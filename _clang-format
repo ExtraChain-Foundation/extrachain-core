@@ -1,0 +1,37 @@
+BasedOnStyle: WebKit
+Standard: Cpp11
+Language: Cpp
+ColumnLimit: 110
+CommentPragmas: "^!|^:"
+PointerBindsToType: true
+PointerAlignment: Right
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+BreakBeforeBraces: Custom
+BraceWrapping:
+ AfterClass: true
+ AfterControlStatement: true # false
+ AfterEnum: true
+ AfterFunction: true
+ AfterNamespace: false
+ AfterObjCDeclaration: false
+ AfterStruct: true
+ AfterUnion: false
+ BeforeCatch: false
+ BeforeElse: true
+ IndentBraces: false
+
+AlignAfterOpenBracket: true
+AlwaysBreakTemplateDeclarations: true
+AllowShortFunctionsOnASingleLine: Inline
+SortIncludes: false
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: None
+SpaceBeforeParens: ControlStatements
+DerivePointerAlignment: true
+
+MaxEmptyLinesToKeep: 1
+AllowShortIfStatementsOnASingleLine: false
+AlignEscapedNewlinesLeft: true
+AllowShortLoopsOnASingleLine: false
+

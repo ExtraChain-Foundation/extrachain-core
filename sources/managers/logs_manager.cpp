@@ -1,0 +1,228 @@
+#include "managers/logs_manager.h"
+
+#ifdef Q_OS_ANDROID
+#include <android/log.h>
+#endif
+
+#include <QFile>
+#include <QDir>
+#include <QDateTime>
+#include <iostream>
+
+bool LogsManager::toConsole = true;
+bool LogsManager::toFile = true;
+bool LogsManager::toQml =
+#ifdef QT_DEBUG
+    true;
+#else
+    false;
+#endif
+
+#ifdef ETALONIUM_CLIENT
+AbstractModel LogsManager::logs = AbstractModel(nullptr, { "text", "date", "file", "line", "func" });
+#endif
+
+QStringList LogsManager::filesFilter;
+bool LogsManager::antiFilter = false;
+
+LogsManager::LogsManager()
+{
+    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog, Qt::QueuedConnection);
+}
+
+void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+{
+    Q_UNUSED(type)
+    static LogsManager logsManager;
+    emit logsManager.makeLogSignal(context.file, context.line, context.function, msg);
+}
+
+void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
+{
+    QString message = msg;
+
+    static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
+                         + ".log");
+
+    if (LogsManager::toFile && !logFile.isOpen())
+        logFile.open(QFile::Append | QFile::Text);
+
+    QDateTime currentDateTime = QDateTime::currentDateTime();
+
+#ifdef QT_DEBUG
+    // TODO: to std::string
+    QString fileName = file;
+    if (fileName.isEmpty())
+        fileName = "global";
+
+#ifdef Q_OS_WIN
+    fileName = fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
+#else
+    fileName = fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
+#endif
+
+#endif
+
+#ifdef QT_DEBUG
+    bool isPrint = !filesFilter.length();
+
+    if (!isPrint)
+    {
+        for (auto&& file : filesFilter)
+        {
+            if (antiFilter ? !fileName.contains(file) : fileName.contains(file))
+            {
+                isPrint = true;
+                break;
+            }
+        }
+    }
+
+    QString fileNameQrc, lineRow;
+    if (fileName.right(3) == "qml")
+    {
+#ifdef Q_OS_WIN
+        fileNameQrc = QString("%1:%2").arg(fileName).arg(line);
+#else
+        fileNameQrc = QString("qrc:/%1:%2").arg(fileName).arg(line);
+#endif
+
+        if (message.left(fileNameQrc.length()) == fileNameQrc)
+        {
+            lineRow = message.mid(fileNameQrc.length(),
+                                  message.length()
+                                      - (message.length() - message.indexOf(":", fileNameQrc.length() + 1))
+                                      - fileNameQrc.length());
+
+            fileNameQrc = fileNameQrc + lineRow;
+
+            message = "Warning: " + message.right(message.length() - fileNameQrc.length() - 2);
+        }
+    }
+
+    QString fileNameStd;
+    if (fileName != "global")
+        fileNameStd = "file:/" + fileName;
+    else
+        fileNameStd = "global";
+#endif
+
+    const QString logStr = currentDateTime.toString("hh:mm:ss ")
+#ifdef QT_DEBUG
+        + "["
+        + (fileNameQrc.length() ? fileNameQrc
+                                : fileNameStd + (fileNameStd == "global" ? "" : ":" + QString::number(line)))
+        + "] "
+#endif
+        + message;
+
+    if (LogsManager::toConsole)
+    {
+#ifdef QT_DEBUG
+        if (isPrint)
+#endif
+#ifdef Q_OS_ANDROID
+            __android_log_print(ANDROID_LOG_DEBUG, "Etalonium", "%s", logStr.toStdString().c_str());
+#else
+        std::cout << logStr.toStdString() << std::endl;
+#endif
+    }
+
+    if (LogsManager::toFile)
+    {
+        logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd "), logStr).toUtf8());
+        logFile.flush();
+    }
+
+#ifdef ETALONIUM_CLIENT
+    if (LogsManager::toQml)
+    {
+        logs.append({ { "text", msg },
+                      { "date", currentDateTime.toMSecsSinceEpoch() }
+#ifdef QT_DEBUG
+                      ,
+                      { "file", fileName },
+                      { "line", line },
+                      { "func", function }
+#endif
+        });
+    }
+#endif
+}
+
+void LogsManager::on()
+{
+    LogsManager::toConsole = true;
+    LogsManager::toFile = true;
+    LogsManager::toQml = true;
+}
+
+void LogsManager::off()
+{
+    LogsManager::toConsole = false;
+    LogsManager::toFile = false;
+    LogsManager::toQml = false;
+}
+
+void LogsManager::onConsole()
+{
+    LogsManager::toConsole = true;
+}
+
+void LogsManager::offConsole()
+{
+    LogsManager::toConsole = false;
+}
+
+void LogsManager::onFile()
+{
+    QDir().mkdir("logs");
+    LogsManager::toFile = true;
+}
+
+void LogsManager::offFile()
+{
+    LogsManager::toFile = false;
+}
+
+void LogsManager::onQml()
+{
+    LogsManager::toQml = true;
+}
+
+void LogsManager::offQml()
+{
+    LogsManager::toQml = false;
+}
+
+void LogsManager::etHandler()
+{
+    std::ios_base::sync_with_stdio(false);
+
+    QDir().mkdir("logs");
+    qInstallMessageHandler(LogsManager::messageHandler);
+}
+
+void LogsManager::qtHandler()
+{
+    qInstallMessageHandler(nullptr);
+}
+
+void LogsManager::emptyHandler()
+{
+    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext& context, const QString& msg) {
+        Q_UNUSED(type)
+        Q_UNUSED(context)
+        Q_UNUSED(msg)
+    });
+}
+
+void LogsManager::setAntiFilter(bool value)
+{
+    antiFilter = value;
+}
+
+void LogsManager::setFilesFilter(const QStringList& value)
+{
+    filesFilter = value;
+}

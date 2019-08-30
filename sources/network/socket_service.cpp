@@ -1,0 +1,243 @@
+#include "network/socket_service.h"
+#include "dfs/packages/headers/dfs_universal.h"
+
+QTcpSocket *SocketService::getSocket() const
+{
+    return socket;
+}
+
+void SocketService::setSocket(QTcpSocket *value)
+{
+    socket = value;
+}
+
+QAbstractSocket::SocketState SocketService::state()
+{
+    return socket->state();
+}
+
+void SocketService::reconnect()
+{
+    active = false;
+    if (connectionTry < 3)
+    {
+        this->socketDescriptor = 0;
+        QTimer::singleShot(4000, this, SLOT(process()));
+    }
+    else
+    {
+        this->socketDescriptor = 0;
+        emit clientDisconnected();
+    }
+    connectionTry++;
+}
+
+void SocketService::readData()
+{
+    while (buffer.size() > 0)
+    {
+        if (_blockSize == 0)
+        {
+            QByteArray size;
+
+            QByteArray el = buffer.mid(0, 1);
+            buffer.remove(0, 1);
+            while (el != " ")
+            {
+
+                size.append(el);
+                // _sok->
+                el = buffer.mid(0, 1);
+                buffer.remove(0, 1);
+            }
+            // qDebug() << "<<<<<<<<" << size;
+
+            _blockSize = size.toInt() /*_sok->read((int)sizeof(quint16)).toInt()*/;
+            // qDebug() << "_blockSize now " << _blockSize;
+        }
+        //        qDebug() << buffer.size() << _blockSize;
+        if (buffer.size() < _blockSize)
+            return;
+
+        QByteArray command;
+        command = buffer.mid(0, _blockSize);
+        buffer.remove(0, _blockSize);
+        // command = _sok->readAll();
+
+        // temp
+        static auto checkMsgType = [](const QByteArray &msg, const QByteArray &type) {
+            Messages::BaseMessage b;
+            b.deserialize(msg);
+            return b.getMsgType() == type;
+        };
+
+        //    if (!checkMsgType(command, Messages::DFS_CHANGES_MESSAGE))
+        //        qDebug() << "Received command " << command;
+
+        // _sok->readAll();
+        if (!active)
+        {
+            active = true;
+
+            indetificator = BigNumber(command);
+            emit checkMe();
+        }
+        else
+            emit MessageReceived(command, this->address, this->port);
+
+        _blockSize = 0;
+    }
+};
+
+int SocketService::getReconnectTry() const
+{
+    return reconnectTry;
+}
+
+void SocketService::setReconnectTry(int value)
+{
+    reconnectTry = value;
+}
+
+BigNumber SocketService::getIdentificator() const
+{
+    return indetificator;
+}
+
+void SocketService::setIdentificator(const BigNumber &value)
+{
+    indetificator = value;
+}
+
+bool SocketService::getActive() const
+{
+    return active;
+}
+
+SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
+    : QObject(parent)
+{
+    this->address = address;
+    this->port = networkPort;
+}
+
+SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
+    : QObject(parent)
+{
+    this->socketDescriptor = socketDescriptor;
+}
+
+SocketService::~SocketService()
+{
+}
+
+void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
+{
+    // check socket status
+    if (!socket->isValid())
+        return;
+    // take data from pair
+    QString ipAddress = QString::fromStdString(socketData.first);
+    qint64 portAddress = socketData.second;
+    // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
+    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
+    {
+        socket->write(QByteArray::number(data.size()) + ' ' + data,
+                      (QByteArray::number(data.size()) + ' ' + data).size());
+    }
+}
+
+void SocketService::sockReady()
+{
+    //    qDebug() << this->thread();
+    QTcpSocket *_sok = this->socket;
+    while (_sok->bytesAvailable())
+        buffer += _sok->readAll();
+    QTimer::singleShot(2000, this, SLOT(readData()));
+    // QDataStream in(_sok);
+
+    //    if (_sok->bytesAvailable() > 0)
+    //        sockReady();
+}
+
+void SocketService::closeSocket()
+{
+    socket->disconnectFromHost();
+}
+
+void SocketService::process()
+{
+    if (socket == nullptr)
+    {
+        this->socket = new QTcpSocket(this);
+        connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
+        connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
+        connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady);
+        connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
+        connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
+                [this](QAbstractSocket::SocketError socketError) {
+                    Q_UNUSED(socketError)
+                    qDebug().nospace().noquote()
+                        << "Socker error " << socketError << " for " << address << ":" << port;
+                    if (this->socket->state() != QTcpSocket::ConnectedState)
+                        this->reconnect();
+                });
+    }
+
+    if (socketDescriptor != 0)
+    {
+        this->socket->setSocketDescriptor(socketDescriptor);
+        establishConnection();
+    }
+    else
+    {
+        this->socket->connectToHost(address, port);
+    }
+}
+
+void SocketService::establishConnection()
+{
+    qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
+    this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
+    this->port = this->socket->peerPort();
+    this->sendMsg(net::readNetManagerIndetificator(), SocketPair(this->address.toStdString(), this->port));
+    qDebug() << "SOCKET SERVICE: socket address " << this->socket;
+
+    qDebug() << "SOCKET SERVICE: "
+             << "socket isOpen - " << socket->isOpen();
+    QObject::connect(qApp, &QCoreApplication::aboutToQuit, [=]() {
+        qDebug() << "SOCKET SERVICE: disconnect";
+        // this->socket->disconnect();
+        this->socket->disconnectFromHost();
+    });
+}
+
+bool *SocketService::socketStatus() const
+{
+    return new bool(socket->isValid());
+}
+
+bool SocketService::isActive() const
+{
+    return active;
+}
+
+QString SocketService::getAddress() const
+{
+    return address;
+}
+
+quint16 SocketService::getPort() const
+{
+    return port;
+}
+
+QHostAddress SocketService::getSocketAddress() const
+{
+    return socket->peerAddress();
+}
+
+quint16 SocketService::getSocketPeer() const
+{
+    return socket->peerPort();
+}

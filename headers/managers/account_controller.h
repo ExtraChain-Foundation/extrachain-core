@@ -1,0 +1,101 @@
+#ifndef ACCOUNT_CONTROLLER_H
+#define ACCOUNT_CONTROLLER_H
+
+#include "utils/bignumber.h"
+#include "datastorage/actor.h"
+#include "datastorage/index/actorindex.h"
+#include "crypt/ecc/key_private.h"
+#include <QDebug>
+#include <QObject>
+
+/**
+ * @brief The AccountController class
+ * One client can have several accounts, so AccountController is storing this accounts
+ * and provides access to them.
+ */
+namespace accountConst {
+static const BigNumber companyId = BigNumber("0");
+}
+class AccountController : public QObject
+{
+    Q_OBJECT
+private:
+    // Current user, used in AccountController.
+    int userNum = 0;
+    QList<Actor<KeyPrivate> *> accounts;
+    ActorIndex *actorIndex;
+    QMap<QByteArray, QByteArray> currentState;
+
+public:
+    AccountController(ActorIndex *actorIndex);
+    QList<QByteArray> getAccountID();
+
+public:
+    /**
+     * @brief Generates a new actor and adds it into accounts list
+     * @return created actor
+     */
+    Actor<KeyPrivate> createActor(bool account);
+    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account);
+    Actor<KeyPrivate> getActor(BigNumber id);
+    /**
+     * @brief Gets Actor by public key
+     * @param pubkey - serialized public key
+     * @return actor
+     */
+    Actor<KeyPrivate> getActor(QByteArray pubkey);
+    Actor<KeyPrivate> getActor(int number);
+
+    Actor<KeyPrivate> *getMainActor();
+    /**
+     * @brief Gets current active actor
+     * @return actor
+     */
+    Actor<KeyPrivate> getCurrentActor();
+
+    /**
+     * @brief Loads actors from local disk to memory: QList accounts;
+     */
+    void loadActors();
+
+    int getAccountCount();
+
+    int getUserNum() const;
+    void setUserNum(int value);
+    QMap<QByteArray, QByteArray> getCurrentState() const;
+    void setCurrentState(const QMap<QByteArray, QByteArray> &value);
+
+    QList<Actor<KeyPrivate> *> getAccounts() const;
+    void setAccounts(const QList<Actor<KeyPrivate> *> &value);
+
+    ActorIndex *getActorIndex() const;
+    void setActorIndex(ActorIndex *value);
+
+public slots:
+    /**
+     * @brief Saves Private actor on local disk in serialized form
+     * @param private actor
+     */
+    void savePrivateActor(Actor<KeyPrivate> actor);
+    void regNewUser(bool account);
+
+    void changeUserNum(QByteArray);
+
+    void process();
+signals:
+    /**
+     * @brief verifyActor
+     * @param serialized private actor
+     */
+    void verifyActor(Actor<KeyPublic> actor);
+    //
+    void sentActorId(BigNumber actorId);
+
+    void updateTransactionListInModel();
+    void newActorIsCreated(BigNumber id, bool isUser);
+
+    void finished();
+
+    void initDfs();
+};
+#endif // ACCOUNT_CONTROLLER_H
