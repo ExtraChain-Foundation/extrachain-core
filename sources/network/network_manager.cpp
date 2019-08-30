@@ -203,11 +203,21 @@ void NetManager::checkMyIndetificator()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
-    if (net::readNetManagerIndetificator() == connection->getIdentificator())
-        connection->removeMe();
-    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
-        if (el->getIdentificator() == connection->getIdentificator())
+    if (allowLocalServer)
+        if (net::readNetManagerIndetificator() == connection->getIdentificator())
             connection->removeMe();
+    short counter = 0;
+    std::for_each(connections.begin(), connections.end(), [connection, &counter](SocketService *el) {
+        if (el->getIdentificator() == connection->getIdentificator())
+        {
+            if (counter == 1)
+            {
+                connection->removeMe();
+                counter = 0;
+            }
+            else
+                counter++;
+        }
     });
 }
 
@@ -455,7 +465,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
 //    connectReconnect(connections.last());
 #endif
     ThreadPool::addThread(connections.last());
-    QTimer::singleShot(1500, this, SLOT(checkConnectionsStatus()));
+    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
 
@@ -473,7 +483,7 @@ void NetManager::addConnection(qint64 socketDescriptor)
             &ResolverService::recieveMsg);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIndetificator);
-    QTimer::singleShot(1500, this, SLOT(checkConnectionsStatus()));
+    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
 
     ThreadPool::addThread(connections.last());
 }
