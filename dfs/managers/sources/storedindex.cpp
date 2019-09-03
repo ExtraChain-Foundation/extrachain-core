@@ -5,7 +5,6 @@ StoredIndex::StoredIndex(ActorIndex *_actorIndex, AccountController *_accountCon
     this->s_ActorIndex = _actorIndex;
     this->account_contrlr = _accountController;
 }
-
 void StoredIndex::SendTempToVerify(QString path)
 {
     QString croped_fileName = path;
@@ -34,8 +33,7 @@ void StoredIndex::SendTempToVerify(QString path)
         }
         else
         {
-            qDebug() << "[Warning][storedIndex][SendTempToVerify] " + croped_fileName
-                    + " don't open";
+            qDebug() << "[Warning][storedIndex][SendTempToVerify] " + croped_fileName + " don't open";
         }
         filetemp.close();
     }
@@ -45,128 +43,154 @@ void StoredIndex::SendTempToVerify(QString path)
     }
 }
 
+///////////
+/// \brief StoredIndex::addStored
+/// Add stored to snapshots history of changing file. That create directory with apropriate name and heap of
+/// stored represented by files with extension ".strd"
+/// \param _stored  - structure of snapshot that need to
+/// add in history. That containt info about changing.
+/// \return 0 - if success. Else - error
+///
 int StoredIndex::addStored(const Stored &_stored)
 {
-    QFile file(_stored.getPath() + ".strd");
-    //    l << _stored.getAuthor().toString().toLocal8Bit() << _stored.getHash()
-    //      << based_dfs_struct::toString(_stored.getState()).toLocal8Bit()
-    //      << _stored.getChangeData() << calcChangeSig(_stored.getChangeData())
-    //      << _stored.getPath() /*<< getPreviousHash()*/
-    //      << getLastStoredByPath(_stored.getPath()).getChangeSig()
-    //      << QByteArray::number(_stored.getFirstByte());
-    //    l << _stored.getHash() << _stored.getData() << _stored.getPath()
-    //      << QString::number(_stored.getFirstByte()).toLocal8Bit() <<
-    //      /*_stored.getSign()*/
-    //      /*<<*/ _stored.getPrevBlockHash() << _stored.getStateBytes() <<
-    //      _stored.getChangeData()
-    //      << /*_stored.getChangeSig() << _stored.getPrevChangeSig()*/
-    //     /* <<*/ _stored.getPrevFileChange();
-
-    QByteArray serialized = _stored.serializedUserField();
-    // serialized.append('\n');
-    serialized.append(DELIM);
+    QDir storedDir(_stored.getPath());
+    if (!storedDir.exists())
+        if (!QDir().mkdir(storedDir.path()))
+        {
+            qDebug() << "[Error][storedIndex][addStored] Can't create directory for stored by path:"
+                     << storedDir.path();
+            return Errors::FILE_IS_NOT_OPENED;
+        }
+    QFile storageIndexInfo(_stored.getPath() + '/' + "storageInfo");
+    BigNumber currentStoredIndex("0");
+    if (storageIndexInfo.exists())
+    {
+        if (storageIndexInfo.open(QIODevice::ReadOnly))
+        {
+            currentStoredIndex = (BigNumber)storageIndexInfo.readLine();
+            storageIndexInfo.close();
+        }
+        else
+        {
+            qDebug() << "[Error][storedIndex][addStored] Can't open file " << storageIndexInfo.fileName();
+            return Errors::FILE_IS_NOT_OPENED;
+        }
+    }
+    else
+    {
+        if (storageIndexInfo.open(QIODevice::WriteOnly))
+        {
+            storageIndexInfo.write("1");
+            storageIndexInfo.close();
+        }
+        else
+        {
+            qDebug() << "[Error][storedIndex][addStored] Can't open file " << storageIndexInfo.fileName();
+            return Errors::FILE_IS_NOT_OPENED;
+        }
+    }
+    QFile file(storedDir.path() + '/' + currentStoredIndex.toByteArray() + ".strd");
     if (file.exists())
     {
-        if (file.open(QIODevice::ReadWrite | QIODevice::Append))
-        {
-            file.seek(file.pos()); // seek end position
-            file.write(serialized);
-            file.close(); // close the file handle.
-        }
-        else
-        {
-            qCritical() << "Can't save the file" << _stored.getPath()
-                        << "(File is not opened)";
-            return Errors::FILE_IS_NOT_OPENED;
-        }
+        currentStoredIndex = searchCurrentStoredIndex(_stored.getPath());
+        file.setFileName(storedDir.path() + '/' + currentStoredIndex.toByteArray() + ".strd");
     }
-
-    if (!file.exists())
+    QByteArray serialized = _stored.serializedUserField();
+    if (file.open(QIODevice::WriteOnly))
     {
-        if (file.open(QIODevice::WriteOnly))
-        {
-            file.write(serialized);
-            file.close(); // close the file handle.
-        }
-        else
-        {
-            qCritical() << "Can't save the file" << _stored.getPath()
-                        << "(File is not opened)";
-            return Errors::FILE_IS_NOT_OPENED;
-        }
+        file.write(serialized);
+        file.close(); // close the file handle.
     }
-    return 0;
+    else
+    {
+        qCritical() << "[Error][storedIndex][addStored] Can't open file " << file.fileName();
+        return Errors::FILE_IS_NOT_OPENED;
+    }
+    if (storageIndexInfo.open(QIODevice::WriteOnly))
+    {
+        currentStoredIndex++;
+        storageIndexInfo.write((currentStoredIndex).toByteArray());
+        storageIndexInfo.close();
+    }
+    else
+    {
+        qDebug() << "[Error][storedIndex][addStored] Can't open file " << storageIndexInfo.fileName();
+        return Errors::FILE_IS_NOT_OPENED;
+    }
 
-    /*  if (_stored.getState() == based_dfs_struct::CREATED)
-      {
-          this->addDataToFile(_stored.getChangeData(), _stored.getPath());
-          return 0;
-      }
-      else if (_stored.getState() == based_dfs_struct::CHANGED)
-      {
-          this->changeDataInFile(_stored.getFirstByte(), _stored.getChangeData(),
-                                 _stored.getPath());
-          return 0;
-      }
-      else if (_stored.getState() == based_dfs_struct::DELETED)
-      {
-          this->deleteDataFromFile(_stored.getFirstByte(),
-          _stored.getChangeData().size(),
-                                   _stored.getPath());
-          return 0;
-      }
-      else
-      {
-          return based_dfs_struct::UNRECOGNIZED;
-      }
-   SIZE = size changed data in stored. For instance if need to delete 4 bytes, need
-      to
-   send ChangedData in Stored with size by 4 bytes "1234" for instance, that enough*/
+    return 0;
 }
 
+BigNumber StoredIndex::searchCurrentStoredIndex(QByteArray path)
+{
+    BigNumber i("0");
+    while ((QFile(path + '/' + i.toByteArray() + ".strd").exists()))
+    {
+        i++;
+    }
+    return i;
+}
+/**
+ * @brief Validates stored digital signature
+ * @param _stored
+ * @return true if stored is valid
+ */
 bool StoredIndex::validateStored(const Stored &_stored) const
 {
     Actor<KeyPublic> actor = s_ActorIndex->getActor(_stored.getAuthor());
     if (actor.isEmpty())
     {
-        qWarning() << "Can not validate stored with path" << _stored.getPath()
-                   << ": There no actor" << _stored.getAuthor() << " in local storage";
+        qWarning() << "Can not validate stored with path" << _stored.getPath() << ": There no actor"
+                   << _stored.getAuthor() << " in local storage";
         return false;
     }
     return _stored.verify(actor);
 }
-
+/// \brief getStoredByHash
+/// \param path and hash
+/// \return QList stored with the same hash
 QList<Stored> StoredIndex::getStoredByHash(QByteArray path, QByteArray _hash) const
 {
-    QList<Stored> qlist_st;
-    QFile file(path + ".strd");
-
-    if (!file.exists())
+    QFile storageIndexInfo(path + '/' + "storageInfo");
+    BigNumber currentStoredIndex("0");
+    if (storageIndexInfo.exists())
     {
-        qDebug() << "Can't get the file" << path << "(File is not exist)";
-        return qlist_st;
-    }
-    //   int quant=0;
-    // QStack<Stored> StoredStack;
-    if (file.open(QIODevice::ReadOnly))
-    {
-        QByteArray data;
-        int pos = -1;
-        QString resultLine = "";
-        while (pos + DELIM.size() < file.size())
+        if (storageIndexInfo.open(QIODevice::ReadOnly))
         {
-            pos++;
-            file.seek(pos);
-            resultLine.append(file.read(1));
-            if (file.read(DELIM.size()) != DELIM)
-            {
-                continue;
-            }
+            currentStoredIndex = (BigNumber)storageIndexInfo.readLine();
+            storageIndexInfo.close();
+        }
+        else
+        {
+            qDebug() << "[Error][storedIndex][getStoredByHash] Can't open file "
+                     << storageIndexInfo.fileName();
+            return QList<Stored>();
+        }
+    }
+    else
+    {
+        qDebug() << "[Error][storedIndex][getStoredByHash] storageInfo file doesn't exist.";
+        return QList<Stored>();
+    }
 
-            data = resultLine.toUtf8();
+    QList<Stored> qlist_st;
+    QFile file;
+    QByteArray data;
+    for (BigNumber i("0"); i < currentStoredIndex; i++)
+    {
+        file.setFileName(path + '/' + i.toByteArray() + ".strd");
+        if (!file.exists())
+        {
+            qDebug() << "[Error][storedIndex][getStoredByHash] file" << file.fileName() + "doesn't exist.";
+            return qlist_st;
+        }
 
-            QList<QByteArray> list =
-                Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
+        if (file.open(QIODevice::ReadOnly))
+        {
+
+            data = file.readLine();
+
+            QList<QByteArray> list = Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
             if (list.size() != 9)
             {
                 qDebug() << "[Error][StoredIndex][getStoredByHash] List!=9";
@@ -179,74 +203,64 @@ QList<Stored> StoredIndex::getStoredByHash(QByteArray path, QByteArray _hash) co
                 for (int j = 0; j < 9; j++)
                     l << list.at(j);
 
-                QByteArray serialized =
-                    Serialization::serialize(l, Serialization::INFORMATION_SEPARATOR_ONE);
+                QByteArray serialized = Serialization::serialize(l, Serialization::DFS_STORED_DELIMETR);
                 qlist_st.append(Stored(serialized));
             }
             data.clear();
-            resultLine.clear();
-            pos += DELIM.size();
-
-            //  QList<QByteArray> list =
-            //    Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
-            // if (list.at(7) == _hash)
-            //            {
-            //                QList<QByteArray> l;
-            //                for (int j = 0; j < 12; j++)
-            //                    l << list.at(j);
-
-            //                QByteArray serialized =
-            //                    Serialization::serialize(l,
-            //                    Serialization::INFORMATION_SEPARATOR_ONE);
-            //                qlist_st.append(Stored(serialized));
-            //            }
-            //            else
-            //                continue;
         }
         file.close();
-        return qlist_st;
     }
-
-    qDebug() << "[Error][StoredIndex][getStoredByHash] File not open" << path + ".strd";
     return qlist_st;
 }
-
+/// \brief getStoredByAuthor
+/// \param _path
+/// \return
 QList<Stored> StoredIndex::getStoredByAuthor(QByteArray path, BigNumber _author) const
 {
-    QList<Stored> qlist_st;
-    QFile file(path + ".strd");
-
-    if (!file.exists())
+    QFile storageIndexInfo(path + '/' + "storageInfo");
+    BigNumber currentStoredIndex("0");
+    if (storageIndexInfo.exists())
     {
-        qDebug() << "Can't get the file" << path << "(File is not exist)";
-        return qlist_st;
-    }
-    //   int quant=0;
-    // QStack<Stored> StoredStack;
-    if (file.open(QIODevice::ReadOnly))
-    {
-        QByteArray data;
-        int pos = -1;
-        QString resultLine = "";
-        while (pos + DELIM.size() < file.size())
+        if (storageIndexInfo.open(QIODevice::ReadOnly))
         {
-            pos++;
-            file.seek(pos);
-            resultLine.append(file.read(1));
-            if (file.read(DELIM.size()) != DELIM)
-            {
-                continue;
-            }
+            currentStoredIndex = (BigNumber)storageIndexInfo.readLine();
+            storageIndexInfo.close();
+        }
+        else
+        {
+            qDebug() << "[Error][storedIndex][getStoredByAuthor] Can't open file "
+                     << storageIndexInfo.fileName();
+            return QList<Stored>();
+        }
+    }
+    else
+    {
+        qDebug() << "[Error][storedIndex][getStoredByAuthor] storageInfo file doesn't exist.";
+        return QList<Stored>();
+    }
+    QList<Stored> qlist_st;
+    QFile file;
+    QByteArray data;
+    for (BigNumber i("0"); i < currentStoredIndex; i++)
+    {
+        file.setFileName(path + '/' + i.toByteArray() + ".strd");
+        if (!file.exists())
+        {
+            qDebug() << "[Error][storedIndex][getStoredByAuthor] file" << file.fileName() + "doesn't exist.";
+            return qlist_st;
+        }
 
-            data = resultLine.toUtf8();
+        if (file.open(QIODevice::ReadOnly))
+        {
 
-            QList<QByteArray> list =
-                Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
+            data = file.readLine();
+
+            QList<QByteArray> list = Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
             if (list.size() != 9)
             {
                 qDebug() << "[Error][StoredIndex][getStoredByAuthor] List!=9";
                 file.close();
-                return qlist_st;
+                continue;
             }
             if (list.at(8) == _author)
             {
@@ -254,198 +268,138 @@ QList<Stored> StoredIndex::getStoredByAuthor(QByteArray path, BigNumber _author)
                 for (int j = 0; j < 9; j++)
                     l << list.at(j);
 
-                QByteArray serialized =
-                    Serialization::serialize(l, Serialization::INFORMATION_SEPARATOR_ONE);
+                QByteArray serialized = Serialization::serialize(l, Serialization::DFS_STORED_DELIMETR);
                 qlist_st.append(Stored(serialized));
             }
             data.clear();
-            resultLine.clear();
-            pos += DELIM.size();
-
-            //  QList<QByteArray> list =
-            //    Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
-            // if (list.at(7) == _hash)
-            //            {
-            //                QList<QByteArray> l;
-            //                for (int j = 0; j < 12; j++)
-            //                    l << list.at(j);
-
-            //                QByteArray serialized =
-            //                    Serialization::serialize(l,
-            //                    Serialization::INFORMATION_SEPARATOR_ONE);
-            //                qlist_st.append(Stored(serialized));
-            //            }
-            //            else
-            //                continue;
         }
         file.close();
-        return qlist_st;
     }
-
-    qDebug() << "[Error][StoredIndex][getStoredByAuthor] File not open" << path + ".strd";
     return qlist_st;
 }
-
+///
+/// \brief getStoredByPath
+/// \param _path
+/// \return
+///
 QList<Stored> StoredIndex::getStoredByPath(QByteArray _path) const
 {
-    QList<Stored> qlist_st;
-    QFile file(_path + ".strd");
-
-    if (!file.exists())
+    QFile storageIndexInfo(_path + '/' + "storageInfo");
+    BigNumber currentStoredIndex("0");
+    if (storageIndexInfo.exists())
     {
-        qDebug() << "Can't get the file" << _path << "(File is not exist)";
-        return qlist_st;
-    }
-    //   int quant=0;
-    // QStack<Stored> StoredStack;
-    if (file.open(QIODevice::ReadOnly))
-    {
-        QByteArray data;
-        int pos = -1;
-        QString resultLine = "";
-        while (pos + DELIM.size() < file.size())
+        if (storageIndexInfo.open(QIODevice::ReadOnly))
         {
-            pos++;
-            file.seek(pos);
-            resultLine.append(file.read(1));
-            if (file.read(DELIM.size()) != DELIM)
+            currentStoredIndex = (BigNumber)storageIndexInfo.readLine();
+            storageIndexInfo.close();
+        }
+        else
+        {
+            qDebug() << "[Error][storedIndex][getStoredByPath] Can't open file "
+                     << storageIndexInfo.fileName();
+            return QList<Stored>();
+        }
+    }
+    else
+    {
+        qDebug() << "[Error][storedIndex][getStoredByPath] storageInfo file doesn't exist.";
+        return QList<Stored>();
+    }
+    QList<Stored> qlist_st;
+    QFile file;
+    QByteArray data;
+    for (BigNumber i("0"); i < currentStoredIndex; i++)
+    {
+        file.setFileName(_path + '/' + i.toByteArray() + ".strd");
+        if (!file.exists())
+        {
+            qDebug() << "[Error][storedIndex][getStoredByPath] file" << file.fileName() + "doesn't exist.";
+            return qlist_st;
+        }
+
+        if (file.open(QIODevice::ReadOnly))
+        {
+
+            data = file.readLine();
+
+            QList<QByteArray> list = Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
+            if (list.size() != 9)
             {
+                qDebug() << "[Error][StoredIndex][getStoredByHash] List!=9 in stored numb " << i;
+                file.close();
                 continue;
             }
 
-            data = resultLine.toUtf8();
+            QList<QByteArray> l;
+            for (int j = 0; j < 9; j++)
+                l << list.at(j);
 
-            QList<QByteArray> list =
-                Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
-            if (list.size() != 9)
-            {
-                qDebug() << "[Error][StoredIndex][getStoredByPath] List!=9";
-                file.close();
-                return qlist_st;
-            }
-            if (list.at(7) == _path)
-            {
-                QList<QByteArray> l;
-                for (int j = 0; j < 9; j++)
-                    l << list.at(j);
+            QByteArray serialized = Serialization::serialize(l, Serialization::DFS_STORED_DELIMETR);
+            qlist_st.append(Stored(serialized));
 
-                QByteArray serialized =
-                    Serialization::serialize(l, Serialization::INFORMATION_SEPARATOR_ONE);
-                qlist_st.append(Stored(serialized));
-            }
             data.clear();
-            resultLine.clear();
-            pos += DELIM.size();
-
-            //  QList<QByteArray> list =
-            //    Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
-            // if (list.at(7) == _hash)
-            //            {
-            //                QList<QByteArray> l;
-            //                for (int j = 0; j < 12; j++)
-            //                    l << list.at(j);
-
-            //                QByteArray serialized =
-            //                    Serialization::serialize(l,
-            //                    Serialization::INFORMATION_SEPARATOR_ONE);
-            //                qlist_st.append(Stored(serialized));
-            //            }
-            //            else
-            //                continue;
         }
         file.close();
-        return qlist_st;
     }
-
-    qDebug() << "[Error][StoredIndex][getStoredByPath] File not open" << _path + ".strd";
     return qlist_st;
 }
 QByteArray StoredIndex::calcChangeSig(QByteArray _changeData)
 {
-    return account_contrlr->getActor(account_contrlr->getUserNum())
-        .getKey()
-        ->sign(_changeData);
+    return account_contrlr->getActor(account_contrlr->getUserNum()).getKey()->sign(_changeData);
 }
 
 Stored StoredIndex::getLastStoredByPath(QByteArray _path) const
 {
 
-    QFile file(_path + ".strd");
+    QFile storageIndexInfo(_path + '/' + "storageInfo");
+    BigNumber currentStoredIndex("0");
+    if (storageIndexInfo.exists())
+    {
+        if (storageIndexInfo.open(QIODevice::ReadOnly))
+        {
+            currentStoredIndex = (BigNumber)storageIndexInfo.readLine();
+            currentStoredIndex--;
+            storageIndexInfo.close();
+        }
+        else
+        {
+            qDebug() << "[Error][storedIndex][getLastStoredByPath] Can't open file "
+                     << storageIndexInfo.fileName();
+            return Stored();
+        }
+    }
+    else
+    {
+        qDebug() << "[Error][storedIndex][getLastStoredByPath] storageInfo file doesn't exist.";
+        return Stored();
+    }
+    QFile file;
     QByteArray data;
+
+    file.setFileName(_path + '/' + currentStoredIndex.toByteArray() + ".strd");
     if (!file.exists())
     {
-        qDebug() << "Can't get the file" << _path << "(File is not exist)";
+        qDebug() << "[Error][storedIndex][getLastStoredByPath] file" << file.fileName() + "doesn't exist.";
         return Stored();
     }
+
     if (file.open(QIODevice::ReadOnly))
     {
-        int k = DELIM.size();
-        QString result = "";
-        while (file.size() - k > 0)
+        data = file.readLine();
+        QList<QByteArray> list = Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
+        if (list.size() != 9)
         {
-            file.seek(file.size() - k);
-            QString test = file.read(DELIM.size());
-            if (test != DELIM)
-                k++;
-            else
-            {
-
-                while (file.size() - k > 0)
-                {
-                    k++;
-                    file.seek(file.size() - k);
-                    result.push_front(file.read(1));
-
-                    QList<QByteArray> l;
-
-                    if (file.size() - k + DELIM.size() > 0)
-                    {
-                        file.seek(file.size() - k);
-                        QString test = file.read(DELIM.size());
-                        if (test == DELIM)
-                        {
-                            result.remove(0, DELIM.size());
-                            QList<QByteArray> list = Serialization::deserialize(
-                                result.toUtf8(), Serialization::USER_FIELD_SPLITER);
-                            //  if (list.at(5) == _path)
-                            //  {
-                            QList<QByteArray> l;
-                            for (int j = 0; j < 9; j++)
-                                l << list.at(j);
-
-                            QByteArray serialized = Serialization::serialize(
-                                l, Serialization::INFORMATION_SEPARATOR_ONE);
-                            file.close();
-                            return Stored(serialized);
-                        }
-                    }
-                }
-                QList<QByteArray> list =
-                    Serialization::deserialize(data, Serialization::USER_FIELD_SPLITER);
-                //  if (list.at(5) == _path)
-                //  {
-                if (list.size() != 9)
-                {
-                    qDebug() << "[Error][StoredIndex][getLastStoredByPath]";
-                    file.close();
-                    return Stored();
-                }
-                QList<QByteArray> l;
-                for (int j = 0; j < 9; j++)
-                    l << list.at(j);
-
-                QByteArray serialized =
-                    Serialization::serialize(l, Serialization::INFORMATION_SEPARATOR_ONE);
-                file.close();
-                return Stored(serialized);
-            }
+            qDebug() << "[Error][StoredIndex][getLastStoredByPath] List!=9";
+            file.close();
+            return Stored();
         }
-        qDebug() << "[Error][StoredIndex][getLastStoredByPath] Unknown Error";
-        return Stored();
+        QList<QByteArray> l;
+        for (int j = 0; j < 9; j++)
+            l << list.at(j);
+        QByteArray serialized = Serialization::serialize(l, Serialization::DFS_STORED_DELIMETR);
+        file.close();
+        return Stored(serialized);
     }
-
-    qDebug() << "[Error][StoredIndex][getLastStoredByPath]" << _path << " didn't open.";
-    return Stored();
 }
 void StoredIndex::addStoredInIndex(Stored getStored)
 {
@@ -456,8 +410,7 @@ void StoredIndex::addStoredInIndex(Stored getStored)
         addStored(getStored);
     }
     else
-        qDebug() << "Stored with actor id='" << getStored.getAuthor()
-                 << "' is not valid. Error add stored";
+        qDebug() << "Stored with actor id='" << getStored.getAuthor() << "' is not valid. Error add stored";
 }
 
 Stored StoredIndex::addSerializedStoredInIndex(QByteArray serialized)
@@ -467,14 +420,13 @@ Stored StoredIndex::addSerializedStoredInIndex(QByteArray serialized)
     {
         qDebug() << "Error in method addSerializedStoredInIndex, StoredIndex.";
     }
-    QList<QByteArray> headerList =
-        Serialization::deserialize(qlist[0], Serialization::DFS_STORED_DELIMETR);
-    QByteArray actorSign = Utils::calcKeccak(
-        qlist[1]); /*this->account_contrlr->getActor(BigNumber(headerList[0]))
-.getKey()
-->sign(qlist[1]);*/
-    QByteArray getPrevSig = Utils::calcKeccak(
-        qlist[1]); /*this->getLastStoredByPath(headerList[3]).getChangeDataSig();*/
+    QList<QByteArray> headerList = Serialization::deserialize(qlist[0], Serialization::DFS_STORED_DELIMETR);
+    QByteArray actorSign =
+        Utils::calcKeccak(qlist[1]); /*this->account_contrlr->getActor(BigNumber(headerList[0]))
+                  .getKey()
+                  ->sign(qlist[1]);*/
+    QByteArray getPrevSig =
+        Utils::calcKeccak(qlist[1]); /*this->getLastStoredByPath(headerList[3]).getChangeDataSig();*/
 
     //!!!!!!!!!!!!!!!!!!!!
     QByteArray getPrevStoredHash = this->getLastStoredByPath(headerList[3]).getHash();
@@ -487,9 +439,8 @@ Stored StoredIndex::addSerializedStoredInIndex(QByteArray serialized)
     }
 
     // actor id, first byte, state, path
-    Stored newStored(BigNumber(headerList[0]), headerList[1].toInt(), qlist[1], actorSign,
-                     headerList[3], getPrevSig, "getPrevStoredHash",
-                     storedSpace::convertToDFSstate(headerList[2]));
+    Stored newStored(BigNumber(headerList[0]), headerList[1].toInt(), qlist[1], actorSign, headerList[3],
+                     getPrevSig, "getPrevStoredHash", storedSpace::convertToDFSstate(headerList[2]));
     if (validateStored(newStored))
     {
         newStored.setChangeDataSig(calcChangeSig(newStored.getChangeData()));
