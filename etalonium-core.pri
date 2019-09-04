@@ -133,8 +133,13 @@ MOC_DIR = .moc
 RCC_DIR = .qrc
 UI_DIR = .ui
 
-win32:COMPILE_DATE=$$system(date /t)
-!win32:COMPILE_DATE=$$system(date +%m.%d)
+QMAKE_SPEC_T = $$[QMAKE_SPEC]
+contains(QMAKE_SPEC_T,.*win32.*) {
+    COMPILE_DATE=$$system(date /t)
+} else {
+    COMPILE_DATE=$$system(date +%m.%d)
+}
+
 GIT_COMMIT_CORE = $$system(git --git-dir .git --work-tree $$PWD describe --always --tags)
 GIT_BRANCH_CORE = $$system(git --git-dir .git --work-tree $$PWD symbolic-ref --short HEAD)
 QMAKE_SUBSTITUTES += preconfig.h.in
