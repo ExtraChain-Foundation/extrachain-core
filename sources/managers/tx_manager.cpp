@@ -32,7 +32,6 @@ int TransactionManager::addTransaction(Transaction tx)
     emit tx.ProveMe();
     qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
                 "function)\n after emit tx.ProveMe() signal to Blockshain";
-
     BigNumber receiverBalance = tx.getReceiverBalance();
     BigNumber senderBalance = tx.getSenderBalance();
     if (!pendingTxs.contains(tx))

@@ -156,6 +156,8 @@ Transaction NodeManager::createTransaction(Transaction tx)
         tx.sign(actor);
         qDebug() << tx.toString();
         emit NewTx(tx);
+
+        accController->sentTxList.add(tx.getHash(), tx.serialize());
         return tx;
     }
     else
@@ -178,10 +180,30 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount)
     {
         qDebug() << actor.getId();
         Transaction tx(actor.getId(), receiver, amount);
-        tx.setSenderBalance(blockchain->getUserBalance(actor.getId()));
-        tx.setReceiverBalance(blockchain->getUserBalance(receiver));
+        // add sent tx balances
+        BigNumber tempBalance = 0;
+        if (accController->sentTxList.getIndexSize() > 0)
+        {
+            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
+            {
+                Transaction tempTx(accController->sentTxList.at(i));
+                if (tempTx.getSender() == actor.getId())
+                    tempBalance -= tempTx.getAmount();
+                else
+                    tempBalance += tempTx.getAmount();
+            }
+        }
+        if (actor.getId() == tx.getSender())
+        {
+            tx.setSenderBalance(blockchain->getUserBalance(actor.getId()) + tempBalance);
+            tx.setReceiverBalance(blockchain->getUserBalance(receiver) - tempBalance);
+        }
+        else if (actor.getId() == tx.getReceiver())
+        {
+            tx.setSenderBalance(blockchain->getUserBalance(actor.getId()) - tempBalance);
+            tx.setReceiverBalance(blockchain->getUserBalance(receiver) + tempBalance);
+        }
         //        tx.setHop(2);
-
         return this->createTransaction(tx);
     }
     else

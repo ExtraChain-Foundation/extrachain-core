@@ -35,11 +35,10 @@ private:
     QList<QByteArray> unApprovedTxHashes;
 
     // current user
-//    Actor<KeyPrivate> currentUser;
+    //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
 
     Blockchain *blockchain;
-
     // received transactions that we need to compare between network and blockchain
 
 public:
@@ -77,8 +76,8 @@ public slots:
      */
     int addTransaction(Transaction tx);
 
-    int proveTransaction(BigNumber senderId, BigNumber receiverId, Transaction sender,
-                         Transaction receiver, QByteArray txHash);
+    int proveTransaction(BigNumber senderId, BigNumber receiverId, Transaction sender, Transaction receiver,
+                         QByteArray txHash);
 
     // Unapproved tx's //
 
@@ -124,8 +123,7 @@ signals:
      * @param senderId
      * @param receiverId
      */
-    void SendProveTransactionRequest(BigNumber senderId, BigNumber receiverId,
-                                     QByteArray txHash);
+    void SendProveTransactionRequest(BigNumber senderId, BigNumber receiverId, QByteArray txHash);
 
     /**
      * @brief sends transaction request to compare transaction

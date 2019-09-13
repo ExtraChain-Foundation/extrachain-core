@@ -205,6 +205,7 @@ void NetManager::checkMyIndetificator()
     SocketService *connection = qobject_cast<SocketService *>(sender);
     if (allowLocalServer)
         if (net::readNetManagerIndetificator() == connection->getIdentificator())
+
             connection->removeMe();
     short counter = 0;
     std::for_each(connections.begin(), connections.end(), [connection, &counter](SocketService *el) {
@@ -702,6 +703,7 @@ void NetManager::sendNewActor(Actor<KeyPublic> actor)
 void NetManager::sendNewTx(Transaction tx)
 {
     EntityMessage<Transaction> msg = Messages::createTxMessage(tx);
+
     signMessage(msg);
     broadcastMsg(msg);
 }
