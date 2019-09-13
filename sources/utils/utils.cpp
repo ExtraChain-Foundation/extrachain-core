@@ -432,6 +432,7 @@ void Utils::wipeDataFiles()
     clearDir("keystore/personal", "0.key");
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
+    QFile(".fileList").remove();
 #else
     QDir("blockchain").removeRecursively();
     QDir("data").removeRecursively();
@@ -439,5 +440,216 @@ void Utils::wipeDataFiles()
     QDir("tmp").removeRecursively();
     QFile("user.private").remove();
     QFile("user.private.login").remove();
+    QFile(".fileList").remove();
 #endif
+}
+
+FileList::FileList()
+{
+    fileList.setFileName(".fileList");
+    if (fileList.exists())
+    {
+        init();
+    }
+    else
+    {
+        //
+    }
+}
+
+void FileList::init()
+{
+    fileList.open(QIODevice::ReadOnly);
+    qDebug() << "fileList INIT";
+    int count = 0, currentPosition = 0;
+    while (fileList.size() != currentPosition)
+    {
+        fileList.seek(currentPosition);
+        count = Utils::qByteArrayToInt(fileList.read(4));
+
+        if (fileList.read(FIELD_SIZE) == DATA_EMPTY)
+        {
+            indexList.append(indexRow(std::to_string(count), currentPosition, 0));
+        }
+        else
+        {
+            indexList.append(indexRow(fileList.read(64).toStdString(), currentPosition, 1));
+        }
+
+        currentPosition += count + FIELD_SIZE;
+    }
+    fileList.flush();
+    fileList.close();
+    checkForDelete();
+    if (indexList.size() == 0)
+        qDebug() << "indexList -> empty";
+    else
+        qDebug() << "indexList size->" << indexList.size();
+}
+
+void FileList::checkForDelete()
+{
+    qDebug() << "check delete fileList" << indexList.size();
+    int count = 0;
+    for (QList<indexRow>::iterator it = indexList.end() - 1; it != indexList.begin() - 1; it--)
+    {
+        if (it->used == 0)
+        {
+            fileList.open(QIODevice::ReadWrite);
+            fileList.seek(it->currentPosition);
+            fileList.resize(fileList.size() - (Utils::qByteArrayToInt(fileList.read(4)) + FIELD_SIZE));
+            indexList.removeLast();
+            fileList.flush();
+            fileList.close();
+            ++count;
+            if (indexList.size() == 0)
+                break;
+        }
+        else
+        {
+            qDebug() << "deleted in fileList " << count;
+            return;
+        }
+    }
+    qDebug() << "after delete" << indexList.size() << "; deleted " << count;
+    return;
+}
+
+bool FileList::check(QByteArray hash)
+{
+    for (QList<indexRow>::iterator it = indexList.begin(); it != indexList.end(); it++)
+    {
+        if (it->hash == hash.toStdString())
+            return true;
+    }
+    return false;
+}
+
+void FileList::add(QByteArray hash, QByteArray data)
+{
+    if (check(hash) /*&& find(hash)->used == 1*/)
+    {
+        qDebug() << "file with this hash are have and use in FileList";
+        return;
+    }
+    fileList.open(QIODevice::ReadWrite);
+    qDebug() << "add to fileList->" << hash;
+    if (indexList.size() == 0)
+    {
+        QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
+        QByteArray serialize2 = Serialization::universalSerialize({ serialize1 }, FIELD_SIZE);
+        indexList.append(indexRow(serialize2.mid(FIELD_SIZE * 2, 64).toStdString(), 0, 1));
+        fileList.write(serialize2);
+    }
+    else
+    {
+        if (find(data.mid(0, FIELD_SIZE)) != indexList.end())
+        {
+            fileList.seek(find(data.mid(0, FIELD_SIZE))->currentPosition);
+            QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
+            QByteArray serialize2 = Serialization::universalSerialize({ serialize1 }, FIELD_SIZE);
+            fileList.write(serialize2);
+            find(serialize2.mid(0, FIELD_SIZE))->used = 1;
+            find(serialize2.mid(0, FIELD_SIZE))->hash = data.mid(FIELD_SIZE * 2, 64).toStdString();
+        }
+        else
+        {
+            fileList.seek(fileList.size());
+            QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
+            QByteArray serialize2 = Serialization::universalSerialize({ serialize1 }, FIELD_SIZE);
+            indexList.append(indexRow(serialize2.mid(FIELD_SIZE * 2, 64).toStdString(), fileList.pos(), 1));
+            fileList.write(serialize2);
+        }
+    }
+    fileList.flush();
+    fileList.close();
+}
+
+void FileList::remove(QByteArray hash)
+{
+    if (!check(hash))
+    {
+        qDebug() << "hash or element not exist";
+        return;
+    }
+
+    fileList.open(QIODevice::ReadWrite);
+    fileList.seek(find(hash)->currentPosition + FIELD_SIZE);
+    fileList.write(DATA_EMPTY);
+    fileList.seek(find(hash)->currentPosition);
+    find(hash)->used = 0;
+    find(hash)->hash = QByteArray::number(Utils::qByteArrayToInt(fileList.read(4))).toStdString();
+    fileList.flush();
+    fileList.close();
+    checkForDelete();
+}
+
+QList<indexRow>::iterator FileList::find(QByteArray key)
+{
+    for (QList<indexRow>::iterator it = indexList.begin(); it != indexList.end(); it++)
+    {
+        if (it->hash == key.toStdString())
+            return it;
+    }
+    return indexList.end();
+}
+
+QByteArray FileList::operator[](int value)
+{
+    return FileList::at(value);
+}
+
+QByteArray FileList::at(QByteArray hash)
+{
+    QByteArray data = "";
+    if (check(hash))
+    {
+        fileList.open(QIODevice::ReadOnly);
+        fileList.seek(find(hash)->currentPosition);
+        int quantity = Utils::qByteArrayToInt(fileList.read(FIELD_SIZE));
+        int hashSize = Utils::qByteArrayToInt(fileList.read(FIELD_SIZE)) + 3 * FIELD_SIZE;
+        fileList.seek(find(hash)->currentPosition + hashSize);
+        data = fileList.read(quantity - hashSize + FIELD_SIZE);
+        fileList.flush();
+        fileList.close();
+    }
+    else
+        qDebug() << "File is not exist in list-> return empty data";
+    return data;
+}
+
+QByteArray FileList::at(int value)
+{
+    if (indexList.size() < value)
+        qDebug() << "never at";
+    else
+    {
+        return this->at(QByteArray::fromStdString(indexList[value].hash));
+    }
+    return "";
+}
+
+int FileList::getIndexSize()
+{
+    return indexList.size();
+}
+
+QByteArray FileList::getHash(int value)
+{
+    QByteArray data = "";
+    if (indexList.size() < value || indexList.size() == 0)
+        qDebug() << "never at";
+    else
+    {
+        return QByteArray::fromStdString(indexList[value].hash);
+    }
+
+    return data;
+}
+
+indexRow::indexRow(std::string _hash, long long pos, short use)
+{
+    hash = _hash;
+    currentPosition = pos;
+    used = use;
 }

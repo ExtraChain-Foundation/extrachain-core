@@ -948,6 +948,15 @@ void Blockchain::checkBlockExistence(const Block &block)
     if (last.getIndex() < block.getIndex() || last.isEmpty())
     {
         addBlock(block);
+        QList<Transaction> tempTxList = block.extractTransactions();
+        foreach (Transaction tx, tempTxList)
+        {
+            if (accountController->sentTxList.at(tx.getHash()) != "")
+            {
+                accountController->sentTxList.remove(tx.getHash());
+                break;
+            }
+        }
         emit BlockIsMissing(block);
     }
     else if (last.getIndex() < block.getIndex())
