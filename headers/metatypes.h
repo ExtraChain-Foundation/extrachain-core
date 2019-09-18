@@ -1,12 +1,20 @@
 #ifndef METATYPES_H
 #define METATYPES_H
+
 #include <QObject>
 #include <QHostAddress>
 #include <QMetaType>
+
 #include "dfs/controls/headers/dfs.h"
-#include "headers/datastorage/blockchain.h"
-#include "headers/datastorage/contract.h"
-//#include "utility"
+#include "datastorage/blockchain.h"
+#include "datastorage/contract.h"
+#include "network/socket_pair.h"
+#include "datastorage/profile.h"
+
+#ifdef ETALONIUM_CLIENT
+#include "ui/struct/searchfilters.h"
+#endif
+
 Q_DECLARE_METATYPE(QHostAddress)
 Q_DECLARE_METATYPE(Block)
 Q_DECLARE_METATYPE(Messages::DfsMessage)
@@ -22,8 +30,13 @@ Q_DECLARE_METATYPE(based_dfs_struct::Status)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
-
+Q_DECLARE_METATYPE(Profile)
+Q_DECLARE_METATYPE(PublicProfile)
 // Q_DECLARE_METATYPE(qintptr)
+
+#ifdef ETALONIUM_CLIENT
+Q_DECLARE_METATYPE(SearchFilters)
+#endif
 
 void registerMetaTypes()
 {
@@ -42,6 +55,13 @@ void registerMetaTypes()
     qRegisterMetaType<based_dfs_struct::Status>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
-    //    qRegisterMetaType<qintptr>();
+    qRegisterMetaType<Profile>();
+    qRegisterMetaType<PublicProfile>();
+    // qRegisterMetaType<qintptr>();
+
+#ifdef ETALONIUM_CLIENT
+    qRegisterMetaType<SearchFilters>();
+#endif
 }
+
 #endif

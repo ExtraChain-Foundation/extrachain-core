@@ -232,7 +232,10 @@ static const QString KEY_FILTER = "*.key";
 
 QString makeKeyFileName(QString name);
 } // namespace KeyStore
-
+namespace SmartContractStorage {
+static const QString CONTRACTSTORE = "keystore/contracts/";
+static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
+}
 namespace FileSystem {
 void createFolderIfNotExist(QString path);
 /**
@@ -260,6 +263,7 @@ enum class TxParam
     UserReceiver,
     UserApprover,
     UserSenderOrReceiver,
+    UserSenderOrReceiverOrToken,
     User, // sender or receiver or approver
     Hash,
     Null

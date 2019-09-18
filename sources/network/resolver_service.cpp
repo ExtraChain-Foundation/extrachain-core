@@ -55,8 +55,7 @@ QByteArray ResolverService::calcHash(const QByteArray &request) const
 
 bool ResolverService::MessageIsNotValid(const Messages::IMessage &message)
 {
-    qDebug() << "RESOLVER SERVICE: "
-             << "MessageIsNotValid(): ";
+    // qDebug() << "RESOLVER SERVICE: " << "MessageIsNotValid(): ";
 
     if (validate(message))
     {
@@ -65,13 +64,11 @@ bool ResolverService::MessageIsNotValid(const Messages::IMessage &message)
         return false;
     }
     qWarning() << QString("Message [%1] digital sign is not valid. Signer was [%2]")
-                      .arg(QString::fromLocal8Bit(message.serialize()),
-                           message.getSigner().toString());
+                      .arg(QString::fromLocal8Bit(message.serialize()), message.getSigner().toString());
     return true;
 }
 
-void ResolverService::universalHandler(const Messages::IMessage &msg,
-                                       const QByteArray &msgType)
+void ResolverService::universalHandler(const Messages::IMessage &msg, const QByteArray &msgType)
 {
     if (checkMsgCount(msg, msgType))
         emit secondWave(msg);
@@ -86,8 +83,8 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
     long long currentPossition = -1;
     if (handlerOffsetMap.find(msg.hash()) != handlerOffsetMap.end())
         currentPossition = handlerOffsetMap[msg.hash()];
-    QByteArray t = Serialization::universalSerialize(
-        { msgType, msg.hash(), QByteArray::number(value) }, Messages::FIELD_SIZES);
+    QByteArray t = Serialization::universalSerialize({ msgType, msg.hash(), QByteArray::number(value) },
+                                                     Messages::FIELD_SIZES);
     QByteArray tableSegmet = Serialization::universalSerialize({ t }, Messages::FIELD_SIZES);
     // find index of elemet
     bool isRead = true;
@@ -95,8 +92,7 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
     {
         isRead = false;
         // check file if we have empty offset with suitable size for write chose this position
-        if (handlerOffsetMap.find(QByteArray::number(tableSegmet.size()))
-            != handlerOffsetMap.end())
+        if (handlerOffsetMap.find(QByteArray::number(tableSegmet.size())) != handlerOffsetMap.end())
             currentPossition = handlerOffsetMap[QByteArray::number(tableSegmet.size())];
     }
     if ((msgType == Messages::ACTOR_MESSAGE) || (msgType == Messages::BLOCK_MESSAGE)
@@ -121,8 +117,7 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
         file.seek(currentPossition);
         int dataSize = Utils::qByteArrayToInt(file.read(4));
         QByteArray r = file.read(dataSize);
-        QList<QByteArray> msgList =
-            Serialization::universalDesirialize(r, Messages::FIELD_SIZES);
+        QList<QByteArray> msgList = Serialization::universalDesirialize(r, Messages::FIELD_SIZES);
         int msg_count;
         if (msgList.size() == 3)
         {
@@ -135,8 +130,7 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
             {
                 file.seek(currentPossition);
                 dataSize += Messages::FIELD_SIZES;
-                if (handlerOffsetMap.find(QByteArray::number(dataSize))
-                    == handlerOffsetMap.end())
+                if (handlerOffsetMap.find(QByteArray::number(dataSize)) == handlerOffsetMap.end())
                     handlerOffsetMap[QByteArray::number(dataSize)] = currentPossition;
                 else
                 {
@@ -150,18 +144,16 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
             else
             {
                 QByteArray t = Serialization::universalSerialize(
-                    { msgType, msg.hash(), QByteArray::number(msg_count) },
-                    Messages::FIELD_SIZES);
-                QByteArray tableSegmet =
-                    Serialization::universalSerialize({ t }, Messages::FIELD_SIZES);
+                    { msgType, msg.hash(), QByteArray::number(msg_count) }, Messages::FIELD_SIZES);
+                QByteArray tableSegmet = Serialization::universalSerialize({ t }, Messages::FIELD_SIZES);
                 file.seek(currentPossition);
                 file.write(tableSegmet);
             }
         }
         else
         {
-            qDebug() << " Wrong size of list handling msg three from three List:  " << msgList
-                     << "data " << r;
+            qDebug() << " Wrong size of list handling msg three from three List:  " << msgList << "data "
+                     << r;
         }
         file.flush();
         file.close();
@@ -176,8 +168,7 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
 //    return active;
 //}
 
-void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddressst,
-                                 const int port)
+void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddressst, const int port)
 {
     QHostAddress peerAddress(peerAddressst);
     using namespace Messages;
@@ -198,8 +189,17 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
 
         // emit NewActor()
 
-        emit reserveActorResponse(message.getEntity(), message.getRequestHash(),
-                                  peerAddressst);
+        emit reserveActorResponse(message.getEntity(), message.getRequestHash(), peerAddressst);
+    }
+    else if (msgType == PROFILE_FILE)
+    {
+        qDebug() << "receive profile";
+        EntityMessage<PublicProfile> message(msg);
+        //        if (MessageIsNotValid(message))
+        //            return;
+        emit ReceiveProfile(message.getEntity());
+        //
+        // emit signal forProfile
     }
     else if (msgType == RESERVE_ACTOR_MESSAGE)
     {
@@ -375,8 +375,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         if (MessageIsNotValid(message))
             return;
 
-        emit GetTxPair(message.getSenderId(), message.getReceiverId(), peerAddress,
-                       calcHash(msg));
+        emit GetTxPair(message.getSenderId(), message.getReceiverId(), peerAddress, calcHash(msg));
     }
 
     else if (msgType == GET_BLOCK_MESSAGE)
@@ -488,8 +487,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)
     {
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_ACTOR_RESPONSE_MESSAGE
-                 << "\nmessage: " << msg;
+                 << "recieveMsg(): type: " << GET_ACTOR_RESPONSE_MESSAGE << "\nmessage: " << msg;
         EntityResponseMessage<Actor<KeyPublic>> message(msg);
         //        if (MessageIsNotValid(message))
         //            return;

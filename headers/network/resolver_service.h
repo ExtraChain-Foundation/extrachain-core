@@ -177,7 +177,7 @@ signals:
     void GetBlockResponse(Block block, QByteArray reqHash, QHostAddress peerAddress);
     void GetBlockCountResponse(BigNumber blockCount, QByteArray reqHash, QHostAddress peerAddress);
     void GetActorCountResponse(BigNumber actorCount, QByteArray reqHash, QHostAddress peerAddress);
-
+    void ReceiveProfile(PublicProfile profile);
     // thread pool
     void finished();
 };

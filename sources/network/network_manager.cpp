@@ -328,6 +328,8 @@ void NetManager::setupResolverServiceConnections()
 
     connect(resolverService, &ResolverService::getNewDfs, this, &NetManager::newDfsPack);
 
+    connect(resolverService, &ResolverService::ReceiveProfile, this, &NetManager::receiveProfile);
+    connect(this, &NetManager::receiveProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     // server signals
     //    connect(client,             &Client::newMessage,
     //            resolverService,    &ResolverService::recieveMsg);
@@ -512,6 +514,14 @@ void NetManager::removeConnection()
     connections.removeAt(connections.indexOf(connection));
 
     checkConnectionsStatus();
+}
+
+void NetManager::sendProfile(PublicProfile profile)
+{
+    qDebug() << "send profile " << profile.profile.at(2);
+    EntityMessage<PublicProfile> msg = Messages::createPublicProfileMessage(profile);
+    signMessage(msg);
+    broadcastMsg(msg);
 }
 
 //#ifdef ETALONIUM_CLIENT
@@ -963,7 +973,7 @@ void NetManager::handleNewTx(Transaction tx, QHostAddress peerAddress)
         tx.decrementHop();
 
         EntityMessage<Transaction> msg = Messages::createTxMessage(tx);
-        signMessage(msg);
+        //        signMessage(msg);
         broadcastMsg(msg);
         return;
     }
@@ -997,8 +1007,15 @@ void NetManager::handleGetActor(BigNumber actorId, QHostAddress peerAddress, QBy
         return;
     }
     EntityResponseMessage<Actor<KeyPublic>> msg = Messages::createGetActorResponse(actor, requestHash);
+
     //    signMessage(msg);
     sendMsgToPeer(msg, peerAddress);
+    PublicProfile profile = actorIndex->getProfileToSend(actor.getId().toString());
+    if (profile.sign != "")
+    {
+        EntityMessage<PublicProfile> msg2 = Messages::createPublicProfileMessage(profile);
+        sendMsgToPeer(msg2, peerAddress);
+    }
     //    } else {
     //        //send massage actor is not exist or not
     //    }

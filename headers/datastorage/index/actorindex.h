@@ -1,4 +1,4 @@
-#ifndef ACTORINDEX_H
+﻿#ifndef ACTORINDEX_H
 #define ACTORINDEX_H
 
 #include "datastorage/actor.h"
@@ -8,6 +8,34 @@
 /**
  * @brief Actors that stored in blockchain
  */
+struct indexList
+{
+    indexList(long long curPos, int _size);
+    long long currentPosition;
+    int size;
+};
+
+class PublicProfile
+{
+public:
+    PublicProfile(Profile _profile, QByteArray _sign, QString path);
+    PublicProfile(Profile _profile, QByteArray _sign);
+    PublicProfile(const QByteArray &serialize);
+    PublicProfile();
+    QByteArray serialize() const;
+    static Profile saveProfile(Profile newProfile, const QString &path, QByteArray sign);
+    static PublicProfile getProfile(const QString &path, const QString id);
+    static Profile saveProfileFromNet(Profile newProfile, QString path);
+    static QByteArray serialize(QByteArrayList actorList);
+    static QByteArrayList deserialize(QByteArray serializeData);
+    Profile profile;
+    QByteArray sign = "";
+signals:
+    //
+private:
+    //    QList<indexList> index;
+};
+
 class ActorIndex : public FileIndex
 {
     Q_OBJECT
@@ -67,7 +95,17 @@ public slots:
      * @param actor
      */
     void handleNewActorCheck(Actor<KeyPublic> actor);
+
+    void saveProfile(Actor<KeyPrivate> *key, Profile newProfile);
+    void saveProfileFromNetwork(PublicProfile newProfile);
+    void requestProfile(QString id);
+    PublicProfile getProfileToSend(QString id);
+    Profile getProfile(QString id);
+    PublicProfile getPublicProfile(QString id);
+
 signals:
+    void sendProfile(PublicProfile profile);
+    void sendProfileToUi(QString userID, Profile profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
     /**
@@ -78,6 +116,7 @@ signals:
     void actorIndexUpdated();
 
     void initDfs(BigNumber userId);
+    void initContractList(QVariantMap map);
     /**
      * @brief There no such actor in the local storage
      * @param actor

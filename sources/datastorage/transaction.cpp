@@ -100,6 +100,16 @@ Transaction::Transaction(const Transaction &other, QObject *parent)
     calcHash();
 }
 
+void Transaction::setData(const QByteArray &value)
+{
+    data = value;
+}
+
+void Transaction::setToken(const BigNumber &value)
+{
+    token = value;
+}
+
 long long Transaction::getDate() const
 {
     return date;

@@ -75,6 +75,7 @@ public slots:
      * @return 0 is transaction is successfully added
      */
     int addTransaction(Transaction tx);
+    int addProvedTransaction(Transaction tx);
 
     int proveTransaction(BigNumber senderId, BigNumber receiverId, Transaction sender, Transaction receiver,
                          QByteArray txHash);

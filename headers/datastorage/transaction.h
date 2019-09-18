@@ -42,10 +42,10 @@ private:
     BigNumber receiverBalance; // receiver balance at the time the transaction was created
     BigNumber prevBlock;       // last block id at the moment of tx creation
     int gas;                   // security and reward param
-    int hop;            // number of the nodes, through which the transaction will pass before
-                        // aprovement
-    QByteArray hash;    // hash from all fields
-    BigNumber approver; // address of the transaction approver.
+    int hop;                   // number of the nodes, through which the transaction will pass before
+                               // aprovement
+    QByteArray hash;           // hash from all fields
+    BigNumber approver;        // address of the transaction approver.
     QByteArray digSig;
 
 private:
@@ -55,7 +55,7 @@ private:
      */
     void calcHash();
 
-protected:
+public:
     /**
      * @brief Concatenates all fields that are used for digSig calculation
      * Override in subclasses
@@ -102,6 +102,10 @@ public:
 
     long long getDate() const;
     void setDate(long long value);
+
+    void setToken(const BigNumber &value);
+
+    void setData(const QByteArray &value);
 
 signals:
     void ProveMe();
