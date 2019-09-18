@@ -77,13 +77,14 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     savePrivateActor(*actor);
 
     accounts.append(actor);
-    account ? emit initDfs() : void();
+    if (account)
+        emit initDfs();
     emit newActorIsCreated(this->getMainActor()->getId(), account);
 
     return *actor;
 }
 
-Actor<KeyPrivate> AccountController::createActorWithId(BigNumber id, bool account)
+Actor<KeyPrivate> AccountController::createActorWithId(BigNumber id, bool account, bool contract)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
     actor->initNew(id, account);
@@ -103,7 +104,8 @@ Actor<KeyPrivate> AccountController::createActorWithId(BigNumber id, bool accoun
     savePrivateActor(*actor);
 
     accounts.append(actor);
-    account ? emit initDfs() : void();
+    if (account)
+        emit initDfs();
     emit newActorIsCreated(id, account);
 
     return *actor;

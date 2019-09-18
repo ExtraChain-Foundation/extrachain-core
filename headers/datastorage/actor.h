@@ -8,11 +8,12 @@
 
 #include <utility>
 #include <type_traits>
-
+#include <datastorage/profile.h>
 /**
  * Acting entity.
  * Users, Smart-contracts
  */
+
 template <typename T>
 class Actor
 {
@@ -208,7 +209,7 @@ public:
             list << id.toString().toLocal8Bit();
         }
         //        return Serialization::serialize(list, Serialization::ACTOR_FIELD_SPLITTER);//
-        QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
+        QByteArray serialized = Serialization::universalSerialize(list, 4);
         return serialized;
     }
 

@@ -9,6 +9,7 @@
 #include "dfs/packages/headers/dfs_universal.h"
 #include "dfs/packages/headers/dfs_request.h"
 #include "network/packages/service/downloaddfsrequest.h"
+#include "datastorage/index/actorindex.h"
 
 #include "network/packages/service/list_connections.h"
 
@@ -22,6 +23,7 @@ static const QByteArray GENESIS_BLOCK_MESSAGE = "genesisBlock";
 static const QByteArray TX_MESSAGE = "tx";
 static const QByteArray CONTRACT_MESSAGE = "contractMessage";
 static const QByteArray COIN_REQUEST = "coinRequest";
+static const QByteArray PROFILE_FILE = "publicProfile";
 // static const QByteArray DFS_CHANGED_MESSAGE = "dfs";
 
 template <class T>
@@ -104,6 +106,7 @@ protected:
     {
         QList<QByteArray> l = BaseMessage::serializedParams();
         l << data.serialize();
+
         return l;
     }
 
@@ -121,6 +124,11 @@ static EntityMessage<BigNumber> createReserveActorMessage(BigNumber logHash)
     return EntityMessage<BigNumber>(RESERVE_ACTOR_MESSAGE, logHash);
 }
 
+static EntityMessage<PublicProfile> createPublicProfileMessage(PublicProfile file)
+{
+    return EntityMessage<PublicProfile>(PROFILE_FILE, file);
+}
+
 static EntityMessage<BigNumber> createRequestCoinMessage(const BigNumber &coinAmount)
 {
     return EntityMessage<BigNumber>(COIN_REQUEST, coinAmount);
@@ -132,8 +140,7 @@ createConnectionListMessage(const Messages::EnableConnections &conList)
     return EntityMessage<Messages::EnableConnections>(ENABLE_LIST_CONNECTIONS, conList);
 }
 
-static EntityMessage<DownloadDfsRequestData>
-createDownloadDfsRequest(const DownloadDfsRequestData &status)
+static EntityMessage<DownloadDfsRequestData> createDownloadDfsRequest(const DownloadDfsRequestData &status)
 {
     return EntityMessage<DownloadDfsRequestData>(DOWNLOAD_DFS_REQUEST, status);
 }

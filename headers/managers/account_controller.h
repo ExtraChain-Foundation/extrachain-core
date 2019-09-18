@@ -37,7 +37,7 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createActor(bool account);
-    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account);
+    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(BigNumber id);
     /**
      * @brief Gets Actor by public key

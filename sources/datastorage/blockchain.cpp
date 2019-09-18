@@ -5,7 +5,6 @@ Blockchain::Blockchain(AccountController *accountController, bool fileMode)
     , accountController(accountController)
 {
     actorIndex = accountController->getActorIndex();
-    createTempTransactionFileByActor();
     connect(this, &Blockchain::NewBlock, this,
             &Blockchain::BlockIsMissing); // non-approved code
 }
@@ -45,62 +44,6 @@ BigNumber Blockchain::checkIntegrity()
     return BigNumber();
 }
 
-void Blockchain::updateLastTransactionListByActor()
-{
-    tempTransactionFile.resize(0);
-    tempTransactionFile.open();
-    QTextStream streamToTemp(&tempTransactionFile);
-
-    Block block = fileMode ? blockIndex.getLastBlock() : memIndex.getLastBlock();
-    BigNumber lastBlockId = block.getIndex();
-
-    qDebug() << lastBlockId;
-
-    while (lastBlockId >= BigNumber(0))
-    {
-        block = blockIndex.getBlockById(lastBlockId); // rewrite
-        QList<Transaction> txList = block.extractTransactions();
-        for (const auto &transaction : txList)
-        {
-            if (transaction.getSender() == accountController->getCurrentActor().getId()
-                || transaction.getReceiver() == accountController->getCurrentActor().getId())
-            {
-                streamToTemp << transaction.serialize() << '!';
-            }
-        }
-        lastBlockId--;
-    }
-    qDebug() << "temp tx file " << streamToTemp.readAll();
-    tempTransactionFile.close();
-    //    emit updateTransactionListInModel("0", "10");
-}
-
-void Blockchain::createTempTransactionFileByActor()
-{
-    tempTransactionFile.open();
-    QTextStream streamToTemp(&tempTransactionFile);
-
-    Block block = fileMode ? blockIndex.getLastBlock() : memIndex.getLastBlock();
-    BigNumber lastBlockId = block.getIndex();
-
-    while (lastBlockId >= BigNumber(0))
-    {
-        block = blockIndex.getBlockById(lastBlockId); // rewrite
-        QList<Transaction> txList = block.extractTransactions();
-        for (const auto &transaction : txList)
-        {
-            if (transaction.getSender() == accountController->getCurrentActor().getId()
-                || transaction.getReceiver() == accountController->getCurrentActor().getId())
-            {
-                streamToTemp << transaction.serialize() << '!';
-            }
-        }
-        lastBlockId--;
-    }
-    qDebug() << "temp tx file " << streamToTemp.readAll();
-    tempTransactionFile.close();
-}
-
 // Blocks //
 
 Block Blockchain::getLastBlock()
@@ -133,62 +76,41 @@ Block Blockchain::getBlockByHash(const QByteArray &hash)
     return validateAndReturnBlock(block);
 }
 
-Transaction Blockchain::getTxByHash(const QByteArray &hash)
+Transaction Blockchain::getTxByHash(const QByteArray &hash, const QByteArray &token)
 {
-    return fileMode ? blockIndex.getLastTxByHash(hash) : memIndex.getLastTxByHash(hash);
+    return fileMode ? blockIndex.getLastTxByHash(hash, token) : memIndex.getLastTxByHash(hash, token);
 }
 
-Transaction Blockchain::getTxBySender(const BigNumber &id)
+Transaction Blockchain::getTxBySender(const BigNumber &id, const QByteArray &token)
 {
-    return fileMode ? blockIndex.getLastTxBySender(id) : memIndex.getLastTxBySender(id);
+    return fileMode ? blockIndex.getLastTxBySender(id, token) : memIndex.getLastTxBySender(id, token);
 }
 
-Transaction Blockchain::getTxByReceiver(const BigNumber &id)
+Transaction Blockchain::getTxByReceiver(const BigNumber &id, const QByteArray &token)
 {
-    return fileMode ? blockIndex.getLastTxByReceiver(id) : memIndex.getLastTxByReceiver(id);
+    return fileMode ? blockIndex.getLastTxByReceiver(id, token) : memIndex.getLastTxByReceiver(id, token);
 }
 
-Transaction Blockchain::getTxBySenderOrReceiver(const BigNumber &id)
+Transaction Blockchain::getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token)
 {
-    return fileMode ? blockIndex.getLastTxBySenderOrReceiver(id) : memIndex.getLastTxBySenderOrReceiver(id);
+    return fileMode ? blockIndex.getLastTxBySenderOrReceiver(id, token)
+                    : memIndex.getLastTxBySenderOrReceiver(id, token);
 }
 
-Transaction Blockchain::getTxByApprover(const BigNumber &id)
+Transaction Blockchain::getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token)
 {
-    return fileMode ? blockIndex.getLastTxByApprover(id) : memIndex.getLastTxByApprover(id);
+    return fileMode ? blockIndex.getLastTxBySenderOrReceiverAndToken(id, token)
+                    : memIndex.getLastTxBySenderOrReceiverAndToken(id, token);
 }
 
-Transaction Blockchain::getTxByUser(const BigNumber &id)
+Transaction Blockchain::getTxByApprover(const BigNumber &id, const QByteArray &token)
 {
-    return fileMode ? blockIndex.getLastTxByApprover(id) : memIndex.getLastTxByApprover(id);
+    return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-QList<Transaction> Blockchain::getRecentTransaction(const BigNumber &last, const BigNumber &first)
+Transaction Blockchain::getTxByUser(const BigNumber &id, const QByteArray &token)
 {
-    QList<Transaction> txList;
-    tempTransactionFile.open();
-    //    qDebug() << "123456789" << tempTransactionFile.readAll();
-    //    qDebug() << tempTransactionFile.readAll();
-    //    for(BigNumber i = 0; i < last; ++i) {
-    //        if(!tempTransactionFile.canReadLine()){
-    //            qDebug() << "temp file 1234";
-    //            break;
-    //        }
-    //        tempTransactionFile.readLine();
-    //    }
-    QByteArray file = tempTransactionFile.readAll();
-    QList<QByteArray> txlistQByte = Serialization::deserialize(file, "!");
-    for (int i = 0; i < 10; ++i)
-    {
-        qDebug() << i << " " << txlistQByte.size();
-        if (i >= txlistQByte.size())
-            break;
-        QByteArray txByteArray = txlistQByte.at(i);
-        txList.append(Transaction(txByteArray));
-        qDebug() << "lol";
-    }
-    tempTransactionFile.close();
-    return txList;
+    return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
 TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
@@ -196,11 +118,28 @@ TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
     return fileMode ? blockIndex.searchPair(first, second) : memIndex.searchPair(first, second);
 }
 
+QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count,
+                                                             BigNumber token)
+{
+    return /*fileMode ?*/ blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
+    // : memIndex.getLastTxBySenderOrReceiver(id);
+}
+
 // Genesis block //
 
 bool Blockchain::shouldStartGenesisCreation()
 {
     return Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS <= this->blocksFromLastGenesis;
+}
+
+BigNumber Blockchain::getBalanceFromTx(BigNumber id, Transaction tx)
+{
+    if (tx.getReceiver() == id)
+        return tx.getReceiverBalance() + tx.getAmount();
+    else if (tx.getSender() == id)
+        return tx.getSenderBalance() - tx.getAmount();
+    else
+        return 0;
 }
 
 void Blockchain::createGenesisBlock()
@@ -265,7 +204,7 @@ void Blockchain::createGenesisBlock()
     // Collect data to collectedData map (block index or file index)
     if (fileMode)
     {
-        if (blockIndex.getRecords() != 0)
+        if (blockIndex.getRecords() == 0)
         {
             qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return;
@@ -520,6 +459,8 @@ Transaction Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArra
 {
     switch (type)
     {
+    case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
+        return getTxBySenderOrReceiverAndToken(value);
     case SearchEnum::TxParam::Hash:
         return getTxByHash(value);
     case SearchEnum::TxParam::User:
@@ -555,29 +496,6 @@ Block Blockchain::validateAndReturnBlock(const Block &block)
     //        emit BlockCorrupted(block);
     //        return Block();
     //    }
-}
-
-bool Blockchain::verifyTxBalance(const BigNumber &actorId, const BigNumber &balanceToVerify,
-                                 const Transaction &prevTx)
-{
-    //    qDebug() << prevTx.toString();
-    //    BigNumber realBalance;
-    //    if (actorId == prevTx.getSender())
-    //    {
-    //        realBalance = prevTx.getSenderBalance() - prevTx.getAmount();
-    //    }
-    //    else if (actorId == prevTx.getReceiver())
-    //    {
-    //        realBalance = prevTx.getReceiverBalance() + prevTx.getAmount();
-    //    }
-    //    else
-    //    {
-    //        qWarning() << "There are no actorId:" << actorId
-    //                   << "found in prevTx:" << prevTx.toString();
-    //    }
-    //    return realBalance == balanceToVerify;
-    BigNumber balance = getUserBalance(actorId);
-    return balanceToVerify == balance;
 }
 
 GenesisBlock *Blockchain::readGenesisBlock(const Block &prevBlock, const QByteArray &prevGenesisHash)
@@ -624,8 +542,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     {
     case 0:
     {
-        updateLastTransactionListByActor();
-        emit updateLastTransactionList();
+        emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << "is successfully added to blockchain";
         break;
     }
@@ -821,8 +738,8 @@ BigNumber Blockchain::getRecords() const
 
 BigNumber Blockchain::getMyBalance() const
 {
-    BigNumber currentBalance { 0 };
-    int i { 0 };
+    BigNumber currentBalance{ 0 };
+    int i{ 0 };
 
     BigNumber userBalanceId = 1;
 
@@ -864,52 +781,32 @@ BigNumber Blockchain::getMyBalance() const
     return currentBalance;
 }
 
-BigNumber Blockchain::getUserBalance(BigNumber userId) const
+BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
 {
-    BigNumber currentBalance { 0 };
-    int i { 0 };
 
-    BigNumber userBalanceId = userId;
-
-    Block currentBlock = blockIndex.getBlockById(i);
-    do
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
     {
-        //        qDebug() << "     Block id: " << currentBlock.getIndex()
-        //                 << "\n     Aprover: " << currentBlock.getApprover()
-        //                 << "\n     Data: " << currentBlock.getData()
-        //                 << "\n     Hash: " << currentBlock.getHash()
-        //                 << "\n     PrevHash: " << currentBlock.getPrevHash()
-        //                 << "\n     DigSig: " << currentBlock.getDigSig();
-        for (auto currentTransaction : currentBlock.extractTransactions())
+        Block currentBlock = blockIndex.getBlockById(i);
+
+        if (currentBlock.isEmpty())
+            break;
+
+        QList<Transaction> txs = currentBlock.extractTransactions();
+
+        for (auto &tx : txs)
         {
-            //            qDebug() << "!!!!!!!!!!!!transaction:" <<
-            //            currentTransaction.toString(); qDebug() << "  sender" <<
-            //            currentTransaction.getSender()
-            //                              << "\n    recipient" <<
-            //                              currentTransaction.getReceiver()
-            //                              << "\n    amount" <<
-            //                              currentTransaction.getAmount()
-            //                              << "\n    receiver balance"  <<
-            //                              currentTransaction.getReceiverBalance();
-            //            qDebug() << currentTransaction.getSender() << " - " <<
-            //            currentTransaction.getReceiver() << " - "
-            //                     << userBalanceId;
-            if (currentTransaction.getSender() == userBalanceId)
+            if (tx.getSender() == userId && tx.getToken() == tokenId)
             {
-                currentBalance = currentTransaction.getSenderBalance() - currentTransaction.getAmount();
+                return tx.getSenderBalance() - tx.getAmount();
             }
-            else if (currentTransaction.getReceiver() == userBalanceId)
+            else if (tx.getReceiver() == userId && tx.getToken() == tokenId)
             {
-                //                qDebug() << currentTransaction.getReceiverBalance() <<
-                //                " - "
-                //                << currentTransaction.getAmount();
-                currentBalance = currentTransaction.getReceiverBalance() + currentTransaction.getAmount();
+                return tx.getReceiverBalance() + tx.getAmount();
             }
         }
-        i++;
-        currentBlock = blockIndex.getBlockById(i);
-    } while (!currentBlock.isEmpty());
-    return currentBalance;
+    }
+
+    return BigNumber(0);
 }
 
 void Blockchain::showBlockchain() const
@@ -1065,21 +962,56 @@ void Blockchain::proveTx()
     QObject *s = QObject::sender();
     Transaction *tx = qobject_cast<Transaction *>(s);
 
+    if (tx->getSender() == 0)
+    {
+        bool sig = actorIndex->getActor(0).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
+        if (sig)
+        {
+            emit TxApproved(*tx);
+            return;
+        }
+        else
+        {
+            emit tx->NotApproved();
+            qDebug() << "False zero user";
+            return;
+        }
+    }
+
+    if (tx->getData() == "genesis")
+    {
+        // type = 6, token = correct
+        emit TxApproved(*tx);
+        return;
+    }
+
+    if (tx->getSender() == tx->getReceiver())
+    {
+        emit tx->NotApproved();
+        qDebug() << "Transaction not approved: sender == receiver";
+        return;
+    }
+
     // verify sender state
     BigNumber targetSender = tx->getSender();
-    BigNumber senderBalanceToVerify = tx->getSenderBalance();
-    Transaction senderLastTx = getTxBySenderOrReceiver(targetSender);
-    bool senderBalanceIsValid = verifyTxBalance(targetSender, tx->getSenderBalance(), senderLastTx);
+    Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toByteArray());
+    BigNumber senderCurBal = getBalanceFromTx(targetSender, senderLastTx);
+    bool senderBalanceIsValid = false;
+    if (tx->getSenderBalance() == senderCurBal)
+        senderBalanceIsValid = true;
 
     // verify receiver state
     BigNumber targetReceiver = tx->getReceiver();
-    BigNumber receiverBalanceToVerify = tx->getReceiver();
-    Transaction receiverLastTx = getTxBySenderOrReceiver(targetReceiver);
-    bool receiverBalanceIsValid = verifyTxBalance(targetReceiver, tx->getReceiverBalance(), receiverLastTx);
+    Transaction receiverLastTx = getTxBySenderOrReceiver(targetReceiver, tx->getToken().toByteArray());
+    BigNumber receiverCurBal = getBalanceFromTx(targetReceiver, receiverLastTx);
+    bool receiverBalanceIsValid = false;
+    if (tx->getReceiverBalance() == receiverCurBal)
+        receiverBalanceIsValid = true;
 
     if (senderBalanceIsValid && receiverBalanceIsValid)
     {
-        emit tx->Approved();
+        emit TxApproved(*tx);
+        return;
     }
     else
     {

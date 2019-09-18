@@ -352,6 +352,7 @@ private slots:
      */
 public slots:
 
+    void sendProfile(PublicProfile profile);
     void reserveActor(const QString &hash);
     void retranslateMessages(const QByteArray &msg, QString peerAddress);
     void Verify(const QByteArray &block);
@@ -409,6 +410,7 @@ signals:
     void qmlServerStatus(bool status);
 
     void newDfsPack(Messages::DfsMessage msg /*, QString senderId*/);
+    void receiveProfile(PublicProfile profile);
     void downloadDfsRequest(QByteArray header, QString peerAdress);
     //    void downloadDfsResponse(DownloadDfsRequestData msg, QString senderIp);
     void getDfsRequest(Messages::DfsRequest msg, QString senderIp);

@@ -30,15 +30,27 @@ int TransactionManager::addTransaction(Transaction tx)
     //    connect(&tx, &Transaction::Approved, this,
     //    &TransactionManager::makeBlock);
     emit tx.ProveMe();
-    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
-                "function)\n after emit tx.ProveMe() signal to Blockshain";
+    //    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
+    //                "function)\n after emit tx.ProveMe() signal to Blockshain";
+    //    BigNumber receiverBalance = tx.getReceiverBalance();
+    //    BigNumber senderBalance = tx.getSenderBalance();
+    //    if (!pendingTxs.contains(tx))
+    //    {
+    //        pendingTxs.push_back(tx);
+    //    }
+    //    //    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());
+    return 0;
+}
+
+int TransactionManager::addProvedTransaction(Transaction tx)
+{
+    qDebug() << "addProvedTransaction";
     BigNumber receiverBalance = tx.getReceiverBalance();
     BigNumber senderBalance = tx.getSenderBalance();
     if (!pendingTxs.contains(tx))
     {
         pendingTxs.push_back(tx);
     }
-    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());
     return 0;
 }
 
@@ -56,13 +68,13 @@ int TransactionManager::proveTransaction(BigNumber senderId, BigNumber receiverI
         }
     }
 
-    // DELETEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-    if (accountController->getCurrentActor().getId() == senderId)
-    {
-        this->pendingTxs.push_back(transaction);
-        return 0;
-    }
-    // DELETEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+    //    // DELETEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+    //    if (accountController->getCurrentActor().getId() == senderId)
+    //    {
+    //        this->pendingTxs.push_back(transaction);
+    //        return 0;
+    //    }
+    //    // DELETEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 
     if (senderId == BigNumber("0"))
     {

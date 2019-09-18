@@ -44,36 +44,35 @@ private:
     int blocksFromLastGenesis = 0;
 
     bool launched;
-    QTemporaryFile tempTransactionFile; // up new, down old
 
 public:
     Blockchain(AccountController *accountController, bool fileMode = true);
     ~Blockchain();
 
 private:
-    void createTempTransactionFileByActor();
-
     Block getBlockByIndex(const BigNumber &index);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
     Block getBlockByHash(const QByteArray &hash);
 
-    Transaction getTxByHash(const QByteArray &hash);
-    Transaction getTxBySender(const BigNumber &id);
-    Transaction getTxByReceiver(const BigNumber &id);
-    Transaction getTxBySenderOrReceiver(const BigNumber &id);
-    Transaction getTxByApprover(const BigNumber &id);
-    Transaction getTxByUser(const BigNumber &id);
+    Transaction getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+    Transaction getTxBySender(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxByUser(const BigNumber &id, const QByteArray &token = "0");
     TxPair getTxPair(const BigNumber &first, const BigNumber second);
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
+    BigNumber getBalanceFromTx(BigNumber id, Transaction tx);
 
 public:
     void createGenesisBlock();
 
-    QList<Transaction> getRecentTransaction(const BigNumber &last, const BigNumber &first);
-    void updateLastTransactionListByActor();
+    QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
+                                                     BigNumber token = 0);
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -94,8 +93,6 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block);
-    bool verifyTxBalance(const BigNumber &actorId, const BigNumber &balanceToVerify,
-                         const Transaction &prevTx);
 
 public:
     /**
@@ -239,13 +236,14 @@ public:
     BigNumber getRecords() const;
 
     BigNumber getMyBalance() const;
-    BigNumber getUserBalance(BigNumber userId) const;
+    BigNumber getUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
     /**
      * @brief Show blockchain
      */
     void showBlockchain() const;
 
 signals:
+    void TxApproved(Transaction tx);
     void updateTransactionListInModel(QByteArray, QByteArray);
     /**
      * @brief Sends new verified block to the network. Should be emited when

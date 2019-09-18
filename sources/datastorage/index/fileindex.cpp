@@ -92,7 +92,6 @@ BigNumber FileIndex::loadLastId()
     {
         qDebug() << "Last saved id is not loaded";
     }
-
     return lastSavedId;
 }
 
@@ -229,9 +228,10 @@ QByteArray FileIndex::getById(const BigNumber &id) const
     if (file.open(QIODevice::ReadOnly))
     {
         QByteArray data;
-        QDataStream stream(&file);
-        stream >> data;
+        data = file.readAll();
         file.close();
+        if (data.mid(data.size() - 1, 1) == "\n")
+            return data.mid(0, data.size() - 1);
         return data;
     }
 
@@ -260,8 +260,7 @@ int FileIndex::add(const BigNumber &id, const QByteArray &data)
 
     if (file.open(QIODevice::WriteOnly))
     {
-        QDataStream stream(&file);
-        stream << data;
+        file.write(data);
         file.flush();
         file.close();
 

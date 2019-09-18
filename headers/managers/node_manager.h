@@ -14,6 +14,7 @@
 #include "dfs/controls/headers/dfs.h"
 #include "managers/contract_manager.h"
 #include "crypt/crypt_manager.h"
+#include "managers/sm_manager.h"
 
 #ifndef ETALONIUM_CONSOLE
 #include "ui/ui_controller.h"
@@ -32,6 +33,7 @@ private:
     NetManager *netManager;
     TransactionManager *txManager;
     AccountController *accController;
+    SmartContractManager *smContractController;
 
 #ifndef ETALONIUM_CONSOLE
     UiController *uiController;
@@ -61,7 +63,7 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(BigNumber receiver, BigNumber amount);
+    Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
     int getClientList();
     void updateActors();
 
@@ -75,6 +77,7 @@ private:
     /**
      * @brief Connect signals between NetManager and Blockchain
      */
+    void connectSmContractManager();
     void connectNetManager();
     void connectTxManager();
     void connectUi();
@@ -101,6 +104,11 @@ signals:
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
 
     void sendActorIdSeva(bool status, BigNumber actorId);
+    void sendProfile(PublicProfile profile);
+    void requestProfile(QString actorId);
+    void saveProfile(Actor<KeyPrivate> *key, Profile profile);
+    void profileToUi(QString actorId, Profile profile);
+    void sendTransactionContract(Transaction tx);
 private slots:
 
     void createNewActor(QByteArray hash, bool accountStatus);
@@ -121,7 +129,7 @@ public slots:
     void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
 #ifdef ETALONIUM_CLIENT
-    void sendTransactionFromUi(BigNumber reciever, BigNumber actor);
+    void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
 
 private slots:
     void createWalletInUi();
@@ -131,6 +139,8 @@ private slots:
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
 
+private:
+    QByteArray currentToken;
 #endif
 };
 #endif // NODE_MANAGER_H

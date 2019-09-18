@@ -19,7 +19,9 @@ SOURCES += \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/tx_pair.cpp \
+    $$PWD/sources/datastorage/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
+    $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/coin_service.cpp \
     $$PWD/sources/managers/contract_manager.cpp \
     $$PWD/sources/managers/tx_manager.cpp \
@@ -55,7 +57,8 @@ SOURCES += \
     $$PWD/sources/network/resolver_service.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
-    $$PWD/sources/network/upnpconnection.cpp
+    $$PWD/sources/network/upnpconnection.cpp \
+    $$PWD/headers/utils/bignumberdec.cpp
 
 HEADERS += \
     $$PWD/headers/metatypes.h \
@@ -79,7 +82,9 @@ HEADERS += \
     $$PWD/headers/datastorage/genesis_block.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/tx_pair.h \
+    $$PWD/headers/datastorage/profile.h \
     $$PWD/headers/managers/account_controller.h \
+    $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/coin_service.h \
     $$PWD/headers/managers/contract_manager.h \
     $$PWD/headers/managers/tx_manager.h \
@@ -122,7 +127,8 @@ HEADERS += \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/utils/utils.h
+    $$PWD/headers/utils/utils.h \
+    $$PWD/headers/utils/bignumberdec.h
 
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
