@@ -426,7 +426,7 @@ void Utils::wipeDataFiles()
                 QFile::remove(file.filePath());
         }
     };
-    clearDir("blockchain/index/actors/0/profile/");
+    clearDir("blockchain/index/actors/0/profile", "0.profile");
     clearDir("blockchain/index/actors/0");
     clearDir("blockchain/index/blocks/0");
     clearDir("keystore/personal", "0.key");
