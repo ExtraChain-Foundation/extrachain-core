@@ -25,28 +25,11 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.append(relAddress);
     actorIndex->saveProfile(actor, profileList);
     profileList.insert(2, actor->getKey()->sign(Serialization::universalSerialize(profileList, 4)));
+
     QFile file(SmartContractStorage::CONTRACTPROFILE + actor->getId().toString() + ".profile");
     if (file.exists())
     {
         qDebug() << "[SmartContractManager][createContractProfile] Error. Contract profile already exist";
-        return;
-    }
-    if (file.open(QIODevice::WriteOnly))
-    {
-        file.write(Serialization::universalSerialize(profileList, 4));
-        file.close();
-    }
-    else
-    {
-        qDebug() << "[SmartContractManager][createContractProfile] Error. File " << file.fileName()
-                 << " not open";
-        return;
-    }
-    // Save in id
-    file.setFileName("id" + actor->getId().toString());
-    if (file.exists())
-    {
-        qDebug() << "[SmartContractManager][createContractProfile] Error. id profile already exist";
         return;
     }
     if (file.open(QIODevice::WriteOnly))

@@ -86,8 +86,8 @@ PublicProfile PublicProfile::getProfile(const QString &path, const QString id)
     profile.flush();
     profile.close();
     int signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
-    QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
-    serializeData = serializeData.mid(0, serializeData.size() - 4 - signSize);
+    QByteArray sign = serializeData.mid(serializeData.size() - 1 - 4 - signSize, signSize);
+    serializeData = serializeData.mid(0, serializeData.size() - 1 - 4 - signSize);
     QByteArrayList listProfile = deserialize(serializeData);
     PublicProfile pubProfile(listProfile, sign);
 
