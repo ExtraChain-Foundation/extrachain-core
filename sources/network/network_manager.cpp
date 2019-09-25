@@ -28,7 +28,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 #endif
     qDebug() << "Current server IPs:" << serverIp << "| allow local:" << allowLocalServer;
 
-    //    deviceId = BigNumber(readNetManagerIndetificator());
+    //    deviceId = BigNumber(readNetManagerIdentificator());
     // ThreadPool::addThread(this);
 
     this->extPort = 2223;
@@ -172,7 +172,7 @@ void NetManager::findLocal()
 //    {
 //        if (!((el->getPort() == checkConnection.second)
 //              && (el->getAddress().toStdString() == checkConnection.first)
-//              && (el->getIndetificator() == checkConnection.getId())))
+//              && (el->getIdentificator() == checkConnection.getId())))
 //            disconnectedSocketList[checkConnection]++;
 //        else
 //        {
@@ -188,7 +188,7 @@ void NetManager::checkConnectionsStatus()
     bool flag = false;
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
-    emit qmlServerStatus(flag);
+    emit qmlNetworkStatus(flag);
 }
 void NetManager::restoreConnections(const QList<SocketPair> &socketList)
 {
@@ -199,12 +199,12 @@ void NetManager::restoreConnections(const QList<SocketPair> &socketList)
     }
 }
 
-void NetManager::checkMyIndetificator()
+void NetManager::checkMyIdentificator()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
     if (allowLocalServer)
-        if (net::readNetManagerIndetificator() == connection->getIdentificator())
+        if (net::readNetManagerIdentificator() == connection->getIdentificator())
 
             connection->removeMe();
     short counter = 0;
@@ -226,12 +226,13 @@ void NetManager::startNetwork()
 {
     qDebug() << "NetManager::startNetwork()";
     netPort = serverPort;
-    qDebug() << "NetPort: " << netPort;
+    qDebug() << "NetPort:" << netPort;
     serverService = new ServerService(netPort, local);
     resolverService = new ResolverService(actorIndex, this);
     setupServerServiceConnections();
+    serverService->startListen();
     setupResolverServiceConnections();
-    //    ThreadPool::addThread(resolverService); // IMPORTANT TO DO !!!!
+    ThreadPool::addThread(resolverService);
 }
 
 void NetManager::startDiscovery()
@@ -260,6 +261,9 @@ void NetManager::logDebug()
 
 void NetManager::connectToServer()
 {
+#ifdef ETALONIUM_CONSOLE
+    return;
+#endif
     qDebug() << "void NetManager::connectToServer()";
     QStringList servers = serverIp.split(";");
     QString localIp = local->ip().toString();
@@ -306,6 +310,9 @@ void NetManager::setupActorIndexConnections()
 void NetManager::setupServerServiceConnections()
 {
     connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection);
+#ifdef ETALONIUM_CLIENT
+    connect(serverService, &ServerService::serverStatus, this, &NetManager::qmlServerError);
+#endif
 }
 
 void NetManager::setupDiscoveryServiceConnections()
@@ -410,7 +417,6 @@ ResolverService *NetManager::getResolverService()
 }
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
-
     SocketPair socketPair(peerAddress.toString().toStdString(), 0, this);
     emit sendMsg(msg.serialize(), socketPair);
 
@@ -463,7 +469,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     connect(connections.last(), &SocketService::MessageReceived, resolverService,
             &ResolverService::recieveMsg);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
-    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIndetificator);
+    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
 #ifdef ETALONIUM_CLIENT
 //    connectReconnect(connections.last());
 #endif
@@ -485,7 +491,7 @@ void NetManager::addConnection(qint64 socketDescriptor)
     connect(connections.last(), &SocketService::MessageReceived, resolverService,
             &ResolverService::recieveMsg);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
-    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIndetificator);
+    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
 
     ThreadPool::addThread(connections.last());
@@ -624,7 +630,7 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
             connect(connections.last(), &SocketService::MessageReceived, resolverService,
                     &ResolverService::recieveMsg);
             connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
-            connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIndetificator);
+            connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
         }
     }
 }
@@ -642,7 +648,7 @@ void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray request
     {
         ++reserveActorId;
     }
-    reservedActorList.push_back(reserveActorId);
+    reservedActorList.append(reserveActorId);
     EntityResponseMessage<BigNumber> msg = Messages::createReserveActorResponse(reserveActorId, requestHash);
     signMessage(msg);
     broadcastMsg(msg);

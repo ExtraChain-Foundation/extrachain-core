@@ -8,8 +8,7 @@ QList<QByteArray> CardManager::sorting(QList<QByteArray> list)
 
     for (auto &i : list)
     {
-        sorted_data[Serialization::deserialize(i, Serialization::INFORMATION_SEPARATOR_TWO)
-                        .at(2)] = i;
+        sorted_data[Serialization::deserialize(i, Serialization::INFORMATION_SEPARATOR_TWO).at(2)] = i;
     }
     QMapIterator<QByteArray, QByteArray> i(sorted_data);
 
@@ -17,14 +16,12 @@ QList<QByteArray> CardManager::sorting(QList<QByteArray> list)
     {
         i.next();
         res.append(
-            Serialization::deserialize(i.value(), Serialization::INFORMATION_SEPARATOR_TWO)
-                .takeFirst());
+            Serialization::deserialize(i.value(), Serialization::INFORMATION_SEPARATOR_TWO).takeFirst());
     }
     return res;
 }
 
-BigNumber CardManager::getLastSavedFile(const BigNumber &actorId,
-                                        const based_dfs_struct::Type type)
+BigNumber CardManager::getLastSavedFile(const BigNumber &actorId, const based_dfs_struct::Type type)
 {
     QString cardPath = "";
     if (type == based_dfs_struct::postes)
@@ -34,8 +31,7 @@ BigNumber CardManager::getLastSavedFile(const BigNumber &actorId,
     else if (type == based_dfs_struct::images)
         cardPath = based_dfs_struct::IMAGE_CARD_FILE_NAME;
     QString path =
-        Serialization::serialize(
-            { based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8(), actorId.toByteArray() }, '/')
+        Serialization::serialize({ based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8(), actorId.toByteArray() }, '/')
         + toByteArray(type) + cardPath;
     QFile file(path);
     file.open(QIODevice::ReadOnly);
@@ -103,12 +99,11 @@ QList<QByteArray> CardManager::getAll(based_dfs_struct::Type type, QString cardF
     return all;
 }
 
-QList<QByteArray> CardManager::getForUser(based_dfs_struct::Type type, QString cardFileName,
-                                          QString userId)
+QList<QByteArray> CardManager::getForUser(based_dfs_struct::Type type, QString cardFileName, QString userId)
 {
     QList<QByteArray> all;
-    QString fileName = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/'
-        + toString(type) + cardFileName;
+    QString fileName =
+        based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + toString(type) + cardFileName;
     QFile file(fileName);
 
     // qDebug() << "fileName" << fileName;
@@ -197,8 +192,8 @@ QByteArray CardManager::getProfileById(const BigNumber &userId)
         + based_dfs_struct::SERVICE_CARD_FILE_NAME;
     QFile file(path);
     file.open(QIODevice::ReadOnly);
-    QList<QByteArray> list = Serialization::deserialize(
-        file.readAll(), Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+    QList<QByteArray> list =
+        Serialization::deserialize(file.readAll(), Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
     QByteArray data = "";
     if (!list.isEmpty())
     {
@@ -225,8 +220,8 @@ BigNumber CardManager::getNameForNewFile(based_dfs_struct::Type type)
     QByteArray cardFileData = cardFile->readAll();
     BigNumber amout = cardFileData.isEmpty()
         ? BigNumber("-1")
-        : BigNumber(cardFileData.mid(
-              0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
+        : BigNumber(
+              cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
     amout++;
     cardFile->close();
     delete cardFile;
@@ -245,8 +240,7 @@ QString CardManager::getFileByName(const based_dfs_struct::Type type, const QByt
         }
         else
         {
-            QList<QByteArray> list =
-                Serialization::deserialize(line, Serialization::TX_FIELD_SPLITTER);
+            QList<QByteArray> list = Serialization::deserialize(line, Serialization::TX_FIELD_SPLITTER);
             if (list.size() == 10)
             {
                 if (list.at(0) == name)
@@ -293,10 +287,8 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
     list[0] = amount.toByteArray();
     list.append(serialize);
     qDebug() << file->fileName().toUtf8()
-             << Serialization::serialize(list,
-                                         Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
-    QByteArray line =
-        Serialization::serialize(list, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+             << Serialization::serialize(list, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+    QByteArray line = Serialization::serialize(list, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
     file->write(line);
     file->flush();
     file->close();
@@ -308,16 +300,14 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
         Serialization::deserialize(data, Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER);
     QList<QByteArray> savedCardsPath = {};
     for (QByteArray el : cardList)
-        savedCardsPath << Serialization::deserialize(
-            el, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+        savedCardsPath << Serialization::deserialize(el, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
     cardFile->close();
     if (int indexOfCardFile = savedCardsPath.indexOf(path.toUtf8()) == -1)
     {
         cardFile->open(QIODevice::WriteOnly | QIODevice::Append);
         QByteArray rootLine =
-            Serialization::serialize(
-                { amount.toByteArray(), Utils::calcKeccak(line), path.toUtf8() },
-                Serialization::DFS_ROOT_CARD_FILE_DELIMITER)
+            Serialization::serialize({ amount.toByteArray(), Utils::calcKeccak(line), path.toUtf8() },
+                                     Serialization::DFS_ROOT_CARD_FILE_DELIMITER)
             + Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER;
         cardFile->write(rootLine);
         cardFile->flush();
@@ -325,14 +315,14 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
     }
     else
     {
-        cardList[indexOfCardFile] = Serialization::serialize(
-            { amount.toByteArray(), Utils::calcKeccak(line), path.toUtf8() },
-            Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+        cardList[indexOfCardFile] =
+            Serialization::serialize({ amount.toByteArray(), Utils::calcKeccak(line), path.toUtf8() },
+                                     Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
         //        if (cardFile->size() < (1024 * 1024 * 10))
         //        {
         cardFile->open(QIODevice::WriteOnly | QIODevice::Truncate);
-        cardFile->write(Serialization::serialize(
-            cardList, Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER));
+        cardFile->write(
+            Serialization::serialize(cardList, Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER));
         cardFile->flush();
         cardFile->close();
         //        }
@@ -379,117 +369,8 @@ void CardManager::createdAllCards(const BigNumber &userId)
 
 int CardManager::checkDfsState(const BigNumber &userId) // not at
 {
+    //    QList<QString> list = getAllFiles(userId);
     return -1;
-    /*
-     * needed to modern for bigs file
-     * Use RAM
-     */
-
-    if (!QDir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray()).exists())
-        return -1;
-    QFile *mainCard = new QFile(based_dfs_struct::ROOT_CARD_FILE_NAME);
-    mainCard->open(QIODevice::ReadOnly);
-    QList<QByteArray> cardsFileList = Serialization::deserialize(
-        mainCard->readAll(), Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER);
-    QList<QByteArray> cardsFilePathList = {};
-    for (QByteArray el : cardsFileList)
-        cardsFilePathList << Serialization::deserialize(
-                                 el, Serialization::DFS_ROOT_CARD_FILE_DELIMITER)
-                                 .at(2);
-    QMap<based_dfs_struct::Type, QByteArray> hashMap = getCardHashFromRoot(userId);
-    int i = 0;
-    for (QMap<based_dfs_struct::Type, QByteArray>::iterator it = hashMap.begin();
-         it != hashMap.end(); ++it)
-    {
-        QList<QByteArray> w = Serialization::deserialize(
-            it.value(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-        qDebug() << "rew";
-        QByteArray tempPath = "file";
-        if (cardsFilePathList.size() > i)
-            tempPath = cardsFilePathList[i];
-        QFile *cardFile = new QFile(tempPath);
-        i++;
-        // modern to big's File here for hash
-        switch (it.key())
-        {
-        case based_dfs_struct::Type::chates:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::CHAT_CARD_FILE_NAME_MISSIMG;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::CHAT_CARD_FILE_NAME_MISSIMG;
-
-            break;
-        }
-        case based_dfs_struct::Type::images:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::IMAGE_CARD_FILE_NAME_MISSIMG;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::IMAGE_CARD_FILE_NAME_MISSIMG;
-            break;
-        }
-        case based_dfs_struct::Type::events:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::EVENT_CARD_FILE_NAME_MISSIMG;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::EVENT_CARD_FILE_NAME_MISSIMG;
-            break;
-        }
-        case based_dfs_struct::Type::postes:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::POST_CARD_FILE_NAME_MISSIMG;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::POST_CARD_FILE_NAME_MISSIMG;
-            break;
-        }
-        case based_dfs_struct::Type::ivideo:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::VIDEO_CARD_FILE_NAME_MISSIMG;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::VIDEO_CARD_FILE_NAME_MISSIMG;
-            break;
-        }
-        case based_dfs_struct::Type::servic:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::SERVICE_CARD_FILE_NAME_MISSING;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::SERVICE_CARD_FILE_NAME_MISSING;
-            break;
-        }
-        case based_dfs_struct::Type::system:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::SYSTEM_CARD_FILE_MISSING;
-            cardFile->open(QIODevice::ReadOnly);
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::SYSTEM_CARD_FILE_MISSING;
-            break;
-        }
-        case based_dfs_struct::Type::cdoctp:
-        {
-            if (!cardFile->exists())
-                return DFS_ERRORS::CONTRACT_CARD_FILE_MISSING;
-            if (Utils::calcKeccak(cardFile->readAll()) != it.value())
-                return DFS_ERRORS::CONTRACT_CARD_FILE_MISSING;
-            break;
-        }
-        }
-        cardFile->close();
-        delete cardFile;
-    }
-
-    return 0;
 }
 
 void CardManager::createdAllConnections()
@@ -503,16 +384,14 @@ void CardManager::createdAllConnections()
     {
         QMap<based_dfs_struct::Type, QString> cardConnections = {};
         for (based_dfs_struct::Type elType : based_dfs_struct::typesVec)
-            cardConnections[elType] =
-                QString(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + el.fileName() + '/'
-                        + based_dfs_struct::toString(elType) + '/'
-                        + based_dfs_struct::typeCardFilesMap[elType]);
+            cardConnections[elType] = QString(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + el.fileName() + '/'
+                                              + based_dfs_struct::toString(elType) + '/'
+                                              + based_dfs_struct::typeCardFilesMap[elType]);
         DFS_ERRORS::allDfsCardFileConnections[el.fileName()] = cardConnections;
     }
 }
 
-QMap<based_dfs_struct::Type, QByteArray>
-CardManager::getCardHashFromRoot(const BigNumber &userId)
+QMap<based_dfs_struct::Type, QByteArray> CardManager::getCardHashFromRoot(const BigNumber &userId)
 {
     /*
      * needed to modern for bigs file
@@ -520,19 +399,19 @@ CardManager::getCardHashFromRoot(const BigNumber &userId)
      */
     QFile *file = new QFile(based_dfs_struct::ROOT_CARD_FILE_NAME);
     file->open(QIODevice::ReadOnly);
-    QList<QByteArray> cardFilesList = Serialization::deserialize(
-        file->readAll(), Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER);
+    QList<QByteArray> cardFilesList =
+        Serialization::deserialize(file->readAll(), Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER);
     QMap<based_dfs_struct::Type, QByteArray> result = {};
     for (QByteArray el : cardFilesList)
     {
         QList<QByteArray> elementOfCards =
             Serialization::deserialize(el, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-        QList<QByteArray> desirializePath =
-            Serialization::deserialize(elementOfCards.at(2), "/");
+        QList<QByteArray> desirializePath = Serialization::deserialize(elementOfCards.at(2), "/");
         if (userId.toByteArray() == desirializePath.at(1))
-            result[based_dfs_struct::convertToDFType(desirializePath.at(2))] =
-                elementOfCards.at(1);
+            result[based_dfs_struct::convertToDFType(desirializePath.at(2))] = elementOfCards.at(1);
     }
+    file->close();
+    delete file;
     return result;
     //    while (!file->atEnd())
     //    {
@@ -550,8 +429,6 @@ CardManager::getCardHashFromRoot(const BigNumber &userId)
     //                return res;
     //            }
     //    }
-    file->close();
-    delete file;
     return {};
 }
 
@@ -608,6 +485,43 @@ QList<QString> CardManager::getAllFiles(const BigNumber &userId)
     return list;
 }
 
+std::vector<std::pair<std::string, std::string>> CardManager::getAllFileWithHash(const BigNumber &userId)
+{
+    std::vector<std::pair<std::string, std::string>> result;
+    QList<QString> cardList = {};
+    for (auto &el : based_dfs_struct::typesVec)
+    {
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+            + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
+        if (QFile(path).exists())
+        {
+            QFile f(path);
+            f.open(QIODevice::ReadOnly);
+            QByteArray data = f.readAll();
+            if (!data.isEmpty())
+                cardList.append(path);
+        }
+    }
+    for (QString &el : cardList)
+    {
+        QFile file(el);
+        file.open(QIODevice::ReadOnly);
+        QByteArray data = file.readAll();
+
+        QList<QByteArray> rlist =
+            Serialization::deserialize(data, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+        qDebug() << rlist.takeFirst();
+        for (QByteArray &el : rlist)
+        {
+            based_dfs_struct::DfStruct dfsFile(el);
+            result.push_back(
+                std::make_pair(dfsFile.getHash().toStdString(), dfsFile.getPath().toStdString()));
+        }
+        file.close();
+    }
+    return result;
+}
+
 QStringList CardManager::existsProfileFiles()
 {
     QDir dir(based_dfs_struct::ROOT_FOOLDER_NAME);
@@ -617,8 +531,8 @@ QStringList CardManager::existsProfileFiles()
 
     for (int i = 0; i != users.length(); ++i)
     {
-        QString tempUser = based_dfs_struct::ROOT_FOOLDER_NAME + "/" + users[i]
-            + "/servic/profile.dat"; // TODO
+        QString tempUser =
+            based_dfs_struct::ROOT_FOOLDER_NAME + "/" + users[i] + "/servic/profile.dat"; // TODO
 
         if (!QFile::exists(tempUser))
             users.removeAt(users.indexOf(users[i--]));
@@ -642,4 +556,23 @@ QList<QByteArray> CardManager::getEventsTemp(BigNumber userId)
 QStringList CardManager::getImagesFromJson(const QByteArray &json)
 {
     return QJsonDocument::fromJson(json).toVariant().toMap()["images"].toStringList();
+}
+
+QStringList CardManager::getAllNotEmptyCardFile(const BigNumber &userId)
+{
+    QStringList cardList = {};
+    for (auto &el : based_dfs_struct::typesVec)
+    {
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+            + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
+        if (QFile(path).exists())
+        {
+            QFile f(path);
+            f.open(QIODevice::ReadOnly);
+            QByteArray data = f.readAll();
+            if (!data.isEmpty())
+                cardList.append(path);
+        }
+    }
+    return cardList;
 }

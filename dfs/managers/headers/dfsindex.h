@@ -40,8 +40,7 @@ public:
     void dfsSender(const QString &filePath, QString peerAdrress);
 
 public:
-    DfsIndex(ActorIndex *actorIndex, AccountController *accountControler,
-             QObject *parent = nullptr);
+    DfsIndex(ActorIndex *actorIndex, AccountController *accountControler, QObject *parent = nullptr);
     DfsIndex(const DfsIndex &dfsIndex, QObject *parent = nullptr);
     ~DfsIndex();
 
@@ -53,11 +52,12 @@ public:
     QList<QByteArray> getFileByHash(const QByteArray &hash) const;
 
     int changedData(const QString &path, const based_dfs_struct::Type &type,
-                    const based_dfs_struct::SubType &subType,
-                    const based_dfs_struct::Status &status);
+                    const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
     int makeSystemDir(const BigNumber &userId) const;
 
     void initNewDfsItem(const QString &path, based_dfs_struct::Status status);
+
+    QStringList fileCompareAndReturnDifference(const QString &first, const QString &second) const;
 
 signals:
 
@@ -71,7 +71,7 @@ signals:
      * if request card file -> data = type.toByteArray
      *    image -> data = subType / REQUESTS_DATA_DELIMETRS/file.name
      */
-//    void requestData(Messages::DfsRequest request);
+    //    void requestData(Messages::DfsRequest request);
 
     void sendRequest(const Messages::DfsRequest &msg);
 

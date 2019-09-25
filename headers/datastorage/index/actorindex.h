@@ -49,12 +49,6 @@ public:
      * @return resultCode, true - exist, false - none
      */
     bool actorExist(BigNumber actorId);
-    /**
-     * @brief Serializes an actor and make a file in fs.
-     * @param actor
-     * @return resultCode, 0 - actor is saved
-     */
-    int addActor(const Actor<KeyPublic> &actor);
 
     /**
      * @brief Gets actor from local storage
@@ -78,6 +72,7 @@ public:
     bool validateTx(const Transaction &tx) const;
 
 public slots:
+    void process();
     /**
      * @brief Validates private actor created by ActorController. Checks the uniqueness of the
      * key. Emit's PrivateActorIsVerified signal on success.
@@ -103,6 +98,13 @@ public slots:
     Profile getProfile(QString id);
     PublicProfile getPublicProfile(QString id);
 
+    /**
+     * @brief Serializes an actor and make a file in fs.
+     * @param actor
+     * @return resultCode, 0 - actor is saved
+     */
+    int addActor(const Actor<KeyPublic> &actor);
+
 signals:
     void sendProfile(PublicProfile profile);
     void sendProfileToUi(QString userID, Profile profile);
@@ -122,6 +124,7 @@ signals:
      * @param actor
      */
     void ActorIsMissing(Actor<KeyPublic> actor);
+    void finished();
 };
 
 #endif // ACTORINDEX_H

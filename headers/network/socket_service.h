@@ -32,7 +32,7 @@ private:
     QString address;
     quint16 port;
     QTcpSocket *socket = nullptr;
-    BigNumber indetificator;
+    BigNumber identificator;
     int _blockSize = 0;
     QByteArray buffer;
     int reconnectTry = 0;

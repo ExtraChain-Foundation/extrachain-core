@@ -88,6 +88,7 @@ signals:
      * @brief verifyActor
      * @param serialized private actor
      */
+    void addActorInActorIndex(Actor<KeyPublic> actor);
     void verifyActor(Actor<KeyPublic> actor);
     //
     void sentActorId(BigNumber actorId);

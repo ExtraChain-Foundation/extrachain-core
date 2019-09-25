@@ -4,7 +4,9 @@ INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
+    $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
+    $$PWD/dfs/types/sources/cardfile_interface.cpp \
     $$PWD/sources/crypt/crypt_manager.cpp \
     $$PWD/sources/crypt/ecc/ecc.cpp \
     $$PWD/sources/crypt/ecc/key_private.cpp \
@@ -38,7 +40,7 @@ SOURCES += \
     $$PWD/dfs/managers/sources/dfsindex.cpp \
     $$PWD/dfs/managers/sources/storedindex.cpp \
     $$PWD/dfs/packages/sources/dfs_universal.cpp \
-    $$PWD/dfs/types/headers/coin_price.cpp \
+    $$PWD/dfs/types/sources/coin_price.cpp \
     $$PWD/dfs/types/sources/dfsitem.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
     $$PWD/dfs/types/sources/stored.cpp \
@@ -61,6 +63,8 @@ SOURCES += \
     $$PWD/headers/utils/bignumberdec.cpp
 
 HEADERS += \
+    $$PWD/dfs/packages/headers/dfs_status.h \
+    $$PWD/dfs/types/headers/cardfile_interface.h \
     $$PWD/headers/metatypes.h \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/dfs/packages/headers/ui_messages.h \

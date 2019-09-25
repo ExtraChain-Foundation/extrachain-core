@@ -16,7 +16,7 @@
 #include "crypt/crypt_manager.h"
 #include "managers/sm_manager.h"
 
-#ifndef ETALONIUM_CONSOLE
+#ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
 #endif
 
@@ -35,10 +35,11 @@ private:
     AccountController *accController;
     SmartContractManager *smContractController;
 
-#ifndef ETALONIUM_CONSOLE
+#ifdef ETALONIUM_CLIENT
     UiController *uiController;
+    WalletController *uiWallet;
 #endif
-    CryptManager *cryptManger;
+    CryptManager *cryptManager;
     ContractManager *contractManager;
 
 public:
@@ -109,6 +110,7 @@ signals:
     void saveProfile(Actor<KeyPrivate> *key, Profile profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
+    void addActorInActorIndex(Actor<KeyPublic> actor);
 private slots:
 
     void createNewActor(QByteArray hash, bool accountStatus);
@@ -138,9 +140,6 @@ private slots:
     void updateAvailableWalletList();
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
-
-private:
-    QByteArray currentToken;
 #endif
 };
 #endif // NODE_MANAGER_H

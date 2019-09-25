@@ -73,7 +73,8 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     file.write(str);
     file.flush();
     file.close();
-    actorIndex->addActor(actor->convertToPublic());
+    emit addActorInActorIndex(actor->convertToPublic());
+    //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
 
     accounts.append(actor);
@@ -100,7 +101,9 @@ Actor<KeyPrivate> AccountController::createActorWithId(BigNumber id, bool accoun
     file.write(str);
     file.flush();
     file.close();
-    actorIndex->addActor(actor->convertToPublic());
+
+    emit addActorInActorIndex(actor->convertToPublic());
+    //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
 
     accounts.append(actor);
@@ -212,7 +215,7 @@ void AccountController::loadActors()
                 qDebug() << prKey;
                 qDebug() << "Actor " << actor->getId() << "found locally - "
                          << actor->getKey()->getPrivateKey();
-                this->accounts.push_back(actor);
+                this->accounts.append(actor);
                 loaded++;
             }
         }

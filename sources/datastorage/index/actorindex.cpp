@@ -51,6 +51,8 @@ Profile PublicProfile::saveProfile(Profile newProfile, const QString &path, QByt
         QByteArray oldProfile = profile.readAll();
         profile.flush();
         profile.close();
+        int signSize = Utils::qByteArrayToInt(oldProfile.mid(oldProfile.size() - 4, 4));
+        oldProfile = oldProfile.mid(0, oldProfile.size() - 4 - signSize);
         if (serializeProfile == oldProfile)
         {
             qDebug() << "profile exist";
@@ -86,8 +88,8 @@ PublicProfile PublicProfile::getProfile(const QString &path, const QString id)
     profile.flush();
     profile.close();
     int signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
-    QByteArray sign = serializeData.mid(serializeData.size() - 1 - 4 - signSize, signSize);
-    serializeData = serializeData.mid(0, serializeData.size() - 1 - 4 - signSize);
+    QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
+    serializeData = serializeData.mid(0, serializeData.size() - 4 - signSize);
     QByteArrayList listProfile = deserialize(serializeData);
     PublicProfile pubProfile(listProfile, sign);
 
@@ -255,6 +257,10 @@ bool ActorIndex::validateTx(const Transaction &tx) const
     return tx.verify(actor);
 }
 
+void ActorIndex::process()
+{
+}
+
 // todo: look closely at this method!
 void ActorIndex::validatePrivateActor(Actor<KeyPrivate> *actor)
 {
@@ -308,23 +314,27 @@ void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
 }
 void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
 {
-    if (newProfile.sign == "")
+    if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")
     {
         qDebug() << "ActorIndex::saveProfileFromNetwork : empty sign";
         return;
     }
-    qDebug() << "Save profile with id" << newProfile.profile.at(2);
     QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
     Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
-    PublicProfile profile;
     if (!key.getKey()->verify(PublicProfile::serialize(newProfile.profile.list()), newProfile.sign))
+    {
         qDebug() << "ActorIndex::saveProfileFromNetwork : profile isn`t verify";
-    else
-        PublicProfile profile(newProfile.profile, newProfile.sign, path);
+        return;
+    }
+
+    PublicProfile profile(newProfile.profile, newProfile.sign, path);
     if (profile.profile.at(2) == "")
         return;
     else
+    {
+        qDebug() << "Save profile with id" << newProfile.profile.at(2);
         sendProfile(profile);
+    }
 }
 
 void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
@@ -353,10 +363,15 @@ void ActorIndex::requestProfile(QString id)
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
+    if (pubProfile.sign == "")
+    {
+        qDebug() << "incorrect profile";
+        return;
+    }
     if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
         emit sendProfileToUi(id, pubProfile.profile);
     else
-        qDebug() << "incorrect profile, fuck off";
+        qDebug() << "incorrect profile";
 }
 
 Profile ActorIndex::getProfile(QString id)
@@ -370,7 +385,7 @@ Profile ActorIndex::getProfile(QString id)
         return pubProfile.profile;
     else
     {
-        qDebug() << "incorrect profile, fuck off";
+        qDebug() << "incorrect profile";
         return Profile();
     }
 }

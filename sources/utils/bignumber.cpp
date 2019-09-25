@@ -820,6 +820,22 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
     return result;
 }
 
+BigNumber BigNumber::fromDec(const QByteArray &dec)
+{
+    BigNumber hex;
+
+    bool positive = dec.at(0) != '-';
+    unsigned long j = 0;
+
+    for (int i = dec.length() - 1; i >= 0 + !positive; i--)
+        hex += BigNumber(QString(dec.at(i)).toInt(nullptr, 10)) * BigNumber(10).pow(j++);
+
+    if (!positive)
+        hex.setPositive(false);
+
+    return hex;
+}
+
 QDataStream &operator<<(QDataStream &in, BigNumber &bigNumber)
 {
     in << bigNumber.getHexValue();

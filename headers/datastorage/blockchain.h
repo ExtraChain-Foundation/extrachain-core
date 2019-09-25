@@ -243,7 +243,7 @@ public:
     void showBlockchain() const;
 
 signals:
-    void TxApproved(Transaction tx);
+    void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);
     /**
      * @brief Sends new verified block to the network. Should be emited when
@@ -293,8 +293,10 @@ signals:
     void VerifiedTx(Transaction tx);
 
     void updateLastTransactionList();
+    void finished();
 
 public slots:
+    void process();
 
     /**
      * @brief Checks if there is a such block in a local blockchain.

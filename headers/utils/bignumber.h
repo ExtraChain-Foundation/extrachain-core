@@ -97,6 +97,7 @@ public:
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
+    static BigNumber fromDec(const QByteArray &dec);
 };
 
 inline bool operator<(const BigNumber &e1, const BigNumber &e2)
