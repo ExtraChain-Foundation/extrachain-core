@@ -6,7 +6,7 @@
 #include "dfs/managers/headers/card_manager.h"
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
-
+#include "dfs/packages/headers/dfs_status.h"
 class Dfs : public QObject
 {
     Q_OBJECT
@@ -49,7 +49,6 @@ signals:
     void sendRequestf(const Messages::DfsRequest &msg);
 
 public slots:
-
     void savedNewData(const QString &path, const based_dfs_struct::Type &type,
                       const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
 
@@ -64,6 +63,9 @@ public slots:
     void process();
 
     void getDfsRequest(const Messages::DfsRequest &msg);
+    void checkStatus(const Messages::DfsStatus &msg);
+
+    void resolveMsg(const Messages::DfsMessage &msg);
 };
 
 #endif // DFS_H

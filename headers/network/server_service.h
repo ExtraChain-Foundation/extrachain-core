@@ -19,25 +19,25 @@ class ServerService : public QTcpServer
 {
     Q_OBJECT
 private:
-    //    bool active = false;
+    // bool active = false;
+    QNetworkAddressEntry *localAddress;
     quint16 port;
 
-private:
-    QNetworkAddressEntry *localAdress;
-
 public:
-    ServerService(quint16 networkPort, QNetworkAddressEntry *local, QObject *parent = nullptr);
+    ServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent = nullptr);
     ~ServerService() override;
 
 public slots:
-    //    void run() override;
+    // void run() override;
     int process();
 
 public:
+    void startListen();
     bool isActive() const;
 
 protected:
     void incomingConnection(qintptr socketDescriptor) override;
+
 private slots:
     /**
      * @brief Initial processing of incoming messages.
@@ -49,7 +49,8 @@ private slots:
 signals:
     void MessageReceived(QByteArray msg, QHostAddress peerAddress);
     void finished();
-    //    void newSocketAdd(QTcpSocket *addSocket);
+    // void newSocketAdd(QTcpSocket *addSocket);
     void newConnection(qint64 socketDescriptor);
+    void serverStatus(bool socketError);
 };
 #endif // SERVER_SERVICE_H

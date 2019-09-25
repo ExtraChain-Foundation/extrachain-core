@@ -173,6 +173,38 @@ void DfsIndex::initNewDfsItem(const QString &path, based_dfs_struct::Status stat
     //    return dfsItemList.last();
 }
 
+QStringList DfsIndex::fileCompareAndReturnDifference(const QString &first, const QString &second) const
+{
+    QStringList difference;
+    // only for card File from Dfs
+    QFile file(first);
+    file.open(QIODevice::ReadOnly);
+    QByteArray data = file.readAll();
+
+    QList<QByteArray> rlist =
+        Serialization::deserialize(data, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+    QFile fileSecond(second);
+    fileSecond.open(QIODevice::ReadOnly);
+    data = fileSecond.readAll();
+
+    QList<QByteArray> rlistSecond =
+        Serialization::deserialize(data, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+
+    for (int i = 0; i < rlist.size(); i++)
+    {
+        bool flag = false;
+        for (int j = 0; j < rlistSecond.size(); j++)
+            if (rlist[i] == rlistSecond[j])
+                flag = true;
+        if (!flag)
+            difference.append(rlist[i]);
+    }
+    if (rlist.size() < rlistSecond.size())
+        for (int i = rlist.size() - 1; i < rlistSecond.size(); i++)
+            difference.append(rlistSecond[i]);
+    return difference;
+}
+
 void DfsIndex::dfsItemStatus(bool status)
 {
     if (status)

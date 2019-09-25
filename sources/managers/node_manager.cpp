@@ -13,7 +13,7 @@ NodeManager::NodeManager()
     netManager = new NetManager(accController, actorIndex);
     ThreadPool::addThread(netManager);
     this->thread()->sleep(1);
-    accController->loadActors();
+    // accController->loadActors();
     blockchain = new Blockchain(accController, fileMode);
     BigNumber i = 0;
     while (i <= blockchain->getLastBlock().getIndex())
@@ -28,13 +28,14 @@ NodeManager::NodeManager()
     contractManager = new ContractManager(accController, blockchain);
 #ifdef ETALONIUM_CLIENT
     uiController = new UiController();
+    uiWallet = uiController->getWallet();
     qDebug() << "========" << uiController;
 #endif
     dfs = new Dfs(actorIndex, accController);
-    cryptManger = new CryptManager(accController);
+    cryptManager = new CryptManager(accController);
     connectSignals();
-#ifdef ETALONIUM_CONSOLE
 
+#ifdef ETALONIUM_CONSOLE
     CreateExtracoin();
 //    if (!QFile("blockchain/index/actor/0/0").exists())
 //    {
@@ -56,9 +57,13 @@ NodeManager::NodeManager()
 //        txManager->makeBlock();
 //    }
 #endif
+
+    ThreadPool::addThread(blockchain);
+    ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(contractManager);
-    ThreadPool::addThread(cryptManger);
+    ThreadPool::addThread(cryptManager);
     ThreadPool::addThread(dfs);
+    ThreadPool::addThread(smContractController);
 #ifdef ETALONIUM_CONSOLE
     emit accController->initDfs();
 #endif
@@ -97,6 +102,8 @@ void NodeManager::showMessage(QString from, QString message)
 void NodeManager::connectSmContractManager()
 {
     connect(smContractController, &SmartContractManager::verifyActor, netManager, &NetManager::NewActor);
+    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
+            &NodeManager::addActorInActorIndex);
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
@@ -279,10 +286,9 @@ void NodeManager::sendTransactionFromUi(BigNumber reciever, BigNumber amount, Bi
 
 void NodeManager::createWalletInUi()
 {
-    accController->loadActors();
-    uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().getId());
-    uiController->getWallet()->setCurrentWalletBalance(
-        blockchain->getUserBalance(accController->getCurrentActor().getId()));
+    // accController->loadActors();
+    uiWallet->setCurrentWalletId(accController->getCurrentActor().getId());
+    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(accController->getCurrentActor().getId()));
 
     updateWalletList();
     updateAvailableWalletList();
@@ -294,8 +300,7 @@ void NodeManager::updateWalletInUi()
 
     //    uiController->getWallet()->setCurrentWalletId(
     //            accController->getCurrentActor().getId());
-    uiController->getWallet()->setCurrentWalletBalance(
-        blockchain->getUserBalance(accController->getCurrentActor().getId()));
+    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(accController->getCurrentActor().getId()));
 
     updateWalletList();
     updateAvailableWalletList();
@@ -313,19 +318,20 @@ void NodeManager::updateWalletList()
         walletList.append(actorIndex->getActor(currentId).getKey()->getPublicKey());
         walletList.append(currentId.toStringDec().toUtf8());
 
-        QByteArray amount = blockchain->getUserBalance(currentId, currentToken).toByteArray();
+        QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
         walletList.append(WalletController::toRealNumber(amount));
     }
 
-    uiController->getWallet()->updateWalletListModel(&walletList);
+    uiWallet->updateWalletListModel(&walletList);
 }
 
 void NodeManager::updateAvailableWalletList()
 {
     qDebug() << "NODE MANAGER: updateAvailableWalletList";
-    BigNumber currentId = uiController->getWallet()->getCurrentWalletId();
+    BigNumber currentId = uiWallet->getCurrentWalletId();
     QList<QByteArray> walletList;
     BigNumber lastId = actorIndex->getLastSavedId();
+
     for (BigNumber i(1); i <= lastId; ++i)
     {
         Actor<KeyPublic> curActor = actorIndex->getActor(i);
@@ -335,7 +341,8 @@ void NodeManager::updateAvailableWalletList()
         walletList.append(curActor.getKey()->getPublicKey());
         walletList.append(curActor.getId().toStringDec().toUtf8());
     }
-    uiController->getWallet()->updateAvailableListModel(&walletList);
+
+    uiWallet->updateAvailableListModel(&walletList);
 }
 
 void NodeManager::updateRecentActivities()
@@ -343,19 +350,19 @@ void NodeManager::updateRecentActivities()
     QList<Transaction> recentTransactionList;
 
     recentTransactionList = blockchain->getTxsBySenderOrReceiverInRow(
-        accController->getCurrentActor().getId(), -1, 100, currentToken);
+        accController->getCurrentActor().getId(), -1, 100, uiWallet->getCurrentToken());
 
-    uiController->getWallet()->updateRecentActivitiesModel(&recentTransactionList);
+    uiWallet->updateRecentActivitiesModel(&recentTransactionList);
 }
 
 void NodeManager::changeWalletIdUi(BigNumber walletId)
 {
     qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
-    //    accController->loadActors();
+    // accController->loadActors();
     accController->changeUserNum(walletId.serialize());
-    uiController->getWallet()->setCurrentWalletBalance(blockchain->getUserBalance(walletId));
+    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId));
 
-    //    updateWalletList();
+    // updateWalletList();
     updateAvailableWalletList();
     updateRecentActivities();
 }
@@ -404,29 +411,18 @@ void NodeManager::connectUi()
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
 
     //=======================================WALLET=========================================
-    connect(uiController->getWallet(), &WalletController::sendNewTransaction, this,
-            &NodeManager::sendTransactionFromUi, Qt::ConnectionType::QueuedConnection);
-    connect(uiController->getWallet(), &WalletController::updateWalletToNode, this,
-            &NodeManager::updateWalletInUi);
-    connect(uiController->getWallet(), &WalletController::createWalletToNode, this,
-            &NodeManager::createWalletInUi);
-    connect(uiController->getWallet(), &WalletController::changeWalletData, this,
-            &NodeManager::changeWalletIdUi);
-    connect(uiController->getWallet()->getWalletListModel(),
-            &WalletListModel::changeWalletIdInAccountController, accController,
-            &AccountController::changeUserNum);
-    connect(uiController->getWallet(), &WalletController::sendCoinRequestFromUi, netManager,
-            &NetManager::sendCoinRequest, Qt::ConnectionType::QueuedConnection);
-    connect(uiController->getWallet(), &WalletController::addNewWallet,
+    connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi,
+            Qt::ConnectionType::QueuedConnection);
+    connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
+    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
+    connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
+    connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
+            accController, &AccountController::changeUserNum);
+    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendCoinRequest,
+            Qt::ConnectionType::QueuedConnection);
+    connect(uiWallet, &WalletController::addNewWallet,
             [=]() { accController->savePrivateActor(accController->createActor(false)); });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
-    connect(uiController->getWallet(), &WalletController::changeCoin, [this](QByteArray token) {
-        qDebug() << "token" << token;
-        currentToken = token;
-        updateWalletInUi();
-    });
-    connect(uiController->getWallet(), &WalletController::changeCoin, smContractController,
-            &SmartContractManager::setCurrentToken);
 
     connect(uiController, &UiController::requestTokenList, smContractController,
             &SmartContractManager::requestTokenList);
@@ -434,24 +430,29 @@ void NodeManager::connectUi()
             &UiController::setTokenList);
 
     //======================================CONTRACT===========================================
-    connect(uiController->getContractsModel(), &ContractsModel::loadContractst, contractManager,
+    auto contractsModel = uiController->getContractsModel();
+    connect(contractsModel, &ContractsModel::loadContractst, contractManager,
             &ContractManager::loadContractsFrom);
-    connect(uiController->getContractsModel(), &ContractsModel::approveByPerformer, contractManager,
+    connect(contractsModel, &ContractsModel::approveByPerformer, contractManager,
             &ContractManager::approveContractByPerformer);
-    connect(uiController->getContractsModel(), &ContractsModel::completeByCustomer, contractManager,
+    connect(contractsModel, &ContractsModel::completeByCustomer, contractManager,
             &ContractManager::completeContractByCustomer);
-    connect(uiController->getContractsModel(), &ContractsModel::completeByPerformer, contractManager,
+    connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
             &ContractManager::completeContractByPerformer);
-    connect(netManager, &NetManager::qmlServerStatus, uiController, &UiController::setServerStatus);
-    connect(uiController->getContractsModel(), &ContractsModel::newContractToNode, contractManager,
+    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
+
+    connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
             &ContractManager::createContract);
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
-    connect(cryptManger, &CryptManager::sendEncryptData, uiController,
+    connect(accController, &AccountController::addActorInActorIndex, this,
+            &NodeManager::addActorInActorIndex);
+    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
+    connect(cryptManager, &CryptManager::sendEncryptData, uiController,
             &UiController::receiveEncryptOrDecryptData);
-    connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManger,
+    connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManager,
             &CryptManager::recieveData);
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
@@ -499,7 +500,6 @@ void NodeManager::connectBlockchain()
     //    &NetManager::sendMergedBlock);
     connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
     connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
-    connect(blockchain, &Blockchain::TxApproved, txManager, &TransactionManager::addProvedTransaction);
 }
 
 void NodeManager::connectAccountController()

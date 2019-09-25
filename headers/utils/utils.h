@@ -44,7 +44,7 @@ private:
 
 namespace net {
 
-static QByteArray readNetManagerIndetificator()
+static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
     file.open(QIODevice::ReadOnly);
@@ -115,11 +115,6 @@ static const int FILE_IS_NOT_OPENED = 102;
 static const int BLOCK_IS_NOT_VALID = 201;
 static const int BLOCKS_CANT_MERGE = 202;
 static const int BLOCKS_ARE_EQUAL = 203;
-
-// TX
-static const int TRANSACTION_IS_EMPTY = 301;
-static const int TRANSACTION_WRONG_SENDER_BALANCE = 302;
-static const int TRANSACTION_WRONG_RECEIVER_BALANCE = 303;
 
 // Mem and Block index
 static const int NO_BLOCKS = 401;

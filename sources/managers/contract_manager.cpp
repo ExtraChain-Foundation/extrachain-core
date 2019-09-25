@@ -42,7 +42,7 @@ void ContractManager::loadContracts()
     {
         QFile open_file(path + filename);
         open_file.open(QIODevice::ReadOnly);
-        contractList.push_back(Contract(open_file.readAll()));
+        contractList.append(Contract(open_file.readAll()));
     }
     for (auto temp : contractList)
     {

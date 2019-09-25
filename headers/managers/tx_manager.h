@@ -34,6 +34,8 @@ private:
     // hashes of sent transactions, that are not approved yet
     QList<QByteArray> unApprovedTxHashes;
 
+    QList<Transaction *> receivedTxList;
+
     // current user
     //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
@@ -44,13 +46,11 @@ private:
 public:
     // todo: add ref to blockchain
     TransactionManager(AccountController *accountController, Blockchain *blockchain);
-    QList<Transaction> receivedTxList; // DO PRIVATE ( Public for test)!!!!!!
+
 private:
     void removeTransaction(int i);
 
 public:
-    //    void run();
-
     void run() override;
 
 public:
@@ -74,11 +74,9 @@ public slots:
      * @param tx - transaction
      * @return 0 is transaction is successfully added
      */
-    int addTransaction(Transaction tx);
-    int addProvedTransaction(Transaction tx);
-
-    int proveTransaction(BigNumber senderId, BigNumber receiverId, Transaction sender, Transaction receiver,
-                         QByteArray txHash);
+    void addTransaction(Transaction tx);
+    void addProvedTransaction();
+    void removeUnApprovedTransaction();
 
     // Unapproved tx's //
 

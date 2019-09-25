@@ -833,6 +833,10 @@ void Blockchain::showBlockchain() const
     }
 }
 
+void Blockchain::process()
+{
+}
+
 void Blockchain::checkBlockExistence(const Block &block)
 {
     Block last = getLastBlock();
@@ -904,7 +908,8 @@ void Blockchain::addBlockToBlockchain(Block block)
 
 int Blockchain::addActor(const Actor<KeyPublic> &actor)
 {
-    return actorIndex->addActor(actor);
+    //    return actorIndex->addActor(actor);
+    return 0;
 }
 
 Actor<KeyPublic> Blockchain::getActor(const BigNumber &actorId)
@@ -924,7 +929,7 @@ void Blockchain::setApprover(const Actor<KeyPrivate> &value)
 
 void Blockchain::newActor(Actor<KeyPublic> actor)
 {
-    actorIndex->addActor(actor);
+    //    actorIndex->addActor(actor);
 }
 
 void Blockchain::getTxFromBlockchain(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
@@ -959,6 +964,7 @@ void Blockchain::VerifyTx(Transaction tx)
 
 void Blockchain::proveTx()
 {
+    qDebug() << "proveTx: started";
     QObject *s = QObject::sender();
     Transaction *tx = qobject_cast<Transaction *>(s);
 
@@ -967,7 +973,7 @@ void Blockchain::proveTx()
         bool sig = actorIndex->getActor(0).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
         if (sig)
         {
-            emit TxApproved(*tx);
+            emit tx->Approved();
             return;
         }
         else
@@ -981,7 +987,7 @@ void Blockchain::proveTx()
     if (tx->getData() == "genesis")
     {
         // type = 6, token = correct
-        emit TxApproved(*tx);
+        emit tx->Approved();
         return;
     }
 
@@ -1010,7 +1016,7 @@ void Blockchain::proveTx()
 
     if (senderBalanceIsValid && receiverBalanceIsValid)
     {
-        emit TxApproved(*tx);
+        emit tx->Approved();
         return;
     }
     else

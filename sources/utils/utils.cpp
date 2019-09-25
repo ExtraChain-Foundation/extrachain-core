@@ -382,7 +382,7 @@ QByteArray Utils::calcKeccakForFile(const QString &path)
     QByteArray hash;
     for (QByteArray &el : hashList)
         hash += el;
-
+    file.close();
     return Utils::calcKeccak(hash);
 }
 

@@ -4,6 +4,7 @@
 #endif
 
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
+    : QObject(parent)
 {
     this->actorIndex = actorIndex;
     initializeTokenArray();
@@ -52,6 +53,10 @@ void SmartContractManager::requestTokenList()
     emit sendTokenList(tokenId);
 }
 
+void SmartContractManager::process()
+{
+}
+
 void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
                                            QByteArray quantity)
 {
@@ -64,6 +69,10 @@ void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray
     tx.sign(*sender);
 
     emit sendTransactionCreateContract(tx);
+#else
+    Q_UNUSED(sender)
+    Q_UNUSED(receiver)
+    Q_UNUSED(quantity)
 #endif
 }
 
@@ -93,7 +102,8 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
     tokenId[actor->getId().toString()] = QString(tokenName);
     // qDebug() << "tokenId[actor->getId().toString()]" << tokenId[actor->getId().toString()];
     sendTokenList(tokenId);
-    actorIndex->addActor(actor->convertToPublic());
+    emit addContractActorInActorIndex(actor->convertToPublic());
+    //    actorIndex->addActor(actor->convertToPublic());
 
     savePrivateActor(*actor);
     // return actor->getId().toByteArray();

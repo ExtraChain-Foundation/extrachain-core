@@ -324,7 +324,7 @@ public slots:
     void logDebug();
     void connectToServer();
 
-    void checkMyIndetificator();
+    void checkMyIdentificator();
     /**
      * @brief Broadcast message to all connected peers
      * @param msg
@@ -407,7 +407,8 @@ public slots:
 signals:
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
-    void qmlServerStatus(bool status);
+    void qmlNetworkStatus(bool status);
+    void qmlServerError(bool serverError);
 
     void newDfsPack(Messages::DfsMessage msg /*, QString senderId*/);
     void receiveProfile(PublicProfile profile);

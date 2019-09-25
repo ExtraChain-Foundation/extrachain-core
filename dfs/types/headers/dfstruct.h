@@ -28,7 +28,7 @@ static const QString VIDEO_CARD_FILE_NAME = "/card_file.video";
 static const QString SERVICE_CARD_FILE_NAME = "/card_file.service";
 static const QString SYSTEM_CARD_FILE_NAME = "/card_file.system";
 // temp files
-static const QString FILE_INDETIFICATOR = ".tmp";
+static const QString FILE_IDENTIFICATOR = ".tmp";
 enum State
 {
     NEWSTATE,
@@ -110,7 +110,7 @@ private:
     QByteArray hash; // hash of object
     QByteArray path; // path in etalonium system
     SubType subType;
-    QByteArray data;   // information about location of object on the device/ VALIK DOLBOEB
+    QByteArray data;   // information about location of object on the device
     BigNumber actorId; // owner user ID
 public:
     DfStruct(const DfStruct &dfStruct);
@@ -186,6 +186,7 @@ static const int DFS_ALL = 600;
 static const int GET_USER_ID = 601;
 static const int GET_MY_PRIVATE_KEY = 602;
 static const int GET_USER_PUBLIC_KEY = 603;
+static const int FILE_REQUEST = 604;
 
 // server request
 static const int CARD_FILE_REQUEST = 5400;

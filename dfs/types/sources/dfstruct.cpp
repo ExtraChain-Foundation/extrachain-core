@@ -213,7 +213,7 @@ based_dfs_struct::DfStruct::DfStruct(const QByteArray &serialized)
 
 based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct::Status status)
 {
-    //    if (!QFile(_file_name - based_dfs_struct::FILE_INDETIFICATOR))
+    //    if (!QFile(_file_name - based_dfs_struct::FILE_IDENTIFICATOR))
     if (status == based_dfs_struct::REPLACE)
     {
         QList<QByteArray> filePathList = Serialization::deserialize(_file_name.toUtf8() + '/', "/");
@@ -223,14 +223,14 @@ based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct
         {
             subType = based_dfs_struct::convertToDFSSubType(filePathList.at(3));
             QByteArray t = filePathList.at(4);
-            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_INDETIFICATOR.size()));
+            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()));
         }
         else
         {
             QByteArray t = filePathList.at(3);
-            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_INDETIFICATOR.size()));
+            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()));
         }
-        path = _file_name.mid(0, _file_name.size() - based_dfs_struct::FILE_INDETIFICATOR.size()).toUtf8();
+        path = _file_name.mid(0, _file_name.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()).toUtf8();
 
         QFile file(_file_name);
         QFile dfsFile(path);
@@ -254,12 +254,12 @@ based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct
         {
             subType = based_dfs_struct::convertToDFSSubType(filePathList.at(3));
             QByteArray t = filePathList.at(4);
-            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_INDETIFICATOR.size()));
+            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()));
         }
         else
         {
             QByteArray t = filePathList.at(3);
-            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_INDETIFICATOR.size()));
+            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()));
         }
         QString tempPath = _file_name.mid(delimetrIndex + 1);
         QFile file(tempPath);

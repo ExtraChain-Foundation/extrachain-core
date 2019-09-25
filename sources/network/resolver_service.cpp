@@ -71,7 +71,11 @@ bool ResolverService::MessageIsNotValid(const Messages::IMessage &message)
 void ResolverService::universalHandler(const Messages::IMessage &msg, const QByteArray &msgType)
 {
     if (checkMsgCount(msg, msgType))
+    {
         emit secondWave(msg);
+
+        emit getNewDfs(Messages::DfsMessage(msg.serialize()));
+    }
 }
 
 bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType)
@@ -223,7 +227,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     {
         DfsMessage message(msg);
         universalHandler(message, msgType);
-        emit getNewDfs(message);
     }
     else if (msgType == DFS_REQUEST_MESSAGE)
     {

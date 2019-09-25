@@ -79,7 +79,7 @@ void SocketService::readData()
         {
             active = true;
 
-            indetificator = BigNumber(command);
+            identificator = BigNumber(command);
             emit checkMe();
         }
         else
@@ -101,12 +101,12 @@ void SocketService::setReconnectTry(int value)
 
 BigNumber SocketService::getIdentificator() const
 {
-    return indetificator;
+    return identificator;
 }
 
 void SocketService::setIdentificator(const BigNumber &value)
 {
-    indetificator = value;
+    identificator = value;
 }
 
 bool SocketService::getActive() const
@@ -200,7 +200,7 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    this->sendMsg(net::readNetManagerIndetificator(), SocketPair(this->address.toStdString(), this->port));
+    this->sendMsg(net::readNetManagerIdentificator(), SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
     qDebug() << "SOCKET SERVICE: "

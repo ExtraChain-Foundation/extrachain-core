@@ -40,11 +40,10 @@ QByteArray CryptManager::decrypt(const QByteArray &data, const BigNumber &actorI
 
 void CryptManager::process()
 {
-
 }
 /*
  * namespace crypting
- * class CryptManger
+ * class CryptManager
  * public slot recieveData
  * number of request
  * data for encrypting or decripting
@@ -61,8 +60,7 @@ void CryptManager::recieveData(int place, int request, QByteArray data, QByteArr
     }
     case crypting::ENCRYPT_USE_ACTOR_REQUEST:
     {
-        emit sendEncryptData(place, crypting::ENCRYPT_DATA_RESPONSE,
-                             encrypt(data, BigNumber(key)));
+        emit sendEncryptData(place, crypting::ENCRYPT_DATA_RESPONSE, encrypt(data, BigNumber(key)));
         break;
     }
     case crypting::DECRYPT_USE_KEY__REQUEST:
@@ -72,8 +70,7 @@ void CryptManager::recieveData(int place, int request, QByteArray data, QByteArr
     }
     case crypting::DECRYPT_USE_ACTOR__REQUEST:
     {
-        emit sendEncryptData(place, crypting::DECRYPT_DATA_RESPONSE,
-                             decrypt(data, BigNumber(key)));
+        emit sendEncryptData(place, crypting::DECRYPT_DATA_RESPONSE, decrypt(data, BigNumber(key)));
         break;
     }
     case crypting::DECRYPT_USE_MAIN_ACTOR_REQUEST:
