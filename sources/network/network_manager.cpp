@@ -526,6 +526,13 @@ void NetManager::sendProfile(PublicProfile profile)
 {
     qDebug() << "send profile " << profile.profile.at(2);
     EntityMessage<PublicProfile> msg = Messages::createPublicProfileMessage(profile);
+
+    if (accounts->getCurrentActor().getKey() == nullptr)
+    {
+        qDebug() << "Sorry not sorry";
+        return;
+    }
+
     signMessage(msg);
     broadcastMsg(msg);
 }
