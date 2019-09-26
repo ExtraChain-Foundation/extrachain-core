@@ -300,6 +300,11 @@ void Dfs::recieve(Messages::DfsMessage msg)
             return;
         }
     }
+    else
+    {
+        if (QFile(msg.getFilePath()).exists())
+            return;
+    }
     file.open(QIODevice::WriteOnly | QIODevice::Append);
     //    file.open(file.exists() ? QIODevice::ReadWrite | QIODevice::Append
     //                            : QIODevice::WriteOnly | QIODevice::Truncate);
@@ -308,6 +313,7 @@ void Dfs::recieve(Messages::DfsMessage msg)
     file.flush();
     file.close();
     long long size = file.size();
+
     if ((msg.getSize() == size) || (msg.getPackageNumber() == (msg.getNeedsByteCount() - 1)))
     {
         if (!actor.isEmpty())

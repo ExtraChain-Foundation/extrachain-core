@@ -66,22 +66,31 @@ DfsIndex::DfsIndex(ActorIndex *actorIndex, AccountController *accountControler, 
     , accControler(accountControler)
     , actorIndex(actorIndex)
 {
-    //    BigNumber id;
-    //    if (accountControler->getMainActor() != nullptr)
-    //        id = accountControler->getMainActor()->getId();
-    //    else
-    //        id = BigNumber(-1);
-    //    int error = CardManager::checkDfsState(id);
-    //    if (error == -1)
-    //    {
-    //        makeSystemDir(accountControler->getMainActor()->getId());
-    //        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, "0");
-    //        emit sendRequest(rqst);
-    //    }
-    //    else
-    //    {
-    //    }
-    //    CardManager::createdCardFilesConnection(accountControler->getMainActor()->getId());
+    QList<BigNumber> listUsers;
+    for (BigNumber i = BigNumber(0); i < actorIndex->getLastSavedId(); i++)
+        if (actorIndex->getActor(i).getAccount() && (i == accountControler->getMainActor()->getId()))
+            listUsers.append(i);
+    std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
+        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
+        emit sendRequest(rqst);
+    });
+    //    QList<QString> cardList = {};
+    //    std::for_each(listUsers.begin(), listUsers.end(), [&cardList](BigNumber userId) {
+    //        for (auto &el : based_dfs_struct::typesVec)
+    //        {
+    //            QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+    //                + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
+    //            if (QFile(path).exists())
+    //            {
+    //                QFile f(path);
+    //                f.open(QIODevice::ReadOnly);
+    //                QByteArray data = f.readAll();
+    //                if (!data.isEmpty())
+    //                    cardList.append(path);
+    //            }
+    //        }
+    //    });
+    //    std::for_each(cardList.begin(), cardList.end(), [this](QString elPath) { dfsSender(elPath, ""); });
 }
 
 DfsIndex::DfsIndex(const DfsIndex &dfsIndex, QObject *parent)
