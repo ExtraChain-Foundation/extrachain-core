@@ -47,7 +47,7 @@ signals:
     void sendMessage(const Messages::DfsMessage &msg);
     void sendToPeer(const Messages::DfsMessage &msg, const QString &peerAddress);
     void sendRequestf(const Messages::DfsRequest &msg);
-
+    void sendDfsStatus(const Messages::DfsStatus &status);
 public slots:
     void savedNewData(const QString &path, const based_dfs_struct::Type &type,
                       const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
