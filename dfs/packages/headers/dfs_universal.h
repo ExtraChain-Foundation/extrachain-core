@@ -13,7 +13,7 @@ class DfsMessage : public BaseMessage
     int size;
     QString filePath;
     int packageNumber;
-    int needsByteCount;
+    int countFilePackage;
 
     short getFieldsCount() const override;
     void initFields(QList<QByteArray> &list) override;
@@ -24,8 +24,10 @@ public:
         : BaseMessage()
     {
     }
-    DfsMessage(const QByteArray &data, int size, const QString &filePath, int segmentCount,
-               int packageN);
+
+    const QByteArray hash() const override final;
+    DfsMessage(const QByteArray &data, int size, const QString &filePath, int packageNumber,
+               int countFilePackage);
     DfsMessage(const QByteArray &serialize);
     DfsMessage(const DfsMessage &temp);
     DfsMessage(QList<QByteArray> &list);

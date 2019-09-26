@@ -254,7 +254,7 @@ void Dfs::recieve(Messages::DfsMessage msg)
 {
     QString fileName = msg.getFilePath() + based_dfs_struct::FILE_IDENTIFICATOR;
     QList<QByteArray> pathList = Serialization::deserialize(msg.getFilePath().toUtf8() + '/', "/");
-    QByteArray data = "";
+
     bool isCardFile = false;
 
     //    based_dfs_struct::typeCardFilesMap<based_dfs_struct::Type, QString>::
@@ -303,8 +303,8 @@ void Dfs::recieve(Messages::DfsMessage msg)
     file.open(QIODevice::WriteOnly | QIODevice::Append);
     //    file.open(file.exists() ? QIODevice::ReadWrite | QIODevice::Append
     //                            : QIODevice::WriteOnly | QIODevice::Truncate);
+    file.seek(msg.getPackageNumber() * 512);
     file.write(msg.getData());
-    data += msg.getData();
     file.flush();
     file.close();
     long long size = file.size();
@@ -316,7 +316,8 @@ void Dfs::recieve(Messages::DfsMessage msg)
             {
                 QFile::rename(temp_History + Utils::calcKeccak(fileName.toUtf8()), fileName);
             }
-            DfsItem dfsItem(fileName, based_dfs_struct::Status::REPLACE, actorIndex, accountControler, data);
+            DfsItem dfsItem(fileName, based_dfs_struct::Status::REPLACE, actorIndex, accountControler,
+                            msg.getData());
             CardManager::appendToCard(dfsItem.getType(), dfsItem.serialize(), dfsItem.getActorId());
             emit usersChanges(dfsItem.getPath(), dfsItem.getType(), dfsItem.getActorId());
         }

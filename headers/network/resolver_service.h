@@ -14,7 +14,6 @@
 #include "network/packages/service/all_messages.h"
 
 static QMutex handlerFileMutex;
-static QMap<QByteArray, long long> handlerOffsetMap;
 
 /**
  * @brief The ResolverService class - the interlayer between Network packages
@@ -47,6 +46,8 @@ public:
 private:
     bool active = false;
     ActorIndex *actorIndex;
+
+    QMap<QByteArray, short> handlerOffsetMap;
 
 private:
     /**

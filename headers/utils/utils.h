@@ -22,6 +22,7 @@ class FileList
 
 public:
     FileList();
+
     void add(QByteArray hash, QByteArray data);
     void remove(QByteArray element);
     QByteArray operator[](int value);
@@ -29,6 +30,8 @@ public:
     QByteArray at(int value);
     int getIndexSize();
     QByteArray getHash(int value);
+
+    void setFileList(const QFile &value);
 
 private:
     QList<indexRow> indexList;

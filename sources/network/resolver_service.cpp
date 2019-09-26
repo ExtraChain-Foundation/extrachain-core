@@ -80,6 +80,28 @@ void ResolverService::universalHandler(const Messages::IMessage &msg, const QByt
 
 bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType)
 {
+    // hadler msg in RAM
+    bool flag_result = true;
+    short value = 0;
+    if (handlerOffsetMap.find(msg.hash()) == handlerOffsetMap.end())
+        handlerOffsetMap[msg.hash()] = value;
+    else
+    {
+        short msg_count = handlerOffsetMap[msg.hash()];
+        msg_count--;
+        if (msg_count == -1)
+        {
+            flag_result = false;
+            handlerOffsetMap.erase(handlerOffsetMap.find(msg.hash()));
+        }
+        else
+            handlerOffsetMap[msg.hash()]--;
+    }
+    return flag_result;
+    /**
+    *
+    *
+    *
     bool flag_result = true;
     // file with history send messages will have index
     short value = 0;
@@ -87,9 +109,9 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
     long long currentPossition = -1;
     if (handlerOffsetMap.find(msg.hash()) != handlerOffsetMap.end())
         currentPossition = handlerOffsetMap[msg.hash()];
-    QByteArray t = Serialization::universalSerialize({ msgType, msg.hash(), QByteArray::number(value) },
-                                                     Messages::FIELD_SIZES);
-    QByteArray tableSegmet = Serialization::universalSerialize({ t }, Messages::FIELD_SIZES);
+    QByteArray t = Serialization::universalSerialize({ msgType, msg.hash(), QByteArray::number(value)
+    }, Messages::FIELD_SIZES); QByteArray tableSegmet = Serialization::universalSerialize({ t },
+    Messages::FIELD_SIZES);
     // find index of elemet
     bool isRead = true;
     if (currentPossition == -1)
@@ -104,67 +126,85 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
         || (msgType == Messages::TX_MESSAGE))
         value = 0;
 
+    FileList indexList;
     handlerFileMutex.lock();
     QFile file(".handlerFile");
+    indexList.setFileList(file);
     if (!isRead)
     {
-        file.open(QIODevice::WriteOnly);
-        file.seek(currentPossition == -1 ? file.size() - 1 : currentPossition);
-        handlerOffsetMap[msg.hash()] = file.pos();
-        file.write(tableSegmet);
-        file.flush();
-        file.close();
+        //        file.open(QIODevice::WriteOnly);
+        //        file.seek(currentPossition == -1 ? file.size() - 1 : currentPossition);
+        //        handlerOffsetMap[msg.hash()] = file.pos();
+        //        file.write(tableSegmet);
+        //        file.flush();
+        //        file.close();
+        indexList.add(msg.hash(), QByteArray::number(value));
     }
     else
     {
-        file.open(QIODevice::ReadWrite);
-        file.seek(currentPossition);
-        int dataSize = Utils::qByteArrayToInt(file.read(4));
-        QByteArray r = file.read(dataSize);
-        QList<QByteArray> msgList = Serialization::universalDesirialize(r, Messages::FIELD_SIZES);
-        int msg_count;
-        if (msgList.size() == 3)
-        {
-            // sepetate this if on the different functon // TO DO
-            msg_count = msgList.at(2).toInt();
-            if (msgList.at(1) == msg.hash())
-                msg_count--;
-            // delete msg from list the circle has been closed now
-            if (msg_count == -1)
-            {
-                file.seek(currentPossition);
-                dataSize += Messages::FIELD_SIZES;
-                if (handlerOffsetMap.find(QByteArray::number(dataSize)) == handlerOffsetMap.end())
-                    handlerOffsetMap[QByteArray::number(dataSize)] = currentPossition;
-                else
-                {
-                    // nothing
-                }
-                handlerOffsetMap.erase(handlerOffsetMap.find(msg.hash()));
-                QByteArray emptyData = QByteArray(dataSize, ' ');
-                file.write(emptyData);
-                flag_result = false;
-            }
-            else
-            {
-                QByteArray t = Serialization::universalSerialize(
-                    { msgType, msg.hash(), QByteArray::number(msg_count) }, Messages::FIELD_SIZES);
-                QByteArray tableSegmet = Serialization::universalSerialize({ t }, Messages::FIELD_SIZES);
-                file.seek(currentPossition);
-                file.write(tableSegmet);
-            }
-        }
+        int msg_count = indexList.at(msg.hash()).toInt();
+        if (msg_count == -1)
+            flag_result = false;
         else
         {
-            qDebug() << " Wrong size of list handling msg three from three List:  " << msgList << "data "
-                     << r;
+            msg_count--;
+            indexList.remove(msg.hash());
+            indexList.add(msg.hash(), QByteArray::number(msg_count));
         }
-        file.flush();
-        file.close();
+
+        //        file.open(QIODevice::ReadWrite);
+        //        file.seek(currentPossition);
+        //        int dataSize = Utils::qByteArrayToInt(file.read(4));
+        //        QByteArray r = file.read(dataSize);
+        //        QList<QByteArray> msgList = Serialization::universalDesirialize(r,
+    Messages::FIELD_SIZES);
+        //        int msg_count;
+        //        if (msgList.size() == 3)
+        //        {
+        //            // sepetate this if on the different functon // TO DO
+        //            msg_count = msgList.at(2).toInt();
+        //            if (msgList.at(1) == msg.hash())
+        //                msg_count--;
+        //            // delete msg from list the circle has been closed now
+        //            if (msg_count == -1)
+        //            {
+        //                file.seek(currentPossition);
+        //                dataSize += Messages::FIELD_SIZES;
+        //                if (handlerOffsetMap.find(QByteArray::number(dataSize)) ==
+    handlerOffsetMap.end())
+        //                    handlerOffsetMap[QByteArray::number(dataSize)] = currentPossition;
+        //                else
+        //                {
+        //                    // nothing
+        //                }
+        //                handlerOffsetMap.erase(handlerOffsetMap.find(msg.hash()));
+        //                QByteArray emptyData = QByteArray(dataSize, ' ');
+        //                file.write(emptyData);
+        //                flag_result = false;
+        //            }
+        //            else
+        //            {
+        //                QByteArray t = Serialization::universalSerialize(
+        //                    { msgType, msg.hash(), QByteArray::number(msg_count) },
+    Messages::FIELD_SIZES);
+        //                QByteArray tableSegmet = Serialization::universalSerialize({ t },
+        //                Messages::FIELD_SIZES); file.seek(currentPossition);
+    file.write(tableSegmet);
+        //    }
+        //}
+        // else
+        //{
+        //    qDebug() << " Wrong size of list handling msg three from three List:  " << msgList <<
+    "data " <<
+        //    r;
+        //}
+        //        file.flush();
+        //        file.close();
     }
 
     handlerFileMutex.unlock();
-    return flag_result;
+    */
+    //    return flag_result;
 }
 
 // bool ResolverService::isActive() const
