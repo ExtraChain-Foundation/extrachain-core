@@ -33,7 +33,6 @@ void AccountController::setActorIndex(ActorIndex *value)
 AccountController::AccountController(ActorIndex *actorIndex)
 {
     this->actorIndex = actorIndex;
-
     // when private actor is verified by actor index -> save it locally
     connect(actorIndex, &ActorIndex::PrivateActorIsVerified, this, &AccountController::savePrivateActor);
     //    if (!QFile(KeyStore::user_actor_state).exists())

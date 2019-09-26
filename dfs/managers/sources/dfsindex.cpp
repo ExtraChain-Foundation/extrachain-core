@@ -21,7 +21,7 @@ void DfsIndex::dfsSender(const QString &filePath, QString peerAdrress)
     if (_file_size < 513)
     {
         QByteArray data = file.readAll();
-        Messages::DfsMessage msg(data, _file_size, filePath, 1, 0);
+        Messages::DfsMessage msg(data, _file_size, filePath, 0, 1);
         if (peerAdrress.isEmpty())
             emit sendData(msg);
         else

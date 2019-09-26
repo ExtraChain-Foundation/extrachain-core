@@ -35,12 +35,12 @@ void DfsMessage::setPackageNumber(int value)
 
 int DfsMessage::getNeedsByteCount() const
 {
-    return needsByteCount;
+    return countFilePackage;
 }
 
 void DfsMessage::setNeedsByteCount(int value)
 {
-    needsByteCount = value;
+    countFilePackage = value;
 }
 
 short DfsMessage::getFieldsCount() const
@@ -54,25 +54,30 @@ void DfsMessage::initFields(QList<QByteArray> &list)
     filePath = list.takeFirst();
     size = list.takeFirst().toInt();
     data = list.takeFirst();
-    needsByteCount = list.takeFirst().toInt();
+    countFilePackage = list.takeFirst().toInt();
     packageNumber = list.takeFirst().toInt();
 }
 QList<QByteArray> DfsMessage::serializedParams() const
 {
     QList<QByteArray> list = this->BaseMessage::serializedParams();
-    list << filePath.toUtf8() << QByteArray::number(size) << data
-         << QByteArray::number(needsByteCount) << QByteArray::number(packageNumber);
+    list << filePath.toUtf8() << QByteArray::number(size) << data << QByteArray::number(countFilePackage)
+         << QByteArray::number(packageNumber);
     return list;
 }
 
-DfsMessage::DfsMessage(const QByteArray &data, int size, const QString &filePath,
-                       int segmentCount, int packageN)
+const QByteArray DfsMessage::hash() const
+{
+    return Utils::calcKeccak(data + QByteArray::number(size) + QByteArray::number(packageNumber));
+}
+
+DfsMessage::DfsMessage(const QByteArray &data, int size, const QString &filePath, int packageNumber,
+                       int countFilePackage)
     : BaseMessage(DFS_CHANGES_MESSAGE)
     , data(data)
     , size(size)
     , filePath(filePath)
-    , packageNumber(packageN)
-    , needsByteCount(segmentCount)
+    , packageNumber(packageNumber)
+    , countFilePackage(countFilePackage)
 {
 }
 
@@ -88,7 +93,7 @@ DfsMessage::DfsMessage(const DfsMessage &temp)
     , size(temp.size)
     , filePath(temp.filePath)
     , packageNumber(temp.packageNumber)
-    , needsByteCount(temp.needsByteCount)
+    , countFilePackage(temp.countFilePackage)
 {
     QList<QByteArray> list = temp.BaseMessage::serializedParams();
     this->BaseMessage::initFields(list);
@@ -112,7 +117,7 @@ DfsMessage DfsMessage::operator=(const DfsMessage &temp)
     filePath = temp.filePath;
     size = temp.size;
     data = temp.data;
-    needsByteCount = temp.needsByteCount;
+    countFilePackage = temp.countFilePackage;
     packageNumber = temp.packageNumber;
     return *this;
 }

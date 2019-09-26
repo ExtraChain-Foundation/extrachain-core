@@ -647,6 +647,11 @@ QByteArray FileList::getHash(int value)
     return data;
 }
 
+void FileList::setFileList(const QFile &value)
+{
+    fileList.setFileName(value.fileName());
+}
+
 indexRow::indexRow(std::string _hash, long long pos, short use)
 {
     hash = _hash;
