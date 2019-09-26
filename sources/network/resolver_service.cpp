@@ -280,6 +280,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     }
     else if (msgType == COIN_REQUEST)
     {
+        // TODO
         EntityMessage<BigNumber> message(msg);
         if (MessageIsNotValid(message))
             return;

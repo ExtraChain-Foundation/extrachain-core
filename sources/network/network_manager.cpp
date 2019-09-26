@@ -211,15 +211,14 @@ void NetManager::checkMyIdentificator()
     std::for_each(connections.begin(), connections.end(), [connection, &counter](SocketService *el) {
         if (el->getIdentificator() == connection->getIdentificator())
         {
-            if (counter == 1)
-            {
-                connection->removeMe();
-                counter = 0;
-            }
+            if (el == connection)
+                emit el->setActiveSignal(true);
             else
-                counter++;
+                emit el->removeMe();
         }
     });
+    if (counter == 0)
+        emit connection->setActiveSignal(true);
 }
 
 void NetManager::startNetwork()
@@ -518,6 +517,7 @@ void NetManager::removeConnection()
 
     disconnect(connection, &SocketService::MessageReceived, resolverService, &ResolverService::recieveMsg);
     connections.removeAt(connections.indexOf(connection));
+    connection->finished();
 
     checkConnectionsStatus();
 }
@@ -643,6 +643,12 @@ void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray request
 
     reservedActorListUse = true;
     sendCompanyActor(peerAddress);
+    PublicProfile profile = actorIndex->getProfileToSend("0");
+    if (profile.sign != "")
+    {
+        EntityMessage<PublicProfile> msg2 = Messages::createPublicProfileMessage(profile);
+        broadcastMsg(msg2);
+    }
     BigNumber reserveActorId = actorIndex->getLastSavedId() + 1;
     while (reservedActorList.contains(reserveActorId))
     {
@@ -1020,6 +1026,7 @@ void NetManager::handleGetActor(BigNumber actorId, QHostAddress peerAddress, QBy
     if (profile.sign != "")
     {
         EntityMessage<PublicProfile> msg2 = Messages::createPublicProfileMessage(profile);
+        qDebug() << "send profile " << actor.getId();
         sendMsgToPeer(msg2, peerAddress);
     }
     //    } else {

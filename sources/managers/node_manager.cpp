@@ -410,6 +410,12 @@ void NodeManager::connectUi()
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
 
+    // Search (temp)
+    connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
+            &ActorIndex::profileToSearch);
+    connect(actorIndex, &ActorIndex::sendProfileToSearchToUi, uiController->getSearch(),
+            &SearchModel::fromActorIndex);
+
     //=======================================WALLET=========================================
     connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi,
             Qt::ConnectionType::QueuedConnection);
@@ -423,11 +429,6 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::addNewWallet,
             [=]() { accController->savePrivateActor(accController->createActor(false)); });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
-
-    connect(uiController, &UiController::requestTokenList, smContractController,
-            &SmartContractManager::requestTokenList);
-    connect(smContractController, &SmartContractManager::sendTokenList, uiController,
-            &UiController::setTokenList);
 
     //======================================CONTRACT===========================================
     auto contractsModel = uiController->getContractsModel();

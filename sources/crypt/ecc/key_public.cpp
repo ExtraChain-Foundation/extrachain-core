@@ -74,9 +74,10 @@ bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
     BigNumber px = P.getX() % p;
     px.setPositive(true);
     px++;
-    qDebug() << px << " " << r << "1234567890";
+
     if (px != r)
         return false;
+
     return true;
 }
 QByteArray KeyPublic::extractPublicKey()

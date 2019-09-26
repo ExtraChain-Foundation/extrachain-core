@@ -63,6 +63,7 @@ SOURCES += \
     $$PWD/headers/utils/bignumberdec.cpp
 
 HEADERS += \
+    $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
     $$PWD/headers/metatypes.h \

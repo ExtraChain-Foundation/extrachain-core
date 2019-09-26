@@ -736,51 +736,6 @@ BigNumber Blockchain::getRecords() const
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumber Blockchain::getMyBalance() const
-{
-    BigNumber currentBalance{ 0 };
-    int i{ 0 };
-
-    BigNumber userBalanceId = 1;
-
-    Block currentBlock = blockIndex.getBlockById(i);
-    do
-    {
-        //        qDebug() << "     Block id: " << currentBlock.getIndex()
-        //                 << "\n     Aprover: " << currentBlock.getApprover()
-        //                 << "\n     Data: " << currentBlock.getData()
-        //                 << "\n     Hash: " << currentBlock.getHash()
-        //                 << "\n     PrevHash: " << currentBlock.getPrevHash()
-        //                 << "\n     DigSig: " << currentBlock.getDigSig();
-        for (auto currentTransaction : currentBlock.extractTransactions())
-        {
-            qDebug() << "!!!!!!!!!!!!transaction:" << currentTransaction.toString();
-            //            qDebug() << "  sender" << currentTransaction.getSender()
-            //                              << "\n    recipient" <<
-            //                              currentTransaction.getReceiver()
-            //                              << "\n    amount" <<
-            //                              currentTransaction.getAmount()
-            //                              << "\n    receiver balance"  <<
-            //                              currentTransaction.getReceiverBalance();
-            qDebug() << currentTransaction.getSender() << " - " << currentTransaction.getReceiver() << " - "
-                     << userBalanceId;
-            if (currentTransaction.getSender() == userBalanceId)
-            {
-                currentBalance = currentTransaction.getSenderBalance() - currentTransaction.getAmount();
-            }
-            else if (currentTransaction.getReceiver() == userBalanceId)
-            {
-                qDebug() << currentTransaction.getReceiverBalance() << " - "
-                         << currentTransaction.getAmount();
-                currentBalance = currentTransaction.getReceiverBalance() + currentTransaction.getAmount();
-            }
-        }
-        i++;
-        currentBlock = blockIndex.getBlockById(i);
-    } while (!currentBlock.isEmpty());
-    return currentBalance;
-}
-
 BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
 {
 
@@ -979,7 +934,7 @@ void Blockchain::proveTx()
         else
         {
             emit tx->NotApproved();
-            qDebug() << "False zero user";
+            qDebug() << "Transaction not approved: false zero user";
             return;
         }
     }
@@ -987,6 +942,22 @@ void Blockchain::proveTx()
     if (tx->getData() == "genesis")
     {
         // type = 6, token = correct
+        Profile profile = actorIndex->getProfile(tx->getSender().toString());
+
+        if (profile.type() != 6)
+        {
+            emit tx->NotApproved();
+            qDebug() << "Transaction not approved: genesis block is not from contract";
+            return;
+        }
+
+        if (tx->getSender() != tx->getToken())
+        {
+            emit tx->NotApproved();
+            qDebug() << "Transaction not approved: sender != token in genesis block";
+            return;
+        }
+
         emit tx->Approved();
         return;
     }
@@ -995,6 +966,13 @@ void Blockchain::proveTx()
     {
         emit tx->NotApproved();
         qDebug() << "Transaction not approved: sender == receiver";
+        return;
+    }
+
+    if (tx->getAmount() <= 0)
+    {
+        emit tx->NotApproved();
+        qDebug() << "Transaction not approved: amount <= 0";
         return;
     }
 
@@ -1014,6 +992,14 @@ void Blockchain::proveTx()
     if (tx->getReceiverBalance() == receiverCurBal)
         receiverBalanceIsValid = true;
 
+    // qDebug() << "ASDASDASD" << senderCurBal - tx->getAmount();
+    if (senderCurBal - tx->getAmount() < 0 /*|| receiverCurBal + tx->getAmount() < 0*/)
+    {
+        qDebug() << "Transaction not approved: sender's or receiver's balance will be < 0";
+        emit tx->NotApproved();
+        return;
+    }
+
     if (senderBalanceIsValid && receiverBalanceIsValid)
     {
         emit tx->Approved();
@@ -1022,8 +1008,8 @@ void Blockchain::proveTx()
     else
     {
         emit tx->NotApproved();
+        qDebug() << "Transaction not approved: balance not valid";
     }
-    qDebug() << "blockchain.cpp <void Blockchain::proveTX> (public slot)";
 }
 
 // Transactions //

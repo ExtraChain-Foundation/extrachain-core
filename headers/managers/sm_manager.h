@@ -19,7 +19,6 @@ private:
     ActorIndex *actorIndex;
     QMap<QByteArray, QMap<QByteArray, QByteArray>> tokenBalance;
     // id wallet, id token, balance
-    QVariantMap tokenId = { { "0", QVariant("Etalonium Coin") } };
 
 private:
     void savePrivateActor(Actor<KeyPrivate> actor);
@@ -33,12 +32,10 @@ public:
 
 public slots:
     void createContractProfile(QByteArray tokenCount, QByteArray tokenName, QByteArray relAddress);
-    void requestTokenList();
     void process();
 
 signals:
     // void sendTokenBalance(QMap<BigNumber,QMap<BigNumber,BigNumber>> tokenBalance);
-    void sendTokenList(QVariantMap tokenList);
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(Transaction trans);
     void addContractActorInActorIndex(Actor<KeyPublic> actor);
