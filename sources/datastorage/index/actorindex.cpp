@@ -353,6 +353,13 @@ void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
     }
     QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
     Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
+
+    if (key.getHash().isEmpty())
+    {
+        qDebug() << "Key is empty";
+        return;
+    }
+
     if (!key.getKey()->verify(PublicProfile::serialize(newProfile.profile.list()), newProfile.sign))
     {
         qDebug() << "ActorIndex::saveProfileFromNetwork : profile isn`t verify";
@@ -371,6 +378,8 @@ void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
 
 void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
 {
+    if (key->getHash().isEmpty())
+        return;
     qDebug() << "Save profile with id" << newProfile.at(2);
     QString path = buildFilePath(BigNumber(newProfile.at(2)));
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile.list()));
@@ -392,6 +401,8 @@ void ActorIndex::requestProfile(QString id)
 {
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
+    if (key.getHash().isEmpty())
+        return;
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
     if (pubProfile.sign == "")
     {

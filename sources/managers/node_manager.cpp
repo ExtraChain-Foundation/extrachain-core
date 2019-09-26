@@ -288,7 +288,8 @@ void NodeManager::createWalletInUi()
 {
     // accController->loadActors();
     uiWallet->setCurrentWalletId(accController->getCurrentActor().getId());
-    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(accController->getCurrentActor().getId()));
+    uiWallet->setCurrentWalletBalance(
+        blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
 
     updateWalletList();
     updateAvailableWalletList();
@@ -300,7 +301,8 @@ void NodeManager::updateWalletInUi()
 
     //    uiController->getWallet()->setCurrentWalletId(
     //            accController->getCurrentActor().getId());
-    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(accController->getCurrentActor().getId()));
+    uiWallet->setCurrentWalletBalance(
+        blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
 
     updateWalletList();
     updateAvailableWalletList();
@@ -360,7 +362,7 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
     qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
     // accController->loadActors();
     accController->changeUserNum(walletId.serialize());
-    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId));
+    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId, uiWallet->getCurrentToken()));
 
     // updateWalletList();
     updateAvailableWalletList();
