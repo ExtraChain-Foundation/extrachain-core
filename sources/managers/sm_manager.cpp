@@ -52,10 +52,6 @@ void SmartContractManager::process()
 {
 }
 
-void SmartContractManager::process()
-{
-}
-
 void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
                                            QByteArray quantity)
 {

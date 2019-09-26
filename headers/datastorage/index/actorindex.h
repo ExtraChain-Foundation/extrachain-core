@@ -107,13 +107,6 @@ public slots:
      */
     int addActor(const Actor<KeyPublic> &actor);
 
-    /**
-     * @brief Serializes an actor and make a file in fs.
-     * @param actor
-     * @return resultCode, 0 - actor is saved
-     */
-    int addActor(const Actor<KeyPublic> &actor);
-
 signals:
     void sendProfile(PublicProfile profile);
     void sendProfileToUi(QString userID, Profile profile);
