@@ -36,6 +36,34 @@ QByteArray PublicProfile::serialize() const
     return data;
 }
 
+void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken)
+{
+    QFile file("blockchain/.tokens");
+    if (file.exists())
+    {
+        file.open(QIODevice::ReadOnly);
+        QByteArray dataFromFile = file.readAll();
+        QByteArrayList list = Serialization::universalDesirialize(dataFromFile, 4);
+        for (int i = 0; i < list.size(); i = i + 2)
+        {
+            if (id == list.at(i))
+            {
+                file.flush();
+                file.close();
+                return;
+            }
+        }
+        file.flush();
+        file.close();
+    }
+    file.open(QIODevice::WriteOnly | QIODevice::Append);
+    QByteArray data = Serialization::universalSerialize({ id, nameToken }, 4);
+
+    file.write(data);
+    file.flush();
+    file.close();
+}
+
 Profile PublicProfile::saveProfile(Profile newProfile, const QString &path, QByteArray sign)
 {
     QByteArrayList &list = newProfile.list();
@@ -69,7 +97,10 @@ Profile PublicProfile::saveProfile(Profile newProfile, const QString &path, QByt
     profile.write(serializeProfile + signWrite);
     profile.flush();
     profile.close();
-
+#ifdef ETALONIUM_CLIENT
+    if (newProfile.type() == 6)
+        saveTokenNames(newProfile.list().at(2), newProfile.list().at(3));
+#endif
     return newProfile;
 }
 
@@ -80,7 +111,7 @@ PublicProfile PublicProfile::getProfile(const QString &path, const QString id)
     QFile profile(pathProfile);
     if (!profile.exists())
     {
-        qDebug() << "Profile isn`t exist";
+        // qDebug() << "Profile isn't exist" << id;
         return PublicProfile();
     }
     profile.open(QIODevice::ReadOnly);
@@ -312,6 +343,7 @@ void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
         emit ActorIsMissing(actor);
     }
 }
+
 void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
 {
     if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")
@@ -339,7 +371,6 @@ void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
 
 void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
 {
-
     qDebug() << "Save profile with id" << newProfile.at(2);
     QString path = buildFilePath(BigNumber(newProfile.at(2)));
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile.list()));
@@ -353,9 +384,8 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
 PublicProfile ActorIndex::getProfileToSend(QString id)
 {
     QString path = buildFilePath(BigNumber(id.toUtf8()));
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
 
-    return pubProfile;
+    return PublicProfile::getProfile(path, id);
 }
 
 void ActorIndex::requestProfile(QString id)
@@ -365,13 +395,13 @@ void ActorIndex::requestProfile(QString id)
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
     if (pubProfile.sign == "")
     {
-        qDebug() << "incorrect profile";
+        qDebug() << "incorrect profile" << id;
         return;
     }
     if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
         emit sendProfileToUi(id, pubProfile.profile);
     else
-        qDebug() << "incorrect profile";
+        qDebug() << "incorrect profile" << id;
 }
 
 Profile ActorIndex::getProfile(QString id)
@@ -385,7 +415,7 @@ Profile ActorIndex::getProfile(QString id)
         return pubProfile.profile;
     else
     {
-        qDebug() << "incorrect profile";
+        qDebug() << "incorrect profile" << id;
         return Profile();
     }
 }
@@ -400,7 +430,7 @@ PublicProfile ActorIndex::getPublicProfile(QString id)
         return pubProfile;
     else
     {
-        qDebug() << "incorrect profile, fuck off";
+        qDebug() << "incorrect profile";
         return PublicProfile();
     }
 }
@@ -438,4 +468,78 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
         }
     }
     return result;
+}
+
+void ActorIndex::profileToSearch(SearchFilters filters)
+{
+    QList<Profile> profiles;
+
+    for (int id = 0; id < lastSavedId; id++)
+    {
+        Profile profile = getProfile(QString::number(id, 16));
+
+        if (profile.at(2) == "")
+            continue;
+        if (profile.userId() == filters.currentId)
+            continue;
+        qint16 type = profile.type();
+        if (type == 0 || type == 6)
+            continue;
+
+        QString firstName = profile.firstName().toLower();
+        QString lastName = profile.lastName().toLower();
+
+        if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
+              || profile.lastName().toLower().startsWith(filters.name.toLower())))
+            continue;
+
+        /*
+        if (profile.type() != filters.userType && filters.userType != -1)
+            continue;
+        if (profile.country() != filters.location && filters.location != -1)
+            continue;
+        if (profile.gender() != filters.gender && filters.gender != -1)
+            continue;
+        if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
+            continue;
+        if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
+            continue;
+        if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
+            continue;
+        if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
+            continue;
+        if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
+            continue;
+        if (filters.category != profile.category() && !filters.category.isEmpty())
+            continue;
+        if (filters.body != profile.body() && !filters.body.isEmpty())
+            continue;
+        if (filters.hair != profile.hair() && !filters.hair.isEmpty())
+            continue;
+        if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
+            continue;
+        if (filters.eye != profile.eye() && !filters.eye.isEmpty())
+            continue;
+        if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
+            continue;
+        if (filters.style != profile.style() && !filters.style.isEmpty())
+            continue;
+        if (filters.sports != profile.sports() && !filters.sports.isEmpty())
+            continue;
+        if (filters.skin != profile.skin() && !filters.skin.isEmpty())
+            continue;
+        if (filters.scope != profile.scope() && !filters.scope.isEmpty())
+            continue;
+        if (filters.direction != profile.direction() && !filters.direction.isEmpty())
+            continue;
+        if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
+            continue;
+        if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
+            continue;
+        */
+
+        profiles.append(profile);
+    }
+
+    emit sendProfileToSearchToUi(profiles);
 }

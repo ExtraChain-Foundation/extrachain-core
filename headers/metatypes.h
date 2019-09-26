@@ -12,7 +12,7 @@
 #include "datastorage/profile.h"
 
 #ifdef ETALONIUM_CLIENT
-#include "ui/struct/searchfilters.h"
+#include "datastorage/searchfilters.h"
 #endif
 
 Q_DECLARE_METATYPE(QHostAddress)
@@ -31,6 +31,7 @@ Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
 Q_DECLARE_METATYPE(Profile)
+Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 // Q_DECLARE_METATYPE(qintptr)
 
@@ -56,7 +57,9 @@ void registerMetaTypes()
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
     qRegisterMetaType<Profile>();
+    qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
+
     // qRegisterMetaType<qintptr>();
 
 #ifdef ETALONIUM_CLIENT

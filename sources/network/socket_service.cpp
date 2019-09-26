@@ -77,7 +77,7 @@ void SocketService::readData()
         // _sok->readAll();
         if (!active)
         {
-            active = true;
+//            active = true;
 
             identificator = BigNumber(command);
             emit checkMe();
@@ -129,6 +129,9 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 
 SocketService::~SocketService()
 {
+    socket->close();
+    socket->deleteLater();
+    qDebug() << "---------> Remove SocketService" << address << port;
 }
 
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
@@ -182,6 +185,7 @@ void SocketService::process()
                     if (this->socket->state() != QTcpSocket::ConnectedState)
                         this->reconnect();
                 });
+        connect(this, &SocketService::setActiveSignal, this, &SocketService::setActive);
     }
 
     if (socketDescriptor != 0)
@@ -210,6 +214,11 @@ void SocketService::establishConnection()
         // this->socket->disconnect();
         this->socket->disconnectFromHost();
     });
+}
+
+void SocketService::setActive(bool active)
+{
+    this->active = active;
 }
 
 bool *SocketService::socketStatus() const

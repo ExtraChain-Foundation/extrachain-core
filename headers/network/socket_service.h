@@ -54,6 +54,8 @@ signals:
     void clientRemove();
     void finished();
     void checkMe();
+
+    void setActiveSignal(bool active);
 private slots:
 
     void reconnect();
@@ -71,6 +73,7 @@ public slots:
     void closeSocket();
     void process();
     void establishConnection();
+    void setActive(bool active);
 
 public:
     bool *socketStatus() const;

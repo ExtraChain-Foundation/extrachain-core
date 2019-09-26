@@ -19,6 +19,7 @@ QThread *ThreadPool::addThread(QList<QObject *> workers)
         worker->moveToThread(thread);
         QObject::connect(thread, SIGNAL(started()), worker, SLOT(process()));
         QObject::connect(worker, SIGNAL(finished()), thread, SLOT(quit()));
+        QObject::connect(thread, SIGNAL(finished()), worker, SLOT(deleteLater()));
     }
 
     QObject::connect(thread, &QThread::finished, [thread, workers]() {

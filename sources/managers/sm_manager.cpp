@@ -48,9 +48,8 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     sendTransaction(actor, relAddress, tokenCount);
 }
 
-void SmartContractManager::requestTokenList()
+void SmartContractManager::process()
 {
-    emit sendTokenList(tokenId);
 }
 
 void SmartContractManager::process()
@@ -99,9 +98,7 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
     // file->flush();
     // file->close();
     // qDebug() << "tokenName" << tokenName << "actor->getId()" << actor->getId();
-    tokenId[actor->getId().toString()] = QString(tokenName);
     // qDebug() << "tokenId[actor->getId().toString()]" << tokenId[actor->getId().toString()];
-    sendTokenList(tokenId);
     emit addContractActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
 
@@ -168,13 +165,10 @@ void SmartContractManager::initializeTokenArray()
                 return;
             }
             tokenBalance[list.at(6)] = { { list.at(4), list.at(5) } };
-            tokenId[filename.split('.')[0]] = QString(list.at(4));
 
             file.close();
         }
     }
-
-    sendTokenList(tokenId);
 }
 
 // rename to .key

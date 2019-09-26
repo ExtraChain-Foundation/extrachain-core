@@ -4,7 +4,7 @@
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/index/fileindex.h"
-
+#include <datastorage/searchfilters.h>
 /**
  * @brief Actors that stored in blockchain
  */
@@ -33,6 +33,7 @@ public:
 signals:
     //
 private:
+    static void saveTokenNames(QByteArray id, QByteArray nameToken);
     //    QList<indexList> index;
 };
 
@@ -97,6 +98,14 @@ public slots:
     PublicProfile getProfileToSend(QString id);
     Profile getProfile(QString id);
     PublicProfile getPublicProfile(QString id);
+    void profileToSearch(SearchFilters filters);
+
+    /**
+     * @brief Serializes an actor and make a file in fs.
+     * @param actor
+     * @return resultCode, 0 - actor is saved
+     */
+    int addActor(const Actor<KeyPublic> &actor);
 
     /**
      * @brief Serializes an actor and make a file in fs.
@@ -125,6 +134,7 @@ signals:
      */
     void ActorIsMissing(Actor<KeyPublic> actor);
     void finished();
+    void sendProfileToSearchToUi(QList<Profile> profiles);
 };
 
 #endif // ACTORINDEX_H
