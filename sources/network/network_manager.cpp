@@ -227,7 +227,7 @@ void NetManager::startNetwork()
     netPort = serverPort;
     qDebug() << "NetPort:" << netPort;
     serverService = new ServerService(netPort, local);
-    resolverService = new ResolverService(actorIndex, this);
+    resolverService = new ResolverService(actorIndex);
     setupServerServiceConnections();
     serverService->startListen();
     setupResolverServiceConnections();
