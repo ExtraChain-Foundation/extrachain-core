@@ -31,7 +31,8 @@ public:
     // QList<QByteArray> getAccountID();
 
 public slots:
-    void createContractProfile(QByteArray tokenCount, QByteArray tokenName, QByteArray relAddress);
+    void createContractProfile(QByteArray tokenCount, QByteArray tokenName, QByteArray relAddress,
+                               QByteArray color);
     void process();
 
 signals:

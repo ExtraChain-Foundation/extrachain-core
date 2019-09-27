@@ -25,7 +25,6 @@ public:
     QByteArray serialize() const;
     static Profile saveProfile(Profile newProfile, const QString &path, QByteArray sign);
     static PublicProfile getProfile(const QString &path, const QString id);
-    static Profile saveProfileFromNet(Profile newProfile, QString path);
     static QByteArray serialize(QByteArrayList actorList);
     static QByteArrayList deserialize(QByteArray serializeData);
     Profile profile;

@@ -11,7 +11,7 @@ SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *pare
 }
 
 void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArray tokenName,
-                                                 QByteArray relAddress)
+                                                 QByteArray relAddress, QByteArray color)
 {
     tokenBalance[relAddress] = { { tokenName, tokenCount } };
     FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTPROFILE);
@@ -24,6 +24,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.append(tokenName);
     profileList.append(tokenCount);
     profileList.append(relAddress);
+    profileList.append(color);
     actorIndex->saveProfile(actor, profileList);
     profileList.insert(2, actor->getKey()->sign(Serialization::universalSerialize(profileList, 4)));
 

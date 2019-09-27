@@ -32,6 +32,7 @@ SOURCES += \
     $$PWD/sources/managers/logs_manager.cpp \
     $$PWD/sources/network/packages/service/list_connections.cpp \
     $$PWD/sources/network/socket_pair.cpp \
+    $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/EllipticPoints.cpp \
@@ -98,6 +99,7 @@ HEADERS += \
     $$PWD/headers/managers/thread_pool.h \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/network/socket_pair.h \
+    $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/list_container.h \
