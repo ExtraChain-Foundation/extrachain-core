@@ -329,7 +329,7 @@ public slots:
      * @brief Broadcast message to all connected peers
      * @param msg
      */
-    void broadcastMsg(const Messages::IMessage &msg);
+    void broadcastMsg(const QByteArray &msg);
 
 private slots:
     /**

@@ -123,7 +123,7 @@ signals:
      * &NetManager::broadcastMsg);
      * @param msg
      */
-    void secondWave(const Messages::IMessage &msg);
+    void secondWave(const QByteArray &msg);
 
     void createConnectionsList(const QByteArray &message);
 

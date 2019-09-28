@@ -394,10 +394,10 @@ void NetManager::setupResolverServiceConnections()
 }
 
 // Basic methods
-void NetManager::broadcastMsg(const Messages::IMessage &msg)
+void NetManager::broadcastMsg(const QByteArray &msg)
 {
     SocketPair socketPair("0.0.0.0", 0, this);
-    emit sendMsg(msg.serialize(), socketPair);
+    emit sendMsg(msg, socketPair);
     //#ifdef ETALONIUM_CLIENT
     //    //    for (auto &el : entryPoints)
     //    //    {
@@ -534,7 +534,7 @@ void NetManager::sendProfile(PublicProfile profile)
     }
 
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 //#ifdef ETALONIUM_CLIENT
@@ -588,7 +588,7 @@ void NetManager::reserveActor(const QString &hash)
     BigNumber logHash(Utils::calcKeccak(werHash));
     EntityMessage<BigNumber> msg = Messages::createReserveActorMessage(logHash);
     getReserveActorHandlers.insert(calcHash(msg), GetEntityHandler<BigNumber>());
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
     //    qDebug() << "ololo";
 }
 
@@ -654,7 +654,7 @@ void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray request
     if (profile.sign != "")
     {
         EntityMessage<PublicProfile> msg2 = Messages::createPublicProfileMessage(profile);
-        broadcastMsg(msg2);
+        broadcastMsg(msg2.serialize());
     }
     BigNumber reserveActorId = actorIndex->getLastSavedId() + 1;
     while (reservedActorList.contains(reserveActorId))
@@ -664,7 +664,7 @@ void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray request
     reservedActorList.append(reserveActorId);
     EntityResponseMessage<BigNumber> msg = Messages::createReserveActorResponse(reserveActorId, requestHash);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
     qDebug() << msg.serialize();
     reservedActorListUse = false;
 }
@@ -680,13 +680,13 @@ void NetManager::sendCoinRequest(BigNumber amount)
 {
     EntityMessage<BigNumber> msg = Messages::createRequestCoinMessage(amount);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
     qDebug() << "NetManager::sendCoinRequest: amount - " << amount;
 }
 
 void NetManager::sendDfsPack(const Messages::DfsMessage &msg)
 {
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
     //#ifdef ETALONIUM_CLIENT
     //    for (SocketService *connect : entryPoints)
     //    {
@@ -703,7 +703,7 @@ void NetManager::sendDfsMessageTo(DfsMessage dfs, QString peerAddress)
 
 void NetManager::sendDfsRequest(const DfsRequest &msg)
 {
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
     //#ifdef ETALONIUM_CLIENT
     //    for (SocketService *connect : entryPoints)
     //    {
@@ -726,7 +726,7 @@ void NetManager::sendNewActor(Actor<KeyPublic> actor)
     //    reservedActorList.removeAt(reservedActorList.indexOf(actor.getId()));
     EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
     //    signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendNewTx(Transaction tx)
@@ -734,7 +734,7 @@ void NetManager::sendNewTx(Transaction tx)
     EntityMessage<Transaction> msg = Messages::createTxMessage(tx);
 
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendNewContract(Contract contract)
@@ -742,14 +742,14 @@ void NetManager::sendNewContract(Contract contract)
     qDebug() << "NetManager::sendNewContract: " << contract.serialize();
     EntityMessage<Contract> msg = Messages::createContractMessage(contract);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendNewBlock(Block block)
 {
     EntityMessage<Block> msg = Messages::createBlockMessage(block);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendTxResponse(Transaction tx, SearchEnum::TxParam param, QString value,
@@ -834,7 +834,7 @@ void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
     QFile::remove(DataStorage::TMP_GENESIS_BLOCK);
 
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 // Send messages //
@@ -853,7 +853,7 @@ void NetManager::sendGetActor(BigNumber actorId)
     GetActorMessage msg(actorId);
     //    signMessage(msg);
     getActorsHandlers.insert(calcHash(msg), GetEntityHandler<Actor<KeyPublic>>());
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::shareContract(Contract contract)
@@ -870,7 +870,7 @@ void NetManager::shareContract(Contract contract)
     }
     EntityMessage<Contract> msg = Messages::createContractMessage(contract);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
@@ -879,7 +879,7 @@ void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
     ChatMessage msg(recipientId, message);
     qDebug() << msg.serialize();
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendGetBlock(BlockParam param, QString value)
@@ -889,7 +889,7 @@ void NetManager::sendGetBlock(BlockParam param, QString value)
     //    signMessage(msg);
     getBlockHandlers.insert(calcHash(msg), GetEntityHandler<Block>());
     qDebug() << "<<<<<<<<<<<<<< " << calcHash((msg));
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendGetBlockCount()
@@ -898,7 +898,7 @@ void NetManager::sendGetBlockCount()
     BaseMessage msg = Messages::createGetBlockCountMessage();
     //    signMessage(msg);
     getCountHandlers.insert(calcHash(msg), GetCountHandler());
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendGetActorCount()
@@ -907,7 +907,7 @@ void NetManager::sendGetActorCount()
     BaseMessage msg = Messages::createGetActorCountMessage();
     //    signMessage(msg);
     getCountHandlers.insert(calcHash(msg), GetCountHandler());
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 
     //    emit creaTx();
 }
@@ -918,7 +918,7 @@ void NetManager::sendGetTx(TxParam param, QString value)
     GetTxMessage msg(param, value.toLocal8Bit());
     signMessage(msg);
     getTxHandlers.insert(calcHash(msg), GetEntityHandler<Transaction>());
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendGetTxPair(BigNumber sender, BigNumber receiver)
@@ -927,7 +927,7 @@ void NetManager::sendGetTxPair(BigNumber sender, BigNumber receiver)
     GetTxPairMessage msg(sender, receiver);
     signMessage(msg);
     getTxPairHandlers.insert(calcHash(msg), GetEntityHandler<TxPair>());
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendCompanyActor(QString peerAddress)
@@ -947,7 +947,7 @@ void NetManager::continueHandlingNewActor(Actor<KeyPublic> actor)
 {
     EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 //===================================DFSpackage===================================
@@ -979,7 +979,7 @@ void NetManager::handleNewGenesisBlock(Block block, QHostAddress peerAddress)
 
     EntityMessage<Block> msg = Messages::createGenesisBlockMessage(block);
     signMessage(msg);
-    broadcastMsg(msg);
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::handleNewTx(Transaction tx, QHostAddress peerAddress)
@@ -993,7 +993,7 @@ void NetManager::handleNewTx(Transaction tx, QHostAddress peerAddress)
 
         EntityMessage<Transaction> msg = Messages::createTxMessage(tx);
         //        signMessage(msg);
-        broadcastMsg(msg);
+        broadcastMsg(msg.serialize());
         return;
     }
 

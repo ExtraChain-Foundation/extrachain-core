@@ -72,7 +72,7 @@ void ResolverService::universalHandler(const Messages::IMessage &msg, const QByt
 {
     if (checkMsgCount(msg, msgType))
     {
-        emit secondWave(msg);
+        emit secondWave(msg.serialize());
 
         emit getNewDfs(Messages::DfsMessage(msg.serialize()));
     }
