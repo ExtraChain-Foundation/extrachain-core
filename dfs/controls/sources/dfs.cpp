@@ -118,6 +118,14 @@ void Dfs::init()
     }
     qDebug() << "[Dfs]:: dfs has been init";
     emit beginTest();
+    QList<BigNumber> listUsers;
+    for (BigNumber i = BigNumber(0); i < actorIndex->getLastSavedId(); i++)
+        if (actorIndex->getActor(i).getAccount() && (i != accountControler->getMainActor()->getId()))
+            listUsers.append(i);
+    std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
+        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
+        emit sendRequestf(rqst);
+    });
 }
 
 void Dfs::initUser(BigNumber userId)
