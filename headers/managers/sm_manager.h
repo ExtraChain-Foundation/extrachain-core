@@ -41,6 +41,7 @@ signals:
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(Transaction trans);
     void addContractActorInActorIndex(Actor<KeyPublic> actor);
+    void saveActorInPrivateProfile(QByteArray id);
     void finished();
 };
 

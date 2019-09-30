@@ -248,7 +248,7 @@ void AccountController::setUserNum(int value)
 void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
-
+    emit editPrivateProfile(actor.getId().toByteArray());
     QString fileName = KeyStore::makeKeyFileName(actor.getId().toString());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;

@@ -8,6 +8,7 @@ NodeManager::NodeManager()
     if (!QFile(".settings").exists())
         createNetManagerIdentificator();
     actorIndex = new ActorIndex();
+    prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
@@ -104,6 +105,12 @@ void NodeManager::connectSmContractManager()
     connect(smContractController, &SmartContractManager::verifyActor, netManager, &NetManager::NewActor);
     connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
             &NodeManager::addActorInActorIndex);
+    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+    });
+    connect(this, &NodeManager::editPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
+    //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
+
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
@@ -430,6 +437,9 @@ void NodeManager::connectUi()
             Qt::ConnectionType::QueuedConnection);
     connect(uiWallet, &WalletController::addNewWallet,
             [=]() { accController->savePrivateActor(accController->createActor(false)); });
+    connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+    });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
 
     //======================================CONTRACT===========================================
@@ -457,6 +467,12 @@ void NodeManager::connectUi()
             &UiController::receiveEncryptOrDecryptData);
     connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManager,
             &CryptManager::recieveData);
+    connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
+    connect(uiController, &UiController::loadProfileForAutologin, prProfile,
+            &PrivateProfile::loadProfileForAutoLogin);
+    connect(prProfile, &PrivateProfile::sendPublicProfile, uiController, &UiController::loginPrivateProfile);
+    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
@@ -519,6 +535,9 @@ void NodeManager::connectActorIndex()
     connect(actorIndex, &ActorIndex::actorIndexUpdated, netManager, &NetManager::sendGetBlockCount);
     connect(actorIndex, &ActorIndex::sendProfile, this, &NodeManager::sendProfile);
     connect(this, &NodeManager::sendProfile, netManager, &NetManager::sendProfile);
+
+    connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);
+    connect(prProfile, &PrivateProfile::setHashProfile, this, &NodeManager::setHashLoginPrivateProfile);
 }
 
 bool NodeManager::dfsConnection()
@@ -646,4 +665,23 @@ void NodeManager::tempareSlotForActors()
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
     createTransaction(receiver, amount);
+}
+QByteArray NodeManager::getIdPrivateProfile() const
+{
+    return idPrivateProfile;
+}
+
+void NodeManager::setIdPrivateProfile(QByteArray id)
+{
+    idPrivateProfile = id;
+}
+
+QByteArray NodeManager::getHashLoginPrivateProfile() const
+{
+    return hashLoginPrivateProfile;
+}
+
+void NodeManager::setHashLoginPrivateProfile(QByteArray hash)
+{
+    hashLoginPrivateProfile = hash;
 }

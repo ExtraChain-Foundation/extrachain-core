@@ -98,6 +98,7 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
     // qDebug() << "tokenName" << tokenName << "actor->getId()" << actor->getId();
     // qDebug() << "tokenId[actor->getId().toString()]" << tokenId[actor->getId().toString()];
     emit addContractActorInActorIndex(actor->convertToPublic());
+    emit saveActorInPrivateProfile(actor->getId().toByteArray());
     //    actorIndex->addActor(actor->convertToPublic());
 
     savePrivateActor(*actor);

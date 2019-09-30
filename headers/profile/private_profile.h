@@ -2,14 +2,23 @@
 #define PRIVATE_PROFILE_H
 
 #include <QByteArray>
-#include "headers/crypt/xor_encrypt.h"
+#include "headers/crypt/blowfish_crypt.h"
 #include "utils/utils.h"
-class PrivateProfile
+class PrivateProfile : public QObject
 {
-public:
+    Q_OBJECT
+public slots:
     void savePrivateProfile(QByteArray login, QByteArray password, QByteArray id);
-    void editPrivateProfile(QByteArray login, QByteArray id);
-    QByteArrayList loadPrivateProfile(QByteArray login, QByteArray password);
+    void loadPrivateProfile(QByteArray login, QByteArray password);
+    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
+    void loadProfileForAutoLogin(QByteArray hash);
+signals:
+    void setIdProfile(QByteArray id);
+    void setHashProfile(QByteArray hash);
+    void sendPublicProfile(QByteArray id, QByteArrayList idList);
+
+private:
+    void profile(QByteArray hash);
 };
 
 #endif // PRIVATE_PROFILE_H
