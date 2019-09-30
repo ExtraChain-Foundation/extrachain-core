@@ -621,7 +621,7 @@ bool BigNumber::isPrime() const
 
 bool BigNumber::isEmpty() const
 {
-    return *this == -1;
+    return *this == -1; // || hexValue.isEmpty();
 }
 
 bool BigNumber::isPositive() const

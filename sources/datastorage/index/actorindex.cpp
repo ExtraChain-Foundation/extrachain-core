@@ -257,8 +257,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
+    qDebug() << "lastSavedId" << lastSavedId;
 
-    for (int id = 0; id < lastSavedId; id++)
+    for (int id = 0; id <= lastSavedId; id++)
     {
         Profile profile = getProfile(QString::number(id, 16));
 
