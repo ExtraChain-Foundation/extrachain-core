@@ -18,7 +18,6 @@ class Profile
     Q_PROPERTY(qint16 birthMonth READ birthMonth WRITE setBirthMonth)
     Q_PROPERTY(qint16 birthYear READ birthYear WRITE setBirthYear)
     Q_PROPERTY(qint16 gender READ gender WRITE setGender)
-    Q_PROPERTY(qint32 rating READ rating WRITE setRating)
     Q_PROPERTY(QStringList avatar READ avatar WRITE setAvatar)
     Q_PROPERTY(QString bio READ bio WRITE setBio)
     Q_PROPERTY(QString url READ url WRITE setUrl)
@@ -77,7 +76,6 @@ public:
     qint16 birthMonth() const;
     qint16 birthYear() const;
     qint16 gender() const;
-    qint32 rating() const;
     QStringList avatar() const;
     qint16 country() const;
     QString bio() const;
@@ -115,7 +113,6 @@ public:
     void setBirthMonth(qint16 birthMonth);
     void setBirthYear(qint16 birthYear);
     void setGender(qint16 gender);
-    void setRating(qint32 rating);
     void setAvatar(QStringList avatar);
     void setBio(const QString& bio);
     void setUrl(const QString& url);
@@ -162,24 +159,7 @@ private:
     QList<int> toListInt(const QString& field);
     QString fromListInt(const QList<int>& list);
 
-    QByteArray tempType = "2";
-    QByteArrayList baseProfileTemp = {
-        tempType,   "1",         "212",     "firstName", "lastName", "1567700043828",      "12021997",
-        "0",        "321",       "",        "123",       "bio123",   "http://google.com/", "url name",
-        "facebook", "instagram", "ethereum"
-    };
-
     QByteArrayList m_list;
-
-    // QByteArrayList m_list = baseProfileTemp;
-
-    // model
-    //    QByteArrayList m_list = baseProfileTemp
-    //        + QByteArrayList { "1",   "1 2", "1 2", "1 2", "1 2", "1 2", "11 12 13 14 15 16 17 18 19",
-    //                           "1 2", "1 2", "1 2", "1 2", "1 2", "" };
-
-    // fashion
-    // QByteArrayList m_list = baseProfileTemp + QByteArrayList { "2 3 4", "1 2", "1 2 4", "0" };
 
 public:
     static const QStringList fieldsCustomer;

@@ -189,11 +189,6 @@ qint16 Profile::gender() const
     return qint16(value("gender").toInt());
 }
 
-qint32 Profile::rating() const
-{
-    return qint32(value("rating").toInt());
-}
-
 QStringList Profile::avatar() const
 {
     QString avatar = value("avatar").trimmed();
@@ -415,11 +410,6 @@ void Profile::setGender(qint16 gender)
     setValue("gender", QByteArray::number(gender));
 }
 
-void Profile::setRating(qint32 rating)
-{
-    setValue("rating", QByteArray::number(rating));
-}
-
 void Profile::setAvatar(QStringList avatar)
 {
     setValue("avatar", avatar.join(" ").toUtf8());
@@ -563,63 +553,64 @@ QString Profile::fromListInt(const QList<int> &list)
 }
 
 //
-const QStringList Profile::fieldsCustomer = { "type",         "version",  "userId", "firstName", "lastName",
-                                              "registerDate", "birthday", "gender", "rating",    "avatar",
-                                              "country",      "bio",      "url",    "urlName",   "facebook",
-                                              "instagram",    "ethereum" };
+const QStringList Profile::fieldsCustomer = { "type",     "version",      "userId",    "firstName",
+                                              "lastName", "registerDate", "birthday",  "gender",
+                                              "avatar",   "country",      "bio",       "url",
+                                              "urlName",  "facebook",     "instagram", "ethereum" };
 
 const QStringList Profile::fieldsModel = fieldsCustomer
     + QStringList({ "unit", "category", "body", "hair", "hairLength", "eye", "sizes", "ethnicity", "style",
                     "sports", "skin", "scope", "portfolio" });
-const QStringList Profile::fieldsAgent = fieldsCustomer + QStringList{ "direction", "workStyle" };
-const QStringList Profile::fieldsAgency = fieldsCustomer + QStringList{ "direction", "workStyle" };
+const QStringList Profile::fieldsAgent = fieldsCustomer + QStringList { "direction", "workStyle" };
+const QStringList Profile::fieldsAgency = fieldsCustomer + QStringList { "direction", "workStyle" };
 const QStringList Profile::fieldsFashion =
-    fieldsCustomer + QStringList{ "direction", "workStyle", "fashion", "portfolio" };
+    fieldsCustomer + QStringList { "direction", "workStyle", "fashion", "portfolio" };
 
 //
-const QMap<int, QString> Profile::unitMap{ { 0, "Imperial" }, { 1, "Metric" } };
-const QMap<int, QString> Profile::categoryMap{ { 0, "Editorial" },  { 1, "Mature" }, { 2, "Child" },
-                                               { 3, "Commercial" }, { 4, "Petite" }, { 5, "Pregnant" },
-                                               { 6, "Fitness" },    { 7, "Plus" } };
-const QMap<int, QString> Profile::bodyMap{
+const QMap<int, QString> Profile::unitMap { { 0, "Imperial" }, { 1, "Metric" } };
+const QMap<int, QString> Profile::categoryMap { { 0, "Editorial" },  { 1, "Mature" }, { 2, "Child" },
+                                                { 3, "Commercial" }, { 4, "Petite" }, { 5, "Pregnant" },
+                                                { 6, "Fitness" },    { 7, "Plus" } };
+const QMap<int, QString> Profile::bodyMap {
     { 0, "Petit" }, { 1, "Average" }, { 2, "Thin" }, { 3, "Athletic" }, { 4, "Heavy" }
 };
-const QMap<int, QString> Profile::hairMap{
+const QMap<int, QString> Profile::hairMap {
     { 0, "Blonde" },    { 1, "Dark Blonde" }, { 2, "Light Blonde" },
     { 3, "Brown" },     { 4, "Dark Brown" },  { 5, "Black" },
     { 6, "Auburn" },    { 7, "Red" },         { 8, "Strawberry Blonde" },
     { 9, "Gray/White" }
 };
-const QMap<int, QString> Profile::hairLengthMap{
+const QMap<int, QString> Profile::hairLengthMap {
     { 0, "Long" },     { 1, "Short" }, { 2, "Shoulder length" }, { 3, "Chin length" }, { 4, "Shaved short" },
     { 5, "Receding" }, { 6, "Bald" }
 };
-const QMap<int, QString> Profile::eyeMap{ { 0, "Blue" },  { 1, "Green" }, { 2, "Blue Green" }, { 3, "Brown" },
-                                          { 4, "Hazel" }, { 5, "Gray" },  { 6, "Black" } };
-const QMap<int, QString> Profile::ethnicityMap{ { 0, "Middle East" },    { 1, "Native American" },
-                                                { 2, "Latin American" }, { 3, "Causian" },
-                                                { 4, "Mixed" },          { 5, "African" },
-                                                { 6, "Indian" },         { 7, "Asian" },
-                                                { 8, "Aboriginal" },     { 9, "Polynesian" } };
-const QMap<int, QString> Profile::styleMap{ { 0, "White" },       { 1, "Blue" },   { 2, "Artist" },
-                                            { 3, "Alternative" }, { 4, "Techie" }, { 5, "Quirky" } };
+const QMap<int, QString> Profile::eyeMap { { 0, "Blue" },  { 1, "Green" }, { 2, "Blue Green" },
+                                           { 3, "Brown" }, { 4, "Hazel" }, { 5, "Gray" },
+                                           { 6, "Black" } };
+const QMap<int, QString> Profile::ethnicityMap { { 0, "Middle East" },    { 1, "Native American" },
+                                                 { 2, "Latin American" }, { 3, "Causian" },
+                                                 { 4, "Mixed" },          { 5, "African" },
+                                                 { 6, "Indian" },         { 7, "Asian" },
+                                                 { 8, "Aboriginal" },     { 9, "Polynesian" } };
+const QMap<int, QString> Profile::styleMap { { 0, "White" },       { 1, "Blue" },   { 2, "Artist" },
+                                             { 3, "Alternative" }, { 4, "Techie" }, { 5, "Quirky" } };
 
-const QMap<int, QString> Profile::sportsMap{ { 0, "Skiing" },     { 1, "Sailing" },  { 2, "Tennis" },
-                                             { 3, "Bicycling" },  { 4, "Aerobics" }, { 5, "Skateboarding" },
-                                             { 6, "Basketball" }, { 7, "Baseball" }, { 8, "Soccer" },
-                                             { 9, "Football" },   { 10, "Running" }, { 11, "Yoga" } };
-const QMap<int, QString> Profile::skinMap{
+const QMap<int, QString> Profile::sportsMap { { 0, "Skiing" },     { 1, "Sailing" },  { 2, "Tennis" },
+                                              { 3, "Bicycling" },  { 4, "Aerobics" }, { 5, "Skateboarding" },
+                                              { 6, "Basketball" }, { 7, "Baseball" }, { 8, "Soccer" },
+                                              { 9, "Football" },   { 10, "Running" }, { 11, "Yoga" } };
+const QMap<int, QString> Profile::skinMap {
     { 0, "Tattoo" }, { 1, "Brand" }, { 2, "Piercing" }, { 3, "Scar" }
 };
-const QMap<int, QString> Profile::scopeMap{ { 0, "Fashion" }, { 1, "Act" },      { 2, "Portrait" },
-                                            { 3, "Glamour" }, { 4, "Lingerie" }, { 5, "Event" },
-                                            { 6, "Hand" } };
-const QMap<int, QString> Profile::directionMap{ { 0, "White-color" }, { 1, "Blue-color" }, { 2, "Art" },
-                                                { 3, "Act" },         { 4, "Portrait" },   { 5, "Glamour" },
-                                                { 6, "Fashion" },     { 7, "Event" } };
-const QMap<int, QString> Profile::workStyleMap{ { 0, "White-color" }, { 1, "Blue-color" }, { 2, "Art" },
-                                                { 3, "Act" },         { 4, "Portrait" },   { 5, "Glamour" },
-                                                { 6, "Fashion" },     { 7, "Event" } };
-const QMap<int, QString> Profile::fashionMap{
+const QMap<int, QString> Profile::scopeMap { { 0, "Fashion" }, { 1, "Act" },      { 2, "Portrait" },
+                                             { 3, "Glamour" }, { 4, "Lingerie" }, { 5, "Event" },
+                                             { 6, "Hand" } };
+const QMap<int, QString> Profile::directionMap { { 0, "White-color" }, { 1, "Blue-color" }, { 2, "Art" },
+                                                 { 3, "Act" },         { 4, "Portrait" },   { 5, "Glamour" },
+                                                 { 6, "Fashion" },     { 7, "Event" } };
+const QMap<int, QString> Profile::workStyleMap { { 0, "White-color" }, { 1, "Blue-color" }, { 2, "Art" },
+                                                 { 3, "Act" },         { 4, "Portrait" },   { 5, "Glamour" },
+                                                 { 6, "Fashion" },     { 7, "Event" } };
+const QMap<int, QString> Profile::fashionMap {
     { 0, "Photographer" }, { 1, "Affiliate" }, { 2, "Designer" }, { 3, "Visagiste" }, { 4, "Stylist" }
 };
