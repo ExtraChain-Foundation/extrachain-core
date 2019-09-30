@@ -7,6 +7,7 @@ SOURCES += \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
+    $$PWD/headers/crypt/ecc/blowfish_crypt.cpp \
     $$PWD/sources/crypt/crypt_manager.cpp \
     $$PWD/sources/crypt/ecc/ecc.cpp \
     $$PWD/sources/crypt/ecc/key_private.cpp \
@@ -66,6 +67,7 @@ SOURCES += \
     $$PWD/headers/utils/bignumberdec.cpp
 
 HEADERS += \
+    $$PWD/headers/crypt/ecc/blowfish_crypt.h \
     $$PWD/headers/crypt/xor_encrypt.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
