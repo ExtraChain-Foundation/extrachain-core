@@ -10,10 +10,7 @@
 #include "datastorage/contract.h"
 #include "network/socket_pair.h"
 #include "datastorage/profile.h"
-
-#ifdef ETALONIUM_CLIENT
 #include "datastorage/searchfilters.h"
-#endif
 
 Q_DECLARE_METATYPE(QHostAddress)
 Q_DECLARE_METATYPE(Block)
@@ -33,11 +30,8 @@ Q_DECLARE_METATYPE(SocketPair)
 Q_DECLARE_METATYPE(Profile)
 Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
-// Q_DECLARE_METATYPE(qintptr)
-
-#ifdef ETALONIUM_CLIENT
 Q_DECLARE_METATYPE(SearchFilters)
-#endif
+// Q_DECLARE_METATYPE(qintptr)
 
 void registerMetaTypes()
 {
@@ -59,12 +53,9 @@ void registerMetaTypes()
     qRegisterMetaType<Profile>();
     qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
+    qRegisterMetaType<SearchFilters>();
 
     // qRegisterMetaType<qintptr>();
-
-#ifdef ETALONIUM_CLIENT
-    qRegisterMetaType<SearchFilters>();
-#endif
 }
 
 #endif
