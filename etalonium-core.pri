@@ -7,11 +7,11 @@ SOURCES += \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
-    $$PWD/headers/crypt/ecc/symmetriccrypt.cpp \
     $$PWD/sources/crypt/crypt_manager.cpp \
     $$PWD/sources/crypt/ecc/ecc.cpp \
     $$PWD/sources/crypt/ecc/key_private.cpp \
     $$PWD/sources/crypt/ecc/key_public.cpp \
+    $$PWD/sources/crypt/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/fileindex.cpp \
@@ -33,6 +33,7 @@ SOURCES += \
     $$PWD/sources/network/packages/service/list_connections.cpp \
     $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/profile/private_profile.cpp \
+    $$PWD/sources/profile/public_profile.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/EllipticPoints.cpp \
@@ -65,7 +66,7 @@ SOURCES += \
     $$PWD/headers/utils/bignumberdec.cpp
 
 HEADERS += \
-    $$PWD/headers/crypt/ecc/symmetriccrypt.h \
+    $$PWD/headers/crypt/xor_encrypt.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
@@ -100,6 +101,7 @@ HEADERS += \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \
+    $$PWD/headers/profile/public_profile.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/list_container.h \

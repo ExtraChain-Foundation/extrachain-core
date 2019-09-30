@@ -9,6 +9,7 @@
 #include <utility>
 #include <type_traits>
 #include <datastorage/profile.h>
+#include "profile/public_profile.h"
 /**
  * Acting entity.
  * Users, Smart-contracts
@@ -26,6 +27,7 @@ private:
     T *key;
     QByteArray hash; // to encrypt private key (email and pass)
     bool account;
+    PublicProfile profile;
 
 public:
     inline void setHash(QByteArray hash)
@@ -276,6 +278,15 @@ public:
     {
         return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->extractPublicKey(), getAccount())
                            : Actor<KeyPublic>();
+    }
+    PublicProfile getProfile()
+    {
+        return profile;
+    }
+
+    void setProfile(const PublicProfile &value)
+    {
+        profile = value;
     }
 };
 
