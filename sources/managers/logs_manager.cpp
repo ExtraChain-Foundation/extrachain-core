@@ -128,7 +128,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #endif
     }
 
-    if (LogsManager::toFile)
+    if (LogsManager::toFile && logFile.isWritable())
     {
         logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd "), logStr).toUtf8());
         logFile.flush();
