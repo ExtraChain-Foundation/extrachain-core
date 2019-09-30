@@ -28,6 +28,7 @@ private:
 
 public:
     SmartContractManager(ActorIndex *actorIndex, QObject *parent = nullptr);
+    ~SmartContractManager() = default;
     // QList<QByteArray> getAccountID();
 
 public slots:

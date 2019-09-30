@@ -16,6 +16,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     tokenBalance[relAddress] = { { tokenName, tokenCount } };
     FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTPROFILE);
     Actor<KeyPrivate> *actor = createContract(tokenName);
+
     QByteArrayList profileList;
     profileList.clear();
     profileList.append("6");

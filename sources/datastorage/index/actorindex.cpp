@@ -187,11 +187,12 @@ Profile ActorIndex::getProfile(QString id)
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "")
+    if (pubProfile.sign == "" || key.getHash() == "")
     {
         qDebug() << "getProfile: incorrect profile" << id;
         return Profile();
     }
+
     if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
         return pubProfile.profile;
     else
@@ -257,7 +258,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
-    qDebug() << "lastSavedId" << lastSavedId;
+    qDebug() << "first last ids" << firstSavedId << lastSavedId;
 
     for (int id = 0; id <= lastSavedId; id++)
     {
