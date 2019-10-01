@@ -24,7 +24,7 @@ class Actor
 private:
     BigNumber id;
     T *key;
-    QByteArray hash; // to encrypt private key (email and pass)
+    QByteArray hash;
     bool account;
 
 public:

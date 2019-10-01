@@ -165,6 +165,12 @@ const QByteArray BaseMessage::hash() const
     return Utils::calcKeccak(msgType);
 }
 
+const QByteArray BaseMessage::init(const QByteArray &data) const
+{
+    QByteArray result = serialize() + data + Utils::intToByteArray(data.size(), Messages::FIELD_SIZES);
+    return result;
+}
+
 // Getters
 
 QByteArray BaseMessage::getProtocol() const
@@ -180,4 +186,40 @@ QByteArray BaseMessage::getMsgType() const
 BigNumber BaseMessage::getSigner() const
 {
     return signer;
+}
+
+// BaseMessage Response
+short BaseMessageResponse::getFieldsCount() const
+{
+    return this->BaseMessage::getFieldsCount() + FIELDS_COUNT;
+}
+
+void BaseMessageResponse::initFields(QList<QByteArray> &list)
+{
+    BaseMessage::initFields(list);
+    dataHash = list.takeFirst();
+}
+
+QList<QByteArray> BaseMessageResponse::serializedParams() const
+{
+}
+
+BaseMessageResponse::~BaseMessageResponse()
+{
+}
+
+BaseMessageResponse BaseMessageResponse::operator=(const BaseMessageResponse &temp)
+{
+}
+
+QByteArray BaseMessageResponse::serialize() const
+{
+}
+
+void BaseMessageResponse::deserialize(const QByteArray &serialized)
+{
+}
+
+const QByteArray BaseMessageResponse::hash() const
+{
 }

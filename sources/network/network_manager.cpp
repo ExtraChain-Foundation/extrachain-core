@@ -410,6 +410,15 @@ void NetManager::broadcastMsg(const QByteArray &msg)
     //#endif
 }
 
+void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageType)
+{
+    BaseMessage msg(messageType);
+    //    if (messageType != Messages::ACTOR_MESSAGE)
+    //    signMessage(msg);
+    QByteArray message = msg.init(data);
+    broadcastMsg(message);
+}
+
 ResolverService *NetManager::getResolverService()
 {
     return resolverService;
@@ -418,19 +427,6 @@ void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
     SocketPair socketPair(peerAddress.toString().toStdString(), 0, this);
     emit sendMsg(msg.serialize(), socketPair);
-
-    //#ifdef ETALONIUM_CLIENT
-    //    for (SocketService *connect : entryPoints)
-    //    {
-    //        if (connect->getSocket()->peerAddress() == peerAddress)
-    //        {
-    //            qDebug() << "NET MANAGER : send to -> " << connect->getAddress()
-    //                     << connect->getPort();
-    //            connect->sendMsg(msg.serialize());
-    //        }
-    //    }
-    //#endif
-    //    client->sendMessageToPeer(msg.serialize(), peerAddress);
 }
 
 void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int port)
@@ -725,6 +721,9 @@ void NetManager::sendNewActor(Actor<KeyPublic> actor)
     qDebug() << "NET MANAGER: Send new actor";
     //    reservedActorList.removeAt(reservedActorList.indexOf(actor.getId()));
     EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
+    GetEntityHandler<BigNumber> handler;
+    handler.addResponse(actor.getId());
+    getReserveActorHandlers.insert(calcHash(msg), handler);
     //    signMessage(msg);
     broadcastMsg(msg.serialize());
 }
@@ -787,16 +786,6 @@ void NetManager::sendBlockCountResponse(BigNumber blockCount, QHostAddress peerA
     sendMsgToPeer(msg, peerAddress);
 }
 
-// void NetManager::sendActorCount(BigNumber actorCount, QHostAddress
-// peerAddress,
-
-//                                QByteArray requestHash)
-//{
-//    qDebug() << "NET MANAGER: Sending actor count" << actorCount << "to"
-//             << peerAddress.toString();
-
-//}
-
 void NetManager::sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress,
                                         QByteArray requestHash)
 {
@@ -805,15 +794,6 @@ void NetManager::sendActorCountResponse(BigNumber actorCount, QHostAddress peerA
     //    signMessage(msg);
     sendMsgToPeer(msg, peerAddress);
 }
-// IMPORTANT !!! NEED TO MAKE WORKING !!!
-// void NetManager::sendMergedBlock(Block firstBlock, Block secondBlock,
-//                                 Block resultBlock) {
-//  qDebug() << "NET MANAGER: Spreading merged block" << resultBlock.getIndex();
-//  MergedBlockMessage msg(firstBlock, secondBlock, resultBlock);
-//  signMessage(msg);
-//  //    qDebug() << msg.serialize();
-//  broadcastMsg(msg);
-//}
 
 void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
 {
@@ -839,14 +819,6 @@ void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
 
 // Send messages //
 
-// void NetManager::sendGetActorWhithoutSign(BigNumber actorId)
-//{
-//    qDebug() << "NET MANAGER: Requesting actor with id =" << actorId;
-//    GetActorMessage msg(actorId);
-//    signMessage(msg);
-//    getActorsHandlers.insert(calcHash(msg),
-//    GetEntityHandler<Actor<KeyPublic>>()); broadcastMsg(msg);
-//}
 void NetManager::sendGetActor(BigNumber actorId)
 {
     qDebug() << "NET MANAGER: Requesting actor with id =" << actorId;
@@ -938,10 +910,25 @@ void NetManager::sendCompanyActor(QString peerAddress)
 
 // Handling messsages ///
 
-void NetManager::handleNewActor(Actor<KeyPublic> actor, QHostAddress peerAddress)
+void NetManager::handleNewActor(Actor<KeyPublic> actor, const QByteArray &requestHash,
+                                QHostAddress peerAddress)
 {
     qDebug() << "NET MANAGER: Handling NewActor" << actor.toString() << "from" << peerAddress.toString();
-    emit NewActor(actor);
+    if (reservedActorList.indexOf(actor.getId()) == -1)
+        emit NewActor(actor);
+    else
+    {
+        BigNumber freeActorId = actor.getId() + BigNumber("1");
+        while (reservedActorList.contains(freeActorId))
+        {
+            freeActorId++;
+        }
+
+        EntityResponseMessage<BigNumber> msg = Messages::createReserveActorResponse(freeActorId, requestHash);
+        signMessage(msg);
+        reservedActorList.append(freeActorId);
+        sendMsgToPeer(msg, peerAddress);
+    }
 }
 void NetManager::continueHandlingNewActor(Actor<KeyPublic> actor)
 {
@@ -1005,15 +992,6 @@ void NetManager::handleBlockApproved(BigNumber blockId, BigNumber approver, QHos
     qDebug() << "NET MANAGER: Handling BlockApproved" << blockId << "from" << peerAddress.toString();
     emit BlockApproved(blockId, approver, peerAddress);
 }
-
-// void NetManager::handleMergedBlock(Block first, Block second, Block result,
-//                                   QByteArray dsig, QHostAddress peerAddress)
-//                                   {
-//  qDebug() << "NET MANAGER: Handling MergedBlock" << result.getIndex() <<
-//  "from"
-//           << peerAddress.toString();
-//  emit HandleMergedBlock(first, second, result, dsig, peerAddress);
-//}
 
 void NetManager::handleGetActor(BigNumber actorId, QHostAddress peerAddress, QByteArray requestHash)
 {
@@ -1328,6 +1306,7 @@ void NetManager::handleReserveActorResponse(const BigNumber &actorId, const QByt
         return;
 
     GetEntityHandler<BigNumber> handler = getReserveActorHandlers[requestHash];
+    //    if (handler.)
     handler.addResponse(actorId);
     getReserveActorHandlers.insert(requestHash, handler);
     if (handler.canProcess())

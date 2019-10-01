@@ -81,12 +81,32 @@ public:
     static BaseMessage deserializeMsg(const QByteArray serialized);
 
     const QByteArray hash() const override;
+    const QByteArray init(const QByteArray &data) const;
 
 public:
     QByteArray getProtocol() const;
     QByteArray getMsgType() const;
     BigNumber getSigner() const override;
     QByteArray getDigSig() const;
+};
+class BaseMessageResponse : public BaseMessage
+{
+private:
+    QByteArray dataHash;
+    static const short FIELDS_COUNT = 1;
+    short getFieldsCount() const override;
+    void initFields(QList<QByteArray> &list) override;
+    QList<QByteArray> serializedParams() const override;
+
+public:
+    BaseMessageResponse(const QByteArray &msg);
+    BaseMessageResponse(const BaseMessage &msg, const QByteArray &hash);
+
+    ~BaseMessageResponse() override;
+    BaseMessageResponse operator=(const BaseMessageResponse &temp);
+    QByteArray serialize() const override final;
+    void deserialize(const QByteArray &serialized) override;
+    const QByteArray hash() const override final;
 };
 }
 #endif // BASEMESSAGE_H

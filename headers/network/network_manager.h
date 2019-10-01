@@ -141,7 +141,6 @@ private:
         {
             responses.clear();
         }
-
         void addResponse(const T &response)
         {
             int mentionsCount = responses[response];
@@ -287,15 +286,12 @@ private slots:
     void upnpErrNet(QString msg);
 
     // spread messages
-    void handleNewActor(Actor<KeyPublic> actor, QHostAddress peerAddress);
+    void handleNewActor(Actor<KeyPublic> actor, const QByteArray &requestHash, QHostAddress peerAddress);
     void handleNewBlock(Block block, QHostAddress peerAddress);
     void handleNewGenesisBlock(Block block, QHostAddress peerAddress);
     void handleNewTx(Transaction tx, QHostAddress peerAddress);
 
     void handleBlockApproved(BigNumber blockId, BigNumber approver, QHostAddress peerAddress);
-    //    void handleMergedBlock(Block first, Block second, Block result,
-    //    QByteArray dsig,
-    //                           QHostAddress peerAddress);
 
     // request messages
     // processed in blockchain (because we don't need to block network thread)
@@ -330,6 +326,12 @@ public slots:
      * @param msg
      */
     void broadcastMsg(const QByteArray &msg);
+    /**
+     * @brief sendMessage
+     * @param data for send
+     * @param messageType type to compress
+     */
+    void sendMessage(const QByteArray &data, const QByteArray &messageType);
 
 private slots:
     /**
@@ -375,8 +377,7 @@ public slots:
                            QByteArray requestHash);
     void sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
     void sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
-    //  void sendMergedBlock(Block firstBlock, Block secondBlock, Block
-    //  resultBlock);
+
     // unique behavior (get block from temp file)
     void sendGenesisBlock(Block prevBlock, QByteArray prevGenHash);
 
@@ -426,8 +427,6 @@ signals:
     void coinRequest(BigNumber receiver, BigNumber amount);
 
     void BlockApproved(BigNumber blockId, BigNumber approver, QHostAddress peerAddress);
-    //  void HandleMergedBlock(Block first, Block second, Block result,
-    //                         QByteArray dsig, QHostAddress peerAddress);
 
     // requests
     void GetTx(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress, QByteArray requestHash);

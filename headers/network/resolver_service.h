@@ -100,6 +100,8 @@ private:
      */
     bool checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType);
 
+    const QByteArray getDataMsg(const QByteArray &msg) const;
+
 public slots:
     /**
      * @brief process

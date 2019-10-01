@@ -207,6 +207,12 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteAr
     //    return flag_result;
 }
 
+const QByteArray ResolverService::getDataMsg(const QByteArray &msg) const
+{
+    int bytesAmount = Utils::qByteArrayToInt(msg.mid(msg.size() - 1 - Messages::FIELD_SIZES));
+    return msg.mid(msg.size() - 1 - Messages::FIELD_SIZES - bytesAmount);
+}
+
 // bool ResolverService::isActive() const
 //{
 //    return active;
@@ -216,14 +222,14 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
 {
     QHostAddress peerAddress(peerAddressst);
     using namespace Messages;
-    QByteArray msgType = checkMsgType(msg);
+    QByteArray msgData = getDataMsg(msg);
+    BaseMessage message;
+    message.deserialize(msg);
+    QByteArray msgType = message.getMsgType();
     if (msgType == DFS_CHANGES_MESSAGE)
         //        qDebug() << "RESOLVER SERVICE: recieveMsg " << msg;
-
         if (msg == "")
             return;
-
-    // spread messages
     // spread messages
     if (msgType == GET_RESERVE_ACTOR_RESPONSE_MESSAGE)
     {
@@ -238,10 +244,9 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == PROFILE_FILE)
     {
         qDebug() << "receive profile";
-        EntityMessage<PublicProfile> message(msg);
         //        if (MessageIsNotValid(message))
         //            return;
-        emit ReceiveProfile(message.getEntity());
+        emit ReceiveProfile(PublicProfile(msgData));
         //
         // emit signal forProfile
     }
@@ -258,10 +263,9 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     }
     else if (msgType == ACTOR_MESSAGE)
     {
-        EntityMessage<Actor<KeyPublic>> message(msg);
         //        if (MessageIsNotValid(message))
         //            return;
-        emit NewActor(message.getEntity(), peerAddress);
+        emit NewActor(Actor<KeyPublic>(msgData), peerAddress);
     }
     else if (msgType == DFS_CHANGES_MESSAGE)
     {
@@ -271,7 +275,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == DFS_REQUEST_MESSAGE)
     {
         DfsRequest message(msg);
-
         emit getDfsRequest(message, peerAddressst);
     }
     else if (msgType == DOWNLOAD_DFS_REQUEST)
@@ -290,8 +293,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == BLOCK_MESSAGE)
     {
         EntityMessage<Block> message(msg);
-        if (MessageIsNotValid(message))
-            return;
+        //        if (MessageIsNotValid(message))
+        //            return;
 
         Block block = message.getEntity();
         if (!validate(block))
