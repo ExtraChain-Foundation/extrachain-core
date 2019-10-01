@@ -28,11 +28,16 @@ private:
     QByteArray hash; // to encrypt private key (email and pass)
     bool account;
     PublicProfile profile;
+    QByteArray addressPubKey; // 20 bytes
 
 public:
     inline void setHash(QByteArray hash)
     {
         this->hash = hash;
+    }
+    inline void setAddressPubKey(QByteArray address)
+    {
+        this->addressPubKey = address;
     }
     inline QByteArray getHash() const
     {
@@ -137,6 +142,13 @@ public:
         {
             this->id = id;
             key = new T();
+            if (typeid(T) == typeid(KeyPrivate))
+            {
+                QByteArray hashPubKey =
+                    Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
+                this->addressPubKey = hashPubKey.mid(hashPubKey.size() - 20, 20).push_front("0x");
+            }
+            //  addressPubKey=Utils::calcKeccak()
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
             this->account = account;
