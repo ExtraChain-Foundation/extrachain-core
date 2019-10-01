@@ -49,6 +49,7 @@ public:
         key = nullptr;
         hash = "";
         account = true;
+        addressPubKey = "0";
     }
     Actor(const Actor<T> &copyActor)
     {
@@ -56,6 +57,12 @@ public:
         key = new T(*(copyActor.getKey()));
         hash = copyActor.getHash();
         account = copyActor.getAccount();
+        if (typeid(T) == typeid(KeyPrivate))
+        {
+            QByteArray hashPubKey = Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
+            this->addressPubKey = hashPubKey.mid(hashPubKey.size() - 20, 20);
+            this->addressPubKey.push_front("0x");
+        }
     }
     Actor(const QByteArray &serialized)
     {
@@ -146,7 +153,13 @@ public:
             {
                 QByteArray hashPubKey =
                     Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
-                this->addressPubKey = hashPubKey.mid(hashPubKey.size() - 20, 20).push_front("0x");
+                if (hashPubKey.size() >= 20)
+                {
+                    this->addressPubKey = hashPubKey.mid(hashPubKey.size() - 20, 20);
+                    this->addressPubKey.push_front("0x");
+                }
+                else
+                    qDebug() << "[Error] Actor.h func InitNew. Error size of hashPubKey";
             }
             //  addressPubKey=Utils::calcKeccak()
             QByteArray hashData(toString().toUtf8());
