@@ -2,12 +2,13 @@
 
 void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, QByteArray id)
 {
+    QDir().mkdir("keystore/profile");
     QByteArray data = login + password;
     QByteArray secureLogin = Utils::calcKeccak(data);
     data = secureLogin + "|" + id;
     blowFish_crypt crypt;
     data = crypt.EncryptBlowFish(data, secureLogin);
-    QFile file("keystore/" + id + ".private");
+    QFile file("keystore/profile/" + id + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
     file.flush();
@@ -17,8 +18,8 @@ void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, Q
 }
 void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id)
 {
-
-    QFile file("keystore/" + idProfile + ".private");
+    QDir().mkdir("keystore/profile");
+    QFile file("keystore/profile/" + idProfile + ".private");
     if (!file.exists())
     {
         qDebug() << "Don`t have private profile";
@@ -54,7 +55,8 @@ void PrivateProfile::loadProfileForAutoLogin(QByteArray hash)
 
 void PrivateProfile::profile(QByteArray hash)
 {
-    QDir dir("keystore");
+    QDir().mkdir("keystore/profile");
+    QDir dir("keystore/profile");
     QStringList users = dir.entryList(QDir::Files);
     QByteArrayList idList;
     if (users.isEmpty())
@@ -66,7 +68,7 @@ void PrivateProfile::profile(QByteArray hash)
     {
         for (QString &fileName : users)
         {
-            QFile file("keystore/" + fileName);
+            QFile file("keystore/profile/" + fileName);
             file.open(QIODevice::ReadOnly);
             QByteArray data = file.readAll();
             file.flush();
@@ -90,7 +92,7 @@ void PrivateProfile::profile(QByteArray hash)
                 emit setIdProfile(idList.first());
 
                 qDebug() << "Load private profile with id" << idList.first();
-                emit sendPublicProfile(idList.first(), idList);
+                emit sendPrivateProfile(idList.first(), idList);
             }
             else
                 continue;

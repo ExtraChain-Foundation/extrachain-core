@@ -470,7 +470,7 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::sendPublicProfile, uiController, &UiController::loginPrivateProfile);
+    connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController, &UiController::loginPrivateProfile);
     connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
 
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);

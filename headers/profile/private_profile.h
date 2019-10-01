@@ -15,7 +15,7 @@ public slots:
 signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
-    void sendPublicProfile(QByteArray id, QByteArrayList idList);
+    void sendPrivateProfile(QByteArray id, QByteArrayList idList);
 
 private:
     void profile(QByteArray hash);
