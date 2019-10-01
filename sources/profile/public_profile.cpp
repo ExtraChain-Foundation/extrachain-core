@@ -35,7 +35,7 @@ QByteArray PublicProfile::serialize() const
     return data;
 }
 
-void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken)
+void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArray color)
 {
     QFile file("blockchain/.tokens");
     if (file.exists())
@@ -56,7 +56,7 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken)
         file.close();
     }
     file.open(QIODevice::WriteOnly | QIODevice::Append);
-    QByteArray data = Serialization::universalSerialize({ id, nameToken }, 4);
+    QByteArray data = Serialization::universalSerialize({ id, nameToken, color }, 4);
 
     file.write(data);
     file.flush();
@@ -97,7 +97,7 @@ Profile PublicProfile::saveProfile(Profile newProfile, const QString &path, QByt
     profile.close();
 #ifdef ETALONIUM_CLIENT
     if (newProfile.type() == 6)
-        saveTokenNames(newProfile.list().at(2), newProfile.list().at(3));
+        saveTokenNames(newProfile.list().at(2), newProfile.list().at(3), newProfile.list().at(4));
 #endif
     return newProfile;
 }

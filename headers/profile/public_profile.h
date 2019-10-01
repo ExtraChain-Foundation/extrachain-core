@@ -26,7 +26,7 @@ public:
 signals:
     //
 private:
-    static void saveTokenNames(QByteArray id, QByteArray nameToken);
+    static void saveTokenNames(QByteArray id, QByteArray nameToken, QByteArray color);
     //    QList<indexList> index;
 };
 #endif // PUBLIC_PROFILE_H
