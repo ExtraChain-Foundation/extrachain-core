@@ -8,6 +8,7 @@ NodeManager::NodeManager()
     if (!QFile(".settings").exists())
         createNetManagerIdentificator();
     actorIndex = new ActorIndex();
+    prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
@@ -36,23 +37,20 @@ NodeManager::NodeManager()
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
-    CreateExtracoin();
+    //    CreateExtracoin();
+    //    accController->loadActors();
 //    if (!QFile("blockchain/index/actor/0/0").exists())
 //    {
-//        Actor<KeyPrivate> company(accController->getActor(0));
+//        Actor<KeyPrivate> company = CreateExtracoin();
 //        accController->loadActors();
-//        for (int i = 0; i < 10; ++i)
-//        {
-//            Transaction newTransaction(BigNumber(0), BigNumber(i + 1),
-//            BigNumber("56bc75e2d63100000"));
-//            newTransaction.setSenderBalance(BigNumber("56bc75e2d63100000"));
-//            newTransaction.setReceiverBalance(BigNumber(0));
-//            newTransaction.setGas(0);
-//            newTransaction.setHop(0);
-//            newTransaction.sign(company);
-//            newTransaction.verify(company.convertToPublic());
-//            txManager->addVerifiedTx(newTransaction);
-//        }
+//        Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
+//        newTransaction.setSenderBalance(BigNumber("0"));
+//        newTransaction.setReceiverBalance(BigNumber("0"));
+//        newTransaction.setGas(0);
+//        newTransaction.setHop(0);
+//        newTransaction.sign(company);
+//        newTransaction.verify(company.convertToPublic());
+//        txManager->addVerifiedTx(newTransaction);
 
 //        txManager->makeBlock();
 //    }
@@ -71,26 +69,30 @@ NodeManager::NodeManager()
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
 {
-    int result = actorIndex->add(BigNumber("0"),
-                                 "00010"
-                                 "00927bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1"
-                                 "a4048a6baa82b2846f2ae82bab83b636a6c6e00011");
+    //    int result = actorIndex->add(BigNumber("0"),
+    //                                 "00010"
+    //                                 "00927bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1"
+    //                                 "a4048a6baa82b2846f2ae82bab83b636a6c6e00011");
 
-    Actor<KeyPrivate> companyPrKey(
-        QByteArray("000100031353e2c69b58a777e367d3f2358303fa0092"
-                   "7bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1a4048a6baa82b2"
-                   "846f2ae82bab83b636a6c6e00011"));
+    //    Actor<KeyPrivate> companyPrKey(
+    //        QByteArray("000100031353e2c69b58a777e367d3f2358303fa0092"
+    //                   "7bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1a4048a6baa82b2"
+    //                   "846f2ae82bab83b636a6c6e00011"));
+    //    accController->savePrivateActor(companyPrKey);
+    //    if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
+    //    {
+    //        qDebug() << "Actor"
+    //                 << "0:353e2c69b58a777e367d3f2358303fa:4ac3b1735ddda843a042661303861fa::"
+    //                 << " was added";
+    //        // todo: Event should be emited only on CREATING new actors, not on
+    //        // RECEIVING new one's make methods:
+    //        // * addActor -> add actor to storage
+    //        // * addNewActor -> add actor to storage and emit event NewActor
+    //    }
+    Actor<KeyPrivate> companyPrKey;
+    companyPrKey.init(true);
+    actorIndex->add(companyPrKey.getId(), companyPrKey.convertToPublic().getKey()->getPublicKey());
     accController->savePrivateActor(companyPrKey);
-    if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
-    {
-        qDebug() << "Actor"
-                 << "0:353e2c69b58a777e367d3f2358303fa:4ac3b1735ddda843a042661303861fa::"
-                 << " was added";
-        // todo: Event should be emited only on CREATING new actors, not on
-        // RECEIVING new one's make methods:
-        // * addActor -> add actor to storage
-        // * addNewActor -> add actor to storage and emit event NewActor
-    }
     return companyPrKey;
 }
 
@@ -104,12 +106,18 @@ void NodeManager::connectSmContractManager()
     connect(smContractController, &SmartContractManager::verifyActor, netManager, &NetManager::NewActor);
     connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
             &NodeManager::addActorInActorIndex);
+    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+    });
+    connect(this, &NodeManager::editPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
+    //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
+
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
-    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, this,
-            &NodeManager::sendTransactionContract);
-    connect(this, &NodeManager::sendTransactionContract, netManager, &NetManager::sendNewTx);
+    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, netManager,
+            &NetManager::sendNewTx);
+
 #endif
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
     // &NetManager::NewActor);
@@ -332,11 +340,12 @@ void NodeManager::updateAvailableWalletList()
     qDebug() << "NODE MANAGER: updateAvailableWalletList";
     BigNumber currentId = uiWallet->getCurrentWalletId();
     QList<QByteArray> walletList;
-    BigNumber lastId = actorIndex->getLastSavedId();
+    Subscribtion sub;
+    QList<BigNumber> subActorsList = sub.getAll();
 
-    for (BigNumber i(1); i <= lastId; ++i)
+    for (const BigNumber &actor : subActorsList)
     {
-        Actor<KeyPublic> curActor = actorIndex->getActor(i);
+        Actor<KeyPublic> curActor = actorIndex->getActor(actor);
         if (curActor.isEmpty() || currentId == curActor.getId()
             || accController->getCurrentActor().getId() == 0)
             continue;
@@ -426,10 +435,13 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
-    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendCoinRequest,
+    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
             Qt::ConnectionType::QueuedConnection);
     connect(uiWallet, &WalletController::addNewWallet,
             [=]() { accController->savePrivateActor(accController->createActor(false)); });
+    connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+    });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
 
     //======================================CONTRACT===========================================
@@ -457,6 +469,12 @@ void NodeManager::connectUi()
             &UiController::receiveEncryptOrDecryptData);
     connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManager,
             &CryptManager::recieveData);
+    connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
+    connect(uiController, &UiController::loadProfileForAutologin, prProfile,
+            &PrivateProfile::loadProfileForAutoLogin);
+    connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController, &UiController::loginPrivateProfile);
+    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
@@ -464,7 +482,8 @@ void NodeManager::connectUi()
     connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
 
     //=============================================LOGIN & REG================================
-    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, netManager, &NetManager::reserveActor);
+    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
+            [=]() { accController->savePrivateActor(accController->createActor(true)); });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -513,33 +532,31 @@ void NodeManager::connectAccountController()
 
 void NodeManager::connectActorIndex()
 {
-    connect(actorIndex, &ActorIndex::NewActor, netManager, &NetManager::sendNewActor);
-    //    connect(actorIndex, &ActorIndex::NewActor, [=]() {
-    //    accController->loadActors(); });
+    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
+    //    connect(actorIndex, &ActorIndex::NewActor, netManager, &NetManager::sendNewActor);
+    // this connect with service message
     connect(actorIndex, &ActorIndex::actorIndexUpdated, netManager, &NetManager::sendGetBlockCount);
-    connect(actorIndex, &ActorIndex::sendProfile, this, &NodeManager::sendProfile);
-    connect(this, &NodeManager::sendProfile, netManager, &NetManager::sendProfile);
+    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
+
+    connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);
+    connect(prProfile, &PrivateProfile::setHashProfile, this, &NodeManager::setHashLoginPrivateProfile);
 }
 
-bool NodeManager::dfsConnection()
+void NodeManager::dfsConnection()
 {
-    bool connect9 = connect(netManager, &NetManager::getDfsRequest, dfs, &Dfs::recieveRequest);
+    connect(netManager, &NetManager::getDfsRequest, dfs, &Dfs::recieveRequest);
     connect(netManager, &NetManager::newDfsPack, dfs, &Dfs::recieve);
     connect(netManager, &NetManager::downloadDfsRequest, dfs, &Dfs::downloadRequset);
+    // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
-    connect(dfs, &Dfs::downloadResponse, netManager, &NetManager::downloadAnswer);
-    // connect(dfs, &Dfs::beginTest, this, &NodeManager::DfsTestStart);
-
-    //    connect(netManager, &NetManager::downloadDfsResponse, dfs,
-    //    &Dfs::downloadRecieve);
+    //    connect(dfs, &Dfs::downloadResponse, netManager, &NetManager::downloadAnswer);
 
     // send files
     qDebug() << "dfs send request connection"
              << connect(dfs, &Dfs::sendToPeer, netManager, &NetManager::sendDfsMessageTo);
     connect(dfs, &Dfs::sendMessage, netManager, &NetManager::sendDfsPack);
     connect(dfs, &Dfs::sendRequestf, netManager, &NetManager::sendDfsRequest);
-    return connect9;
 }
 
 void NodeManager::connectSignals()
@@ -554,11 +571,7 @@ void NodeManager::connectSignals()
     connectAccountController();
     connectActorIndex();
     connectSmContractManager();
-
-    // dfs
-    if (!dfsConnection())
-        qDebug() << "NODE MANGER :"
-                 << "one of more from dfs connection have been failed";
+    dfsConnection();
 }
 
 void NodeManager::prepareFolders()
@@ -603,7 +616,7 @@ void NodeManager::createNewActor(QByteArray data, bool accountStatus)
     }
     if (!data.isEmpty())
     {
-        emit sendActorIdSeva(true, accController->getActorIndex()->getLastSavedId());
+        //        emit sendActorIdSeva(true, accController->getActorIndex()->getLastSavedId());
         this->dfs = new Dfs(actorIndex, accController);
     }
 }
@@ -646,4 +659,23 @@ void NodeManager::tempareSlotForActors()
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
     createTransaction(receiver, amount);
+}
+QByteArray NodeManager::getIdPrivateProfile() const
+{
+    return idPrivateProfile;
+}
+
+void NodeManager::setIdPrivateProfile(QByteArray id)
+{
+    idPrivateProfile = id;
+}
+
+QByteArray NodeManager::getHashLoginPrivateProfile() const
+{
+    return hashLoginPrivateProfile;
+}
+
+void NodeManager::setHashLoginPrivateProfile(QByteArray hash)
+{
+    hashLoginPrivateProfile = hash;
 }

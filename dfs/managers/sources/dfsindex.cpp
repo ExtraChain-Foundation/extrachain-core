@@ -66,7 +66,12 @@ DfsIndex::DfsIndex(ActorIndex *actorIndex, AccountController *accountControler, 
     , accControler(accountControler)
     , actorIndex(actorIndex)
 {
-
+    Subscribtion sub;
+    QList<BigNumber> listUsers = sub.getAll();
+    std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
+        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
+        emit sendRequest(rqst);
+    });
     //    QList<QString> cardList = {};
     //    std::for_each(listUsers.begin(), listUsers.end(), [&cardList](BigNumber userId) {
     //        for (auto &el : based_dfs_struct::typesVec)

@@ -15,6 +15,7 @@
 #include "managers/contract_manager.h"
 #include "crypt/crypt_manager.h"
 #include "managers/sm_manager.h"
+#include "profile/private_profile.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
@@ -34,10 +35,13 @@ private:
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
-
+    PrivateProfile *prProfile;
+    QByteArray idPrivateProfile;
+    QByteArray hashLoginPrivateProfile;
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;
+
 #endif
     CryptManager *cryptManager;
     ContractManager *contractManager;
@@ -72,6 +76,10 @@ public:
     UiController *getUiController() const;
 #endif
 
+    QByteArray getIdPrivateProfile() const;
+
+    QByteArray getHashLoginPrivateProfile() const;
+
 private:
     Actor<KeyPrivate> CreateExtracoin();
     void showMessage(QString from, QString message);
@@ -86,7 +94,7 @@ private:
     void connectBlockchain();
     void connectAccountController();
     void connectActorIndex();
-    bool dfsConnection();
+    void dfsConnection();
     void connectSignals();
     //    void dfsConnection();
     /**
@@ -95,6 +103,7 @@ private:
     void prepareFolders();
 
 signals:
+
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
     // created keys for chat
@@ -105,14 +114,15 @@ signals:
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
 
     void sendActorIdSeva(bool status, BigNumber actorId);
-    void sendProfile(PublicProfile profile);
     void requestProfile(QString actorId);
     void saveProfile(Actor<KeyPrivate> *key, Profile profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     void addActorInActorIndex(Actor<KeyPublic> actor);
+    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
 private slots:
-
+    void setIdPrivateProfile(QByteArray id);
+    void setHashLoginPrivateProfile(QByteArray hash);
     void createNewActor(QByteArray hash, bool accountStatus);
 
     void makeContractFirstTransaction(Contract &contract);
@@ -140,6 +150,7 @@ private slots:
     void updateAvailableWalletList();
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
+
 #endif
 };
 #endif // NODE_MANAGER_H

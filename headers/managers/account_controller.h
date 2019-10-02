@@ -99,5 +99,6 @@ signals:
     void finished();
 
     void initDfs();
+    void editPrivateProfile(QByteArray id);
 };
 #endif // ACCOUNT_CONTROLLER_H

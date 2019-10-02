@@ -9,6 +9,7 @@
 #include <utility>
 #include <type_traits>
 #include <datastorage/profile.h>
+#include "profile/public_profile.h"
 /**
  * Acting entity.
  * Users, Smart-contracts
@@ -26,6 +27,7 @@ private:
     T *key;
     QByteArray hash;
     bool account;
+    PublicProfile profile;
 
 public:
     inline void setHash(QByteArray hash)
@@ -82,7 +84,7 @@ public:
      * @brief initial construction
      * @param serialized
      */
-    void init(const QByteArray &serialized)
+    bool init(const QByteArray &serialized)
     {
         if (!serialized.isEmpty())
         {
@@ -118,23 +120,35 @@ public:
             }
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
+            return true;
         }
         else
         {
             qDebug() << "WARNING!:: Actor::init(const QByteArray &serialized) serialized IS "
                         "EMPTY!";
+            return false;
         }
     }
     /**
      * @brief initial construction of new Actor
      * @param id
      */
-    bool initNew(const BigNumber &id, bool account)
+    bool init(bool account)
     {
         if (isPrivate())
         {
-            this->id = id;
             key = new T();
+            if (typeid(T) == typeid(KeyPrivate))
+            {
+                QByteArray hashPubKey =
+                    Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
+                if (hashPubKey.size() >= 20)
+                {
+                    id = BigNumber(hashPubKey.mid(hashPubKey.size() - 20));
+                }
+                else
+                    qDebug() << "[Error] Actor.h func InitNew. Error size of hashPubKey";
+            }
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
             this->account = account;
@@ -148,11 +162,12 @@ public:
      * @param id
      * @param keydata - (private/public key)
      */
-    void init(const BigNumber &id, const QByteArray &keydata, bool account)
+    bool init(const BigNumber &id, const QByteArray &keydata, bool account)
     {
         this->id = id;
         this->key = new T(keydata);
         this->account = account;
+        return true;
     }
 
     bool isEmpty() const
@@ -276,6 +291,15 @@ public:
     {
         return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->extractPublicKey(), getAccount())
                            : Actor<KeyPublic>();
+    }
+    PublicProfile getProfile()
+    {
+        return profile;
+    }
+
+    void setProfile(const PublicProfile &value)
+    {
+        profile = value;
     }
 };
 

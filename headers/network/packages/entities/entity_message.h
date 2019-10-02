@@ -116,68 +116,6 @@ public:
         return data;
     }
 };
-
-// Constructing methods //
-
-static EntityMessage<BigNumber> createReserveActorMessage(BigNumber logHash)
-{
-    return EntityMessage<BigNumber>(RESERVE_ACTOR_MESSAGE, logHash);
-}
-
-static EntityMessage<PublicProfile> createPublicProfileMessage(PublicProfile file)
-{
-    return EntityMessage<PublicProfile>(PROFILE_FILE, file);
-}
-
-static EntityMessage<BigNumber> createRequestCoinMessage(const BigNumber &coinAmount)
-{
-    return EntityMessage<BigNumber>(COIN_REQUEST, coinAmount);
-}
-
-static EntityMessage<Messages::EnableConnections>
-createConnectionListMessage(const Messages::EnableConnections &conList)
-{
-    return EntityMessage<Messages::EnableConnections>(ENABLE_LIST_CONNECTIONS, conList);
-}
-
-static EntityMessage<DownloadDfsRequestData> createDownloadDfsRequest(const DownloadDfsRequestData &status)
-{
-    return EntityMessage<DownloadDfsRequestData>(DOWNLOAD_DFS_REQUEST, status);
-}
-static EntityMessage<DfsMessage> createDfsMessage(const DfsMessage &dfs)
-{
-    return EntityMessage<DfsMessage>(DFS_CHANGES_MESSAGE, dfs);
-}
-
-static EntityMessage<DfsRequest> requestDfsMessage(const DfsRequest &dfs)
-{
-    return EntityMessage<DfsRequest>(DFS_REQUEST_MESSAGE, dfs);
-}
-
-static EntityMessage<Block> createBlockMessage(const Block &block)
-{
-    return EntityMessage<Block>(BLOCK_MESSAGE, block);
-}
-
-static EntityMessage<Block> createGenesisBlockMessage(const Block &block)
-{
-    return EntityMessage<Block>(GENESIS_BLOCK_MESSAGE, block);
-}
-
-static EntityMessage<Actor<KeyPublic>> createActorMessage(const Actor<KeyPublic> &actor)
-{
-    return EntityMessage<Actor<KeyPublic>>(ACTOR_MESSAGE, actor);
-}
-
-static EntityMessage<Transaction> createTxMessage(const Transaction &tx)
-{
-    return EntityMessage<Transaction>(TX_MESSAGE, tx);
-}
-
-static EntityMessage<Contract> createContractMessage(const Contract &contract)
-{
-    return EntityMessage<Contract>(CONTRACT_MESSAGE, contract);
-}
 }
 
 #endif // ENTITY_MESSAGE_H

@@ -202,3 +202,47 @@ int DfsItem::makeChanges(QByteArray data)
     }
     return 0;
 }
+void Subscribtion::add(const BigNumber &actorId)
+{
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toString() + fileName;
+    QFile file(path);
+    file.open(QIODevice::WriteOnly | QIODevice::Append);
+    file.write(actorId.toByteArray());
+    file.flush();
+    file.close();
+}
+
+void Subscribtion::remove(const BigNumber &actorId)
+{
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toString() + fileName;
+    QFile file(path);
+    file.open(QIODevice::ReadWrite);
+    while (!file.atEnd())
+    {
+        if (BigNumber(file.read(20)) == actorId)
+        {
+            QByteArray data = file.readAll();
+            file.seek(file.pos() - 20);
+            file.write(data);
+            file.flush();
+            file.close();
+            return;
+        }
+    }
+    file.flush();
+    file.close();
+}
+
+QList<BigNumber> Subscribtion::getAll() const
+{
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toString() + fileName;
+    QFile file(path);
+    file.open(QIODevice::ReadOnly);
+    QList<BigNumber> list;
+    while (!file.atEnd())
+    {
+        list.append(BigNumber(file.read(20)));
+    }
+    file.close();
+    return list;
+}

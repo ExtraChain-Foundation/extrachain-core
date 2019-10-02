@@ -312,8 +312,8 @@ private slots:
     void handleGetBlockResponse(Block block, QByteArray reqHash, QHostAddress peerAddress);
     void handleGetBlockCountResponse(BigNumber blockCount, QByteArray reqHash, QHostAddress peerAddress);
     void handleGetActorCountResponse(BigNumber actorCount, QByteArray reqHash, QHostAddress peerAddress);
-    void handleReserveActorResponse(const BigNumber &actorId, const QByteArray &requestHash,
-                                    const QString &peerAdress);
+    //    void handleReserveActorResponse(const BigNumber &actorId, const QByteArray &requestHash,
+    //                                    const QString &peerAdress);
 public slots:
     // test thread
     void process();
@@ -352,9 +352,6 @@ private slots:
      */
     void removeConnection();
 public slots:
-
-    void sendProfile(PublicProfile profile);
-    void reserveActor(const bool account);
     void retranslateMessages(const QByteArray &msg, QString peerAddress);
     void Verify(const QByteArray &block);
     /**
@@ -391,7 +388,7 @@ public slots:
     void sendGetTxPair(BigNumber sender, BigNumber receiver);
 
     void sendCompanyActor(QString peerAddress);
-    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int port);
+    //    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int port);
     void sendConnectionList(Messages::EnableConnections sendConList, SocketService *addressant);
 
     void sendCoinRequest(BigNumber amount);
@@ -400,9 +397,7 @@ public slots:
     void sendDfsRequest(const Messages::DfsRequest &msg);
 
     //    void sendDfsPackTo(Messages::DfsMessage dfs, QString peerAddress);
-    void downloadAnswer(bool status, QByteArray msg, QString peerAddressst);
-
-    void sendNewActor(Actor<KeyPublic> actor);
+    //    void downloadAnswer(bool status, QByteArray msg, QString peerAddressst);
 
 signals:
     void sendMsg(const QByteArray &data, const SocketPair &socketData);

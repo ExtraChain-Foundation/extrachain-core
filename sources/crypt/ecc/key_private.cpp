@@ -1,5 +1,4 @@
 #include "crypt/ecc/key_private.h"
-
 KeyPrivate::KeyPrivate()
 {
     BigNumber temp = BigNumber::random(64);

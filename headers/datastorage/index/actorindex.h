@@ -5,45 +5,39 @@
 #include "datastorage/block.h"
 #include "datastorage/index/fileindex.h"
 #include <datastorage/searchfilters.h>
+#include "profile/public_profile.h"
+#include "network/packages/entities/entity_message.h"
 /**
  * @brief Actors that stored in blockchain
  */
-struct indexList
-{
-    indexList(long long curPos, int _size);
-    long long currentPosition;
-    int size;
-};
 
-class PublicProfile
-{
-public:
-    PublicProfile(Profile _profile, QByteArray _sign, QString path);
-    PublicProfile(Profile _profile, QByteArray _sign);
-    PublicProfile(const QByteArray &serialize);
-    PublicProfile();
-    QByteArray serialize() const;
-    static Profile saveProfile(Profile newProfile, const QString &path, QByteArray sign);
-    static PublicProfile getProfile(const QString &path, const QString id);
-    static Profile saveProfileFromNet(Profile newProfile, QString path);
-    static QByteArray serialize(QByteArrayList actorList);
-    static QByteArrayList deserialize(QByteArray serializeData);
-    Profile profile;
-    QByteArray sign = "";
-signals:
-    //
-private:
-    static void saveTokenNames(QByteArray id, QByteArray nameToken);
-    //    QList<indexList> index;
-};
-
-class ActorIndex : public FileIndex
+class ActorIndex : public QObject
 {
     Q_OBJECT
+    const QByteArray classType = Messages::ACTOR_MESSAGE;
+    const QByteArray profileType = Messages::PROFILE_FILE;
+
+private:
+    BigNumber records = 0;
+    const QString folderPath =
+        DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
+    short SECTION_NAME_SIZE = 2;
+    /**
+     * @brief buildFilePath
+     * @param id
+     * @return
+     */
+    QString buildFilePath(const BigNumber &id) const;
+
 public:
-    ActorIndex();
-    ActorIndex(QString folderName); // custom folder name
-public:
+    /**
+     * @brief ActorIndex
+     */
+    ActorIndex(QObject *parent = nullptr);
+    /**
+     * @brief ~ActorIndex
+     */
+    ~ActorIndex();
     /**
      * @brief Check actor with actorId exist
      * @param actorId
@@ -72,14 +66,23 @@ public:
      */
     bool validateTx(const Transaction &tx) const;
 
+    /**
+     * @brief getById
+     * @param id
+     * @return
+     */
+    QByteArray getById(const BigNumber &id) const;
+    /**
+     * @brief add
+     * @param BigNumber id actorId for add
+     * @param data
+     * @return
+     */
+    int add(const BigNumber &id, const QByteArray &data);
+    BigNumber getRecords() const;
+
 public slots:
     void process();
-    /**
-     * @brief Validates private actor created by ActorController. Checks the uniqueness of the
-     * key. Emit's PrivateActorIsVerified signal on success.
-     * @param private actor
-     */
-    void validatePrivateActor(Actor<KeyPrivate> *actor);
     /**
      * @brief Attempts to save actor to local storage
      * @param actor
@@ -107,16 +110,21 @@ public slots:
      */
     int addActor(const Actor<KeyPublic> &actor);
 
+    /**
+     * @brief
+     */
+    void removeAll();
+
 signals:
-    void sendProfile(PublicProfile profile);
+    /**
+     * @brief sendMessage to NetManager slot: sendMessage
+     * @param data
+     * @param type
+     */
+    void sendMessage(const QByteArray &data, const QByteArray &type);
     void sendProfileToUi(QString userID, Profile profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
-    /**
-     * @brief New actor is created
-     * @param actor
-     */
-    void NewActor(Actor<KeyPublic> actor);
     void actorIndexUpdated();
 
     void initDfs(BigNumber userId);

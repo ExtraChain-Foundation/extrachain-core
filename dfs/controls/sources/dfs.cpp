@@ -118,8 +118,9 @@ void Dfs::init()
     }
     qDebug() << "[Dfs]:: dfs has been init";
     emit beginTest();
-    QList<BigNumber> listUsers;
-    for (BigNumber i = BigNumber(0); i < actorIndex->getLastSavedId(); i++)
+    Subscribtion sub;
+    QList<BigNumber> listUsers = sub.getAll();
+    for (const BigNumber &i : listUsers)
         if (actorIndex->getActor(i).getAccount() && (i != accountControler->getMainActor()->getId()))
             listUsers.append(i);
     std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
@@ -156,7 +157,7 @@ void Dfs::recieveRequest(Messages::DfsRequest request, QString peerAdress)
     {
         QList<QString> list;
         QList<BigNumber> actorList;
-        BigNumber maxActor = actorIndex->getLastSavedId();
+        //        BigNumber maxActor = actorIndex->getLastSavedId();
         //        for (BigNumber i = 0; i < maxActor; i++)
         //            actorList.append(i);
         //        actorList.append(maxActor);
@@ -369,4 +370,11 @@ void Dfs::checkStatus(const Messages::DfsStatus &msg)
 
 void Dfs::resolveMsg(const Messages::DfsMessage &msg)
 {
+    qDebug() << msg.serialize();
+}
+
+void Dfs::appendSubscribtion(const BigNumber &actorId)
+{
+    Subscribtion sub;
+    sub.add(actorId);
 }

@@ -1,260 +1,17 @@
 #include "datastorage/index/actorindex.h"
 
-PublicProfile::PublicProfile(Profile _profile, QByteArray _sign, QString path)
-{
-    profile = saveProfile(_profile, path, _sign);
-    sign = _sign;
-}
+ActorIndex::ActorIndex(QObject *parent)
+    : QObject(parent)
 
-PublicProfile::PublicProfile(Profile _profile, QByteArray _sign)
-{
-    profile = _profile;
-    sign = _sign;
-}
-PublicProfile::PublicProfile()
-{
-    profile = Profile();
-    sign = "";
-}
-PublicProfile::PublicProfile(const QByteArray &serialize)
-{
-    int signSize = Utils::qByteArrayToInt(serialize.mid(serialize.size() - 4, 4));
-    QByteArray _sign = serialize.mid(serialize.size() - signSize - 4, signSize);
-    QByteArray data = serialize.mid(0, serialize.size() - signSize - 4);
-    QByteArrayList list = deserialize(data);
-    sign = _sign;
-    profile = list;
-}
-QByteArray PublicProfile::serialize() const
-{
-    QByteArray data = serialize(profile.getConstList());
-    QByteArray _sign = Serialization::universalSerialize({ sign }, 4);
-    QByteArray signSize = _sign.mid(0, 4);
-    _sign += signSize;
-    _sign = _sign.mid(4, _sign.size());
-    data += _sign;
-    return data;
-}
-
-void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken)
-{
-    QFile file("blockchain/.tokens");
-    if (file.exists())
-    {
-        file.open(QIODevice::ReadOnly);
-        QByteArray dataFromFile = file.readAll();
-        QByteArrayList list = Serialization::universalDesirialize(dataFromFile, 4);
-        for (int i = 0; i < list.size(); i = i + 2)
-        {
-            if (id == list.at(i))
-            {
-                file.flush();
-                file.close();
-                return;
-            }
-        }
-        file.flush();
-        file.close();
-    }
-    file.open(QIODevice::WriteOnly | QIODevice::Append);
-    QByteArray data = Serialization::universalSerialize({ id, nameToken }, 4);
-
-    file.write(data);
-    file.flush();
-    file.close();
-}
-
-Profile PublicProfile::saveProfile(Profile newProfile, const QString &path, QByteArray sign)
-{
-    QByteArrayList &list = newProfile.list();
-
-    QString pathProfile =
-        path.mid(0, path.size() - newProfile.at(2).size()) + "profile/" + newProfile.at(2) + ".profile";
-    QDir().mkdir(path.mid(0, path.size() - newProfile.at(2).size()) + "profile/");
-    QFile profile(pathProfile);
-    QByteArray serializeProfile = serialize(list);
-    if (profile.exists())
-    {
-        profile.open(QIODevice::ReadOnly);
-        QByteArray oldProfile = profile.readAll();
-        profile.flush();
-        profile.close();
-        int signSize = Utils::qByteArrayToInt(oldProfile.mid(oldProfile.size() - 4, 4));
-        oldProfile = oldProfile.mid(0, oldProfile.size() - 4 - signSize);
-        if (serializeProfile == oldProfile)
-        {
-            qDebug() << "profile exist";
-            return Profile();
-        }
-        else
-            profile.resize(0);
-    }
-    QByteArray signWrite = Serialization::universalSerialize({ sign }, 4);
-    QByteArray sign2 = signWrite.mid(4, signWrite.size());
-    QByteArray signSize = signWrite.mid(0, 4);
-    signWrite = sign2 + signSize;
-    profile.open(QIODevice::WriteOnly);
-    profile.write(serializeProfile + signWrite);
-    profile.flush();
-    profile.close();
-#ifdef ETALONIUM_CLIENT
-    if (newProfile.type() == 6)
-        saveTokenNames(newProfile.list().at(2), newProfile.list().at(3));
-#endif
-    return newProfile;
-}
-
-PublicProfile PublicProfile::getProfile(const QString &path, const QString id)
-{
-    QDir().mkdir(path.mid(0, path.size() - id.size()) + "profile/");
-    QString pathProfile = path.mid(0, path.size() - id.size()) + "profile/" + id + ".profile";
-    QFile profile(pathProfile);
-    if (!profile.exists())
-    {
-        // qDebug() << "Profile isn't exist" << id;
-        return PublicProfile();
-    }
-    profile.open(QIODevice::ReadOnly);
-    QByteArray serializeData = profile.readAll();
-    profile.flush();
-    profile.close();
-    int signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
-    QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
-    serializeData = serializeData.mid(0, serializeData.size() - 4 - signSize);
-    QByteArrayList listProfile = deserialize(serializeData);
-    PublicProfile pubProfile(listProfile, sign);
-
-    return pubProfile;
-}
-
-Profile PublicProfile::saveProfileFromNet(Profile newProfile, QString path)
-{
-    QByteArrayList &list = newProfile.list();
-
-    QString pathProfile =
-        path.mid(0, path.size() - newProfile.at(2).size()) + "profile/" + newProfile.at(2) + ".profile";
-    QDir().mkdir(path.mid(0, path.size() - newProfile.at(2).size()) + "profile/");
-    QFile profile(pathProfile);
-    QByteArray serializeProfile = serialize(list);
-    if (profile.exists())
-    {
-        profile.open(QIODevice::ReadOnly);
-        QByteArray oldProfile = profile.readAll();
-        profile.flush();
-        profile.close();
-        if (serializeProfile == oldProfile)
-        {
-            qDebug() << "profile exist";
-            return Profile();
-        }
-        else
-            profile.resize(0);
-    }
-
-    profile.open(QIODevice::WriteOnly);
-    profile.write(serializeProfile);
-    profile.flush();
-    profile.close();
-
-    return newProfile;
-}
-
-QByteArray PublicProfile::serialize(QByteArrayList actorList)
-{
-    QByteArray data = "";
-    QByteArray actorData = "";
-    uint count = 0;
-
-    for (auto element : actorList)
-    {
-        if (count <= 2)
-        {
-            if (count > 0)
-            {
-                data = Serialization::universalSerialize({ element }, 4);
-                actorData.append(data);
-                data.clear();
-                count++;
-                continue;
-            }
-            actorData.append(element);
-            count++;
-            continue;
-        }
-        if (element == "")
-        {
-            data += "1| ";
-            actorData.append(data);
-            data.clear();
-            continue;
-        }
-        data += QByteArray::number(element.size());
-        data += "|";
-        data += element;
-        actorData.append(data);
-        data.clear();
-    }
-
-    return actorData;
-}
-
-QByteArrayList PublicProfile::deserialize(QByteArray serializeData)
-{
-    QByteArrayList profileData;
-    int position = 0, sizeField = 0;
-
-    for (int i = 0; i < serializeData.size(); i++)
-    {
-        if (i == 0)
-        {
-            profileData.append(serializeData.mid(i, 1));
-            ++position;
-            continue;
-        }
-        if (i <= 2)
-        {
-            profileData.append(
-                serializeData.mid(position + 4, Utils::qByteArrayToInt(serializeData.mid(position, 4))));
-            position += 4 + Utils::qByteArrayToInt(serializeData.mid(position, 4));
-            continue;
-        }
-        sizeField = Utils::qByteArrayToInt(
-            serializeData.mid(position, serializeData.indexOf("|", position) - position));
-        position += serializeData.mid(position, serializeData.indexOf("|", position) - position).size() + 1;
-        if (serializeData.mid(position, sizeField) == " ")
-        {
-            profileData.append("");
-            position += sizeField;
-            i = position;
-            continue;
-        }
-        profileData.append(serializeData.mid(position, sizeField));
-        position += sizeField;
-        i = position;
-    }
-
-    return profileData;
-}
-
-indexList::indexList(long long curPos, int _size)
-{
-    currentPosition = curPos;
-    size = _size;
-}
-
-ActorIndex::ActorIndex()
-    : FileIndex(/*DataStorage::BLOCKCHAIN_INDEX + '/' +*/ DataStorage::ACTOR_INDEX_FOLDER_NAME)
 {
 }
 
-ActorIndex::ActorIndex(QString folderName)
-    : FileIndex(folderName)
+ActorIndex::~ActorIndex()
 {
 }
 
 Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id) const
 {
-
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {
@@ -290,30 +47,6 @@ bool ActorIndex::validateTx(const Transaction &tx) const
 
 void ActorIndex::process()
 {
-}
-
-// todo: look closely at this method!
-void ActorIndex::validatePrivateActor(Actor<KeyPrivate> *actor)
-{
-    if (actor == nullptr)
-    {
-        qCritical() << "Null pointer";
-        return;
-    }
-
-    KeyPrivate *prKey = actor->getKey();
-    BigNumber last = getLastSavedId();
-
-    for (BigNumber i = getFirstSavedId(); i < last; ++i)
-    {
-        if (getActor(i).getKey()->extractPublicKey() == prKey->extractPublicKey())
-        {
-            qDebug() << "Error: Created actor is not unique";
-            return;
-        }
-    }
-
-    emit PrivateActorIsVerified(*actor);
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
@@ -353,10 +86,9 @@ void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
     }
     QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
     Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
-
     if (key.getHash().isEmpty())
     {
-        qDebug() << "Key is empty";
+        qDebug() << "saveProfileFromNetwork: Key " << newProfile.profile.at(2) << " is empty";
         return;
     }
 
@@ -372,7 +104,8 @@ void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
     else
     {
         qDebug() << "Save profile with id" << newProfile.profile.at(2);
-        sendProfile(profile);
+        key.setProfile(profile);
+        sendMessage(profile.serialize(), profileType);
     }
 }
 
@@ -385,9 +118,15 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile.list()));
     PublicProfile pubProfile(newProfile, sign, path);
     if (pubProfile.profile.at(2) == "")
+    {
+        qDebug() << "saveProfile: incorrect profile" << newProfile.at(2);
         return;
+    }
     else
-        sendProfile(pubProfile);
+    {
+        key->setProfile(pubProfile);
+        sendMessage(pubProfile.serialize(), profileType);
+    }
 }
 
 PublicProfile ActorIndex::getProfileToSend(QString id)
@@ -402,17 +141,20 @@ void ActorIndex::requestProfile(QString id)
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
     if (key.getHash().isEmpty())
+    {
+        qDebug() << "requestProfile: Key " << id << " is empty";
         return;
+    }
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
     if (pubProfile.sign == "")
     {
-        qDebug() << "incorrect profile" << id;
+        qDebug() << "requestProfile: incorrect profile" << id;
         return;
     }
     if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
         emit sendProfileToUi(id, pubProfile.profile);
     else
-        qDebug() << "incorrect profile" << id;
+        qDebug() << "requestProfile: incorrect profile" << id;
 }
 
 Profile ActorIndex::getProfile(QString id)
@@ -420,13 +162,17 @@ Profile ActorIndex::getProfile(QString id)
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "")
-        return pubProfile.profile;
+    if (pubProfile.sign == "" || key.getHash() == "")
+    {
+        qDebug() << "getProfile: incorrect profile" << id;
+        return Profile();
+    }
+
     if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
         return pubProfile.profile;
     else
     {
-        qDebug() << "incorrect profile" << id;
+        qDebug() << "getProfile: incorrect profile" << id;
         return Profile();
     }
 }
@@ -436,12 +182,15 @@ PublicProfile ActorIndex::getPublicProfile(QString id)
     Actor<KeyPublic> key = getActor(id.toUtf8());
     PublicProfile pubProfile = PublicProfile::getProfile(path, id);
     if (pubProfile.sign == "")
-        return pubProfile;
+    {
+        qDebug() << "getPublicProfile: incorrect profile";
+        return PublicProfile();
+    }
     if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
         return pubProfile;
     else
     {
-        qDebug() << "incorrect profile";
+        qDebug() << "getPublicProfile: incorrect profile";
         return PublicProfile();
     }
 }
@@ -452,26 +201,79 @@ bool ActorIndex::actorExist(BigNumber actorId)
         return false;
     return true;
 }
+QString ActorIndex::buildFilePath(const BigNumber &id) const
+{
+    BigNumber section = id.getHexValue().right(SECTION_NAME_SIZE).toUtf8();
+    QString pathToFolder = folderPath + section.toString();
 
+    QDir dir(pathToFolder);
+    if (!dir.exists())
+    {
+        qDebug() << "Creating dir:" << pathToFolder;
+        dir = QDir();
+        dir.mkpath(pathToFolder);
+    }
+
+    return pathToFolder + "/" + id.toString();
+}
+BigNumber ActorIndex::getRecords() const
+{
+    return records;
+}
+
+int ActorIndex::add(const BigNumber &id, const QByteArray &data)
+{
+    QString path = buildFilePath(id);
+    QFile file(path);
+
+    qDebug() << "Saving the file:" << path;
+
+    if (file.exists())
+    {
+        qDebug() << "Can't save the file" << path << "(File already exits)";
+        return Errors::FILE_ALREADY_EXISTS;
+    }
+
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(data);
+        file.flush();
+        file.close();
+
+        this->records++;
+
+        return 0;
+    }
+
+    qCritical() << "Can't save the file" << path << "(File is not opened)";
+    return Errors::FILE_IS_NOT_OPENED;
+}
+
+QByteArray ActorIndex::getById(const BigNumber &id) const
+{
+    QString filePath = folderPath + id.getHexValue().right(SECTION_NAME_SIZE) + '/' + id.getHexValue();
+    QFile file(filePath);
+    if (!file.exists())
+    {
+        qCritical() << "[&ActorIndex] file with path >>> " << filePath << "not found";
+        return QByteArray();
+    }
+    file.open(QIODevice::ReadOnly);
+    QByteArray data = file.readAll();
+    file.close();
+    return data;
+}
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
     int result = this->add(actor.getId(), actor.serialize());
-    qDebug() << actor.getId().serialize() << " =~= " << lastSavedId.serialize();
-    if (actor.getId() + 1 == lastSavedId || lastSavedId == BigNumber(1))
-        emit actorIndexUpdated();
+    emit actorIndexUpdated();
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
-                 << "lsd: " << lastSavedId;
-        // todo: Event should be emited only on CREATING new actors, not on RECEIVING new
-        // one's make methods:
-        // * addActor -> add actor to storage
-        // * addNewActor -> add actor to storage and emit event NewActor
-        if (actor.getId() > BigNumber(0))
-        {
-            //            ++lastSavedId;
-            emit NewActor(actor);
-        }
+                 << "lsd: ";
+
+        emit sendMessage(actor.serialize(), classType);
+
         if (actor.getAccount())
         {
             qDebug() << "emit signal for init dfs for user" << actor.getId().toByteArray();
@@ -480,77 +282,96 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     }
     return result;
 }
+void ActorIndex::removeAll()
+{
+    qDebug() << "Clearing file index: " << folderPath;
 
+    QDir folder(folderPath);
+    for (const QString &section :
+         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name))
+    {
+        QDir dir(folderPath + QString("/") + section);
+        dir.removeRecursively();
+    }
+
+    // update state
+    this->records = 0;
+}
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
-
-    for (int id = 0; id < lastSavedId; id++)
+    QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+    for (const QString &section : sectionList)
     {
-        Profile profile = getProfile(QString::number(id, 16));
+        QString profileFolderPath = folderPath + section + "/profile";
+        QStringList profilePathList =
+            QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
+        for (const QString &profilePath : profilePathList)
+        {
+            Profile profile = getProfile(profilePath);
 
-        if (profile.at(2) == "")
-            continue;
-        if (profile.userId() == filters.currentId)
-            continue;
-        qint16 type = profile.type();
-        if (type == 0 || type == 6)
-            continue;
+            if (profile.at(2) == "")
+                continue;
+            if (profile.userId() == filters.currentId)
+                continue;
+            qint16 type = profile.type();
+            if (type == 0 || type == 6)
+                continue;
 
-        QString firstName = profile.firstName().toLower();
-        QString lastName = profile.lastName().toLower();
+            QString firstName = profile.firstName().toLower();
+            QString lastName = profile.lastName().toLower();
 
-        if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
-              || profile.lastName().toLower().startsWith(filters.name.toLower())))
-            continue;
+            if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
+                  || profile.lastName().toLower().startsWith(filters.name.toLower())))
+                continue;
 
-        /*
-        if (profile.type() != filters.userType && filters.userType != -1)
-            continue;
-        if (profile.country() != filters.location && filters.location != -1)
-            continue;
-        if (profile.gender() != filters.gender && filters.gender != -1)
-            continue;
-        if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
-            continue;
-        if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
-            continue;
-        if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
-            continue;
-        if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
-            continue;
-        if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
-            continue;
-        if (filters.category != profile.category() && !filters.category.isEmpty())
-            continue;
-        if (filters.body != profile.body() && !filters.body.isEmpty())
-            continue;
-        if (filters.hair != profile.hair() && !filters.hair.isEmpty())
-            continue;
-        if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
-            continue;
-        if (filters.eye != profile.eye() && !filters.eye.isEmpty())
-            continue;
-        if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
-            continue;
-        if (filters.style != profile.style() && !filters.style.isEmpty())
-            continue;
-        if (filters.sports != profile.sports() && !filters.sports.isEmpty())
-            continue;
-        if (filters.skin != profile.skin() && !filters.skin.isEmpty())
-            continue;
-        if (filters.scope != profile.scope() && !filters.scope.isEmpty())
-            continue;
-        if (filters.direction != profile.direction() && !filters.direction.isEmpty())
-            continue;
-        if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
-            continue;
-        if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
-            continue;
-        */
+            /*
+            if (profile.type() != filters.userType && filters.userType != -1)
+                continue;
+            if (profile.country() != filters.location && filters.location != -1)
+                continue;
+            if (profile.gender() != filters.gender && filters.gender != -1)
+                continue;
+            if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
+                continue;
+            if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
+                continue;
+            if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
+                continue;
+            if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
+                continue;
+            if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
+                continue;
+            if (filters.category != profile.category() && !filters.category.isEmpty())
+                continue;
+            if (filters.body != profile.body() && !filters.body.isEmpty())
+                continue;
+            if (filters.hair != profile.hair() && !filters.hair.isEmpty())
+                continue;
+            if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
+                continue;
+            if (filters.eye != profile.eye() && !filters.eye.isEmpty())
+                continue;
+            if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
+                continue;
+            if (filters.style != profile.style() && !filters.style.isEmpty())
+                continue;
+            if (filters.sports != profile.sports() && !filters.sports.isEmpty())
+                continue;
+            if (filters.skin != profile.skin() && !filters.skin.isEmpty())
+                continue;
+            if (filters.scope != profile.scope() && !filters.scope.isEmpty())
+                continue;
+            if (filters.direction != profile.direction() && !filters.direction.isEmpty())
+                continue;
+            if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
+                continue;
+            if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
+                continue;
+            */
 
-        profiles.append(profile);
+            profiles.append(profile);
+        }
     }
-
     emit sendProfileToSearchToUi(profiles);
 }

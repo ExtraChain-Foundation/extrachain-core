@@ -56,10 +56,8 @@ QList<QByteArray> AccountController::getAccountID()
 Actor<KeyPrivate> AccountController::createActor(bool account)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-    BigNumber lsid = actorIndex->getLastSavedId();
-    qDebug() << lsid;
     // todo: local last saved id can be outdated
-    actor->initNew(actorIndex->getLastSavedId() == 0 ? 1 : actorIndex->getLastSavedId() + 1, account);
+    actor->init(account);
 
     qDebug() << actor->serialize();
 
@@ -80,35 +78,6 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     if (account)
         emit initDfs();
     emit newActorIsCreated(this->getMainActor()->getId(), account);
-
-    return *actor;
-}
-
-Actor<KeyPrivate> AccountController::createActorWithId(BigNumber id, bool account, bool contract)
-{
-    Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-    actor->initNew(id, account);
-
-    qDebug() << actor->serialize();
-
-    emit verifyActor(actor->convertToPublic());
-    QFile file(KeyStore::user_actor_state);
-    file.open(QIODevice::WriteOnly | QIODevice::Append);
-    QByteArray str = "\n";
-    str += actor->getId().toByteArray() + Serialization::TX_PAIR_FIELD_SPLITTER + "0"
-        + Serialization::TX_PAIR_FIELD_SPLITTER;
-    file.write(str);
-    file.flush();
-    file.close();
-
-    emit addActorInActorIndex(actor->convertToPublic());
-    //    actorIndex->addActor(actor->convertToPublic());
-    savePrivateActor(*actor);
-
-    accounts.append(actor);
-    if (account)
-        emit initDfs();
-    emit newActorIsCreated(id, account);
 
     return *actor;
 }
@@ -248,7 +217,7 @@ void AccountController::setUserNum(int value)
 void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
-
+    emit editPrivateProfile(actor.getId().toByteArray());
     QString fileName = KeyStore::makeKeyFileName(actor.getId().toString());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;

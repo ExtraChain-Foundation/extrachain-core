@@ -328,8 +328,13 @@ void NetManager::setupResolverServiceConnections()
     /**
         connect(resolverService, &ResolverService::reserveActor, this, &NetManager::sendReserveActorRequest);
 
+<<<<<<< HEAD
         connect(resolverService, &ResolverService::getNewConnectionList, this,
        &NetManager::getNewConnectionList);
+=======
+    //    connect(resolverService, &ResolverService::reserveActor, this,
+    //    &NetManager::sendReserveActorRequest);
+>>>>>>> 9-private-profile
 
         connect(resolverService, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);
 
@@ -337,6 +342,7 @@ void NetManager::setupResolverServiceConnections()
 
         connect(resolverService, &ResolverService::ReceiveProfile, this, &NetManager::receiveProfile);*/
     connect(this, &NetManager::receiveProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
+
     // server signals
     //    connect(client,             &Client::newMessage,
     //            resolverService,    &ResolverService::recieveMsg);
@@ -375,12 +381,6 @@ void NetManager::setupResolverServiceConnections()
        &NetManager::handleGetBlockResponse); connect(resolverService, &ResolverService::GetBlockCountResponse,
        this, &NetManager::handleGetBlockCountResponse);*/
 
-    // second waves signal
-
-    //    connect(resolverService, &ResolverService::secondWavesMsg, this,
-    //    &NetManager::sendDfsPack); connect(resolverService, &ResolverService::secondWavesRaw,
-    //    this, &NetManager::sendDfsPack);
-
 #ifdef ETALONIUM_CONSOLE
     connect(resolverService, &ResolverService::contractFromNetwork, this, &NetManager::shareContract);
 #endif
@@ -412,10 +412,6 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageTy
     broadcastMsg(message);
 }
 
-ResolverService *NetManager::getResolverService()
-{
-    return resolverService;
-}
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
     SocketPair socketPair(peerAddress.toString().toStdString(), 0, this);
@@ -426,6 +422,11 @@ void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int 
 {
     SocketPair socketPair(peerAddress.toString().toStdString(), port, this);
     emit sendMsg(msg.serialize(), socketPair);
+}
+
+ResolverService *NetManager::getResolverService()
+{
+    return resolverService;
 }
 
 void NetManager::upnpErrDis(QString msg)
@@ -440,16 +441,10 @@ void NetManager::upnpErrNet(QString msg)
 
 SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 port)
 {
-    qDebug() << "count of connections:: " << connections.size();
     SocketService *socket = new SocketService(address.toString(), port);
     connections.append(socket);
-    qDebug() << 1;
-    //    socket->setIdentificator(deviceId);
-    qDebug() << 1;
-
     connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
-
-    qDebug() << "clientDisconnect with removeConnection connect:: status:   "
+    qDebug() << "[&netManager connection status] clientDisconnect with removeConnection connect:: status:"
              << connect(connections.last(), &SocketService::clientDisconnected, this,
                         &NetManager::removeConnection);
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
@@ -458,9 +453,6 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
             &ResolverService::recieveMsg);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
-#ifdef ETALONIUM_CLIENT
-//    connectReconnect(connections.last());
-#endif
     ThreadPool::addThread(connections.last());
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
@@ -468,11 +460,9 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
 
 void NetManager::addConnection(qint64 socketDescriptor)
 {
-    qDebug() << "count of connections:: " << connections.size();
     SocketService *socket = new SocketService(socketDescriptor);
-    qDebug() << 1;
     connections.append(socket);
-    qDebug() << "clientDisconnect with removeConnection connect:: status:   "
+    qDebug() << "[&netManager connection status] clientDisconnect with removeConnection connect:: status:"
              << connect(connections.last(), &SocketService::clientDisconnected, this,
                         &NetManager::removeConnection);
     connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
@@ -481,7 +471,6 @@ void NetManager::addConnection(qint64 socketDescriptor)
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
-
     ThreadPool::addThread(connections.last());
 }
 
@@ -490,33 +479,14 @@ void NetManager::removeConnection()
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
     disconnect(connection, &SocketService::clientRemove, this, &NetManager::removeConnection);
-
     disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
-
-    qDebug() << "clientDisconnect with removeConnection disconnect:: status:   "
+    qDebug() << "[&netManager disconnect status] clientDisconnect with removeConnection disconnect::status:"
              << disconnect(connection, &SocketService::clientDisconnected, this,
                            &NetManager::removeConnection);
-
     disconnect(connection, &SocketService::MessageReceived, resolverService, &ResolverService::recieveMsg);
     connections.removeAt(connections.indexOf(connection));
     connection->finished();
-
     checkConnectionsStatus();
-}
-
-void NetManager::sendProfile(PublicProfile profile)
-{
-    qDebug() << "send profile " << profile.profile.at(2);
-    EntityMessage<PublicProfile> msg = Messages::createPublicProfileMessage(profile);
-
-    if (accounts->getCurrentActor().getKey() == nullptr)
-    {
-        qDebug() << "Sorry not sorry";
-        return;
-    }
-
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
 }
 
 //#ifdef ETALONIUM_CLIENT
@@ -560,19 +530,6 @@ void NetManager::sendProfile(PublicProfile profile)
 //    //    sendConnectionList(connectionList);
 //}
 //#endif
-
-void NetManager::reserveActor(const bool account)
-{
-    //    int r = rand();
-    qsrand(QDateTime().currentMSecsSinceEpoch());
-    int temp = qrand() % ((30000 + 1) - 10000) + 10000;
-    //    QByteArray werHash = hash.toUtf8() + QByteArray::number(temp);
-    BigNumber logHash("a124");
-    EntityMessage<BigNumber> msg = Messages::createReserveActorMessage(logHash);
-    getReserveActorHandlers.insert(calcHash(msg), GetEntityHandler<BigNumber>());
-    broadcastMsg(msg.serialize());
-    //    qDebug() << "ololo";
-}
 
 void NetManager::retranslateMessages(const QByteArray &msg, QString peerAddress)
 {
@@ -625,45 +582,16 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
 }
 
 // Send messages //
-void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray requestHash, const int port)
-{
-    for (auto i : reservedActorList)
-        qDebug() << i;
-
-    reservedActorListUse = true;
-    sendCompanyActor(peerAddress);
-    PublicProfile profile = actorIndex->getProfileToSend("0");
-    if (profile.sign != "")
-    {
-        EntityMessage<PublicProfile> msg2 = Messages::createPublicProfileMessage(profile);
-        broadcastMsg(msg2.serialize());
-    }
-    BigNumber reserveActorId = actorIndex->getLastSavedId() + 1;
-    while (reservedActorList.contains(reserveActorId))
-    {
-        ++reserveActorId;
-    }
-    reservedActorList.append(reserveActorId);
-    EntityResponseMessage<BigNumber> msg = Messages::createReserveActorResponse(reserveActorId, requestHash);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
-    qDebug() << msg.serialize();
-    reservedActorListUse = false;
-}
+// void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray requestHash, const int port)
+//{
+//    for (auto i : reservedActorList)
+//        qDebug() << i;
 
 void NetManager::sendConnectionList(EnableConnections sendConList, SocketService *addressant)
 {
     signMessage(sendConList);
     SocketPair socketPair(addressant->getAddress().toStdString(), addressant->getPort(), this);
     emit sendMsg(sendConList.serialize(), socketPair);
-}
-
-void NetManager::sendCoinRequest(BigNumber amount)
-{
-    EntityMessage<BigNumber> msg = Messages::createRequestCoinMessage(amount);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
-    qDebug() << "NetManager::sendCoinRequest: amount - " << amount;
 }
 
 void NetManager::sendDfsPack(const Messages::DfsMessage &msg)
@@ -694,25 +622,17 @@ void NetManager::sendDfsRequest(const DfsRequest &msg)
     //#endif
 }
 
-void NetManager::downloadAnswer(bool status, QByteArray header, QString peerAddressst)
-{
-    DownloadDfsRequestData package(status, header);
-    EntityMessage<DownloadDfsRequestData> msg = Messages::createDownloadDfsRequest(package);
-    signMessage(msg);
-    sendMsgToPeer(msg, QHostAddress(peerAddressst));
-}
-
-void NetManager::sendNewActor(Actor<KeyPublic> actor)
-{
-    qDebug() << "NET MANAGER: Send new actor";
-    //    reservedActorList.removeAt(reservedActorList.indexOf(actor.getId()));
-    EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
-    GetEntityHandler<BigNumber> handler;
-    handler.addResponse(actor.getId());
-    getReserveActorHandlers.insert(calcHash(msg), handler);
-    //    signMessage(msg);
-    broadcastMsg(msg.serialize());
-}
+// void NetManager::sendNewActor(Actor<KeyPublic> actor)
+//{
+//    qDebug() << "NET MANAGER: Send new actor";
+//    //    reservedActorList.removeAt(reservedActorList.indexOf(actor.getId()));
+//    EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
+//    GetEntityHandler<BigNumber> handler;
+//    handler.addResponse(actor.getId());
+//    getReserveActorHandlers.insert(calcHash(msg), handler);
+//    //    signMessage(msg);
+//    broadcastMsg(msg.serialize());
+//}
 
 void NetManager::sendNewTx(Transaction tx)
 {
@@ -1249,59 +1169,4 @@ void NetManager::handleGetBlockCountResponse(BigNumber blockCount, QByteArray re
     }
 
     qDebug() << "NET MANAGER: Waiting for more GetBlockCount [" << reqHash << "] responses";
-}
-
-void NetManager::handleGetActorCountResponse(BigNumber actorCount, QByteArray reqHash,
-                                             QHostAddress peerAddress)
-{
-    // if handler doesn't exists
-    if (!getCountHandlers.contains(reqHash))
-    {
-        qDebug() << "NET MANAGER: Error: not waiting for account count responses "
-                    "with reqHash="
-                 << reqHash;
-        return;
-    }
-    qDebug() << "NET MANAGER: handleGetActorCountResponse: count" << actorCount;
-    qDebug() << actorIndex->getLastSavedId();
-    BigNumber currentActorCount = actorIndex->getLastSavedId();
-    if (currentActorCount > actorCount)
-    {
-        while (currentActorCount > actorCount)
-        {
-            actorCount = actorCount + 1;
-            sendNewActor(actorIndex->getActor(actorCount));
-            qDebug() << "NET MANAGER: handleGetActorCountResponse: " << currentActorCount;
-        }
-        return;
-    }
-    sendGetActor(BigNumber(0));
-    while (currentActorCount < actorCount)
-    {
-        currentActorCount = currentActorCount + 1;
-        sendGetActor(currentActorCount);
-        qDebug() << "NET MANAGER: handleGetActorCountResponse: " << currentActorCount;
-    }
-    //    sendGetBlockCount();
-}
-
-void NetManager::handleReserveActorResponse(const BigNumber &actorId, const QByteArray &requestHash,
-                                            const QString &peerAdress)
-{
-    if (!getReserveActorHandlers.contains(requestHash))
-        return;
-
-    GetEntityHandler<BigNumber> handler = getReserveActorHandlers[requestHash];
-    //    if (handler.)
-    handler.addResponse(actorId);
-    getReserveActorHandlers.insert(requestHash, handler);
-    if (handler.canProcess())
-    {
-        if (!actorIndex->getActor(0).isEmpty())
-        {
-            qDebug() << "1234567890987654321";
-        }
-
-        accounts->createActorWithId(actorId, true);
-    }
 }

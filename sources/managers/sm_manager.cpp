@@ -11,11 +11,12 @@ SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *pare
 }
 
 void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArray tokenName,
-                                                 QByteArray relAddress)
+                                                 QByteArray relAddress, QByteArray color)
 {
     tokenBalance[relAddress] = { { tokenName, tokenCount } };
     FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTPROFILE);
     Actor<KeyPrivate> *actor = createContract(tokenName);
+
     QByteArrayList profileList;
     profileList.clear();
     profileList.append("6");
@@ -24,6 +25,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.append(tokenName);
     profileList.append(tokenCount);
     profileList.append(relAddress);
+    profileList.append(color);
     actorIndex->saveProfile(actor, profileList);
     profileList.insert(2, actor->getKey()->sign(Serialization::universalSerialize(profileList, 4)));
 
@@ -74,9 +76,8 @@ void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray
 Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-    BigNumber lsid = actorIndex->getLastSavedId();
 
-    actor->initNew(actorIndex->getLastSavedId() == 0 ? 1 : actorIndex->getLastSavedId() + 1, false);
+    actor->init(false);
 
     emit verifyActor(actor->convertToPublic());
     // QFile *file = new QFile(SmartContractStorage::CONTRACTSTORE);
@@ -96,6 +97,7 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
     // qDebug() << "tokenName" << tokenName << "actor->getId()" << actor->getId();
     // qDebug() << "tokenId[actor->getId().toString()]" << tokenId[actor->getId().toString()];
     emit addContractActorInActorIndex(actor->convertToPublic());
+    emit saveActorInPrivateProfile(actor->getId().toByteArray());
     //    actorIndex->addActor(actor->convertToPublic());
 
     savePrivateActor(*actor);

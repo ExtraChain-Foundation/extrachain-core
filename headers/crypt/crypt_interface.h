@@ -7,14 +7,27 @@ class ICryptor
 {
 public:
     virtual ~ICryptor() = 0;
+
 public:
-    virtual QByteArray encrypt(const QByteArray &data) = 0;
-    virtual QByteArray decrypt(const QByteArray &data) = 0;
+    static QByteArray encrypt(const QByteArray key, const QByteArray &data)
+    {
+        Q_UNUSED(key)
+        Q_UNUSED(data)
+        return "";
+    }
+    static QByteArray decrypt(const QByteArray key, const QByteArray &data)
+    {
+        Q_UNUSED(key)
+        Q_UNUSED(data)
+        return "";
+    }
+
     /**
      * @brief setter for public key
      * @param publicKey
      */
     virtual bool loadPublicKey(const QByteArray &key) = 0;
+
     /**
      * @brief Serialize method
      * @return public key string
@@ -26,6 +39,4 @@ public:
      */
     virtual QByteArray getPublicKey() = 0;
 };
-
-inline ICryptor::~ICryptor() {}
 #endif // CRYPT_INTERFACE_H

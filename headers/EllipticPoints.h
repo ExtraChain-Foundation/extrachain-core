@@ -48,6 +48,6 @@ namespace Curves
 {
     static BigNumber aCurve(BigNumber("-5"));
     static BigNumber bCurve(BigNumber("3"));
-    static BigNumber pCurve(BigNumber("74207281"));
+    static BigNumber pCurve(BigNumber("12287d72ae0b022f04f59075d446a6bb"));
 }
 #endif // ELLIPTICPOINTS_H

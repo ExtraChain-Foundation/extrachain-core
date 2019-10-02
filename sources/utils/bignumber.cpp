@@ -621,7 +621,7 @@ bool BigNumber::isPrime() const
 
 bool BigNumber::isEmpty() const
 {
-    return *this == -1;
+    return *this == -1; // || hexValue.isEmpty();
 }
 
 bool BigNumber::isPositive() const
@@ -685,8 +685,8 @@ BigNumber BigNumber::abs() const
 
 void BigNumber::setHexValue(const QString &hex)
 {
-    QByteArray num = cutZeros(hex).trimmed().toLocal8Bit();
-
+    //    QByteArray num = cutZeros(hex).trimmed().toLocal8Bit();
+    QByteArray num = hex.toUtf8();
     if (hex.isEmpty() || num.isEmpty())
         num = "0";
 
