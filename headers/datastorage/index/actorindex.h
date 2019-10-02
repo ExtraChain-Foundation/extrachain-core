@@ -125,7 +125,6 @@ signals:
     void sendProfileToUi(QString userID, Profile profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
-    void actorIndexUpdated();
 
     void initDfs(BigNumber userId);
     void initContractList(QVariantMap map);

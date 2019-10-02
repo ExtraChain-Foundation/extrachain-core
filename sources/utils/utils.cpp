@@ -591,7 +591,7 @@ QList<indexRow>::iterator FileList::find(QByteArray key)
         if (it->hash == key.toStdString())
             return it;
     }
-    return indexList.end();
+    return QList<indexRow>::iterator();
 }
 
 QByteArray FileList::operator[](int value)
@@ -657,4 +657,8 @@ indexRow::indexRow(std::string _hash, long long pos, short use)
     hash = _hash;
     currentPosition = pos;
     used = use;
+}
+FileList::~FileList()
+{
+    this->checkForDelete();
 }

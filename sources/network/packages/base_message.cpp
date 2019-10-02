@@ -46,6 +46,7 @@ void BaseMessage::initFields(QList<QByteArray> &list)
     msgType = list.takeFirst();
     signer = BigNumber(list.takeFirst());
     digSig = list.takeFirst();
+    msg_data = list.takeFirst();
 }
 
 short BaseMessage::getFieldsCount() const
@@ -56,7 +57,7 @@ short BaseMessage::getFieldsCount() const
 QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
-    l << protocol << msgType << signer.serialize() << digSig;
+    l << protocol << msgType << signer.serialize() << digSig << msg_data;
     return l;
 }
 
@@ -121,6 +122,7 @@ QByteArray BaseMessage::serialize() const
 
     for (const QByteArray &param : serializedParams())
     {
+
         serialized += Utils::intToByteArray(param.size(), Messages::FIELD_SIZES);
         serialized += param;
     }
@@ -143,7 +145,6 @@ void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor)
 {
     signer = actor.getId();
     digSig = actor.getKey()->sign(concatenateAllData()).toBase64();
-    //    Actor<KeyPublic> pubActor();
     qDebug() << "pubk: " << actor.convertToPublic().getKey()->extractPublicKey();
 }
 
@@ -162,12 +163,14 @@ BaseMessage BaseMessage::deserializeMsg(const QByteArray serialized)
 
 const QByteArray BaseMessage::hash() const
 {
-    return Utils::calcKeccak(msgType);
+    return Utils::calcKeccak(msg_data);
 }
 
-const QByteArray BaseMessage::init(const QByteArray &data) const
+const QByteArray BaseMessage::init(const QByteArray &data)
 {
-    QByteArray result = serialize() + data + Utils::intToByteArray(data.size(), Messages::FIELD_SIZES);
+    this->msg_data = data;
+    QByteArray result = serialize();
+
     return result;
 }
 

@@ -47,7 +47,7 @@ private:
     bool active = false;
     ActorIndex *actorIndex;
 
-    QMap<QByteArray, short> handlerOffsetMap;
+    //    QMap<QByteArray, short> handlerList;
 
 private:
     /**
@@ -91,7 +91,7 @@ private:
      * @param msg
      * @param msgType
      */
-    void universalHandler(const Messages::IMessage &msg, const QByteArray &msgType);
+    bool universalHandler(const Messages::IMessage &msg, const QByteArray &msgType);
     /**
      * @brief checkMsgCount
      * @param msg
@@ -99,8 +99,6 @@ private:
      * @return
      */
     bool checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType);
-
-    const QByteArray getDataMsg(const QByteArray &msg) const;
 
 public slots:
     // slot for threadpool

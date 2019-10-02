@@ -20,14 +20,9 @@ ResolverService::~ResolverService()
 bool ResolverService::validate(const Messages::IMessage &message)
 {
     BigNumber signer = message.getSigner();
-    // qDebug() << "RESOLVER SERVICE: validate()" << signer;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
-    // qDebug() << "RESOLVER SERVICE: validate()" <<
-    // actor.getKey()->getPublicKey();
     if (!actor.isEmpty())
     {
-        // qDebug() << "RESOLVER SERVICE: validate: actor is not empty "
-        //                  << message.verifyDigSig(actor);
         return message.verifyDigSig(actor);
     }
     else
@@ -68,199 +63,76 @@ bool ResolverService::MessageIsNotValid(const Messages::IMessage &message)
     return true;
 }
 
-void ResolverService::universalHandler(const Messages::IMessage &msg, const QByteArray &msgType)
+bool ResolverService::universalHandler(const Messages::IMessage &msg, const QByteArray &msgType)
 {
+    // verify
     if (checkMsgCount(msg, msgType))
     {
         emit secondWave(msg.serialize());
-
-        //        emit getNewDfs(Messages::DfsMessage(msg.serialize()));
+        return true;
     }
+    else
+        return false;
 }
 
 bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType)
 {
-    // hadler msg in RAM
     bool flag_result = true;
     short value = 0;
-    if (handlerOffsetMap.find(msg.hash()) == handlerOffsetMap.end())
-        handlerOffsetMap[msg.hash()] = value;
+    QFile file(".handler");
+    FileList handlerList;
+    handlerList.setFileList(file);
+    if (handlerList.at(msg.hash()) == "")
+        handlerList.add(msg.hash(), QByteArray::number(value));
     else
     {
-        short msg_count = handlerOffsetMap[msg.hash()];
+        short msg_count = handlerList.at(msg.hash()).toShort();
         msg_count--;
         if (msg_count == -1)
         {
             flag_result = false;
-            handlerOffsetMap.erase(handlerOffsetMap.find(msg.hash()));
+            handlerList.remove(msg.hash());
         }
-        else
-            handlerOffsetMap[msg.hash()]--;
-    }
-    return flag_result;
-    /**
-    *
-    *
-    *
-    bool flag_result = true;
-    // file with history send messages will have index
-    short value = 0;
-    // possition if such hash has been
-    long long currentPossition = -1;
-    if (handlerOffsetMap.find(msg.hash()) != handlerOffsetMap.end())
-        currentPossition = handlerOffsetMap[msg.hash()];
-    QByteArray t = Serialization::universalSerialize({ msgType, msg.hash(), QByteArray::number(value)
-    }, Messages::FIELD_SIZES); QByteArray tableSegmet = Serialization::universalSerialize({ t },
-    Messages::FIELD_SIZES);
-    // find index of elemet
-    bool isRead = true;
-    if (currentPossition == -1)
-    {
-        isRead = false;
-        // check file if we have empty offset with suitable size for write chose this position
-        if (handlerOffsetMap.find(QByteArray::number(tableSegmet.size())) != handlerOffsetMap.end())
-            currentPossition = handlerOffsetMap[QByteArray::number(tableSegmet.size())];
-    }
-    if ((msgType == Messages::ACTOR_MESSAGE) || (msgType == Messages::BLOCK_MESSAGE)
-        || (msgType == Messages::GENESIS_BLOCK_MESSAGE) || (msgType == Messages::COIN_REQUEST)
-        || (msgType == Messages::TX_MESSAGE))
-        value = 0;
-
-    FileList indexList;
-    handlerFileMutex.lock();
-    QFile file(".handlerFile");
-    indexList.setFileList(file);
-    if (!isRead)
-    {
-        //        file.open(QIODevice::WriteOnly);
-        //        file.seek(currentPossition == -1 ? file.size() - 1 : currentPossition);
-        //        handlerOffsetMap[msg.hash()] = file.pos();
-        //        file.write(tableSegmet);
-        //        file.flush();
-        //        file.close();
-        indexList.add(msg.hash(), QByteArray::number(value));
-    }
-    else
-    {
-        int msg_count = indexList.at(msg.hash()).toInt();
-        if (msg_count == -1)
-            flag_result = false;
         else
         {
-            msg_count--;
-            indexList.remove(msg.hash());
-            indexList.add(msg.hash(), QByteArray::number(msg_count));
+            short amount = handlerList.at(msg.hash()).toShort();
+            amount--;
+            handlerList.remove(msg.hash());
+            handlerList.add(msg.hash(), QByteArray::number(amount));
         }
-
-        //        file.open(QIODevice::ReadWrite);
-        //        file.seek(currentPossition);
-        //        int dataSize = Utils::qByteArrayToInt(file.read(4));
-        //        QByteArray r = file.read(dataSize);
-        //        QList<QByteArray> msgList = Serialization::universalDesirialize(r,
-    Messages::FIELD_SIZES);
-        //        int msg_count;
-        //        if (msgList.size() == 3)
-        //        {
-        //            // sepetate this if on the different functon // TO DO
-        //            msg_count = msgList.at(2).toInt();
-        //            if (msgList.at(1) == msg.hash())
-        //                msg_count--;
-        //            // delete msg from list the circle has been closed now
-        //            if (msg_count == -1)
-        //            {
-        //                file.seek(currentPossition);
-        //                dataSize += Messages::FIELD_SIZES;
-        //                if (handlerOffsetMap.find(QByteArray::number(dataSize)) ==
-    handlerOffsetMap.end())
-        //                    handlerOffsetMap[QByteArray::number(dataSize)] = currentPossition;
-        //                else
-        //                {
-        //                    // nothing
-        //                }
-        //                handlerOffsetMap.erase(handlerOffsetMap.find(msg.hash()));
-        //                QByteArray emptyData = QByteArray(dataSize, ' ');
-        //                file.write(emptyData);
-        //                flag_result = false;
-        //            }
-        //            else
-        //            {
-        //                QByteArray t = Serialization::universalSerialize(
-        //                    { msgType, msg.hash(), QByteArray::number(msg_count) },
-    Messages::FIELD_SIZES);
-        //                QByteArray tableSegmet = Serialization::universalSerialize({ t },
-        //                Messages::FIELD_SIZES); file.seek(currentPossition);
-    file.write(tableSegmet);
-        //    }
-        //}
-        // else
-        //{
-        //    qDebug() << " Wrong size of list handling msg three from three List:  " << msgList <<
-    "data " <<
-        //    r;
-        //}
-        //        file.flush();
-        //        file.close();
     }
-
-    handlerFileMutex.unlock();
-    */
-    //    return flag_result;
-}
-
-const QByteArray ResolverService::getDataMsg(const QByteArray &msg) const
-{
-    int bytesAmount = Utils::qByteArrayToInt(msg.mid(msg.size() - 1 - Messages::FIELD_SIZES));
-    return msg.mid(msg.size() - 1 - Messages::FIELD_SIZES - bytesAmount);
+    return flag_result;
 }
 
 void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddressst, const int port)
 {
     QHostAddress peerAddress(peerAddressst);
     using namespace Messages;
-    QByteArray msgData = getDataMsg(msg);
     BaseMessage message;
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
-    if (msgType == DFS_CHANGES_MESSAGE)
-        //        qDebug() << "RESOLVER SERVICE: recieveMsg " << msg;
-        if (msg == "")
-            return;
+    if (msgType != ACTOR_MESSAGE)
+        MessageIsNotValid(message);
+    universalHandler(message, msgType);
     // spread messages
     if (msgType == GET_RESERVE_ACTOR_RESPONSE_MESSAGE)
     {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_RESERVE_ACTOR_RESPONSE_MESSAGE;
         EntityResponseMessage<BigNumber> message(msg);
-
-        // emit NewActor()
-
-        //        emit reserveActorResponse(message.getEntity(), message.getRequestHash(), peerAddressst);
     }
     else if (msgType == PROFILE_FILE)
     {
-        qDebug() << "receive profile";
-        //        if (MessageIsNotValid(message))
-        //            return;
-        //        emit ReceiveProfile(PublicProfile(msgData));
-        //
-        // emit signal forProfile
     }
     else if (msgType == RESERVE_ACTOR_MESSAGE)
     {
         EntityMessage<BigNumber> message(msg);
-
-        //        emit reserveActor(peerAddressst, calcHash(msg), port);
     }
     else if (msgType == ENABLE_LIST_CONNECTIONS)
     {
-        //        EnableConnections message(msg);
-        //        emit createConnectionsList(msg);
     }
     else if (msgType == ACTOR_MESSAGE)
     {
-        //        if (MessageIsNotValid(message))
-        //            return;
-        //        emit NewActor(Actor<KeyPublic>(msgData), peerAddress);
     }
     else if (msgType == DFS_CHANGES_MESSAGE)
     {

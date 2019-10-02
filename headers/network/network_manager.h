@@ -286,34 +286,7 @@ private slots:
     void upnpErrNet(QString msg);
 
     // spread messages
-    void handleNewActor(Actor<KeyPublic> actor, const QByteArray &requestHash, QHostAddress peerAddress);
-    void handleNewBlock(Block block, QHostAddress peerAddress);
-    void handleNewGenesisBlock(Block block, QHostAddress peerAddress);
-    void handleNewTx(Transaction tx, QHostAddress peerAddress);
 
-    void handleBlockApproved(BigNumber blockId, BigNumber approver, QHostAddress peerAddress);
-
-    // request messages
-    // processed in blockchain (because we don't need to block network thread)
-    void handleGetActor(BigNumber actorId, QHostAddress peerAddress, QByteArray requestHash);
-    void handleGetTx(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
-                     QByteArray requestHash);
-    void handleGetTxPair(BigNumber sender, BigNumber receiver, QHostAddress peerAddress,
-                         QByteArray requestHash);
-    void handleGetBlock(SearchEnum::BlockParam param, QByteArray value, QHostAddress peerAddress,
-                        QByteArray requestHash);
-    void handleGetBlockCount(const QHostAddress &peerAddress, const QByteArray &requestHash);
-    void handleGetActorCount(const QHostAddress &peerAddress, const QByteArray &requestHash);
-
-    // response messages (waiting for NECESSARY_RESPONSE_COUNT responses)
-    void handleGetActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, QHostAddress peerAddress);
-    void handleGetTxResponse(Transaction tx, QByteArray reqHash, QHostAddress peerAddress);
-    void handleGetTxPairResponse(TxPair pair, QByteArray reqHash, QHostAddress peerAddress);
-    void handleGetBlockResponse(Block block, QByteArray reqHash, QHostAddress peerAddress);
-    void handleGetBlockCountResponse(BigNumber blockCount, QByteArray reqHash, QHostAddress peerAddress);
-    void handleGetActorCountResponse(BigNumber actorCount, QByteArray reqHash, QHostAddress peerAddress);
-    //    void handleReserveActorResponse(const BigNumber &actorId, const QByteArray &requestHash,
-    //                                    const QString &peerAdress);
 public slots:
     // test thread
     void process();
@@ -359,9 +332,6 @@ public slots:
      * @return
      */
 
-    void continueHandlingNewBlock(Block block);
-    void continueHandlingNewActor(Actor<KeyPublic> actor);
-
     // send msgs
     void sendNewTx(Transaction tx);
     void sendNewContract(Contract contract);
@@ -387,11 +357,10 @@ public slots:
     void sendGetActorCount();
     void sendGetTxPair(BigNumber sender, BigNumber receiver);
 
-    void sendCompanyActor(QString peerAddress);
+    //    void sendCompanyActor(QString peerAddress);
     //    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int port);
     void sendConnectionList(Messages::EnableConnections sendConList, SocketService *addressant);
 
-    void sendCoinRequest(BigNumber amount);
     void sendDfsPack(const Messages::DfsMessage &msg);
     void sendDfsMessageTo(Messages::DfsMessage dfs, QString peerAddress);
     void sendDfsRequest(const Messages::DfsRequest &msg);

@@ -22,7 +22,7 @@ class FileList
 
 public:
     FileList();
-
+    ~FileList();
     void add(QByteArray hash, QByteArray data);
     void remove(QByteArray element);
     QByteArray operator[](int value);
@@ -34,10 +34,10 @@ public:
     void setFileList(const QFile &value);
 
 private:
+    QList<indexRow>::iterator find(QByteArray key);
     QList<indexRow> indexList;
     QFile fileList;
 
-    QList<indexRow>::iterator find(QByteArray key);
     void init();
     void checkForDelete();
     bool check(QByteArray hash); // IF HASH HAVED-> END

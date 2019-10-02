@@ -24,11 +24,13 @@ private:
     //    QByteArray protocol; // protocol version
     QByteArray msgType; // message type
     BigNumber signer;   // message signer actor's id
+
 protected:
+    QByteArray msg_data = "";
     QByteArray digSig; // for security
 
 public:
-    static const short FIELDS_COUNT = 3; // 4;
+    static const short FIELDS_COUNT = 4;
 
 public:
     BaseMessage();
@@ -81,7 +83,7 @@ public:
     static BaseMessage deserializeMsg(const QByteArray serialized);
 
     const QByteArray hash() const override;
-    const QByteArray init(const QByteArray &data) const;
+    const QByteArray init(const QByteArray &data);
 
 public:
     QByteArray getProtocol() const;

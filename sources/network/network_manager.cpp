@@ -303,7 +303,7 @@ void NetManager::setupActorIndexConnections()
     connect(this, &NetManager::CheckActorExistence, actorIndex, &ActorIndex::handleNewActorCheck);
 
     // from ActorIndex to NetManager
-    connect(actorIndex, &ActorIndex::ActorIsMissing, this, &NetManager::continueHandlingNewActor);
+    //    connect(actorIndex, &ActorIndex::ActorIsMissing, this, &NetManager::continueHandlingNewActor);
 }
 
 void NetManager::setupServerServiceConnections()
@@ -382,7 +382,7 @@ void NetManager::setupResolverServiceConnections()
        this, &NetManager::handleGetBlockCountResponse);*/
 
 #ifdef ETALONIUM_CONSOLE
-    connect(resolverService, &ResolverService::contractFromNetwork, this, &NetManager::shareContract);
+    // connect(resolverService, &ResolverService::contractFromNetwork, this, &NetManager::shareContract);
 #endif
     /**   connect(resolverService, &ResolverService::getDfsRequest, this, &NetManager::getDfsRequest);
        connect(resolverService, &ResolverService::downloadDfsResponse, this,
@@ -406,8 +406,8 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageType)
 {
     BaseMessage msg(messageType);
-    //    if (messageType != Messages::ACTOR_MESSAGE)
-    //    signMessage(msg);
+    if (messageType != Messages::ACTOR_MESSAGE)
+        signMessage(msg);
     QByteArray message = msg.init(data);
     broadcastMsg(message);
 }
@@ -636,25 +636,19 @@ void NetManager::sendDfsRequest(const DfsRequest &msg)
 
 void NetManager::sendNewTx(Transaction tx)
 {
-    EntityMessage<Transaction> msg = Messages::createTxMessage(tx);
-
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
+    sendMessage(tx.serialize(), Messages::TX_MESSAGE);
 }
 
 void NetManager::sendNewContract(Contract contract)
 {
     qDebug() << "NetManager::sendNewContract: " << contract.serialize();
-    EntityMessage<Contract> msg = Messages::createContractMessage(contract);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
+    //    EntityMessage<Contract> msg = Messages::createContractMessage(contract);
+    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
 }
 
 void NetManager::sendNewBlock(Block block)
 {
-    EntityMessage<Block> msg = Messages::createBlockMessage(block);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
+    sendMessage(block.serialize(), Messages::BLOCK_MESSAGE);
 }
 
 void NetManager::sendTxResponse(Transaction tx, SearchEnum::TxParam param, QString value,
@@ -714,13 +708,11 @@ void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
     // sign block
     genBlock->sign(accounts->getCurrentActor());
 
-    EntityMessage<Block> msg = Messages::createGenesisBlockMessage(*genBlock);
+    sendMessage(genBlock->serialize(), Messages::GENESIS_BLOCK_MESSAGE);
+    //    EntityMessage<Block> msg = Messages::createGenesisBlockMessage(*genBlock);
 
     delete genBlock;
     QFile::remove(DataStorage::TMP_GENESIS_BLOCK);
-
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
 }
 
 // Send messages //
@@ -746,9 +738,7 @@ void NetManager::shareContract(Contract contract)
         emit contractFinalTransaction(contract);
         return;
     }
-    EntityMessage<Contract> msg = Messages::createContractMessage(contract);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
+    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
 }
 
 void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
@@ -808,40 +798,7 @@ void NetManager::sendGetTxPair(BigNumber sender, BigNumber receiver)
     broadcastMsg(msg.serialize());
 }
 
-void NetManager::sendCompanyActor(QString peerAddress)
-{
-    EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actorIndex->getActor(BigNumber(0)));
-    sendMsgToPeer(msg, QHostAddress(peerAddress));
-}
-
 // Handling messsages ///
-
-void NetManager::handleNewActor(Actor<KeyPublic> actor, const QByteArray &requestHash,
-                                QHostAddress peerAddress)
-{
-    qDebug() << "NET MANAGER: Handling NewActor" << actor.toString() << "from" << peerAddress.toString();
-    if (reservedActorList.indexOf(actor.getId()) == -1)
-        emit NewActor(actor);
-    else
-    {
-        BigNumber freeActorId = actor.getId() + BigNumber("1");
-        while (reservedActorList.contains(freeActorId))
-        {
-            freeActorId++;
-        }
-
-        EntityResponseMessage<BigNumber> msg = Messages::createReserveActorResponse(freeActorId, requestHash);
-        signMessage(msg);
-        reservedActorList.append(freeActorId);
-        sendMsgToPeer(msg, peerAddress);
-    }
-}
-void NetManager::continueHandlingNewActor(Actor<KeyPublic> actor)
-{
-    EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
-}
 
 //===================================DFSpackage===================================
 // void NetManager::sendDfsPackage()
@@ -851,322 +808,3 @@ void NetManager::continueHandlingNewActor(Actor<KeyPublic> actor)
 //    broadcastMsg(msg);
 //}
 //================================================================================
-
-void NetManager::handleNewBlock(Block block, QHostAddress peerAddress)
-{
-    qDebug() << "NET MANAGER: Handling NewBlock" << block.toString() << "from" << peerAddress.toString();
-    emit CheckBlockExistence(block);
-}
-
-void NetManager::continueHandlingNewBlock(Block block)
-{
-    sendNewBlock(block);
-}
-
-void NetManager::handleNewGenesisBlock(Block block, QHostAddress peerAddress)
-{
-    qDebug() << "NET MANAGER: Handling NewGenesisBlock" << block.toString() << "from"
-             << peerAddress.toString();
-
-    emit AddBlock(block);
-
-    EntityMessage<Block> msg = Messages::createGenesisBlockMessage(block);
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
-}
-
-void NetManager::handleNewTx(Transaction tx, QHostAddress peerAddress)
-{
-    qDebug() << "NET MANAGER: Handling newTx" << tx.toString() << "from" << peerAddress.toString();
-
-    // If there are hops -> spread message forward
-    if (tx.getHop() > 0)
-    {
-        tx.decrementHop();
-
-        EntityMessage<Transaction> msg = Messages::createTxMessage(tx);
-        //        signMessage(msg);
-        broadcastMsg(msg.serialize());
-        return;
-    }
-
-    emit NewTx(tx);
-}
-
-void NetManager::handleBlockApproved(BigNumber blockId, BigNumber approver, QHostAddress peerAddress)
-{
-    qDebug() << "NET MANAGER: Handling BlockApproved" << blockId << "from" << peerAddress.toString();
-    emit BlockApproved(blockId, approver, peerAddress);
-}
-
-void NetManager::handleGetActor(BigNumber actorId, QHostAddress peerAddress, QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Handling request: getActor" << actorId << "from" << peerAddress.toString();
-    //    if(actorIndex->actorExist(actorId)) {
-    Actor<KeyPublic> actor = actorIndex->getActor(actorId);
-    if (actor.isEmpty())
-    {
-        qDebug() << "NET MANAGER: Can't handle request: There no actor with id" << actorId << "locally";
-        return;
-    }
-    EntityResponseMessage<Actor<KeyPublic>> msg = Messages::createGetActorResponse(actor, requestHash);
-
-    //    signMessage(msg);
-    sendMsgToPeer(msg, peerAddress);
-    PublicProfile profile = actorIndex->getProfileToSend(actor.getId().toString());
-    if (profile.sign != "")
-    {
-        EntityMessage<PublicProfile> msg2 = Messages::createPublicProfileMessage(profile);
-        qDebug() << "send profile " << actor.getId();
-        sendMsgToPeer(msg2, peerAddress);
-    }
-    //    } else {
-    //        //send massage actor is not exist or not
-    //    }
-}
-
-void NetManager::handleGetTx(TxParam param, QByteArray value, QHostAddress peerAddress,
-                             QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Handling request: getTx" << toString(param) << value << "from"
-             << peerAddress.toString();
-    emit GetTx(param, value, peerAddress, requestHash);
-}
-
-void NetManager::handleGetTxPair(BigNumber sender, BigNumber receiver, QHostAddress peerAddress,
-                                 QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Handling request: getTxPair sender=" << sender << "receiver=" << receiver
-             << "from" << peerAddress.toString();
-    emit GetTxPair(sender, receiver, peerAddress, requestHash);
-}
-
-void NetManager::handleGetBlock(BlockParam param, QByteArray value, QHostAddress peerAddress,
-                                QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Handling request: getBlock" << toString(param) << value << "from"
-             << peerAddress.toString();
-    emit GetBlock(param, value, peerAddress, requestHash);
-}
-
-void NetManager::handleGetBlockCount(const QHostAddress &peerAddress, const QByteArray &requestHash)
-{
-    qDebug() << "NET MANAGER: Handling request: getBlockCount from" << peerAddress.toString();
-    emit GetBlockCount(peerAddress, requestHash);
-}
-
-void NetManager::handleGetActorCount(const QHostAddress &peerAddress, const QByteArray &requestHash)
-{
-    qDebug() << "NET MANAGER: Handling request: getActorCount from" << peerAddress.toString();
-    emit GetActorCount(peerAddress, requestHash);
-}
-
-void NetManager::handleGetActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, QHostAddress peerAddress)
-{
-    qDebug() << "NET MANAGER: handleGetActorResponse(): " << actor.getId();
-    // if handler doesn't exists
-    if (!getActorsHandlers.contains(reqHash))
-    {
-        qDebug() << "NET MANAGER: Error: not waiting for getActor responses with "
-                    "reqHash="
-                 << reqHash;
-        return;
-    }
-
-    qDebug() << "NET MANAGER: Handling response: actor" << actor.getId() << "from" << peerAddress.toString();
-    GetEntityHandler<Actor<KeyPublic>> handler = getActorsHandlers[reqHash];
-    handler.addResponse(actor);
-    getActorsHandlers.insert(reqHash, handler);
-
-    if (handler.canProcess())
-    {
-        Actor<KeyPublic> toAdd = handler.resolveBestEntity();
-        if (!toAdd.isEmpty())
-        {
-            qDebug() << "NET MANAGER: Adding new Actor" << toAdd.toString();
-            emit NewActor(actor);
-            // clear handler
-            getTxHandlers.remove(reqHash);
-            return;
-        }
-        else
-        {
-            // if we have controversial situation - wait for some more requests
-            qDebug() << "NET MANAGER: Can't resolve best Actor entity";
-        }
-    }
-
-    qDebug() << "NET MANAGER: Waiting for more GetActor [" << reqHash << "] responses";
-}
-
-void NetManager::handleGetTxResponse(Transaction tx, QByteArray reqHash, QHostAddress peerAddress)
-{
-    // if handler doesn't exists
-    if (!getTxHandlers.contains(reqHash))
-    {
-        qDebug() << "NET MANAGER: Error: not waiting for getTx responses with reqHash=" << reqHash;
-        return;
-    }
-
-    qDebug() << "NET MANAGER: Handling response: tranaction" << tx.getHash() << "from"
-             << peerAddress.toString();
-    GetEntityHandler<Transaction> handler = getTxHandlers[reqHash];
-    handler.addResponse(tx);
-    getTxHandlers.insert(reqHash, handler);
-
-    if (handler.canProcess())
-    {
-        Transaction toAdd = handler.resolveBestEntity();
-        if (!toAdd.isEmpty())
-        {
-            // validate tx
-            if (actorIndex->validateTx(toAdd))
-            {
-                qDebug() << "NET MANAGER: Adding new Tx" << toAdd.toString();
-                emit TxResponse(tx, peerAddress);
-                // clear handler
-                getTxHandlers.remove(reqHash);
-
-                return;
-            }
-            else
-            {
-                qDebug() << "NET MANAGER: Warning: Received tx" << toAdd.toString() << "is not valid.";
-            }
-        }
-        else
-        {
-            // if we have controversial situation - wait for some more requests
-            qDebug() << "NET MANAGER: Can't resolve best Transaction entity";
-        }
-    }
-
-    qDebug() << "NET MANAGER: Waiting for more GetTx [" << reqHash << "] responses";
-}
-
-void NetManager::handleGetTxPairResponse(TxPair pair, QByteArray reqHash, QHostAddress peerAddress)
-{
-    // if handler doesn't exists
-    if (!getTxHandlers.contains(reqHash))
-    {
-        qDebug() << "NET MANAGER: Error: not waiting for getTx responses with reqHash=" << reqHash;
-        return;
-    }
-
-    qDebug() << "NET MANAGER: Handling response: txPair" << pair.serialize() << "from"
-             << peerAddress.toString();
-    GetEntityHandler<TxPair> handler = getTxPairHandlers[reqHash];
-
-    handler.addResponse(pair);
-    getTxPairHandlers.insert(reqHash, handler);
-
-    if (handler.canProcess())
-    {
-        TxPair toAdd = handler.resolveBestEntity();
-        if (!toAdd.isEmpty())
-        {
-            // validate tx pair
-            if (actorIndex->validateTx(pair.getFirst()) && actorIndex->validateTx(pair.getSecond()))
-            {
-                qDebug() << "NET MANAGER: Adding new TxPair" << toAdd.serialize();
-                emit TxPairResponse(pair, peerAddress);
-                // clear handler
-                getTxHandlers.remove(reqHash);
-
-                return;
-            }
-            else
-            {
-                qWarning() << "NET MANAGER: Warning: Received TxPair" << toAdd.serialize() << "is not valid.";
-            }
-        }
-        else
-        {
-            // if we have controversial situation - wait for some more requests
-            qWarning() << "NET MANAGER: Can't resolve best TxPair entity";
-        }
-    }
-
-    qDebug() << "NET MANAGER: Waiting for more GetTxPair [" << reqHash << "] responses";
-}
-
-void NetManager::handleGetBlockResponse(Block block, QByteArray reqHash, QHostAddress peerAddress)
-{
-    // if handler doesn't exists
-    qDebug() << ">>>>>>>>>>" << reqHash;
-    if (!getBlockHandlers.contains(reqHash))
-    {
-        qDebug() << "NET MANAGER: Error: not waiting for getBlock responses with "
-                    "reqHash="
-                 << reqHash;
-        return;
-    }
-
-    qDebug() << "NET MANAGER: Handling response: block" << block.getIndex() << "from"
-             << peerAddress.toString();
-    GetEntityHandler<Block> handler = getBlockHandlers[reqHash];
-    handler.addResponse(block);
-    getBlockHandlers.insert(reqHash, handler);
-
-    if (handler.canProcess())
-    {
-        Block toAdd = handler.resolveBestEntity();
-        if (!toAdd.isEmpty())
-        {
-            // validate block
-            if (actorIndex->validateBlock(toAdd))
-            {
-                qDebug() << "NET MANAGER: Adding new Block" << toAdd.toString();
-                emit AddBlock(toAdd);
-                // clear handler
-                getBlockHandlers.remove(reqHash);
-
-                return;
-            }
-            else
-            {
-                qDebug() << "NET MANAGER: Warning: Received block" << toAdd.toString() << "is not valid.";
-            }
-        }
-        else
-        {
-            // if we have controversial situation - wait for some more requests
-            qDebug() << "NET MANAGER: Can't resolve best block entity";
-        }
-    }
-
-    qDebug() << "NET MANAGER: Waiting for more GetBlock [" << reqHash << "] responses";
-}
-
-void NetManager::handleGetBlockCountResponse(BigNumber blockCount, QByteArray reqHash,
-                                             QHostAddress peerAddress)
-{
-    // if handler doesn't exists
-    if (!getCountHandlers.contains(reqHash))
-    {
-        qDebug() << "NET MANAGER: Error: not waiting for block count responses "
-                    "with reqHash="
-                 << reqHash;
-        return;
-    }
-
-    qDebug() << "NET MANAGER: Handling response: block count" << blockCount << "from"
-             << peerAddress.toString();
-    GetCountHandler handler = getCountHandlers[reqHash];
-    handler.addResponse(blockCount);
-    getCountHandlers.insert(reqHash, handler);
-
-    if (handler.canProcess())
-    {
-        BigNumber searchedValue = handler.getSearchedValue();
-        this->maxBlockCount = searchedValue;
-        qDebug() << "NET MANAGER: Max block count is set to" << searchedValue;
-        emit BlockCountResponse(searchedValue, peerAddress);
-        //        block
-
-        // clear handler
-        getCountHandlers.remove(reqHash);
-    }
-
-    qDebug() << "NET MANAGER: Waiting for more GetBlockCount [" << reqHash << "] responses";
-}

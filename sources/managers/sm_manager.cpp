@@ -65,7 +65,7 @@ void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray
     tx.setToken(sender->getId());
     tx.sign(*sender);
 
-    emit sendTransactionCreateContract(tx);
+    emit sendTransactionCreateContract(tx.serialize(), "contractMessage");
 #else
     Q_UNUSED(sender)
     Q_UNUSED(receiver)

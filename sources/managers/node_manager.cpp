@@ -116,7 +116,7 @@ void NodeManager::connectSmContractManager()
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
     connect(smContractController, &SmartContractManager::sendTransactionCreateContract, netManager,
-            &NetManager::sendNewTx);
+            &NetManager::sendMessage);
 
 #endif
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
@@ -517,7 +517,6 @@ void NodeManager::connectBlockchain()
     connect(blockchain, &Blockchain::BlockFound, netManager, &NetManager::sendBlockResponse);
     connect(blockchain, &Blockchain::BlockCount, netManager, &NetManager::sendBlockCountResponse);
     connect(blockchain, &Blockchain::ActorCount, netManager, &NetManager::sendActorCountResponse);
-    connect(blockchain, &Blockchain::BlockIsMissing, netManager, &NetManager::continueHandlingNewBlock);
     //    connect(blockchain, &Blockchain::SendMergedBlock, netManager,
     //    &NetManager::sendMergedBlock);
     connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
@@ -535,7 +534,7 @@ void NodeManager::connectActorIndex()
     connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
     //    connect(actorIndex, &ActorIndex::NewActor, netManager, &NetManager::sendNewActor);
     // this connect with service message
-    connect(actorIndex, &ActorIndex::actorIndexUpdated, netManager, &NetManager::sendGetBlockCount);
+
     connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);

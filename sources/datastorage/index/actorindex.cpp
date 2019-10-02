@@ -266,7 +266,6 @@ QByteArray ActorIndex::getById(const BigNumber &id) const
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
     int result = this->add(actor.getId(), actor.serialize());
-    emit actorIndexUpdated();
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
