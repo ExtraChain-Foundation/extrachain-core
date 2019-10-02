@@ -33,7 +33,7 @@ bool ResolverService::validate(const Messages::IMessage &message)
     else
     {
         qDebug() << QString("There no actor[%1] locally").arg(signer.toString());
-        emit SendGetActor(signer);
+        //        emit SendGetActor(signer);
         return false;
     }
 }
@@ -74,7 +74,7 @@ void ResolverService::universalHandler(const Messages::IMessage &msg, const QByt
     {
         emit secondWave(msg.serialize());
 
-        emit getNewDfs(Messages::DfsMessage(msg.serialize()));
+        //        emit getNewDfs(Messages::DfsMessage(msg.serialize()));
     }
 }
 
@@ -213,11 +213,6 @@ const QByteArray ResolverService::getDataMsg(const QByteArray &msg) const
     return msg.mid(msg.size() - 1 - Messages::FIELD_SIZES - bytesAmount);
 }
 
-// bool ResolverService::isActive() const
-//{
-//    return active;
-//}
-
 void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddressst, const int port)
 {
     QHostAddress peerAddress(peerAddressst);
@@ -239,14 +234,14 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
 
         // emit NewActor()
 
-        emit reserveActorResponse(message.getEntity(), message.getRequestHash(), peerAddressst);
+        //        emit reserveActorResponse(message.getEntity(), message.getRequestHash(), peerAddressst);
     }
     else if (msgType == PROFILE_FILE)
     {
         qDebug() << "receive profile";
         //        if (MessageIsNotValid(message))
         //            return;
-        emit ReceiveProfile(PublicProfile(msgData));
+        //        emit ReceiveProfile(PublicProfile(msgData));
         //
         // emit signal forProfile
     }
@@ -254,18 +249,18 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     {
         EntityMessage<BigNumber> message(msg);
 
-        emit reserveActor(peerAddressst, calcHash(msg), port);
+        //        emit reserveActor(peerAddressst, calcHash(msg), port);
     }
     else if (msgType == ENABLE_LIST_CONNECTIONS)
     {
         //        EnableConnections message(msg);
-        emit createConnectionsList(msg);
+        //        emit createConnectionsList(msg);
     }
     else if (msgType == ACTOR_MESSAGE)
     {
         //        if (MessageIsNotValid(message))
         //            return;
-        emit NewActor(Actor<KeyPublic>(msgData), peerAddress);
+        //        emit NewActor(Actor<KeyPublic>(msgData), peerAddress);
     }
     else if (msgType == DFS_CHANGES_MESSAGE)
     {
@@ -275,13 +270,13 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == DFS_REQUEST_MESSAGE)
     {
         DfsRequest message(msg);
-        emit getDfsRequest(message, peerAddressst);
+        //        emit getDfsRequest(message, peerAddressst);
     }
     else if (msgType == DOWNLOAD_DFS_REQUEST)
     {
         EntityMessage<DownloadDfsRequestData> message(msg);
         //        if (MessageIsNotValid(message))
-        emit downloadDfsResponse(message.getEntity(), peerAddressst);
+        //        emit downloadDfsResponse(message.getEntity(), peerAddressst);
     }
     else if (msgType == CHAT_MESSAGE)
     {
@@ -303,7 +298,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
             return;
         }
 
-        emit NewBlock(block, peerAddress);
+        //        emit NewBlock(block, peerAddress);
     }
     else if (msgType == GENESIS_BLOCK_MESSAGE)
     {
@@ -319,7 +314,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //     return;
         // }
 
-        emit NewGenesisBlock(block, peerAddress);
+        //        emit NewGenesisBlock(block, peerAddress);
     }
     else if (msgType == COIN_REQUEST)
     {
@@ -327,7 +322,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         EntityMessage<BigNumber> message(msg);
         if (MessageIsNotValid(message))
             return;
-        emit CoinRequest(message.getSigner(), message.getEntity());
+        //        emit CoinRequest(message.getSigner(), message.getEntity());
     }
     else if (msgType == TX_MESSAGE)
     {
@@ -342,7 +337,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
             return;
         }
 
-        emit NewTx(tx, peerAddress);
+        //        emit NewTx(tx, peerAddress);
     }
     else if (msgType == CONTRACT_MESSAGE)
     {
@@ -352,7 +347,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
 
         Contract contract = message.getEntity();
 
-        emit contractFromNetwork(contract);
+        //        emit contractFromNetwork(contract);
     }
 
     else if (msgType == MERGED_BLOCK_MESSAGE)
@@ -387,7 +382,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         if (MessageIsNotValid(message))
             return;
 
-        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
+        //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
     }
 
     // request messages
@@ -399,7 +394,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         EntityMessage<Actor<KeyPublic>> message(msg);
         if (MessageIsNotValid(message))
             return;
-        emit VerifyActor(message.getEntity(), peerAddress);
+        //        emit VerifyActor(message.getEntity(), peerAddress);
     }
     //    else if (checkMsgType((msg, /*GET_BLOCKCHAIN*/)) {
 
@@ -412,7 +407,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         if (MessageIsNotValid(message))
             return;
 
-        emit GetTx(message.getParam(), message.getValue(), peerAddress, calcHash(msg));
+        //        emit GetTx(message.getParam(), message.getValue(), peerAddress, calcHash(msg));
     }
     else if (msgType == GET_TX_PAIR_MESSAGE)
     {
@@ -422,7 +417,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         if (MessageIsNotValid(message))
             return;
 
-        emit GetTxPair(message.getSenderId(), message.getReceiverId(), peerAddress, calcHash(msg));
+        //        emit GetTxPair(message.getSenderId(), message.getReceiverId(), peerAddress, calcHash(msg));
     }
 
     else if (msgType == GET_BLOCK_MESSAGE)
@@ -433,7 +428,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //        if (MessageIsNotValid(message))
         //            return;
 
-        emit GetBlock(message.getParam(), message.getValue(), peerAddress, calcHash(msg));
+        //        emit GetBlock(message.getParam(), message.getValue(), peerAddress, calcHash(msg));
     }
     else if (msgType == GET_ACTOR_MESSAGE)
     {
@@ -443,7 +438,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //        if (MessageIsNotValid(message))
         //            return;
         qDebug() << "RESOLVER SERVICE: GetActorMessage: " << message.getActorId();
-        emit GetActor(message.getActorId(), peerAddress, calcHash(msg));
+        //        emit GetActor(message.getActorId(), peerAddress, calcHash(msg));
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {
@@ -453,7 +448,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //        if (MessageIsNotValid(message))
         //            return;
 
-        emit GetActorCount(peerAddress, calcHash(msg));
+        //        emit GetActorCount(peerAddress, calcHash(msg));
     }
     else if (msgType == GET_BLOCK_COUNT_MESSAGE)
     {
@@ -463,7 +458,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //        if (MessageIsNotValid(message))
         //            return;
 
-        emit GetBlockCount(peerAddress, calcHash(msg));
+        //        emit GetBlockCount(peerAddress, calcHash(msg));
     }
 
     // response messages
@@ -476,7 +471,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         if (MessageIsNotValid(message))
             return;
 
-        emit VerifyActorResponse(message.getEntity(), message.getVerified(), peerAddress);
+        //        emit VerifyActorResponse(message.getEntity(), message.getVerified(), peerAddress);
     }
 
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
@@ -494,7 +489,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
             return;
         }
 
-        emit GetTxResponse(tx, calcHash(msg), peerAddress);
+        //        emit GetTxResponse(tx, calcHash(msg), peerAddress);
     }
     else if (msgType == GET_TX_PAIR_RESPONSE_MESSAGE)
     {
@@ -512,7 +507,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
             return;
         }
 
-        emit GetTxPairResponse(pair, calcHash(msg), peerAddress);
+        //        emit GetTxPairResponse(pair, calcHash(msg), peerAddress);
     }
     else if (msgType == GET_BLOCK_RESPONSE_MESSAGE)
     {
@@ -529,7 +524,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
             return;
         }
 
-        emit GetBlockResponse(message.getEntity(), message.getRequestHash(), peerAddress);
+        //        emit GetBlockResponse(message.getEntity(), message.getRequestHash(), peerAddress);
     }
     else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)
     {
@@ -538,7 +533,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         EntityResponseMessage<Actor<KeyPublic>> message(msg);
         //        if (MessageIsNotValid(message))
         //            return;
-        emit GetActorResponse(message.getEntity(), message.getRequestHash(), peerAddress);
+        //        emit GetActorResponse(message.getEntity(), message.getRequestHash(), peerAddress);
     }
 
     else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
@@ -548,7 +543,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         EntityResponseMessage<BigNumber> message(msg);
         //        if (MessageIsNotValid(message))
         //            return;
-        emit GetActorCountResponse(message.getEntity(), message.getRequestHash(), peerAddress);
+        //        emit GetActorCountResponse(message.getEntity(), message.getRequestHash(), peerAddress);
     }
     else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
     {
@@ -558,7 +553,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //        if (MessageIsNotValid(message))
         //            return;
 
-        emit GetBlockCountResponse(message.getEntity(), message.getRequestHash(), peerAddress);
+        //        emit GetBlockCountResponse(message.getEntity(), message.getRequestHash(), peerAddress);
     }
 
     else

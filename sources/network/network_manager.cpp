@@ -325,16 +325,17 @@ void NetManager::setupResolverServiceConnections()
     qDebug() << "NET MANAGER: setupResolverServiceConnections";
 
     connect(resolverService, &ResolverService::secondWave, this, &NetManager::broadcastMsg);
+    /**
+        connect(resolverService, &ResolverService::reserveActor, this, &NetManager::sendReserveActorRequest);
 
-    connect(resolverService, &ResolverService::reserveActor, this, &NetManager::sendReserveActorRequest);
+        connect(resolverService, &ResolverService::getNewConnectionList, this,
+       &NetManager::getNewConnectionList);
 
-    connect(resolverService, &ResolverService::getNewConnectionList, this, &NetManager::getNewConnectionList);
+        connect(resolverService, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);
 
-    connect(resolverService, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);
+        connect(resolverService, &ResolverService::getNewDfs, this, &NetManager::newDfsPack);
 
-    connect(resolverService, &ResolverService::getNewDfs, this, &NetManager::newDfsPack);
-
-    connect(resolverService, &ResolverService::ReceiveProfile, this, &NetManager::receiveProfile);
+        connect(resolverService, &ResolverService::ReceiveProfile, this, &NetManager::receiveProfile);*/
     connect(this, &NetManager::receiveProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     // server signals
     //    connect(client,             &Client::newMessage,
@@ -342,10 +343,11 @@ void NetManager::setupResolverServiceConnections()
 
     //    connect(serverService,      &ServerService::MessageReceived,
     //            resolverService,    &ResolverService::recieveMsg);
-    connect(resolverService, &ResolverService::reserveActorResponse, this,
-            &NetManager::handleReserveActorResponse);
+    /**  connect(resolverService, &ResolverService::reserveActorResponse, this,
+              &NetManager::handleReserveActorResponse);*/
 
-    // spread signals
+    // spread signals/**
+    /**
     connect(resolverService, &ResolverService::NewActor, this, &NetManager::handleNewActor);
     connect(resolverService, &ResolverService::NewBlock, this, &NetManager::handleNewBlock);
     connect(resolverService, &ResolverService::NewGenesisBlock, this, &NetManager::handleNewGenesisBlock);
@@ -359,19 +361,19 @@ void NetManager::setupResolverServiceConnections()
     connect(resolverService, &ResolverService::GetTxPair, this, &NetManager::handleGetTxPair);
     connect(resolverService, &ResolverService::GetBlock, this, &NetManager::handleGetBlock);
     connect(resolverService, &ResolverService::GetBlockCount, this, &NetManager::handleGetBlockCount);
-    connect(resolverService, &ResolverService::GetActorCount, this, &NetManager::handleGetActorCount);
+    connect(resolverService, &ResolverService::GetActorCount, this, &NetManager::handleGetActorCount);*/
     connect(this, &NetManager::requestBlockCount, this, &NetManager::sendGetBlockCount);
     connect(this, &NetManager::requestActorCount, this, &NetManager::sendGetActorCount);
-
-    // responses
-    connect(resolverService, &ResolverService::GetActorResponse, this, &NetManager::handleGetActorResponse);
-    connect(resolverService, &ResolverService::GetActorCountResponse, this,
-            &NetManager::handleGetActorCountResponse);
-    connect(resolverService, &ResolverService::GetTxResponse, this, &NetManager::handleGetTxResponse);
-    connect(resolverService, &ResolverService::GetTxPairResponse, this, &NetManager::handleGetTxPairResponse);
-    connect(resolverService, &ResolverService::GetBlockResponse, this, &NetManager::handleGetBlockResponse);
-    connect(resolverService, &ResolverService::GetBlockCountResponse, this,
-            &NetManager::handleGetBlockCountResponse);
+    /**
+        // responses
+        connect(resolverService, &ResolverService::GetActorResponse, this,
+       &NetManager::handleGetActorResponse); connect(resolverService, &ResolverService::GetActorCountResponse,
+       this, &NetManager::handleGetActorCountResponse); connect(resolverService,
+       &ResolverService::GetTxResponse, this, &NetManager::handleGetTxResponse); connect(resolverService,
+       &ResolverService::GetTxPairResponse, this, &NetManager::handleGetTxPairResponse);
+        connect(resolverService, &ResolverService::GetBlockResponse, this,
+       &NetManager::handleGetBlockResponse); connect(resolverService, &ResolverService::GetBlockCountResponse,
+       this, &NetManager::handleGetBlockCountResponse);*/
 
     // second waves signal
 
@@ -382,15 +384,16 @@ void NetManager::setupResolverServiceConnections()
 #ifdef ETALONIUM_CONSOLE
     connect(resolverService, &ResolverService::contractFromNetwork, this, &NetManager::shareContract);
 #endif
-    connect(resolverService, &ResolverService::getDfsRequest, this, &NetManager::getDfsRequest);
-    connect(resolverService, &ResolverService::downloadDfsResponse, this, &NetManager::downloadDfsResponse);
-    //    connect(resolverService, &ResolverService::downloadDfsResponse, this,
-    //            &NetManager::downloadDfsResponse);
-    connect(resolverService, &ResolverService::broadcast, this, &NetManager::retranslateMessages);
-    connect(resolverService, &ResolverService::downloadRequest, this, &NetManager::downloadDfsRequest);
-    // list connections
-    connect(resolverService, &ResolverService::createConnectionsList, this,
-            &NetManager::createNewConnectionsFromList);
+    /**   connect(resolverService, &ResolverService::getDfsRequest, this, &NetManager::getDfsRequest);
+       connect(resolverService, &ResolverService::downloadDfsResponse, this,
+   &NetManager::downloadDfsResponse);
+       //    connect(resolverService, &ResolverService::downloadDfsResponse, this,
+       //            &NetManager::downloadDfsResponse);
+       connect(resolverService, &ResolverService::broadcast, this, &NetManager::retranslateMessages);
+       connect(resolverService, &ResolverService::downloadRequest, this, &NetManager::downloadDfsRequest);
+       // list connections
+       connect(resolverService, &ResolverService::createConnectionsList, this,
+               &NetManager::createNewConnectionsFromList);*/
 }
 
 // Basic methods
@@ -398,16 +401,6 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 {
     SocketPair socketPair("0.0.0.0", 0, this);
     emit sendMsg(msg, socketPair);
-    //#ifdef ETALONIUM_CLIENT
-    //    //    for (auto &el : entryPoints)
-    //    //    {
-    //    //        std
-    //    //        el->sendMsg(msg.serialize());
-    //    //    }
-
-    //    std::pair<std::string, quint16> socketPair = std::make_pair("0.0.0.0",
-    //    0); emit sendMsg(msg.serialize(), socketPair);
-    //#endif
 }
 
 void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageType)
@@ -492,13 +485,6 @@ void NetManager::addConnection(qint64 socketDescriptor)
     ThreadPool::addThread(connections.last());
 }
 
-void NetManager::remSocket()
-{
-    QObject *sender = QObject::sender();
-    SocketService *connection = qobject_cast<SocketService *>(sender);
-    connections.removeOne(connection);
-}
-
 void NetManager::removeConnection()
 {
     QObject *sender = QObject::sender();
@@ -575,13 +561,13 @@ void NetManager::sendProfile(PublicProfile profile)
 //}
 //#endif
 
-void NetManager::reserveActor(const QString &hash)
+void NetManager::reserveActor(const bool account)
 {
     //    int r = rand();
     qsrand(QDateTime().currentMSecsSinceEpoch());
     int temp = qrand() % ((30000 + 1) - 10000) + 10000;
-    QByteArray werHash = hash.toUtf8() + QByteArray::number(temp);
-    BigNumber logHash(Utils::calcKeccak(werHash));
+    //    QByteArray werHash = hash.toUtf8() + QByteArray::number(temp);
+    BigNumber logHash("a124");
     EntityMessage<BigNumber> msg = Messages::createReserveActorMessage(logHash);
     getReserveActorHandlers.insert(calcHash(msg), GetEntityHandler<BigNumber>());
     broadcastMsg(msg.serialize());

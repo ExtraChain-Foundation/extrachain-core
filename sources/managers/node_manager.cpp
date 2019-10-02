@@ -481,8 +481,8 @@ void NodeManager::connectContractManager()
 {
     connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
 #ifdef ETALONIUM_CLIENT
-    connect(netManager->getResolverService(), &ResolverService::contractFromNetwork, contractManager,
-            &ContractManager::contractFromNetWork);
+//    connect(netManager->getResolverService(), &ResolverService::contractFromNetwork, contractManager,
+//            &ContractManager::contractFromNetWork);
 #endif
 
 #ifdef ETALONIUM_CONSOLE

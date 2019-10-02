@@ -202,6 +202,16 @@ void BaseMessageResponse::initFields(QList<QByteArray> &list)
 
 QList<QByteArray> BaseMessageResponse::serializedParams() const
 {
+    QList<QByteArray> list = BaseMessage::serializedParams();
+    list << dataHash;
+    return list;
+}
+
+BaseMessageResponse::BaseMessageResponse(const BaseMessageResponse &temp)
+{
+    QList<QByteArray> list = temp.BaseMessage::serializedParams();
+    this->BaseMessage::initFields(list);
+    dataHash = temp.dataHash;
 }
 
 BaseMessageResponse::~BaseMessageResponse()
@@ -210,16 +220,19 @@ BaseMessageResponse::~BaseMessageResponse()
 
 BaseMessageResponse BaseMessageResponse::operator=(const BaseMessageResponse &temp)
 {
-}
-
-QByteArray BaseMessageResponse::serialize() const
-{
+    QList<QByteArray> list = temp.BaseMessage::serializedParams();
+    this->BaseMessage::initFields(list);
+    dataHash = temp.dataHash;
+    return *this;
 }
 
 void BaseMessageResponse::deserialize(const QByteArray &serialized)
 {
+    QList<QByteArray> list = deserializeToList(serialized);
+    this->initFields(list);
 }
 
 const QByteArray BaseMessageResponse::hash() const
 {
+    return dataHash;
 }

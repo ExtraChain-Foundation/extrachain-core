@@ -319,7 +319,9 @@ public slots:
     void process();
     void logDebug();
     void connectToServer();
-
+    /**
+     * @brief checkMyIdentificator
+     */
     void checkMyIdentificator();
     /**
      * @brief Broadcast message to all connected peers
@@ -340,22 +342,19 @@ private slots:
      * @param port
      */
     SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
+    /**
+     * @brief addConnection
+     * @param socketDescriptor
+     */
     void addConnection(qint64 socketDescriptor);
-
-    void remSocket();
-
     /**
      * @brief Remove connections from connection list
      */
     void removeConnection();
-
-    /**
-     *@brief Add socket from ServerService to SocketService
-     */
 public slots:
 
     void sendProfile(PublicProfile profile);
-    void reserveActor(const QString &hash);
+    void reserveActor(const bool account);
     void retranslateMessages(const QByteArray &msg, QString peerAddress);
     void Verify(const QByteArray &block);
     /**
