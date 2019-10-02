@@ -76,9 +76,8 @@ void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray
 Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-    BigNumber lsid = actorIndex->getLastSavedId();
 
-    actor->initNew(actorIndex->getLastSavedId() == 0 ? 1 : actorIndex->getLastSavedId() + 1, false);
+    actor->init(false);
 
     emit verifyActor(actor->convertToPublic());
     // QFile *file = new QFile(SmartContractStorage::CONTRACTSTORE);

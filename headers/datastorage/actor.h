@@ -28,16 +28,11 @@ private:
     QByteArray hash; // to encrypt private key (email and pass)
     bool account;
     PublicProfile profile;
-    QByteArray addressPubKey; // 20 bytes
 
 public:
     inline void setHash(QByteArray hash)
     {
         this->hash = hash;
-    }
-    inline void setAddressPubKey(QByteArray address)
-    {
-        this->addressPubKey = address;
     }
     inline QByteArray getHash() const
     {
@@ -49,7 +44,6 @@ public:
         key = nullptr;
         hash = "";
         account = true;
-        addressPubKey = "0";
     }
     Actor(const Actor<T> &copyActor)
     {
@@ -57,12 +51,6 @@ public:
         key = new T(*(copyActor.getKey()));
         hash = copyActor.getHash();
         account = copyActor.getAccount();
-        if (typeid(T) == typeid(KeyPrivate))
-        {
-            QByteArray hashPubKey = Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
-            this->addressPubKey = hashPubKey.mid(hashPubKey.size() - 20, 20);
-            this->addressPubKey.push_front("0x");
-        }
     }
     Actor(const QByteArray &serialized)
     {
@@ -96,7 +84,7 @@ public:
      * @brief initial construction
      * @param serialized
      */
-    void init(const QByteArray &serialized)
+    bool init(const QByteArray &serialized)
     {
         if (!serialized.isEmpty())
         {
@@ -132,22 +120,23 @@ public:
             }
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
+            return true;
         }
         else
         {
             qDebug() << "WARNING!:: Actor::init(const QByteArray &serialized) serialized IS "
                         "EMPTY!";
+            return false;
         }
     }
     /**
      * @brief initial construction of new Actor
      * @param id
      */
-    bool initNew(const BigNumber &id, bool account)
+    bool init(bool account)
     {
         if (isPrivate())
         {
-            this->id = id;
             key = new T();
             if (typeid(T) == typeid(KeyPrivate))
             {
@@ -155,13 +144,11 @@ public:
                     Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
                 if (hashPubKey.size() >= 20)
                 {
-                    this->addressPubKey = hashPubKey.mid(hashPubKey.size() - 20, 20);
-                    this->addressPubKey.push_front("0x");
+                    id = BigNumber(hashPubKey.mid(hashPubKey.size() - 20));
                 }
                 else
                     qDebug() << "[Error] Actor.h func InitNew. Error size of hashPubKey";
             }
-            //  addressPubKey=Utils::calcKeccak()
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
             this->account = account;
@@ -175,11 +162,12 @@ public:
      * @param id
      * @param keydata - (private/public key)
      */
-    void init(const BigNumber &id, const QByteArray &keydata, bool account)
+    bool init(const BigNumber &id, const QByteArray &keydata, bool account)
     {
         this->id = id;
         this->key = new T(keydata);
         this->account = account;
+        return true;
     }
 
     bool isEmpty() const

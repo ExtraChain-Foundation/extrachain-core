@@ -316,8 +316,8 @@ private slots:
     void handleGetBlockResponse(Block block, QByteArray reqHash, QHostAddress peerAddress);
     void handleGetBlockCountResponse(BigNumber blockCount, QByteArray reqHash, QHostAddress peerAddress);
     void handleGetActorCountResponse(BigNumber actorCount, QByteArray reqHash, QHostAddress peerAddress);
-    void handleReserveActorResponse(const BigNumber &actorId, const QByteArray &requestHash,
-                                    const QString &peerAdress);
+    //    void handleReserveActorResponse(const BigNumber &actorId, const QByteArray &requestHash,
+    //                                    const QString &peerAdress);
 public slots:
     // test thread
     void process();
@@ -391,7 +391,7 @@ public slots:
     void sendGetTxPair(BigNumber sender, BigNumber receiver);
 
     void sendCompanyActor(QString peerAddress);
-    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int port);
+    //    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int port);
     void sendConnectionList(Messages::EnableConnections sendConList, SocketService *addressant);
 
     void sendCoinRequest(BigNumber amount);

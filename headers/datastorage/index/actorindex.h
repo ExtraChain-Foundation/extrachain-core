@@ -10,13 +10,30 @@
  * @brief Actors that stored in blockchain
  */
 
-class ActorIndex : public FileIndex
+class ActorIndex : public QObject
 {
     Q_OBJECT
+private:
+    BigNumber records = 0;
+    const QString folderPath =
+        DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
+    short SECTION_NAME_SIZE = 2;
+    /**
+     * @brief buildFilePath
+     * @param id
+     * @return
+     */
+    QString buildFilePath(const BigNumber &id) const;
+
 public:
-    ActorIndex();
-    ActorIndex(QString folderName); // custom folder name
-public:
+    /**
+     * @brief ActorIndex
+     */
+    ActorIndex(QObject *parent = nullptr);
+    /**
+     * @brief ~ActorIndex
+     */
+    ~ActorIndex();
     /**
      * @brief Check actor with actorId exist
      * @param actorId
@@ -45,14 +62,23 @@ public:
      */
     bool validateTx(const Transaction &tx) const;
 
+    /**
+     * @brief getById
+     * @param id
+     * @return
+     */
+    QByteArray getById(const BigNumber &id) const;
+    /**
+     * @brief add
+     * @param BigNumber id actorId for add
+     * @param data
+     * @return
+     */
+    int add(const BigNumber &id, const QByteArray &data);
+    BigNumber getRecords() const;
+
 public slots:
     void process();
-    /**
-     * @brief Validates private actor created by ActorController. Checks the uniqueness of the
-     * key. Emit's PrivateActorIsVerified signal on success.
-     * @param private actor
-     */
-    void validatePrivateActor(Actor<KeyPrivate> *actor);
     /**
      * @brief Attempts to save actor to local storage
      * @param actor
@@ -79,6 +105,11 @@ public slots:
      * @return resultCode, 0 - actor is saved
      */
     int addActor(const Actor<KeyPublic> &actor);
+
+    /**
+     * @brief
+     */
+    void removeAll();
 
 signals:
     void sendProfile(PublicProfile profile);

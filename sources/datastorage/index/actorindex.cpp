@@ -1,18 +1,17 @@
 #include "datastorage/index/actorindex.h"
 
-ActorIndex::ActorIndex()
-    : FileIndex(/*DataStorage::BLOCKCHAIN_INDEX + '/' +*/ DataStorage::ACTOR_INDEX_FOLDER_NAME)
+ActorIndex::ActorIndex(QObject *parent)
+    : QObject(parent)
+
 {
 }
 
-ActorIndex::ActorIndex(QString folderName)
-    : FileIndex(folderName)
+ActorIndex::~ActorIndex()
 {
 }
 
 Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id) const
 {
-
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {
@@ -48,30 +47,6 @@ bool ActorIndex::validateTx(const Transaction &tx) const
 
 void ActorIndex::process()
 {
-}
-
-// todo: look closely at this method!
-void ActorIndex::validatePrivateActor(Actor<KeyPrivate> *actor)
-{
-    if (actor == nullptr)
-    {
-        qCritical() << "Null pointer";
-        return;
-    }
-
-    KeyPrivate *prKey = actor->getKey();
-    BigNumber last = getLastSavedId();
-
-    for (BigNumber i = getFirstSavedId(); i < last; ++i)
-    {
-        if (getActor(i).getKey()->extractPublicKey() == prKey->extractPublicKey())
-        {
-            qDebug() << "Error: Created actor is not unique";
-            return;
-        }
-    }
-
-    emit PrivateActorIsVerified(*actor);
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
@@ -226,26 +201,79 @@ bool ActorIndex::actorExist(BigNumber actorId)
         return false;
     return true;
 }
+QString ActorIndex::buildFilePath(const BigNumber &id) const
+{
+    BigNumber section = id.getHexValue().right(SECTION_NAME_SIZE).toUtf8();
+    QString pathToFolder = folderPath + section.toString();
 
+    QDir dir(pathToFolder);
+    if (!dir.exists())
+    {
+        qDebug() << "Creating dir:" << pathToFolder;
+        dir = QDir();
+        dir.mkpath(pathToFolder);
+    }
+
+    return pathToFolder + "/" + id.toString();
+}
+BigNumber ActorIndex::getRecords() const
+{
+    return records;
+}
+
+int ActorIndex::add(const BigNumber &id, const QByteArray &data)
+{
+    QString path = buildFilePath(id);
+    QFile file(path);
+
+    qDebug() << "Saving the file:" << path;
+
+    if (file.exists())
+    {
+        qDebug() << "Can't save the file" << path << "(File already exits)";
+        return Errors::FILE_ALREADY_EXISTS;
+    }
+
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(data);
+        file.flush();
+        file.close();
+
+        this->records++;
+
+        return 0;
+    }
+
+    qCritical() << "Can't save the file" << path << "(File is not opened)";
+    return Errors::FILE_IS_NOT_OPENED;
+}
+
+QByteArray ActorIndex::getById(const BigNumber &id) const
+{
+    QString filePath = folderPath + id.getHexValue().right(SECTION_NAME_SIZE) + '/' + id.getHexValue();
+    QFile file(filePath);
+    if (!file.exists())
+    {
+        qCritical() << "[&ActorIndex] file with path >>> " << filePath << "not found";
+        return QByteArray();
+    }
+    file.open(QIODevice::ReadOnly);
+    QByteArray data = file.readAll();
+    file.close();
+    return data;
+}
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
     int result = this->add(actor.getId(), actor.serialize());
-    qDebug() << actor.getId().serialize() << " =~= " << lastSavedId.serialize();
-    if (actor.getId() + 1 == lastSavedId || lastSavedId == BigNumber(1))
-        emit actorIndexUpdated();
+    emit actorIndexUpdated();
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
-                 << "lsd: " << lastSavedId;
-        // todo: Event should be emited only on CREATING new actors, not on RECEIVING new
-        // one's make methods:
-        // * addActor -> add actor to storage
-        // * addNewActor -> add actor to storage and emit event NewActor
-        if (actor.getId() > BigNumber(0))
-        {
-            //            ++lastSavedId;
-            emit NewActor(actor);
-        }
+                 << "lsd: ";
+
+        emit NewActor(actor);
+
         if (actor.getAccount())
         {
             qDebug() << "emit signal for init dfs for user" << actor.getId().toByteArray();
@@ -254,78 +282,96 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     }
     return result;
 }
+void ActorIndex::removeAll()
+{
+    qDebug() << "Clearing file index: " << folderPath;
 
+    QDir folder(folderPath);
+    for (const QString &section :
+         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name))
+    {
+        QDir dir(folderPath + QString("/") + section);
+        dir.removeRecursively();
+    }
+
+    // update state
+    this->records = 0;
+}
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
-    qDebug() << "first last ids" << firstSavedId << lastSavedId;
-
-    for (int id = 0; id <= lastSavedId; id++)
+    QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+    for (const QString &section : sectionList)
     {
-        Profile profile = getProfile(QString::number(id, 16));
+        QString profileFolderPath = folderPath + section + "/profile";
+        QStringList profilePathList =
+            QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
+        for (const QString &profilePath : profilePathList)
+        {
+            Profile profile = getProfile(profilePath);
 
-        if (profile.at(2) == "")
-            continue;
-        if (profile.userId() == filters.currentId)
-            continue;
-        qint16 type = profile.type();
-        if (type == 0 || type == 6)
-            continue;
+            if (profile.at(2) == "")
+                continue;
+            if (profile.userId() == filters.currentId)
+                continue;
+            qint16 type = profile.type();
+            if (type == 0 || type == 6)
+                continue;
 
-        QString firstName = profile.firstName().toLower();
-        QString lastName = profile.lastName().toLower();
+            QString firstName = profile.firstName().toLower();
+            QString lastName = profile.lastName().toLower();
 
-        if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
-              || profile.lastName().toLower().startsWith(filters.name.toLower())))
-            continue;
+            if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
+                  || profile.lastName().toLower().startsWith(filters.name.toLower())))
+                continue;
 
-        /*
-        if (profile.type() != filters.userType && filters.userType != -1)
-            continue;
-        if (profile.country() != filters.location && filters.location != -1)
-            continue;
-        if (profile.gender() != filters.gender && filters.gender != -1)
-            continue;
-        if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
-            continue;
-        if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
-            continue;
-        if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
-            continue;
-        if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
-            continue;
-        if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
-            continue;
-        if (filters.category != profile.category() && !filters.category.isEmpty())
-            continue;
-        if (filters.body != profile.body() && !filters.body.isEmpty())
-            continue;
-        if (filters.hair != profile.hair() && !filters.hair.isEmpty())
-            continue;
-        if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
-            continue;
-        if (filters.eye != profile.eye() && !filters.eye.isEmpty())
-            continue;
-        if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
-            continue;
-        if (filters.style != profile.style() && !filters.style.isEmpty())
-            continue;
-        if (filters.sports != profile.sports() && !filters.sports.isEmpty())
-            continue;
-        if (filters.skin != profile.skin() && !filters.skin.isEmpty())
-            continue;
-        if (filters.scope != profile.scope() && !filters.scope.isEmpty())
-            continue;
-        if (filters.direction != profile.direction() && !filters.direction.isEmpty())
-            continue;
-        if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
-            continue;
-        if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
-            continue;
-        */
+            /*
+            if (profile.type() != filters.userType && filters.userType != -1)
+                continue;
+            if (profile.country() != filters.location && filters.location != -1)
+                continue;
+            if (profile.gender() != filters.gender && filters.gender != -1)
+                continue;
+            if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
+                continue;
+            if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
+                continue;
+            if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
+                continue;
+            if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
+                continue;
+            if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
+                continue;
+            if (filters.category != profile.category() && !filters.category.isEmpty())
+                continue;
+            if (filters.body != profile.body() && !filters.body.isEmpty())
+                continue;
+            if (filters.hair != profile.hair() && !filters.hair.isEmpty())
+                continue;
+            if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
+                continue;
+            if (filters.eye != profile.eye() && !filters.eye.isEmpty())
+                continue;
+            if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
+                continue;
+            if (filters.style != profile.style() && !filters.style.isEmpty())
+                continue;
+            if (filters.sports != profile.sports() && !filters.sports.isEmpty())
+                continue;
+            if (filters.skin != profile.skin() && !filters.skin.isEmpty())
+                continue;
+            if (filters.scope != profile.scope() && !filters.scope.isEmpty())
+                continue;
+            if (filters.direction != profile.direction() && !filters.direction.isEmpty())
+                continue;
+            if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
+                continue;
+            if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
+                continue;
+            */
 
-        profiles.append(profile);
+            profiles.append(profile);
+        }
     }
-
     emit sendProfileToSearchToUi(profiles);
 }

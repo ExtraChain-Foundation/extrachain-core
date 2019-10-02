@@ -7,6 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
+
 class Dfs : public QObject
 {
     Q_OBJECT
@@ -66,6 +67,8 @@ public slots:
     void checkStatus(const Messages::DfsStatus &msg);
 
     void resolveMsg(const Messages::DfsMessage &msg);
+
+    void appendSubscribtion(const BigNumber &actorId);
 };
 
 #endif // DFS_H

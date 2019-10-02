@@ -148,7 +148,7 @@ void Dfs::recieveRequest(Messages::DfsRequest request, QString peerAdress)
     {
         QList<QString> list;
         QList<BigNumber> actorList;
-        BigNumber maxActor = actorIndex->getLastSavedId();
+        //        BigNumber maxActor = actorIndex->getLastSavedId();
         //        for (BigNumber i = 0; i < maxActor; i++)
         //            actorList.append(i);
         //        actorList.append(maxActor);
@@ -361,4 +361,11 @@ void Dfs::checkStatus(const Messages::DfsStatus &msg)
 
 void Dfs::resolveMsg(const Messages::DfsMessage &msg)
 {
+    qDebug() << msg.serialize();
+}
+
+void Dfs::appendSubscribtion(const BigNumber &actorId)
+{
+    Subscribtion sub;
+    sub.add(actorId);
 }

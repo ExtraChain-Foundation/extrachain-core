@@ -37,23 +37,20 @@ NodeManager::NodeManager()
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
-    CreateExtracoin();
+    //    CreateExtracoin();
+    //    accController->loadActors();
 //    if (!QFile("blockchain/index/actor/0/0").exists())
 //    {
-//        Actor<KeyPrivate> company(accController->getActor(0));
+//        Actor<KeyPrivate> company = CreateExtracoin();
 //        accController->loadActors();
-//        for (int i = 0; i < 10; ++i)
-//        {
-//            Transaction newTransaction(BigNumber(0), BigNumber(i + 1),
-//            BigNumber("56bc75e2d63100000"));
-//            newTransaction.setSenderBalance(BigNumber("56bc75e2d63100000"));
-//            newTransaction.setReceiverBalance(BigNumber(0));
-//            newTransaction.setGas(0);
-//            newTransaction.setHop(0);
-//            newTransaction.sign(company);
-//            newTransaction.verify(company.convertToPublic());
-//            txManager->addVerifiedTx(newTransaction);
-//        }
+//        Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
+//        newTransaction.setSenderBalance(BigNumber("0"));
+//        newTransaction.setReceiverBalance(BigNumber("0"));
+//        newTransaction.setGas(0);
+//        newTransaction.setHop(0);
+//        newTransaction.sign(company);
+//        newTransaction.verify(company.convertToPublic());
+//        txManager->addVerifiedTx(newTransaction);
 
 //        txManager->makeBlock();
 //    }
@@ -72,26 +69,30 @@ NodeManager::NodeManager()
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
 {
-    int result = actorIndex->add(BigNumber("0"),
-                                 "00010"
-                                 "00927bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1"
-                                 "a4048a6baa82b2846f2ae82bab83b636a6c6e00011");
+    //    int result = actorIndex->add(BigNumber("0"),
+    //                                 "00010"
+    //                                 "00927bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1"
+    //                                 "a4048a6baa82b2846f2ae82bab83b636a6c6e00011");
 
-    Actor<KeyPrivate> companyPrKey(
-        QByteArray("000100031353e2c69b58a777e367d3f2358303fa0092"
-                   "7bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1a4048a6baa82b2"
-                   "846f2ae82bab83b636a6c6e00011"));
+    //    Actor<KeyPrivate> companyPrKey(
+    //        QByteArray("000100031353e2c69b58a777e367d3f2358303fa0092"
+    //                   "7bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1a4048a6baa82b2"
+    //                   "846f2ae82bab83b636a6c6e00011"));
+    //    accController->savePrivateActor(companyPrKey);
+    //    if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
+    //    {
+    //        qDebug() << "Actor"
+    //                 << "0:353e2c69b58a777e367d3f2358303fa:4ac3b1735ddda843a042661303861fa::"
+    //                 << " was added";
+    //        // todo: Event should be emited only on CREATING new actors, not on
+    //        // RECEIVING new one's make methods:
+    //        // * addActor -> add actor to storage
+    //        // * addNewActor -> add actor to storage and emit event NewActor
+    //    }
+    Actor<KeyPrivate> companyPrKey;
+    companyPrKey.init(true);
+    actorIndex->add(companyPrKey.getId(), companyPrKey.convertToPublic().getKey()->getPublicKey());
     accController->savePrivateActor(companyPrKey);
-    if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
-    {
-        qDebug() << "Actor"
-                 << "0:353e2c69b58a777e367d3f2358303fa:4ac3b1735ddda843a042661303861fa::"
-                 << " was added";
-        // todo: Event should be emited only on CREATING new actors, not on
-        // RECEIVING new one's make methods:
-        // * addActor -> add actor to storage
-        // * addNewActor -> add actor to storage and emit event NewActor
-    }
     return companyPrKey;
 }
 
@@ -339,11 +340,12 @@ void NodeManager::updateAvailableWalletList()
     qDebug() << "NODE MANAGER: updateAvailableWalletList";
     BigNumber currentId = uiWallet->getCurrentWalletId();
     QList<QByteArray> walletList;
-    BigNumber lastId = actorIndex->getLastSavedId();
+    Subscribtion sub;
+    QList<BigNumber> subActorsList = sub.getAll();
 
-    for (BigNumber i(1); i <= lastId; ++i)
+    for (const BigNumber &actor : subActorsList)
     {
-        Actor<KeyPublic> curActor = actorIndex->getActor(i);
+        Actor<KeyPublic> curActor = actorIndex->getActor(actor);
         if (curActor.isEmpty() || currentId == curActor.getId()
             || accController->getCurrentActor().getId() == 0)
             continue;
@@ -480,7 +482,8 @@ void NodeManager::connectUi()
     connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
 
     //=============================================LOGIN & REG================================
-    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, netManager, &NetManager::reserveActor);
+    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
+            [=]() { accController->savePrivateActor(accController->createActor(true)); });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -622,7 +625,7 @@ void NodeManager::createNewActor(QByteArray data, bool accountStatus)
     }
     if (!data.isEmpty())
     {
-        emit sendActorIdSeva(true, accController->getActorIndex()->getLastSavedId());
+        //        emit sendActorIdSeva(true, accController->getActorIndex()->getLastSavedId());
         this->dfs = new Dfs(actorIndex, accController);
     }
 }

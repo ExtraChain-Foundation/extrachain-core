@@ -850,8 +850,8 @@ void Blockchain::getBlockCount(QHostAddress peerAddress, QByteArray requestHash)
 
 void Blockchain::getActorCount(QHostAddress peerAddress, QByteArray requestHash)
 {
-    qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->actorIndex->getLastSavedId();
-    emit ActorCount(this->actorIndex->getLastSavedId(), peerAddress, requestHash);
+    qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->actorIndex->getRecords();
+    emit ActorCount(this->actorIndex->getRecords(), peerAddress, requestHash);
 }
 
 void Blockchain::addBlockToBlockchain(Block block)
