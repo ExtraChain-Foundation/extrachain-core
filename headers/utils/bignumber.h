@@ -44,6 +44,7 @@ private:
     static std::pair<BigNumber, BigNumber> naiveDivide(BigNumber &value, const BigNumber &divider);
 
 public:
+    int byteRefHexToDec(QByteRef byte);
     static std::pair<BigNumber, BigNumber> divide(BigNumber val, BigNumber divider);
     static int compare(const QString &one, const QString &two);
     BigNumber operator&(const BigNumber &);

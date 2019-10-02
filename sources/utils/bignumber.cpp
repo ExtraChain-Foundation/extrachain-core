@@ -143,6 +143,42 @@ std::pair<BigNumber, BigNumber> BigNumber::naiveDivide(BigNumber &value, const B
     return std::make_pair(result, value);
 }
 
+int BigNumber::byteRefHexToDec(QByteRef byte)
+{
+    if (byte == 'a')
+        return 10;
+    else if (byte == 'b')
+        return 11;
+    else if (byte == 'c')
+        return 12;
+    else if (byte == 'd')
+        return 13;
+    else if (byte == 'e')
+        return 14;
+    else if (byte == 'f')
+        return 15;
+    else if (byte == '1')
+        return 1;
+    else if (byte == '2')
+        return 2;
+    else if (byte == '3')
+        return 3;
+    else if (byte == '4')
+        return 4;
+    else if (byte == '5')
+        return 5;
+    else if (byte == '6')
+        return 6;
+    else if (byte == '7')
+        return 7;
+    else if (byte == '8')
+        return 8;
+    else if (byte == '9')
+        return 9;
+    else
+        return 0;
+}
+
 std::pair<BigNumber, BigNumber> BigNumber::divide(BigNumber val, BigNumber divider)
 {
     QString value = val.hexValue;
