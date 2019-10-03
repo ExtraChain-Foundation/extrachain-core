@@ -117,9 +117,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     // spread messages
     if (msgType == PROFILE_FILE)
     {
-    }
-    else if (msgType == ENABLE_LIST_CONNECTIONS)
-    {
+        emit receiveProfile(message.getMsg_data());
     }
     else if (msgType == ACTOR_MESSAGE)
     {
@@ -203,94 +201,38 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     }
 
     // request messages
-
-    else if (msgType == VERIFY_ACTOR_MESSAGE)
-    {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << VERIFY_ACTOR_MESSAGE;
-        EntityMessage<Actor<KeyPublic>> message(msg);
-        if (MessageIsNotValid(message))
-            return;
-        //        emit VerifyActor(message.getEntity(), peerAddress);
-    }
-    //    else if (checkMsgType((msg, /*GET_BLOCKCHAIN*/)) {
-
-    //    }
     else if (msgType == GET_TX_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_TX_MESSAGE;
         GetTxMessage message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        //        emit GetTx(message.getParam(), message.getValue(), peerAddress, calcHash(msg));
+        emit getTx(message.getParam(), message.getValue(), peerAddress);
     }
     else if (msgType == GET_TX_PAIR_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_TX_PAIR_MESSAGE;
         GetTxPairMessage message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        //        emit GetTxPair(message.getSenderId(), message.getReceiverId(), peerAddress, calcHash(msg));
+        emit getTxPair(message.getSenderId(), message.getReceiverId(), peerAddress);
     }
 
     else if (msgType == GET_BLOCK_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << msg;
         GetBlockMessage message(msg);
-        //        if (MessageIsNotValid(message))
-        //            return;
-
-        //        emit GetBlock(message.getParam(), message.getValue(), peerAddress, calcHash(msg));
+        emit getBlock(message.getParam(), message.getValue(), peerAddress);
     }
     else if (msgType == GET_ACTOR_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_ACTOR_MESSAGE;
         GetActorMessage message(msg);
-        //        if (MessageIsNotValid(message))
-        //            return;
-        qDebug() << "RESOLVER SERVICE: GetActorMessage: " << message.getActorId();
-        //        emit GetActor(message.getActorId(), peerAddress, calcHash(msg));
+        emit getActor(message.getActorId(), peerAddress);
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_ACTOR_COUNT_MESSAGE;
         BaseMessage message = BaseMessage::deserializeMsg(msg);
-        //        if (MessageIsNotValid(message))
-        //            return;
-
-        //        emit GetActorCount(peerAddress, calcHash(msg));
+        emit getActorsCount(peerAddress);
     }
     else if (msgType == GET_BLOCK_COUNT_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_BLOCK_COUNT_MESSAGE;
         BaseMessage message = BaseMessage::deserializeMsg(msg);
-        //        if (MessageIsNotValid(message))
-        //            return;
-
-        //        emit GetBlockCount(peerAddress, calcHash(msg));
+        emit getBlocksCount(peerAddress);
     }
-
     // response messages
-
-    else if (msgType == VERIFY_ACTOR_RESPONSE_MESSAGE)
-    {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << VERIFY_ACTOR_RESPONSE_MESSAGE;
-        VerifyResponseMessage<Actor<KeyPublic>> message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        //        emit VerifyActorResponse(message.getEntity(), message.getVerified(), peerAddress);
-    }
-
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
     {
         qDebug() << "RESOLVER SERVICE: "

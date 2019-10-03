@@ -318,8 +318,6 @@ public slots:
 
     void addBlockToBlockchain(Block block);
 
-    void newActor(Actor<KeyPublic> actor);
-
     /**
      * @brief If there no such tx in a previous block
      * adds this tx to the list and emits VerifiedTx signal

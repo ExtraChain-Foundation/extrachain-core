@@ -2,6 +2,11 @@
 
 using namespace Messages;
 
+BigNumber GetActorMessage::getActorId() const
+{
+    return actorId;
+}
+
 GetActorMessage::GetActorMessage(const BigNumber &id)
 {
     this->actorId = id;
@@ -26,9 +31,4 @@ void GetActorMessage::deserialize(const QByteArray &serilaized)
 {
     QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
     this->actorId = BigNumber(list.at(0));
-}
-
-BigNumber GetActorMessage::getValue() const
-{
-    return actorId;
 }

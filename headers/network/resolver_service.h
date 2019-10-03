@@ -126,16 +126,32 @@ signals:
      * @param msg
      */
     void secondWave(const QByteArray &msg);
+
     // retranslate package to their owners class
+    // new data
     void newDfsPack(const Messages::DfsMessage &msg);
 
-    void receiveProfile(const PublicProfile &msg);
+    void receiveProfile(const QByteArray &msg);
 
     void newActor(const Actor<KeyPublic> &actor);
 
     void newBlock(const Block &block);
 
     void newTx(const Transaction &tx);
+
+    // request
+    void getTx(const SearchEnum::TxParam &param, const QByteArray &value, const QHostAddress &peerAddress);
+
+    void getTxPair(const BigNumber &senderId, const BigNumber &receiverId, const QHostAddress &peerAddress);
+
+    void getBlock(const SearchEnum::BlockParam &param, const QByteArray &value,
+                  const QHostAddress &peerAddress);
+
+    void getActor(const BigNumber &actorId, const QHostAddress &peerAddress);
+
+    void getActorsCount(const QHostAddress &peerAddress);
+
+    void getBlocksCount(const QHostAddress &peerAddress);
     //    void createConnectionsList(const QByteArray &message);
 
     //    void SendGetActor(BigNumber actorId);

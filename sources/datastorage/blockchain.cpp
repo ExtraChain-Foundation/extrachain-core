@@ -882,11 +882,6 @@ void Blockchain::setApprover(const Actor<KeyPrivate> &value)
     this->accountController->getCurrentActor() = value;
 }
 
-void Blockchain::newActor(Actor<KeyPublic> actor)
-{
-    //    actorIndex->addActor(actor);
-}
-
 void Blockchain::getTxFromBlockchain(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
                                      QByteArray requestHash)
 {

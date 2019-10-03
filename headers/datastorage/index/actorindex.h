@@ -96,7 +96,7 @@ public slots:
     void handleNewActorCheck(Actor<KeyPublic> actor);
 
     void saveProfile(Actor<KeyPrivate> *key, Profile newProfile);
-    void saveProfileFromNetwork(PublicProfile newProfile);
+    void saveProfileFromNetwork(const QByteArray &newProfile);
     void requestProfile(QString id);
     PublicProfile getProfileToSend(QString id);
     Profile getProfile(QString id);

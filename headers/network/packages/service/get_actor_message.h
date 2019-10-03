@@ -20,7 +20,7 @@ public:
 
     const QByteArray serialize() const;
     void deserialize(const QByteArray &serilaized);
-    BigNumber getValue() const;
+    BigNumber getActorId() const;
 };
 }
 

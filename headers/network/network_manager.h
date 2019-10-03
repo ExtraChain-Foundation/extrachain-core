@@ -381,7 +381,7 @@ signals:
     void qmlServerError(bool serverError);
 
     void newDfsPack(Messages::DfsMessage msg /*, QString senderId*/);
-    void receiveProfile(PublicProfile profile);
+    void receiveProfile(const QByteArray &profile);
     void downloadDfsRequest(QByteArray header, QString peerAdress);
     //    void downloadDfsResponse(DownloadDfsRequestData msg, QString senderIp);
     void getDfsRequest(Messages::DfsRequest msg, QString senderIp);
