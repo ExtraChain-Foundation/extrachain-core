@@ -10,6 +10,7 @@
 #include <QtNetwork/QNetworkAddressEntry>
 #include <algorithm>
 
+#include "headers/utils/utils.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
@@ -190,13 +191,14 @@ private:
         }
     };
 
-    // Get response handlers
-    QMap<QByteArray, GetCountHandler> getCountHandlers; // for getBlockCount && getActorCount
-    QMap<QByteArray, GetEntityHandler<Actor<KeyPublic>>> getActorsHandlers;
-    QMap<QByteArray, GetEntityHandler<Block>> getBlockHandlers;
-    QMap<QByteArray, GetEntityHandler<Transaction>> getTxHandlers;
-    QMap<QByteArray, GetEntityHandler<TxPair>> getTxPairHandlers;
-    QMap<QByteArray, GetEntityHandler<BigNumber>> getReserveActorHandlers;
+    // Get response handler map
+    QMap<QByteArray, int> requestResponseMap;
+    //    QMap<QByteArray, GetCountHandler> getCountHandlers; // for getBlockCount && getActorCount
+    //    QMap<QByteArray, GetEntityHandler<Actor<KeyPublic>>> getActorsHandlers;
+    //    QMap<QByteArray, GetEntityHandler<Block>> getBlockHandlers;
+    //    QMap<QByteArray, GetEntityHandler<Transaction>> getTxHandlers;
+    //    QMap<QByteArray, GetEntityHandler<TxPair>> getTxPairHandlers;
+    //    QMap<QByteArray, GetEntityHandler<BigNumber>> getReserveActorHandlers;
 
 private:
     ActorIndex *actorIndex;
@@ -272,7 +274,13 @@ private:
      * @param message
      * @return
      */
-    bool addResponseHandler(const Messages::IMessage &message, const QByteArray &msgType) const;
+    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
+    /**
+     * @brief checkResponseHandler
+     * @param message
+     * @return
+     */
+    bool checkResponseHandler(const QByteArray &message);
 private slots:
     /**
      * @brief createNewConnectionsFromList

@@ -63,10 +63,10 @@ bool ResolverService::MessageIsNotValid(const Messages::IMessage &message)
     return true;
 }
 
-bool ResolverService::universalHandler(const Messages::IMessage &msg, const QByteArray &msgType)
+bool ResolverService::universalHandler(const Messages::IMessage &msg)
 {
     // verify
-    if (checkMsgCount(msg, msgType))
+    if (checkMsgCount(msg))
     {
         emit secondWave(msg.serialize());
         return true;
@@ -75,7 +75,7 @@ bool ResolverService::universalHandler(const Messages::IMessage &msg, const QByt
         return false;
 }
 
-bool ResolverService::checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType)
+bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
 {
     bool flag_result = true;
     short value = 0;
@@ -113,7 +113,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     QByteArray msgType = message.getMsgType();
     if (msgType != ACTOR_MESSAGE)
         MessageIsNotValid(message);
-    universalHandler(message, msgType);
+    universalHandler(message);
     // spread messages
     if (msgType == PROFILE_FILE)
     {

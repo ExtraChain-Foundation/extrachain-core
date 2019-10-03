@@ -91,14 +91,14 @@ private:
      * @param msg
      * @param msgType
      */
-    bool universalHandler(const Messages::IMessage &msg, const QByteArray &msgType);
+    bool universalHandler(const Messages::IMessage &msg);
     /**
      * @brief checkMsgCount
      * @param msg
      * @param msgType
      * @return
      */
-    bool checkMsgCount(const Messages::IMessage &msg, const QByteArray &msgType);
+    bool checkMsgCount(const Messages::IMessage &msg);
 
 public slots:
     // slot for threadpool

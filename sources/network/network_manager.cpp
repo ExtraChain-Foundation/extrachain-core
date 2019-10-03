@@ -349,7 +349,7 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageTy
         signMessage(msg);
 
     QByteArray message = msg.init(data);
-    if (!addResponseHandler(msg, messageType))
+    if (!addResponseHandler(message, messageType))
     {
         FileList list;
         QFile file(".handler");
@@ -446,18 +446,47 @@ QByteArray NetManager::calcHash(Messages::IMessage &message) const
     return Utils::calcKeccak(message.serialize());
 }
 
-bool NetManager::addResponseHandler(const Messages::IMessage &message, const QByteArray &msgType) const
+bool NetManager::addResponseHandler(const QByteArray &message, const QByteArray &msgType)
 {
-    FileList responseHandler;
-    QFile file(".responseHamdler");
-    responseHandler.setFileList(file);
+    QByteArray hash = Utils::calcKeccak(message);
     if (Messages::RESPONSE.contains(msgType))
     {
-        responseHandler.add(message.hash(), message.serialize());
+        requestResponseMap.insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
         return true;
     }
     else
+    {
         return false;
+    }
+
+    //    FileList responseHandler;
+    //    QFile file(".responseHamdler");
+    //    responseHandler.setFileList(file);
+    //    if (Messages::RESPONSE.contains(msgType))
+    //    {
+    //        responseHandler.add(message.hash(), message.serialize());
+    //        return true;
+    //    }
+    //    else
+    //        return false;
+}
+
+bool NetManager::checkResponseHandler(const QByteArray &message)
+{
+    QByteArray hash = Utils::calcKeccak(message);
+    if (requestResponseMap.keys().contains(hash))
+    {
+        int t = requestResponseMap[hash] - 1;
+        if (t <= 0)
+        {
+            requestResponseMap.remove(hash);
+        }
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)

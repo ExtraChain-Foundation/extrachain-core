@@ -8,7 +8,6 @@
 #include <QJsonObject>
 #include <QList>
 #include <QString>
-//#include <hex.h>
 #include "utils/Keccak256.h"
 struct indexRow
 {
@@ -40,7 +39,7 @@ private:
 
     void init();
     void checkForDelete();
-    bool check(QByteArray hash); // IF HASH HAVED-> END
+    bool check(QByteArray hash); // IF HASH HAVE-> END
     const QByteArray DATA_EMPTY = "null";
     const int FIELD_SIZE = 4;
 };
