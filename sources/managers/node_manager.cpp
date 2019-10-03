@@ -525,7 +525,7 @@ void NodeManager::connectBlockchain()
 
 void NodeManager::connectAccountController()
 {
-    connect(accController, &AccountController::verifyActor, netManager, &NetManager::NewActor);
+    // connect(accController, &AccountController::verifyActor, netManager, &NetManager::NewActor);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
 }
 

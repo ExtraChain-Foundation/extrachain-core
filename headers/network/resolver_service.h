@@ -159,7 +159,7 @@ signals:
     void getBlock(const SearchEnum::BlockParam &param, const QByteArray &value,
                   const QHostAddress &peerAddress);
 
-    void getActor(const BigNumber &actorId, const QHostAddress &peerAddress);
+    void getActor(const BigNumber &actorId, QByteArray reqHash, const QHostAddress &peerAddress);
 
     void getActorsCount(const QHostAddress &peerAddress);
 

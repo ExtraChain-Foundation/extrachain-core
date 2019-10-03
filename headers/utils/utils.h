@@ -39,7 +39,7 @@ private:
 
     void init();
     void checkForDelete();
-    bool check(QByteArray hash); // IF HASH HAVE-> END
+    bool check(QByteArray hash); // IF HASH HAVE -> END
     const QByteArray DATA_EMPTY = "null";
     const int FIELD_SIZE = 4;
 };

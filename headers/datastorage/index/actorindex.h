@@ -9,6 +9,9 @@
 #include <datastorage/searchfilters.h>
 #include "profile/public_profile.h"
 #include "network/packages/entities/entity_message.h"
+
+#include "headers/network/packages/base_message_response.h"
+#include "headers/network/packages/service/response_messages.h"
 /**
  * @brief Actors that stored in blockchain
  */
