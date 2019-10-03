@@ -144,7 +144,6 @@ void NetManager::findLocal()
     }
 }
 
-#include <iostream>
 void NetManager::checkConnectionsStatus()
 {
     bool flag = false;
@@ -152,6 +151,7 @@ void NetManager::checkConnectionsStatus()
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit qmlNetworkStatus(flag);
 }
+
 void NetManager::restoreConnections(const QList<SocketPair> &socketList)
 {
     //
@@ -298,10 +298,18 @@ void NetManager::setupResolverServiceConnections()
     // spread signals
 
     connect(resolverService, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
+    connect(resolverService, &ResolverService::getActor, actorIndex, &ActorIndex::getActor);
+    connect(resolverService, &ResolverService::getActorsCount, this, &NetManager::GetActorCount);
+
     connect(resolverService, &ResolverService::newBlock, this, &NetManager::AddBlock);
+    connect(resolverService, &ResolverService::getBlock, this, &NetManager::GetBlock);
+    connect(resolverService, &ResolverService::getBlocksCount, this, &NetManager::GetBlockCount);
     //    connect(resolverService, &ResolverService::NewGenesisBlock, this,
     //    &NetManager::handleNewGenesisBlock);
     connect(resolverService, &ResolverService::newTx, this, &NetManager::NewTx);
+    connect(resolverService, &ResolverService::getTx, this, &NetManager::GetTx);
+    connect(resolverService, &ResolverService::getTxPair, this, &NetManager::GetTxPair);
+
     //    connect(resolverService, &ResolverService::BlockApproved, this, &NetManager::handleBlockApproved);
 
     // request signals
