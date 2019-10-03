@@ -85,7 +85,7 @@ public:
 
 public slots:
     void process();
-    void handleGetActor(const BigNumber &actorId, const QHostAddress &peerAddress);
+    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const QHostAddress &peerAddress);
     /**
      * @brief Attempts to save actor to local storage
      * @param actor
@@ -124,6 +124,8 @@ signals:
      * @param data
      * @param type
      */
+
+    void getActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, const QHostAddress &peerAddress);
     void sendMessage(const QByteArray &data, const QByteArray &type);
     void sendProfileToUi(QString userID, Profile profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);

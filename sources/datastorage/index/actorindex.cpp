@@ -49,10 +49,12 @@ void ActorIndex::process()
 {
 }
 
-void ActorIndex::handleGetActor(const BigNumber &actorId, const QHostAddress &peerAddress)
+void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, const QHostAddress &peerAddress)
 {
     // receive id
     // create response message
+    Actor<KeyPublic> actor = getActor(actorId);
+    emit getActorResponse(actor, reqHash, peerAddress);
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
