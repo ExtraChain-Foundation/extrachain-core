@@ -1,6 +1,8 @@
 ﻿#ifndef ACTORINDEX_H
 #define ACTORINDEX_H
 
+#include <QHostAddress>
+
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/index/fileindex.h"
@@ -83,6 +85,7 @@ public:
 
 public slots:
     void process();
+    void handleGetActor(const BigNumber &actorId, const QHostAddress &peerAddress);
     /**
      * @brief Attempts to save actor to local storage
      * @param actor

@@ -49,6 +49,12 @@ void ActorIndex::process()
 {
 }
 
+void ActorIndex::handleGetActor(const BigNumber &actorId, const QHostAddress &peerAddress)
+{
+    // receive id
+    // create response message
+}
+
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
 {
     //    qDebug() << "adfklsfkl;adskl;afsdl;afsdl;";
@@ -77,36 +83,36 @@ void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
     }
 }
 
-void ActorIndex::saveProfileFromNetwork(PublicProfile newProfile)
+void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
 {
-    if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")
-    {
-        qDebug() << "ActorIndex::saveProfileFromNetwork : empty sign";
-        return;
-    }
-    QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
-    Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
-    if (key.getHash().isEmpty())
-    {
-        qDebug() << "saveProfileFromNetwork: Key " << newProfile.profile.at(2) << " is empty";
-        return;
-    }
+    //    if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")
+    //    {
+    //        qDebug() << "ActorIndex::saveProfileFromNetwork : empty sign";
+    //        return;
+    //    }
+    //    QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
+    //    Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
+    //    if (key.getHash().isEmpty())
+    //    {
+    //        qDebug() << "saveProfileFromNetwork: Key " << newProfile.profile.at(2) << " is empty";
+    //        return;
+    //    }
 
-    if (!key.getKey()->verify(PublicProfile::serialize(newProfile.profile.list()), newProfile.sign))
-    {
-        qDebug() << "ActorIndex::saveProfileFromNetwork : profile isn`t verify";
-        return;
-    }
+    //    if (!key.getKey()->verify(PublicProfile::serialize(newProfile.profile.list()), newProfile.sign))
+    //    {
+    //        qDebug() << "ActorIndex::saveProfileFromNetwork : profile isn`t verify";
+    //        return;
+    //    }
 
-    PublicProfile profile(newProfile.profile, newProfile.sign, path);
-    if (profile.profile.at(2) == "")
-        return;
-    else
-    {
-        qDebug() << "Save profile with id" << newProfile.profile.at(2);
-        key.setProfile(profile);
-        sendMessage(profile.serialize(), profileType);
-    }
+    //    PublicProfile profile(newProfile.profile, newProfile.sign, path);
+    //    if (profile.profile.at(2) == "")
+    //        return;
+    //    else
+    //    {
+    //        qDebug() << "Save profile with id" << newProfile.profile.at(2);
+    //        key.setProfile(profile);
+    //        sendMessage(profile.serialize(), profileType);
+    //    }
 }
 
 void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)

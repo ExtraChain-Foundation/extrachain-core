@@ -57,142 +57,142 @@ private:
     bool allowLocalServer = false;
 
     // virtual
-    struct ResponseHandler
-    {
-    protected:
-        int responseCount;
-        virtual ~ResponseHandler()
-        {
-        }
+    //    struct ResponseHandler
+    //    {
+    //    protected:
+    //        int responseCount;
+    //        virtual ~ResponseHandler()
+    //        {
+    //        }
 
-    public:
-        ResponseHandler()
-            : responseCount(0)
-        {
-        }
+    //    public:
+    //        ResponseHandler()
+    //            : responseCount(0)
+    //        {
+    //        }
 
-    protected:
-        void incrementResponseCount()
-        {
-            this->responseCount++;
-        }
+    //    protected:
+    //        void incrementResponseCount()
+    //        {
+    //            this->responseCount++;
+    //        }
 
-    public:
-        virtual bool canProcess() = 0;
+    //    public:
+    //        virtual bool canProcess() = 0;
 
-        int getResponseCount() const
-        {
-            return responseCount;
-        }
-    };
+    //        int getResponseCount() const
+    //        {
+    //            return responseCount;
+    //        }
+    //    };
 
-    struct GetCountHandler : public ResponseHandler
-    {
-    private:
-        int responsesToProcess;
-        BigNumber searchedValue = 0;
+    //    struct GetCountHandler : public ResponseHandler
+    //    {
+    //    private:
+    //        int responsesToProcess;
+    //        BigNumber searchedValue = 0;
 
-    public:
-        GetCountHandler()
-            : ResponseHandler()
-            , responsesToProcess(Config::Net::NECESSARY_RESPONSE_COUNT)
-        {
-        }
+    //    public:
+    //        GetCountHandler()
+    //            : ResponseHandler()
+    //            , responsesToProcess(Config::Net::NECESSARY_RESPONSE_COUNT)
+    //        {
+    //        }
 
-        void addResponse(const BigNumber &value)
-        {
-            // find max value from all responses
-            if (value > searchedValue)
-            {
-                searchedValue = value;
-            }
-            incrementResponseCount();
-        }
+    //        void addResponse(const BigNumber &value)
+    //        {
+    //            // find max value from all responses
+    //            if (value > searchedValue)
+    //            {
+    //                searchedValue = value;
+    //            }
+    //            incrementResponseCount();
+    //        }
 
-        bool canProcess() override
-        {
-            return responseCount >= responsesToProcess;
-        }
+    //        bool canProcess() override
+    //        {
+    //            return responseCount >= responsesToProcess;
+    //        }
 
-        BigNumber getSearchedValue() const
-        {
-            return searchedValue;
-        }
+    //        BigNumber getSearchedValue() const
+    //        {
+    //            return searchedValue;
+    //        }
 
-        int getResponsesToProcess() const
-        {
-            return responsesToProcess;
-        }
+    //        int getResponsesToProcess() const
+    //        {
+    //            return responsesToProcess;
+    //        }
 
-        QString toString() const
-        {
-            return QString("GetRequest[responseCount:%2, responsesToProcess:%3")
-                .arg(responseCount, responsesToProcess);
-        }
-    };
+    //        QString toString() const
+    //        {
+    //            return QString("GetRequest[responseCount:%2, responsesToProcess:%3")
+    //                .arg(responseCount, responsesToProcess);
+    //        }
+    //    };
 
-    template <typename T>
-    struct GetEntityHandler : public ResponseHandler
-    {
-    private:
-        QMap<T, int> responses; // entity -> mentions count
-    public:
-        GetEntityHandler()
-            : ResponseHandler()
-        {
-            responses.clear();
-        }
-        void addResponse(const T &response)
-        {
-            int mentionsCount = responses[response];
-            responses.insert(response, ++mentionsCount);
-            incrementResponseCount();
-        }
+    //    template <typename T>
+    //    struct GetEntityHandler : public ResponseHandler
+    //    {
+    //    private:
+    //        QMap<T, int> responses; // entity -> mentions count
+    //    public:
+    //        GetEntityHandler()
+    //            : ResponseHandler()
+    //        {
+    //            responses.clear();
+    //        }
+    //        void addResponse(const T &response)
+    //        {
+    //            int mentionsCount = responses[response];
+    //            responses.insert(response, ++mentionsCount);
+    //            incrementResponseCount();
+    //        }
 
-        int getResponsesByEntity(const T &entity)
-        {
-            return responses[entity];
-        }
+    //        int getResponsesByEntity(const T &entity)
+    //        {
+    //            return responses[entity];
+    //        }
 
-        bool canProcess() override
-        {
-            // if number of responses is odd and more than Nessessary response count
-            return responseCount >= Config::Net::NECESSARY_RESPONSE_COUNT && (responseCount % 2 != 0);
-        }
+    //        bool canProcess() override
+    //        {
+    //            // if number of responses is odd and more than Nessessary response count
+    //            return responseCount >= Config::Net::NECESSARY_RESPONSE_COUNT && (responseCount % 2 != 0);
+    //        }
 
-        T resolveBestEntity()
-        {
-            // resolve best Entities from map
-            QList<int> entries = responses.values();
-            int maxCount = *std::max_element(entries.begin(), entries.end());
+    //        T resolveBestEntity()
+    //        {
+    //            // resolve best Entities from map
+    //            QList<int> entries = responses.values();
+    //            int maxCount = *std::max_element(entries.begin(), entries.end());
 
-            // remove all Entities with entry count < max
-            for (typename QMap<T, int>::iterator it = responses.begin(); it != responses.end();)
-            {
-                if (it.value() < maxCount)
-                {
-                    it = responses.erase(it);
-                }
-                else
-                {
-                    ++it;
-                }
-            }
+    //            // remove all Entities with entry count < max
+    //            for (typename QMap<T, int>::iterator it = responses.begin(); it != responses.end();)
+    //            {
+    //                if (it.value() < maxCount)
+    //                {
+    //                    it = responses.erase(it);
+    //                }
+    //                else
+    //                {
+    //                    ++it;
+    //                }
+    //            }
 
-            // if we have one Entity with max entry count - it is the best entity
-            if (responses.count() == 1)
-            {
-                return responses.keys().first();
-            }
+    //            // if we have one Entity with max entry count - it is the best entity
+    //            if (responses.count() == 1)
+    //            {
+    //                return responses.keys().first();
+    //            }
 
-            // can't resolve best entities (there are 2 or more entities with equal
-            // mentions count)
-            return T();
-        }
-    };
+    //            // can't resolve best entities (there are 2 or more entities with equal
+    //            // mentions count)
+    //            return T();
+    //        }
+    //    };
 
     // Get response handler map
-    QMap<QByteArray, int> requestResponseMap;
+    QMap<QByteArray, int> *requestResponseMap;
     //    QMap<QByteArray, GetCountHandler> getCountHandlers; // for getBlockCount && getActorCount
     //    QMap<QByteArray, GetEntityHandler<Actor<KeyPublic>>> getActorsHandlers;
     //    QMap<QByteArray, GetEntityHandler<Block>> getBlockHandlers;

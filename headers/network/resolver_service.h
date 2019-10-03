@@ -31,13 +31,13 @@ public:
      * @brief ResolverService
      * @param parent
      */
-    ResolverService(QObject *parent = nullptr);
+    ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QObject *parent = nullptr);
+    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
@@ -46,7 +46,7 @@ public:
 private:
     bool active = false;
     ActorIndex *actorIndex;
-
+    QMap<QByteArray, int> *requestResponseMap;
     //    QMap<QByteArray, short> handlerList;
 
 private:
@@ -92,6 +92,18 @@ private:
      * @param msgType
      */
     bool universalHandler(const Messages::IMessage &msg);
+    /**
+     * @brief addResponseHandler
+     * @param message
+     * @return
+     */
+    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
+    /**
+     * @brief checkResponseHandler
+     * @param message
+     * @return
+     */
+    bool checkResponseHandler(const QByteArray &message);
     /**
      * @brief checkMsgCount
      * @param msg

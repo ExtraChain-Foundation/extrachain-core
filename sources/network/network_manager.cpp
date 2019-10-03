@@ -15,6 +15,7 @@ QList<SocketService *> NetManager::getConnections() const
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 {
+    requestResponseMap = new QMap<QByteArray, int>();
 #ifdef ETALONIUM_CLIENT
     QSettings settings;
 
@@ -189,7 +190,7 @@ void NetManager::startNetwork()
     netPort = serverPort;
     qDebug() << "NetPort:" << netPort;
     serverService = new ServerService(netPort, local);
-    resolverService = new ResolverService(actorIndex);
+    resolverService = new ResolverService(actorIndex, requestResponseMap);
     setupServerServiceConnections();
     serverService->startListen();
     setupResolverServiceConnections();
@@ -313,6 +314,7 @@ void NetManager::setupResolverServiceConnections()
     //    connect(resolverService, &ResolverService::BlockApproved, this, &NetManager::handleBlockApproved);
 
     // request signals
+    connect(resolverService, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
     /**
     connect(resolverService, &ResolverService::GetActor, this, &NetManager::handleGetActor);
     connect(resolverService, &ResolverService::GetTx, this, &NetManager::handleGetTx);
@@ -459,7 +461,7 @@ bool NetManager::addResponseHandler(const QByteArray &message, const QByteArray 
     QByteArray hash = Utils::calcKeccak(message);
     if (Messages::RESPONSE.contains(msgType))
     {
-        requestResponseMap.insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
+        requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
         return true;
     }
     else
@@ -482,12 +484,12 @@ bool NetManager::addResponseHandler(const QByteArray &message, const QByteArray 
 bool NetManager::checkResponseHandler(const QByteArray &message)
 {
     QByteArray hash = Utils::calcKeccak(message);
-    if (requestResponseMap.keys().contains(hash))
+    if (requestResponseMap->keys().contains(hash))
     {
-        int t = requestResponseMap[hash] - 1;
+        int t = requestResponseMap->value(hash) - 1;
         if (t <= 0)
         {
-            requestResponseMap.remove(hash);
+            requestResponseMap->remove(hash);
         }
         return true;
     }
@@ -591,49 +593,49 @@ void NetManager::sendNewBlock(Block block)
     sendMessage(block.serialize(), Messages::BLOCK_MESSAGE);
 }
 
-void NetManager::sendTxResponse(Transaction tx, SearchEnum::TxParam param, QString value,
-                                QHostAddress peerAddress, QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Sending tx" << tx.getHash() << "to" << peerAddress.toString();
-    EntityResponseMessage<Transaction> msg = Messages::createGetTxResponse(tx, requestHash);
-    signMessage(msg);
-    //    sendMsgToPeer(msg, peerAddress); fix it
-}
+// void NetManager::sendTxResponse(Transaction tx, SearchEnum::TxParam param, QString value,
+//                                QHostAddress peerAddress, QByteArray requestHash)
+//{
+//    qDebug() << "NET MANAGER: Sending tx" << tx.getHash() << "to" << peerAddress.toString();
+//    EntityResponseMessage<Transaction> msg = Messages::createGetTxResponse(tx, requestHash);
+//    signMessage(msg);
+//    //    sendMsgToPeer(msg, peerAddress); fix it
+//}
 
-void NetManager::sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Sending txPair" << pair.serialize() << "to" << peerAddress.toString();
-    EntityResponseMessage<TxPair> msg = Messages::createGetTxPairResponse(pair, requestHash);
-    signMessage(msg);
-    //    sendMsgToPeer(msg, peerAddress); fix it
-}
+// void NetManager::sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash)
+//{
+//    qDebug() << "NET MANAGER: Sending txPair" << pair.serialize() << "to" << peerAddress.toString();
+//    EntityResponseMessage<TxPair> msg = Messages::createGetTxPairResponse(pair, requestHash);
+//    signMessage(msg);
+//    //    sendMsgToPeer(msg, peerAddress); fix it
+//}
 
-void NetManager::sendBlockResponse(Block block, SearchEnum::BlockParam param, QString value,
-                                   QHostAddress peerAddress, QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Sending block" << block.serialize() << "to" << peerAddress.toString();
-    EntityResponseMessage<Block> msg = Messages::createGetBlockResponse(block, requestHash);
-    signMessage(msg);
-    sendMsgToPeer(msg, peerAddress);
-}
+// void NetManager::sendBlockResponse(Block block, SearchEnum::BlockParam param, QString value,
+//                                   QHostAddress peerAddress, QByteArray requestHash)
+//{
+//    qDebug() << "NET MANAGER: Sending block" << block.serialize() << "to" << peerAddress.toString();
+//    EntityResponseMessage<Block> msg = Messages::createGetBlockResponse(block, requestHash);
+//    signMessage(msg);
+//    sendMsgToPeer(msg, peerAddress);
+//}
 
-void NetManager::sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress,
-                                        QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Sending block count" << blockCount << "to" << peerAddress.toString();
-    EntityResponseMessage<BigNumber> msg = createGetBlockCountResponse(blockCount, requestHash);
-    //    signMessage(msg);
-    sendMsgToPeer(msg, peerAddress);
-}
+// void NetManager::sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress,
+//                                        QByteArray requestHash)
+//{
+//    qDebug() << "NET MANAGER: Sending block count" << blockCount << "to" << peerAddress.toString();
+//    EntityResponseMessage<BigNumber> msg = createGetBlockCountResponse(blockCount, requestHash);
+//    //    signMessage(msg);
+//    sendMsgToPeer(msg, peerAddress);
+//}
 
-void NetManager::sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress,
-                                        QByteArray requestHash)
-{
-    qDebug() << "NET MANAGER: Sending actor count" << actorCount << "to" << peerAddress.toString();
-    EntityResponseMessage<BigNumber> msg = createGetActorCountResponse(actorCount, requestHash);
-    //    signMessage(msg);
-    sendMsgToPeer(msg, peerAddress);
-}
+// void NetManager::sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress,
+//                                        QByteArray requestHash)
+//{
+//    qDebug() << "NET MANAGER: Sending actor count" << actorCount << "to" << peerAddress.toString();
+//    EntityResponseMessage<BigNumber> msg = createGetActorCountResponse(actorCount, requestHash);
+//    //    signMessage(msg);
+//    sendMsgToPeer(msg, peerAddress);
+//}
 
 void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
 {
@@ -657,14 +659,14 @@ void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
 
 // Send messages //
 
-void NetManager::sendGetActor(BigNumber actorId)
-{
-    qDebug() << "NET MANAGER: Requesting actor with id =" << actorId;
-    GetActorMessage msg(actorId);
-    //    signMessage(msg);
-    getActorsHandlers.insert(calcHash(msg), GetEntityHandler<Actor<KeyPublic>>());
-    broadcastMsg(msg.serialize());
-}
+// void NetManager::sendGetActor(BigNumber actorId)
+//{
+//    qDebug() << "NET MANAGER: Requesting actor with id =" << actorId;
+//    GetActorMessage msg(actorId);
+//    //    signMessage(msg);
+//    getActorsHandlers.insert(calcHash(msg), GetEntityHandler<Actor<KeyPublic>>());
+//    broadcastMsg(msg.serialize());
+//}
 
 void NetManager::shareContract(Contract contract)
 {
@@ -690,53 +692,53 @@ void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
     broadcastMsg(msg.serialize());
 }
 
-void NetManager::sendGetBlock(BlockParam param, QString value)
-{
-    qDebug() << "NET MANAGER: Requesting block by" << toString(param) << "and" << value;
-    GetBlockMessage msg(param, value.toLocal8Bit());
-    //    signMessage(msg);
-    getBlockHandlers.insert(calcHash(msg), GetEntityHandler<Block>());
-    qDebug() << "<<<<<<<<<<<<<< " << calcHash((msg));
-    broadcastMsg(msg.serialize());
-}
+// void NetManager::sendGetBlock(BlockParam param, QString value)
+//{
+//    qDebug() << "NET MANAGER: Requesting block by" << toString(param) << "and" << value;
+//    GetBlockMessage msg(param, value.toLocal8Bit());
+//    //    signMessage(msg);
+//    getBlockHandlers.insert(calcHash(msg), GetEntityHandler<Block>());
+//    qDebug() << "<<<<<<<<<<<<<< " << calcHash((msg));
+//    broadcastMsg(msg.serialize());
+//}
 
-void NetManager::sendGetBlockCount()
-{
-    qDebug() << "NET MANAGER: Requesting block count";
-    BaseMessage msg = Messages::createGetBlockCountMessage();
-    //    signMessage(msg);
-    getCountHandlers.insert(calcHash(msg), GetCountHandler());
-    broadcastMsg(msg.serialize());
-}
+// void NetManager::sendGetBlockCount()
+//{
+//    qDebug() << "NET MANAGER: Requesting block count";
+//    BaseMessage msg = Messages::createGetBlockCountMessage();
+//    //    signMessage(msg);
+//    getCountHandlers.insert(calcHash(msg), GetCountHandler());
+//    broadcastMsg(msg.serialize());
+//}
 
-void NetManager::sendGetActorCount()
-{
-    qDebug() << "NET MANAGER: Requesting actor count";
-    BaseMessage msg = Messages::createGetActorCountMessage();
-    //    signMessage(msg);
-    getCountHandlers.insert(calcHash(msg), GetCountHandler());
-    broadcastMsg(msg.serialize());
+// void NetManager::sendGetActorCount()
+//{
+//    qDebug() << "NET MANAGER: Requesting actor count";
+//    BaseMessage msg = Messages::createGetActorCountMessage();
+//    //    signMessage(msg);
+//    getCountHandlers.insert(calcHash(msg), GetCountHandler());
+//    broadcastMsg(msg.serialize());
 
-    //    emit creaTx();
-}
+//    //    emit creaTx();
+//}
 
-void NetManager::sendGetTx(TxParam param, QString value)
-{
-    qDebug() << "NET MANAGER: Requesting tx by" << toString(param) << "and" << value;
-    GetTxMessage msg(param, value.toLocal8Bit());
-    signMessage(msg);
-    getTxHandlers.insert(calcHash(msg), GetEntityHandler<Transaction>());
-    broadcastMsg(msg.serialize());
-}
+// void NetManager::sendGetTx(TxParam param, QString value)
+//{
+//    qDebug() << "NET MANAGER: Requesting tx by" << toString(param) << "and" << value;
+//    GetTxMessage msg(param, value.toLocal8Bit());
+//    signMessage(msg);
+//    getTxHandlers.insert(calcHash(msg), GetEntityHandler<Transaction>());
+//    broadcastMsg(msg.serialize());
+//}
 
-void NetManager::sendGetTxPair(BigNumber sender, BigNumber receiver)
-{
-    qDebug() << "NET MANAGER: Requesting tx pair. Sender:" << sender << ", Receiver:" << receiver;
-    GetTxPairMessage msg(sender, receiver);
-    signMessage(msg);
-    getTxPairHandlers.insert(calcHash(msg), GetEntityHandler<TxPair>());
-    broadcastMsg(msg.serialize());
-}
+// void NetManager::sendGetTxPair(BigNumber sender, BigNumber receiver)
+//{
+//    qDebug() << "NET MANAGER: Requesting tx pair. Sender:" << sender << ", Receiver:" << receiver;
+//    GetTxPairMessage msg(sender, receiver);
+//    signMessage(msg);
+//    getTxPairHandlers.insert(calcHash(msg), GetEntityHandler<TxPair>());
+//    broadcastMsg(msg.serialize());
+//}
 
 // Handling messsages ///
 
