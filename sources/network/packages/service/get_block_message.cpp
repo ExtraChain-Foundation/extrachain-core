@@ -3,36 +3,30 @@
 using namespace Messages;
 
 GetBlockMessage::GetBlockMessage(const SearchEnum::BlockParam param, const QByteArray &value)
-    : BaseMessage(GET_BLOCK_MESSAGE)
-    , param(param)
-    , value(value)
 {
+    this->param = param;
+    this->value = value;
 }
 
 GetBlockMessage::GetBlockMessage(const QByteArray &serialized)
 {
-    QList<QByteArray> msgElemList = BaseMessage::deserializeToList(serialized);
-//    BaseMessage::initFields(msgElemList);
-    initFields(msgElemList);
+    deserialize(serialized);
 }
 
-short GetBlockMessage::getFieldsCount() const
+GetBlockMessage::~GetBlockMessage()
 {
-    return BaseMessage::getFieldsCount() + 2;
 }
 
-void GetBlockMessage::initFields(QList<QByteArray> &list)
+const QByteArray GetBlockMessage::serialize() const
 {
-    value = list.takeLast();
-    param = SearchEnum::fromStringBlockParam(list.takeLast());
-    BaseMessage::initFields(list);
+    return Serialization::universalSerialize({ SearchEnum::toString(param).toUtf8(), value }, FIELDS_SIZE);
 }
 
-QList<QByteArray> GetBlockMessage::serializedParams() const
+void GetBlockMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> l = BaseMessage::serializedParams();
-    l << SearchEnum::toString(param).toLocal8Bit() << value;
-    return l;
+    QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
+    this->param = SearchEnum::fromStringBlockParam(list.at(0));
+    this->value = list.at(1);
 }
 
 SearchEnum::BlockParam GetBlockMessage::getParam() const

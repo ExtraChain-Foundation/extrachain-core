@@ -3,30 +3,30 @@
 
 #include "network/packages/base_message.h"
 
-namespace Messages
+namespace Messages {
+static const QByteArray GET_TX_PAIR_MESSAGE = "getTxPair";
+
+class GetTxPairMessage
 {
-    static const QByteArray GET_TX_PAIR_MESSAGE = "getTxPair";
+    const short FIELDS_SIZE = 4;
 
-    class GetTxPairMessage : public BaseMessage
-    {
-    private:
-        BigNumber senderId;
-        BigNumber receiverId;
+private:
+    BigNumber senderId;
+    BigNumber receiverId;
 
-    public:
-        GetTxPairMessage(const BigNumber &senderId, const BigNumber &receiverId);
-        GetTxPairMessage(const QByteArray &serialized);
+public:
+    GetTxPairMessage(const BigNumber &senderId, const BigNumber &receiverId);
+    GetTxPairMessage(const QByteArray &serialized);
 
-        // BaseMessage interface
-    protected:
-        short getFieldsCount() const override;
-        void initFields(QLinkedList<QByteArray> &list) override;
-        QList<QByteArray> serializedParams() const override;
+    // BaseMessage interface
+    ~GetTxPairMessage();
 
-    public:
-        BigNumber getSenderId() const;
-        BigNumber getReceiverId() const;
-    };
+    const QByteArray serialize() const;
+    void deserialize(const QByteArray &serilaized);
+
+    BigNumber getSenderId() const;
+    BigNumber getReceiverId() const;
+};
 }
 
 #endif // GET_TX_PAIR_MESSAGE_H

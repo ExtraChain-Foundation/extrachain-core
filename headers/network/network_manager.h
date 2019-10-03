@@ -267,7 +267,12 @@ private:
      * @return
      */
     QByteArray calcHash(Messages::IMessage &message) const;
-
+    /**
+     * @brief addResponseHandler
+     * @param message
+     * @return
+     */
+    bool addResponseHandler(const Messages::IMessage &message, const QByteArray &msgType) const;
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -292,6 +297,7 @@ private slots:
     void checkConnectionsStatus();
     void startNetwork();
     void startDiscovery();
+    // for upnpn
     void upnpErrDis(QString msg);
     void upnpErrNet(QString msg);
 

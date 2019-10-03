@@ -144,44 +144,6 @@ void NetManager::findLocal()
     }
 }
 
-// void NetManager::restoreConnections()
-//{
-//    //
-//    QHash<SocketPair, int>::iterator it;
-//    for (it = disconnectedSocketList.begin(); it !=
-//    disconnectedSocketList.end(); it++)
-//    {
-//        if (it.value() == maxValueTryConnections)
-//        {
-//            disconnectedSocketList.erase(it);
-//        }
-//        else
-//        {
-//            addConnectionFromPair(QHostAddress(QString::fromStdString(it.key().first)),
-//                                  it.key().second);
-//            checkConnection = it.key();
-//            QTimer::singleShot(1000, this, SLOT(checkConnectionsStatus()));
-//        }
-//    }
-//}
-
-// void NetManager::checkConnectionsStatus()
-//{
-
-//    for (SocketService *el : connections)
-//    {
-//        if (!((el->getPort() == checkConnection.second)
-//              && (el->getAddress().toStdString() == checkConnection.first)
-//              && (el->getIdentificator() == checkConnection.getId())))
-//            disconnectedSocketList[checkConnection]++;
-//        else
-//        {
-//            QHash<SocketPair, int>::iterator it =
-//            disconnectedSocketList.find(checkConnection);
-//            disconnectedSocketList.erase(it);
-//        }
-//    }
-//}
 #include <iostream>
 void NetManager::checkConnectionsStatus()
 {
@@ -385,7 +347,15 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageTy
     BaseMessage msg(messageType);
     if (messageType != Messages::ACTOR_MESSAGE)
         signMessage(msg);
+
     QByteArray message = msg.init(data);
+    if (!addResponseHandler(msg, messageType))
+    {
+        FileList list;
+        QFile file(".handler");
+        list.setFileList(file);
+        list.add(msg.hash(), "0");
+    }
     broadcastMsg(message);
 }
 
@@ -466,55 +436,7 @@ void NetManager::removeConnection()
     checkConnectionsStatus();
 }
 
-//#ifdef ETALONIUM_CLIENT
-// void NetManager::addEntryPoint(QTcpSocket *newEntryPoint)
-//{
-//    for (SocketService *connection : entryPoints)
-//    {
-//        if (connection->getAddress() ==
-//        newEntryPoint->peerAddress().toString()
-//            || newEntryPoint->peerAddress().toIPv4Address() ==
-//            local->ip().toIPv4Address())
-//        {
-//            qDebug() << "NET MANAGER: Can't add connection (already
-//            established): "
-//                     << newEntryPoint->peerAddress();
-//            return;
-//        }
-//    }
-//    entryPoints.append(new SocketService(newEntryPoint));
-//    //    connections.append(entryPoints.last());
-//    //    ThreadPool::addThread(entryPoints.last());
-//    connect(entryPoints.last(), &SocketService::clientDisconnected, this,
-//            &NetManager::remSocket);
-
-//    qDebug() << "NET MANAGER: New entry point is established : "
-//             << newEntryPoint->peerAddress().toString() << ":" <<
-//             newEntryPoint->peerPort();
-//    connect(entryPoints.last(), &SocketService::MessageReceived,
-//    resolverService,
-//            &ResolverService::recieveMsg);
-
-//    //    connect(connections.last(), &SocketService::finished,
-//    //            this,               &NetManager::removeConnection);
-//    //    sendGetActorCount();
-
-//    //    connectionsList.append(newConnection->peerAddress());
-//    //    ConnectionList connectionList;
-//    //    for (auto current : connections) {
-//    //        connectionList.addConnection(current->getSocketAddress());
-//    //    }
-//    //    sendConnectionList(connectionList);
-//}
-//#endif
-
-void NetManager::retranslateMessages(const QByteArray &msg, QString peerAddress)
-{
-    SocketPair socketPair(peerAddress.toStdString(), 0, this);
-    emit sendMsg(msg, socketPair);
-}
-
-void NetManager::signMessage(Messages::IMessage &message) const
+void NetManager::signMessage(IMessage &message) const
 {
     message.calcDigSig(accounts->getCurrentActor());
 }
@@ -522,6 +444,20 @@ void NetManager::signMessage(Messages::IMessage &message) const
 QByteArray NetManager::calcHash(Messages::IMessage &message) const
 {
     return Utils::calcKeccak(message.serialize());
+}
+
+bool NetManager::addResponseHandler(const Messages::IMessage &message, const QByteArray &msgType) const
+{
+    FileList responseHandler;
+    QFile file(".responseHamdler");
+    responseHandler.setFileList(file);
+    if (msgType == Messages::GET_ACTOR_MESSAGE || msgType == Messages::GET_ACTOR_COUNT_MESSAGE)
+    {
+        responseHandler.add(message.hash(), message.serialize());
+        return true;
+    }
+    else
+        return false;
 }
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)
