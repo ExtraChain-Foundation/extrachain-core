@@ -451,7 +451,7 @@ bool NetManager::addResponseHandler(const Messages::IMessage &message, const QBy
     FileList responseHandler;
     QFile file(".responseHamdler");
     responseHandler.setFileList(file);
-    if (msgType == Messages::GET_ACTOR_MESSAGE || msgType == Messages::GET_ACTOR_COUNT_MESSAGE)
+    if (Messages::RESPONSE.contains(msgType))
     {
         responseHandler.add(message.hash(), message.serialize());
         return true;
