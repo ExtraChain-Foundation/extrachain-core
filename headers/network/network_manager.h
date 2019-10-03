@@ -206,14 +206,6 @@ private:
     //    DiscoveryService *discoveryService;
     ServerService *serverService;
     QList<SocketService *> connections;
-    //    QHash<SocketPair, int> disconnectedSocketList;
-    SocketPair checkConnection = SocketPair("0.0.0.0", 0, this);
-    bool status_test_file = false;
-    //#ifdef ETALONIUM_CONSOLE
-    QList<BigNumber> reservedActorList;
-
-    //    BigNumber deviceId;
-    //#endif
 
 #ifdef ETALONIUM_CLIENT
     QTcpSocket *socket_wer;
@@ -229,22 +221,12 @@ public:
     void resolverMessage(const QHostAddress &from, const QString &message);
 
 public:
-    // void run() override;
-    // int exec();
-    // void quit();
-    // bool isActive() const;
-
-    //    DiscoveryService *getDiscoveryService();
     ServerService *getServerService();
     ResolverService *getResolverService();
-
     QList<SocketService *> getConnections() const;
 
 signals:
     void finished();
-
-    void creaTx();
-    void downloadDfsResponse(Messages::DownloadDfsRequestData msg, QString senderIp);
 
 private:
     /**
@@ -253,32 +235,60 @@ private:
      * @param peerAddress
      */
     void sendMsgToPeer(Messages::IMessage &msg, QHostAddress peerAddress);
-    void sendMsgToPeerPort(Messages::IMessage &msg, QHostAddress peerAddress, int port);
-
     /**
-     * @brief Compares the conections list size and MINIMUM_PEERSs
-     * @return true if there are enough peers in connections list
+     * @brief sendMsgToPeerPort
+     * @param msg
+     * @param peerAddress
+     * @param port
      */
-    bool hasEnoughPeers() const;
-
+    void sendMsgToPeerPort(Messages::IMessage &msg, QHostAddress peerAddress, int port);
+    /**
+     * @brief findLocal
+     */
     void findLocal();
-
+    /**
+     * @brief restoreConnections
+     * @param socketList
+     */
     void restoreConnections(const QList<SocketPair> &socketList);
-
+    // create connect from signal to slot
     void setupActorIndexConnections();
     void setupServerServiceConnections();
     void setupDiscoveryServiceConnections();
     void setupResolverServiceConnections();
-
+    /**
+     * @brief signMessage
+     * @param message
+     */
     void signMessage(Messages::IMessage &message) const;
+    /**
+     * @brief calcHash
+     * @param message
+     * @return
+     */
     QByteArray calcHash(Messages::IMessage &message) const;
 
 private slots:
-
-    void getNewConnectionList(QList<QByteArray> newConList);
-
+    /**
+     * @brief createNewConnectionsFromList
+     * @param message
+     */
     void createNewConnectionsFromList(const QByteArray &message);
-
+    /**
+     * @brief Creates new socket connection and adds it to connections
+     * @param address
+     * @param port
+     */
+    SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
+    /**
+     * @brief addConnection
+     * @param socketDescriptor
+     */
+    void addConnection(qint64 socketDescriptor);
+    /**
+     * @brief Remove connections from connection list
+     */
+    void removeConnection();
     void checkConnectionsStatus();
     void startNetwork();
     void startDiscovery();
@@ -308,30 +318,12 @@ public slots:
      */
     void sendMessage(const QByteArray &data, const QByteArray &messageType);
 
-private slots:
-    /**
-     * @brief Creates new socket connection and adds it to connections
-     * @param address
-     * @param port
-     */
-    SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
-    /**
-     * @brief addConnection
-     * @param socketDescriptor
-     */
-    void addConnection(qint64 socketDescriptor);
-    /**
-     * @brief Remove connections from connection list
-     */
-    void removeConnection();
 public slots:
-    void retranslateMessages(const QByteArray &msg, QString peerAddress);
-    void Verify(const QByteArray &block);
     /**
-     * @brief init function
-     * @return
+     * @brief Verify
+     * @param block
      */
-
+    void Verify(const QByteArray &block);
     // send msgs
     void sendNewTx(Transaction tx);
     void sendNewContract(Contract contract);
@@ -385,8 +377,7 @@ signals:
     void CheckBlockExistence(Block block);
     void CheckActorExistence(Actor<KeyPublic> actor);
 
-    void NewActor(Actor<KeyPublic> actor);
-    void NewTx(Transaction tx);
+    void NewTx(const Transaction &tx);
     void coinRequest(BigNumber receiver, BigNumber amount);
 
     void BlockApproved(BigNumber blockId, BigNumber approver, QHostAddress peerAddress);
@@ -400,7 +391,7 @@ signals:
     void GetActorCount(QHostAddress peerAddress, QByteArray requestHash);
 
     // responses
-    void AddBlock(Block block);
+    void AddBlock(const Block &block);
     void TxResponse(Transaction tx, QHostAddress peerAddress);
     void TxPairResponse(TxPair pair, QHostAddress peerAddress);
     void BlockCountResponse(BigNumber blockCount, QHostAddress peerAddress);

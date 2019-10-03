@@ -115,109 +115,54 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         MessageIsNotValid(message);
     universalHandler(message, msgType);
     // spread messages
-    if (msgType == GET_RESERVE_ACTOR_RESPONSE_MESSAGE)
+    if (msgType == PROFILE_FILE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_RESERVE_ACTOR_RESPONSE_MESSAGE;
-        EntityResponseMessage<BigNumber> message(msg);
-    }
-    else if (msgType == PROFILE_FILE)
-    {
-    }
-    else if (msgType == RESERVE_ACTOR_MESSAGE)
-    {
-        EntityMessage<BigNumber> message(msg);
     }
     else if (msgType == ENABLE_LIST_CONNECTIONS)
     {
     }
     else if (msgType == ACTOR_MESSAGE)
     {
+        Actor<KeyPublic> actor(message.getMsg_data());
+        emit newActor(actor);
     }
     else if (msgType == DFS_CHANGES_MESSAGE)
     {
         DfsMessage message(msg);
-        universalHandler(message, msgType);
-    }
-    else if (msgType == DFS_REQUEST_MESSAGE)
-    {
-        DfsRequest message(msg);
-        //        emit getDfsRequest(message, peerAddressst);
-    }
-    else if (msgType == DOWNLOAD_DFS_REQUEST)
-    {
-        EntityMessage<DownloadDfsRequestData> message(msg);
-        //        if (MessageIsNotValid(message))
-        //        emit downloadDfsResponse(message.getEntity(), peerAddressst);
-    }
-    else if (msgType == CHAT_MESSAGE)
-    {
-        ChatMessage message(msg);
-        if (MessageIsNotValid(message))
-            return;
-        qDebug() << "Message Is good";
+        emit newDfsPack(message);
     }
     else if (msgType == BLOCK_MESSAGE)
     {
-        EntityMessage<Block> message(msg);
-        //        if (MessageIsNotValid(message))
-        //            return;
-
-        Block block = message.getEntity();
+        Block block(message.getMsg_data());
         if (!validate(block))
         {
             qDebug() << "Received block" << block.getIndex() << "is not valid";
             return;
         }
-
-        //        emit NewBlock(block, peerAddress);
+        emit newBlock(block);
     }
     else if (msgType == GENESIS_BLOCK_MESSAGE)
     {
-        EntityMessage<Block> message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        Block block = message.getEntity();
-        // if (!validate(block))
-        // {
-        //     qDebug() << "Received genesis block" << block.getIndex()
-        //              << "is not valid";
-        //     return;
-        // }
-
-        //        emit NewGenesisBlock(block, peerAddress);
+        Block block = message.getMsg_data();
+        emit newBlock(block);
     }
     else if (msgType == COIN_REQUEST)
     {
-        // TODO
-        EntityMessage<BigNumber> message(msg);
-        if (MessageIsNotValid(message))
-            return;
-        //        emit CoinRequest(message.getSigner(), message.getEntity());
+        BigNumber amout(message.getMsg_data());
     }
     else if (msgType == TX_MESSAGE)
     {
-        EntityMessage<Transaction> message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        Transaction tx = message.getEntity();
+        Transaction tx(message.getMsg_data());
         if (!validate(tx))
         {
             qDebug() << "Received tx" << tx.getHash() << "is not valid";
             return;
         }
-
-        //        emit NewTx(tx, peerAddress);
+        emit newTx(tx);
     }
     else if (msgType == CONTRACT_MESSAGE)
     {
-        EntityMessage<Contract> message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        Contract contract = message.getEntity();
+        Contract contract(message.getMsg_data());
 
         //        emit contractFromNetwork(contract);
     }
@@ -426,29 +371,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
         //            return;
 
         //        emit GetBlockCountResponse(message.getEntity(), message.getRequestHash(), peerAddress);
-    }
-
-    else
-    {
-        //        if (msg == "start")
-        //        {
-        //            status_file_test_data = true;
-        //        }
-        //        else if (msg == "end")
-        //        {
-        //            status_file_test_data = false;
-        //            //            Messages::dfsPack temp(data[peerAddressst]);
-        //            //            emit getNewDfs(temp);
-        //        }
-        //        else
-        //        {
-        //            //            data[peerAddressst] += msg;
-        //            QFile file(fileName);
-        //            file.open(QIODevice::WriteOnly | QIODevice::Append);
-        //            file.write(msg);
-        //            file.flush();
-        //            file.close();
-        //        }
     }
 }
 

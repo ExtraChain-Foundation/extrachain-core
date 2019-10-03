@@ -7,9 +7,14 @@ QByteArray BaseMessage::getDigSig() const
     return digSig;
 }
 
+QByteArray BaseMessage::getMsg_data() const
+{
+    return msg_data;
+}
+
 BaseMessage::BaseMessage()
     : IMessage()
-
+    
 {
 }
 

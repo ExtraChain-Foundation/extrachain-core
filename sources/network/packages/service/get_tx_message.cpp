@@ -3,10 +3,9 @@
 using namespace Messages;
 
 GetTxMessage::GetTxMessage(const SearchEnum::TxParam param, const QByteArray &value)
-    : BaseMessage(GET_TX_MESSAGE)
-    , param(param)
-    , value(value)
 {
+    this->param = param;
+    this->value = value;
 }
 
 GetTxMessage::GetTxMessage(const QByteArray &serialized)
@@ -14,23 +13,20 @@ GetTxMessage::GetTxMessage(const QByteArray &serialized)
     deserialize(serialized);
 }
 
-short GetTxMessage::getFieldsCount() const
+GetTxMessage::~GetTxMessage()
 {
-    return BaseMessage::getFieldsCount() + 2;
 }
 
-void GetTxMessage::initFields(QLinkedList<QByteArray> &list)
+const QByteArray GetTxMessage::serialize() const
 {
-    value = list.takeLast();
-    param = SearchEnum::fromStringTxParam(list.takeLast());
-    BaseMessage::initFields(list);
+    return Serialization::universalSerialize({ SearchEnum::toString(param).toUtf8(), value }, FIELDS_SIZE);
 }
 
-QList<QByteArray> GetTxMessage::serializedParams() const
+void GetTxMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> l = BaseMessage::serializedParams();
-    l << SearchEnum::toString(param).toLocal8Bit() << value;
-    return l;
+    QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
+    this->param = SearchEnum::fromStringTxParam(list.at(0));
+    this->value = list.at(1);
 }
 
 SearchEnum::TxParam GetTxMessage::getParam() const

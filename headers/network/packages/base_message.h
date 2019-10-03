@@ -90,11 +90,13 @@ public:
     QByteArray getMsgType() const;
     BigNumber getSigner() const override;
     QByteArray getDigSig() const;
+    QByteArray getMsg_data() const;
 };
 class BaseMessageResponse : public BaseMessage
 {
-public:
+private:
     QByteArray dataHash;
+
     static const short FIELDS_COUNT = 1;
     short getFieldsCount() const override;
     void initFields(QList<QByteArray> &list) override;

@@ -3,30 +3,26 @@
 
 #include "network/packages/base_message.h"
 
-namespace Messages
+namespace Messages {
+static const QByteArray GET_TX_MESSAGE = "getTx";
+
+class GetTxMessage
 {
-    static const QByteArray GET_TX_MESSAGE = "getTx";
+    short FIELDS_SIZE = 4;
 
-    class GetTxMessage : public BaseMessage
-    {
-    private:
-        SearchEnum::TxParam param;
-        QByteArray value;
+private:
+    SearchEnum::TxParam param;
+    QByteArray value;
 
-    public:
-        GetTxMessage(const SearchEnum::TxParam param, const QByteArray &value);
-        GetTxMessage(const QByteArray &serialized);
-
-        // BaseMessage interface
-    protected:
-        short getFieldsCount() const override;
-        void initFields(QLinkedList<QByteArray> &list) override;
-        QList<QByteArray> serializedParams() const override;
-
-    public:
-        SearchEnum::TxParam getParam() const;
-        QByteArray getValue() const;
-    };
+public:
+    GetTxMessage(const SearchEnum::TxParam param, const QByteArray &value);
+    GetTxMessage(const QByteArray &serialized);
+    ~GetTxMessage();
+    const QByteArray serialize() const;
+    void deserialize(const QByteArray &serilaized);
+    SearchEnum::TxParam getParam() const;
+    QByteArray getValue() const;
+};
 }
 
 #endif // GET_TX_MESSAGE_H

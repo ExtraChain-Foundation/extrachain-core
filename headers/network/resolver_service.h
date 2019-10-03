@@ -126,7 +126,16 @@ signals:
      * @param msg
      */
     void secondWave(const QByteArray &msg);
+    // retranslate package to their owners class
+    void newDfsPack(const Messages::DfsMessage &msg);
 
+    void receiveProfile(const PublicProfile &msg);
+
+    void newActor(const Actor<KeyPublic> &actor);
+
+    void newBlock(const Block &block);
+
+    void newTx(const Transaction &tx);
     //    void createConnectionsList(const QByteArray &message);
 
     //    void SendGetActor(BigNumber actorId);
