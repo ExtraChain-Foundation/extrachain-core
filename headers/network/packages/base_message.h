@@ -92,25 +92,5 @@ public:
     QByteArray getDigSig() const;
     QByteArray getMsg_data() const;
 };
-class BaseMessageResponse : public BaseMessage
-{
-private:
-    QByteArray dataHash;
-
-    static const short FIELDS_COUNT = 1;
-    short getFieldsCount() const override;
-    void initFields(QList<QByteArray> &list) override;
-    QList<QByteArray> serializedParams() const override;
-
-public:
-    BaseMessageResponse(const QByteArray &msg);
-    BaseMessageResponse(const BaseMessage &msg, const QByteArray &hash);
-    BaseMessageResponse(const BaseMessageResponse &temp);
-    ~BaseMessageResponse() override;
-    BaseMessageResponse operator=(const BaseMessageResponse &temp);
-    //    QByteArray serialize() const override final;
-    void deserialize(const QByteArray &serialized) override;
-    const QByteArray hash() const override final;
-};
 }
 #endif // BASEMESSAGE_H
