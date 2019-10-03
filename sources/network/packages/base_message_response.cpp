@@ -1,25 +1,12 @@
 #include <headers/network/packages/base_message_response.h>
 using namespace Messages;
-short BaseMessageResponse::getFieldsCount() const
-{
-    return this->BaseMessage::getFieldsCount() + FIELDS_COUNT;
-}
 
-void BaseMessageResponse::initFields(QList<QByteArray> &list)
+BaseMessageResponse::BaseMessageResponse(const QByteArray &msg, const QByteArray &hash,
+                                         const QByteArray &type)
+    : BaseMessage(type)
 {
-    BaseMessage::initFields(list);
-    dataHash = list.takeFirst();
-}
-
-QList<QByteArray> BaseMessageResponse::serializedParams() const
-{
-    QList<QByteArray> list = BaseMessage::serializedParams();
-    list << dataHash;
-    return list;
-}
-
-BaseMessageResponse::BaseMessageResponse(const QByteArray &msg, const QByteArray &hash)
-{
+    this->msg_data = msg;
+    this->dataHash = hash;
 }
 
 BaseMessageResponse::BaseMessageResponse(const BaseMessageResponse &temp)
@@ -50,4 +37,22 @@ void BaseMessageResponse::deserialize(const QByteArray &serialized)
 const QByteArray BaseMessageResponse::hash() const
 {
     return dataHash;
+}
+
+short BaseMessageResponse::getFieldsCount() const
+{
+    return this->BaseMessage::getFieldsCount() + FIELDS_COUNT;
+}
+
+void BaseMessageResponse::initFields(QList<QByteArray> &list)
+{
+    BaseMessage::initFields(list);
+    dataHash = list.takeFirst();
+}
+
+QList<QByteArray> BaseMessageResponse::serializedParams() const
+{
+    QList<QByteArray> list = BaseMessage::serializedParams();
+    list << dataHash;
+    return list;
 }

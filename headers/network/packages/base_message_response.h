@@ -4,6 +4,14 @@
 #include "headers/network/packages/base_message.h"
 
 namespace Messages {
+static const QByteArray GET_RESERVE_ACTOR_RESPONSE_MESSAGE = "getReserveActorResponse";
+static const QByteArray GET_BLOCK_COUNT_RESPONSE_MESSAGE = "getBlockCountResponse";
+static const QByteArray GET_ACTOR_COUNT_RESPONSE_MESSAGE = "getActorCountResponse";
+
+static const QByteArray GET_BLOCK_RESPONSE_MESSAGE = "getBlockResponse";
+static const QByteArray GET_ACTOR_RESPONSE_MESSAGE = "getActorResponse";
+static const QByteArray GET_TX_RESPONSE_MESSAGE = "getTxResponse";
+static const QByteArray GET_TX_PAIR_RESPONSE_MESSAGE = "getTxPairResponse";
 class BaseMessageResponse : public BaseMessage
 {
 private:
@@ -15,7 +23,7 @@ private:
     QList<QByteArray> serializedParams() const override;
 
 public:
-    BaseMessageResponse(const QByteArray &msg, const QByteArray &hash);
+    BaseMessageResponse(const QByteArray &msg, const QByteArray &hash, const QByteArray &type);
     BaseMessageResponse(const BaseMessageResponse &temp);
     ~BaseMessageResponse() override;
     BaseMessageResponse operator=(const BaseMessageResponse &temp);
