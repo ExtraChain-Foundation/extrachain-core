@@ -2,38 +2,33 @@
 
 using namespace Messages;
 
-Messages::GetActorMessage::GetActorMessage(const BigNumber &actorId)
-    : BaseMessage(GET_ACTOR_MESSAGE)
-    , actorId(actorId)
+GetActorMessage::GetActorMessage(const BigNumber &id)
+{
+    this->actorId = id;
+}
+
+GetActorMessage::GetActorMessage(const QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
+GetActorMessage::~GetActorMessage()
 {
 }
 
-Messages::GetActorMessage::GetActorMessage(const QByteArray &serialized)
+const QByteArray GetActorMessage::serialize() const
 {
-    QList<QByteArray> msgElemList = BaseMessage::deserializeToList(serialized);
-//    BaseMessage::initFields(msgElemList);
-    initFields(msgElemList);
+
+    return Serialization::universalSerialize({ actorId.toByteArray() }, FIELDS_SIZE);
 }
 
-short GetActorMessage::getFieldsCount() const
+void GetActorMessage::deserialize(const QByteArray &serilaized)
 {
-    return BaseMessage::getFieldsCount() + 1;
+    QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
+    this->actorId = BigNumber(list.at(0));
 }
 
-void GetActorMessage::initFields(QList<QByteArray> &list)
-{
-    BaseMessage::initFields(list);
-    actorId = BigNumber(list.takeFirst());
-}
-
-QList<QByteArray> GetActorMessage::serializedParams() const
-{
-    QList<QByteArray> l = BaseMessage::serializedParams();
-    l << actorId.serialize();
-    return l;
-}
-
-BigNumber GetActorMessage::getActorId() const
+BigNumber GetActorMessage::getValue() const
 {
     return actorId;
 }

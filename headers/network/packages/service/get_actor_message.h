@@ -6,23 +6,21 @@
 namespace Messages {
 static const QByteArray GET_ACTOR_MESSAGE = "getActors";
 
-class GetActorMessage : public BaseMessage
+class GetActorMessage
 {
+    short FIELDS_SIZE = 4;
+
 private:
     BigNumber actorId;
 
 public:
-    GetActorMessage(const BigNumber &actorId);
+    GetActorMessage(const BigNumber &id);
     GetActorMessage(const QByteArray &serialized);
+    ~GetActorMessage();
 
-    // BaseMessage interface
-protected:
-    short getFieldsCount() const override;
-    void initFields(QList<QByteArray> &list) override;
-    QList<QByteArray> serializedParams() const override;
-
-public:
-    BigNumber getActorId() const;
+    const QByteArray serialize() const;
+    void deserialize(const QByteArray &serilaized);
+    BigNumber getValue() const;
 };
 }
 
