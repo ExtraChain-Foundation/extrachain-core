@@ -17,14 +17,20 @@ static QMutex handlerFileMutex;
 
 /**
  * @brief The ResolverService class - the interlayer between Network packages
- * and Blockchain logic. The main idea of ResolverService is to detect message
+ * and system objects logic. The main idea of ResolverService is to detect message
  * type and deserialize it. There are package definition methods, and signals to
- * NetManager.
+ * ResolveManager.
  */
 
 class ResolverService : public QObject
 {
     Q_OBJECT
+
+private:
+    bool active = false;
+    ActorIndex *actorIndex;
+    QMap<QByteArray, int> *requestResponseMap;
+    //    QMap<QByteArray, short> handlerList;
 
 public:
     /**
@@ -43,11 +49,7 @@ public:
      */
     ~ResolverService() override;
 
-private:
-    bool active = false;
-    ActorIndex *actorIndex;
-    QMap<QByteArray, int> *requestResponseMap;
-    //    QMap<QByteArray, short> handlerList;
+    bool isActive() const;
 
 private:
     /**
@@ -130,7 +132,7 @@ public slots:
     void recieveMsg(const QByteArray &msgS, const QString &peerAddressst, const int port);
 
 signals:
-
+    void TaskFinished();
     /**
      * @brief secondWave
      * NetManager::connect(resolverService, &ResolverService::secondWave, this,

@@ -1,4 +1,4 @@
-#include "network/resolver_service.h"
+#include "headers/resolve/resolver_service.h"
 
 ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent)
     : QObject(parent)
@@ -17,6 +17,11 @@ ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *
 ResolverService::~ResolverService()
 {
     emit finished();
+}
+
+bool ResolverService::isActive() const
+{
+    return active;
 }
 
 bool ResolverService::validate(const Messages::IMessage &message)

@@ -36,6 +36,8 @@ SOURCES += \
     $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
+    $$PWD/sources/resolve/resolve_manager.cpp \
+    $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/EllipticPoints.cpp \
@@ -61,7 +63,6 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
     $$PWD/sources/network/packages/service/merged_block_message.cpp \
-    $$PWD/sources/network/resolver_service.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
@@ -106,6 +107,8 @@ HEADERS += \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
+    $$PWD/headers/resolve/resolve_manager.h \
+    $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/list_container.h \
@@ -138,7 +141,6 @@ HEADERS += \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/response_messages.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/resolver_service.h \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \

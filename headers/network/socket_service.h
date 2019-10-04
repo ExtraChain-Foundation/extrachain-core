@@ -12,7 +12,7 @@
 #include "datastorage/block.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "network/resolver_service.h"
+//#include "network/resolver_service.h"
 #include <QTimer>
 
 #include "network/socket_pair.h"

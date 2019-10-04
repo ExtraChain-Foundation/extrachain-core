@@ -1,0 +1,43 @@
+
+#ifndef RESOLVE_MANAGER_H
+#define RESOLVE_MANAGER_H
+
+#include <QObject>
+#include "headers/resolve/resolver_service.h"
+#include "headers/network/network_manager.h"
+#include "headers/datastorage/blockchain.h"
+#include "headers/datastorage/index/actorindex.h"
+
+class ResolveManager : public QObject
+{
+    Q_OBJECT
+private:
+    QList<ResolverService *> resolvers;
+    QMap<QByteArray, int> *requestResponseMap;
+
+private:
+    ActorIndex *actorIndex;
+    Blockchain *blockchain;
+    NetManager *networkManager;
+
+public:
+    ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
+                   QObject *parent = nullptr);
+    ~ResolveManager();
+
+private:
+    void connectSignals(ResolverService *resolver);
+    void disconnectSignals(ResolverService *resolver);
+
+private:
+    QList<ResolverService *> getActive();
+    QList<ResolverService *> getFinished();
+
+signals:
+    //
+public slots:
+    void setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress);
+    void taskFinised();
+};
+
+#endif // RESOLVE_MANAGER_H

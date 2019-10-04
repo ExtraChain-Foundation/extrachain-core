@@ -17,7 +17,7 @@
 #include "managers/account_controller.h"
 #include "managers/thread_pool.h"
 #include "network/discovery_service.h"
-#include "network/resolver_service.h"
+//#include "network/resolver_service.h"
 #include "network/server_service.h"
 #include "network/socket_service.h"
 #include "network/upnpconnection.h"
@@ -55,7 +55,7 @@ private:
     QString serverIp = "51.68.181.52;51.68.181.53";
     quint16 serverPort = isDebug ? 2221 : 2222;
     bool allowLocalServer = false;
-
+    QMap<QByteArray, int> *requestResponseMap;
     // virtual
     //    struct ResponseHandler
     //    {
@@ -192,7 +192,7 @@ private:
     //    };
 
     // Get response handler map
-    QMap<QByteArray, int> *requestResponseMap;
+
     //    QMap<QByteArray, GetCountHandler> getCountHandlers; // for getBlockCount && getActorCount
     //    QMap<QByteArray, GetEntityHandler<Actor<KeyPublic>>> getActorsHandlers;
     //    QMap<QByteArray, GetEntityHandler<Block>> getBlockHandlers;
