@@ -24,6 +24,13 @@ bool ResolverService::isActive() const
     return active;
 }
 
+void ResolverService::setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress)
+{
+    this->msg = msg;
+    this->hash = hash;
+    this->senderAddress = senderAddress;
+}
+
 bool ResolverService::validate(const Messages::IMessage &message)
 {
     BigNumber signer = message.getSigner();
@@ -128,6 +135,7 @@ bool ResolverService::checkResponseHandler(const QByteArray &message)
 
 bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
 {
+    handlerFileMutex.lock();
     bool flag_result = true;
     short value = 0;
     QFile file(".handler");
@@ -152,12 +160,19 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
             handlerList.add(msg.hash(), QByteArray::number(amount));
         }
     }
+    handlerFileMutex.unlock();
     return flag_result;
 }
 
-void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddressst, const int port)
+void ResolverService::process()
 {
-    QHostAddress peerAddress(peerAddressst);
+    recieveMsg(this->msg, this->hash, this->senderAddress);
+}
+
+void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
+                                 const QHostAddress &peerAddresss)
+{
+    QHostAddress peerAddress(peerAddresss);
     using namespace Messages;
     BaseMessage message;
     message.deserialize(msg);
@@ -271,7 +286,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == GET_ACTOR_MESSAGE)
     {
         GetActorMessage message(msg);
-        emit getActor(message.getActorId(), peerAddress); // TODO : peer adress
+        emit getActor(message.getActorId(), "", peerAddress); // TODO : peer adress
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {

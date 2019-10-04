@@ -15,6 +15,9 @@
 #include "managers/contract_manager.h"
 #include "crypt/crypt_manager.h"
 #include "managers/sm_manager.h"
+
+#include "resolve/resolve_manager.h"
+
 #include "profile/private_profile.h"
 
 #ifdef ETALONIUM_CLIENT
@@ -35,6 +38,9 @@ private:
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
+
+    ResolveManager *resolveManager;
+
     PrivateProfile *prProfile;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
@@ -86,6 +92,7 @@ private:
     /**
      * @brief Connect signals between NetManager and Blockchain
      */
+    void connectResolveManager();
     void connectSmContractManager();
     void connectNetManager();
     void connectTxManager();

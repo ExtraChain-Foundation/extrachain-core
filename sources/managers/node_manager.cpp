@@ -27,6 +27,7 @@ NodeManager::NodeManager()
     }
     txManager = new TransactionManager(accController, blockchain);
     contractManager = new ContractManager(accController, blockchain);
+
 #ifdef ETALONIUM_CLIENT
     uiController = new UiController();
     uiWallet = uiController->getWallet();
@@ -34,6 +35,7 @@ NodeManager::NodeManager()
 #endif
     dfs = new Dfs(actorIndex, accController);
     cryptManager = new CryptManager(accController);
+    resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, dfs);
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
@@ -62,6 +64,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(cryptManager);
     ThreadPool::addThread(dfs);
     ThreadPool::addThread(smContractController);
+    ThreadPool::addThread(resolveManager);
 #ifdef ETALONIUM_CONSOLE
     emit accController->initDfs();
 #endif
@@ -101,9 +104,15 @@ void NodeManager::showMessage(QString from, QString message)
     qDebug() << from << " " << message;
 }
 
+void NodeManager::connectResolveManager()
+{
+    connect(netManager, &NetManager::MessageReceived, resolveManager, &ResolveManager::resolveMessage);
+}
+
 void NodeManager::connectSmContractManager()
 {
-    connect(smContractController, &SmartContractManager::verifyActor, netManager, &NetManager::NewActor);
+    //    connect(smContractController, &SmartContractManager::verifyActor, netManager,
+    //    &NetManager::NewActor); TODO!!!
     connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
             &NodeManager::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
@@ -564,6 +573,7 @@ void NodeManager::connectSignals()
 #ifdef ETALONIUM_CLIENT
     connectUi();
 #endif
+    connectResolveManager();
     connectContractManager();
     connectBlockchain();
     connectAccountController();

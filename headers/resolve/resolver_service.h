@@ -27,6 +27,9 @@ class ResolverService : public QObject
     Q_OBJECT
 
 private:
+    QByteArray msg;
+    QByteArray hash;
+    QHostAddress senderAddress;
     bool active = false;
     ActorIndex *actorIndex;
     QMap<QByteArray, int> *requestResponseMap;
@@ -50,6 +53,7 @@ public:
     ~ResolverService() override;
 
     bool isActive() const;
+    void setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress);
 
 private:
     /**
@@ -119,9 +123,7 @@ public slots:
     /**
      * @brief process
      */
-    void process()
-    {
-    }
+    void process();
 
     //
     /**
@@ -129,7 +131,7 @@ public slots:
      * corresponding signals
      * @param msg - serialized packages
      */
-    void recieveMsg(const QByteArray &msgS, const QString &peerAddressst, const int port);
+    void recieveMsg(const QByteArray &msgS, const QByteArray &hash, const QHostAddress &peerAddresss);
 
 signals:
     void TaskFinished();

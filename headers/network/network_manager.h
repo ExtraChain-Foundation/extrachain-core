@@ -204,7 +204,7 @@ private:
     ActorIndex *actorIndex;
     AccountController *accounts;
 
-    ResolverService *resolverService;
+    //    ResolverService *resolverService;
     //    DiscoveryService *discoveryService;
     ServerService *serverService;
     QList<SocketService *> connections;
@@ -224,7 +224,7 @@ public:
 
 public:
     ServerService *getServerService();
-    ResolverService *getResolverService();
+    //    ResolverService *getResolverService();
     QList<SocketService *> getConnections() const;
 
 signals:
@@ -257,7 +257,7 @@ private:
     void setupActorIndexConnections();
     void setupServerServiceConnections();
     void setupDiscoveryServiceConnections();
-    void setupResolverServiceConnections();
+    //    void setupResolverServiceConnections();
     /**
      * @brief signMessage
      * @param message
@@ -375,6 +375,7 @@ public slots:
     //    void downloadAnswer(bool status, QByteArray msg, QString peerAddressst);
 
 signals:
+    void MessageReceived(const QByteArray &msg, const QString &peerAddress, const int port);
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);

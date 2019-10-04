@@ -26,7 +26,7 @@ private:
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
-                   TransactionManager *txManager, QObject *parent = nullptr);
+                   TransactionManager *txManager, Dfs *dfs, QObject *parent = nullptr);
     ~ResolveManager();
 
 private:
@@ -38,10 +38,13 @@ private:
     QList<ResolverService *> getFinished();
 
 signals:
-    //
+    void finished();
 public slots:
+    void resolveMessage(const QByteArray &msg, const QString &peerAddress, const int port);
     void setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress);
-    void taskFinised();
+    void taskFinished();
+public slots:
+    void process();
 };
 
 #endif // RESOLVE_MANAGER_H

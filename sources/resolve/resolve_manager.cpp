@@ -14,14 +14,14 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
 
 ResolveManager::~ResolveManager()
 {
-    //
+    emit finished();
 }
 
 void ResolveManager::connectSignals(ResolverService *resolver)
 {
     //    connect(resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
-    connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinised);
+    connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     // "New" signals
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
@@ -85,7 +85,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
 {
     //    disconnect(resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
-    disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinised);
+    disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     // "New" signals
     disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
@@ -98,12 +98,21 @@ void ResolveManager::setTask(QByteArray msg, QByteArray hash, QHostAddress sende
 {
     resolvers.append(new ResolverService(actorIndex, requestResponseMap));
     connectSignals(resolvers.last());
+    resolvers.last()->setTask(msg, hash, senderAddress);
+    ThreadPool::addThread(resolvers.last());
 }
 
-void ResolveManager::taskFinised()
+void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
-    resolvers.removeAt(resolvers.indexOf(resolver));
+    resolvers.removeOne(resolver);
+    disconnectSignals(resolver);
+    emit resolver->finished();
+}
+
+void ResolveManager::process()
+{
+    //
 }
 
 QList<ResolverService *> ResolveManager::getActive()
@@ -125,4 +134,9 @@ QList<ResolverService *> ResolveManager::getFinished()
             ret.append(resolver);
     }
     return ret;
+}
+
+void ResolveManager::resolveMessage(const QByteArray &msg, const QString &peerAddress, const int port)
+{
+    setTask(msg, "", QHostAddress(peerAddress));
 }
