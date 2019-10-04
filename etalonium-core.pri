@@ -5,6 +5,7 @@ INCLUDEPATH += $$PWD/deprecated/headers
 SOURCES += \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
+    $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
     $$PWD/sources/crypt/blowfish_crypt.cpp \
@@ -69,6 +70,7 @@ SOURCES += \
     $$PWD/headers/utils/bignumberdec.cpp
 
 HEADERS += \
+    $$PWD/dfs/packages/headers/message_struct.h \
     $$PWD/headers/crypt/blowfish_crypt.h \
     $$PWD/headers/crypt/xor_encrypt.h \
     $$PWD/headers/datastorage/searchfilters.h \

@@ -3,7 +3,7 @@
 
 #include "dfs/types/headers/dfstruct.h"
 namespace Message {
-
+const short dfs_message_field_size = 4;
 struct dfs_message
 {
     QString filePath;
@@ -18,6 +18,7 @@ struct dfs_message
     dfs_message(const dfs_message &temp);
 
     const QByteArray serialize() const;
+    const QList<QByteArray> deserialize(const QByteArray &serialized) const;
 };
 }
 #endif // MESSAGE_STRCUT_H
