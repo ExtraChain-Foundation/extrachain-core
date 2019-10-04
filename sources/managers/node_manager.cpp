@@ -500,8 +500,8 @@ void NodeManager::connectContractManager()
 {
     connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
 #ifdef ETALONIUM_CLIENT
-//    connect(netManager->getResolverService(), &ResolverService::contractFromNetwork, contractManager,
-//            &ContractManager::contractFromNetWork);
+    connect(resolver, &ResolverService::contractFromNetwork, contractManager,
+            &ContractManager::contractFromNetWork); // TODO : Resolver
 #endif
 
 #ifdef ETALONIUM_CONSOLE
@@ -521,6 +521,7 @@ void NodeManager::connectBlockchain()
     //    &NetManager::sendMergedBlock);
     connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
     connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
+    connect(blockchain, &Blockchain::sendMessage, netManager, &NetManager::sendMessage);
 }
 
 void NodeManager::connectAccountController()
@@ -534,8 +535,6 @@ void NodeManager::connectActorIndex()
     connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
     //    connect(actorIndex, &ActorIndex::NewActor, netManager, &NetManager::sendNewActor);
     // this connect with service message
-
-    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);
     connect(prProfile, &PrivateProfile::setHashProfile, this, &NodeManager::setHashLoginPrivateProfile);

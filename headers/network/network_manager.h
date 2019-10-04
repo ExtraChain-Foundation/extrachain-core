@@ -414,7 +414,6 @@ signals:
     void GetActorResponse(Actor<KeyPublic> actor);
 
     // net&blockchain test
-    void newTrans(Transaction &newTransact);
     void requestBlockCount();
     void requestActorCount();
 

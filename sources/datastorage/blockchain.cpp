@@ -544,6 +544,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << "is successfully added to blockchain";
+        emit sendMessage(block.serialize(), block_message);
         break;
     }
     case Errors::FILE_ALREADY_EXISTS:

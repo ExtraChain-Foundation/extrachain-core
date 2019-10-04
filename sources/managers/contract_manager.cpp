@@ -99,13 +99,14 @@ void ContractManager::addContractToManager(const Contract &contract)
 
 void ContractManager::contractFromNetWork(const Contract &contract)
 {
-    qDebug() << accountController->getMainActor()->getId().serialize();
     if (contract.getCustomer() == accountController->getMainActor()->getId()
         || contract.getPerformer() == accountController->getMainActor()->getId())
     {
+        qDebug() << "add contract";
         addContractToManager(contract);
         // do some staff
     }
+
     //    if (contract.getCustomer() == accountController->getMainActor()->getId()) {
     //        if (contract.ver)
     //    }

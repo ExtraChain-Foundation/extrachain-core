@@ -213,7 +213,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     {
         Contract contract(message.getMsg_data());
 
-        //        emit contractFromNetwork(contract);
+        emit contractFromNetwork(contract);
     }
 
     else if (msgType == MERGED_BLOCK_MESSAGE)
@@ -271,7 +271,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QString &peerAddre
     else if (msgType == GET_ACTOR_MESSAGE)
     {
         GetActorMessage message(msg);
-        emit getActor(message.getActorId(), peerAddress);
+        emit getActor(message.getActorId(), peerAddress); // TODO : peer adress
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {

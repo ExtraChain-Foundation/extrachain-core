@@ -31,6 +31,7 @@
 class Blockchain : public QObject
 {
     const int FIELS_SIZE = 4;
+    const QByteArray block_message = Messages::BLOCK_MESSAGE;
     Q_OBJECT
 private:
     // storage //
@@ -292,6 +293,7 @@ signals:
     void VerifiedTx(Transaction tx);
 
     void updateLastTransactionList();
+    void sendMessage(const QByteArray &data, const QByteArray &type);
     void finished();
 
 public slots:

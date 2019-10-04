@@ -176,7 +176,7 @@ signals:
     //    // broadcast signal
     //    void secondWavesMsg(Messages::DfsMessage dfs, QByteArray text);
     //    void secondWavesRaw(Messages::DfsMessage dfs, QByteArray text);
-    //    void contractFromNetwork(const Contract &contract);
+    void contractFromNetwork(const Contract &contract);
 
     //    // dfs
     //    void getNewDfs(Messages::DfsMessage msg /*, QString senderId*/);
