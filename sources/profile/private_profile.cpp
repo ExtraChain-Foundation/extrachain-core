@@ -31,10 +31,27 @@ void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfi
     data = crypt.DecryptBlowFish(data, hashLogin);
     if (data.mid(0, 64) == hashLogin)
     {
-        data.append("|" + id);
-        data = crypt.EncryptBlowFish(data, hashLogin);
-        file.resize(0);
-        file.write(data);
+        bool have = false;
+        int position = 0;
+        while (position < data.size())
+        {
+            position = data.indexOf("|", position) + 1;
+            if (position == 0)
+                break;
+            QByteArray _id = data.mid(position, data.indexOf("|", position) - position);
+            if (_id == id)
+            {
+                have = !have;
+                break;
+            }
+        }
+        if (!have)
+        {
+            data.append("|" + id);
+            data = crypt.EncryptBlowFish(data, hashLogin);
+            file.resize(0);
+            file.write(data);
+        }
     }
     else
         qDebug() << "Error : incorrect login or id";
@@ -76,9 +93,9 @@ void PrivateProfile::profile(QByteArray hash)
             blowFish_crypt crypt;
             data = crypt.DecryptBlowFish(data, hash);
             QByteArray secureLoginFile = data.mid(0, 64);
-            data = data.mid(64, data.size());
             if (secureLoginFile == hash)
             {
+                data = data.mid(64, data.size());
                 emit setHashProfile(secureLoginFile);
                 int position = 0;
                 while (position < data.size())
