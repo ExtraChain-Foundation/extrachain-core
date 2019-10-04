@@ -1,13 +1,15 @@
 #include "headers/resolve/resolve_manager.h"
 
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
-                               TransactionManager *txManager, QObject *parent)
+                               TransactionManager *txManager, Dfs *dfs, QObject *parent)
+    : QObject(parent)
 {
     requestResponseMap = new QMap<QByteArray, int>();
     this->actorIndex = actorIndex;
     this->blockchain = blockchain;
     this->networkManager = networkManager;
     this->txManager = txManager;
+    this->dfs = dfs;
 }
 
 ResolveManager::~ResolveManager()
@@ -24,6 +26,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
+    connect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
 
