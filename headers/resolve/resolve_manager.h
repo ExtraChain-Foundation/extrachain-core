@@ -7,6 +7,7 @@
 #include "headers/network/network_manager.h"
 #include "headers/datastorage/blockchain.h"
 #include "headers/datastorage/index/actorindex.h"
+#include "headers/managers/tx_manager.h"
 
 class ResolveManager : public QObject
 {
@@ -19,10 +20,11 @@ private:
     ActorIndex *actorIndex;
     Blockchain *blockchain;
     NetManager *networkManager;
+    TransactionManager *txManager;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
-                   QObject *parent = nullptr);
+                   TransactionManager *txManager, QObject *parent = nullptr);
     ~ResolveManager();
 
 private:
