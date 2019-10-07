@@ -139,7 +139,8 @@ public slots:
      */
     void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
     // response
-    void getActorResponse(Actor<KeyPublic> actor, QByteArray type, QByteArray reqHash, SocketPair receiver);
+    //    void getActorResponse(Actor<KeyPublic> actor, QByteArray type, QByteArray reqHash, SocketPair
+    //    receiver);
 
 signals:
     void TaskFinished();

@@ -6,7 +6,7 @@ EllipticPoints::EllipticPoints()
 }
 EllipticPoints::EllipticPoints(BigNumber x)
 {
-    *this=calcPointOnCurve(x);
+    *this = calcPointOnCurve(x);
 }
 
 EllipticPoints::EllipticPoints(BigNumber pointX, BigNumber pointY)
@@ -23,17 +23,18 @@ EllipticPoints::EllipticPoints(const EllipticPoints &point)
 
 bool EllipticPoints::checkOnCurve(BigNumber x, BigNumber y)
 {
-   // y^2 = x^3 + ax + b mod p
-    return (y*y)%Curves::pCurve==(x*x*x+Curves::aCurve*x+Curves::bCurve)%Curves::pCurve;
-    return y==(BigNumber::sqrt(x*x*x+Curves::aCurve*x+Curves::bCurve)%Curves::pCurve);
+    // y^2 = x^3 + ax + b mod p
+    return (y * y) % Curves::pCurve == (x * x * x + Curves::aCurve * x + Curves::bCurve) % Curves::pCurve;
+    return y == (BigNumber::sqrt(x * x * x + Curves::aCurve * x + Curves::bCurve) % Curves::pCurve);
 }
 
 EllipticPoints EllipticPoints::calcPointOnCurve(BigNumber x)
 {
-    BigNumber cur_x=x%Curves::pCurve;
-    return EllipticPoints(cur_x,BigNumber::sqrt(cur_x*cur_x*cur_x+Curves::aCurve*cur_x+Curves::bCurve)%Curves::pCurve);
+    BigNumber cur_x = x % Curves::pCurve;
+    return EllipticPoints(cur_x,
+                          BigNumber::sqrt(cur_x * cur_x * cur_x + Curves::aCurve * cur_x + Curves::bCurve)
+                              % Curves::pCurve);
 }
-
 
 EllipticPoints EllipticPoints::operator*(const BigNumber &bigNumber)
 {
@@ -45,27 +46,27 @@ BigNumber EllipticPoints::operator*(const EllipticPoints &point)
     return (x * point.x + y * point.y);
 }
 
-EllipticPoints EllipticPoints::operator+(  EllipticPoints &point)
+EllipticPoints EllipticPoints::operator+(EllipticPoints &point)
 {
-   // return EllipticPoints((this->getX() + point.x), (this->getY() + point.y));
+    // return EllipticPoints((this->getX() + point.x), (this->getY() + point.y));
     BigNumber lambda;
     BigNumber x3;
     BigNumber y3;
-    if(this->x==point.x)
+    if (this->x == point.x)
     {
-        if(point.y!=BigNumber("0"))
-            this->y=-point.y;
-            lambda=(this->x*this->x*3+ Curves::aCurve*2*this->x)/(this->y*2);
-        x3=lambda*lambda-this->x-point.x;
-        y3= -this->y-lambda*(x3-this->x);
+        if (point.y != BigNumber("0"))
+            this->y = -point.y;
+        lambda = (this->x * this->x * 3 + Curves::aCurve * 2 * this->x) / (this->y * 2);
+        x3 = lambda * lambda - this->x - point.x;
+        y3 = -this->y - lambda * (x3 - this->x);
     }
-    else {
-    lambda=(point.y- this->y)/(point.x-this->x);
-     x3=lambda*lambda-this->x-point.x;
-     y3= -this->y-lambda*(x3-this->x);
+    else
+    {
+        lambda = (point.y - this->y) / (point.x - this->x);
+        x3 = lambda * lambda - this->x - point.x;
+        y3 = -this->y - lambda * (x3 - this->x);
     }
-    return EllipticPoints(x3,y3);
-
+    return EllipticPoints(x3, y3);
 }
 
 QByteArray EllipticPoints::CryptMessage(QByteArray message)

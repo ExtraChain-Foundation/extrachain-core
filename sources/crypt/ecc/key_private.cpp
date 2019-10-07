@@ -44,7 +44,7 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data)
     do
     {
         res.clear();
-        r = BigNumber::random(30);
+        r = BigNumber::random(64);
         R = ECC::GPoint * r;
         S = this->pbkey * r;
         res.append(S.CryptMessage(data));

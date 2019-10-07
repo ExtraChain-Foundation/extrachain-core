@@ -71,6 +71,7 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/headers/EllipticPoints.h \
     $$PWD/headers/crypt/blowfish_crypt.h \
     $$PWD/headers/crypt/xor_encrypt.h \
     $$PWD/headers/datastorage/searchfilters.h \

@@ -41,20 +41,20 @@ NodeManager::NodeManager()
 #ifdef ETALONIUM_CONSOLE
     //    CreateExtracoin();
     //    accController->loadActors();
-//    if (!QFile("blockchain/index/actor/0/0").exists())
-//    {
-//        Actor<KeyPrivate> company = CreateExtracoin();
-//        accController->loadActors();
-//        Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
-//        newTransaction.setSenderBalance(BigNumber("0"));
-//        newTransaction.setReceiverBalance(BigNumber("0"));
-//        newTransaction.setGas(0);
-//        newTransaction.setHop(0);
-//        newTransaction.sign(company);
-//        newTransaction.verify(company.convertToPublic());
-//        txManager->addVerifiedTx(newTransaction);
+    //    if (!QFile("blockchain/index/actor/0/0").exists())
+    //    {
+    Actor<KeyPrivate> company = CreateExtracoin();
+    accController->loadActors();
+    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
+    newTransaction.setSenderBalance(BigNumber("0"));
+    newTransaction.setReceiverBalance(BigNumber("0"));
+    newTransaction.setGas(0);
+    newTransaction.setHop(0);
+    newTransaction.sign(company);
+    newTransaction.verify(company.convertToPublic());
+    txManager->addVerifiedTx(newTransaction);
 
-//        txManager->makeBlock();
+    txManager->makeBlock();
 //    }
 #endif
 
