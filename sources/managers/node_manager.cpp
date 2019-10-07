@@ -267,12 +267,12 @@ void NodeManager::CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress
         return;
     //    if (currentBlockCount == 0)
     //    {
-    netManager->sendGetBlock(BlockParam::Id, BigNumber(0).toString());
+    //    netManager->sendGetBlock(BlockParam::Id, BigNumber(0).toString());
     //    }
     while (currentBlockCount <= blockCount)
     {
         currentBlockCount = currentBlockCount + 1;
-        netManager->sendGetBlock(BlockParam::Id, currentBlockCount.toString());
+        //        netManager->sendGetBlock(BlockParam::Id, currentBlockCount.toString());
         qDebug() << "NodeManager::CheckBlockCount" << currentBlockCount;
     }
 }
@@ -521,15 +521,15 @@ void NodeManager::connectContractManager()
 
 void NodeManager::connectBlockchain()
 {
-    connect(blockchain, &Blockchain::TxFound, netManager, &NetManager::sendTxResponse);
-    connect(blockchain, &Blockchain::TxPairFound, netManager, &NetManager::sendTxPairResponse);
-    connect(blockchain, &Blockchain::BlockFound, netManager, &NetManager::sendBlockResponse);
-    connect(blockchain, &Blockchain::BlockCount, netManager, &NetManager::sendBlockCountResponse);
-    connect(blockchain, &Blockchain::ActorCount, netManager, &NetManager::sendActorCountResponse);
+    //    connect(blockchain, &Blockchain::TxFound, netManager, &NetManager::sendTxResponse);
+    //    connect(blockchain, &Blockchain::TxPairFound, netManager, &NetManager::sendTxPairResponse);
+    //    connect(blockchain, &Blockchain::BlockFound, netManager, &NetManager::sendBlockResponse);
+    //    connect(blockchain, &Blockchain::BlockCount, netManager, &NetManager::sendBlockCountResponse);
+    //    connect(blockchain, &Blockchain::ActorCount, netManager, &NetManager::sendActorCountResponse);
     //    connect(blockchain, &Blockchain::SendMergedBlock, netManager,
     //    &NetManager::sendMergedBlock);
-    connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
-    connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
+    //    connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
+    //    connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
     connect(blockchain, &Blockchain::sendMessage, netManager, &NetManager::sendMessage);
 }
 
@@ -599,7 +599,9 @@ void NodeManager::updateActors()
     for (BigNumber i = 1; i < accController->getMainActor()->getId(); ++i)
     {
         if (actorIndex->getById(i).isEmpty())
-            netManager->sendGetActor(i);
+        {
+        }
+        //            netManager->sendGetActor(i);
     }
 }
 

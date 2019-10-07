@@ -342,29 +342,30 @@ public slots:
     void sendNewTx(Transaction tx);
     void sendNewContract(Contract contract);
     void sendNewBlock(Block block);
-    void sendTxResponse(Transaction tx, TxParam param, QString value, QHostAddress peerAddress,
-                        QByteArray requestHash);
-    void sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
-    void sendBlockResponse(Block block, BlockParam param, QString value, QHostAddress peerAddress,
-                           QByteArray requestHash);
-    void sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
-    void sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
+    //    void sendTxResponse(Transaction tx, TxParam param, QString value, QHostAddress peerAddress,
+    //                        QByteArray requestHash);
+    //    void sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
+    //    void sendBlockResponse(Block block, BlockParam param, QString value, QHostAddress peerAddress,
+    //                           QByteArray requestHash);
+    //    void sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
+    //    void sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
 
-    // unique behavior (get block from temp file)
+    //    // unique behavior (get block from temp file)
     void sendGenesisBlock(Block prevBlock, QByteArray prevGenHash);
 
-    // requests for entities from other peers
-    void sendGetActor(BigNumber actorId);
+    //    // requests for entities from other peers
+    //    //    void sendGetActor(BigNumber actorId);
     void shareContract(Contract contract);
     void sendMessageTo(BigNumber recipientId, QByteArray message);
-    void sendGetTx(SearchEnum::TxParam param, QString value);
-    void sendGetBlock(SearchEnum::BlockParam param, QString value);
-    void sendGetBlockCount();
-    void sendGetActorCount();
-    void sendGetTxPair(BigNumber sender, BigNumber receiver);
+    //    void sendGetTx(SearchEnum::TxParam param, QString value);
+    //    //    void sendGetBlock(SearchEnum::BlockParam param, QString value);
+    //    void sendGetBlockCount();
+    //    void sendGetActorCount();
+    //    void sendGetTxPair(BigNumber sender, BigNumber receiver);
 
     //    void sendCompanyActor(QString peerAddress);
-    //    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int port);
+    //    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int
+    //    port);
     void sendConnectionList(Messages::EnableConnections sendConList, SocketService *addressant);
 
     void sendDfsPack(const Messages::DfsMessage &msg);

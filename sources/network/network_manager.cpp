@@ -193,12 +193,6 @@ void NetManager::startNetwork()
     //    resolverService = new ResolverService(actorIndex, requestResponseMap);
     setupServerServiceConnections();
     serverService->startListen();
-<<<<<<< Updated upstream
-    //    setupResolverServiceConnections();
-=======
-    setupResolverServiceConnections();
->>>>>>> Stashed changes
-    //    ThreadPool::addThread(resolverService);
 }
 
 void NetManager::startDiscovery()
