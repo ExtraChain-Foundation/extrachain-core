@@ -54,8 +54,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
-    Messages::BaseMessageResponse bmr(actor.serialize(), reqHash, Messages::GET_ACTOR_RESPONSE_MESSAGE);
-    emit sendMessage(bmr.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE);
+    emit getActorResponse(actor, reqHash, peerAddress);
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)

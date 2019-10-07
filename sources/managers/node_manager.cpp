@@ -124,8 +124,8 @@ void NodeManager::connectSmContractManager()
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
-    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, netManager,
-            &NetManager::sendMessage);
+    //    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, netManager,
+    //            &NetManager::sendMessage);
 
 #endif
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
@@ -444,64 +444,68 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
-    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
+    //    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
             Qt::ConnectionType::QueuedConnection);
-    connect(uiWallet, &WalletController::addNewWallet,
-            [=]() { accController->savePrivateActor(accController->createActor(false)); });
-    connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
-    });
-    connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
+            connect(uiWallet, &WalletController::addNewWallet,
+                    [=]() { accController->savePrivateActor(accController->createActor(false)); });
+            connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
+                emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+            });
+            connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
 
-    //======================================CONTRACT===========================================
-    auto contractsModel = uiController->getContractsModel();
-    connect(contractsModel, &ContractsModel::loadContractst, contractManager,
-            &ContractManager::loadContractsFrom);
-    connect(contractsModel, &ContractsModel::approveByPerformer, contractManager,
-            &ContractManager::approveContractByPerformer);
-    connect(contractsModel, &ContractsModel::completeByCustomer, contractManager,
-            &ContractManager::completeContractByCustomer);
-    connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
-            &ContractManager::completeContractByPerformer);
-    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
+            //======================================CONTRACT===========================================
+            auto contractsModel = uiController->getContractsModel();
+            connect(contractsModel, &ContractsModel::loadContractst, contractManager,
+                    &ContractManager::loadContractsFrom);
+            connect(contractsModel, &ContractsModel::approveByPerformer, contractManager,
+                    &ContractManager::approveContractByPerformer);
+            connect(contractsModel, &ContractsModel::completeByCustomer, contractManager,
+                    &ContractManager::completeContractByCustomer);
+            connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
+                    &ContractManager::completeContractByPerformer);
+            connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
 
-    connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
-            &ContractManager::createContract);
+            connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
+                    &ContractManager::createContract);
 
-    //==========================================DFS=========================================
-    connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
-    connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
-    connect(accController, &AccountController::addActorInActorIndex, this,
-            &NodeManager::addActorInActorIndex);
-    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
-    connect(cryptManager, &CryptManager::sendEncryptData, uiController,
-            &UiController::receiveEncryptOrDecryptData);
-    connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManager,
-            &CryptManager::recieveData);
-    connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
-    connect(uiController, &UiController::loadProfileForAutologin, prProfile,
-            &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController, &UiController::loginPrivateProfile);
-    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+            //==========================================DFS=========================================
+            connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+            connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
+            connect(accController, &AccountController::addActorInActorIndex, this,
+                    &NodeManager::addActorInActorIndex);
+            connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
+            connect(cryptManager, &CryptManager::sendEncryptData, uiController,
+                    &UiController::receiveEncryptOrDecryptData);
+            connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManager,
+                    &CryptManager::recieveData);
+            connect(uiController, &UiController::loadPrivateProfile, prProfile,
+                    &PrivateProfile::loadPrivateProfile);
+            connect(uiController, &UiController::loadProfileForAutologin, prProfile,
+                    &PrivateProfile::loadProfileForAutoLogin);
+            connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController,
+                    &UiController::loginPrivateProfile);
+            connect(uiController, &UiController::savePrivateProfile, prProfile,
+                    &PrivateProfile::savePrivateProfile);
 
-    // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
-    // connect(uiController, &UiController::profileById, dfs,
-    // &Dfs::profileRequest);
-    connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
-    connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
+            // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
+            // connect(uiController, &UiController::profileById, dfs,
+            // &Dfs::profileRequest);
+            connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
+            connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
 
-    //=============================================LOGIN & REG================================
-    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=]() { accController->savePrivateActor(accController->createActor(true)); });
-    //    connect(uiController->getWelcomePage(),
-    //    &WelcomePage::autoLogInStarted, netManager,
-    //            &NetManager::connectToServer);
+            //=============================================LOGIN & REG================================
+            connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
+                    [=]() { accController->savePrivateActor(accController->createActor(true)); });
+            //    connect(uiController->getWelcomePage(),
+            //    &WelcomePage::autoLogInStarted, netManager,
+            //            &NetManager::connectToServer);
 
-    //=======================================ACCOUNT_CONTROLLER===============================
-    connect(accController, &AccountController::newActorIsCreated, uiController,
-            &UiController::userRegistrationCompletion);
-    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
-    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
+            //=======================================ACCOUNT_CONTROLLER===============================
+            connect(accController, &AccountController::newActorIsCreated, uiController,
+                    &UiController::userRegistrationCompletion);
+            connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
+            connect(accController, &AccountController::newActorIsCreated, this,
+                    &NodeManager::updateWalletInUi);
 }
 #endif
 
@@ -530,7 +534,7 @@ void NodeManager::connectBlockchain()
     //    &NetManager::sendMergedBlock);
     //    connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
     //    connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
-    connect(blockchain, &Blockchain::sendMessage, netManager, &NetManager::sendMessage);
+    //    connect(blockchain, &Blockchain::sendMessage, netManager, &NetManager::sendMessage);
 }
 
 void NodeManager::connectAccountController()
@@ -541,7 +545,7 @@ void NodeManager::connectAccountController()
 
 void NodeManager::connectActorIndex()
 {
-    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
+    //    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
     //    connect(actorIndex, &ActorIndex::NewActor, netManager, &NetManager::sendNewActor);
     // this connect with service message
 

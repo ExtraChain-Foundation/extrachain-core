@@ -1,4 +1,4 @@
-#ifndef NETWORK_MANAGER_H
+﻿#ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
 #include "dfs/packages/headers/dfs_universal.h"
@@ -56,149 +56,6 @@ private:
     quint16 serverPort = isDebug ? 2221 : 2222;
     bool allowLocalServer = false;
     QMap<QByteArray, int> *requestResponseMap;
-    // virtual
-    //    struct ResponseHandler
-    //    {
-    //    protected:
-    //        int responseCount;
-    //        virtual ~ResponseHandler()
-    //        {
-    //        }
-
-    //    public:
-    //        ResponseHandler()
-    //            : responseCount(0)
-    //        {
-    //        }
-
-    //    protected:
-    //        void incrementResponseCount()
-    //        {
-    //            this->responseCount++;
-    //        }
-
-    //    public:
-    //        virtual bool canProcess() = 0;
-
-    //        int getResponseCount() const
-    //        {
-    //            return responseCount;
-    //        }
-    //    };
-
-    //    struct GetCountHandler : public ResponseHandler
-    //    {
-    //    private:
-    //        int responsesToProcess;
-    //        BigNumber searchedValue = 0;
-
-    //    public:
-    //        GetCountHandler()
-    //            : ResponseHandler()
-    //            , responsesToProcess(Config::Net::NECESSARY_RESPONSE_COUNT)
-    //        {
-    //        }
-
-    //        void addResponse(const BigNumber &value)
-    //        {
-    //            // find max value from all responses
-    //            if (value > searchedValue)
-    //            {
-    //                searchedValue = value;
-    //            }
-    //            incrementResponseCount();
-    //        }
-
-    //        bool canProcess() override
-    //        {
-    //            return responseCount >= responsesToProcess;
-    //        }
-
-    //        BigNumber getSearchedValue() const
-    //        {
-    //            return searchedValue;
-    //        }
-
-    //        int getResponsesToProcess() const
-    //        {
-    //            return responsesToProcess;
-    //        }
-
-    //        QString toString() const
-    //        {
-    //            return QString("GetRequest[responseCount:%2, responsesToProcess:%3")
-    //                .arg(responseCount, responsesToProcess);
-    //        }
-    //    };
-
-    //    template <typename T>
-    //    struct GetEntityHandler : public ResponseHandler
-    //    {
-    //    private:
-    //        QMap<T, int> responses; // entity -> mentions count
-    //    public:
-    //        GetEntityHandler()
-    //            : ResponseHandler()
-    //        {
-    //            responses.clear();
-    //        }
-    //        void addResponse(const T &response)
-    //        {
-    //            int mentionsCount = responses[response];
-    //            responses.insert(response, ++mentionsCount);
-    //            incrementResponseCount();
-    //        }
-
-    //        int getResponsesByEntity(const T &entity)
-    //        {
-    //            return responses[entity];
-    //        }
-
-    //        bool canProcess() override
-    //        {
-    //            // if number of responses is odd and more than Nessessary response count
-    //            return responseCount >= Config::Net::NECESSARY_RESPONSE_COUNT && (responseCount % 2 != 0);
-    //        }
-
-    //        T resolveBestEntity()
-    //        {
-    //            // resolve best Entities from map
-    //            QList<int> entries = responses.values();
-    //            int maxCount = *std::max_element(entries.begin(), entries.end());
-
-    //            // remove all Entities with entry count < max
-    //            for (typename QMap<T, int>::iterator it = responses.begin(); it != responses.end();)
-    //            {
-    //                if (it.value() < maxCount)
-    //                {
-    //                    it = responses.erase(it);
-    //                }
-    //                else
-    //                {
-    //                    ++it;
-    //                }
-    //            }
-
-    //            // if we have one Entity with max entry count - it is the best entity
-    //            if (responses.count() == 1)
-    //            {
-    //                return responses.keys().first();
-    //            }
-
-    //            // can't resolve best entities (there are 2 or more entities with equal
-    //            // mentions count)
-    //            return T();
-    //        }
-    //    };
-
-    // Get response handler map
-
-    //    QMap<QByteArray, GetCountHandler> getCountHandlers; // for getBlockCount && getActorCount
-    //    QMap<QByteArray, GetEntityHandler<Actor<KeyPublic>>> getActorsHandlers;
-    //    QMap<QByteArray, GetEntityHandler<Block>> getBlockHandlers;
-    //    QMap<QByteArray, GetEntityHandler<Transaction>> getTxHandlers;
-    //    QMap<QByteArray, GetEntityHandler<TxPair>> getTxPairHandlers;
-    //    QMap<QByteArray, GetEntityHandler<BigNumber>> getReserveActorHandlers;
 
 private:
     ActorIndex *actorIndex;
@@ -269,18 +126,18 @@ private:
      * @return
      */
     QByteArray calcHash(Messages::IMessage &message) const;
-    /**
-     * @brief addResponseHandler
-     * @param message
-     * @return
-     */
-    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
-    /**
-     * @brief checkResponseHandler
-     * @param message
-     * @return
-     */
-    bool checkResponseHandler(const QByteArray &message);
+    //    /**
+    //     * @brief addResponseHandler
+    //     * @param message
+    //     * @return
+    //     */
+    //    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
+    //    /**
+    //     * @brief checkResponseHandler
+    //     * @param message
+    //     * @return
+    //     */
+    //    bool checkResponseHandler(const QByteArray &message);
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -330,8 +187,7 @@ public slots:
      * @param data for send
      * @param messageType type to compress
      */
-    void sendMessage(const QByteArray &data, const QByteArray &messageType);
-
+    void sendMessage(const QByteArray &data, SocketPair receiver);
 public slots:
     /**
      * @brief Verify

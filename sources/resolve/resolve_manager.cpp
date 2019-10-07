@@ -22,6 +22,8 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     //    connect(resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
+    connect(resolver, &ResolverService::MessageReady, networkManager, &NetManager::sendMessage);
+    connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
     // "New" signals
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
@@ -29,7 +31,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-
+    connect(actorIndex, &ActorIndex::getActorResponse, resolver, &ResolverService::getActorResponse);
     //    connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
 
     //    connect(resolver, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);

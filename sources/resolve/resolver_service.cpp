@@ -384,6 +384,13 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
     //    }
 }
 
+void ResolverService::getActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, SocketPair receiver)
+{
+    Messages::BaseMessageResponse resp(actor.serialize(), reqHash, Messages::GET_ACTOR_RESPONSE_MESSAGE);
+    resp.calcDigSig(ac->getCurrentActor());
+    emit MessageReady(resp.serialize(), receiver);
+}
+
 // validation methods //
 
 bool ResolverService::validate(const Block &block)

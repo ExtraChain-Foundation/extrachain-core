@@ -351,21 +351,22 @@ void NetManager::broadcastMsg(const QByteArray &msg)
     emit sendMsg(msg, socketPair);
 }
 
-void NetManager::sendMessage(const QByteArray &data, const QByteArray &messageType)
+void NetManager::sendMessage(const QByteArray &data, SocketPair receiver)
 {
-    BaseMessage msg(messageType);
-    if (messageType != Messages::ACTOR_MESSAGE)
-        signMessage(msg);
+    emit sendMsg(data, receiver);
+    //    BaseMessage msg(receiver);
+    //    if (receiver != Messages::ACTOR_MESSAGE)
+    //        signMessage(msg);
 
-    QByteArray message = msg.init(data);
-    if (!addResponseHandler(message, messageType))
-    {
-        FileList list;
-        QFile file(".handler");
-        list.setFileList(file);
-        list.add(msg.hash(), "0");
-    }
-    broadcastMsg(message);
+    //    QByteArray message = msg.init(data);
+    //    //    if (!addResponseHandler(message, messageType))
+    //    //    {
+    //    //        FileList list;
+    //    //        QFile file(".handler");
+    //    //        list.setFileList(file);
+    //    //        list.add(msg.hash(), "0");
+    //    //    }
+    //    broadcastMsg(message);
 }
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
@@ -453,48 +454,48 @@ QByteArray NetManager::calcHash(Messages::IMessage &message) const
     return Utils::calcKeccak(message.serialize());
 }
 
-bool NetManager::addResponseHandler(const QByteArray &message, const QByteArray &msgType)
-{
-    QByteArray hash = Utils::calcKeccak(message);
-    if (Messages::RESPONSE.contains(msgType))
-    {
-        requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+// bool NetManager::addResponseHandler(const QByteArray &message, const QByteArray &msgType)
+//{
+//    QByteArray hash = Utils::calcKeccak(message);
+//    if (Messages::RESPONSE.contains(msgType))
+//    {
+//        requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
+//        return true;
+//    }
+//    else
+//    {
+//        return false;
+//    }
 
-    //    FileList responseHandler;
-    //    QFile file(".responseHamdler");
-    //    responseHandler.setFileList(file);
-    //    if (Messages::RESPONSE.contains(msgType))
-    //    {
-    //        responseHandler.add(message.hash(), message.serialize());
-    //        return true;
-    //    }
-    //    else
-    //        return false;
-}
+//    //    FileList responseHandler;
+//    //    QFile file(".responseHamdler");
+//    //    responseHandler.setFileList(file);
+//    //    if (Messages::RESPONSE.contains(msgType))
+//    //    {
+//    //        responseHandler.add(message.hash(), message.serialize());
+//    //        return true;
+//    //    }
+//    //    else
+//    //        return false;
+//}
 
-bool NetManager::checkResponseHandler(const QByteArray &message)
-{
-    QByteArray hash = Utils::calcKeccak(message);
-    if (requestResponseMap->keys().contains(hash))
-    {
-        int t = requestResponseMap->value(hash) - 1;
-        if (t <= 0)
-        {
-            requestResponseMap->remove(hash);
-        }
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
+// bool NetManager::checkResponseHandler(const QByteArray &message)
+//{
+//    QByteArray hash = Utils::calcKeccak(message);
+//    if (requestResponseMap->keys().contains(hash))
+//    {
+//        int t = requestResponseMap->value(hash) - 1;
+//        if (t <= 0)
+//        {
+//            requestResponseMap->remove(hash);
+//        }
+//        return true;
+//    }
+//    else
+//    {
+//        return false;
+//    }
+//}
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)
 {
@@ -572,22 +573,22 @@ void NetManager::sendDfsRequest(const DfsRequest &msg)
 //    broadcastMsg(msg.serialize());
 //}
 
-void NetManager::sendNewTx(Transaction tx)
-{
-    sendMessage(tx.serialize(), Messages::TX_MESSAGE);
-}
+// void NetManager::sendNewTx(Transaction tx)
+//{
+//    sendMessage(tx.serialize(), Messages::TX_MESSAGE);
+//}
 
-void NetManager::sendNewContract(Contract contract)
-{
-    qDebug() << "NetManager::sendNewContract: " << contract.serialize();
-    //    EntityMessage<Contract> msg = Messages::createContractMessage(contract);
-    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
-}
+// void NetManager::sendNewContract(Contract contract)
+//{
+//    qDebug() << "NetManager::sendNewContract: " << contract.serialize();
+//    //    EntityMessage<Contract> msg = Messages::createContractMessage(contract);
+//    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
+//}
 
-void NetManager::sendNewBlock(Block block)
-{
-    sendMessage(block.serialize(), Messages::BLOCK_MESSAGE);
-}
+// void NetManager::sendNewBlock(Block block)
+//{
+//    sendMessage(block.serialize(), Messages::BLOCK_MESSAGE);
+//}
 
 // void NetManager::sendTxResponse(Transaction tx, SearchEnum::TxParam param, QString value,
 //                                QHostAddress peerAddress, QByteArray requestHash)
@@ -676,7 +677,7 @@ void NetManager::shareContract(Contract contract)
         emit contractFinalTransaction(contract);
         return;
     }
-    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
+    //    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
 }
 
 void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)

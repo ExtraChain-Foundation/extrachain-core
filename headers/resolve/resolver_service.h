@@ -11,7 +11,12 @@
 #include "datastorage/block.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
+#include "managers/account_controller.h"
 #include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/response_messages.h"
+#include "network/socket_pair.h"
 
 static QMutex handlerFileMutex;
 
@@ -32,6 +37,7 @@ private:
     QHostAddress senderAddress;
     bool active = false;
     ActorIndex *actorIndex;
+    AccountController *ac;
     QMap<QByteArray, int> *requestResponseMap;
     //    QMap<QByteArray, short> handlerList;
 
@@ -132,7 +138,8 @@ public slots:
      * @param msg - serialized packages
      */
     void recieveMsg(const QByteArray &msgS, const QByteArray &hash, const QHostAddress &peerAddresss);
-
+    // response
+    void getActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, SocketPair receiver);
 signals:
     void TaskFinished();
     /**
@@ -142,7 +149,7 @@ signals:
      * @param msg
      */
     void secondWave(const QByteArray &msg);
-
+    void MessageReady(const QByteArray &data, SocketPair receiver);
     // retranslate package to their owners class
     // new data
     void newDfsPack(const Messages::DfsMessage &msg);
@@ -168,6 +175,7 @@ signals:
     void getActorsCount(const QHostAddress &peerAddress);
 
     void getBlocksCount(const QHostAddress &peerAddress);
+
     //    void createConnectionsList(const QByteArray &message);
 
     //    void SendGetActor(BigNumber actorId);
