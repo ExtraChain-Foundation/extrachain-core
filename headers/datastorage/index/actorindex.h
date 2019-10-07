@@ -9,7 +9,7 @@
 #include <datastorage/searchfilters.h>
 #include "profile/public_profile.h"
 #include "network/packages/entities/entity_message.h"
-
+#include "network/socket_pair.h"
 #include "headers/network/packages/base_message_response.h"
 #include "headers/network/packages/service/response_messages.h"
 /**
@@ -88,7 +88,7 @@ public:
 
 public slots:
     void process();
-    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const QHostAddress &peerAddress);
+    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
     /**
      * @brief Attempts to save actor to local storage
      * @param actor
@@ -128,7 +128,8 @@ signals:
      * @param type
      */
 
-    void getActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, const QHostAddress &peerAddress);
+    void responseReady(const QByteArray &data, QByteArray type, QByteArray reqHash,
+                       const SocketPair &receiver);
     void sendMessage(const QByteArray &data, const QByteArray &type);
     void sendProfileToUi(QString userID, Profile profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);

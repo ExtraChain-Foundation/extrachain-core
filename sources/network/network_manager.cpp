@@ -351,22 +351,30 @@ void NetManager::broadcastMsg(const QByteArray &msg)
     emit sendMsg(msg, socketPair);
 }
 
-void NetManager::sendMessage(const QByteArray &data, SocketPair receiver)
+void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
 {
-    emit sendMsg(data, receiver);
-    //    BaseMessage msg(receiver);
-    //    if (receiver != Messages::ACTOR_MESSAGE)
-    //        signMessage(msg);
+    BaseMessage msg(msgType);
+    if (msgType != Messages::ACTOR_MESSAGE)
+        signMessage(msg);
 
-    //    QByteArray message = msg.init(data);
-    //    //    if (!addResponseHandler(message, messageType))
-    //    //    {
-    //    //        FileList list;
-    //    //        QFile file(".handler");
-    //    //        list.setFileList(file);
-    //    //        list.add(msg.hash(), "0");
-    //    //    }
-    //    broadcastMsg(message);
+    QByteArray message = msg.init(data);
+    //    if (!addResponseHandler(message, messageType))
+    //    {
+    //        FileList list;
+    //        QFile file(".handler");
+    //        list.setFileList(file);
+    //        list.add(msg.hash(), "0");
+    //    }
+    broadcastMsg(message);
+}
+
+void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,
+                                     const QByteArray &requestHash, const SocketPair &receiver)
+{
+    BaseMessageResponse rmsg(data, requestHash, msgType);
+    signMessage(rmsg);
+
+    emit sendMsg(rmsg.serialize(), receiver);
 }
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)

@@ -45,7 +45,7 @@ public:
     ~SocketService() override;
 
 signals:
-    void MessageReceived(const QByteArray &msgS, const QString &peerAddressst, const int port);
+    void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
     /**
      * @brief has only one connection with &QTcpSocket::disconnected on client
      * and connection with &NetManager::removeConnection on server

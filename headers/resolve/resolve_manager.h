@@ -40,8 +40,8 @@ private:
 signals:
     void finished();
 public slots:
-    void resolveMessage(const QByteArray &msg, const QString &peerAddress, const int port);
-    void setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress);
+    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
+    void setTask(QByteArray msg, const SocketPair &receiver);
     void taskFinished();
 public slots:
     void process();

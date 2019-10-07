@@ -24,11 +24,11 @@ bool ResolverService::isActive() const
     return active;
 }
 
-void ResolverService::setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress)
+void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 {
     this->msg = msg;
     this->hash = hash;
-    this->senderAddress = senderAddress;
+    this->senderAddress = receiver;
 }
 
 bool ResolverService::validate(const Messages::IMessage &message)
@@ -94,38 +94,43 @@ bool ResolverService::addResponseHandler(const QByteArray &message, const QByteA
     QByteArray hash = Utils::calcKeccak(message);
     if (Messages::RESPONSE.contains(msgType))
     {
-        requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
-        return true;
+        if (requestResponseMap->find(hash) == requestResponseMap->end())
+        {
+            handlerFileMutex.lock();
+            requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
+            handlerFileMutex.unlock();
+            return true;
+        }
+        else
+            return false;
     }
     else
     {
         return false;
     }
-
-    //    FileList responseHandler;
-    //    QFile file(".responseHamdler");
-    //    responseHandler.setFileList(file);
-    //    if (Messages::RESPONSE.contains(msgType))
-    //    {
-    //        responseHandler.add(message.hash(), message.serialize());
-    //        return true;
-    //    }
-    //    else
-    //        return false;
 }
 
-bool ResolverService::checkResponseHandler(const QByteArray &message)
+bool ResolverService::checkResponseHandler(const QByteArray &hash)
 {
-    QByteArray hash = Utils::calcKeccak(message);
-    if (requestResponseMap->keys().contains(hash))
+    QMap<QByteArray, int>::iterator it = requestResponseMap->find(hash);
+    if (it != requestResponseMap->end())
     {
-        int t = requestResponseMap->value(hash) - 1;
+        int t = it.value() - 1;
         if (t <= 0)
         {
+            handlerFileMutex.lock();
             requestResponseMap->remove(hash);
+            handlerFileMutex.unlock();
             return true;
         }
-        return false;
+        else
+        {
+            handlerFileMutex.lock();
+            requestResponseMap->remove(hash);
+            requestResponseMap->insert(hash, t);
+            handlerFileMutex.unlock();
+            return false;
+        }
     }
     else
     {
@@ -166,24 +171,23 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
 
 void ResolverService::process()
 {
-    recieveMsg(this->msg, this->hash, this->senderAddress);
+    recieveMsg(this->msg, this->senderAddress);
 }
 
-void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
-                                 const QHostAddress &peerAddresss)
+void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiver)
 {
-    QHostAddress peerAddress(peerAddresss);
     using namespace Messages;
     BaseMessage message;
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
     if (msgType != ACTOR_MESSAGE)
-        MessageIsNotValid(message);
+        if (!MessageIsNotValid(message))
+            return;
     universalHandler(message);
     // spread messages
     if (msgType == PROFILE_FILE)
     {
-        emit receiveProfile(message.getMsg_data());
+        emit newProfile(message.getMsg_data());
     }
     else if (msgType == ACTOR_MESSAGE)
     {
@@ -233,27 +237,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
 
     else if (msgType == MERGED_BLOCK_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << MERGED_BLOCK_MESSAGE;
-        MergedBlockMessage message(msg);
-        if (MessageIsNotValid(message))
-            return;
-
-        Block first = message.getFirstBlock();
-        Block second = message.getFirstBlock();
-        Block result = message.getFirstBlock();
-        // if (!validate(first) || !validate(second) || !validate(result))
-        // {
-        //     qDebug()
-        //         << QString(
-        //                "In Received message [%1] At least one block is not
-        //                valid") .arg(QString::fromLocal8Bit(message.serialize()));
-        //     return;
-        // }
-
-        // ASK!
-        //        emit MergedBlock(first, second, result, message.getDigSig(),
-        //        peerAddress);
+        //
+        qDebug() << "[resolve message] MERGED_BLOCK_MESSAGE";
     }
     else if (msgType == BLOCK_APPROVED_MESSAGE)
     {
@@ -267,10 +252,17 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
     }
 
     // request messages
+    else if (msgType == GET_ACTOR_MESSAGE)
+    {
+        GetActorMessage message(msg);
+        //        if (addResponseHandler(msg, msgType))
+        emit getActor(message.getActorId(), calcHash(msg), receiver);
+    }
+    /**
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage message(msg);
-        emit getTx(message.getParam(), message.getValue(), peerAddress);
+        emit getTx(message.getParam(), message.getValue(), "peerAddress");
     }
     else if (msgType == GET_TX_PAIR_MESSAGE)
     {
@@ -286,7 +278,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
     else if (msgType == GET_ACTOR_MESSAGE)
     {
         GetActorMessage message(msg);
-        emit getActor(message.getActorId(), "", peerAddress); // TODO : peer adress
+        emit getActor(message.getActorId(), "", ); // TODO : peer adress
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {
@@ -298,7 +290,16 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
         BaseMessage message = BaseMessage::deserializeMsg(msg);
         emit getBlocksCount(peerAddress);
     }
+    **/
     // response messages
+    else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)
+    {
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << GET_ACTOR_RESPONSE_MESSAGE << "\nmessage: " << msg;
+        BaseMessageResponse responseMessage(msg);
+        if (checkResponseHandler(responseMessage.getDataHash()))
+            emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+    }
     //    else if (msgType == GET_TX_RESPONSE_MESSAGE)
     //    {
     //        qDebug() << "RESOLVER SERVICE: "
@@ -382,13 +383,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const QByteArray &hash,
     //        //        emit GetBlockCountResponse(message.getEntity(), message.getRequestHash(),
     //        peerAddress);
     //    }
-}
-
-void ResolverService::getActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, SocketPair receiver)
-{
-    Messages::BaseMessageResponse resp(actor.serialize(), reqHash, Messages::GET_ACTOR_RESPONSE_MESSAGE);
-    resp.calcDigSig(ac->getCurrentActor());
-    emit MessageReady(resp.serialize(), receiver);
 }
 
 // validation methods //

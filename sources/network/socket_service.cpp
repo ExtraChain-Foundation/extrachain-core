@@ -83,8 +83,11 @@ void SocketService::readData()
             emit checkMe();
         }
         else
-            emit MessageReceived(command, this->address, this->port);
-
+        {
+            SocketPair receiver(address.toStdString(), port);
+            receiver.setId(identificator.toByteArray());
+            emit MessageReceived(command, receiver);
+        }
         _blockSize = 0;
     }
 };

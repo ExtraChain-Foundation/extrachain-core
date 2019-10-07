@@ -187,7 +187,16 @@ public slots:
      * @param data for send
      * @param messageType type to compress
      */
-    void sendMessage(const QByteArray &data, SocketPair receiver);
+    void sendMessage(const QByteArray &data, const QByteArray &msgType);
+    /**
+     * @brief sendMessageResponse from resolver
+     * @param data
+     * @param msgType
+     * @param requestHash
+     * @param receiver
+     */
+    void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+                             const SocketPair &receiver);
 public slots:
     /**
      * @brief Verify
@@ -195,9 +204,9 @@ public slots:
      */
     void Verify(const QByteArray &block);
     // send msgs
-    void sendNewTx(Transaction tx);
-    void sendNewContract(Contract contract);
-    void sendNewBlock(Block block);
+    //    void sendNewTx(Transaction tx);
+    //    void sendNewContract(Contract contract);
+    //    void sendNewBlock(Block block);
     //    void sendTxResponse(Transaction tx, TxParam param, QString value, QHostAddress peerAddress,
     //                        QByteArray requestHash);
     //    void sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
@@ -232,7 +241,7 @@ public slots:
     //    void downloadAnswer(bool status, QByteArray msg, QString peerAddressst);
 
 signals:
-    void MessageReceived(const QByteArray &msg, const QString &peerAddress, const int port);
+    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);

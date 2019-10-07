@@ -14,6 +14,7 @@ class CoinService : public QThread
     Q_OBJECT
 private:
     //	ResolverService *resolver;
+
     bool active = false;
 
 private:
@@ -23,6 +24,7 @@ private:
 
 public:
     CoinService(/*ResolverService *resolverService*/);
+
     ~CoinService() override;
 
 public:

@@ -9,6 +9,11 @@ BaseMessageResponse::BaseMessageResponse(const QByteArray &msg, const QByteArray
     this->dataHash = hash;
 }
 
+BaseMessageResponse::BaseMessageResponse(const QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
 BaseMessageResponse::BaseMessageResponse(const BaseMessageResponse &temp)
 {
     QList<QByteArray> list = temp.BaseMessage::serializedParams();
@@ -35,6 +40,11 @@ void BaseMessageResponse::deserialize(const QByteArray &serialized)
 }
 
 const QByteArray BaseMessageResponse::hash() const
+{
+    return dataHash;
+}
+
+QByteArray BaseMessageResponse::getDataHash() const
 {
     return dataHash;
 }

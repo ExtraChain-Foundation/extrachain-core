@@ -408,7 +408,7 @@ void NodeManager::connectTxManager()
     connect(txManager, &TransactionManager::SendBlock, netManager, &NetManager::Verify);
     connect(txManager, &TransactionManager::VerifyTx, blockchain, &Blockchain::VerifyTx);
     connect(netManager, &NetManager::coinRequest, this, &NodeManager::coinResponse);
-    connect(this, &NodeManager::NewTx, netManager, &NetManager::sendNewTx);
+    //    connect(this, &NodeManager::NewTx, netManager, &NetManager::sendNewTx);
 }
 
 #ifdef ETALONIUM_CLIENT
@@ -445,76 +445,68 @@ void NodeManager::connectUi()
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
     //    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
-            Qt::ConnectionType::QueuedConnection);
-            connect(uiWallet, &WalletController::addNewWallet,
-                    [=]() { accController->savePrivateActor(accController->createActor(false)); });
-            connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-                emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
-            });
-            connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
+    //            Qt::ConnectionType::QueuedConnection);
+    connect(uiWallet, &WalletController::addNewWallet,
+            [=]() { accController->savePrivateActor(accController->createActor(false)); });
+    connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+    });
+    connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
 
-            //======================================CONTRACT===========================================
-            auto contractsModel = uiController->getContractsModel();
-            connect(contractsModel, &ContractsModel::loadContractst, contractManager,
-                    &ContractManager::loadContractsFrom);
-            connect(contractsModel, &ContractsModel::approveByPerformer, contractManager,
-                    &ContractManager::approveContractByPerformer);
-            connect(contractsModel, &ContractsModel::completeByCustomer, contractManager,
-                    &ContractManager::completeContractByCustomer);
-            connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
-                    &ContractManager::completeContractByPerformer);
-            connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
+    //======================================CONTRACT===========================================
+    auto contractsModel = uiController->getContractsModel();
+    connect(contractsModel, &ContractsModel::loadContractst, contractManager,
+            &ContractManager::loadContractsFrom);
+    connect(contractsModel, &ContractsModel::approveByPerformer, contractManager,
+            &ContractManager::approveContractByPerformer);
+    connect(contractsModel, &ContractsModel::completeByCustomer, contractManager,
+            &ContractManager::completeContractByCustomer);
+    connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
+            &ContractManager::completeContractByPerformer);
+    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
 
-            connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
-                    &ContractManager::createContract);
+    connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
+            &ContractManager::createContract);
 
-            //==========================================DFS=========================================
-            connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
-            connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
-            connect(accController, &AccountController::addActorInActorIndex, this,
-                    &NodeManager::addActorInActorIndex);
-            connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
-            connect(cryptManager, &CryptManager::sendEncryptData, uiController,
-                    &UiController::receiveEncryptOrDecryptData);
-            connect(uiController, &UiController::sendForEncryptingORDecrypting, cryptManager,
-                    &CryptManager::recieveData);
-            connect(uiController, &UiController::loadPrivateProfile, prProfile,
-                    &PrivateProfile::loadPrivateProfile);
-            connect(uiController, &UiController::loadProfileForAutologin, prProfile,
-                    &PrivateProfile::loadProfileForAutoLogin);
-            connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController,
-                    &UiController::loginPrivateProfile);
-            connect(uiController, &UiController::savePrivateProfile, prProfile,
-                    &PrivateProfile::savePrivateProfile);
+    //==========================================DFS=========================================
+    connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+    connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
+    connect(accController, &AccountController::addActorInActorIndex, this,
+            &NodeManager::addActorInActorIndex);
+    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
 
-            // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
-            // connect(uiController, &UiController::profileById, dfs,
-            // &Dfs::profileRequest);
-            connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
-            connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
+    connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
+    connect(uiController, &UiController::loadProfileForAutologin, prProfile,
+            &PrivateProfile::loadProfileForAutoLogin);
+    connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController, &UiController::loginPrivateProfile);
+    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
 
-            //=============================================LOGIN & REG================================
-            connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-                    [=]() { accController->savePrivateActor(accController->createActor(true)); });
-            //    connect(uiController->getWelcomePage(),
-            //    &WelcomePage::autoLogInStarted, netManager,
-            //            &NetManager::connectToServer);
+    // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
+    // connect(uiController, &UiController::profileById, dfs,
+    // &Dfs::profileRequest);
+    connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
+    connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
 
-            //=======================================ACCOUNT_CONTROLLER===============================
-            connect(accController, &AccountController::newActorIsCreated, uiController,
-                    &UiController::userRegistrationCompletion);
-            connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
-            connect(accController, &AccountController::newActorIsCreated, this,
-                    &NodeManager::updateWalletInUi);
+    //=============================================LOGIN & REG================================
+    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
+            [=]() { accController->savePrivateActor(accController->createActor(true)); });
+    //    connect(uiController->getWelcomePage(),
+    //    &WelcomePage::autoLogInStarted, netManager,
+    //            &NetManager::connectToServer);
+
+    //=======================================ACCOUNT_CONTROLLER===============================
+    connect(accController, &AccountController::newActorIsCreated, uiController,
+            &UiController::userRegistrationCompletion);
+    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
+    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
 }
 #endif
 
 void NodeManager::connectContractManager()
 {
-    connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
+//    connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
 #ifdef ETALONIUM_CLIENT
-    connect(resolver, &ResolverService::contractFromNetwork, contractManager,
-            &ContractManager::contractFromNetWork); // TODO : Resolver
+
 #endif
 
 #ifdef ETALONIUM_CONSOLE

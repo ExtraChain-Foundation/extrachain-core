@@ -17,12 +17,14 @@ private:
 
 public:
     BaseMessageResponse(const QByteArray &msg, const QByteArray &hash, const QByteArray &type);
+    BaseMessageResponse(const QByteArray &serialized);
     BaseMessageResponse(const BaseMessageResponse &temp);
     ~BaseMessageResponse() override;
     BaseMessageResponse operator=(const BaseMessageResponse &temp);
     //    QByteArray serialize() const override final;
     void deserialize(const QByteArray &serialized) override;
     const QByteArray hash() const override final;
+    QByteArray getDataHash() const;
 };
 }
 #endif // BASE_MESSAGE_RESPONSE_H

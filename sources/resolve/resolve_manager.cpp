@@ -22,16 +22,18 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     //    connect(resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
-    connect(resolver, &ResolverService::MessageReady, networkManager, &NetManager::sendMessage);
+    connect(resolver, &ResolverService::responseReady, networkManager, &NetManager::sendMessageResponse);
     connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
     // "New" signals
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
+    connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     connect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-    connect(actorIndex, &ActorIndex::getActorResponse, resolver, &ResolverService::getActorResponse);
+    connect(actorIndex, &ActorIndex::responseReady, resolver, &ResolverService::responseReady);
+    // response signals
     //    connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
 
     //    connect(resolver, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);
@@ -92,15 +94,16 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     disconnect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
+    disconnect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
 }
 
-void ResolveManager::setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress)
+void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
     resolvers.append(new ResolverService(actorIndex, requestResponseMap));
     connectSignals(resolvers.last());
-    resolvers.last()->setTask(msg, hash, senderAddress);
+    resolvers.last()->setTask(msg, receiver);
     ThreadPool::addThread(resolvers.last());
 }
 
@@ -138,7 +141,7 @@ QList<ResolverService *> ResolveManager::getFinished()
     return ret;
 }
 
-void ResolveManager::resolveMessage(const QByteArray &msg, const QString &peerAddress, const int port)
+void ResolveManager::resolveMessage(const QByteArray &msg, const SocketPair &receiver)
 {
-    setTask(msg, "", QHostAddress(peerAddress));
+    setTask(msg, receiver);
 }

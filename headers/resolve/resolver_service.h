@@ -34,7 +34,7 @@ class ResolverService : public QObject
 private:
     QByteArray msg;
     QByteArray hash;
-    QHostAddress senderAddress;
+    SocketPair senderAddress;
     bool active = false;
     ActorIndex *actorIndex;
     AccountController *ac;
@@ -59,7 +59,7 @@ public:
     ~ResolverService() override;
 
     bool isActive() const;
-    void setTask(QByteArray msg, QByteArray hash, QHostAddress senderAddress);
+    void setTask(QByteArray msg, SocketPair receiver);
 
 private:
     /**
@@ -115,7 +115,7 @@ private:
      * @param message
      * @return
      */
-    bool checkResponseHandler(const QByteArray &message);
+    bool checkResponseHandler(const QByteArray &hash);
     /**
      * @brief checkMsgCount
      * @param msg
@@ -137,9 +137,10 @@ public slots:
      * corresponding signals
      * @param msg - serialized packages
      */
-    void recieveMsg(const QByteArray &msgS, const QByteArray &hash, const QHostAddress &peerAddresss);
+    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
     // response
-    void getActorResponse(Actor<KeyPublic> actor, QByteArray reqHash, SocketPair receiver);
+    void getActorResponse(Actor<KeyPublic> actor, QByteArray type, QByteArray reqHash, SocketPair receiver);
+
 signals:
     void TaskFinished();
     /**
@@ -149,12 +150,20 @@ signals:
      * @param msg
      */
     void secondWave(const QByteArray &msg);
-    void MessageReady(const QByteArray &data, SocketPair receiver);
+    /**
+     * @brief responseReady to network manager
+     * @param data
+     * @param msgType
+     * @param requestHash
+     * @param receiver
+     */
+    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+                       const SocketPair &receiver);
     // retranslate package to their owners class
     // new data
     void newDfsPack(const Messages::DfsMessage &msg);
 
-    void receiveProfile(const QByteArray &msg);
+    void newProfile(const QByteArray &msg);
 
     void newActor(const Actor<KeyPublic> &actor);
 
@@ -170,7 +179,7 @@ signals:
     void getBlock(const SearchEnum::BlockParam &param, const QByteArray &value,
                   const QHostAddress &peerAddress);
 
-    void getActor(const BigNumber &actorId, QByteArray reqHash, const QHostAddress &peerAddress);
+    void getActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
 
     void getActorsCount(const QHostAddress &peerAddress);
 
