@@ -110,7 +110,27 @@ int BigNumber::compare(const QString &one, const QString &two)
 
 BigNumber BigNumber::operator&(const BigNumber &value)
 {
-    BigNumber qwerty(toBase(2), 2);
+    QByteArray a = this->toBase(2).toByteArray();
+    QByteArray b = value.toBase(2).toByteArray();
+    while (a.length() > b.length())
+    {
+        b.push_front("0");
+    }
+    while (a.length() < b.length())
+    {
+        a.push_front("0");
+    }
+    QByteArray c;
+    for (int i = 0; i < a.length(); i++)
+    {
+        if ((a[i] == '1') && (b[i] == '1'))
+            c.append('1');
+        else
+            c.append('0');
+    }
+    BigNumber res(c, 2);
+    return res.toBase(16);
+    //    BigNumber qwerty(toBase(2), 2);
 
     //    int mineSize = this->toBinary().size();
     //    int valueSize = value.toBinary().size();
@@ -136,6 +156,14 @@ BigNumber BigNumber::operator&(const BigNumber &value)
     //    //[mineSize-i-1]
     //    //[valueSize-i-1]
     //    return result;
+}
+
+BigNumber BigNumber::operator>>(const int &value)
+{
+    BigNumber n = this->toBase(2);
+    QByteArray b = n.toByteArray();
+    b.chop(value);
+    return BigNumber(b, 2).toBase(16);
 }
 
 std::pair<BigNumber, BigNumber> BigNumber::naiveDivide(BigNumber &value, const BigNumber &divider)
@@ -722,8 +750,8 @@ void BigNumber::setHexValue(const QString &hex)
     //        std::exit(-1);
     //    }
     //#endif
-
-    QByteArray num = hex.toUtf8();
+    QByteArray num = cutZeros(hex).trimmed().toUtf8();
+    //    QByteArray num = hex.toUtf8();
     if (hex.isEmpty() || num.isEmpty())
         num = "0";
 
@@ -779,7 +807,7 @@ void BigNumber::fromString(QString serialized)
     }
 }
 
-QByteArray BigNumber::toBase(int to)
+BigNumber BigNumber::toBase(int to) const
 {
     return BigNumber::fromBase(toByteArray(), base, to);
 }
@@ -869,15 +897,15 @@ BigNumber BigNumber::fromDec(const QByteArray &dec)
     return fromBase(dec, 10, 16);
 }
 
-QByteArray BigNumber::fromBase(QByteArray hexValue, int from, int base)
+BigNumber BigNumber::fromBase(QByteArray hexValue, int from, int base)
 {
     if (base < 2 || base > 36)
-        return "";
+        return BigNumber();
 
-    BigNumber dec(0);
-    dec.setBase(base);
+    BigNumber res(0);
+    res.setBase(base);
     if (hexValue.isEmpty())
-        return "0";
+        return BigNumber("0");
     bool positive = hexValue.at(0) != '-';
     unsigned long j = 0;
     BigNumber two(QByteArray::number(from, base));
@@ -894,13 +922,13 @@ QByteArray BigNumber::fromBase(QByteArray hexValue, int from, int base)
             result = result * two;
         j++;
 
-        dec += one * result;
+        res += one * result;
     }
 
     if (!positive)
-        dec.setPositive(false);
+        res.setPositive(false);
 
-    return dec.toByteArray();
+    return res;
 }
 
 QDataStream &operator<<(QDataStream &in, BigNumber &bigNumber)

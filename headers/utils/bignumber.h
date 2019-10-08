@@ -46,6 +46,7 @@ public:
     static std::pair<BigNumber, BigNumber> divide(BigNumber val, BigNumber divider);
     static int compare(const QString &one, const QString &two);
     BigNumber operator&(const BigNumber &);
+    BigNumber operator>>(const int &);
     BigNumber operator+(const BigNumber &);
     BigNumber operator+(long long);
     BigNumber operator-(const BigNumber &);
@@ -89,7 +90,7 @@ public:
     BigNumber pow(unsigned long long number);
     QString toStringDec() const;
     void fromString(QString serialized);
-    QByteArray toBase(int to);
+    BigNumber toBase(int to) const;
 
     static BigNumber fromByteArray(QByteArray serialized, int base = 16);
     static BigNumber factorial(int num, int base = 16);
@@ -98,7 +99,7 @@ public:
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
     static BigNumber fromDec(const QByteArray &dec);
-    static QByteArray fromBase(QByteArray hexValue, int from, int base);
+    static BigNumber fromBase(QByteArray hexValue, int from, int base);
     int getBase() const;
     void setBase(int value);
 };
