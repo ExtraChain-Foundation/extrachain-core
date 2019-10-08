@@ -188,17 +188,16 @@ public:
         {
             QByteArray pubKey = key->extractPublicKey();
             //  QByteArray
-
             if (isPrivate())
             {
                 // key_private
-                QByteArray prKey = reinterpret_cast<KeyPrivate *>(key)->getPrivateKey();
+                KeyPrivate *prKey = reinterpret_cast<KeyPrivate *>(key);
                 QList<QByteArray> list;
-                EllipticPoints temp(hash);
 
-                qDebug() << this->id.toString().toLocal8Bit() << prKey << pubKey;
+                qDebug() << this->id.toString().toLocal8Bit() << prKey->serialize() << pubKey;
 
-                list << this->id.toString().toLocal8Bit() << prKey << pubKey << QByteArray::number(account);
+                list << this->id.toString().toLocal8Bit() << prKey->serialize()
+                     << QByteArray::number(account);
                 //                list << this->id.toString().toLocal8Bit() <<
                 //                temp.CryptMessage(prKey) <<temp.CryptMessage( pubKey);
                 //                KeyPublic pubKey(key->extractPublicKey());

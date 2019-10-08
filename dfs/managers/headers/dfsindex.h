@@ -3,7 +3,6 @@
 
 #include "dfs/types/headers/dfsitem.h"
 #include "managers/account_controller.h"
-#include "crypt/ecc/ecc.h"
 #include "utils/utils.h"
 #include "dfs/types/headers/stored.h"
 #include "dfs/managers/headers/card_manager.h"

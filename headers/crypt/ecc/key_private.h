@@ -8,15 +8,17 @@
 //#include <QDir>
 
 #include <QDebug>
-#include "EllipticPoints.h"
 #include "utils/bignumber.h"
-#include "crypt/ecc/ecc.h"
+#include "crypt/ecc/ellipticpoint.h"
+#include "crypt/ecc/curves.h"
+#include "crypt/ecc/math.h"
 
 class KeyPrivate
 {
 private:
+    ECC::curve curve;
     QByteArray prkey;
-    EllipticPoints pbkey;
+    EllipticPoint pbkey;
 
 public:
     /**
@@ -41,39 +43,18 @@ public: // Signer interface
 
 public:
     /**
-     * @brief loadPrivateKey
-     * @param key
-     */
-    /**
      * @brief extractPrivateKey
      * @return
      */
-    inline QByteArray extractPrivateKey()
-    {
-        return this->prkey;
-    }
+    QByteArray extractPrivateKey();
     /**
      * @brief extractPublicKey
      * @return
      */
     QByteArray extractPublicKey();
-    inline QByteArray getPrivateKey()
-    {
-        return extractPrivateKey();
-    }
-    /**
-     * @brief getPublicKey
-     * @return
-     */
-    EllipticPoints getPublicPoint()
-    {
-        return this->pbkey;
-    }
+    QByteArray getPrivateKey();
     QByteArray getPublicKey();
-
-private:
-    QByteArray getPrivateX();
-    QByteArray getPrivateY();
+    QByteArray serialize();
 };
 
 #endif // KEY_PRIVATE_H

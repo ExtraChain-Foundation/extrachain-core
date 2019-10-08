@@ -110,52 +110,51 @@ int BigNumber::compare(const QString &one, const QString &two)
 
 BigNumber BigNumber::operator&(const BigNumber &value)
 {
-    QByteArray a = this->toBase(2).toByteArray();
-    QByteArray b = value.toBase(2).toByteArray();
-    while (a.length() > b.length())
-    {
-        b.push_front("0");
-    }
-    while (a.length() < b.length())
-    {
-        a.push_front("0");
-    }
-    QByteArray c;
-    for (int i = 0; i < a.length(); i++)
-    {
-        if ((a[i] == '1') && (b[i] == '1'))
-            c.append('1');
-        else
-            c.append('0');
-    }
-    BigNumber res(c, 2);
-    return res.toBase(16);
+    //    QByteArray a = this->toBase(2).toByteArray();
+    //    QByteArray b = value.toBase(2).toByteArray();
+    //    while (a.length() > b.length())
+    //    {
+    //        b.push_front("0");
+    //    }
+    //    while (a.length() < b.length())
+    //    {
+    //        a.push_front("0");
+    //    }
+    //    QByteArray c;
+    //    for (int i = 0; i < a.length(); i++)
+    //    {
+    //        if ((a[i] == '1') && (b[i] == '1'))
+    //            c.append('1');
+    //        else
+    //            c.append('0');
+    //    }
+    //    BigNumber res(c, 2);
+    //    return res.toBase(16);
     //    BigNumber qwerty(toBase(2), 2);
 
-    //    int mineSize = this->toBinary().size();
-    //    int valueSize = value.toBinary().size();
+    int mineSize = this->toBinary().size();
+    int valueSize = value.toBinary().size();
 
-    //    int size = 0;
-    //    if (mineSize > valueSize)
-    //        size = valueSize;
-    //    else
-    //        size = mineSize;
+    int size = 0;
+    if (mineSize > valueSize)
+        size = valueSize;
+    else
+        size = mineSize;
 
-    //    QByteArray result;
-    //    mineSize -= size;
-    //    valueSize -= size;
-    //    // QString somestr = QString::number(this->toString().toInt(),16);
+    QByteArray result;
+    mineSize -= size;
+    valueSize -= size;
+    // QString somestr = QString::number(this->toString().toInt(),16);
 
-    //    for (int i = 0; i < size; i++)
-    //    {
+    for (int i = 0; i < size; i++)
+    {
 
-    //        result.append(
-    //            BigNumber::binaryCompareAnd(this->toBinary()[mineSize + i], value.toBinary()[valueSize +
-    //            i]));
-    //    }
-    //    //[mineSize-i-1]
-    //    //[valueSize-i-1]
-    //    return result;
+        result.append(
+            BigNumber::binaryCompareAnd(this->toBinary()[mineSize + i], value.toBinary()[valueSize + i]));
+    }
+    //[mineSize-i-1]
+    //[valueSize-i-1]
+    return BigNumber(result, 2).toBase(16);
 }
 
 BigNumber BigNumber::operator>>(const int &value)
@@ -887,7 +886,7 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
     do
     {
         result = random(n);
-    } while (result > max);
+    } while (result >= max);
 
     return result;
 }

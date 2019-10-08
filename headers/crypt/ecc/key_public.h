@@ -9,24 +9,22 @@
 //#include <QDir>
 //#include <QDebug>
 
-#include "EllipticPoints.h"
 #include "utils/bignumber.h"
-#include "crypt/ecc/ecc.h"
+#include "crypt/ecc/math.h"
+#include "crypt/ecc/curves.h"
+#include "crypt/ecc/ellipticpoint.h"
 
 class KeyPublic
 {
 private:
-    EllipticPoints pbkey;
+    EllipticPoint pbkey;
 
 public:
     /**
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
-    KeyPublic(EllipticPoints pubKey)
-    {
-        this->pbkey = pubKey;
-    }
+    KeyPublic(EllipticPoint pubKey);
     KeyPublic(QByteArray pbKey);
     KeyPublic(const KeyPublic &keyPrivate);
     ~KeyPublic()
@@ -52,19 +50,8 @@ public:
      * @return
      */
     QByteArray extractPublicKey();
-
-    bool operator==(KeyPublic &other);
-
-public:
-    /**
-     * @brief getPublicKey
-     * @return
-     */
-    EllipticPoints getPublicPoint()
-    {
-        return this->pbkey;
-    }
     QByteArray getPublicKey();
+    QByteArray serialize();
 };
 
 #endif // KEY_PUBLIC_H

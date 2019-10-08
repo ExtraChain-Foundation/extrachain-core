@@ -8,11 +8,12 @@ SOURCES += \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
+    $$PWD/sources/crypt/ecc/ellipticpoint.cpp \
     $$PWD/sources/crypt/blowfish_crypt.cpp \
     $$PWD/sources/crypt/crypt_manager.cpp \
-    $$PWD/sources/crypt/ecc/ecc.cpp \
     $$PWD/sources/crypt/ecc/key_private.cpp \
     $$PWD/sources/crypt/ecc/key_public.cpp \
+    $$PWD/sources/crypt/ecc/math.cpp \
     $$PWD/sources/crypt/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
@@ -41,7 +42,6 @@ SOURCES += \
     $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/utils.cpp \
-    $$PWD/sources/EllipticPoints.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/managers/headers/card_manager.cpp \
@@ -71,8 +71,10 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/dfs/packages/headers/message_struct.h \
-    $$PWD/headers/EllipticPoints.h \
     $$PWD/headers/crypt/blowfish_crypt.h \
+    $$PWD/headers/crypt/ecc/curves.h \
+    $$PWD/headers/crypt/ecc/ellipticpoint.h \
+    $$PWD/headers/crypt/ecc/math.h \
     $$PWD/headers/crypt/xor_encrypt.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
@@ -82,7 +84,6 @@ HEADERS += \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/headers/crypt/crypt_manager.h \
-    $$PWD/headers/crypt/ecc/ecc.h \
     $$PWD/headers/crypt/ecc/key_private.h \
     $$PWD/headers/crypt/ecc/key_public.h \
     $$PWD/headers/crypt/crypt_interface.h \

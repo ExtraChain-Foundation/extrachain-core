@@ -5,7 +5,6 @@
 #include "crypt/ecc/key_public.h"
 #include "crypt/ecc/key_private.h"
 #include "managers/account_controller.h"
-#include "crypt/ecc/ecc.h"
 #include <QObject>
 namespace crypting {
 
