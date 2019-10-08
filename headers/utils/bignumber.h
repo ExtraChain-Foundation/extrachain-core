@@ -23,7 +23,7 @@ class BigNumber
 {
 public:
     BigNumber();
-    BigNumber(const QByteArray &bigNumber);
+    BigNumber(const QByteArray &bigNumber, int base = 16);
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);
@@ -32,14 +32,13 @@ public:
 private:
     QString hexValue = "";
     bool positive = true;
+    int base = 16;
     static const int HEX_BASE = 16;
     static const int DEC_BASE = 10;
-    static const int LONG_LONG_LENGTH = 19;
 
 private:
     QString toHex(const QString &dec) const;
     QString toDec(const QString &hex) const;
-    QString fillZeros(const QString &number) const; // fill string with zeros up to 19 numbers
     QString cutZeros(const QString &number) const;
     static std::pair<BigNumber, BigNumber> naiveDivide(BigNumber &value, const BigNumber &divider);
 
@@ -90,14 +89,18 @@ public:
     BigNumber pow(unsigned long long number);
     QString toStringDec() const;
     void fromString(QString serialized);
+    QByteArray toBase(int to);
 
-    static BigNumber fromByteArray(QByteArray serialized);
-    static BigNumber factorial(int num);
+    static BigNumber fromByteArray(QByteArray serialized, int base = 16);
+    static BigNumber factorial(int num, int base = 16);
     static BigNumber sqrt(const BigNumber &);
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
     static BigNumber fromDec(const QByteArray &dec);
+    static QByteArray fromBase(QByteArray hexValue, int from, int base);
+    int getBase() const;
+    void setBase(int value);
 };
 
 inline bool operator<(const BigNumber &e1, const BigNumber &e2)

@@ -1,11 +1,16 @@
 #include "utils/bignumber.h"
 
+#ifdef QT_DEBUG
+#include <QRegularExpression>
+#endif
+
 BigNumber::BigNumber()
 {
 }
 
-BigNumber::BigNumber(const QByteArray &bigNumber)
+BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
+    this->setBase(base);
     this->setHexValue(bigNumber);
 }
 
@@ -13,6 +18,7 @@ BigNumber::BigNumber(const BigNumber &other)
 {
     this->setHexValue(other.getHexValue());
     this->setPositive(other.isPositive());
+    this->setBase(other.getBase());
 }
 
 BigNumber::BigNumber(int number)
@@ -41,6 +47,16 @@ BigNumber::~BigNumber()
 {
 }
 
+int BigNumber::getBase() const
+{
+    return base;
+}
+
+void BigNumber::setBase(int value)
+{
+    base = value;
+}
+
 QString BigNumber::toHex(const QString &dec) const
 {
     qlonglong decVal = dec.toLongLong(nullptr, DEC_BASE);
@@ -53,17 +69,6 @@ QString BigNumber::toDec(const QString &hex) const
     qlonglong decVal = hex.toLongLong(nullptr, HEX_BASE);
     QString dec = QString::number(decVal, DEC_BASE);
     return dec;
-}
-
-QString BigNumber::fillZeros(const QString &number) const
-{
-    QString result = number;
-    while (number.size() <= LONG_LONG_LENGTH)
-    {
-        result = "0" + result;
-    }
-
-    return result;
 }
 
 QString BigNumber::cutZeros(const QString &number) const
@@ -90,7 +95,6 @@ QString BigNumber::cutZeros(const QString &number) const
 
 int BigNumber::compare(const QString &one, const QString &two)
 {
-
     if (one.compare(two) == 0)
         return 0;
 
@@ -106,29 +110,32 @@ int BigNumber::compare(const QString &one, const QString &two)
 
 BigNumber BigNumber::operator&(const BigNumber &value)
 {
-    int mineSize = this->toBinary().size();
-    int valueSize = value.toBinary().size();
+    BigNumber qwerty(toBase(2), 2);
 
-    int size = 0;
-    if (mineSize > valueSize)
-        size = valueSize;
-    else
-        size = mineSize;
+    //    int mineSize = this->toBinary().size();
+    //    int valueSize = value.toBinary().size();
 
-    QByteArray result;
-    mineSize -= size;
-    valueSize -= size;
-    // QString somestr = QString::number(this->toString().toInt(),16);
+    //    int size = 0;
+    //    if (mineSize > valueSize)
+    //        size = valueSize;
+    //    else
+    //        size = mineSize;
 
-    for (int i = 0; i < size; i++)
-    {
+    //    QByteArray result;
+    //    mineSize -= size;
+    //    valueSize -= size;
+    //    // QString somestr = QString::number(this->toString().toInt(),16);
 
-        result.append(
-            BigNumber::binaryCompareAnd(this->toBinary()[mineSize + i], value.toBinary()[valueSize + i]));
-    }
-    //[mineSize-i-1]
-    //[valueSize-i-1]
-    return result;
+    //    for (int i = 0; i < size; i++)
+    //    {
+
+    //        result.append(
+    //            BigNumber::binaryCompareAnd(this->toBinary()[mineSize + i], value.toBinary()[valueSize +
+    //            i]));
+    //    }
+    //    //[mineSize-i-1]
+    //    //[valueSize-i-1]
+    //    return result;
 }
 
 std::pair<BigNumber, BigNumber> BigNumber::naiveDivide(BigNumber &value, const BigNumber &divider)
@@ -254,9 +261,12 @@ BigNumber BigNumber::operator+(const BigNumber &other)
     {
         BigNumber one = *this;
         BigNumber two = other;
+        one.setBase(base);
+        two.setBase(base);
         one.positive = true;
 
         BigNumber result = one - two;
+        result.setBase(base);
         result.positive = result.hexValue != "0" ? one < two : true;
 
         return result;
@@ -266,9 +276,12 @@ BigNumber BigNumber::operator+(const BigNumber &other)
     {
         BigNumber one = *this;
         BigNumber two = other;
+        one.setBase(base);
+        two.setBase(base);
         two.positive = true;
 
         BigNumber result = two - one;
+        result.setBase(base);
         result.positive = result.hexValue != "0" ? one > two.abs() : true;
 
         return result;
@@ -288,26 +301,26 @@ BigNumber BigNumber::operator+(const BigNumber &other)
     while (length1 > 0)
     {
         // get first number
-        get1 = hex1.mid(length1 - 1, 1).toInt(nullptr, HEX_BASE);
+        get1 = hex1.mid(length1 - 1, 1).toInt(nullptr, base);
 
         // get second number
         if (length2 > 0)
-            get2 = hex2.mid(length2 - 1, 1).toInt(nullptr, HEX_BASE);
+            get2 = hex2.mid(length2 - 1, 1).toInt(nullptr, base);
         else
             get2 = 0;
 
         // get the sum
         sum = get1 + get2 + flag;
 
-        if (sum >= HEX_BASE)
+        if (sum >= base)
         {
-            int left = sum % HEX_BASE;
-            hex1[length1 - 1] = QString::number(left, HEX_BASE).at(0);
+            int left = sum % base;
+            hex1[length1 - 1] = QString::number(left, base).at(0);
             flag = 1;
         }
         else
         {
-            hex1[length1 - 1] = QString::number(sum, HEX_BASE).at(0);
+            hex1[length1 - 1] = QString::number(sum, base).at(0);
             flag = 0;
         }
 
@@ -316,6 +329,7 @@ BigNumber BigNumber::operator+(const BigNumber &other)
     }
 
     BigNumber result = (flag == 1 ? BigNumber(("1" + hex1).toLocal8Bit()) : BigNumber(hex1.toLocal8Bit()));
+    result.setBase(base);
 
     if (!this->isPositive() && !other.isPositive())
         result.positive = !result.positive;
@@ -329,7 +343,7 @@ BigNumber BigNumber::operator+(const BigNumber &other)
 BigNumber BigNumber::operator+(long long number)
 {
     QByteArray hexVal = toHex(QString::number(number)).toLocal8Bit();
-    return *this + BigNumber(hexVal);
+    return *this + BigNumber(hexVal, base);
 }
 
 BigNumber BigNumber::operator-(const BigNumber &bigNumber)
@@ -337,9 +351,11 @@ BigNumber BigNumber::operator-(const BigNumber &bigNumber)
     if (!this->isPositive() && bigNumber.isPositive())
     {
         BigNumber one = *this;
+        one.setBase(base);
         one.positive = true;
 
         BigNumber res = one + bigNumber;
+        res.setBase(base);
         res.setPositive(false);
 
         return res;
@@ -348,16 +364,18 @@ BigNumber BigNumber::operator-(const BigNumber &bigNumber)
     if (this->isPositive() && !bigNumber.isPositive())
     {
         BigNumber two = bigNumber;
+        two.setBase(base);
         two.positive = true;
 
         BigNumber res(*this + two);
-
+        res.setBase(base);
         return res;
     }
 
     QString hex1 = this->hexValue;
     QString hex2 = bigNumber.getHexValue();
     BigNumber result;
+    result.setBase(base);
     QString res_s;
     if (compare(hex2, hex1) > 0)
     {
@@ -377,11 +395,11 @@ BigNumber BigNumber::operator-(const BigNumber &bigNumber)
     while (length1 > 0)
     {
         // get first number
-        get1 = hex1.mid(length1 - 1, 1).toInt(nullptr, HEX_BASE);
+        get1 = hex1.mid(length1 - 1, 1).toInt(nullptr, base);
 
         // get second number
         if (length2 > 0)
-            get2 = hex2.mid(length2 - 1, 1).toInt(nullptr, HEX_BASE);
+            get2 = hex2.mid(length2 - 1, 1).toInt(nullptr, base);
         else
             get2 = 0;
 
@@ -389,15 +407,15 @@ BigNumber BigNumber::operator-(const BigNumber &bigNumber)
 
         if (div < 0)
         {
-            int convertVal = HEX_BASE + get1 - flag;
+            int convertVal = base + get1 - flag;
             convertVal = convertVal - get2;
-            res_s.insert(0, QString::number(convertVal, HEX_BASE).at(0));
+            res_s.insert(0, QString::number(convertVal, base).at(0));
             // hex1[length1-1] = QString::number(convertVal, HEX_BASE).at(0);
             flag = 1;
         }
         else
         {
-            res_s.insert(0, QString::number(div, HEX_BASE).at(0));
+            res_s.insert(0, QString::number(div, base).at(0));
             flag = 0;
         }
 
@@ -416,13 +434,17 @@ BigNumber BigNumber::operator-(const BigNumber &bigNumber)
 BigNumber BigNumber::operator-(long long number)
 {
     QString hexVal = toHex(QString::number(number));
-    return *this - BigNumber(hexVal.toLocal8Bit());
+    return *this - BigNumber(hexVal.toLocal8Bit(), base);
 }
 
 BigNumber BigNumber::operator*(const BigNumber &bigNumber)
 {
     if (bigNumber.getHexValue() == "0" || this->hexValue == "0")
-        return BigNumber();
+    {
+        BigNumber empty;
+        empty.setBase(base);
+        return empty;
+    }
 
     bool resultPositive = true;
     if (!this->isPositive() && !bigNumber.isPositive())
@@ -431,20 +453,24 @@ BigNumber BigNumber::operator*(const BigNumber &bigNumber)
         resultPositive = false;
 
     BigNumber two = bigNumber;
+    two.setBase(base);
     two.positive = true;
 
     QString multi = two.getHexValue();
     int length = multi.size();
     int digit = 0;
 
-    BigNumber value = BigNumber(*this);
+    BigNumber value(*this);
+    value.setBase(base);
     value.positive = true;
     BigNumber result;
+    result.setBase(base);
 
     while (length > 0)
     {
-        int repeat = multi.mid(length - 1, 1).toInt(nullptr, HEX_BASE);
+        int repeat = multi.mid(length - 1, 1).toInt(nullptr, base);
         BigNumber columnResult;
+        columnResult.setBase(base);
 
         for (int i = 1; i <= repeat; repeat--)
             columnResult = columnResult + value;
@@ -464,7 +490,7 @@ BigNumber BigNumber::operator*(const BigNumber &bigNumber)
 BigNumber BigNumber::operator*(long long number)
 {
     QString hexVal = toHex(QString::number(number));
-    return *this * BigNumber(hexVal.toLocal8Bit());
+    return *this * BigNumber(hexVal.toLocal8Bit(), base);
 }
 
 BigNumber BigNumber::operator/(const BigNumber &divider)
@@ -475,7 +501,7 @@ BigNumber BigNumber::operator/(const BigNumber &divider)
 BigNumber BigNumber::operator/(long long number)
 {
     QString hexVal = toHex(QString::number(number));
-    return *this / BigNumber(hexVal.toLocal8Bit());
+    return *this / BigNumber(hexVal.toLocal8Bit(), base);
 }
 
 BigNumber BigNumber::operator%(const BigNumber &divider)
@@ -486,13 +512,14 @@ BigNumber BigNumber::operator%(const BigNumber &divider)
 BigNumber BigNumber::operator%(long long number)
 {
     QString hexVal = toHex(QString::number(number));
-    return *this % BigNumber(hexVal.toLocal8Bit());
+    return *this % BigNumber(hexVal.toLocal8Bit(), base);
 }
 
 BigNumber &BigNumber::operator=(const BigNumber &bigNumber)
 {
     this->hexValue = bigNumber.getHexValue();
     this->setPositive(bigNumber.isPositive());
+    this->setBase(bigNumber.getBase());
     return *this;
 }
 
@@ -517,6 +544,7 @@ BigNumber &BigNumber::operator++()
 BigNumber BigNumber::operator++(int)
 {
     BigNumber val = *this;
+    val.setBase(base);
     ++(*this);
     return val;
 }
@@ -601,7 +629,7 @@ BigNumber &BigNumber::operator-()
 }
 
 bool BigNumber::isPrime() const
-{
+{ // TODO: base
     BigNumber currentThis = *this;
     BigNumber n = sqrt(*this);
 
@@ -685,7 +713,16 @@ BigNumber BigNumber::abs() const
 
 void BigNumber::setHexValue(const QString &hex)
 {
-    //    QByteArray num = cutZeros(hex).trimmed().toLocal8Bit();
+    // QByteArray num = cutZeros(hex).trimmed().toLocal8Bit();
+    //#ifdef QT_DEBUG
+    //    static QRegularExpression regExp("[a-f0-9]+");
+    //    if (hex.length() && !regExp.match(hex).hasMatch())
+    //    {
+    //        std::cout << "BigNumber error for hex" << hex.toStdString() << std::endl;
+    //        std::exit(-1);
+    //    }
+    //#endif
+
     QByteArray num = hex.toUtf8();
     if (hex.isEmpty() || num.isEmpty())
         num = "0";
@@ -715,6 +752,7 @@ void BigNumber::setPositive(bool newPositive)
 BigNumber BigNumber::pow(unsigned long long number) // naive
 {
     BigNumber result = 1;
+    result.setBase(base);
     for (unsigned long long i = 0; i != number; ++i)
         result = result * *this;
     return result;
@@ -741,14 +779,20 @@ void BigNumber::fromString(QString serialized)
     }
 }
 
-BigNumber BigNumber::fromByteArray(QByteArray serialized)
+QByteArray BigNumber::toBase(int to)
 {
-    return BigNumber(serialized);
+    return BigNumber::fromBase(toByteArray(), base, to);
 }
 
-BigNumber BigNumber::factorial(int num) // naive
+BigNumber BigNumber::fromByteArray(QByteArray serialized, int base)
+{
+    return BigNumber(serialized, base);
+}
+
+BigNumber BigNumber::factorial(int num, int base) // naive
 {
     BigNumber result = 1;
+    result.setBase(base);
 
     for (int i = 2; i != num + 1; ++i)
         result *= i;
@@ -822,18 +866,41 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
 
 BigNumber BigNumber::fromDec(const QByteArray &dec)
 {
-    BigNumber hex;
+    return fromBase(dec, 10, 16);
+}
 
-    bool positive = dec.at(0) != '-';
+QByteArray BigNumber::fromBase(QByteArray hexValue, int from, int base)
+{
+    if (base < 2 || base > 36)
+        return "";
+
+    BigNumber dec(0);
+    dec.setBase(base);
+    if (hexValue.isEmpty())
+        return "0";
+    bool positive = hexValue.at(0) != '-';
     unsigned long j = 0;
+    BigNumber two(QByteArray::number(from, base));
+    two.setBase(base);
 
-    for (int i = dec.length() - 1; i >= 0 + !positive; i--)
-        hex += BigNumber(QString(dec.at(i)).toInt(nullptr, 10)) * BigNumber(10).pow(j++);
+    for (int i = hexValue.length() - 1; i >= 0 + !positive; i--)
+    {
+        BigNumber one(QByteArray::number(QString(hexValue.at(i)).toInt(nullptr, from), base));
+        one.setBase(base);
+
+        BigNumber result = 1;
+        result.setBase(base);
+        for (unsigned long long i = 0; i != j; ++i)
+            result = result * two;
+        j++;
+
+        dec += one * result;
+    }
 
     if (!positive)
-        hex.setPositive(false);
+        dec.setPositive(false);
 
-    return hex;
+    return dec.toByteArray();
 }
 
 QDataStream &operator<<(QDataStream &in, BigNumber &bigNumber)
@@ -853,6 +920,6 @@ QDataStream &operator>>(QDataStream &out, BigNumber &bigNumber)
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace() << bigNumber.toString();
+    debug.nospace().noquote() << "\"0x" << bigNumber.toString() << "\"";
     return debug;
 }
