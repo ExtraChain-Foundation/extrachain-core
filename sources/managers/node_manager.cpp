@@ -178,7 +178,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
     if (!actor.isEmpty())
     {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                        .arg(tx.toString(), actor.getId().toString());
+                        .arg(tx.toString(), QString(actor.getId().toByteArray()));
 
         // 1) set prev block id
         BigNumber lastBlockId = blockchain->getLastBlock().getIndex();
@@ -252,8 +252,8 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
     }
     else
     {
-        qDebug()
-            << QString("Warning: can not create tx to [%1]. There no current user").arg(receiver.toString());
+        qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
+                        .arg(QString(receiver.toByteArray()));
     }
     return Transaction();
 }

@@ -204,8 +204,8 @@ QByteArray Block::serialize() const
 {
     QList<QByteArray> list;
 
-    list << getType() << getIndex().toString().toLocal8Bit() << getApprover().toString().toLocal8Bit()
-         << QByteArray::number(date) << getData() << getPrevHash() << getHash() << getDigSig();
+    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << QByteArray::number(date)
+         << getData() << getPrevHash() << getHash() << getDigSig();
     //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
     return Serialization::universalSerialize(list, FIELDS_SIZE);
 }
@@ -214,8 +214,8 @@ QString Block::toString() const
 {
     QList<QByteArray> list;
 
-    list << getType() << getIndex().toString().toLocal8Bit() << getApprover().toString().toLocal8Bit()
-         << QByteArray::number(date) << getData() << getPrevHash() << getHash() << getDigSig();
+    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << QByteArray::number(date)
+         << getData() << getPrevHash() << getHash() << getDigSig();
     //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
     return Serialization::universalSerialize(list, FIELDS_SIZE);
 }

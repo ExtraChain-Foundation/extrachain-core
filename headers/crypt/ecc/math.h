@@ -6,7 +6,7 @@
 #include "curves.h"
 #include <QDebug>
 #include <cassert>
-
+#include <iostream>
 namespace ECC {
 /**
  * @brief Modular arithmetic

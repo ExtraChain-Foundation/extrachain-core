@@ -2,8 +2,8 @@
 
 EllipticPoint::EllipticPoint()
 {
-    x = BigNumber("0");
-    y = BigNumber("0");
+    x = BigNumber();
+    y = BigNumber();
 }
 
 EllipticPoint::EllipticPoint(BigNumber x, BigNumber y)
@@ -30,6 +30,7 @@ BigNumber EllipticPoint::X() const
 void EllipticPoint::setX(const BigNumber &value)
 {
     x = value;
+    std::cout << "x: " << x.toByteArray().toStdString() << std::endl;
 }
 
 BigNumber EllipticPoint::Y() const
@@ -40,6 +41,7 @@ BigNumber EllipticPoint::Y() const
 void EllipticPoint::setY(const BigNumber &value)
 {
     y = value;
+    std::cout << "y: " << y.toByteArray().toStdString() << std::endl;
 }
 
 bool EllipticPoint::isZero()

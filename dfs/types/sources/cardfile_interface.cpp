@@ -7,7 +7,7 @@
 
 ICardFile::ICardFile(const BigNumber userId)
 {
-    cardFile.setFileName(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString());
+    cardFile.setFileName(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray());
     cardFile.open(QIODevice::ReadWrite);
     long long first_data = Utils::qByteArrayToInt(cardFile.read(FIELDS_SIZE));
 }

@@ -29,10 +29,11 @@ void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
                        const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
 {
     QString createdPath = based_dfs_struct::ROOT_FOOLDER_NAME + '/'
-        + accountControler->getMainActor()->getId().toString() + '/' + based_dfs_struct::toString(type) + '/';
+        + accountControler->getMainActor()->getId().toByteArray() + '/' + based_dfs_struct::toString(type)
+        + '/';
     createdPath += based_dfs_struct::images == type ? based_dfs_struct::toString(subType) + '/' : "";
     if (type != based_dfs_struct::servic)
-        createdPath += CardManager::getNameForNewFile(type).toString();
+        createdPath += CardManager::getNameForNewFile(type).toByteArray();
     else
     {
         if (subType == based_dfs_struct::profil)

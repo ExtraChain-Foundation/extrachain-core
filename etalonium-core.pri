@@ -66,8 +66,7 @@ SOURCES += \
     $$PWD/sources/network/packages/service/merged_block_message.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
-    $$PWD/sources/network/upnpconnection.cpp \
-    $$PWD/headers/utils/bignumberdec.cpp
+    $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
     $$PWD/dfs/packages/headers/message_struct.h \
@@ -149,7 +148,8 @@ HEADERS += \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/utils.h \
-    $$PWD/headers/utils/bignumberdec.h
+    $$PWD/libs/gmp.h \
+    $$PWD/libs/gmpxx.h
 
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
@@ -159,6 +159,13 @@ OBJECTS_DIR = .obj
 MOC_DIR = .moc
 RCC_DIR = .qrc
 UI_DIR = .ui
+
+android {
+LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
+}
+linux:!android {
+LIBS += -lgmp -lgmpxx
+}
 
 QMAKE_SPEC_T = $$[QMAKE_SPEC]
 contains(QMAKE_SPEC_T,.*win32.*) {
@@ -174,3 +181,14 @@ QMAKE_SUBSTITUTES += preconfig.h.in
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.12+")
 lessThan(QT_MINOR_VERSION, 12): error("requires Qt 5.12+")
 lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.12+")
+
+DISTFILES += \
+    $$PWD/android/AndroidManifest.xml \
+    $$PWD/android/build.gradle \
+    $$PWD/android/gradle/wrapper/gradle-wrapper.jar \
+    $$PWD/android/gradle/wrapper/gradle-wrapper.properties \
+    $$PWD/android/gradlew \
+    $$PWD/android/gradlew.bat \
+    $$PWD/android/libs/armeabi-v7a/libgmp.so \
+    $$PWD/android/libs/armeabi-v7a/libgmpxx.so \
+    $$PWD/android/res/values/libs.xml

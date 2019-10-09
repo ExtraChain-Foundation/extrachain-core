@@ -222,7 +222,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
         QList<Transaction> txs = lastBlock.extractTransactions();
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken() != token)
+            if (tx.getToken().toByteArray() != token)
                 continue;
             switch (param)
             {

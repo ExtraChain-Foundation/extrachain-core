@@ -35,7 +35,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
         this->amount = BigNumber(list.at(2));
         this->date = list.at(3).toLongLong();
         this->data = list.at(4);
-        this->token = BigNumber::fromByteArray(list.at(5));
+        this->token = BigNumber(list.at(5));
         this->senderBalance = BigNumber(list.at(6));
         this->receiverBalance = BigNumber(list.at(7));
         this->prevBlock = BigNumber(list.at(8));
@@ -326,23 +326,22 @@ void Transaction::operator=(const Transaction &other)
 QString Transaction::toString() const
 {
     QStringList list;
-    list << "sender:" + sender.toString() << "receiver:" + receiver.toString()
-         << "amount:" + amount.toString() << "date:" << QDateTime::fromTime_t(date).toString()
-         << "data:" + data << "token:" + token.serialize() << "senderBalance:" + senderBalance.toString()
-         << "receiverBalance:" + receiverBalance.toString() << "prevBlock:" + prevBlock.toString()
+    list << "sender:" + sender.toByteArray() << "receiver:" + receiver.toByteArray()
+         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromTime_t(date).toString()
+         << "data:" + data << "token:" + token.serialize() << "senderBalance:" + senderBalance.toByteArray()
+         << "receiverBalance:" + receiverBalance.toByteArray() << "prevBlock:" + prevBlock.toByteArray()
          << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
-         << "approver:" + approver.toString() << "digitalSignature:" + digSig;
+         << "approver:" + approver.toByteArray() << "digitalSignature:" + digSig;
     return Serialization::serializeString(list, Serialization::TX_FIELD_SPLITTER);
 }
 
 QByteArray Transaction::serialize() const
 {
     QList<QByteArray> list;
-    list << sender.toString().toLocal8Bit() << receiver.toString().toLocal8Bit()
-         << amount.toString().toLocal8Bit() << QByteArray::number(date) << data << token.toByteArray()
-         << senderBalance.toString().toLocal8Bit() << receiverBalance.toString().toLocal8Bit()
+    list << sender.toByteArray() << receiver.toByteArray() << amount.toByteArray() << QByteArray::number(date)
+         << data << token.toByteArray() << senderBalance.toByteArray() << receiverBalance.toByteArray()
          << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
-         << QString::number(hop).toLocal8Bit() << hash << approver.toString().toLocal8Bit() << digSig;
+         << QString::number(hop).toLocal8Bit() << hash << approver.toByteArray() << digSig;
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 
     return Serialization::universalSerialize(list, FIELS_SIZE);

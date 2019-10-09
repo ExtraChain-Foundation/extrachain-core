@@ -14,7 +14,7 @@ ContractManager::ContractManager(AccountController *accountController, Blockchai
 void ContractManager::saveContract(const Contract &contract)
 {
     QString path = based_dfs_struct::ROOT_FOOLDER_NAME + "/"
-        + accountController->getMainActor()->getId().toString() + "/" + "CONTRACTS" + "/";
+        + accountController->getMainActor()->getId().toByteArray() + "/" + "CONTRACTS" + "/";
     qDebug() << path;
     QDir().mkpath(path);
     QDir contract_dir(path);
@@ -33,7 +33,7 @@ void ContractManager::loadContracts()
 {
     contractList.clear();
     QString path = based_dfs_struct::ROOT_FOOLDER_NAME + "/"
-        + accountController->getMainActor()->getId().toString() + "/" + "CONTRACTS" + "/";
+        + accountController->getMainActor()->getId().toByteArray() + "/" + "CONTRACTS" + "/";
     QDir directory(path);
     if (!directory.exists())
         return;

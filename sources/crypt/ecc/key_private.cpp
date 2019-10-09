@@ -2,7 +2,8 @@
 KeyPrivate::KeyPrivate()
 {
     this->curve = ECC::secp256k1();
-    BigNumber temp = BigNumber::random(64, curve.n);
+    BigNumber temp =
+        BigNumber("32904579310113466452080265028528580382987806394282029105120642762719869018987", 10);
     this->prkey = temp.toByteArray();
     this->pbkey = ECC::multiply(this->curve, temp, curve.g);
 }

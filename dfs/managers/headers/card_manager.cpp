@@ -187,7 +187,7 @@ QList<QByteArray> CardManager::getAllMyChat()
 
 QByteArray CardManager::getProfileById(const BigNumber &userId)
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
         + based_dfs_struct::toString(based_dfs_struct::Type::servic)
         + based_dfs_struct::SERVICE_CARD_FILE_NAME;
     QFile file(path);
@@ -221,7 +221,7 @@ BigNumber CardManager::getNameForNewFile(based_dfs_struct::Type type)
     BigNumber amout = cardFileData.isEmpty()
         ? BigNumber("-1")
         : BigNumber(
-              cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
+            cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
     amout++;
     cardFile->close();
     delete cardFile;
@@ -266,7 +266,7 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
      * rootCard file use DFS_ROOT_CARD_FILE_SECTION_DELIMITER
      */
 
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
         + based_dfs_struct::toString(type) + based_dfs_struct::typeCardFilesMap[type];
     QFile *file = new QFile(path);
     if (!file->exists())
@@ -358,7 +358,7 @@ void CardManager::createdAllCards(const BigNumber &userId)
 {
     for (auto &el : based_dfs_struct::typeCardFilesMap)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
             + based_dfs_struct::toString(el.first) + el.second;
         QFile file(path);
         file.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -437,7 +437,7 @@ int CardManager::createdCardFilesConnection(const BigNumber &userId)
     QList<QByteArray> list = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (!QFile(path).exists())
         {
@@ -455,7 +455,7 @@ QList<QString> CardManager::getAllFiles(const BigNumber &userId)
     QList<QString> cardList = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (QFile(path).exists())
         {
@@ -491,7 +491,7 @@ std::vector<std::pair<std::string, std::string>> CardManager::getAllFileWithHash
     QList<QString> cardList = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (QFile(path).exists())
         {
@@ -563,7 +563,7 @@ QStringList CardManager::getAllNotEmptyCardFile(const BigNumber &userId)
     QStringList cardList = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (QFile(path).exists())
         {

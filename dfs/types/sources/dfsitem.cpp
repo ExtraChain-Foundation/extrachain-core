@@ -204,7 +204,7 @@ int DfsItem::makeChanges(QByteArray data)
 }
 void Subscribtion::add(const BigNumber &actorId)
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toString() + fileName;
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toByteArray() + fileName;
     QFile file(path);
     file.open(QIODevice::WriteOnly | QIODevice::Append);
     file.write(actorId.toByteArray());
@@ -214,7 +214,7 @@ void Subscribtion::add(const BigNumber &actorId)
 
 void Subscribtion::remove(const BigNumber &actorId)
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toString() + fileName;
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toByteArray() + fileName;
     QFile file(path);
     file.open(QIODevice::ReadWrite);
     while (!file.atEnd())
@@ -235,7 +235,7 @@ void Subscribtion::remove(const BigNumber &actorId)
 
 QList<BigNumber> Subscribtion::getAll() const
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toString() + fileName;
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toByteArray() + fileName;
     QFile file(path);
     file.open(QIODevice::ReadOnly);
     QList<BigNumber> list;

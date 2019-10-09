@@ -40,7 +40,7 @@ public:
     }
     Actor()
     {
-        id = BigNumber(-1);
+        id = 0;
         key = nullptr;
         hash = "";
         account = true;
@@ -194,10 +194,9 @@ public:
                 KeyPrivate *prKey = reinterpret_cast<KeyPrivate *>(key);
                 QList<QByteArray> list;
 
-                qDebug() << this->id.toString().toLocal8Bit() << prKey->serialize() << pubKey;
+                qDebug() << this->id.toByteArray() << prKey->serialize() << pubKey;
 
-                list << this->id.toString().toLocal8Bit() << prKey->serialize()
-                     << QByteArray::number(account);
+                list << this->id.toByteArray() << prKey->serialize() << QByteArray::number(account);
                 //                list << this->id.toString().toLocal8Bit() <<
                 //                temp.CryptMessage(prKey) <<temp.CryptMessage( pubKey);
                 //                KeyPublic pubKey(key->extractPublicKey());
@@ -215,12 +214,12 @@ public:
             else
             {
                 // key_public
-                list << id.toString().toLocal8Bit() << pubKey << QByteArray::number(account);
+                list << id.toByteArray() << pubKey << QByteArray::number(account);
             }
         }
         else
         {
-            list << id.toString().toLocal8Bit();
+            list << id.toByteArray();
         }
         //        return Serialization::serialize(list, Serialization::ACTOR_FIELD_SPLITTER);//
         QByteArray serialized = Serialization::universalSerialize(list, 4);
