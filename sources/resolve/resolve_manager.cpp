@@ -32,57 +32,13 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-    connect(actorIndex, &ActorIndex::responseReady, resolver, &ResolverService::responseReady);
+    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
+    connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
+    connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
+    connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
     // response signals
-    //    connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
-
-    //    connect(resolver, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);
-
-    //    connect(resolver, &ResolverService::newDfsPack, networkManager, &NetManager::newDfsPack);
-
-    //    connect(resolver, &ResolverService::receiveProfile, networkManager, &NetManager::receiveProfile);
-    //    connect(networkManager, &NetManager::receiveProfile, actorIndex,
-    //    &ActorIndex::saveProfileFromNetwork);
-
-    // spread signals
-
-    // connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::getActor);
-    //    connect(resolver, &ResolverService::getActorsCount, this, &NetManager::GetActorCount);
-
-    //    connect(resolver, &ResolverService::getBlock, this, &NetManager::GetBlock);
-    //    connect(resolver, &ResolverService::getBlocksCount, this, &NetManager::GetBlockCount);
-    //    connect(resolver, &ResolverService::NewGenesisBlock, this,
-    //    &NetManager::handleNewGenesisBlock);
-    //    connect(resolver, &ResolverService::newTx, this, &NetManager::NewTx);
-    //    connect(resolver, &ResolverService::getTx, this, &NetManager::GetTx);
-    //    connect(resolver, &ResolverService::getTxPair, this, &NetManager::GetTxPair);
-
-    //    connect(resolver, &ResolverService::BlockApproved, this, &NetManager::handleBlockApproved);
-
-    /**
-    connect(resolver, &ResolverService::GetActor, this, &NetManager::handleGetActor);
-    connect(resolver, &ResolverService::GetTx, this, &NetManager::handleGetTx);
-    connect(resolver, &ResolverService::CoinRequest, this, &NetManager::coinRequest);
-    connect(resolver, &ResolverService::GetTxPair, this, &NetManager::handleGetTxPair);
-    connect(resolver, &ResolverService::GetBlock, this, &NetManager::handleGetBlock);
-    connect(resolver, &ResolverService::GetBlockCount, this, &NetManager::handleGetBlockCount);
-    connect(resolver, &ResolverService::GetActorCount, this, &NetManager::handleGetActorCount);
-    */
-    //    connect(this, &NetManager::requestBlockCount, this, &NetManager::sendGetBlockCount);
-    //    connect(this, &NetManager::requestActorCount, this, &NetManager::sendGetActorCount);
-    /*********************************************************************************************/
-
-    // responses
-    /**
-    connect(resolver, &ResolverService::GetActorResponse, this, &NetManager::handleGetActorResponse);
-    connect(resolver, &ResolverService::GetActorCountResponse, this,
-            &NetManager::handleGetActorCountResponse);
-    connect(resolver, &ResolverService::GetTxResponse, this, &NetManager::handleGetTxResponse);
-    connect(resolver, &ResolverService::GetTxPairResponse, this, &NetManager::handleGetTxPairResponse);
-    connect(resolver, &ResolverService::GetBlockResponse, this, &NetManager::handleGetBlockResponse);
-    connect(resolver, &ResolverService::GetBlockCountResponse, this,
-            &NetManager::handleGetBlockCountResponse);
-    */
+    connect(actorIndex, &ActorIndex::responseReady, resolver, &ResolverService::responseReady);
+    connect(blockchain, &Blockchain::responseReady, resolver, &ResolverService::responseReady);
 }
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)
@@ -97,6 +53,13 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
+    disconnect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
+    disconnect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
+    disconnect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
+    disconnect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
+    // response signals
+    disconnect(actorIndex, &ActorIndex::responseReady, resolver, &ResolverService::responseReady);
+    disconnect(blockchain, &Blockchain::responseReady, resolver, &ResolverService::responseReady);
 }
 
 void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)

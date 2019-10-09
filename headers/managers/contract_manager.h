@@ -42,7 +42,8 @@ signals:
     void addContractToUi(const Contract &contract);
     void loadToUi(QList<Contract> *, BigNumber currentId);
 
-    void makeFirstContractTransaction(Contract contract);
+    void makeFirstContractTransaction(const Contract &contract);
+    void makeFinalContractTransaction(const Contract &contract);
 };
 
 #endif // CONTRACT_MANAGER_H

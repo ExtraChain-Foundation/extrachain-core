@@ -834,25 +834,20 @@ void Blockchain::checkBlockExistence(const Block &block)
     }
 }
 
-void Blockchain::getBlockFromBlockchain(SearchEnum::BlockParam param, QByteArray value,
-                                        QHostAddress peerAddress, QByteArray requestHash)
+void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
+                                        const QByteArray &requestHash, const SocketPair &receiver)
 {
     Block block = getBlock(param, value);
     if (block.isEmpty())
         return;
-    emit BlockFound(block, param, value, peerAddress, requestHash);
+    emit responseReady(block.serialize(), Messages::GET_BLOCK_RESPONSE_MESSAGE, requestHash, receiver);
 }
 
-void Blockchain::getBlockCount(QHostAddress peerAddress, QByteArray requestHash)
+void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
 {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
-    emit BlockCount(this->blockIndex.getLastSavedId(), peerAddress, requestHash);
-}
-
-void Blockchain::getActorCount(QHostAddress peerAddress, QByteArray requestHash)
-{
-    qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->actorIndex->getRecords();
-    emit ActorCount(this->actorIndex->getRecords(), peerAddress, requestHash);
+    emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
+                       Messages::GET_BLOCK_COUNT_RESPONSE_MESSAGE, requestHash, receiver);
 }
 
 void Blockchain::addBlockToBlockchain(Block block)
@@ -883,13 +878,13 @@ void Blockchain::setApprover(const Actor<KeyPrivate> &value)
     this->accountController->getCurrentActor() = value;
 }
 
-void Blockchain::getTxFromBlockchain(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
-                                     QByteArray requestHash)
+void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
+                                     const SocketPair &receiver, const QByteArray &request)
 {
     Transaction transaction = getTransaction(param, value);
     if (!transaction.isEmpty())
     {
-        emit TxFound(transaction, param, QString(value), peerAddress, requestHash);
+        emit responseReady(transaction.serialize(), Messages::GET_TX_RESPONSE_MESSAGE, request, receiver);
     }
     else
     {
@@ -1006,14 +1001,6 @@ void Blockchain::proveTx()
         emit tx->NotApproved();
         qDebug() << "Transaction not approved: balance not valid";
     }
-}
-
-// Transactions //
-
-void Blockchain::getTxPairFromBlockChain(BigNumber sender, BigNumber receiver, QHostAddress peerAddress,
-                                         QByteArray requestHash)
-{
-    // todo
 }
 
 // Other //

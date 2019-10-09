@@ -53,8 +53,8 @@ class Contract : public QObject
 {
     Q_OBJECT
 private:
-    BigNumber customer;
-    BigNumber performer;
+    BigNumber customer; // creator
+    QMap<BigNumber, bool> performer;
 
     QByteArray location;
     QByteArray event;
@@ -65,11 +65,11 @@ private:
 
     QByteArray customer_sign;
     QByteArray performer_sign;
+
     QByteArray first_transaction_hash;
     QByteArray final_transaction_hash;
 
     bool approve_complete_customer;
-    bool approve_complete_performer;
 
     bool isCompleted;
 
@@ -79,12 +79,14 @@ public:
     Contract(const Contract &contract, QObject *parent = nullptr);
     Contract(const BigNumber _customer, const BigNumber _performer, const QByteArray _location,
              const QByteArray event, const QPair<long long, long long> _event_date,
-             const QList<QByteArray> _scope_of_work, const QByteArray _agreement,
-             const BigNumber _amount, QObject *parent = nullptr);
+             const QList<QByteArray> _scope_of_work, const QByteArray _agreement, const BigNumber _amount,
+             QObject *parent = nullptr);
 
-    void operator=(const Contract &contract);
+    Contract operator=(const Contract &contract);
     bool operator==(const Contract &contract) const;
 
+    bool checkCustomerSign(const Actor<KeyPublic> &actor);
+    bool checkPerformerSign(const Actor<KeyPublic> &actor);
     QByteArray serialize() const;
 
     QByteArray getSignData() const;
@@ -92,8 +94,18 @@ public:
     void signByCustomer(const Actor<KeyPrivate> &actor);
     void signByPerformer(const Actor<KeyPrivate> &actor);
 
+    bool makeFirstTransction() const;
+    bool makeFinalTransaction() const;
+
+    void completeContractByCustomer();
+    void completeContractByPerformer();
+
+    bool getIsCompleted() const;
+    void setIsCompleted(bool value);
+    // getter and setter members
     QByteArray getCustomer_sign() const;
     void setCustomer_sign(const QByteArray &value);
+
     QByteArray getPerformer_sign() const;
     void setPerformer_sign(const QByteArray &value);
 
@@ -102,11 +114,6 @@ public:
 
     BigNumber getPerformer() const;
     void setPerformer(const BigNumber &value);
-
-    bool checkCustomerSign(const Actor<KeyPublic> &actor);
-    bool checkPerformerSign(const Actor<KeyPublic> &actor);
-    //    bool checkCustomerComplete();
-    //    bool
 
     QByteArray getLocation() const;
     void setLocation(const QByteArray &value);
@@ -129,9 +136,6 @@ public:
     QByteArray getHash() const;
     QByteArray getFileName() const;
 
-    bool makeFirstTransction() const;
-    bool makeFinalTransaction() const;
-
     QByteArray getFirst_transaction_hash() const;
     void setFirst_transaction_hash(const QByteArray &value);
 
@@ -141,16 +145,9 @@ public:
     bool getApprove_complete_performer() const;
     void setApprove_complete_performer(bool value);
 
-    void completeContractByCustomer();
-    void completeContractByPerformer();
-
-    bool getIsCompleted() const;
-    void setIsCompleted(bool value);
-
 private:
     QByteArray calcDigSig(const Actor<KeyPrivate> &actor);
-    bool verifyDigSig(const Actor<KeyPublic> &actor, const QByteArray &data,
-                      const QByteArray &digSig);
+    bool verifyDigSig(const Actor<KeyPublic> &actor, const QByteArray &data, const QByteArray &digSig);
 };
 
 #endif // CONTRACT_H

@@ -332,10 +332,12 @@ void Contract::setIsCompleted(bool value)
 }
 
 Contract::Contract(QObject *parent)
+    : QObject(parent)
 {
 }
 
 Contract::Contract(const QByteArray serialize_contract, QObject *parent)
+    : QObject(parent)
 {
     QList<QByteArray> data =
         Serialization::universalDesirialize(serialize_contract, Serialization::DEFAULT_FIELD_SIZE);
@@ -361,6 +363,7 @@ Contract::Contract(const QByteArray serialize_contract, QObject *parent)
 }
 
 Contract::Contract(const Contract &contract, QObject *parent)
+    : QObject(parent)
 {
     customer = contract.customer;
     performer = contract.performer;
@@ -402,7 +405,7 @@ Contract::Contract(const BigNumber _customer, const BigNumber _performer, const 
     isCompleted = false;
 }
 
-void Contract::operator=(const Contract &contract)
+Contract Contract::operator=(const Contract &contract)
 {
     customer = contract.customer;
     performer = contract.performer;
@@ -422,6 +425,7 @@ void Contract::operator=(const Contract &contract)
     approve_complete_performer = contract.approve_complete_performer;
 
     isCompleted = contract.isCompleted;
+    return *this;
 }
 
 bool Contract::operator==(const Contract &contract) const

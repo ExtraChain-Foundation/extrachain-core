@@ -17,7 +17,6 @@ void ContractManager::saveContract(const Contract &contract)
         + accountController->getMainActor()->getId().toString() + "/" + "CONTRACTS" + "/";
     qDebug() << path;
     QDir().mkpath(path);
-    QDir contract_dir(path);
 
     QFile contract_file(path + QString(contract.getFileName()));
     contract_file.open(QIODevice::WriteOnly);
@@ -37,8 +36,9 @@ void ContractManager::loadContracts()
     QDir directory(path);
     if (!directory.exists())
         return;
-    QStringList images = directory.entryList(QDir::Files);
-    foreach (QString filename, images)
+
+    QStringList contracts = directory.entryList(QDir::Files);
+    for (QString filename : contracts)
     {
         QFile open_file(path + filename);
         open_file.open(QIODevice::ReadOnly);
@@ -88,7 +88,7 @@ void ContractManager::addContractToManager(const Contract &contract)
         && contract.getFirst_transaction_hash().isEmpty()
         && contract.getCustomer() == accountController->getMainActor()->getId())
     {
-        makeFirstContractTransaction(contract);
+        emit makeFirstContractTransaction(contract);
         return;
     }
     contractList.append(contract);
@@ -152,6 +152,7 @@ void ContractManager::completeContractByPerformer(QByteArray hash)
             curr.completeContractByPerformer();
             saveContract(curr);
             contractIsCreated(curr);
+            makeFinalContractTransaction(curr);
             break;
         }
     }

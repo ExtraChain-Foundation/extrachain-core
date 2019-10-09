@@ -100,6 +100,7 @@ public slots:
      * @param actor
      */
     void handleNewActorCheck(Actor<KeyPublic> actor);
+    void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void saveProfile(Actor<KeyPrivate> *key, Profile newProfile);
     void saveProfileFromNetwork(const QByteArray &newProfile);
@@ -128,7 +129,7 @@ signals:
      * @param type
      */
 
-    void responseReady(const QByteArray &data, QByteArray type, QByteArray reqHash,
+    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
                        const SocketPair &receiver);
     void sendMessage(const QByteArray &data, const QByteArray &type);
     void sendProfileToUi(QString userID, Profile profile);

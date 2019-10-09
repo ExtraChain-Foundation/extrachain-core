@@ -271,14 +271,8 @@ signals:
     void GenesisBlockCreated(Block prevBlock, QByteArray prevGenHash);
 
     // responses
-    void TxFound(Transaction tx, SearchEnum::TxParam param, QString value, QHostAddress peerAddress,
-                 QByteArray requestHash);
-
-    void TxPairFound(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
-    void BlockFound(Block block, SearchEnum::BlockParam param, QString value, QHostAddress peerAddress,
-                    QByteArray requestHash);
-    void BlockCount(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
-    void ActorCount(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
+    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+                       const SocketPair &receiver);
 
     /**
      * @brief There no such block in a local blockchain
@@ -307,16 +301,12 @@ public slots:
     void checkBlockExistence(const Block &block);
 
     // from node manager
-    void getTxFromBlockchain(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
-                             QByteArray requestHash);
+    void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
+                             const SocketPair &receiver, const QByteArray &request);
 
-    void getTxPairFromBlockChain(BigNumber sender, BigNumber receiver, QHostAddress peerAddress,
-                                 QByteArray requestHash);
-
-    void getBlockFromBlockchain(SearchEnum::BlockParam param, QByteArray value, QHostAddress peerAddress,
-                                QByteArray requestHash);
-    void getBlockCount(QHostAddress peerAddress, QByteArray requestHash);
-    void getActorCount(QHostAddress peerAddress, QByteArray requestHash);
+    void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
+                                const QByteArray &requestHash, const SocketPair &receiver);
+    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void addBlockToBlockchain(Block block);
 

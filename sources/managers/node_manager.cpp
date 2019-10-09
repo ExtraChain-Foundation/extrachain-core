@@ -388,29 +388,6 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 }
 #endif
 
-void NodeManager::connectNetManager()
-{
-    connect(netManager, &NetManager::GetTx, blockchain, &Blockchain::getTxFromBlockchain);
-    connect(netManager, &NetManager::GetTxPair, blockchain, &Blockchain::getTxPairFromBlockChain);
-    connect(netManager, &NetManager::GetBlock, blockchain, &Blockchain::getBlockFromBlockchain);
-    connect(netManager, &NetManager::GetBlockCount, blockchain, &Blockchain::getBlockCount);
-    connect(netManager, &NetManager::GetActorCount, blockchain, &Blockchain::getActorCount);
-    connect(netManager, &NetManager::CheckBlockExistence, blockchain, &Blockchain::checkBlockExistence);
-    connect(netManager, &NetManager::BlockCountResponse, this, &NodeManager::CheckBlockCount);
-    connect(netManager, &NetManager::AddBlock, blockchain, &Blockchain::addBlockToBlockchain);
-    connect(netManager, &NetManager::NewTx, txManager, &TransactionManager::addTransaction);
-    connect(netManager, &NetManager::SendBlockExistence, blockchain, &Blockchain::checkBlockExistence);
-}
-
-void NodeManager::connectTxManager()
-{
-
-    connect(txManager, &TransactionManager::SendBlock, netManager, &NetManager::Verify);
-    connect(txManager, &TransactionManager::VerifyTx, blockchain, &Blockchain::VerifyTx);
-    connect(netManager, &NetManager::coinRequest, this, &NodeManager::coinResponse);
-    //    connect(this, &NodeManager::NewTx, netManager, &NetManager::sendNewTx);
-}
-
 #ifdef ETALONIUM_CLIENT
 void NodeManager::connectUi()
 {
@@ -504,29 +481,6 @@ void NodeManager::connectUi()
 
 void NodeManager::connectContractManager()
 {
-//    connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
-#ifdef ETALONIUM_CLIENT
-
-#endif
-
-#ifdef ETALONIUM_CONSOLE
-    connect(contractManager, &ContractManager::makeFirstContractTransaction, this,
-            &NodeManager::makeFirstContractTransaction);
-#endif
-}
-
-void NodeManager::connectBlockchain()
-{
-    //    connect(blockchain, &Blockchain::TxFound, netManager, &NetManager::sendTxResponse);
-    //    connect(blockchain, &Blockchain::TxPairFound, netManager, &NetManager::sendTxPairResponse);
-    //    connect(blockchain, &Blockchain::BlockFound, netManager, &NetManager::sendBlockResponse);
-    //    connect(blockchain, &Blockchain::BlockCount, netManager, &NetManager::sendBlockCountResponse);
-    //    connect(blockchain, &Blockchain::ActorCount, netManager, &NetManager::sendActorCountResponse);
-    //    connect(blockchain, &Blockchain::SendMergedBlock, netManager,
-    //    &NetManager::sendMergedBlock);
-    //    connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
-    //    connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
-    //    connect(blockchain, &Blockchain::sendMessage, netManager, &NetManager::sendMessage);
 }
 
 void NodeManager::connectAccountController()
@@ -547,25 +501,14 @@ void NodeManager::connectActorIndex()
 
 void NodeManager::dfsConnection()
 {
-    connect(netManager, &NetManager::getDfsRequest, dfs, &Dfs::recieveRequest);
-    connect(netManager, &NetManager::newDfsPack, dfs, &Dfs::recieve);
-    connect(netManager, &NetManager::downloadDfsRequest, dfs, &Dfs::downloadRequset);
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
-    //    connect(dfs, &Dfs::downloadResponse, netManager, &NetManager::downloadAnswer);
-
-    // send files
-    qDebug() << "dfs send request connection"
-             << connect(dfs, &Dfs::sendToPeer, netManager, &NetManager::sendDfsMessageTo);
-    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::sendDfsPack);
-    connect(dfs, &Dfs::sendRequestf, netManager, &NetManager::sendDfsRequest);
 }
 
 void NodeManager::connectSignals()
 {
-    connectNetManager();
-    connectTxManager();
+//    connectTxManager();
 #ifdef ETALONIUM_CLIENT
     connectUi();
 #endif

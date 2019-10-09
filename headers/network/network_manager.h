@@ -111,7 +111,7 @@ private:
      */
     void restoreConnections(const QList<SocketPair> &socketList);
     // create connect from signal to slot
-    void setupActorIndexConnections();
+    //    void setupActorIndexConnections();
     void setupServerServiceConnections();
     void setupDiscoveryServiceConnections();
     //    void setupResolverServiceConnections();
@@ -126,18 +126,6 @@ private:
      * @return
      */
     QByteArray calcHash(Messages::IMessage &message) const;
-    //    /**
-    //     * @brief addResponseHandler
-    //     * @param message
-    //     * @return
-    //     */
-    //    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
-    //    /**
-    //     * @brief checkResponseHandler
-    //     * @param message
-    //     * @return
-    //     */
-    //    bool checkResponseHandler(const QByteArray &message);
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -198,47 +186,11 @@ public slots:
     void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
                              const SocketPair &receiver);
 public slots:
-    /**
-     * @brief Verify
-     * @param block
-     */
-    void Verify(const QByteArray &block);
-    // send msgs
-    //    void sendNewTx(Transaction tx);
-    //    void sendNewContract(Contract contract);
-    //    void sendNewBlock(Block block);
-    //    void sendTxResponse(Transaction tx, TxParam param, QString value, QHostAddress peerAddress,
-    //                        QByteArray requestHash);
-    //    void sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
-    //    void sendBlockResponse(Block block, BlockParam param, QString value, QHostAddress peerAddress,
-    //                           QByteArray requestHash);
-    //    void sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
-    //    void sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
 
-    //    // unique behavior (get block from temp file)
     void sendGenesisBlock(Block prevBlock, QByteArray prevGenHash);
 
-    //    // requests for entities from other peers
-    //    //    void sendGetActor(BigNumber actorId);
     void shareContract(Contract contract);
     void sendMessageTo(BigNumber recipientId, QByteArray message);
-    //    void sendGetTx(SearchEnum::TxParam param, QString value);
-    //    //    void sendGetBlock(SearchEnum::BlockParam param, QString value);
-    //    void sendGetBlockCount();
-    //    void sendGetActorCount();
-    //    void sendGetTxPair(BigNumber sender, BigNumber receiver);
-
-    //    void sendCompanyActor(QString peerAddress);
-    //    void sendReserveActorRequest(QString peerAddress, QByteArray requestHash, int
-    //    port);
-    void sendConnectionList(Messages::EnableConnections sendConList, SocketService *addressant);
-
-    void sendDfsPack(const Messages::DfsMessage &msg);
-    void sendDfsMessageTo(Messages::DfsMessage dfs, QString peerAddress);
-    void sendDfsRequest(const Messages::DfsRequest &msg);
-
-    //    void sendDfsPackTo(Messages::DfsMessage dfs, QString peerAddress);
-    //    void downloadAnswer(bool status, QByteArray msg, QString peerAddressst);
 
 signals:
     void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
@@ -246,51 +198,6 @@ signals:
 
     void qmlNetworkStatus(bool status);
     void qmlServerError(bool serverError);
-
-    void newDfsPack(Messages::DfsMessage msg /*, QString senderId*/);
-    void receiveProfile(const QByteArray &profile);
-    void downloadDfsRequest(QByteArray header, QString peerAdress);
-    //    void downloadDfsResponse(DownloadDfsRequestData msg, QString senderIp);
-    void getDfsRequest(Messages::DfsRequest msg, QString senderIp);
-    void sendMediaDfs(QByteArray path, QList<QByteArray> list);
-    void SendBlockExistence(const Block &block);
-    // spread
-    void CheckBlockExistence(Block block);
-    void CheckActorExistence(Actor<KeyPublic> actor);
-
-    void NewTx(const Transaction &tx);
-    void coinRequest(BigNumber receiver, BigNumber amount);
-
-    void BlockApproved(BigNumber blockId, BigNumber approver, QHostAddress peerAddress);
-
-    // requests
-    void GetTx(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress, QByteArray requestHash);
-    void GetTxPair(BigNumber sender, BigNumber receiver, QHostAddress peerAddress, QByteArray requestHash);
-    void GetBlock(SearchEnum::BlockParam param, QByteArray value, QHostAddress peerAddress,
-                  QByteArray requestHash);
-    void GetBlockCount(QHostAddress peerAddress, QByteArray requestHash);
-    void GetActorCount(QHostAddress peerAddress, QByteArray requestHash);
-
-    // responses
-    void AddBlock(const Block &block);
-    void TxResponse(Transaction tx, QHostAddress peerAddress);
-    void TxPairResponse(TxPair pair, QHostAddress peerAddress);
-    void BlockCountResponse(BigNumber blockCount, QHostAddress peerAddress);
-    void GetTxResponse(Transaction tx, SearchEnum::TxParam param);
-    void GetBlockResponse(Block block, SearchEnum::BlockParam param);
-    void GetActorResponse(Actor<KeyPublic> actor);
-
-    // net&blockchain test
-    void requestBlockCount();
-    void requestActorCount();
-
-    void nodeTxCreate(BigNumber receiver, BigNumber amount);
-
-    // contracts
-    void contractFirstTransaction(Contract &contract);
-    void contractFinalTransaction(Contract &contract);
-
-    void createActorWithId(BigNumber actorId, bool account);
 };
 
 #endif // NETWORK_MANAGER_H

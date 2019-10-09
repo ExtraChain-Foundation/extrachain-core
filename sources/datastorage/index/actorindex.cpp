@@ -85,6 +85,14 @@ void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
     }
 }
 
+void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &receiver)
+{
+
+    qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->getRecords();
+    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
+                       requestHash, receiver);
+}
+
 void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
 {
     //    if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")

@@ -231,8 +231,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == CONTRACT_MESSAGE)
     {
         Contract contract(message.getMsg_data());
-
-        emit contractFromNetwork(contract);
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << CONTRACT_MESSAGE;
     }
 
     else if (msgType == MERGED_BLOCK_MESSAGE)
@@ -255,42 +255,27 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == GET_ACTOR_MESSAGE)
     {
         GetActorMessage message(msg);
-        //        if (addResponseHandler(msg, msgType))
         emit getActor(message.getActorId(), calcHash(msg), receiver);
     }
-    /**
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage message(msg);
-        emit getTx(message.getParam(), message.getValue(), "peerAddress");
+        emit getTx(message.getParam(), message.getValue(), receiver, calcHash(msg));
     }
-    else if (msgType == GET_TX_PAIR_MESSAGE)
-    {
-        GetTxPairMessage message(msg);
-        emit getTxPair(message.getSenderId(), message.getReceiverId(), peerAddress);
-    }
-
-    else if (msgType == GET_BLOCK_MESSAGE)
+    else if (msgType == GET_BLOCK_MESSAGE) // TODO 3 from 3
     {
         GetBlockMessage message(msg);
-        emit getBlock(message.getParam(), message.getValue(), peerAddress);
-    }
-    else if (msgType == GET_ACTOR_MESSAGE)
-    {
-        GetActorMessage message(msg);
-        emit getActor(message.getActorId(), "", ); // TODO : peer adress
+        emit getBlock(message.getParam(), message.getValue(), calcHash(msg), receiver);
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {
-        BaseMessage message = BaseMessage::deserializeMsg(msg);
-        emit getActorsCount(peerAddress);
+        emit getActorsCount(calcHash(msg), receiver);
     }
     else if (msgType == GET_BLOCK_COUNT_MESSAGE)
     {
-        BaseMessage message = BaseMessage::deserializeMsg(msg);
-        emit getBlocksCount(peerAddress);
+        emit getBlocksCount(calcHash(msg), receiver);
     }
-    **/
+
     // response messages
     else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)
     {
@@ -300,89 +285,53 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         if (checkResponseHandler(responseMessage.getDataHash()))
             emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
     }
-    //    else if (msgType == GET_TX_RESPONSE_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << GET_TX_RESPONSE_MESSAGE;
-    //        EntityResponseMessage<Transaction> message(msg);
-    //        if (MessageIsNotValid(message))
-    //            return;
+    else if (msgType == GET_TX_RESPONSE_MESSAGE)
+    {
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << GET_TX_RESPONSE_MESSAGE;
+        BaseMessageResponse responseMessage(msg);
+        if (!checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        Transaction tx(responseMessage.getMsg_data());
+        if (!validate(tx))
+        {
+            qDebug() << "Received tx" << tx.getHash() << "is not valid";
+            return;
+        }
+        emit newTx(tx);
+    }
+    else if (msgType == GET_BLOCK_RESPONSE_MESSAGE)
+    {
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << GET_BLOCK_RESPONSE_MESSAGE;
 
-    //        Transaction tx = message.getEntity();
-    //        if (!validate(tx))
-    //        {
-    //            qDebug() << "Received tx" << tx.getHash() << "is not valid";
-    //            return;
-    //        }
-
-    //        //        emit GetTxResponse(tx, calcHash(msg), peerAddress);
-    //    }
-    //    else if (msgType == GET_TX_PAIR_RESPONSE_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << GET_TX_PAIR_RESPONSE_MESSAGE;
-    //        EntityResponseMessage<TxPair> message(msg);
-    //        if (MessageIsNotValid(message))
-    //            return;
-
-    //        TxPair pair = message.getEntity();
-    //        if (!validate(pair.getFirst()) || !validate(pair.getSecond()))
-    //        {
-    //            qDebug() << QString("In Received message [%1] At least one tx is not valid")
-    //                            .arg(QString::fromLocal8Bit(message.serialize()));
-    //            return;
-    //        }
-
-    //        //        emit GetTxPairResponse(pair, calcHash(msg), peerAddress);
-    //    }
-    //    else if (msgType == GET_BLOCK_RESPONSE_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << GET_BLOCK_RESPONSE_MESSAGE;
-    //        EntityResponseMessage<Block> message(msg);
-    //        if (MessageIsNotValid(message))
-    //            return;
-
-    //        Block block = message.getEntity();
-    //        if (!validate(block))
-    //        {
-    //            qDebug() << "Received block" << block.getIndex() << "is not valid";
-    //            return;
-    //        }
-
-    //        //        emit GetBlockResponse(message.getEntity(), message.getRequestHash(), peerAddress);
-    //    }
-    //    else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << GET_ACTOR_RESPONSE_MESSAGE << "\nmessage: " << msg;
-    //        EntityResponseMessage<Actor<KeyPublic>> message(msg);
-    //        //        if (MessageIsNotValid(message))
-    //        //            return;
-    //        //        emit GetActorResponse(message.getEntity(), message.getRequestHash(), peerAddress);
-    //    }
-
-    //    else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
-    //        EntityResponseMessage<BigNumber> message(msg);
-    //        //        if (MessageIsNotValid(message))
-    //        //            return;
-    //        //        emit GetActorCountResponse(message.getEntity(), message.getRequestHash(),
-    //        peerAddress);
-    //    }
-    //    else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << GET_BLOCK_COUNT_RESPONSE_MESSAGE;
-    //        EntityResponseMessage<BigNumber> message(msg);
-    //        //        if (MessageIsNotValid(message))
-    //        //            return;
-
-    //        //        emit GetBlockCountResponse(message.getEntity(), message.getRequestHash(),
-    //        peerAddress);
-    //    }
+        BaseMessageResponse responseMessage(msg);
+        if (!checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        Block block(responseMessage.getMsg_data());
+        if (!validate(block))
+        {
+            qDebug() << "Received block" << block.getIndex() << "is not valid";
+            return;
+        }
+        emit newBlock(block);
+    }
+    else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
+    {
+        BaseMessageResponse responseMessage(msg);
+        if (!checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << GET_BLOCK_COUNT_RESPONSE_MESSAGE;
+    }
+    else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
+    {
+        BaseMessageResponse responseMessage(msg);
+        if (!checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
+    }
 }
 
 // validation methods //

@@ -94,8 +94,7 @@ private:
      */
     void connectResolveManager();
     void connectSmContractManager();
-    void connectNetManager();
-    void connectTxManager();
+    //    void connectTxManager();
     void connectUi();
     void connectContractManager();
     void connectBlockchain();
