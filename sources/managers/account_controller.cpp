@@ -75,6 +75,7 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     savePrivateActor(*actor);
 
     accounts.append(actor);
+    userNum = accounts.size() - 1;
     if (account)
         emit initDfs();
     emit newActorIsCreated(this->getMainActor()->getId(), account);

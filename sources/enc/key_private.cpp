@@ -8,8 +8,9 @@ KeyPrivate::KeyPrivate()
 }
 KeyPrivate::KeyPrivate(const QByteArray &keyPrivate)
 {
-    this->prkey = BigNumber(keyPrivate.mid(0, 64));
-    this->pbkey = EllipticPoint(BigNumber(keyPrivate.mid(64, 64)), BigNumber(keyPrivate.mid(128, 64)));
+    QList<QByteArray> list = Serialization::universalDesirialize(keyPrivate, 3);
+    this->prkey = BigNumber(list[0]);
+    this->pbkey = EllipticPoint(list[1]);
 }
 
 KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate)
@@ -67,8 +68,6 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data)
 
 QByteArray KeyPrivate::sign(const QByteArray &data)
 {
-    //    //    qDebug() << "Sign data : " << data;
-    //    //    qDebug() << "prKey" << this->prkey;
     BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
     BigNumber r, s, k;
     EllipticPoint point;
@@ -85,34 +84,6 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
     list.append(r.toByteArray());
     list.append(s.toByteArray());
     return Serialization::universalSerialize(list, 3);
-    //    BigNumber kmodp("1");
-    //    BigNumber r("1");
-    //    BigNumber p = BigNumber("1");
-    //    BigNumber s("1");
-    //    QByteArray result;
-    //    QList<QByteArray> res;
-    //    do
-    //    {
-    //        BigNumber k = BigNumber::random(64);
-    //        EllipticPoints R = ECC::GPoint * k;
-    //        while (!p.isPrime())
-    //            p = BigNumber::random(6);
-    //        r = R.getX() % p;
-    //        kmodp = ECC::eea(k, p);
-    //        if (kmodp == 0)
-    //            continue;
-    //        s = (kmodp * (hashMessage + (BigNumber(this->prkey) * r))) % p;
-    //        if (r < 1 || (r > p - BigNumber("1")))
-    //            continue;
-    //        if (s < 1 || (s > p - BigNumber("1")))
-    //            continue;
-    //        res.clear();
-    //        res.append(s.toByteArray());
-    //        res.append(r.toByteArray());
-    //        res.append(p.toByteArray());
-    //        result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
-    //    } while (!(verify(data, result)));
-    //    return result;
 }
 
 bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
@@ -123,8 +94,9 @@ bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
     BigNumber w = ECC::inverseMod(s, curve.n);
     BigNumber u1 = (z * w) % curve.n;
     BigNumber u2 = (r * w) % curve.n;
-    EllipticPoint point =
-        ECC::add(curve, (ECC::multiply(curve, u1, curve.g)), (ECC::multiply(curve, u2, pbkey)));
+    EllipticPoint p1 = ECC::multiply(curve, u1, curve.g);
+    EllipticPoint p2 = ECC::multiply(curve, u2, pbkey);
+    EllipticPoint point = ECC::add(curve, p1, p2);
     return r % curve.n == point.X() % curve.n;
 }
 
@@ -139,7 +111,8 @@ QByteArray KeyPrivate::getPublicKey()
 
 QByteArray KeyPrivate::serialize()
 {
-    return prkey.toByteArray(16) + pbkey.serialize();
+    QList<QByteArray> list = { prkey.toByteArray(16), pbkey.serialize() };
+    return Serialization::universalSerialize(list, 3);
 }
 
 BigNumber KeyPrivate::extractPrivateKey()

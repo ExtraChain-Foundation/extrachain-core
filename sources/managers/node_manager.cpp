@@ -46,7 +46,7 @@ NodeManager::NodeManager()
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
-    accController->loadActors();
+    //    accController->loadActors();
     Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
     newTransaction.setSenderBalance(BigNumber("0"));
     newTransaction.setReceiverBalance(BigNumber("0"));
@@ -95,11 +95,13 @@ Actor<KeyPrivate> NodeManager::CreateExtracoin()
     //        // * addActor -> add actor to storage
     //        // * addNewActor -> add actor to storage and emit event NewActor
     //    }
-    Actor<KeyPrivate> companyPrKey;
-    companyPrKey.init(true);
-    actorIndex->add(companyPrKey.getId(), companyPrKey.convertToPublic().getKey()->getPublicKey());
-    accController->savePrivateActor(companyPrKey);
-    return companyPrKey;
+    //    Actor<KeyPrivate> companyPrKey;
+    //    companyPrKey.init(true);
+    accController->createActor(true);
+
+    //    actorIndex->add(companyPrKey.getId(), companyPrKey.convertToPublic().getKey()->getPublicKey());
+    //    accController->savePrivateActor(companyPrKey);
+    return accController->getActor(0);
 }
 
 void NodeManager::showMessage(QString from, QString message)
@@ -542,13 +544,14 @@ void NodeManager::prepareFolders()
 }
 void NodeManager::updateActors()
 {
-    for (BigNumber i = 1; i < accController->getMainActor()->getId(); ++i)
-    {
-        if (actorIndex->getById(i).isEmpty())
-        {
-        }
-        //            netManager->sendGetActor(i);
-    }
+    //    BigNumber t = accController->getMainActor()->getId();
+    //    for (BigNumber i = 1; i < t; ++i)
+    //    {
+    //        if (actorIndex->getById(i).isEmpty())
+    //        {
+    //        }
+    //        //            netManager->sendGetActor(i);
+    //    }
 }
 
 int NodeManager::getClientList()

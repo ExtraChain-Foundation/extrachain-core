@@ -11,6 +11,7 @@ private:
 
 public:
     EllipticPoint();
+    EllipticPoint(const QByteArray &serialized);
     EllipticPoint(BigNumber x, BigNumber y);
     ~EllipticPoint();
 

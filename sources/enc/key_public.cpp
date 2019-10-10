@@ -5,7 +5,7 @@ KeyPublic::KeyPublic(EllipticPoint pbKey)
 }
 KeyPublic::KeyPublic(QByteArray pbKey)
 {
-    this->pbkey = EllipticPoint(BigNumber(pbKey.mid(0, 64)), BigNumber(pbKey.mid(64, 64)));
+    this->pbkey = EllipticPoint(pbKey);
 }
 KeyPublic::KeyPublic(const KeyPublic &keyPublic)
 {
@@ -43,8 +43,9 @@ bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
     BigNumber w = ECC::inverseMod(s, curve.n);
     BigNumber u1 = (z * w) % curve.n;
     BigNumber u2 = (r * w) % curve.n;
-    EllipticPoint point =
-        ECC::add(curve, (ECC::multiply(curve, u1, curve.g)), (ECC::multiply(curve, u2, pbkey)));
+    EllipticPoint p1 = ECC::multiply(curve, u1, curve.g);
+    EllipticPoint p2 = ECC::multiply(curve, u2, pbkey);
+    EllipticPoint point = ECC::add(curve, p1, p2);
     return r % curve.n == point.X() % curve.n;
 }
 QByteArray KeyPublic::extractPublicKey()

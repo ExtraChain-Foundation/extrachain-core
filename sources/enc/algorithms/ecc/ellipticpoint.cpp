@@ -6,6 +6,13 @@ EllipticPoint::EllipticPoint()
     y = BigNumber();
 }
 
+EllipticPoint::EllipticPoint(const QByteArray &serialized)
+{
+    QList<QByteArray> list = Serialization::universalDesirialize(serialized, 2);
+    x = BigNumber(list[0]);
+    y = BigNumber(list[1]);
+}
+
 EllipticPoint::EllipticPoint(BigNumber x, BigNumber y)
 {
     this->x = x;
@@ -19,7 +26,10 @@ EllipticPoint::~EllipticPoint()
 
 QByteArray EllipticPoint::serialize()
 {
-    return x.toByteArray() + y.toByteArray();
+    QByteArray xb = x.toByteArray();
+    QByteArray yb = y.toByteArray();
+    QList<QByteArray> list = { xb, yb };
+    return Serialization::universalSerialize(list, 2);
 }
 
 BigNumber EllipticPoint::X() const

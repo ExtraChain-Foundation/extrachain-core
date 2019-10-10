@@ -104,8 +104,6 @@ public:
                 QList<QByteArray> l;
                 l << prKey << pubKey;
 
-                QByteArray keyPair = Serialization::universalSerialize(l, FIELDS_SIZE);
-
                 this->key = new T(prKey);
             }
             else
@@ -197,16 +195,6 @@ public:
                 qDebug() << this->id.toByteArray() << prKey->serialize() << pubKey;
 
                 list << this->id.toByteArray() << prKey->serialize() << QByteArray::number(account);
-                //                list << this->id.toString().toLocal8Bit() <<
-                //                temp.CryptMessage(prKey) <<temp.CryptMessage( pubKey);
-                //                KeyPublic pubKey(key->extractPublicKey());
-
-                //                list << this->id.toString().toLocal8Bit() <<
-                //                key->encrypt(hash) << pubKey.encrypt(hash);
-                // old method serilaize
-                //                QByteArray serialized =
-                //                    Serialization::serialize(list,
-                //                    Serialization::ACTOR_FIELD_SPLITTER);
                 //
                 QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
                 return serialized;
@@ -221,7 +209,6 @@ public:
         {
             list << id.toByteArray();
         }
-        //        return Serialization::serialize(list, Serialization::ACTOR_FIELD_SPLITTER);//
         QByteArray serialized = Serialization::universalSerialize(list, 4);
         return serialized;
     }

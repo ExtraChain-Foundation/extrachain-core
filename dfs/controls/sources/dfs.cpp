@@ -109,7 +109,7 @@ void Dfs::init()
     qDebug() << "[Dfs]:: dfs has been init";
     emit beginTest();
     Subscribtion sub;
-    QList<BigNumber> listUsers = sub.getAll();
+    QList<BigNumber> listUsers = sub.getAll(accountControler->getMainActor()->getId());
     for (const BigNumber &i : listUsers)
         if (actorIndex->getActor(i).getAccount() && (i != accountControler->getMainActor()->getId()))
             listUsers.append(i);
