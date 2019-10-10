@@ -15,6 +15,12 @@
 
 #include "gmpxx.h"
 
+#ifdef QT_DEBUG
+#define UPDATE_DEBUG() qdata = m_data->get_str(16).c_str();
+#else
+#define UPDATE_DEBUG()
+#endif
+
 /**
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
@@ -34,6 +40,10 @@ public:
 private:
     mpz_class *m_data;
     int m_base;
+
+#ifdef QT_DEBUG
+    QByteArray qdata;
+#endif
 
 public:
     BigNumber operator&(const BigNumber &);
@@ -68,25 +78,20 @@ public:
     BigNumber operator-();
 
 public:
-    bool isPrime() const;
+    mpz_class data() const;
+    int base() const;
+    int isProbPrime() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const; // todo: change to serialize
     QByteArray serialize() const;
+    BigNumber pow(unsigned long number);
+    BigNumber sqrt(unsigned long number = 2) const;
 
-    void setHexValue(const QString &hex);
-    void setPositive(bool newPositive);
-    BigNumber pow(unsigned long long number);
-    void fromString(QString serialized);
-    BigNumber toBase(int to) const;
-
-    static BigNumber fromByteArray(QByteArray serialized, int base = 16);
-    static BigNumber sqrt(const BigNumber &);
+    static BigNumber factorial(unsigned long number);
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
     static BigNumber random(const BigNumber &max);
-    mpz_class data() const;
-    int base() const;
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r)
@@ -156,9 +161,7 @@ inline uint qHash(const BigNumber &key, uint seed)
     return qHash(key.toByteArray(), seed);
 }
 
-Q_DECLARE_METATYPE(BigNumber)
-Q_DECLARE_METATYPE(BigNumber *)
-
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
+QDebug operator<<(QDebug debug, const mpz_class &bigNumber);
 
 #endif // BIGNUMBER_H
