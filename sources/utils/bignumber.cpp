@@ -159,6 +159,7 @@ BigNumber &BigNumber::operator=(long long number)
 BigNumber &BigNumber::operator++()
 {
     *this = *this + 1;
+    UPDATE_DEBUG()
     return *this;
 }
 
@@ -172,6 +173,7 @@ BigNumber BigNumber::operator++(int)
 BigNumber &BigNumber::operator--()
 {
     (*this->m_data)--;
+    UPDATE_DEBUG()
     return *this;
 }
 
