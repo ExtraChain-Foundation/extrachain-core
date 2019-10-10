@@ -2,8 +2,6 @@
 
 BigNumber ECC::inverseMod(BigNumber k, BigNumber p)
 {
-    std::cout << "k: " << k.toByteArray(10).toStdString() << std::endl;
-    std::cout << "p: " << p.toByteArray(10).toStdString() << std::endl;
     if (k < 0)
         return p - inverseMod(-k, p);
     assert(k != 0);
@@ -24,9 +22,9 @@ BigNumber ECC::inverseMod(BigNumber k, BigNumber p)
     }
     if (x1 < 0)
         x1 += b0;
-    std::cout << "k: " << kc.toByteArray(10).toStdString() << std::endl;
-    std::cout << "x1: " << x1.toByteArray(10).toStdString() << std::endl;
-    std::cout << "p: " << pc.toByteArray(10).toStdString() << std::endl;
+    //    std::cout << "k: " << kc.toByteArray(10).toStdString() << std::endl;
+    //    std::cout << "x1: " << x1.toByteArray(10).toStdString() << std::endl;
+    //    std::cout << "p: " << pc.toByteArray(10).toStdString() << std::endl;
     assert((k * x1) % p == 1);
     return x1;
 }

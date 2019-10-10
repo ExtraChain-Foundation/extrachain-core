@@ -44,6 +44,8 @@ NodeManager::NodeManager()
     //    if (!QFile("blockchain/index/actor/0/0").exists())
     //    {
     Actor<KeyPrivate> company = CreateExtracoin();
+    QByteArray td = company.getKey()->sign("test");
+    std::cout << company.getKey()->verify("test", td) << std::endl;
     accController->loadActors();
     Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
     newTransaction.setSenderBalance(BigNumber("0"));
