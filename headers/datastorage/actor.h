@@ -235,7 +235,7 @@ public:
             list << "pub_key:" + key->getPublicKey();
             if (isPrivate())
             {
-                list << "pr_key:" + reinterpret_cast<KeyPrivate *>(key)->getPrivateKey();
+                list << "pr_key:" + reinterpret_cast<KeyPrivate *>(key)->getPrivateKey().toByteArray();
             }
         }
         else

@@ -2,14 +2,13 @@
 KeyPrivate::KeyPrivate()
 {
     this->curve = ECC::secp256k1();
-    BigNumber temp =
-        BigNumber("32904579310113466452080265028528580382987806394282029105120642762719869018987", 10);
-    this->prkey = temp.toByteArray();
-    this->pbkey = ECC::multiply(this->curve, temp, curve.g);
+    this->prkey = BigNumber::random(curve.p);
+    this->pbkey = ECC::multiply(this->curve, this->prkey, curve.g);
+    std::cout << "Key built!!!!!" << std::endl;
 }
 KeyPrivate::KeyPrivate(const QByteArray &keyPrivate)
 {
-    this->prkey = keyPrivate.mid(0, 64);
+    this->prkey = BigNumber(keyPrivate.mid(0, 64));
     this->pbkey = EllipticPoint(BigNumber(keyPrivate.mid(64, 64)), BigNumber(keyPrivate.mid(128, 64)));
 }
 
@@ -136,14 +135,14 @@ QByteArray KeyPrivate::getPublicKey()
 
 QByteArray KeyPrivate::serialize()
 {
-    return prkey + pbkey.serialize();
+    return prkey.toByteArray(16) + pbkey.serialize();
 }
 
-QByteArray KeyPrivate::extractPrivateKey()
+BigNumber KeyPrivate::extractPrivateKey()
 {
     return this->prkey;
 }
-QByteArray KeyPrivate::getPrivateKey()
+BigNumber KeyPrivate::getPrivateKey()
 {
     return extractPrivateKey();
 }

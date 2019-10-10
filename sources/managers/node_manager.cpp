@@ -646,16 +646,6 @@ void NodeManager::makeContractFinalTransaction(Contract &contract)
     netManager->shareContract(contract);
 }
 
-void NodeManager::takePubKeyFordecr(BigNumber actorId)
-{
-    emit sendKey(actorIndex->getActor(actorId).getKey()->getPublicKey());
-}
-
-void NodeManager::takePrKeyFordecr(BigNumber actorId)
-{
-    emit sendPrivateKey(accController->getActor(actorId).getKey()->getPrivateKey());
-}
-
 void NodeManager::tempareSlotForActors()
 {
     emit sendActorStateList(accController->getCurrentState());

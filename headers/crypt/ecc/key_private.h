@@ -17,7 +17,7 @@ class KeyPrivate
 {
 private:
     ECC::curve curve;
-    QByteArray prkey;
+    BigNumber prkey;
     EllipticPoint pbkey;
 
 public:
@@ -46,13 +46,13 @@ public:
      * @brief extractPrivateKey
      * @return
      */
-    QByteArray extractPrivateKey();
+    BigNumber extractPrivateKey();
     /**
      * @brief extractPublicKey
      * @return
      */
     QByteArray extractPublicKey();
-    QByteArray getPrivateKey();
+    BigNumber getPrivateKey();
     QByteArray getPublicKey();
     QByteArray serialize();
 };

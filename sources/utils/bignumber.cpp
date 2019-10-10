@@ -117,10 +117,10 @@ BigNumber BigNumber::operator*(long long number)
 
 BigNumber BigNumber::operator/(const BigNumber &bigNumber)
 {
-    if (*(this->m_data) >= bigNumber.data())
-        std::cout << "true" << std::endl;
-    else
-        std::cout << "false" << std::endl;
+    //    if (*(this->m_data) >= bigNumber.data())
+    //        std::cout << "true" << std::endl;
+    //    else
+    //        std::cout << "false" << std::endl;
     BigNumber ret(*(this->m_data) / bigNumber.data());
     return ret;
 }
@@ -148,7 +148,8 @@ BigNumber &BigNumber::operator=(const BigNumber &bigNumber)
     if (this->m_data == nullptr)
         this->m_data = new mpz_class();
     this->m_base = bigNumber.base();
-    *(this->m_data) = bigNumber.data();
+    *(this->m_data) = mpz_class(bigNumber.data());
+    //    *(this->m_data) = ;
     return *this;
 }
 
@@ -340,7 +341,7 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
 
 BigNumber BigNumber::random(const BigNumber &max)
 {
-    BigNumber t(0);
+    BigNumber t(QByteArray().fill('f', max.toByteArray().size()));
     while (t >= max)
     {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());

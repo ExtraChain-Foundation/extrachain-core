@@ -177,10 +177,6 @@ void AccountController::loadActors()
                 if (serialized.isEmpty())
                     continue;
 
-                QByteArray prKey = actor->getKey()->getPrivateKey();
-                //                EllipticPoints somepo(hasHH);
-                //                prKey = somepo.CryptMessage(prKey);
-                qDebug() << prKey;
                 qDebug() << "Actor " << actor->getId() << "found locally - "
                          << actor->getKey()->getPrivateKey();
                 this->accounts.append(actor);

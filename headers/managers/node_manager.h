@@ -136,9 +136,6 @@ private slots:
     void makeContractFinalTransaction(Contract &contract);
 public slots:
 
-    void takePubKeyFordecr(BigNumber actorId);
-    void takePrKeyFordecr(BigNumber actorId);
-
     void tempareSlotForActors();
     void coinResponse(BigNumber receiver, BigNumber amount);
 
