@@ -12,6 +12,8 @@
 #include "datastorage/profile.h"
 #include "datastorage/searchfilters.h"
 
+Q_DECLARE_METATYPE(BigNumber)
+// Q_DECLARE_METATYPE(BigNumber *)
 Q_DECLARE_METATYPE(QHostAddress)
 Q_DECLARE_METATYPE(Block)
 Q_DECLARE_METATYPE(Messages::DfsMessage)

@@ -8,12 +8,13 @@ SOURCES += \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
-    $$PWD/sources/crypt/blowfish_crypt.cpp \
-    $$PWD/sources/crypt/crypt_manager.cpp \
-    $$PWD/sources/crypt/ecc/ecc.cpp \
-    $$PWD/sources/crypt/ecc/key_private.cpp \
-    $$PWD/sources/crypt/ecc/key_public.cpp \
-    $$PWD/sources/crypt/xor_encrypt.cpp \
+    $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
+    $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
+    $$PWD/sources/enc/crypt_manager.cpp \
+    $$PWD/sources/enc/key_private.cpp \
+    $$PWD/sources/enc/key_public.cpp \
+    $$PWD/sources/enc/algorithms/ecc/math.cpp \
+    $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/fileindex.cpp \
@@ -41,7 +42,6 @@ SOURCES += \
     $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/utils.cpp \
-    $$PWD/sources/EllipticPoints.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/managers/headers/card_manager.cpp \
@@ -66,14 +66,21 @@ SOURCES += \
     $$PWD/sources/network/packages/service/merged_block_message.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
-    $$PWD/sources/network/upnpconnection.cpp \
-    $$PWD/headers/utils/bignumberdec.cpp
+    $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
     $$PWD/dfs/packages/headers/message_struct.h \
-    $$PWD/headers/EllipticPoints.h \
-    $$PWD/headers/crypt/blowfish_crypt.h \
-    $$PWD/headers/crypt/xor_encrypt.h \
+    $$PWD/headers/enc/algorithms/aes.h \
+    $$PWD/headers/enc/algorithms/blowfish_crypt.h \
+    $$PWD/headers/enc/algorithms/ecc/curves.h \
+    $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
+    $$PWD/headers/enc/algorithms/ecc/math.h \
+    $$PWD/headers/enc/algorithms/xor_encrypt.h \
+    $$PWD/headers/enc/crypt_manager.h \
+    $$PWD/headers/enc/key_private.h \
+    $$PWD/headers/enc/key_public.h \
+    $$PWD/headers/enc/crypt_interface.h \
+    $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
@@ -81,12 +88,6 @@ HEADERS += \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
-    $$PWD/headers/crypt/crypt_manager.h \
-    $$PWD/headers/crypt/ecc/ecc.h \
-    $$PWD/headers/crypt/ecc/key_private.h \
-    $$PWD/headers/crypt/ecc/key_public.h \
-    $$PWD/headers/crypt/crypt_interface.h \
-    $$PWD/headers/crypt/sign_interface.h \
     $$PWD/headers/datastorage/index/actorindex.h \
     $$PWD/headers/datastorage/index/blockindex.h \
     $$PWD/headers/datastorage/index/fileindex.h \
@@ -148,9 +149,10 @@ HEADERS += \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/utils.h \
-    $$PWD/headers/utils/bignumberdec.h
+    $$PWD/libs/gmp.h \
+    $$PWD/libs/gmpxx.h
 
-linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
+linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android!ios: DESTDIR = Etalonium
 android: DESTDIR = android-build
@@ -158,6 +160,13 @@ OBJECTS_DIR = .obj
 MOC_DIR = .moc
 RCC_DIR = .qrc
 UI_DIR = .ui
+
+android {
+LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
+}
+linux:!android {
+LIBS += -lgmp -lgmpxx
+}
 
 QMAKE_SPEC_T = $$[QMAKE_SPEC]
 contains(QMAKE_SPEC_T,.*win32.*) {
@@ -173,3 +182,14 @@ QMAKE_SUBSTITUTES += preconfig.h.in
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.12+")
 lessThan(QT_MINOR_VERSION, 12): error("requires Qt 5.12+")
 lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.12+")
+
+DISTFILES += \
+    $$PWD/android/AndroidManifest.xml \
+    $$PWD/android/build.gradle \
+    $$PWD/android/gradle/wrapper/gradle-wrapper.jar \
+    $$PWD/android/gradle/wrapper/gradle-wrapper.properties \
+    $$PWD/android/gradlew \
+    $$PWD/android/gradlew.bat \
+    $$PWD/android/libs/armeabi-v7a/libgmp.so \
+    $$PWD/android/libs/armeabi-v7a/libgmpxx.so \
+    $$PWD/android/res/values/libs.xml

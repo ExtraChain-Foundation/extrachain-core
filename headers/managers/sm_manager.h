@@ -7,7 +7,7 @@
 #include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
-#include "crypt/ecc/key_private.h"
+#include "enc/key_private.h"
 #include "datastorage/profile.h"
 #include "datastorage/transaction.h"
 

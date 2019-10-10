@@ -41,7 +41,7 @@ void BaseMessage::initFields(QLinkedList<QByteArray> &list)
 {
     protocol = list.takeFirst();
     msgType = list.takeFirst();
-    signer = BigNumber::fromByteArray(list.takeLast());
+    signer = BigNumber(list.takeLast());
     digSig = list.takeFirst();
 }
 

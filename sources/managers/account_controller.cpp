@@ -177,10 +177,6 @@ void AccountController::loadActors()
                 if (serialized.isEmpty())
                     continue;
 
-                QByteArray prKey = actor->getKey()->getPrivateKey();
-                //                EllipticPoints somepo(hasHH);
-                //                prKey = somepo.CryptMessage(prKey);
-                qDebug() << prKey;
                 qDebug() << "Actor " << actor->getId() << "found locally - "
                          << actor->getKey()->getPrivateKey();
                 this->accounts.append(actor);
@@ -218,7 +214,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
     emit editPrivateProfile(actor.getId().toByteArray());
-    QString fileName = KeyStore::makeKeyFileName(actor.getId().toString());
+    QString fileName = KeyStore::makeKeyFileName(actor.getId().toByteArray());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
     QFile *file = new QFile(path);
@@ -267,8 +263,7 @@ void AccountController::changeUserNum(QByteArray wallId)
     userNum = 0;
     for (auto currAcc : accounts)
     {
-        qDebug() << "ACCOUNT CONTROLLER: change userNum" << currAcc->getId().toStringDec().toUtf8() << " "
-                 << wallId;
+        qDebug() << "ACCOUNT CONTROLLER: change userNum" << currAcc->getId().toByteArray(10) << " " << wallId;
         if (currAcc->getId().serialize() == wallId)
         {
             emit updateTransactionListInModel();

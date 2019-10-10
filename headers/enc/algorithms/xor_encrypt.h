@@ -1,6 +1,6 @@
 #ifndef XORENCRYPT_H
 #define XORENCRYPT_H
-#include "headers/crypt/crypt_interface.h"
+#include "enc/crypt_interface.h"
 
 class XOREncrypt : ICryptor
 {

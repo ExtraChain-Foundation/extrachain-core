@@ -818,7 +818,8 @@ void Blockchain::checkBlockExistence(const Block &block)
     }
     else if (last.getIndex() < block.getIndex())
     {
-        qDebug() << QString("Block [%1] already exists in local blockchain").arg(block.getIndex().toString());
+        qDebug() << QString("Block [%1] already exists in local blockchain")
+                        .arg(QString(block.getIndex().toByteArray()));
     }
     else if (last.getIndex() == block.getIndex())
     {
@@ -933,7 +934,7 @@ void Blockchain::proveTx()
     if (tx->getData() == "genesis")
     {
         // type = 6, token = correct
-        Profile profile = actorIndex->getProfile(tx->getSender().toString());
+        Profile profile = actorIndex->getProfile(tx->getSender().toByteArray());
 
         if (profile.type() != 6)
         {

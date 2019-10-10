@@ -29,7 +29,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     actorIndex->saveProfile(actor, profileList);
     profileList.insert(2, actor->getKey()->sign(Serialization::universalSerialize(profileList, 4)));
 
-    QFile file(SmartContractStorage::CONTRACTPROFILE + actor->getId().toString() + ".profile");
+    QFile file(SmartContractStorage::CONTRACTPROFILE + actor->getId().toByteArray() + ".profile");
     if (file.exists())
     {
         qDebug() << "[SmartContractManager][createContractProfile] Error. Contract profile already exist";
@@ -109,7 +109,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
 
-    QString fileName = KeyStore::makeKeyFileName(actor.getId().toString());
+    QString fileName = KeyStore::makeKeyFileName(actor.getId().toByteArray());
     QString path = SmartContractStorage::CONTRACTSTORE + fileName;
     qDebug() << "Path=" << path;
     QFile *file = new QFile(path);

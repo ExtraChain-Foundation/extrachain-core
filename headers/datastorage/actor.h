@@ -3,8 +3,8 @@
 #include <QDebug>
 
 #include "utils/bignumber.h"
-#include "crypt/ecc/key_private.h"
-#include "crypt/ecc/key_public.h"
+#include "enc/key_private.h"
+#include "enc/key_public.h"
 
 #include <utility>
 #include <type_traits>
@@ -40,7 +40,7 @@ public:
     }
     Actor()
     {
-        id = BigNumber(-1);
+        id = 0;
         key = nullptr;
         hash = "";
         account = true;
@@ -188,17 +188,15 @@ public:
         {
             QByteArray pubKey = key->extractPublicKey();
             //  QByteArray
-
             if (isPrivate())
             {
                 // key_private
-                QByteArray prKey = reinterpret_cast<KeyPrivate *>(key)->getPrivateKey();
+                KeyPrivate *prKey = reinterpret_cast<KeyPrivate *>(key);
                 QList<QByteArray> list;
-                EllipticPoints temp(hash);
 
-                qDebug() << this->id.toString().toLocal8Bit() << prKey << pubKey;
+                qDebug() << this->id.toByteArray() << prKey->serialize() << pubKey;
 
-                list << this->id.toString().toLocal8Bit() << prKey << pubKey << QByteArray::number(account);
+                list << this->id.toByteArray() << prKey->serialize() << QByteArray::number(account);
                 //                list << this->id.toString().toLocal8Bit() <<
                 //                temp.CryptMessage(prKey) <<temp.CryptMessage( pubKey);
                 //                KeyPublic pubKey(key->extractPublicKey());
@@ -216,12 +214,12 @@ public:
             else
             {
                 // key_public
-                list << id.toString().toLocal8Bit() << pubKey << QByteArray::number(account);
+                list << id.toByteArray() << pubKey << QByteArray::number(account);
             }
         }
         else
         {
-            list << id.toString().toLocal8Bit();
+            list << id.toByteArray();
         }
         //        return Serialization::serialize(list, Serialization::ACTOR_FIELD_SPLITTER);//
         QByteArray serialized = Serialization::universalSerialize(list, 4);
@@ -237,7 +235,7 @@ public:
             list << "pub_key:" + key->getPublicKey();
             if (isPrivate())
             {
-                list << "pr_key:" + reinterpret_cast<KeyPrivate *>(key)->getPrivateKey();
+                list << "pr_key:" + reinterpret_cast<KeyPrivate *>(key)->getPrivateKey().toByteArray();
             }
         }
         else

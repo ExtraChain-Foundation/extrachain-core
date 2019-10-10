@@ -53,6 +53,10 @@ void PrivateProfile::loadProfileForAutoLogin(QByteArray hash)
     profile(hash);
 }
 
+void PrivateProfile::process()
+{
+}
+
 void PrivateProfile::profile(QByteArray hash)
 {
     QDir().mkdir("keystore/profile");

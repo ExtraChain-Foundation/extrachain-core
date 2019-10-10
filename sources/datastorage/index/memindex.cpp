@@ -193,7 +193,7 @@ Transaction MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam 
         QList<Transaction> txs = byPosition.extractTransactions();
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken() != token)
+            if (tx.getToken().toByteArray() != token)
                 continue;
             switch (param)
             {

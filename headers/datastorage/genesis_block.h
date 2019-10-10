@@ -51,7 +51,7 @@ public:
 
 static QDataStream &operator<<(QDataStream &in, GenesisDataRow &row)
 {
-    in << row.actorId.getHexValue() << row.tx.serialize();
+    in << row.actorId.toByteArray() << row.tx.serialize();
     return in;
 }
 static QDataStream &operator>>(QDataStream &out, GenesisDataRow &row)
@@ -88,8 +88,7 @@ public:
     GenesisBlock(const QByteArray &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    GenesisBlock(const QByteArray &data, const Block *prevBlock,
-                 const QByteArray &prevGenHash);
+    GenesisBlock(const QByteArray &data, const Block *prevBlock, const QByteArray &prevGenHash);
 
     // Block interface
 public:

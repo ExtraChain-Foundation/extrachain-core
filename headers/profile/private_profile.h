@@ -2,7 +2,7 @@
 #define PRIVATE_PROFILE_H
 
 #include <QByteArray>
-#include "headers/crypt/blowfish_crypt.h"
+#include "enc/algorithms/blowfish_crypt.h"
 #include "utils/utils.h"
 class PrivateProfile : public QObject
 {
@@ -12,10 +12,13 @@ public slots:
     void loadPrivateProfile(QByteArray login, QByteArray password);
     void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
     void loadProfileForAutoLogin(QByteArray hash);
+    void process();
+
 signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
     void sendPrivateProfile(QByteArray id, QByteArrayList idList);
+    void finished();
 
 private:
     void profile(QByteArray hash);
