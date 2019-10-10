@@ -37,40 +37,15 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
 
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
 {
-    //    qDebug() << "Verify data : " << data;
-    //    QList<QByteArray> res;
-    //    res = Serialization::universalDesirialize(dsignBase64, Serialization::DEFAULT_FIELD_SIZE);
-    //    BigNumber s = res.at(0);
-    //    BigNumber r = res.at(1);
-    //    // EllipticPoints Qa(res.at(2),res.at(3));
-
-    //    BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
-    //    BigNumber p = res.at(2);
-
-    //    BigNumber w = ECC::eea(s, p);
-
-    //    BigNumber u1 = (hashMessage * w) % p;
-
-    //    BigNumber u2 = (r * w) % p;
-
-    //    res = Serialization::universalDesirialize(dsignBase64, Serialization::DEFAULT_FIELD_SIZE);
-    //    //    BigNumber s = res.at(0);
-    //    //    BigNumber r = res.at(1);
-    //    //    BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
-    //    //    BigNumber p = res.at(2);
-    //    //    BigNumber w = ECC::eea(s, p);
-    //    //    BigNumber u1 = (hashMessage * w) % p;
-    //    //    BigNumber u2 = (r * w) % p;
-    //    EllipticPoints temp = pbkey * u2;
-    //    EllipticPoints P = ECC::GPoint * u1 + temp;
-    //    BigNumber px = P.getX() % p;
-    //    px.setPositive(true);
-    //    px++;
-
-    //    if (px != r)
-    //        return false;
-
-    return true;
+    BigNumber z = BigNumber(Utils::calcKeccak(data));
+    QList<QByteArray> signature = Serialization::universalDesirialize(dsignBase64, 3);
+    BigNumber r(signature[0]), s(signature[1]);
+    BigNumber w = ECC::inverseMod(s, curve.n);
+    BigNumber u1 = (z * w) % curve.n;
+    BigNumber u2 = (r * w) % curve.n;
+    EllipticPoint point =
+        ECC::add(curve, (ECC::multiply(curve, u1, curve.g)), (ECC::multiply(curve, u2, pbkey)));
+    return r % curve.n == point.X() % curve.n;
 }
 QByteArray KeyPublic::extractPublicKey()
 {

@@ -231,7 +231,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     else if (msgType == CONTRACT_MESSAGE)
     {
-        Contract contract(message.getMsg_data());
+        //        Contract contract(message.getMsg_data());
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << CONTRACT_MESSAGE;
     }

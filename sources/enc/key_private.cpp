@@ -126,25 +126,6 @@ bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
     EllipticPoint point =
         ECC::add(curve, (ECC::multiply(curve, u1, curve.g)), (ECC::multiply(curve, u2, pbkey)));
     return r % curve.n == point.X() % curve.n;
-    //    QList<QByteArray> res;
-    //    res = Serialization::universalDesirialize(dsignBase64, Serialization::DEFAULT_FIELD_SIZE);
-    //    BigNumber s = res.at(0);
-    //    BigNumber r = res.at(1);
-    //    BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
-    //    BigNumber p = res.at(2);
-    //    BigNumber w = ECC::eea(s, p);
-    //    BigNumber u1 = (hashMessage * w) % p;
-    //    BigNumber u2 = (r * w) % p;
-    //    EllipticPoints m;
-    //    EllipticPoints sr;
-    //    EllipticPoints kr = m + sr;
-    //    EllipticPoints temp = pbkey * u2;
-    //    EllipticPoints P = ECC::GPoint * u1 + temp;
-    //    BigNumber px = P.getX() % p - 1;
-    //    px.setPositive(true);
-    //    if (px != r)
-    //        return false;
-    return true;
 }
 
 QByteArray KeyPrivate::extractPublicKey()

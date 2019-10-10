@@ -50,7 +50,7 @@ private:
 
 #endif
     CryptManager *cryptManager;
-    ContractManager *contractManager;
+    //    ContractManager *contractManager;
 
 public:
     NodeManager();
@@ -131,8 +131,8 @@ private slots:
     void setHashLoginPrivateProfile(QByteArray hash);
     void createNewActor(QByteArray hash, bool accountStatus);
 
-    void makeContractFirstTransaction(Contract &contract);
-    void makeContractFinalTransaction(Contract &contract);
+    //    void makeContractFirstTransaction(Contract &contract);
+    //    void makeContractFinalTransaction(Contract &contract);
 public slots:
 
     void tempareSlotForActors();
@@ -141,7 +141,7 @@ public slots:
     // test net & blockchain
 
     void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
-    void makeFirstContractTransaction(Contract contract);
+    //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
 #ifdef ETALONIUM_CLIENT
     void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);

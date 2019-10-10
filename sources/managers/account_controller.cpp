@@ -224,20 +224,16 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 
     if (file->open(QIODevice::ReadWrite))
     {
-        QByteArray old;
-        QDataStream read(file);
-        read >> old;
+        QByteArray old = file->readAll();
         if (old == actor.serialize())
         {
             qDebug() << "Private actor with id =" << actor.getId() << "already exists";
         }
         else
         {
-            QDataStream stream(file);
-            qDebug() << "actor serial: ---- " << actor.serialize();
-            stream << actor.serialize();
+            qDebug() << "actor serialized: ---- " << actor.serialize();
+            file->write(actor.serialize());
             file->flush();
-            //            this->accounts << &actor;
             qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
         }
         file->close();

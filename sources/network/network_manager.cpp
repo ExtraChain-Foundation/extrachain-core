@@ -545,20 +545,20 @@ void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
 //    broadcastMsg(msg.serialize());
 //}
 
-void NetManager::shareContract(Contract contract)
-{
-    //    if (contract.makeFirstTransction()) {
-    //        emit contractFirstTransaction(contract);
-    //        return;
-    //    }
-    qDebug() << contract.serialize();
-    if (contract.makeFinalTransaction())
-    {
-        //        emit contractFinalTransaction(contract);
-        return;
-    }
-    //    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
-}
+// void NetManager::shareContract(Contract contract)
+//{
+//    //    if (contract.makeFirstTransction()) {
+//    //        emit contractFirstTransaction(contract);
+//    //        return;
+//    //    }
+//    qDebug() << contract.serialize();
+//    if (contract.makeFinalTransaction())
+//    {
+//        //        emit contractFinalTransaction(contract);
+//        return;
+//    }
+//    //    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
+//}
 
 void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
 {

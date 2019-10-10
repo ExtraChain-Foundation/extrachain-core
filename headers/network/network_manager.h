@@ -189,7 +189,7 @@ public slots:
 
     void sendGenesisBlock(Block prevBlock, QByteArray prevGenHash);
 
-    void shareContract(Contract contract);
+    //    void shareContract(Contract contract);
     void sendMessageTo(BigNumber recipientId, QByteArray message);
 
 signals:

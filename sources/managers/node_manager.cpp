@@ -26,7 +26,7 @@ NodeManager::NodeManager()
         ++i;
     }
     txManager = new TransactionManager(accController, blockchain);
-    contractManager = new ContractManager(accController, blockchain);
+    //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
     uiController = new UiController();
@@ -62,7 +62,7 @@ NodeManager::NodeManager()
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
-    ThreadPool::addThread(contractManager);
+    //    ThreadPool::addThread(contractManager);
     ThreadPool::addThread(cryptManager);
     ThreadPool::addThread(dfs);
     ThreadPool::addThread(smContractController);
@@ -279,15 +279,15 @@ void NodeManager::CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress
         qDebug() << "NodeManager::CheckBlockCount" << currentBlockCount;
     }
 }
-void NodeManager::makeFirstContractTransaction(Contract contract)
-{
-    qDebug() << contract.serialize();
-    QByteArray hash = createTransaction(BigNumber(0), contract.getAmount()).getHash();
-    qDebug() << hash;
-    contract.setFirst_transaction_hash(hash);
-    qDebug() << contract.serialize();
-    contractManager->updateContract(contract);
-}
+// void NodeManager::makeFirstContractTransaction(Contract contract)
+//{
+//    qDebug() << contract.serialize();
+//    QByteArray hash = createTransaction(BigNumber(0), contract.getAmount()).getHash();
+//    qDebug() << hash;
+//    contract.setFirst_transaction_hash(hash);
+//    qDebug() << contract.serialize();
+//    contractManager->updateContract(contract);
+//}
 
 void NodeManager::createNetManagerIdentificator()
 {
@@ -489,33 +489,6 @@ void NodeManager::connectUi()
 
 void NodeManager::connectContractManager()
 {
-<<<<<<< HEAD
-=======
-//    connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
-#ifdef ETALONIUM_CLIENT
-    // connect(resolver, &ResolverService::contractFromNetwork, contractManager,
-    //         &ContractManager::contractFromNetWork); // TODO : Resolver
-#endif
-
-#ifdef ETALONIUM_CONSOLE
-    connect(contractManager, &ContractManager::makeFirstContractTransaction, this,
-            &NodeManager::makeFirstContractTransaction);
-#endif
-}
-
-void NodeManager::connectBlockchain()
-{
-    //    connect(blockchain, &Blockchain::TxFound, netManager, &NetManager::sendTxResponse);
-    //    connect(blockchain, &Blockchain::TxPairFound, netManager, &NetManager::sendTxPairResponse);
-    //    connect(blockchain, &Blockchain::BlockFound, netManager, &NetManager::sendBlockResponse);
-    //    connect(blockchain, &Blockchain::BlockCount, netManager, &NetManager::sendBlockCountResponse);
-    //    connect(blockchain, &Blockchain::ActorCount, netManager, &NetManager::sendActorCountResponse);
-    //    connect(blockchain, &Blockchain::SendMergedBlock, netManager,
-    //    &NetManager::sendMergedBlock);
-    //    connect(blockchain, &Blockchain::GenesisBlockCreated, netManager, &NetManager::sendGenesisBlock);
-    //    connect(blockchain, &Blockchain::VerifiedTx, txManager, &TransactionManager::addVerifiedTx);
-    //    connect(blockchain, &Blockchain::sendMessage, netManager, &NetManager::sendMessage);
->>>>>>> 29-cryptogrphy-fix
 }
 
 void NodeManager::connectAccountController()
@@ -549,7 +522,6 @@ void NodeManager::connectSignals()
 #endif
     connectResolveManager();
     connectContractManager();
-    connectBlockchain();
     connectAccountController();
     connectActorIndex();
     connectSmContractManager();
@@ -606,22 +578,22 @@ void NodeManager::createNewActor(QByteArray data, bool accountStatus)
 
 // void NodeManager::createActorWith
 
-void NodeManager::makeContractFirstTransaction(Contract &contract)
-{
-    qDebug() << "NodeManager::makeContractFirstTransaction";
-    //    contract.setFirst_transaction_hash(
-    //        createTransaction(BigNumber(0), contract.getAmount()).getHash());
-    netManager->shareContract(contract);
-}
+// void NodeManager::makeContractFirstTransaction(Contract &contract)
+//{
+//    qDebug() << "NodeManager::makeContractFirstTransaction";
+//    //    contract.setFirst_transaction_hash(
+//    //        createTransaction(BigNumber(0), contract.getAmount()).getHash());
+//    netManager->shareContract(contract);
+//}
 
-void NodeManager::makeContractFinalTransaction(Contract &contract)
-{
-    contract.setFinal_transaction_hash(
-        createTransaction(contract.getPerformer(), contract.getAmount()).getHash());
-    qDebug() << contract.serialize();
-    contract.setIsCompleted(true);
-    netManager->shareContract(contract);
-}
+// void NodeManager::makeContractFinalTransaction(Contract &contract)
+//{
+//    contract.setFinal_transaction_hash(
+//        createTransaction(contract.getPerformer(), contract.getAmount()).getHash());
+//    qDebug() << contract.serialize();
+//    contract.setIsCompleted(true);
+//    netManager->shareContract(contract);
+//}
 
 void NodeManager::tempareSlotForActors()
 {
