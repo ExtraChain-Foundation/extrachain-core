@@ -178,9 +178,6 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
-// user data
-static const QString USER_DATA_FILE_NAME = "user.private";
-
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 

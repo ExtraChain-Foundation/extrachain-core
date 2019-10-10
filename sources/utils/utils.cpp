@@ -359,6 +359,10 @@ void Utils::wipeDataFiles()
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
     QFile(".fileList").remove();
+    QFile("blockchain/index/actors/.first").remove();
+    QFile("blockchain/index/actors/.last").remove();
+    QFile("blockchain/index/blocks/.first").remove();
+    QFile("blockchain/index/blocks/.last").remove();
 #else
     QDir("blockchain").removeRecursively();
     QDir("data").removeRecursively();

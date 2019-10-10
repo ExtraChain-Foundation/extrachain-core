@@ -151,7 +151,7 @@ HEADERS += \
     $$PWD/libs/gmp.h \
     $$PWD/libs/gmpxx.h
 
-linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
+linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android!ios: DESTDIR = Etalonium
 android: DESTDIR = android-build

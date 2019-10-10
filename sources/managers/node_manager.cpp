@@ -65,6 +65,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(dfs);
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
+    ThreadPool::addThread(prProfile);
 #ifdef ETALONIUM_CONSOLE
     emit accController->initDfs();
 #endif
@@ -138,11 +139,11 @@ NodeManager::~NodeManager()
     //    uiController->quit();
 
     //    delete uiController;
-    delete netManager;
+    // delete netManager;
     delete txManager;
-    delete blockchain;
+    // delete blockchain;
     delete accController;
-    delete actorIndex;
+    // delete actorIndex;
 }
 
 // DFSIndex *NodeManager::getDFSIndex(){
@@ -315,7 +316,6 @@ void NodeManager::createWalletInUi()
 
 void NodeManager::updateWalletInUi()
 {
-
     //    uiController->getWallet()->setCurrentWalletId(
     //            accController->getCurrentActor().getId());
     uiWallet->setCurrentWalletBalance(
@@ -328,14 +328,15 @@ void NodeManager::updateWalletInUi()
 
 void NodeManager::updateWalletList()
 {
-    QList<QByteArray> walletList;
-    for (auto curWallet : accController->getAccounts())
+    QByteArrayList walletList;
+    QByteArrayList currentWallets = uiWallet->getCurrentWallets();
+
+    for (const QByteArray &currentId : currentWallets)
     {
-        BigNumber currentId = curWallet->getId();
         if (actorIndex->getActor(currentId).isEmpty())
             break;
-        walletList.append(actorIndex->getActor(currentId).getKey()->getPublicKey());
-        walletList.append(currentId.toStringDec().toUtf8());
+
+        walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
         walletList.append(WalletController::toRealNumber(amount));
@@ -358,8 +359,7 @@ void NodeManager::updateAvailableWalletList()
         if (curActor.isEmpty() || currentId == curActor.getId()
             || accController->getCurrentActor().getId() == 0)
             continue;
-        walletList.append(curActor.getKey()->getPublicKey());
-        walletList.append(curActor.getId().toStringDec().toUtf8());
+        walletList.append(curActor.getId().toByteArray());
     }
 
     uiWallet->updateAvailableListModel(&walletList);
@@ -444,10 +444,17 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
-    //    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
-    //            Qt::ConnectionType::QueuedConnection);
-    connect(uiWallet, &WalletController::addNewWallet,
-            [=]() { accController->savePrivateActor(accController->createActor(false)); });
+
+    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
+            Qt::ConnectionType::QueuedConnection);
+    connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
+        auto actor = accController->createActor(false);
+        accController->savePrivateActor(actor);
+        auto wallets = uiWallet->getCurrentWallets();
+        uiWallet->setCurrentWallets(wallets << actor.getId().toByteArray());
+        uiWallet->createWalletToNode();
+    });
+
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
     });
@@ -474,7 +481,6 @@ void NodeManager::connectUi()
     connect(accController, &AccountController::addActorInActorIndex, this,
             &NodeManager::addActorInActorIndex);
     connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
-
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
@@ -506,7 +512,8 @@ void NodeManager::connectContractManager()
 {
 //    connect(contractManager, &ContractManager::contractIsCreated, netManager, &NetManager::sendNewContract);
 #ifdef ETALONIUM_CLIENT
-
+    // connect(resolver, &ResolverService::contractFromNetwork, contractManager,
+    //         &ContractManager::contractFromNetWork); // TODO : Resolver
 #endif
 
 #ifdef ETALONIUM_CONSOLE
@@ -622,7 +629,6 @@ void NodeManager::createNewActor(QByteArray data, bool accountStatus)
     }
     if (!data.isEmpty())
     {
-        //        emit sendActorIdSeva(true, accController->getActorIndex()->getLastSavedId());
         this->dfs = new Dfs(actorIndex, accController);
     }
 }
