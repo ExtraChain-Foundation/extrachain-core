@@ -1,60 +1,57 @@
-#ifndef KEY_PRIVATE_H
-#define KEY_PRIVATE_H
+#ifndef KEY_PUBLIC_H
+#define KEY_PUBLIC_H
 
 //#include <string>
 //#include <sstream>
 //#include <iostream>
 //#include <cstring>
+
 //#include <QDir>
+//#include <QDebug>
 
-#include <QDebug>
 #include "utils/bignumber.h"
-#include "crypt/ecc/ellipticpoint.h"
-#include "crypt/ecc/curves.h"
-#include "crypt/ecc/math.h"
+#include "enc/algorithms/ecc/math.h"
+#include "enc/algorithms/ecc/curves.h"
+#include "enc/algorithms/ecc/ellipticpoint.h"
 
-class KeyPrivate
+class KeyPublic
 {
 private:
-    ECC::curve curve;
-    BigNumber prkey;
     EllipticPoint pbkey;
 
 public:
     /**
-     * @brief New keys
-     */
-    KeyPrivate();
-    /**
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
-    KeyPrivate(const QByteArray &keyPrivate);
-    KeyPrivate(const KeyPrivate &keyPrivate);
-    ~KeyPrivate();
+    KeyPublic(EllipticPoint pubKey);
+    KeyPublic(QByteArray pbKey);
+    KeyPublic(const KeyPublic &keyPrivate);
+    ~KeyPublic()
+    {
+    }
 
 public: // Cryptor interface
     QByteArray encrypt(const QByteArray &data);
-    QByteArray decrypt(const QByteArray &data);
 
 public: // Signer interface
-    QByteArray sign(const QByteArray &data);
     bool verify(const QByteArray &data, const QByteArray &dsignBase64);
 
 public:
     /**
-     * @brief extractPrivateKey
-     * @return
+     * @brief loadPublicKey
+     * @param key
      */
-    BigNumber extractPrivateKey();
+    bool loadPublicKey(const QByteArray &keyBase64);
+
+public:
     /**
      * @brief extractPublicKey
      * @return
      */
     QByteArray extractPublicKey();
-    BigNumber getPrivateKey();
     QByteArray getPublicKey();
     QByteArray serialize();
 };
 
-#endif // KEY_PRIVATE_H
+#endif // KEY_PUBLIC_H

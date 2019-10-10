@@ -4,7 +4,7 @@
 #include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
-#include "crypt/ecc/key_private.h"
+#include "enc/key_private.h"
 #include <QDebug>
 #include <QObject>
 

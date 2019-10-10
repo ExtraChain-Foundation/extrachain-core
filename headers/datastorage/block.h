@@ -3,7 +3,7 @@
 
 #include <QString>
 #include <QDebug>
-#include "crypt/sign_interface.h"
+#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/utils.h"
 #include "datastorage/transaction.h"

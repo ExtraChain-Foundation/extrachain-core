@@ -1,4 +1,4 @@
-#include "headers/crypt/ecc/math.h"
+#include "enc/algorithms/ecc/math.h"
 
 BigNumber ECC::inverseMod(BigNumber k, BigNumber p)
 {

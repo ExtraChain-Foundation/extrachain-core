@@ -1,4 +1,4 @@
-#include "crypt/crypt_manager.h"
+#include "enc/crypt_manager.h"
 
 CryptManager::CryptManager(AccountController *accountControler, QObject *parent)
     : QObject(parent)

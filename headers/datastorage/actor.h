@@ -3,8 +3,8 @@
 #include <QDebug>
 
 #include "utils/bignumber.h"
-#include "crypt/ecc/key_private.h"
-#include "crypt/ecc/key_public.h"
+#include "enc/key_private.h"
+#include "enc/key_public.h"
 
 #include <utility>
 #include <type_traits>

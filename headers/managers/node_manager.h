@@ -13,7 +13,7 @@
 #include "managers/thread_pool.h"
 #include "dfs/controls/headers/dfs.h"
 #include "managers/contract_manager.h"
-#include "crypt/crypt_manager.h"
+#include "enc/crypt_manager.h"
 #include "managers/sm_manager.h"
 
 #include "resolve/resolve_manager.h"

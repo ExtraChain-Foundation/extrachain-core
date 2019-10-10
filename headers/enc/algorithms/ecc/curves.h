@@ -1,6 +1,6 @@
 #ifndef CURVES_H
 #define CURVES_H
-#include "crypt/ecc/ellipticpoint.h"
+#include "enc/algorithms/ecc/ellipticpoint.h"
 #include "utils/bignumber.h"
 
 namespace ECC {

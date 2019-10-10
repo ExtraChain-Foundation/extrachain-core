@@ -1,4 +1,4 @@
-#include "headers/crypt/ecc/ellipticpoint.h"
+#include "enc/algorithms/ecc/ellipticpoint.h"
 
 EllipticPoint::EllipticPoint()
 {

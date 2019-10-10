@@ -1,4 +1,4 @@
-#include "crypt/ecc/key_public.h"
+#include "enc/key_public.h"
 KeyPublic::KeyPublic(EllipticPoint pbKey)
 {
     this->pbkey = pbKey;

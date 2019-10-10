@@ -1,4 +1,4 @@
-#include "crypt/ecc/key_private.h"
+#include "enc/key_private.h"
 KeyPrivate::KeyPrivate()
 {
     this->curve = ECC::secp256k1();

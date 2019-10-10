@@ -1,4 +1,4 @@
-#include "crypt/blowfish_crypt.h"
+#include "enc/algorithms/blowfish_crypt.h"
 
 //
 // Blowfish C++ implementation

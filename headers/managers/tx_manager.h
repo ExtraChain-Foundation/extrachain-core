@@ -9,7 +9,7 @@
 #include <QTimer>
 
 #include "datastorage/blockchain.h"
-#include "crypt/crypt_interface.h"
+#include "enc/crypt_interface.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
 #include "datastorage/index/blockindex.h"

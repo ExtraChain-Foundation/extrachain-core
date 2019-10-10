@@ -1,4 +1,4 @@
-#include "headers/crypt/xor_encrypt.h"
+#include "enc/algorithms/xor_encrypt.h"
 
 QByteArray XOREncrypt::encrypt(QByteArray key, const QByteArray &message)
 {

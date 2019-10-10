@@ -2,8 +2,8 @@
 #define CRYPT_MANAGER_H
 #include <QByteArray>
 #include "datastorage/actor.h"
-#include "crypt/ecc/key_public.h"
-#include "crypt/ecc/key_private.h"
+#include "enc/key_public.h"
+#include "enc/key_private.h"
 #include "managers/account_controller.h"
 #include <QObject>
 namespace crypting {

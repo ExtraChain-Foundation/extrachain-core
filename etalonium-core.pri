@@ -8,13 +8,13 @@ SOURCES += \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
-    $$PWD/sources/crypt/ecc/ellipticpoint.cpp \
-    $$PWD/sources/crypt/blowfish_crypt.cpp \
-    $$PWD/sources/crypt/crypt_manager.cpp \
-    $$PWD/sources/crypt/ecc/key_private.cpp \
-    $$PWD/sources/crypt/ecc/key_public.cpp \
-    $$PWD/sources/crypt/ecc/math.cpp \
-    $$PWD/sources/crypt/xor_encrypt.cpp \
+    $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
+    $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
+    $$PWD/sources/enc/crypt_manager.cpp \
+    $$PWD/sources/enc/key_private.cpp \
+    $$PWD/sources/enc/key_public.cpp \
+    $$PWD/sources/enc/algorithms/ecc/math.cpp \
+    $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/fileindex.cpp \
@@ -70,11 +70,16 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/dfs/packages/headers/message_struct.h \
-    $$PWD/headers/crypt/blowfish_crypt.h \
-    $$PWD/headers/crypt/ecc/curves.h \
-    $$PWD/headers/crypt/ecc/ellipticpoint.h \
-    $$PWD/headers/crypt/ecc/math.h \
-    $$PWD/headers/crypt/xor_encrypt.h \
+    $$PWD/headers/enc/algorithms/blowfish_crypt.h \
+    $$PWD/headers/enc/algorithms/ecc/curves.h \
+    $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
+    $$PWD/headers/enc/algorithms/ecc/math.h \
+    $$PWD/headers/enc/algorithms/xor_encrypt.h \
+    $$PWD/headers/enc/crypt_manager.h \
+    $$PWD/headers/enc/key_private.h \
+    $$PWD/headers/enc/key_public.h \
+    $$PWD/headers/enc/crypt_interface.h \
+    $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
@@ -82,11 +87,6 @@ HEADERS += \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
-    $$PWD/headers/crypt/crypt_manager.h \
-    $$PWD/headers/crypt/ecc/key_private.h \
-    $$PWD/headers/crypt/ecc/key_public.h \
-    $$PWD/headers/crypt/crypt_interface.h \
-    $$PWD/headers/crypt/sign_interface.h \
     $$PWD/headers/datastorage/index/actorindex.h \
     $$PWD/headers/datastorage/index/blockindex.h \
     $$PWD/headers/datastorage/index/fileindex.h \
