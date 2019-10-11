@@ -121,7 +121,7 @@ signals:
 
     void sendActorIdSeva(bool status, BigNumber actorId);
     void requestProfile(QString actorId);
-    void saveProfile(Actor<KeyPrivate> *key, Profile profile);
+    void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     void addActorInActorIndex(Actor<KeyPublic> actor);

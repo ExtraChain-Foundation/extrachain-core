@@ -95,119 +95,61 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &
 
 void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
 {
-    //    if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")
-    //    {
-    //        qDebug() << "ActorIndex::saveProfileFromNetwork : empty sign";
-    //        return;
-    //    }
-    //    QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
-    //    Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
-    //    if (key.getHash().isEmpty())
-    //    {
-    //        qDebug() << "saveProfileFromNetwork: Key " << newProfile.profile.at(2) << " is empty";
-    //        return;
-    //    }
-
-    //    if (!key.getKey()->verify(PublicProfile::serialize(newProfile.profile.list()), newProfile.sign))
-    //    {
-    //        qDebug() << "ActorIndex::saveProfileFromNetwork : profile isn`t verify";
-    //        return;
-    //    }
-
-    //    PublicProfile profile(newProfile.profile, newProfile.sign, path);
-    //    if (profile.profile.at(2) == "")
-    //        return;
-    //    else
-    //    {
-    //        qDebug() << "Save profile with id" << newProfile.profile.at(2);
-    //        key.setProfile(profile);
-    //        sendMessage(profile.serialize(), profileType);
-    //    }
+    PublicProfile profile(newProfile);
+    if (profile.sign == "")
+        return;
+    Actor<KeyPublic> key = getActor(profile.id);
+    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+    {
+        qDebug() << "Save publicProfile with id:" << profile.id;
+        sendMessage(profile.serialize(), profileType);
+    }
+    else
+        qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
 }
 
-void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
+void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 {
     if (key->getHash().isEmpty())
         return;
     qDebug() << "Save profile with id" << newProfile.at(2);
-    QString path = buildFilePath(BigNumber(newProfile.at(2)));
-    QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile.list()));
-    PublicProfile pubProfile(newProfile, sign, path);
-    if (pubProfile.profile.at(2) == "")
+    QByteArray path = buildFilePath(BigNumber(newProfile.at(2))).toUtf8();
+    QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
+    PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
+    if (pubProfile.sign == "")
     {
         qDebug() << "saveProfile: incorrect profile" << newProfile.at(2);
         return;
     }
     else
     {
-        key->setProfile(pubProfile);
         sendMessage(pubProfile.serialize(), profileType);
     }
-}
-
-PublicProfile ActorIndex::getProfileToSend(QString id)
-{
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
-
-    return PublicProfile::getProfile(path, id);
 }
 
 void ActorIndex::requestProfile(QString id)
 {
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
-    if (key.getHash().isEmpty())
-    {
-        qDebug() << "requestProfile: Key " << id << " is empty";
-        return;
-    }
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "")
-    {
-        qDebug() << "requestProfile: incorrect profile" << id;
-        return;
-    }
-    if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
-        emit sendProfileToUi(id, pubProfile.profile);
+    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+        emit sendProfileToUi(id, key.profile().getListProfile());
     else
         qDebug() << "requestProfile: incorrect profile" << id;
 }
 
-Profile ActorIndex::getProfile(QString id)
+QByteArrayList ActorIndex::getProfile(QString id)
 {
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "" || key.getHash() == "")
-    {
-        qDebug() << "getProfile: incorrect profile" << id;
-        return Profile();
-    }
+    if (key.profile().sign == "")
+        return QByteArrayList();
 
-    if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
-        return pubProfile.profile;
+    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+        return key.profile().getListProfile();
     else
     {
         qDebug() << "getProfile: incorrect profile" << id;
-        return Profile();
-    }
-}
-PublicProfile ActorIndex::getPublicProfile(QString id)
-{
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
-    Actor<KeyPublic> key = getActor(id.toUtf8());
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "")
-    {
-        qDebug() << "getPublicProfile: incorrect profile";
-        return PublicProfile();
-    }
-    if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
-        return pubProfile;
-    else
-    {
-        qDebug() << "getPublicProfile: incorrect profile";
-        return PublicProfile();
+        return QByteArrayList();
     }
 }
 

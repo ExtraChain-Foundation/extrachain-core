@@ -410,10 +410,10 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::requestProfile, this, &NodeManager::requestProfile);
     connect(this, &NodeManager::requestProfile, actorIndex, &ActorIndex::requestProfile);
     connect(actorIndex, &ActorIndex::sendProfileToUi, this,
-            [this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
+            [this](QString userId, QByteArrayList profile) { emit profileToUi(userId, Profile(profile)); });
 
     connect(this, &NodeManager::profileToUi, uiController, &UiController::profileUpdated);
-    connect(uiController, &UiController::saveProfile, this, [this](Profile profile) {
+    connect(uiController, &UiController::saveProfile, this, [this](QByteArrayList profile) {
         Actor<KeyPrivate> *key = accController->getMainActor();
         emit saveProfile(key, profile);
     });

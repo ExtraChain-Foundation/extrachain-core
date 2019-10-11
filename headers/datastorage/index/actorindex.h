@@ -102,12 +102,10 @@ public slots:
     void handleNewActorCheck(Actor<KeyPublic> actor);
     void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
 
-    void saveProfile(Actor<KeyPrivate> *key, Profile newProfile);
+    void saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile);
     void saveProfileFromNetwork(const QByteArray &newProfile);
     void requestProfile(QString id);
-    PublicProfile getProfileToSend(QString id);
-    Profile getProfile(QString id);
-    PublicProfile getPublicProfile(QString id);
+    QByteArrayList getProfile(QString id);
     void profileToSearch(SearchFilters filters);
 
     /**
@@ -132,7 +130,7 @@ signals:
     void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
                        const SocketPair &receiver);
     void sendMessage(const QByteArray &data, const QByteArray &type);
-    void sendProfileToUi(QString userID, Profile profile);
+    void sendProfileToUi(QString userID, QByteArrayList profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
 
