@@ -267,9 +267,9 @@ public:
     }
     PublicProfile profile()
     {
-        BigNumber section = id.toActorId().right(2);
+        QByteArray section = id.toActorId().right(2);
         QByteArray pathToFolder = DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/"
-            + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8() + "/" + section.toByteArray();
+            + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8() + "/" + section;
         return PublicProfile(id.toActorId(), pathToFolder);
     }
 

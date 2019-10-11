@@ -83,7 +83,7 @@ public:
     static BaseMessage deserializeMsg(const QByteArray serialized);
 
     const QByteArray hash() const override;
-    const QByteArray init(const QByteArray &data);
+    void init(const QByteArray &data);
 
 public:
     QByteArray getProtocol() const;

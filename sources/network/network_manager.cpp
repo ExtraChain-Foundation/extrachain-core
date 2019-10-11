@@ -337,10 +337,11 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
 {
     BaseMessage msg(msgType);
+    msg.init(data);
     if (msgType != Messages::ACTOR_MESSAGE)
         signMessage(msg);
 
-    QByteArray message = msg.init(data);
+    QByteArray message = msg.serialize();
     //    if (!addResponseHandler(message, messageType))
     //    {
     //        FileList list;
@@ -349,6 +350,11 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
     //        list.add(msg.hash(), "0");
     //    }
     broadcastMsg(message);
+}
+
+void NetManager::dfsMessageTmp(const DfsMessage &msg)
+{
+    broadcastMsg(msg.serialize());
 }
 
 void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,

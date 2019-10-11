@@ -40,6 +40,7 @@ private:
 
 signals:
     void finished();
+    void coinRequest(BigNumber id, BigNumber amount);
 public slots:
     void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void setTask(QByteArray msg, const SocketPair &receiver);

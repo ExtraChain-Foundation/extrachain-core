@@ -13,9 +13,6 @@
 // private:
 //    QList<Contract> contractList;
 
-//    AccountController *accountController;
-//    Blockchain *blockchain;
-
 // public:
 //    ContractManager(AccountController *accountController, Blockchain *blockchain);
 

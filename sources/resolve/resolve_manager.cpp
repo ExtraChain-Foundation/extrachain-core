@@ -24,6 +24,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     connect(resolver, &ResolverService::responseReady, networkManager, &NetManager::sendMessageResponse);
     connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
+    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
     // "New" signals
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
@@ -51,6 +52,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     disconnect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     disconnect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
+
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
     disconnect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);

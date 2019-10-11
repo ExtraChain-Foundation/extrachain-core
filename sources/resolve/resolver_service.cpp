@@ -29,7 +29,7 @@ bool ResolverService::isActive() const
 void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 {
     this->msg = msg;
-    this->hash = hash;
+    this->hash = calcHash(msg);
     this->senderAddress = receiver;
 }
 
@@ -48,7 +48,7 @@ bool ResolverService::validate(const Messages::IMessage &message)
         qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
         //        emit SendGetActor(signer);
         //        return false;
-        thread()->wait(1000);
+        this->thread()->wait(1000);
         return validate(message);
     }
 }
@@ -185,11 +185,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     BaseMessage message;
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
-    if (msgType != ACTOR_MESSAGE)
-        if (!MessageIsNotValid(message))
+    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE))
+        if (MessageIsNotValid(message))
             return;
-    if (!universalHandler(message))
-        return;
+    if (msgType != COIN_REQUEST)
+        if (!universalHandler(message))
+            return;
     // spread messages
     if (msgType == PROFILE_FILE)
     {
@@ -222,7 +223,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     else if (msgType == COIN_REQUEST)
     {
-        BigNumber amout(message.getMsg_data());
+        BigNumber amount(message.getMsg_data());
+        emit coinRequest(message.getSigner(), amount);
     }
     else if (msgType == TX_MESSAGE)
     {

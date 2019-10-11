@@ -475,7 +475,8 @@ void FileList::add(QByteArray hash, QByteArray data)
     }
     else
     {
-        if (find(data.mid(0, FIELD_SIZE)) != indexList.end())
+        QList<indexRow>::iterator it = find(data.mid(0, FIELD_SIZE));
+        if (it != indexList.end())
         {
             fileList.seek(find(data.mid(0, FIELD_SIZE))->currentPosition);
             QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
@@ -523,7 +524,7 @@ QList<indexRow>::iterator FileList::find(QByteArray key)
         if (it->hash == key.toStdString())
             return it;
     }
-    return QList<indexRow>::iterator();
+    return indexList.end();
 }
 
 QByteArray FileList::operator[](int value)

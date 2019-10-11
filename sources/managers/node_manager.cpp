@@ -92,7 +92,7 @@ void NodeManager::showMessage(QString from, QString message)
 void NodeManager::connectResolveManager()
 {
     connect(netManager, &NetManager::MessageReceived, resolveManager, &ResolveManager::resolveMessage);
-
+    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
     // TODO: move
     connect(txManager, &TransactionManager::SendBlock, netManager, &NetManager::sendMessage);
 }
@@ -184,7 +184,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
         qDebug() << tx.toString();
         emit NewTx(tx);
 
-        accController->sentTxList.add(tx.getHash(), tx.serialize());
+        accController->sentTxList.add(tx.getHash(), Serialization::universalSerialize({ tx.serialize() }, 4));
         return tx;
     }
     else
@@ -404,16 +404,14 @@ void NodeManager::connectUi()
             &SearchModel::fromActorIndex);
 
     //=======================================WALLET=========================================
-    connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi,
-            Qt::ConnectionType::QueuedConnection);
+    connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
     connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
     connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
 
-    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage,
-            Qt::ConnectionType::QueuedConnection);
+    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage);
     connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
         auto actor = accController->createActor(false);
         accController->savePrivateActor(actor);
@@ -491,6 +489,7 @@ void NodeManager::connectAccountController()
 void NodeManager::connectActorIndex()
 {
     connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
+    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::dfsMessageTmp);
     // this connect with service message
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);

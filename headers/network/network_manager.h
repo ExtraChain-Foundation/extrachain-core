@@ -176,6 +176,7 @@ public slots:
      * @param messageType type to compress
      */
     void sendMessage(const QByteArray &data, const QByteArray &msgType);
+    void dfsMessageTmp(const Messages::DfsMessage &msg);
     /**
      * @brief sendMessageResponse from resolver
      * @param data
