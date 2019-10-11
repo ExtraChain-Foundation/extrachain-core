@@ -267,7 +267,7 @@ public:
     }
     PublicProfile profile()
     {
-        BigNumber section = id.getHexValue().right(2).toUtf8();
+        BigNumber section = id.toByteArray().right(2);
         QByteArray pathToFolder = "blockchain/index/actors" + section.toByteArray();
         return PublicProfile(id.toByteArray(), pathToFolder + "/" + id.toByteArray());
     }
