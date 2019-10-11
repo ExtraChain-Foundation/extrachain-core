@@ -27,7 +27,6 @@ private:
     T *key;
     QByteArray hash; // to encrypt private key (email and pass)
     bool account;
-    PublicProfile profile;
 
 public:
     bool checkSumValid(QByteArray checkSum)
@@ -280,6 +279,12 @@ public:
         QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
         return QString(serialized);
     }
+    PublicProfile profile()
+    {
+        BigNumber section = id.getHexValue().right(2).toUtf8();
+        QByteArray pathToFolder = "blockchain/index/actors" + section.toByteArray();
+        return PublicProfile(id.toByteArray(), pathToFolder + "/" + id.toByteArray());
+    }
 
 public:
     bool operator==(const Actor<T> &other)
@@ -321,15 +326,6 @@ public:
     {
         return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->extractPublicKey(), getAccount())
                            : Actor<KeyPublic>();
-    }
-    PublicProfile getProfile()
-    {
-        return profile;
-    }
-
-    void setProfile(const PublicProfile &value)
-    {
-        profile = value;
     }
 };
 
