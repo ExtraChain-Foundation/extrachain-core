@@ -223,7 +223,7 @@ Contract::Contract(const BigNumber &_customer, const QMap<BigNumber, performer_s
 const QByteArray Contract::serialize() const
 {
     QList<QByteArray> list;
-    list << customer.toByteArray() << performersSerialize() << _location << event << _contract_dateSerialize()
+    list << customer.toActorId() << performersSerialize() << _location << event << _contract_dateSerialize()
          << _scope_of_workSerialize() << _agreement << _amount.toByteArray() << data;
     return Serialization::universalSerialize(list, CONTRACT_FIELDS_SIZE);
 }
