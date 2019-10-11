@@ -148,9 +148,7 @@ HEADERS += \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/utils/utils.h \
-    $$PWD/libs/gmp.h \
-    $$PWD/libs/gmpxx.h
+    $$PWD/headers/utils/utils.h
 
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
@@ -162,10 +160,11 @@ RCC_DIR = .qrc
 UI_DIR = .ui
 
 android {
-LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
+    INCLUDEPATH += $$PWD/libs
+    LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
 }
 linux:!android {
-LIBS += -lgmp -lgmpxx
+    LIBS += -lgmp -lgmpxx
 }
 
 QMAKE_SPEC_T = $$[QMAKE_SPEC]

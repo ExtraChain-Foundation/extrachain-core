@@ -25,7 +25,7 @@ using namespace SearchEnum;
 class SocketService : public QObject
 {
     Q_OBJECT
-    const QByteArray INDETEFICATOR = "Ind:";
+    const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
     int connectionTry = 0;

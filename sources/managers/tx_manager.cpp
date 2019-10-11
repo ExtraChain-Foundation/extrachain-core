@@ -97,7 +97,7 @@ void TransactionManager::addVerifiedTx(Transaction tx)
 
 // Block making
 
-void TransactionManager::makeBlock()
+Block TransactionManager::makeBlock()
 {
     int txs = pendingTxs.size();
     //    qDebug() << QString("Attempting to make a block from [%1]
@@ -105,7 +105,7 @@ void TransactionManager::makeBlock()
 
     if (txs == 0)
     {
-        return;
+        return Block();
     }
 
     QByteArray data = convertTxs(pendingTxs);
@@ -117,11 +117,12 @@ void TransactionManager::makeBlock()
     block.sign(accountController->getCurrentActor());
 
     qDebug() << QString("Created block: [%1]").arg(block.toString());
-    QByteArray qw = block.serialize();
-    qDebug() << qw;
-    emit SendBlock(qw);
+    QByteArray blockSerialize = block.serialize();
+    qDebug() << blockSerialize;
+    emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
 
     this->pendingTxs.clear();
+    return block;
 }
 
 QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
@@ -134,29 +135,6 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
     return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
 }
 
-// Thread management //
-
-void TransactionManager::run()
+void TransactionManager::process()
 {
-    active = true;
-    exec();
-}
-
-int TransactionManager::exec()
-{
-    while (isActive())
-    {
-        //
-    }
-    return 0;
-}
-
-void TransactionManager::quit()
-{
-    active = false;
-}
-
-bool TransactionManager::isActive() const
-{
-    return this->active;
 }

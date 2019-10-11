@@ -253,7 +253,7 @@ int BigNumber::isProbPrime() const
 
 bool BigNumber::isEmpty() const // TODO
 {
-    return true;
+    return m_data == 0;
 }
 
 QByteArray BigNumber::toByteArray(int base) const

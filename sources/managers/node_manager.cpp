@@ -56,13 +56,16 @@ NodeManager::NodeManager()
     newTransaction.verify(company.convertToPublic());
     txManager->addVerifiedTx(newTransaction);
 
-    txManager->makeBlock();
+    Block block = txManager->makeBlock();
+    blockchain->addBlock(block, true);
+
 //    }
 #endif
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
-    //    ThreadPool::addThread(contractManager);
+    ThreadPool::addThread(txManager);
+    // ThreadPool::addThread(contractManager);
     ThreadPool::addThread(cryptManager);
     ThreadPool::addThread(dfs);
     ThreadPool::addThread(smContractController);
@@ -112,6 +115,9 @@ void NodeManager::showMessage(QString from, QString message)
 void NodeManager::connectResolveManager()
 {
     connect(netManager, &NetManager::MessageReceived, resolveManager, &ResolveManager::resolveMessage);
+
+    // TODO: move
+    connect(txManager, &TransactionManager::SendBlock, netManager, &NetManager::sendMessage);
 }
 
 void NodeManager::connectSmContractManager()
@@ -354,6 +360,7 @@ void NodeManager::updateAvailableWalletList()
     qDebug() << "NODE MANAGER: updateAvailableWalletList";
     BigNumber currentId = uiWallet->getCurrentWalletId();
     QList<QByteArray> walletList;
+    /*
     Subscribtion sub;
     QList<BigNumber> subActorsList = sub.getAll();
 
@@ -367,6 +374,7 @@ void NodeManager::updateAvailableWalletList()
     }
 
     uiWallet->updateAvailableListModel(&walletList);
+    */
 }
 
 void NodeManager::updateRecentActivities()
@@ -442,6 +450,7 @@ void NodeManager::connectUi()
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
 
     //======================================CONTRACT===========================================
+    /*
     auto contractsModel = uiController->getContractsModel();
     connect(contractsModel, &ContractsModel::loadContractst, contractManager,
             &ContractManager::loadContractsFrom);
@@ -455,6 +464,7 @@ void NodeManager::connectUi()
 
     connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
             &ContractManager::createContract);
+    */
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);

@@ -60,7 +60,7 @@ void SocketService::readData()
             return;
 
         QByteArray command;
-        command = buffer.mid(0, _blockSize);
+        command = buffer.mid(4, _blockSize);
         buffer.remove(0, _blockSize);
         // command = _sok->readAll();
 
@@ -78,8 +78,10 @@ void SocketService::readData()
         if (!active)
         {
             //            active = true;
-            if (command.left(INDETEFICATOR.size()) == INDETEFICATOR)
+            if (command.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+            {
                 identificator = BigNumber(command);
+            }
             emit checkMe();
         }
         else
@@ -207,7 +209,7 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    this->sendMsg(INDETEFICATOR + net::readNetManagerIdentificator(),
+    this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
                   SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
