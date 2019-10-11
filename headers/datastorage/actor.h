@@ -82,6 +82,7 @@ private:
     {
         return std::is_same<T, KeyPrivate>::value;
     }
+
     QByteArray getChecksumPubKey()
     {
         QByteArray localPublicKey = "0";
@@ -96,12 +97,12 @@ private:
         else
             return "0";
 
-        QByteArray hash = Utils::calcKeccak(localPublicKey);
+        QString hash = Utils::calcKeccak(localPublicKey);
         while (hash.size() < localPublicKey.size())
             hash = hash.append(hash);
         for (int i = 0; i < localPublicKey.size(); i++)
         {
-            if (BigNumber().byteRefHexToDec(hash[i]) >= 8)
+            if (QString(hash[i]).toInt(nullptr, 16) >= 8)
             {
                 localPublicKey[i] = localPublicKey.toUpper()[i];
             }
