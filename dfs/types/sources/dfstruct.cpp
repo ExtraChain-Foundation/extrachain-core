@@ -247,7 +247,7 @@ based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct
     {
         int delimetrIndex = _file_name.indexOf('&');
         path = _file_name.mid(0, delimetrIndex).toUtf8();
-        QList<QByteArray> filePathList = Serialization::deserialize(_file_name.toUtf8() + '/', "/");
+        QList<QByteArray> filePathList = Serialization::deserialize(path + '/', "/");
         actorId = BigNumber(filePathList.at(1));
         type = based_dfs_struct::convertToDFType(filePathList.at(2));
         if (type == based_dfs_struct::images)
