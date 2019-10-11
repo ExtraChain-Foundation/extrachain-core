@@ -352,10 +352,21 @@ void Utils::wipeDataFiles()
                 QFile::remove(file.filePath());
         }
     };
-    clearDir("blockchain/index/actors/0/profile", "0.profile");
-    clearDir("blockchain/index/actors/0");
-    clearDir("blockchain/index/blocks/0");
-    clearDir("keystore/personal", "0.key");
+
+    QByteArray companySection = companyActorId.right(2);
+    QDir actorDir("blockchain/index/actors");
+    auto dirsList = actorDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (auto &dir : dirsList)
+    {
+        qDebug() << dir.filePath();
+        if (dir.fileName() != companySection)
+            QDir(dir.filePath()).removeRecursively();
+    }
+
+    clearDir("blockchain/index/actors/" + companySection, companyActorId);
+    clearDir("blockchain/index/blocks/0", "0");
+    clearDir("keystore/personal", companyActorId + ".key");
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
     QFile(".fileList").remove();
