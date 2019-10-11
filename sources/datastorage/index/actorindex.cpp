@@ -217,10 +217,11 @@ bool ActorIndex::actorExist(BigNumber actorId)
         return false;
     return true;
 }
+
 QString ActorIndex::buildFilePath(const BigNumber &id) const
 {
-    BigNumber section = id.toByteArray().right(SECTION_NAME_SIZE);
-    QString pathToFolder = folderPath + section.toByteArray();
+    QByteArray section = id.toByteArray().right(SECTION_NAME_SIZE);
+    QString pathToFolder = folderPath + section;
 
     QDir dir(pathToFolder);
     if (!dir.exists())
@@ -232,6 +233,7 @@ QString ActorIndex::buildFilePath(const BigNumber &id) const
 
     return pathToFolder + "/" + id.toByteArray();
 }
+
 BigNumber ActorIndex::getRecords() const
 {
     return records;
