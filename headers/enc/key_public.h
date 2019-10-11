@@ -10,7 +10,7 @@
 //#include <QDebug>
 
 #include "utils/bignumber.h"
-#include "enc/algorithms/ecc/math.h"
+#include "enc/algorithms/ecc/eccmath.h"
 #include "enc/algorithms/ecc/curves.h"
 #include "enc/algorithms/ecc/ellipticpoint.h"
 

@@ -8,12 +8,12 @@ SOURCES += \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
+    $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
     $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
     $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
     $$PWD/sources/enc/crypt_manager.cpp \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
-    $$PWD/sources/enc/algorithms/ecc/math.cpp \
     $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
@@ -73,8 +73,8 @@ HEADERS += \
     $$PWD/headers/enc/algorithms/aes.h \
     $$PWD/headers/enc/algorithms/blowfish_crypt.h \
     $$PWD/headers/enc/algorithms/ecc/curves.h \
+    $$PWD/headers/enc/algorithms/ecc/eccmath.h \
     $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
-    $$PWD/headers/enc/algorithms/ecc/math.h \
     $$PWD/headers/enc/algorithms/xor_encrypt.h \
     $$PWD/headers/enc/crypt_manager.h \
     $$PWD/headers/enc/key_private.h \

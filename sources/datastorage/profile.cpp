@@ -75,7 +75,7 @@ bool Profile::isEmpty()
     {
         if (!at(i).isEmpty())
         {
-            qDebug() << i;
+            // qDebug() << i;
             isEmpty = false;
             break;
         }
