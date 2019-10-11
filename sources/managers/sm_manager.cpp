@@ -112,32 +112,28 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
     QString fileName = KeyStore::makeKeyFileName(actor.getId().toByteArray());
     QString path = SmartContractStorage::CONTRACTSTORE + fileName;
     qDebug() << "Path=" << path;
-    QFile *file = new QFile(path);
+    QFile file(path);
 
     // move to another place
     FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTSTORE);
 
-    if (file->open(QIODevice::ReadWrite))
+    if (file.open(QIODevice::ReadWrite))
     {
         QByteArray old;
-        QDataStream read(file);
-        read >> old;
+        old = file.readAll();
         if (old == actor.serialize())
         {
             qDebug() << "Private actor with id =" << actor.getId() << "already exists";
         }
         else
         {
-            QDataStream stream(file);
+            file.resize(0);
             qDebug() << "actor serial: ---- " << actor.serialize();
-            stream << actor.serialize();
-            file->flush();
-            //            this->accounts << &actor;
+            file.write(actor.serialize());
+            file.flush();
             qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
         }
-        file->close();
-        delete file;
-        //        loadActors();
+        file.close();
         return;
     }
 
