@@ -30,6 +30,10 @@ private:
     PublicProfile profile;
 
 public:
+    bool checkSumValid(QByteArray checkSum)
+    {
+        return checkSum == getChecksumPubKey();
+    }
     inline void setHash(QByteArray hash)
     {
         this->hash = hash;
@@ -77,6 +81,32 @@ private:
     bool isPrivate() const
     {
         return std::is_same<T, KeyPrivate>::value;
+    }
+    QByteArray getChecksumPubKey()
+    {
+        QByteArray localPublicKey = "0";
+        if (typeid(T) == typeid(KeyPrivate))
+        {
+            localPublicKey = reinterpret_cast<KeyPrivate *>(key)->getPublicKey();
+        }
+        else if (typeid(T) == typeid(KeyPublic))
+        {
+            localPublicKey = reinterpret_cast<KeyPublic *>(key)->getPublicKey();
+        }
+        else
+            return "0";
+
+        QByteArray hash = Utils::calcKeccak(localPublicKey);
+        while (hash.size() < localPublicKey.size())
+            hash = hash.append(hash);
+        for (int i = 0; i < localPublicKey.size(); i++)
+        {
+            if (BigNumber().byteRefHexToDec(hash[i]) >= 8)
+            {
+                localPublicKey[i] = localPublicKey.toUpper()[i];
+            }
+        }
+        return localPublicKey;
     }
 
 public:
