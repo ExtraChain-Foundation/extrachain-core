@@ -5,7 +5,7 @@ void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, Q
     QDir().mkdir("keystore/profile");
     QByteArray data = login + password;
     QByteArray secureLogin = Utils::calcKeccak(data);
-    data = secureLogin + "|" + id;
+    data = secureLogin + id;
     blowFish_crypt crypt;
     data = crypt.EncryptBlowFish(data, secureLogin);
     QFile file("keystore/profile/" + id + ".private");
@@ -31,10 +31,16 @@ void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfi
     data = crypt.DecryptBlowFish(data, hashLogin);
     if (data.mid(0, 64) == hashLogin)
     {
-        data.append("|" + id);
-        data = crypt.EncryptBlowFish(data, hashLogin);
-        file.resize(0);
-        file.write(data);
+        data = data.mid(64);
+        QByteArrayList list = data.split('|');
+        if (!list.contains(id))
+        {
+            data.append("|" + id);
+            data.insert(0, hashLogin);
+            data = crypt.EncryptBlowFish(data, hashLogin);
+            file.resize(0);
+            file.write(data);
+        }
     }
     else
         qDebug() << "Error : incorrect login or id";
@@ -80,21 +86,12 @@ void PrivateProfile::profile(QByteArray hash)
             blowFish_crypt crypt;
             data = crypt.DecryptBlowFish(data, hash);
             QByteArray secureLoginFile = data.mid(0, 64);
-            data = data.mid(64, data.size());
             if (secureLoginFile == hash)
             {
+                data = data.mid(64, data.size());
                 emit setHashProfile(secureLoginFile);
-                int position = 0;
-                while (position < data.size())
-                {
-                    position = data.indexOf("|", position) + 1;
-                    if (position == 0)
-                        break;
-                    QByteArray id = data.mid(position, data.indexOf("|", position) - position);
-                    idList.append(id);
-                }
+                idList = data.split('|');
                 emit setIdProfile(idList.first());
-
                 qDebug() << "Load private profile with id" << idList.first();
                 emit sendPrivateProfile(idList.first(), idList);
             }

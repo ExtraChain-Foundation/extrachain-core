@@ -12,17 +12,23 @@ struct indexList
 class PublicProfile
 {
 public:
-    PublicProfile(Profile _profile, QByteArray _sign, QString path);
-    PublicProfile(Profile _profile, QByteArray _sign);
+    PublicProfile(QByteArrayList _profile, QByteArray _sign, QByteArray path, QByteArray _id);
+    PublicProfile(QByteArray _profile, QByteArray _sign, QByteArray path, QByteArray _id);
     PublicProfile(const QByteArray &serialize);
+    PublicProfile(QByteArray _id, QByteArray _path);
     PublicProfile();
     QByteArray serialize() const;
-    static Profile saveProfile(Profile newProfile, const QString &path, QByteArray sign);
-    static PublicProfile getProfile(const QString &path, const QString id);
-    static QByteArray serialize(QByteArrayList actorList);
+    void setProfile(QByteArrayList profile, QByteArray path);
+    void saveProfileFromNet(QByteArray newProfile);
+    QByteArrayList getListProfile();
+    QByteArray getProfile();
+    static QByteArray serialize(QByteArrayList profileList);
     static QByteArrayList deserialize(QByteArray serializeData);
-    Profile profile;
+    QByteArrayList getQuickProfile(QByteArray _data);
     QByteArray sign = "";
+    QByteArray idPath;
+    QByteArray id;
+
 signals:
     //
 private:
