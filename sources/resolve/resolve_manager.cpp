@@ -64,7 +64,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
 
 void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
-    resolvers.append(new ResolverService(actorIndex, requestResponseMap));
+    resolvers.append(new ResolverService(actorIndex, packageHandler, requestResponseMap));
     connectSignals(resolvers.last());
     resolvers.last()->setTask(msg, receiver);
     ThreadPool::addThread(resolvers.last());

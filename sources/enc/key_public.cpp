@@ -11,6 +11,11 @@ KeyPublic::KeyPublic(const KeyPublic &keyPublic)
 {
     pbkey = keyPublic.pbkey;
 }
+
+KeyPublic::KeyPublic()
+{
+    pbkey = EllipticPoint();
+}
 QByteArray KeyPublic::encrypt(const QByteArray &data)
 {
     //    QList<QByteArray> res;
@@ -61,4 +66,9 @@ QByteArray KeyPublic::getPublicKey()
 QByteArray KeyPublic::serialize()
 {
     return pbkey.serialize();
+}
+
+bool KeyPublic::isEmpty()
+{
+    return pbkey.isZero();
 }

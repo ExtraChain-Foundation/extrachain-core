@@ -28,6 +28,7 @@ public:
     KeyPublic(EllipticPoint pubKey);
     KeyPublic(QByteArray pbKey);
     KeyPublic(const KeyPublic &keyPrivate);
+    KeyPublic();
     ~KeyPublic()
     {
     }
@@ -44,6 +45,8 @@ public:
      * @param key
      */
     bool loadPublicKey(const QByteArray &keyBase64);
+
+    bool isEmpty();
 
 public:
     /**

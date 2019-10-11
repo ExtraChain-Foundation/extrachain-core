@@ -1,17 +1,19 @@
 #include "headers/resolve/resolver_service.h"
 
-ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent)
+ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QMap<QByteArray, int> *pckgH, QObject *parent)
     : QObject(parent)
 {
     requestResponseMap = rrMap;
-    //    actorIndex = new ActorIndex;
+    handler = pckgH;
 }
 
-ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent)
+ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap,
+                                 QMap<QByteArray, int> *pckgH, QObject *parent)
     : QObject(parent)
 {
     this->actorIndex = actorIndex;
     requestResponseMap = rrMap;
+    handler = pckgH;
 }
 
 ResolverService::~ResolverService()
@@ -34,7 +36,9 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 bool ResolverService::validate(const Messages::IMessage &message)
 {
     BigNumber signer = message.getSigner();
+
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
+
     if (!actor.isEmpty())
     {
         return message.verifyDigSig(actor);
@@ -43,7 +47,9 @@ bool ResolverService::validate(const Messages::IMessage &message)
     {
         qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toByteArray()));
         //        emit SendGetActor(signer);
-        return false;
+        //        return false;
+        thread()->wait(1000);
+        return validate(message);
     }
 }
 
@@ -143,27 +149,25 @@ bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
 {
     handlerFileMutex.lock();
     bool flag_result = true;
-    short value = 0;
-    QFile file(".handler");
-    FileList handlerList;
-    handlerList.setFileList(file);
-    if (handlerList.at(msg.hash()) == "")
-        handlerList.add(msg.hash(), QByteArray::number(value));
+    int value = 0;
+    QMap<QByteArray, int>::iterator it = handler->find(msg.hash());
+    if (it == handler->end())
+        handler->insert(msg.hash(), value);
     else
     {
-        short msg_count = handlerList.at(msg.hash()).toShort();
+        int msg_count = it.value();
         msg_count--;
         if (msg_count == -1)
         {
             flag_result = false;
-            handlerList.remove(msg.hash());
+            handler->remove(msg.hash());
         }
         else
         {
-            short amount = handlerList.at(msg.hash()).toShort();
+            int amount = it.value();
             amount--;
-            handlerList.remove(msg.hash());
-            handlerList.add(msg.hash(), QByteArray::number(amount));
+            handler->remove(msg.hash());
+            handler->insert(msg.hash(), amount);
         }
     }
     handlerFileMutex.unlock();
@@ -184,7 +188,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     if (msgType != ACTOR_MESSAGE)
         if (!MessageIsNotValid(message))
             return;
-    universalHandler(message);
+    if (!universalHandler(message))
+        return;
     // spread messages
     if (msgType == PROFILE_FILE)
     {

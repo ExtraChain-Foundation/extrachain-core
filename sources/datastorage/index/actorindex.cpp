@@ -99,6 +99,11 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     if (profile.sign == "")
         return;
     Actor<KeyPublic> key = getActor(profile.id);
+    if (key.isEmpty())
+    {
+        qDebug() << "WE DON`T HAVE ACTOR";
+        return;
+    }
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;

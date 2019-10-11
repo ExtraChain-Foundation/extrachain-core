@@ -114,7 +114,9 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
 
 void PublicProfile::saveProfileFromNet(QByteArray newProfile)
 {
-    QDir().mkdir(idPath);
+    QByteArray sec = this->id.mid(id.size() - 2);
+    QDir().mkdir(DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8()
+                 + "/" + sec + "/" + "profile");
     QFile profile(idPath);
     if (profile.exists())
     {
@@ -170,7 +172,6 @@ QByteArrayList PublicProfile::getListProfile()
 
 QByteArray PublicProfile::getProfile()
 {
-    QDir().mkdir(idPath);
     QString pathProfile = idPath;
     QFile profile(pathProfile);
     if (!profile.exists())

@@ -193,6 +193,13 @@ public:
 
     bool isEmpty() const
     {
+        if (key == nullptr)
+            return true;
+        if (!isPrivate())
+        {
+            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(key);
+            return pbKey->isEmpty();
+        }
         return id == BigNumber(-1) || key == nullptr;
     }
 
@@ -261,7 +268,8 @@ public:
     PublicProfile profile()
     {
         BigNumber section = id.toByteArray().right(2);
-        QByteArray pathToFolder = "blockchain/index/actors/" + section.toByteArray();
+        QByteArray pathToFolder = DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/"
+            + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8() + "/" + section.toByteArray();
         return PublicProfile(id.toByteArray(), pathToFolder);
     }
 

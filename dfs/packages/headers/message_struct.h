@@ -20,5 +20,9 @@ struct dfs_message
     const QByteArray serialize() const;
     const QList<QByteArray> deserialize(const QByteArray &serialized) const;
 };
+
+struct file_data_message
+{
+};
 }
 #endif // MESSAGE_STRCUT_H

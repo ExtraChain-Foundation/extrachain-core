@@ -60,27 +60,16 @@ void SocketService::readData()
             return;
 
         QByteArray command;
-        command = buffer.mid(4, _blockSize);
+        command = buffer.mid(0, _blockSize);
         buffer.remove(0, _blockSize);
-        // command = _sok->readAll();
 
-        // temp
-        static auto checkMsgType = [](const QByteArray &msg, const QByteArray &type) {
-            Messages::BaseMessage b;
-            b.deserialize(msg);
-            return b.getMsgType() == type;
-        };
-
-        //    if (!checkMsgType(command, Messages::DFS_CHANGES_MESSAGE))
-        //        qDebug() << "Received command " << command;
-
-        // _sok->readAll();
         if (!active)
         {
             //            active = true;
             if (command.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
             {
-                identificator = BigNumber(command);
+
+                identificator = BigNumber(command.mid(IDENTIFICATOR.size()));
             }
             emit checkMe();
         }

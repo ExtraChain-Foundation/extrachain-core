@@ -2,8 +2,8 @@
 
 EllipticPoint::EllipticPoint()
 {
-    x = BigNumber();
-    y = BigNumber();
+    x = BigNumber(0);
+    y = BigNumber(0);
 }
 
 EllipticPoint::EllipticPoint(const QByteArray &serialized)
@@ -56,7 +56,7 @@ void EllipticPoint::setY(const BigNumber &value)
 
 bool EllipticPoint::isZero()
 {
-    if (x == BigNumber("0") && y == BigNumber("0"))
+    if (x == BigNumber(0) && y == BigNumber(0))
         return true;
     else
         return false;

@@ -43,7 +43,7 @@ NodeManager::NodeManager()
     //    accController->loadActors();
     //    if (!QFile("blockchain/index/actor/0/0").exists())
     //    {
-    /*
+
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
@@ -59,7 +59,6 @@ NodeManager::NodeManager()
 
     Block block = txManager->makeBlock();
     blockchain->addBlock(block, true);
-    */
 
 //    }
 #endif
@@ -80,33 +79,10 @@ NodeManager::NodeManager()
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
 {
-    //    int result = actorIndex->add(BigNumber("0"),
-    //                                 "00010"
-    //                                 "00927bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1"
-    //                                 "a4048a6baa82b2846f2ae82bab83b636a6c6e00011");
 
-    //    Actor<KeyPrivate> companyPrKey(
-    //        QByteArray("000100031353e2c69b58a777e367d3f2358303fa0092"
-    //                   "7bffcfb68515622ac53bc3e7b1c6efed8f55de78dad26eae1f224e1a4048a6baa82b2"
-    //                   "846f2ae82bab83b636a6c6e00011"));
-    //    accController->savePrivateActor(companyPrKey);
-    //    if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
-    //    {
-    //        qDebug() << "Actor"
-    //                 << "0:353e2c69b58a777e367d3f2358303fa:4ac3b1735ddda843a042661303861fa::"
-    //                 << " was added";
-    //        // todo: Event should be emited only on CREATING new actors, not on
-    //        // RECEIVING new one's make methods:
-    //        // * addActor -> add actor to storage
-    //        // * addNewActor -> add actor to storage and emit event NewActor
-    //    }
-    //    Actor<KeyPrivate> companyPrKey;
-    //    companyPrKey.init(true);
     accController->createActor(true);
 
-    //    actorIndex->add(companyPrKey.getId(), companyPrKey.convertToPublic().getKey()->getPublicKey());
-    //    accController->savePrivateActor(companyPrKey);
-    return accController->getActor(companyActorId);
+    return *accController->getMainActor();
 }
 
 void NodeManager::showMessage(QString from, QString message)
@@ -516,8 +492,7 @@ void NodeManager::connectAccountController()
 
 void NodeManager::connectActorIndex()
 {
-    //    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
-    //    connect(actorIndex, &ActorIndex::NewActor, netManager, &NetManager::sendNewActor);
+    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
     // this connect with service message
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);

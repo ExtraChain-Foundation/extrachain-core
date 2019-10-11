@@ -16,6 +16,7 @@ class ResolveManager : public QObject
 private:
     QList<ResolverService *> resolvers;
     QMap<QByteArray, int> *requestResponseMap;
+    QMap<QByteArray, int> *packageHandler;
 
 private:
     ActorIndex *actorIndex;

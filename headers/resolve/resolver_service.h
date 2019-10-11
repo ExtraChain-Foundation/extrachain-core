@@ -39,6 +39,7 @@ private:
     ActorIndex *actorIndex;
     AccountController *ac;
     QMap<QByteArray, int> *requestResponseMap;
+    QMap<QByteArray, int> *handler;
     //    QMap<QByteArray, short> handlerList;
 
 public:
@@ -46,13 +47,14 @@ public:
      * @brief ResolverService
      * @param parent
      */
-    ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
+    ResolverService(QMap<QByteArray, int> *rrMap, QMap<QByteArray, int> *pckgH, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
+    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, int> *pckgH,
+                    QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */

@@ -8,14 +8,14 @@ BigNumber::BigNumber()
 
 BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
-    try
-    {
-        this->m_data = mpz_class(bigNumber.toStdString(), base);
-    } catch (std::exception a)
-    {
-        std::cout << "! BigNumber incorrect value: \"" << bigNumber.toStdString() << "\"" << std::endl;
-        std::exit(-1500);
-    }
+    //    try
+    //    {
+    this->m_data = mpz_class(bigNumber.toStdString(), base);
+    //    } catch (std::exception a)
+    //    {
+    //        std::cout << "! BigNumber incorrect value: \"" << bigNumber.toStdString() << "\"" << std::endl;
+    //        std::exit(-1500);
+    //    }
 
     UPDATE_DEBUG()
 }

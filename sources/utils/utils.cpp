@@ -270,7 +270,7 @@ int Utils::qByteArrayToInt(const QByteArray &number)
     //    bool flag = false;
     while (i < number.size())
     {
-        if (number[i] == 0)
+        if (number[i] == '0')
             i++;
         else
             break;
