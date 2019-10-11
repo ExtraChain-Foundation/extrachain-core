@@ -21,8 +21,9 @@ PublicProfile::PublicProfile()
 
 PublicProfile::PublicProfile(QByteArray _id, QByteArray _path)
 {
-    idPath = _path.mid(0, _path.size() - id.size()) + "profile/" + id + ".profile";
     id = _id;
+    idPath = _path + "/profile/" + id + ".profile";
+    std::cout << ">>>" << idPath.toStdString() << std::endl;
     QFile profile(idPath);
     if (!profile.exists())
         return;
@@ -33,7 +34,9 @@ PublicProfile::PublicProfile(QByteArray _id, QByteArray _path)
     profile.close();
     int signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
     sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
+    std::cout << "sign" << sign.toStdString() << std::endl;
 }
+
 PublicProfile::PublicProfile(const QByteArray &serialize)
 {
     int signSize = Utils::qByteArrayToInt(serialize.mid(serialize.size() - 4, 4));

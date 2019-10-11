@@ -23,7 +23,7 @@ class Actor
     const int FIELDS_SIZE = 4;
 
 private:
-    BigNumber id;
+    BigNumber id = -1;
     T *key;
     QByteArray hash;
     bool account;
@@ -126,15 +126,8 @@ public:
                 QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
 
                 this->id = BigNumber(list.at(0));
-
-                QByteArray prKey = list.at(1);
-                QByteArray pubKey = list.at(2);
-                account = list.at(3).toInt();
-
-                QList<QByteArray> l;
-                l << prKey << pubKey;
-
-                this->key = new T(prKey);
+                this->key = new T(list.at(1));
+                account = list.at(2).toInt();
             }
             else
             {
@@ -268,8 +261,8 @@ public:
     PublicProfile profile()
     {
         BigNumber section = id.toByteArray().right(2);
-        QByteArray pathToFolder = "blockchain/index/actors" + section.toByteArray();
-        return PublicProfile(id.toByteArray(), pathToFolder + "/" + id.toByteArray());
+        QByteArray pathToFolder = "blockchain/index/actors/" + section.toByteArray();
+        return PublicProfile(id.toByteArray(), pathToFolder);
     }
 
 public:

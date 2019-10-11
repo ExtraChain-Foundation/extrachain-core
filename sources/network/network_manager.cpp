@@ -166,12 +166,15 @@ void NetManager::checkMyIdentificator()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
-    if (allowLocalServer)
-        if (net::readNetManagerIdentificator() == connection->getIdentificator())
 
-            connection->removeMe();
-    short counter = 0;
-    std::for_each(connections.begin(), connections.end(), [connection, &counter](SocketService *el) {
+    if (connection == nullptr)
+        return;
+
+    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator())
+        connection->removeMe();
+
+    // short counter = 0;
+    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
         if (el->getIdentificator() == connection->getIdentificator())
         {
             if (el == connection)
@@ -180,8 +183,8 @@ void NetManager::checkMyIdentificator()
                 emit el->removeMe();
         }
     });
-    if (counter == 0)
-        emit connection->setActiveSignal(true);
+    // if (counter == 0)
+    //    emit connection->setActiveSignal(true);
 }
 
 void NetManager::startNetwork()

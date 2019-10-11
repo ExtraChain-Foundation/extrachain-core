@@ -915,9 +915,10 @@ void Blockchain::proveTx()
     QObject *s = QObject::sender();
     Transaction *tx = qobject_cast<Transaction *>(s);
 
-    if (tx->getSender() == 0)
+    if (tx->getSender() == BigNumber(companyActorId))
     {
-        bool sig = actorIndex->getActor(0).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
+        bool sig =
+            actorIndex->getActor(companyActorId).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
         if (sig)
         {
             emit tx->Approved();

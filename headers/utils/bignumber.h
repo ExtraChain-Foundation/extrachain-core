@@ -29,7 +29,7 @@
 class BigNumber
 {
 public:
-    BigNumber() = default;
+    BigNumber();
     BigNumber(const QByteArray &bigNumber, int base = 16);
     BigNumber(const BigNumber &other);
     BigNumber(int number);

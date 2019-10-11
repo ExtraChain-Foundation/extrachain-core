@@ -131,6 +131,8 @@ void ActorIndex::requestProfile(QString id)
 {
     QString path = buildFilePath(BigNumber(id.toUtf8()));
     Actor<KeyPublic> key = getActor(id.toUtf8());
+    if (key.getKey() == nullptr || key.getHash().isEmpty())
+        return;
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
         emit sendProfileToUi(id, key.profile().getListProfile());
     else
@@ -267,7 +269,7 @@ void ActorIndex::profileToSearch(SearchFilters filters)
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
         for (const QString &profilePath : profilePathList)
         {
-            Profile profile = getProfile(profilePath);
+            Profile profile = getProfile(profilePath.mid(0, profilePath.size() - 8));
 
             if (profile.at(2) == "")
                 continue;

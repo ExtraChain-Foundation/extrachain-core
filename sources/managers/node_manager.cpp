@@ -43,6 +43,7 @@ NodeManager::NodeManager()
     //    accController->loadActors();
     //    if (!QFile("blockchain/index/actor/0/0").exists())
     //    {
+    /*
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
@@ -58,6 +59,7 @@ NodeManager::NodeManager()
 
     Block block = txManager->makeBlock();
     blockchain->addBlock(block, true);
+    */
 
 //    }
 #endif
@@ -104,7 +106,7 @@ Actor<KeyPrivate> NodeManager::CreateExtracoin()
 
     //    actorIndex->add(companyPrKey.getId(), companyPrKey.convertToPublic().getKey()->getPublicKey());
     //    accController->savePrivateActor(companyPrKey);
-    return accController->getActor(0);
+    return accController->getActor(companyActorId);
 }
 
 void NodeManager::showMessage(QString from, QString message)

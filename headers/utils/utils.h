@@ -8,7 +8,11 @@
 #include <QJsonObject>
 #include <QList>
 #include <QString>
+#include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+
+const QByteArray companyActorId("42bfbc0fccee57600de");
+
 struct indexRow
 {
     indexRow(std::string _hash, long long pos, short use);

@@ -1,6 +1,11 @@
 #include "utils/bignumber.h"
 #include <exception>
 
+BigNumber::BigNumber()
+    : m_data(0)
+{
+}
+
 BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
     try
