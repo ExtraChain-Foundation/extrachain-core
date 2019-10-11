@@ -459,9 +459,9 @@ void NodeManager::connectUi()
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
-    connect(accController, &AccountController::addActorInActorIndex, this,
-            &NodeManager::addActorInActorIndex);
-    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
+    //    connect(accController, &AccountController::addActorInActorIndex, this,
+    //            &NodeManager::addActorInActorIndex);
+    //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
@@ -497,6 +497,9 @@ void NodeManager::connectAccountController()
 {
     // connect(accController, &AccountController::verifyActor, netManager, &NetManager::NewActor);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
+    connect(accController, &AccountController::addActorInActorIndex, this,
+            &NodeManager::addActorInActorIndex);
+    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
 }
 
 void NodeManager::connectActorIndex()
