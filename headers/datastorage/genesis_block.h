@@ -51,7 +51,7 @@ public:
 
 static QDataStream &operator<<(QDataStream &in, GenesisDataRow &row)
 {
-    in << row.actorId.toByteArray() << row.tx.serialize();
+    in << row.actorId.toActorId() << row.tx.serialize();
     return in;
 }
 static QDataStream &operator>>(QDataStream &out, GenesisDataRow &row)

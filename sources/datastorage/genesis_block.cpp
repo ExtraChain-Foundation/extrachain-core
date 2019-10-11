@@ -57,7 +57,7 @@ bool GenesisBlock::deserialize(const QByteArray &serialized)
 QByteArray GenesisBlock::serialize() const
 {
     QList<QByteArray> list;
-    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << getData() << getPrevHash()
+    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << getData() << getPrevHash()
          << getHash() << getDigSig() << getPrevGenHash();
     return Serialization::universalSerialize(list, FIELDS_SIZE);
 }

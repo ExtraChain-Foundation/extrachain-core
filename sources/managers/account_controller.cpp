@@ -49,7 +49,7 @@ QList<QByteArray> AccountController::getAccountID()
 {
     QList<QByteArray> list;
     for (int i = 0; i < accounts.size(); i++)
-        list.append(accounts[i]->getId().toByteArray());
+        list.append(accounts[i]->getId().toActorId());
     return list;
 }
 
@@ -65,7 +65,7 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     QFile file(KeyStore::user_actor_state);
     file.open(QIODevice::WriteOnly | QIODevice::Append);
     QByteArray str = "\n";
-    str += actor->getId().toByteArray() + Serialization::TX_PAIR_FIELD_SPLITTER + "0"
+    str += actor->getId().toActorId() + Serialization::TX_PAIR_FIELD_SPLITTER + "0"
         + Serialization::TX_PAIR_FIELD_SPLITTER;
     file.write(str);
     file.flush();
@@ -123,8 +123,7 @@ Actor<KeyPrivate> AccountController::getActor(int number)
 
 Actor<KeyPrivate> *AccountController::getMainActor()
 {
-    //    if (accounts.size() == 0)
-    //        return &Actor<KeyPrivate>();
+    // assert(!accounts.isEmpty());
     return accounts.isEmpty() ? nullptr : accounts.first();
 }
 
@@ -162,8 +161,7 @@ void AccountController::loadActors()
             if (file->open(QIODevice::ReadOnly))
             {
                 QByteArray serialized;
-                QDataStream stream(file);
-                stream >> serialized;
+                serialized = file->readAll();
                 qDebug() << serialized;
 
                 file->close();
@@ -214,8 +212,8 @@ void AccountController::setUserNum(int value)
 void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
-    emit editPrivateProfile(actor.getId().toByteArray());
-    QString fileName = KeyStore::makeKeyFileName(actor.getId().toByteArray());
+    emit editPrivateProfile(actor.getId().toActorId());
+    QString fileName = KeyStore::makeKeyFileName(actor.getId().toActorId());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
     QFile *file = new QFile(path);

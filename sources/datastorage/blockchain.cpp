@@ -935,7 +935,7 @@ void Blockchain::proveTx()
     if (tx->getData() == "genesis")
     {
         // type = 6, token = correct
-        Profile profile = actorIndex->getProfile(tx->getSender().toByteArray());
+        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
 
         if (profile.type() != 6)
         {
@@ -971,7 +971,7 @@ void Blockchain::proveTx()
 
     // verify sender state
     BigNumber targetSender = tx->getSender();
-    Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toByteArray());
+    Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toActorId());
     BigNumber senderCurBal = getBalanceFromTx(targetSender, senderLastTx);
     bool senderBalanceIsValid = false;
     if (tx->getSenderBalance() == senderCurBal)
@@ -979,7 +979,7 @@ void Blockchain::proveTx()
 
     // verify receiver state
     BigNumber targetReceiver = tx->getReceiver();
-    Transaction receiverLastTx = getTxBySenderOrReceiver(targetReceiver, tx->getToken().toByteArray());
+    Transaction receiverLastTx = getTxBySenderOrReceiver(targetReceiver, tx->getToken().toActorId());
     BigNumber receiverCurBal = getBalanceFromTx(targetReceiver, receiverLastTx);
     bool receiverBalanceIsValid = false;
     if (tx->getReceiverBalance() == receiverCurBal)

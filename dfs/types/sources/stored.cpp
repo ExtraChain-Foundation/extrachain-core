@@ -1,8 +1,7 @@
 #include "dfs/types/headers/stored.h"
 
-Stored::Stored(const BigNumber actorId, const int first, const QByteArray changedata,
-               const QByteArray sign, QByteArray path, QByteArray prevSig,
-               QByteArray prevStoredHash, const storedSpace::State state)
+Stored::Stored(const BigNumber actorId, const int first, const QByteArray changedata, const QByteArray sign,
+               QByteArray path, QByteArray prevSig, QByteArray prevStoredHash, const storedSpace::State state)
 
 {
     this->PrevSig = prevSig;
@@ -23,8 +22,7 @@ Stored::~Stored()
 Stored::Stored(const QByteArray &serialized)
 
 {
-    QList<QByteArray> list =
-        Serialization::deserialize(serialized, Serialization::DFS_STORED_DELIMETR);
+    QList<QByteArray> list = Serialization::deserialize(serialized, Serialization::DFS_STORED_DELIMETR);
     if (list.count() == 9)
     {
         this->FirstByte = list.at(0).toInt();
@@ -39,9 +37,8 @@ Stored::Stored(const QByteArray &serialized)
         this->actorId = BigNumber(list.at(8));
     }
     else
-        qDebug()
-            << "STORED::"
-            << "Stored(QByteArray &serialized), the list.count() not enought elements";
+        qDebug() << "STORED::"
+                 << "Stored(QByteArray &serialized), the list.count() not enought elements";
 }
 const Stored Stored::operator=(const Stored &temp)
 {
@@ -60,10 +57,9 @@ const Stored Stored::operator=(const Stored &temp)
 QByteArray Stored::serializedHeaderTail()
 {
     QList<QByteArray> list = {};
-    list << QString::number(this->FirstByte).toUtf8()
-         << storedSpace::toString(this->State).toUtf8() << this->ChangeDataSig << this->PrevSig
-         << this->PrevStoredHash << this->getHash() << this->getPath()
-         << this->getAuthor().toByteArray();
+    list << QString::number(this->FirstByte).toUtf8() << storedSpace::toString(this->State).toUtf8()
+         << this->ChangeDataSig << this->PrevSig << this->PrevStoredHash << this->getHash() << this->getPath()
+         << this->getAuthor().toActorId();
     QByteArray headerData = Serialization::serialize(list, Serialization::DFS_STORED_DELIMETR);
     list.clear();
     list << headerData << this->ChangeData;
@@ -74,19 +70,17 @@ QByteArray Stored::serialized() const
     QList<QByteArray> list = {};
     list << QString::number(this->FirstByte).toUtf8() << this->ChangeData
          << storedSpace::toString(this->State).toUtf8() << this->ChangeDataSig << this->PrevSig
-         << this->PrevStoredHash << this->getHash() << this->getPath()
-         << this->getAuthor().toByteArray();
+         << this->PrevStoredHash << this->getHash() << this->getPath() << this->getAuthor().toActorId();
     return Serialization::serialize(list, Serialization::DFS_STORED_DELIMETR);
 }
 
 QByteArray Stored::serializedUserField() const
 {
-    return Serialization::serialize(
-        { QString::number(this->FirstByte).toUtf8(), this->ChangeData,
-          storedSpace::toString(this->State).toUtf8(), this->ChangeDataSig, this->PrevSig,
-          this->PrevStoredHash, this->getHash(), this->getPath(),
-          this->getAuthor().toByteArray() },
-        Serialization::USER_FIELD_SPLITER);
+    return Serialization::serialize({ QString::number(this->FirstByte).toUtf8(), this->ChangeData,
+                                      storedSpace::toString(this->State).toUtf8(), this->ChangeDataSig,
+                                      this->PrevSig, this->PrevStoredHash, this->getHash(), this->getPath(),
+                                      this->getAuthor().toActorId() },
+                                    Serialization::USER_FIELD_SPLITER);
 }
 //
 Stored::Stored()
@@ -116,8 +110,7 @@ Stored::Stored(const Stored &_object)
 }
 void Stored::init(const QByteArray &serialized)
 {
-    QList<QByteArray> list =
-        Serialization::deserialize(serialized, Serialization::DFS_STORED_DELIMETR);
+    QList<QByteArray> list = Serialization::deserialize(serialized, Serialization::DFS_STORED_DELIMETR);
     if (list.count() == 9)
     {
         this->FirstByte = list.at(0).toInt();
@@ -132,9 +125,8 @@ void Stored::init(const QByteArray &serialized)
         this->actorId = BigNumber(list.at(8));
     }
     else
-        qDebug()
-            << "STORED::"
-            << "Stored(QByteArray &serialized), the list.count() not enought elements";
+        qDebug() << "STORED::"
+                 << "Stored(QByteArray &serialized), the list.count() not enought elements";
 }
 
 int Stored::getFirstByte() const

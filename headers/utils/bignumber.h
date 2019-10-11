@@ -82,6 +82,7 @@ public:
     int isProbPrime() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const; // todo: change to serialize
+    QByteArray toActorId() const;
     QByteArray serialize() const;
     BigNumber pow(unsigned long number);
     BigNumber sqrt(unsigned long number = 2) const;

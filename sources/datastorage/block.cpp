@@ -92,12 +92,12 @@ void Block::calcHash()
 
 QByteArray Block::getDataForHash() const
 {
-    return type + data + index.toByteArray() + approver.toByteArray() + QByteArray::number(date) + prevHash;
+    return type + data + index.toByteArray() + approver.toActorId() + QByteArray::number(date) + prevHash;
 }
 
 QByteArray Block::getDataForDigSig() const
 {
-    return type + data + index.serialize() + approver.serialize() + QByteArray::number(date) + prevHash
+    return type + data + index.serialize() + approver.toActorId() + QByteArray::number(date) + prevHash
         + hash;
 }
 
@@ -204,7 +204,7 @@ QByteArray Block::serialize() const
 {
     QList<QByteArray> list;
 
-    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << QByteArray::number(date)
+    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << QByteArray::number(date)
          << getData() << getPrevHash() << getHash() << getDigSig();
     //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
     return Serialization::universalSerialize(list, FIELDS_SIZE);
@@ -214,7 +214,7 @@ QString Block::toString() const
 {
     QList<QByteArray> list;
 
-    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << QByteArray::number(date)
+    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << QByteArray::number(date)
          << getData() << getPrevHash() << getHash() << getDigSig();
     //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
     return Serialization::universalSerialize(list, FIELDS_SIZE);

@@ -35,7 +35,7 @@ QList<QByteArray> BlockApprovedMessage::serializedParams() const
 
 const QByteArray BlockApprovedMessage::hash() const
 {
-    return Utils::calcKeccak(blockId.toByteArray() + approver.toByteArray());
+    return Utils::calcKeccak(blockId.toByteArray() + approver.toActorId());
 }
 
 BigNumber BlockApprovedMessage::getBlockId() const

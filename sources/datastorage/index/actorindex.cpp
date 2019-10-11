@@ -118,7 +118,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     if (key->getHash().isEmpty())
         return;
     qDebug() << "Save profile with id" << newProfile.at(2);
-    QByteArray path = buildFilePath(BigNumber(newProfile.at(2))).toUtf8();
+    QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
     if (pubProfile.sign == "")
@@ -134,7 +134,23 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 
 void ActorIndex::requestProfile(QString id)
 {
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
+    if (id == "0")
+    {
+        Profile profile;
+        profile.setUserId("0");
+        profile.setFirstName("Etalonium");
+        profile.setLastName("Fashion Group");
+        profile.setRegisterDate(1549290447779);
+        profile.setFacebook("https://www.facebook.com/etalonium/");
+        profile.setInstagram("etalonium");
+        profile.setAvatar({ "3" });
+        profile.setBio("ANOTHER WAY TO TOP:\n - Find a job\n - Create stars\n - Your ideal model");
+        profile.setUrl("https://etalonium.io/");
+        profile.setUrlName("Our site");
+        return emit sendProfileToUi("0", QByteArrayList(profile.list()));
+    }
+
+    QString path = buildFilePath(id.toUtf8());
     Actor<KeyPublic> key = getActor(id.toUtf8());
     if (key.getKey() == nullptr || key.getHash().isEmpty())
         return;
@@ -146,7 +162,7 @@ void ActorIndex::requestProfile(QString id)
 
 QByteArrayList ActorIndex::getProfile(QString id)
 {
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
+    QString path = buildFilePath(id.toUtf8());
     Actor<KeyPublic> key = getActor(id.toUtf8());
     if (key.profile().sign == "")
         return QByteArrayList();
@@ -167,9 +183,13 @@ bool ActorIndex::actorExist(BigNumber actorId)
     return true;
 }
 
-QString ActorIndex::buildFilePath(const BigNumber &id) const
+QString ActorIndex::buildFilePath(const QByteArray &id) const
 {
-    QByteArray section = id.toByteArray().right(SECTION_NAME_SIZE);
+    QByteArray Id = id;
+    if (Id.length() == 19)
+        Id = "0" + id;
+
+    QByteArray section = Id.right(SECTION_NAME_SIZE);
     QString pathToFolder = folderPath + section;
 
     QDir dir(pathToFolder);
@@ -180,7 +200,7 @@ QString ActorIndex::buildFilePath(const BigNumber &id) const
         dir.mkpath(pathToFolder);
     }
 
-    return pathToFolder + "/" + id.toByteArray();
+    return pathToFolder + "/" + Id;
 }
 
 BigNumber ActorIndex::getRecords() const
@@ -190,7 +210,7 @@ BigNumber ActorIndex::getRecords() const
 
 int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 {
-    QString path = buildFilePath(id);
+    QString path = buildFilePath(id.toActorId());
     QFile file(path);
 
     qDebug() << "Saving the file:" << path;
@@ -218,7 +238,7 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
 QByteArray ActorIndex::getById(const BigNumber &id) const
 {
-    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
+    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
     QFile file(filePath);
     if (!file.exists())
     {
@@ -242,7 +262,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 
         if (actor.getAccount())
         {
-            qDebug() << "emit signal for init dfs for user" << actor.getId().toByteArray();
+            qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
             emit initDfs(actor.getId());
         }
     }

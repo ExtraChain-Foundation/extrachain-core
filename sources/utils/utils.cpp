@@ -372,6 +372,8 @@ void Utils::wipeDataFiles()
     QFile("user.private.login").remove();
     QFile(".fileList").remove();
 #endif
+    QFile(".etalonium.lock").remove();
+    QFile(".settings").remove();
 }
 
 FileList::FileList()

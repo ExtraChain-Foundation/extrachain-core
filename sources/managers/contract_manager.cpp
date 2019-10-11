@@ -14,7 +14,7 @@
 // void ContractManager::saveContract(const Contract &contract)
 //{
 //    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + "/"
-//        + accountController->getMainActor()->getId().toByteArray() + "/" + "CONTRACTS" + "/";
+//        + accountController->getMainActor()->getId().toActorId() + "/" + "CONTRACTS" + "/";
 //    qDebug() << path;
 //    QDir().mkpath(path);
 
@@ -32,7 +32,7 @@
 //{
 //    contractList.clear();
 //    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + "/"
-//        + accountController->getMainActor()->getId().toByteArray() + "/" + "CONTRACTS" + "/";
+//        + accountController->getMainActor()->getId().toActorId() + "/" + "CONTRACTS" + "/";
 //    QDir directory(path);
 //    if (!directory.exists())
 //        return;

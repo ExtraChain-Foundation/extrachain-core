@@ -43,7 +43,7 @@ NodeManager::NodeManager()
     //    accController->loadActors();
     //    if (!QFile("blockchain/index/actor/0/0").exists())
     //    {
-
+    /*
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
@@ -59,7 +59,7 @@ NodeManager::NodeManager()
 
     Block block = txManager->makeBlock();
     blockchain->addBlock(block, true);
-
+    */
 //    }
 #endif
 
@@ -79,7 +79,6 @@ NodeManager::NodeManager()
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
 {
-
     accController->createActor(true);
 
     return *accController->getMainActor();
@@ -167,7 +166,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
     if (!actor.isEmpty())
     {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                        .arg(tx.toString(), QString(actor.getId().toByteArray()));
+                        .arg(tx.toString(), QString(actor.getId().toActorId()));
 
         // 1) set prev block id
         BigNumber lastBlockId = blockchain->getLastBlock().getIndex();
@@ -242,7 +241,7 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
     else
     {
         qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                        .arg(QString(receiver.toByteArray()));
+                        .arg(QString(receiver.toActorId()));
     }
     return Transaction();
 }
@@ -348,7 +347,7 @@ void NodeManager::updateAvailableWalletList()
         if (curActor.isEmpty() || currentId == curActor.getId()
             || accController->getCurrentActor().getId() == 0)
             continue;
-        walletList.append(curActor.getId().toByteArray());
+        walletList.append(curActor.getId().toActorId());
     }
 
     uiWallet->updateAvailableListModel(&walletList);
@@ -396,6 +395,7 @@ void NodeManager::connectUi()
         emit saveProfile(key, profile);
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
+    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
@@ -418,7 +418,7 @@ void NodeManager::connectUi()
         auto actor = accController->createActor(false);
         accController->savePrivateActor(actor);
         auto wallets = uiWallet->getCurrentWallets();
-        uiWallet->setCurrentWallets(wallets << actor.getId().toByteArray());
+        uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
         uiWallet->createWalletToNode();
     });
 
@@ -438,8 +438,6 @@ void NodeManager::connectUi()
             &ContractManager::completeContractByCustomer);
     connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
             &ContractManager::completeContractByPerformer);
-    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
-
     connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
             &ContractManager::createContract);
     */

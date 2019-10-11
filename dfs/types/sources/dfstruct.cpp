@@ -259,7 +259,7 @@ based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct
         else
         {
             QByteArray t = filePathList.at(3);
-            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()));
+            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()), 36);
         }
         QString tempPath = _file_name.mid(delimetrIndex + 1);
         QFile file(tempPath);
@@ -417,7 +417,7 @@ bool based_dfs_struct::DfStruct::operator==(const based_dfs_struct::DfStruct &df
 QByteArray based_dfs_struct::DfStruct::madeFolderDir(const based_dfs_struct::Type &type) const
 {
     QList<QByteArray> list;
-    list << ROOT_FOOLDER_NAME.toUtf8() << this->actorId.toByteArray() << toByteArray(type);
+    list << ROOT_FOOLDER_NAME.toUtf8() << this->actorId.toActorId() << toByteArray(type);
     return Serialization::serialize(list, '/');
 }
 

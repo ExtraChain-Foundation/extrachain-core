@@ -24,7 +24,7 @@ void Messages::DfsStatus::initFields(QList<QByteArray> &list)
 QList<QByteArray> Messages::DfsStatus::serializedParams() const
 {
     QList<QByteArray> list = this->BaseMessage::serializedParams();
-    list << QByteArray::fromStdString(serializeToStdString()) << actorId.toByteArray();
+    list << QByteArray::fromStdString(serializeToStdString()) << actorId.toActorId();
     return list;
 }
 

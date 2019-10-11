@@ -32,7 +32,7 @@ private:
      * @param id
      * @return
      */
-    QString buildFilePath(const BigNumber &id) const;
+    QString buildFilePath(const QByteArray &id) const;
 
 public:
     /**

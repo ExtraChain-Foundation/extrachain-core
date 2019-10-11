@@ -222,9 +222,9 @@ public:
                 KeyPrivate *prKey = reinterpret_cast<KeyPrivate *>(key);
                 QList<QByteArray> list;
 
-                qDebug() << this->id.toByteArray() << prKey->serialize() << pubKey;
+                qDebug() << this->id.toActorId() << prKey->serialize() << pubKey;
 
-                list << this->id.toByteArray() << prKey->serialize() << QByteArray::number(account);
+                list << this->id.toActorId() << prKey->serialize() << QByteArray::number(account);
                 //
                 QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
                 return serialized;
@@ -232,12 +232,12 @@ public:
             else
             {
                 // key_public
-                list << id.toByteArray() << pubKey << QByteArray::number(account);
+                list << id.toActorId() << pubKey << QByteArray::number(account);
             }
         }
         else
         {
-            list << id.toByteArray();
+            list << id.toActorId();
         }
         QByteArray serialized = Serialization::universalSerialize(list, 4);
         return serialized;
@@ -246,7 +246,7 @@ public:
     QString toString() const
     {
         QList<QByteArray> list;
-        list << "id:" + id.toByteArray();
+        list << "id:" + id.toActorId();
         if (key != nullptr)
         {
             list << "pub_key:" + key->getPublicKey();
@@ -267,10 +267,10 @@ public:
     }
     PublicProfile profile()
     {
-        BigNumber section = id.toByteArray().right(2);
+        BigNumber section = id.toActorId().right(2);
         QByteArray pathToFolder = DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/"
             + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8() + "/" + section.toByteArray();
-        return PublicProfile(id.toByteArray(), pathToFolder);
+        return PublicProfile(id.toActorId(), pathToFolder);
     }
 
 public:

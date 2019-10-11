@@ -266,6 +266,13 @@ QByteArray BigNumber::toByteArray(int base) const
     return QByteArray::fromStdString(m_data.get_str(base));
 }
 
+QByteArray BigNumber::toActorId() const
+{
+    QByteArray actorId = toByteArray();
+    actorId = actorId.length() == 19 ? "0" + actorId : actorId;
+    return actorId;
+}
+
 QByteArray BigNumber::serialize() const
 {
     return toByteArray();
