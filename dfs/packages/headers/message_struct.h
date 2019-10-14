@@ -1,6 +1,7 @@
 #ifndef MESSAGE_STRCUT_H
 #define MESSAGE_STRCUT_H
 
+#include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
 namespace Message {
 const short dfs_message_field_size = 4;

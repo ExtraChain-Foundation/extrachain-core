@@ -8,21 +8,30 @@ BigNumber::BigNumber()
 
 BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
+    if (bigNumber.isNull())
+        this->m_data = mpz_class(0);
+    else
+    {
+        std::string s = bigNumber.toStdString();
+        mpz_class st("0", base); // segfault только в одном случае
+        this->m_data = mpz_class(s, base);
+        //        this->m_data = mpz_class(bigNumber.toStdString(), base);
+    }
     //    try
     //    {
-    this->m_data = mpz_class(bigNumber.toStdString(), base);
+
     //    } catch (std::exception a)
     //    {
     //        std::cout << "! BigNumber incorrect value: \"" << bigNumber.toStdString() << "\"" << std::endl;
     //        std::exit(-1500);
     //    }
 
-    UPDATE_DEBUG()
+    //    UPDATE_DEBUG()
 }
 
 BigNumber::BigNumber(const BigNumber &other)
 {
-    this->m_data = mpz_class(other.data());
+    this->m_data = other.data();
     UPDATE_DEBUG()
 }
 
@@ -267,7 +276,8 @@ QByteArray BigNumber::toByteArray(int base) const
     char *ch = new char();
     mpz_get_str(ch, base, m_data.get_mpz_t());
     int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
-    QByteArray e = QByteArray::fromRawData(ch, size);
+    std::string d(ch);
+    QByteArray e = QByteArray::fromStdString(d);
     //    if (t != "")
     //        return QByteArray::fromStdString(t);
     //    return QByteArray();
@@ -352,11 +362,13 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
     return result;
 }
 
-BigNumber BigNumber::random(const BigNumber &max)
+BigNumber BigNumber::random(BigNumber max)
 {
     QByteArray maxdata = max.toByteArray();
-    BigNumber bt(maxdata);
-    BigNumber t(QByteArray().fill('f', bt.toByteArray().size()));
+    QByteArray b;
+    b.clear();
+    b.fill('f', /*maxdata.size() - */ 1);
+    BigNumber t("f"); // ERROR для присвоения на createActor (segfault)
     while (t >= max)
     {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());

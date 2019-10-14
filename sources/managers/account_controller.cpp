@@ -147,12 +147,21 @@ void AccountController::loadActors()
             this->currentState[list.at(0)] = list.at(1);
     }
     QDir dir(path);
+    if (!dir.exists())
+    {
+        QDir().mkdir(path);
+    }
+    dir.cd(path);
     QStringList filters;
     filters << KeyStore::KEY_FILTER;
     dir.setNameFilters(filters);
 
     int loaded = 0;
 
+    if (dir.entryList().size() == 0)
+    {
+        return;
+    }
     for (QString fileName : dir.entryList())
     {
         QFile *file = new QFile(path + "/" + fileName);

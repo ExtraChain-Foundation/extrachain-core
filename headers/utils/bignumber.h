@@ -11,7 +11,7 @@
 #include <QDebug>
 
 #include <iostream>
-#include "utils/utils.h"
+//#include "utils/utils.h"
 
 #include "gmpxx.h"
 
@@ -35,10 +35,7 @@ public:
     BigNumber(int number);
     BigNumber(long long number);
     BigNumber(mpz_class number);
-    //    ~BigNumber() = default;
-    ~BigNumber()
-    {
-    }
+    ~BigNumber() = default;
 
 private:
     mpz_class m_data;
@@ -96,7 +93,7 @@ public:
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
-    static BigNumber random(const BigNumber &max);
+    static BigNumber random(BigNumber max);
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r)
