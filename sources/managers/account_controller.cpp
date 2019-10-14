@@ -162,6 +162,7 @@ void AccountController::loadActors()
             {
                 QByteArray serialized;
                 serialized = file->readAll();
+                std::cout << serialized.toStdString() << std::endl;
                 qDebug() << serialized;
 
                 file->close();

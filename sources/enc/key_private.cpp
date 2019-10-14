@@ -1,7 +1,6 @@
 #include "enc/key_private.h"
 KeyPrivate::KeyPrivate()
 {
-    this->curve = ECC::secp256k1();
     this->prkey = BigNumber::random(curve.p);
     this->pbkey = ECC::multiply(this->curve, this->prkey, curve.g);
     std::cout << "Key built!!!!!" << std::endl;

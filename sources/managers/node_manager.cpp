@@ -43,7 +43,7 @@ NodeManager::NodeManager()
     //    accController->loadActors();
     //    if (!QFile("blockchain/index/actor/0/0").exists())
     //    {
-    /*
+
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
@@ -59,7 +59,7 @@ NodeManager::NodeManager()
 
     Block block = txManager->makeBlock();
     blockchain->addBlock(block, true);
-    */
+
 //    }
 #endif
 
@@ -118,6 +118,11 @@ void NodeManager::connectSmContractManager()
 #endif
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
     // &NetManager::NewActor);
+}
+
+void NodeManager::connectTxManager()
+{
+    connect(this, &NodeManager::NewTx, txManager, &TransactionManager::addTransaction);
 }
 
 NodeManager::~NodeManager()
@@ -245,7 +250,58 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
     }
     return Transaction();
 }
+Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                               BigNumber token)
+{
+    if (receiver.isEmpty() || amount.isEmpty())
+    {
+        qDebug() << QString("Warning: can not create tx without receiver or amount");
+        return Transaction();
+    }
 
+    Actor<KeyPrivate> actor = accController->getActor(sender);
+    if (!actor.isEmpty())
+    {
+        qDebug() << actor.getId();
+        Transaction tx(actor.getId(), receiver, amount);
+        // add sent tx balances
+        BigNumber tempBalance = 0;
+
+        if (accController->sentTxList.getIndexSize() > 0)
+        {
+            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
+            {
+                Transaction tempTx(accController->sentTxList.at(i));
+                if (tempTx.getToken() != token)
+                    continue;
+                if (tempTx.getSender() == actor.getId())
+                    tempBalance -= tempTx.getAmount();
+                else
+                    tempBalance += tempTx.getAmount();
+            }
+        }
+
+        if (actor.getId() == tx.getSender())
+        {
+            BigNumber actorBalance = blockchain->getUserBalance(actor.getId(), token);
+            BigNumber receiverBalance = blockchain->getUserBalance(receiver, token);
+            tx.setSenderBalance(actorBalance + tempBalance);
+            tx.setReceiverBalance(receiverBalance - tempBalance);
+        }
+
+        tx.setToken(token);
+        // tx.setHop(2);
+        if (actor.getId() == 0)
+            tx.setSenderBalance(BigNumber(0));
+        return this->createTransaction(tx);
+    }
+    else
+    {
+        qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
+                        .arg(QString(receiver.toActorId()));
+    }
+    return Transaction();
+}
 void NodeManager::CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress)
 {
     BigNumber currentBlockCount = blockchain->getLastBlock().getIndex();
@@ -505,7 +561,7 @@ void NodeManager::dfsConnection()
 
 void NodeManager::connectSignals()
 {
-//    connectTxManager();
+    connectTxManager();
 #ifdef ETALONIUM_CLIENT
     connectUi();
 #endif
@@ -593,7 +649,7 @@ void NodeManager::tempareSlotForActors()
 
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
-    createTransaction(receiver, amount);
+    createTransactionFrom(BigNumber(companyActorId), receiver, amount);
 }
 QByteArray NodeManager::getIdPrivateProfile() const
 {

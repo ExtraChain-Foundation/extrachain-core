@@ -12,6 +12,7 @@
 #include "network/socket_pair.h"
 #include "headers/network/packages/base_message_response.h"
 #include "headers/network/packages/service/response_messages.h"
+#include "headers/network/packages/service/all_messages.h"
 /**
  * @brief Actors that stored in blockchain
  */
@@ -21,6 +22,7 @@ class ActorIndex : public QObject
     Q_OBJECT
     const QByteArray classType = Messages::ACTOR_MESSAGE;
     const QByteArray profileType = Messages::PROFILE_FILE;
+    const QByteArray getActorMessage = Messages::GET_ACTOR_MESSAGE;
 
 private:
     BigNumber records = 0;
@@ -55,21 +57,21 @@ public:
      * @param id - actor's id
      * @return Found actor, or empty actor (if not found)
      */
-    Actor<KeyPublic> getActor(const BigNumber &id) const;
+    Actor<KeyPublic> getActor(const BigNumber &id);
 
     /**
      * @brief Validates block digital signature
      * @param block
      * @return true if block is valid
      */
-    bool validateBlock(const Block &block) const;
+    bool validateBlock(const Block &block);
 
     /**
      * @brief Validates transaction digital signature
      * @param tx
      * @return true if transaction is valid
      */
-    bool validateTx(const Transaction &tx) const;
+    bool validateTx(const Transaction &tx);
 
     /**
      * @brief getById

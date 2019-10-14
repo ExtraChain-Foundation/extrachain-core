@@ -17,7 +17,7 @@
 class KeyPublic
 {
 private:
-    ECC::curve curve = ECC::secp256k1();
+    ECC::curve curve;
     EllipticPoint pbkey;
 
 public:

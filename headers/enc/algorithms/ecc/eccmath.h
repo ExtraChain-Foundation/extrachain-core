@@ -1,5 +1,5 @@
-#ifndef MATH_H
-#define MATH_H
+#ifndef ECCMATH_H
+#define ECCMATH_H
 
 #include "utils/bignumber.h"
 #include "ellipticpoint.h"
@@ -46,7 +46,6 @@ EllipticPoint add(ECC::curve curve, EllipticPoint a, EllipticPoint b);
  * @return
  */
 EllipticPoint multiply(ECC::curve curve, BigNumber k, EllipticPoint point);
-
 }
 
 #endif // MATH_H

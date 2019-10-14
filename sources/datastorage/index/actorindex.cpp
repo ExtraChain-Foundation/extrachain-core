@@ -10,18 +10,22 @@ ActorIndex::~ActorIndex()
 {
 }
 
-Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id) const
+Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
 {
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {
         return Actor<KeyPublic>(serializedActor);
     }
-    qDebug() << "There no actor with id:" << id;
-    return Actor<KeyPublic>();
+    else
+    {
+        emit sendMessage(id.serialize(), getActorMessage);
+        qDebug() << "There no actor with id:" << id;
+        return Actor<KeyPublic>();
+    }
 }
 
-bool ActorIndex::validateBlock(const Block &block) const
+bool ActorIndex::validateBlock(const Block &block)
 {
     Actor<KeyPublic> actor = this->getActor(block.getApprover());
     if (actor.isEmpty())
@@ -33,7 +37,7 @@ bool ActorIndex::validateBlock(const Block &block) const
     return block.verify(actor);
 }
 
-bool ActorIndex::validateTx(const Transaction &tx) const
+bool ActorIndex::validateTx(const Transaction &tx)
 {
     Actor<KeyPublic> actor = this->getActor(tx.getApprover());
     if (actor.isEmpty())

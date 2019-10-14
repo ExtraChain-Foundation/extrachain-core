@@ -94,7 +94,7 @@ private:
      */
     void connectResolveManager();
     void connectSmContractManager();
-    //    void connectTxManager();
+    void connectTxManager();
     void connectUi();
     void connectContractManager();
     void connectBlockchain();
@@ -107,6 +107,8 @@ private:
      * @brief Creates folders for work, if they not exist
      */
     void prepareFolders();
+    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                      BigNumber token = 0);
 
 signals:
 

@@ -130,7 +130,7 @@ BigNumber BigNumber::operator%(long long number)
 
 BigNumber &BigNumber::operator=(const BigNumber &bigNumber)
 {
-    m_data = mpz_class(bigNumber.data());
+    m_data = bigNumber.data();
     UPDATE_DEBUG()
     //    m_data = ;
     return *this;
@@ -263,12 +263,20 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    return QByteArray::fromStdString(m_data.get_str(base));
+    std::string t = "";
+    char *ch = new char();
+    mpz_get_str(ch, base, m_data.get_mpz_t());
+    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
+    QByteArray e = QByteArray::fromRawData(ch, size);
+    //    if (t != "")
+    //        return QByteArray::fromStdString(t);
+    //    return QByteArray();
+    return e;
 }
 
 QByteArray BigNumber::toActorId() const
 {
-    QByteArray actorId = toByteArray();
+    QByteArray actorId = this->toByteArray();
     actorId = actorId.length() == 19 ? "0" + actorId : actorId;
     return actorId;
 }
@@ -346,7 +354,8 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
 
 BigNumber BigNumber::random(const BigNumber &max)
 {
-    BigNumber bt = max;
+    QByteArray maxdata = max.toByteArray();
+    BigNumber bt(maxdata);
     BigNumber t(QByteArray().fill('f', bt.toByteArray().size()));
     while (t >= max)
     {

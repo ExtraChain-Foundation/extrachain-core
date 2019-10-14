@@ -35,7 +35,10 @@ public:
     BigNumber(int number);
     BigNumber(long long number);
     BigNumber(mpz_class number);
-    ~BigNumber() = default;
+    //    ~BigNumber() = default;
+    ~BigNumber()
+    {
+    }
 
 private:
     mpz_class m_data;

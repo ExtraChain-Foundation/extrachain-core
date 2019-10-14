@@ -16,7 +16,7 @@
 class KeyPrivate
 {
 private:
-    ECC::curve curve = ECC::secp256k1();
+    ECC::curve curve;
     BigNumber prkey;
     EllipticPoint pbkey;
 
