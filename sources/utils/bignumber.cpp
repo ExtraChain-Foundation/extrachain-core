@@ -272,16 +272,17 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    std::string t = "";
-    char *ch = new char();
-    mpz_get_str(ch, base, m_data.get_mpz_t());
-    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
-    std::string d(ch);
-    QByteArray e = QByteArray::fromStdString(d);
+    //    std::string t = "";
+    //    char *ch = new char();
+    //    mpz_get_str(ch, base, m_data.get_mpz_t());
+    //    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
+    //    std::string d(ch);
+    //    QByteArray e = QByteArray::fromStdString(d);
     //    if (t != "")
     //        return QByteArray::fromStdString(t);
     //    return QByteArray();
-    return e;
+    //    return e;
+    return QByteArray::fromStdString(m_data.get_str(base));
 }
 
 QByteArray BigNumber::toActorId() const
