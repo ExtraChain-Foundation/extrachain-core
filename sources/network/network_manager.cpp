@@ -128,18 +128,34 @@ void NetManager::findLocal()
         }
     }
 
-    QList<QNetworkInterface> nl = QNetworkInterface::allInterfaces();
-    for (int i = 0; i < nl.size(); i++)
+    for (const auto &interface : QNetworkInterface::allInterfaces())
     {
-        foreach (QNetworkAddressEntry entry, nl.at(i).addressEntries())
+        for (const auto &entry : interface.addressEntries())
         {
+#ifdef Q_OS_WINDOWS
+            // hack for windows: TODO!
+            const auto flags = interface.flags();
+
+            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
+            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
+            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+
+            QTcpSocket *socket = new QTcpSocket;
+            socket->bind(entry.ip());
+            socket->connectToHost("8.8.8.8", 53);
+            bool isConnected = socket->waitForConnected(1000);
+            socket->deleteLater();
+            if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint || !isConnected)
+                continue;
+#endif
+
             if (localIpNotConnect.contains(entry.ip()))
             {
                 local = new QNetworkAddressEntry(entry);
                 qDebug() << "Discovered local: " << local->ip().toString();
-                if ((nl.at(i).type() == QNetworkInterface::Wifi)
-                    || (nl.at(i).type() == QNetworkInterface::Ethernet))
-                    i = nl.size();
+                if (interface.type() == QNetworkInterface::Wifi
+                    || interface.type() == QNetworkInterface::Ethernet)
+                    break;
             }
         }
     }
