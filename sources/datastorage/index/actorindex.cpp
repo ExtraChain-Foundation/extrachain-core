@@ -19,7 +19,8 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     }
     else
     {
-        emit sendMessage(id.serialize(), getActorMessage);
+        Messages::GetActorMessage msg(id);
+        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
     }
@@ -58,6 +59,8 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
+    if (actor.isEmpty())
+        return;
     emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
 }
 
@@ -205,6 +208,11 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const
     }
 
     return pathToFolder + "/" + Id;
+}
+
+void ActorIndex::setCompanyId(QByteArray *value)
+{
+    companyId = value;
 }
 
 BigNumber ActorIndex::getRecords() const

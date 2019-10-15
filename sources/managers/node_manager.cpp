@@ -42,8 +42,10 @@ NodeManager::NodeManager()
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
-    accController->loadActors();                    //!!!
-    companyActorId = company.getId().toByteArray(); //!!!
+    accController->loadActors();                                         //!!!
+    TMP::companyActorId = new QByteArray(company.getId().toByteArray()); //!!!
+    actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
+    qDebug() << "Company id->" << *TMP::companyActorId << " " << company.getId().toByteArray();
     Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
     newTransaction.setSenderBalance(BigNumber("0"));
     newTransaction.setReceiverBalance(BigNumber("0"));
@@ -235,7 +237,7 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actor.getId() == 0)
+        if (actor.getId() == BigNumber(*actorIndex->companyId))
             tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
@@ -287,7 +289,7 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actor.getId() == 0)
+        if (actor.getId() == BigNumber(*actorIndex->companyId))
             tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
@@ -645,7 +647,7 @@ void NodeManager::tempareSlotForActors()
 
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
-    createTransactionFrom(BigNumber(companyActorId), receiver, amount);
+    createTransactionFrom(BigNumber(*actorIndex->companyId), receiver, amount);
 }
 QByteArray NodeManager::getIdPrivateProfile() const
 {

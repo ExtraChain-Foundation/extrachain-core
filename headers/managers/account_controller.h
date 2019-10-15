@@ -13,9 +13,7 @@
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-namespace accountConst {
-static const BigNumber companyId = BigNumber("0");
-}
+
 class AccountController : public QObject
 {
     Q_OBJECT

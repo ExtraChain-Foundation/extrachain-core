@@ -10,7 +10,7 @@ BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
     try
     {
-        if (bigNumber.isNull())
+        if (bigNumber.isEmpty())
             this->m_data = mpz_class(0);
         else
         {

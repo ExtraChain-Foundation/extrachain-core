@@ -44,6 +44,7 @@ private:
     PrivateProfile *prProfile;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
+
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;

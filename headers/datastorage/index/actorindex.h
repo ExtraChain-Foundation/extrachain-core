@@ -38,6 +38,10 @@ private:
 
 public:
     /**
+     * @brief companyId
+     */
+    QByteArray *companyId;
+    /**
      * @brief ActorIndex
      */
     ActorIndex(QObject *parent = nullptr);
@@ -87,6 +91,8 @@ public:
      */
     int add(const BigNumber &id, const QByteArray &data);
     BigNumber getRecords() const;
+
+    void setCompanyId(QByteArray *value);
 
 public slots:
     void process();

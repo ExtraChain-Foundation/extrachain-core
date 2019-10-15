@@ -188,7 +188,7 @@ void Blockchain::createGenesisBlock()
         {
             for (const Transaction &tx : block.extractTransactions())
             {
-                if (tx.getReceiver() == BigNumber("0"))
+                if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                     break;
                 GenesisDataRow recSender = GenesisDataRow(tx.getSender(), tx);
                 addRecordIfNew(recSender);
@@ -914,11 +914,12 @@ void Blockchain::proveTx()
     qDebug() << "proveTx: started";
     QObject *s = QObject::sender();
     Transaction *tx = qobject_cast<Transaction *>(s);
-
-    if (tx->getSender() == BigNumber(companyActorId))
+    qDebug() << tx->getSender() << *TMP::companyActorId << actorIndex->companyId << " SEVA 4Mo";
+    if (tx->getSender() == BigNumber(*actorIndex->companyId))
     {
-        bool sig =
-            actorIndex->getActor(companyActorId).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
+        bool sig = actorIndex->getActor(BigNumber(*actorIndex->companyId))
+                       .getKey()
+                       ->verify(tx->getDataForDigSig(), tx->getDigSig());
         if (sig)
         {
             emit tx->Approved();

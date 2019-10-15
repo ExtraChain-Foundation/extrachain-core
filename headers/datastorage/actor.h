@@ -188,7 +188,7 @@ public:
      * @param id
      * @param keydata - (private/public key)
      */
-    bool init(const BigNumber &id, const QByteArray &keydata, bool account)
+    bool init(const BigNumber &id, const QByteArray &keydata, int account)
     {
         this->id = id;
         this->key = new T(keydata);
