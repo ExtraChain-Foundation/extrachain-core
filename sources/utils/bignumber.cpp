@@ -8,12 +8,19 @@ BigNumber::BigNumber()
 
 BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
-    if (bigNumber.isNull())
-        this->m_data = mpz_class(0);
-    else
+    try
     {
-        std::string s = bigNumber.toStdString();
-        this->m_data = mpz_class(s, base);
+        if (bigNumber.isNull())
+            this->m_data = mpz_class(0);
+        else
+        {
+            std::string s = bigNumber.toStdString();
+            this->m_data = mpz_class(s, base);
+        }
+    } catch (std::exception e)
+    {
+        qDebug() << "Incorrect value:" << bigNumber;
+        assert(false);
     }
 
     UPDATE_DEBUG()

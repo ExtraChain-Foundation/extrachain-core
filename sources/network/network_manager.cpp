@@ -361,7 +361,8 @@ void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &m
                                      const QByteArray &requestHash, const SocketPair &receiver)
 {
     BaseMessageResponse rmsg(data, requestHash, msgType);
-    signMessage(rmsg);
+    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
+        signMessage(rmsg);
 
     emit sendMsg(rmsg.serialize(), receiver);
 }
