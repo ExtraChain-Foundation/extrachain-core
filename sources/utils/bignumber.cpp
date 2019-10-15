@@ -356,7 +356,7 @@ BigNumber BigNumber::random(BigNumber max)
     b.clear();
     b.fill('f', maxdata.size());
     BigNumber t(b);
-    while (b >= max)
+    while (t >= max)
     {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
         QByteArray res;

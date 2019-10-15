@@ -264,7 +264,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 
         emit sendMessage(actor.serialize(), classType);
 
-        if (actor.getAccount())
+        if (actor.getAccount() == 1)
         {
             qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
             emit initDfs(actor.getId());

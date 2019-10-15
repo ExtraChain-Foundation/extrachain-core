@@ -48,7 +48,7 @@ bool ResolverService::validate(const Messages::IMessage &message)
         qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
         //        emit SendGetActor(signer);
         //        return false;
-        this->thread()->wait(1000);
+        this->thread()->wait(10000);
         return validate(message);
     }
 }
