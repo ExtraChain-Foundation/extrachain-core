@@ -235,10 +235,9 @@ BigNumber &BigNumber::operator%=(long long number)
     return *this;
 }
 
-BigNumber BigNumber::operator-()
+BigNumber BigNumber::operator-() const
 {
-    BigNumber res(0 - m_data);
-    return res;
+    return BigNumber(-m_data);
 }
 
 mpz_class BigNumber::data() const
@@ -294,6 +293,13 @@ BigNumber BigNumber::sqrt(unsigned long number) const
 {
     mpz_class res;
     mpz_root(res.get_mpz_t(), m_data.get_mpz_t(), number);
+    return res;
+}
+
+BigNumber BigNumber::abs() const
+{
+    mpz_class res;
+    mpz_abs(res.get_mpz_t(), m_data.get_mpz_t());
     return res;
 }
 
@@ -374,13 +380,28 @@ BigNumber BigNumber::random(BigNumber max)
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << "\"0x" << bigNumber.toByteArray(16) << "\"";
+
+    if (bigNumber >= 0)
+        debug.nospace().noquote() << "0x" << bigNumber.toByteArray(16);
+    else
+        debug.nospace().noquote() << "-0x" << bigNumber.abs().toByteArray(16);
+
     return debug;
 }
 
 QDebug operator<<(QDebug debug, const mpz_class &bigNumber)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << "\"0x" << bigNumber.get_str(16).c_str() << "\"";
+
+    if (bigNumber >= 0)
+    {
+        debug.nospace().noquote() << "0x" << bigNumber.get_str(16).c_str();
+    }
+    else
+    {
+        mpz_class num = -bigNumber;
+        debug.nospace().noquote() << "-0x" << num.get_str(16).c_str();
+    }
+
     return debug;
 }

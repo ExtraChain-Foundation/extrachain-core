@@ -75,7 +75,7 @@ public:
     BigNumber &operator/=(long long);
     BigNumber &operator%=(const BigNumber &);
     BigNumber &operator%=(long long);
-    BigNumber operator-();
+    BigNumber operator-() const;
 
 public:
     mpz_class data() const;
@@ -86,6 +86,7 @@ public:
     QByteArray serialize() const;
     BigNumber pow(unsigned long number);
     BigNumber sqrt(unsigned long number = 2) const;
+    BigNumber abs() const;
     bool getInfinity() const;
     void setInfinity(bool value);
 
