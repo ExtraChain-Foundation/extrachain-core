@@ -11,7 +11,7 @@
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
 
-const QByteArray companyActorId("dd938ac4953c448e144b");
+static QByteArray companyActorId("0");
 
 struct indexRow
 {

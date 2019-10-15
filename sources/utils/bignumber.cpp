@@ -13,20 +13,10 @@ BigNumber::BigNumber(const QByteArray &bigNumber, int base)
     else
     {
         std::string s = bigNumber.toStdString();
-        mpz_class st("0", base); // segfault только в одном случае
         this->m_data = mpz_class(s, base);
-        //        this->m_data = mpz_class(bigNumber.toStdString(), base);
     }
-    //    try
-    //    {
 
-    //    } catch (std::exception a)
-    //    {
-    //        std::cout << "! BigNumber incorrect value: \"" << bigNumber.toStdString() << "\"" << std::endl;
-    //        std::exit(-1500);
-    //    }
-
-    //    UPDATE_DEBUG()
+    UPDATE_DEBUG()
 }
 
 BigNumber::BigNumber(const BigNumber &other)
@@ -111,10 +101,6 @@ BigNumber BigNumber::operator*(long long number)
 
 BigNumber BigNumber::operator/(const BigNumber &bigNumber)
 {
-    //    if (m_data >= bigNumber.data())
-    //        std::cout << "true" << std::endl;
-    //    else
-    //        std::cout << "false" << std::endl;
     BigNumber ret(m_data / bigNumber.data());
     return ret;
 }
@@ -368,9 +354,9 @@ BigNumber BigNumber::random(BigNumber max)
     QByteArray maxdata = max.toByteArray();
     QByteArray b;
     b.clear();
-    b.fill('f', /*maxdata.size() - */ 1);
-    BigNumber t("f"); // ERROR для присвоения на createActor (segfault)
-    while (t >= max)
+    b.fill('f', maxdata.size());
+    BigNumber t(b);
+    while (b >= max)
     {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
         QByteArray res;

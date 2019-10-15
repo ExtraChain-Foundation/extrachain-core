@@ -39,15 +39,11 @@ NodeManager::NodeManager()
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
-    //    CreateExtracoin();
-    //    accController->loadActors();
-    //    if (!QFile("blockchain/index/actor/0/0").exists())
-    //    {
-
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
-    //    accController->loadActors();
+    accController->loadActors();                    //!!!
+    companyActorId = company.getId().toByteArray(); //!!!
     Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
     newTransaction.setSenderBalance(BigNumber("0"));
     newTransaction.setReceiverBalance(BigNumber("0"));
