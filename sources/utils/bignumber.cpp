@@ -13,13 +13,10 @@ BigNumber::BigNumber(const QByteArray &bigNumber, int base)
         if (bigNumber.isEmpty())
             this->m_data = mpz_class(0);
         else
-        {
-            std::string s = bigNumber.toStdString();
-            this->m_data = mpz_class(s, base);
-        }
-    } catch (std::exception e)
+            this->m_data = mpz_class(bigNumber.toStdString(), base);
+    } catch (std::exception &)
     {
-        qDebug() << "Incorrect value:" << bigNumber;
+        qDebug() << "Incorrect BigNumber value:" << bigNumber << "with base" << base;
         assert(false);
     }
 
@@ -134,7 +131,6 @@ BigNumber &BigNumber::operator=(const BigNumber &bigNumber)
 {
     m_data = bigNumber.data();
     UPDATE_DEBUG()
-    //    m_data = ;
     return *this;
 }
 
@@ -176,6 +172,7 @@ BigNumber BigNumber::operator--(int)
 BigNumber &BigNumber::operator+=(const BigNumber &bigNumber)
 {
     *this = *this + bigNumber;
+    UPDATE_DEBUG()
     return *this;
 }
 
@@ -264,17 +261,10 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    //    std::string t = "";
-    //    char *ch = new char();
-    //    mpz_get_str(ch, base, m_data.get_mpz_t());
-    //    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
-    //    std::string d(ch);
-    //    QByteArray e = QByteArray::fromStdString(d);
-    //    if (t != "")
-    //        return QByteArray::fromStdString(t);
-    //    return QByteArray();
-    //    return e;
-    return QByteArray::fromStdString(m_data.get_str(base));
+    char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
+    QByteArray number(ch);
+    delete ch;
+    return number;
 }
 
 QByteArray BigNumber::toActorId() const
@@ -282,11 +272,6 @@ QByteArray BigNumber::toActorId() const
     QByteArray actorId = this->toByteArray();
     actorId = actorId.length() == 19 ? "0" + actorId : actorId;
     return actorId;
-}
-
-QByteArray BigNumber::serialize() const
-{
-    return toByteArray();
 }
 
 BigNumber BigNumber::pow(unsigned long number)
