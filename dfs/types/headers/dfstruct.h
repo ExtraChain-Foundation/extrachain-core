@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <tuple>
 #include "utils/bignumber.h"
+#include "utils/utils.h"
 
 namespace based_dfs_struct {
 

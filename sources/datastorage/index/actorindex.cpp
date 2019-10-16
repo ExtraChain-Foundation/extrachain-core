@@ -19,7 +19,8 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     }
     else
     {
-        emit sendMessage(id.serialize(), getActorMessage);
+        Messages::GetActorMessage msg(id);
+        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
     }
@@ -58,6 +59,8 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
+    if (actor.isEmpty())
+        return;
     emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
 }
 
@@ -105,9 +108,10 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     Actor<KeyPublic> key = getActor(profile.id);
     if (key.isEmpty())
     {
-        qDebug() << "WE DON`T HAVE ACTOR";
+        qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
+    qDebug() << "SEVA" << key.profile().getProfile() << key.profile().sign;
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
@@ -132,6 +136,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     }
     else
     {
+        qDebug() << "SEVA" << key->profile().getProfile() << key->profile().sign;
         sendMessage(pubProfile.serialize(), profileType);
     }
 }
@@ -207,6 +212,11 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const
     return pathToFolder + "/" + Id;
 }
 
+void ActorIndex::setCompanyId(QByteArray *value)
+{
+    companyId = value;
+}
+
 BigNumber ActorIndex::getRecords() const
 {
     return records;
@@ -264,7 +274,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 
         emit sendMessage(actor.serialize(), classType);
 
-        if (actor.getAccount())
+        if (actor.getAccount() == 1)
         {
             qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
             emit initDfs(actor.getId());

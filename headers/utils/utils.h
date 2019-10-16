@@ -11,7 +11,9 @@
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
 
-const QByteArray companyActorId("dd938ac4953c448e144b");
+namespace TMP {
+static QByteArray *companyActorId = new QByteArray("0");
+};
 
 struct indexRow
 {

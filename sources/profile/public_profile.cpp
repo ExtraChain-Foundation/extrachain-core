@@ -132,9 +132,8 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
         else
             profile.resize(0);
     }
-    QByteArray signWrite = sign + Utils::intToByteArray(sign.size(), 4);
     profile.open(QIODevice::WriteOnly);
-    profile.write(newProfile + signWrite);
+    profile.write(newProfile);
     profile.flush();
     profile.close();
 #ifdef ETALONIUM_CLIENT

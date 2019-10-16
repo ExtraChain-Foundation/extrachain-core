@@ -1,6 +1,7 @@
 #ifndef MESSAGE_STRCUT_H
 #define MESSAGE_STRCUT_H
 
+#include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
 #include "dfs_message_interface.h"
 namespace Message {

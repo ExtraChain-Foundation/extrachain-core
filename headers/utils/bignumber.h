@@ -11,7 +11,7 @@
 #include <QDebug>
 
 #include <iostream>
-#include "utils/utils.h"
+//#include "utils/utils.h"
 
 #include "gmpxx.h"
 
@@ -35,10 +35,7 @@ public:
     BigNumber(int number);
     BigNumber(long long number);
     BigNumber(mpz_class number);
-    //    ~BigNumber() = default;
-    ~BigNumber()
-    {
-    }
+    ~BigNumber() = default;
 
 private:
     mpz_class m_data;
@@ -78,7 +75,7 @@ public:
     BigNumber &operator/=(long long);
     BigNumber &operator%=(const BigNumber &);
     BigNumber &operator%=(long long);
-    BigNumber operator-();
+    BigNumber operator-() const;
 
 public:
     mpz_class data() const;
@@ -89,6 +86,7 @@ public:
     QByteArray serialize() const;
     BigNumber pow(unsigned long number);
     BigNumber sqrt(unsigned long number = 2) const;
+    BigNumber abs() const;
     bool getInfinity() const;
     void setInfinity(bool value);
 
@@ -96,7 +94,7 @@ public:
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
-    static BigNumber random(const BigNumber &max);
+    static BigNumber random(BigNumber max);
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r)

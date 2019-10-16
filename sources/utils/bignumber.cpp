@@ -8,21 +8,27 @@ BigNumber::BigNumber()
 
 BigNumber::BigNumber(const QByteArray &bigNumber, int base)
 {
-    //    try
-    //    {
-    this->m_data = mpz_class(bigNumber.toStdString(), base);
-    //    } catch (std::exception a)
-    //    {
-    //        std::cout << "! BigNumber incorrect value: \"" << bigNumber.toStdString() << "\"" << std::endl;
-    //        std::exit(-1500);
-    //    }
+    try
+    {
+        if (bigNumber.isEmpty())
+            this->m_data = mpz_class(0);
+        else
+        {
+            std::string s = bigNumber.toStdString();
+            this->m_data = mpz_class(s, base);
+        }
+    } catch (std::exception e)
+    {
+        qDebug() << "Incorrect value:" << bigNumber;
+        assert(false);
+    }
 
     UPDATE_DEBUG()
 }
 
 BigNumber::BigNumber(const BigNumber &other)
 {
-    this->m_data = mpz_class(other.data());
+    this->m_data = other.data();
     UPDATE_DEBUG()
 }
 
@@ -102,10 +108,6 @@ BigNumber BigNumber::operator*(long long number)
 
 BigNumber BigNumber::operator/(const BigNumber &bigNumber)
 {
-    //    if (m_data >= bigNumber.data())
-    //        std::cout << "true" << std::endl;
-    //    else
-    //        std::cout << "false" << std::endl;
     BigNumber ret(m_data / bigNumber.data());
     return ret;
 }
@@ -240,10 +242,9 @@ BigNumber &BigNumber::operator%=(long long number)
     return *this;
 }
 
-BigNumber BigNumber::operator-()
+BigNumber BigNumber::operator-() const
 {
-    BigNumber res(0 - m_data);
-    return res;
+    return BigNumber(-m_data);
 }
 
 mpz_class BigNumber::data() const
@@ -263,15 +264,17 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    std::string t = "";
-    char *ch = new char();
-    mpz_get_str(ch, base, m_data.get_mpz_t());
-    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
-    QByteArray e = QByteArray::fromRawData(ch, size);
+    //    std::string t = "";
+    //    char *ch = new char();
+    //    mpz_get_str(ch, base, m_data.get_mpz_t());
+    //    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
+    //    std::string d(ch);
+    //    QByteArray e = QByteArray::fromStdString(d);
     //    if (t != "")
     //        return QByteArray::fromStdString(t);
     //    return QByteArray();
-    return e;
+    //    return e;
+    return QByteArray::fromStdString(m_data.get_str(base));
 }
 
 QByteArray BigNumber::toActorId() const
@@ -297,6 +300,13 @@ BigNumber BigNumber::sqrt(unsigned long number) const
 {
     mpz_class res;
     mpz_root(res.get_mpz_t(), m_data.get_mpz_t(), number);
+    return res;
+}
+
+BigNumber BigNumber::abs() const
+{
+    mpz_class res;
+    mpz_abs(res.get_mpz_t(), m_data.get_mpz_t());
     return res;
 }
 
@@ -352,11 +362,13 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
     return result;
 }
 
-BigNumber BigNumber::random(const BigNumber &max)
+BigNumber BigNumber::random(BigNumber max)
 {
     QByteArray maxdata = max.toByteArray();
-    BigNumber bt(maxdata);
-    BigNumber t(QByteArray().fill('f', bt.toByteArray().size()));
+    QByteArray b;
+    b.clear();
+    b.fill('f', maxdata.size());
+    BigNumber t(b);
     while (t >= max)
     {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
@@ -375,13 +387,28 @@ BigNumber BigNumber::random(const BigNumber &max)
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << "\"0x" << bigNumber.toByteArray(16) << "\"";
+
+    if (bigNumber >= 0)
+        debug.nospace().noquote() << "0x" << bigNumber.toByteArray(16);
+    else
+        debug.nospace().noquote() << "-0x" << bigNumber.abs().toByteArray(16);
+
     return debug;
 }
 
 QDebug operator<<(QDebug debug, const mpz_class &bigNumber)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << "\"0x" << bigNumber.get_str(16).c_str() << "\"";
+
+    if (bigNumber >= 0)
+    {
+        debug.nospace().noquote() << "0x" << bigNumber.get_str(16).c_str();
+    }
+    else
+    {
+        mpz_class num = -bigNumber;
+        debug.nospace().noquote() << "-0x" << num.get_str(16).c_str();
+    }
+
     return debug;
 }

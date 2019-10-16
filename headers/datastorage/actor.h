@@ -14,7 +14,12 @@
  * Acting entity.
  * Users, Smart-contracts
  */
-
+enum actorType
+{
+    WALLET = 0,
+    ACCOUNT = 1,
+    COMPANY = 2
+};
 template <typename T>
 class Actor
 {
@@ -26,7 +31,7 @@ private:
     BigNumber id = -1;
     T *key;
     QByteArray hash;
-    bool account;
+    actorType account;
 
 public:
     bool checkSumValid(QByteArray checkSum)
@@ -46,14 +51,14 @@ public:
         id = 0;
         key = nullptr;
         hash = "";
-        account = true;
+        account = WALLET;
     }
     Actor(const Actor<T> &copyActor)
     {
         id = copyActor.getId();
         key = new T(*(copyActor.getKey()));
         hash = copyActor.getHash();
-        account = copyActor.getAccount();
+        account = static_cast<actorType>(copyActor.getAccount());
     }
     Actor(const QByteArray &serialized)
     {
@@ -72,7 +77,7 @@ public:
         id = copyActor.getId();
         key = new T(*(copyActor.getKey()));
         hash = copyActor.getHash();
-        account = copyActor.getAccount();
+        account = static_cast<actorType>(copyActor.getAccount());
         return *this;
     }
 
@@ -127,7 +132,7 @@ public:
 
                 this->id = BigNumber(list.at(0));
                 this->key = new T(list.at(1));
-                account = list.at(2).toInt();
+                account = static_cast<actorType>(list.at(2).toInt());
             }
             else
             {
@@ -136,7 +141,7 @@ public:
                 {
                     this->id = BigNumber(list.at(0));
                     this->key = new T(list.at(1));
-                    this->account = list.at(2).toInt();
+                    this->account = static_cast<actorType>(list.at(2).toInt());
                 }
             }
             QByteArray hashData(toString().toUtf8());
@@ -172,7 +177,7 @@ public:
             }
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
-            this->account = account;
+            this->account = static_cast<actorType>(account);
             return true;
         }
         else
@@ -183,11 +188,11 @@ public:
      * @param id
      * @param keydata - (private/public key)
      */
-    bool init(const BigNumber &id, const QByteArray &keydata, bool account)
+    bool init(const BigNumber &id, const QByteArray &keydata, int account)
     {
         this->id = id;
         this->key = new T(keydata);
-        this->account = account;
+        this->account = static_cast<actorType>(account);
         return true;
     }
 

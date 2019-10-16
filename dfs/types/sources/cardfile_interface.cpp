@@ -1,6 +1,7 @@
 #ifndef CARDFILE_INTERFACE_CPP
 #define CARDFILE_INTERFACE_CPP
 
+#include "utils/utils.h"
 #include "dfs/types/headers/cardfile_interface.h"
 
 #endif // CARDFILE_INTERFACE_CPP

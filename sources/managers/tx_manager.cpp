@@ -112,13 +112,12 @@ Block TransactionManager::makeBlock()
     qDebug() << data;
     Block lastBlock = blockchain->getLastBlock();
 
-    Block block(data, &lastBlock);
+    Block block(data, lastBlock);
     // blockchain->signBlock(block); // Non-approved code
     block.sign(accountController->getCurrentActor());
 
     qDebug() << QString("Created block: [%1]").arg(block.toString());
     QByteArray blockSerialize = block.serialize();
-    qDebug() << blockSerialize;
     emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
 
     this->pendingTxs.clear();

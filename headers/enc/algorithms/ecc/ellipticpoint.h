@@ -1,6 +1,7 @@
 #ifndef ELLIPTICPOINT_H
 #define ELLIPTICPOINT_H
 
+#include "utils/utils.h"
 #include "utils/bignumber.h"
 
 class EllipticPoint

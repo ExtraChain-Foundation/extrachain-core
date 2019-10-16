@@ -39,26 +39,26 @@ NodeManager::NodeManager()
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
-    //    CreateExtracoin();
-    //    accController->loadActors();
-    //    if (!QFile("blockchain/index/actor/0/0").exists())
-    //    {
-
     Actor<KeyPrivate> company = CreateExtracoin();
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
-    //    accController->loadActors();
-    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
-    newTransaction.setSenderBalance(BigNumber("0"));
-    newTransaction.setReceiverBalance(BigNumber("0"));
-    newTransaction.setGas(0);
-    newTransaction.setHop(0);
-    newTransaction.sign(company);
-    newTransaction.verify(company.convertToPublic());
-    txManager->addVerifiedTx(newTransaction);
+    accController->loadActors();                                         //!!!
+    TMP::companyActorId = new QByteArray(company.getId().toByteArray()); //!!!
+    actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
+    QMap<BigNumber, BigNumber> tm;
+    tm.insert(0, 0);
+    blockchain->createGenesisBlock(company, tm);
+//    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
+//    newTransaction.setSenderBalance(BigNumber("0"));
+//    newTransaction.setReceiverBalance(BigNumber("0"));
+//    newTransaction.setGas(0);
+//    newTransaction.setHop(0);
+//    newTransaction.sign(company);
+//    newTransaction.verify(company.convertToPublic());
+//    txManager->addVerifiedTx(newTransaction);
 
-    Block block = txManager->makeBlock();
-    blockchain->addBlock(block, true);
+//    Block block = txManager->makeBlock();
+//    blockchain->addBlock(block, true);
 
 //    }
 #endif
@@ -239,7 +239,7 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actor.getId() == 0)
+        if (actor.getId() == BigNumber(*actorIndex->companyId))
             tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
@@ -291,7 +291,7 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actor.getId() == 0)
+        if (actor.getId() == BigNumber(*actorIndex->companyId))
             tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
@@ -649,7 +649,7 @@ void NodeManager::tempareSlotForActors()
 
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
-    createTransactionFrom(BigNumber(companyActorId), receiver, amount);
+    createTransactionFrom(BigNumber(*actorIndex->companyId), receiver, amount);
 }
 QByteArray NodeManager::getIdPrivateProfile() const
 {

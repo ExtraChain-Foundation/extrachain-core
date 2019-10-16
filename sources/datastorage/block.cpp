@@ -44,10 +44,10 @@ Block::Block(const QByteArray &serialized)
     this->deserialize(serialized);
 }
 
-Block::Block(const QByteArray &data, const Block *prev)
+Block::Block(const QByteArray &data, const Block &prev)
     : Block()
 {
-    if (prev->isEmpty())
+    if (prev.isEmpty())
     {
         // qDebug() << "BLOCK: Construction first block";
         this->index = BigNumber("0");
@@ -57,8 +57,8 @@ Block::Block(const QByteArray &data, const Block *prev)
     {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
         //          << prev->getIndex();
-        this->index = prev->getIndex() + 1;
-        this->prevHash = prev->getHash();
+        this->index = prev.getIndex() + 1;
+        this->prevHash = prev.getHash();
     }
 
     this->date = QDateTime::currentDateTime().toTime_t();
@@ -169,8 +169,7 @@ QList<Transaction> Block::extractTransactions() const
 {
     if (type != Config::DATA_BLOCK_TYPE)
     {
-        QList<Transaction> transactions;
-        return transactions;
+        return QList<Transaction>();
     }
 
     //    QList<QByteArray> txsData =

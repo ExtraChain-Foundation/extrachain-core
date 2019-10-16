@@ -48,7 +48,7 @@ bool ResolverService::validate(const Messages::IMessage &message)
         qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
         //        emit SendGetActor(signer);
         //        return false;
-        this->thread()->wait(1000);
+        this->thread()->sleep(2);
         return validate(message);
     }
 }
@@ -119,30 +119,31 @@ bool ResolverService::addResponseHandler(const QByteArray &message, const QByteA
 
 bool ResolverService::checkResponseHandler(const QByteArray &hash)
 {
+    handlerFileMutex.lock();
+    bool flag = false;
     QMap<QByteArray, int>::iterator it = requestResponseMap->find(hash);
     if (it != requestResponseMap->end())
     {
         int t = it.value() - 1;
         if (t <= 0)
         {
-            handlerFileMutex.lock();
+
             requestResponseMap->remove(hash);
-            handlerFileMutex.unlock();
-            return true;
+            flag = true;
         }
         else
         {
-            handlerFileMutex.lock();
             requestResponseMap->remove(hash);
             requestResponseMap->insert(hash, t);
-            handlerFileMutex.unlock();
-            return false;
         }
     }
     else
     {
-        return false;
+        requestResponseMap->insert(hash, 0);
     }
+
+    handlerFileMutex.unlock();
+    return flag;
 }
 
 bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
@@ -185,7 +186,9 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     BaseMessage message;
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
-    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE))
+    qDebug() << "Resolver: receive " << msgType;
+    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE)
+        && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
         if (MessageIsNotValid(message))
             return;
     if (msgType != COIN_REQUEST)
@@ -252,9 +255,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << BLOCK_APPROVED_MESSAGE;
-        BlockApprovedMessage message(msg);
-        if (MessageIsNotValid(message))
-            return;
+        BlockApprovedMessage r(message.getMsg_data());
 
         //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
     }
@@ -262,18 +263,18 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     // request messages
     else if (msgType == GET_ACTOR_MESSAGE)
     {
-        GetActorMessage message(msg);
-        emit getActor(message.getActorId(), calcHash(msg), receiver);
+        GetActorMessage response(message.getMsg_data());
+        emit getActor(response.getActorId(), calcHash(msg), receiver);
     }
     else if (msgType == GET_TX_MESSAGE)
     {
-        GetTxMessage message(msg);
-        emit getTx(message.getParam(), message.getValue(), receiver, calcHash(msg));
+        GetTxMessage txMessage(message.getMsg_data());
+        emit getTx(txMessage.getParam(), txMessage.getValue(), receiver, calcHash(msg));
     }
     else if (msgType == GET_BLOCK_MESSAGE) // TODO 3 from 3
     {
-        GetBlockMessage message(msg);
-        emit getBlock(message.getParam(), message.getValue(), calcHash(msg), receiver);
+        GetBlockMessage blMessage(message.getMsg_data());
+        emit getBlock(blMessage.getParam(), blMessage.getValue(), calcHash(msg), receiver);
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {

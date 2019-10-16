@@ -2,6 +2,7 @@
 #define NODE_MANAGER_H
 
 #include <QObject>
+#include <QMap>
 #include "network/network_manager.h"
 #include "managers/tx_manager.h"
 #include "managers/account_controller.h"
@@ -44,6 +45,7 @@ private:
     PrivateProfile *prProfile;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
+
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;

@@ -128,18 +128,34 @@ void NetManager::findLocal()
         }
     }
 
-    QList<QNetworkInterface> nl = QNetworkInterface::allInterfaces();
-    for (int i = 0; i < nl.size(); i++)
+    for (const auto &interface : QNetworkInterface::allInterfaces())
     {
-        foreach (QNetworkAddressEntry entry, nl.at(i).addressEntries())
+        for (const auto &entry : interface.addressEntries())
         {
+#ifdef Q_OS_WINDOWS
+            // hack for windows: TODO!
+            const auto flags = interface.flags();
+
+            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
+            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
+            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+
+            QTcpSocket *socket = new QTcpSocket;
+            socket->bind(entry.ip());
+            socket->connectToHost("8.8.8.8", 53);
+            bool isConnected = socket->waitForConnected(1000);
+            socket->deleteLater();
+            if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint || !isConnected)
+                continue;
+#endif
+
             if (localIpNotConnect.contains(entry.ip()))
             {
                 local = new QNetworkAddressEntry(entry);
                 qDebug() << "Discovered local: " << local->ip().toString();
-                if ((nl.at(i).type() == QNetworkInterface::Wifi)
-                    || (nl.at(i).type() == QNetworkInterface::Ethernet))
-                    i = nl.size();
+                if (interface.type() == QNetworkInterface::Wifi
+                    || interface.type() == QNetworkInterface::Ethernet)
+                    break;
             }
         }
     }
@@ -340,7 +356,7 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
     msg.init(data);
     if (msgType != Messages::ACTOR_MESSAGE)
         signMessage(msg);
-
+    qDebug() << "NetManager: send " << msgType;
     QByteArray message = msg.serialize();
     //    if (!addResponseHandler(message, messageType))
     //    {
@@ -361,7 +377,8 @@ void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &m
                                      const QByteArray &requestHash, const SocketPair &receiver)
 {
     BaseMessageResponse rmsg(data, requestHash, msgType);
-    signMessage(rmsg);
+    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
+        signMessage(rmsg);
 
     emit sendMsg(rmsg.serialize(), receiver);
 }
@@ -515,32 +532,6 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
             connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
         }
     }
-}
-
-// Send messages //
-// void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray requestHash, const int port)
-//{
-//    for (auto i : reservedActorList)
-//        qDebug() << i;
-
-void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
-{
-    qDebug() << "NET MANAGER: Sending genesis block";
-    GenesisBlock *genBlock = Blockchain::readGenesisBlock(prevBlock, prevGenHash);
-    if (genBlock == nullptr)
-    {
-        qCritical() << "NET MANAGER: Error while sending genesis block";
-        return;
-    }
-
-    // sign block
-    genBlock->sign(accounts->getCurrentActor());
-
-    sendMessage(genBlock->serialize(), Messages::GENESIS_BLOCK_MESSAGE);
-    //    EntityMessage<Block> msg = Messages::createGenesisBlockMessage(*genBlock);
-
-    delete genBlock;
-    QFile::remove(DataStorage::TMP_GENESIS_BLOCK);
 }
 
 // Send messages //

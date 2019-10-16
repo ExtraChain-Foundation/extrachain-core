@@ -46,7 +46,7 @@ public:
     // Deserialize already constructed block
     Block(const QByteArray &serialized);
     // Initial block construction, prev = nullptr for first block
-    Block(const QByteArray &data, const Block *prev);
+    Block(const QByteArray &data, const Block &prev);
 
     virtual ~Block();
 
