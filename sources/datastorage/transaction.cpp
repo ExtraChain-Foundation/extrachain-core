@@ -27,7 +27,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
 {
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
-    QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELS_SIZE);
     if (list.size() == 14)
     {
         this->sender = BigNumber(list.at(0));
@@ -132,7 +132,7 @@ void Transaction::calcHash()
 QByteArray Transaction::getDataForHash() const
 {
     return (sender.serialize() + receiver.serialize() + amount.serialize() + QByteArray::number(date) + data
-            + token.toByteArray() + senderBalance.serialize() + receiverBalance.serialize()
+            + token.toActorId() + senderBalance.serialize() + receiverBalance.serialize()
             + prevBlock.serialize() + QByteArray::number(gas) + approver.serialize());
 }
 
@@ -326,22 +326,22 @@ void Transaction::operator=(const Transaction &other)
 QString Transaction::toString() const
 {
     QStringList list;
-    list << "sender:" + sender.toByteArray() << "receiver:" + receiver.toByteArray()
+    list << "sender:" + sender.toActorId() << "receiver:" + receiver.toActorId()
          << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromTime_t(date).toString()
-         << "data:" + data << "token:" + token.serialize() << "senderBalance:" + senderBalance.toByteArray()
+         << "data:" + data << "token:" + token.toActorId() << "senderBalance:" + senderBalance.toByteArray()
          << "receiverBalance:" + receiverBalance.toByteArray() << "prevBlock:" + prevBlock.toByteArray()
          << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
-         << "approver:" + approver.toByteArray() << "digitalSignature:" + digSig;
+         << "approver:" + approver.toActorId() << "digitalSignature:" + digSig;
     return Serialization::serializeString(list, Serialization::TX_FIELD_SPLITTER);
 }
 
 QByteArray Transaction::serialize() const
 {
     QList<QByteArray> list;
-    list << sender.toByteArray() << receiver.toByteArray() << amount.toByteArray() << QByteArray::number(date)
-         << data << token.toByteArray() << senderBalance.toByteArray() << receiverBalance.toByteArray()
+    list << sender.toActorId() << receiver.toActorId() << amount.toByteArray() << QByteArray::number(date)
+         << data << token.toActorId() << senderBalance.toByteArray() << receiverBalance.toByteArray()
          << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
-         << QString::number(hop).toLocal8Bit() << hash << approver.toByteArray() << digSig;
+         << QString::number(hop).toLocal8Bit() << hash << approver.toActorId() << digSig;
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 
     return Serialization::universalSerialize(list, FIELS_SIZE);

@@ -5,7 +5,6 @@
 #include <QString>
 #include <QDateTime>
 #include <QByteArray>
-#include <QDataStream>
 #include <unordered_map>
 #include "utils/bignumber.h"
 #include "utils/utils.h"
@@ -29,9 +28,8 @@ private:
 public:
     Stored();                      //+++
     Stored(const Stored &_object); //+++
-    Stored(const BigNumber actorId, const int first, const QByteArray changedata,
-           const QByteArray sign, QByteArray path, QByteArray prevSig,
-           QByteArray prevStoredHash,
+    Stored(const BigNumber actorId, const int first, const QByteArray changedata, const QByteArray sign,
+           QByteArray path, QByteArray prevSig, QByteArray prevStoredHash,
            const storedSpace::State state = storedSpace::State::NEWSTATE); //+++
     Stored(const QByteArray &serialized);                                  //+++
     //    void initStored(const QByteArray &serialize);
@@ -41,7 +39,7 @@ public:
     QByteArray serialized() const;           //+++
     QByteArray serializedUserField() const;  //+++
     void init(const QByteArray &serialized); //+++
-//    Stored init(const QByteArray &serilaize) const;
+                                             //    Stored init(const QByteArray &serilaize) const;
     QByteArray getPath() const;
     BigNumber getAuthor() const;
     QByteArray getChangeData() const;

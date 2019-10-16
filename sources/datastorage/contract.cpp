@@ -105,383 +105,130 @@ BigNumber Token::getAmount(QList<Block> list, BigNumber userId)
     return amount;
 }
 
-QByteArray Contract::getCustomer_sign() const
+/**
+ * @brief Contract
+ */
+
+Contract::performer_status Contract::fromInt(const int &s) const
 {
-    return customer_sign;
+    if (s == 1)
+        return performer_status::Approve;
+    else if (s == 2)
+        return performer_status::Done;
+    else
+        return performer_status::notApprove;
 }
 
-void Contract::setCustomer_sign(const QByteArray &value)
+const QMap<BigNumber, Contract::performer_status>
+Contract::performersDeserialize(const QByteArray &serialized) const
 {
-    customer_sign = value;
-}
-
-QByteArray Contract::getPerformer_sign() const
-{
-    return performer_sign;
-}
-
-void Contract::setPerformer_sign(const QByteArray &value)
-{
-    performer_sign = value;
-}
-
-QByteArray Contract::calcDigSig(const Actor<KeyPrivate> &actor)
-{
-    return actor.getKey()->sign(getSignData()).toBase64();
-}
-
-bool Contract::verifyDigSig(const Actor<KeyPublic> &actor, const QByteArray &data, const QByteArray &digSig)
-{
-    return actor.getKey()->verify(getSignData(), QByteArray::fromBase64(digSig));
-}
-
-BigNumber Contract::getCustomer() const
-{
-    return customer;
-}
-
-void Contract::setCustomer(const BigNumber &value)
-{
-    customer = value;
-}
-
-BigNumber Contract::getPerformer() const
-{
-    return performer;
-}
-
-void Contract::setPerformer(const BigNumber &value)
-{
-    performer = value;
-}
-
-bool Contract::checkCustomerSign(const Actor<KeyPublic> &actor)
-{
-    if (customer_sign.isEmpty() || !verifyDigSig(actor, getSignData(), customer_sign))
+    QMap<BigNumber, performer_status> result;
+    QList<QByteArray> list = Serialization::deserialize(serialized, PERFORMER_LIST_DELIMETR);
+    for (const QByteArray &el : list)
     {
+        QList<QByteArray> list_el = Serialization::deserialize(el, PERFORMER_DELIMETR);
+        if (list.size() != 2)
+        {
+            qDebug() << "[Contract] performer fields list wrong size";
+            break;
+        }
+        result[BigNumber(list_el.takeFirst())] = fromInt(list_el.takeFirst().toInt());
     }
-    return true;
+    return result;
 }
 
-bool Contract::checkPerformerSign(const Actor<KeyPublic> &actor)
+const QByteArray Contract::performersSerialize() const
 {
-    if (performer_sign.isEmpty() || !verifyDigSig(actor, getSignData(), performer_sign))
-    {
-    }
-    return true;
+    QList<QByteArray> list;
+    //    std::for_each(performers.begin(), performers.end(),
+    //                  [&list, this](QMap<BigNumber, performer_status>::const_iterator it) {
+    //                      QByteArray list_el = Serialization::serialize(
+    //                          { it.key().toByteArray(), QByteArray::number(it.value()) },
+    //                          PERFORMER_DELIMETR);
+    //                      list << list_el;
+    //                  });
+    return Serialization::serialize(list, PERFORMER_LIST_DELIMETR);
 }
 
-QByteArray Contract::getLocation() const
+const QByteArrayList Contract::_scope_of_workDeserialize(const QByteArray &serialized) const
 {
-    return location;
+    return Serialization::deserialize(serialized, SCOPE_OF_WORK_DELIMETR);
 }
 
-void Contract::setLocation(const QByteArray &value)
+const QByteArray Contract::_scope_of_workSerialize() const
 {
-    location = value;
+    return Serialization::serialize(_scope_of_work, SCOPE_OF_WORK_DELIMETR);
 }
 
-QByteArray Contract::getEvent() const
+const QPair<long long, long long> Contract::_contract_dateDeserialize(const QByteArray &serialized) const
 {
-    return event;
+    QList<QByteArray> list = Serialization::deserialize(serialized, CONTRACT_DATE_DELIMETR);
+    return QPair<long long, long long>(list.takeFirst().toLongLong(), list.takeFirst().toLongLong());
 }
 
-void Contract::setEvent(const QByteArray &value)
+const QByteArray Contract::_contract_dateSerialize() const
 {
-    event = value;
+    return Serialization::serialize(
+        { QByteArray::number(_contract_date.first), QByteArray::number(_contract_date.second) },
+        CONTRACT_DATE_DELIMETR);
 }
 
-QPair<long long, long long> Contract::getEvent_date() const
+Contract::Contract(const QByteArray &serialize_contract, QObject *parent)
+    : QObject(parent)
 {
-    return event_date;
-}
-
-void Contract::setEvent_date(const QPair<long long, long long> &value)
-{
-    event_date = value;
-}
-
-QList<QByteArray> Contract::getScope_of_work() const
-{
-    return scope_of_work;
-}
-
-void Contract::setScope_of_work(const QList<QByteArray> &value)
-{
-    scope_of_work = value;
-}
-
-QByteArray Contract::getAgreement() const
-{
-    return agreement;
-}
-
-void Contract::setAgreement(const QByteArray &value)
-{
-    agreement = value;
-}
-
-BigNumber Contract::getAmount() const
-{
-    return amount;
-}
-
-void Contract::setAmount(const BigNumber &value)
-{
-    amount = value;
-}
-
-QByteArray Contract::getHash() const
-{
-    return Utils::calcKeccak(getSignData());
-}
-
-QByteArray Contract::getFileName() const
-{
-    QList<QByteArray> data = { customer.serialize(),
-                               performer.serialize(),
-                               location,
-                               event,
-                               QString::number(event_date.first).toUtf8(),
-                               QString::number(event_date.second).toUtf8() };
-    data.append(scope_of_work);
-    data.append(agreement);
-    data.append(amount.serialize());
-    return Utils::calcKeccak(Serialization::universalSerialize(data, Serialization::DEFAULT_FIELD_SIZE));
-}
-
-bool Contract::makeFirstTransction() const
-{
-    if (!first_transaction_hash.isEmpty())
-        return false;
-    if (!customer_sign.isEmpty() && !performer_sign.isEmpty())
-    {
-        return true;
-    }
-    return false;
-}
-
-bool Contract::makeFinalTransaction() const
-{
-    if (isCompleted)
-    {
-        return false;
-    }
-    if (first_transaction_hash.isEmpty())
-    {
-        return false;
-    }
-    if (approve_complete_customer && approve_complete_performer && final_transaction_hash.isEmpty())
-    {
-        return true;
-    }
-    return false;
-}
-
-QByteArray Contract::getFirst_transaction_hash() const
-{
-    return first_transaction_hash;
-}
-
-void Contract::setFirst_transaction_hash(const QByteArray &value)
-{
-    first_transaction_hash = value;
-}
-
-QByteArray Contract::getFinal_transaction_hash() const
-{
-    return final_transaction_hash;
-}
-
-void Contract::setFinal_transaction_hash(const QByteArray &value)
-{
-    final_transaction_hash = value;
-}
-
-bool Contract::getApprove_complete_performer() const
-{
-    return approve_complete_performer;
-}
-
-void Contract::setApprove_complete_performer(bool value)
-{
-    approve_complete_performer = value;
-}
-
-void Contract::completeContractByCustomer()
-{
-    approve_complete_customer = true;
-    approve_complete_performer = true;
-
-    isCompleted = true;
-}
-
-void Contract::completeContractByPerformer()
-{
-    approve_complete_customer = true;
-}
-
-bool Contract::getIsCompleted() const
-{
-    return isCompleted;
-}
-
-void Contract::setIsCompleted(bool value)
-{
-    isCompleted = value;
-}
-
-Contract::Contract(QObject *parent)
-{
-}
-
-Contract::Contract(const QByteArray serialize_contract, QObject *parent)
-{
-    QList<QByteArray> data =
-        Serialization::universalDesirialize(serialize_contract, Serialization::DEFAULT_FIELD_SIZE);
-
-    customer = BigNumber(data.at(0));
-    performer = BigNumber(data.at(1));
-    location = data.at(2);
-    event = data.at(3);
-    event_date = qMakePair(data.at(4).toLongLong(), data.at(5).toLongLong());
-    scope_of_work = Serialization::universalDesirialize(data.at(6), Serialization::DEFAULT_FIELD_SIZE);
-    agreement = data.at(7);
-    amount = BigNumber(data.at(8));
-    customer_sign = data.at(9);
-    performer_sign = data.at(10);
-
-    first_transaction_hash = data.at(11);
-    final_transaction_hash = data.at(12);
-
-    approve_complete_customer = data.at(13).toInt();
-    approve_complete_performer = data.at(14).toInt();
-
-    isCompleted = data.at(15).toInt();
+    QList<QByteArray> list = deserialize(serialize_contract);
+    if (list.isEmpty())
+        return;
+    customer = BigNumber(list.takeFirst());
+    performers = performersDeserialize(list.takeFirst());
+    _location = list.takeFirst();
+    event = list.takeFirst();
+    _contract_date = _contract_dateDeserialize(list.takeFirst());
+    _scope_of_work = _scope_of_workDeserialize(list.takeFirst());
+    _agreement = list.takeFirst();
+    _amount = BigNumber(list.takeFirst());
+    data = list.takeFirst();
 }
 
 Contract::Contract(const Contract &contract, QObject *parent)
+    : QObject(parent)
 {
     customer = contract.customer;
-    performer = contract.performer;
-    location = contract.location;
+    performers = contract.performers;
+    _location = contract._location;
     event = contract.event;
-    event_date = contract.event_date;
-    scope_of_work = contract.scope_of_work;
-    agreement = contract.agreement;
-    amount = contract.amount;
-    customer_sign = contract.customer_sign;
-    performer_sign = contract.performer_sign;
-
-    first_transaction_hash = contract.first_transaction_hash;
-    final_transaction_hash = contract.final_transaction_hash;
-
-    approve_complete_customer = contract.approve_complete_customer;
-    approve_complete_performer = contract.approve_complete_performer;
-
-    isCompleted = contract.isCompleted;
+    _contract_date = contract._contract_date;
+    _scope_of_work = contract._scope_of_work;
+    _agreement = contract._agreement;
+    _amount = contract._amount;
+    data = contract.data;
 }
 
-Contract::Contract(const BigNumber _customer, const BigNumber _performer, const QByteArray _location,
-                   const QByteArray _event, const QPair<long long, long long> _event_date,
-                   const QList<QByteArray> _scope_of_work, const QByteArray _agreement,
-                   const BigNumber _amount, QObject *parent)
+Contract::Contract(const BigNumber &_customer, const QMap<BigNumber, performer_status> &_performers,
+                   const QByteArray &_location, const QByteArray &event,
+                   const QPair<long long, long long> &_contract_date, const QList<QByteArray> &_scope_of_work,
+                   const QByteArray &_agreement, const BigNumber &_amount, QObject *parent)
+    : QObject(parent)
+    , customer(_customer)
+    , performers(_performers)
+    , _location(_location)
+    , event(event)
+    , _contract_date(_contract_date)
+    , _scope_of_work(_scope_of_work)
+    , _agreement(_agreement)
+    , _amount(_amount)
 {
-    (void)parent;
-    customer = _customer;
-    performer = _performer;
-    location = _location;
-    event = _event;
-    event_date = _event_date;
-    scope_of_work = _scope_of_work;
-    agreement = _agreement;
-    amount = _amount;
-
-    approve_complete_customer = false;
-    approve_complete_performer = false;
-    isCompleted = false;
 }
 
-void Contract::operator=(const Contract &contract)
+const QByteArray Contract::serialize() const
 {
-    customer = contract.customer;
-    performer = contract.performer;
-    location = contract.location;
-    event = contract.event;
-    event_date = contract.event_date;
-    scope_of_work = contract.scope_of_work;
-    agreement = contract.agreement;
-    amount = contract.amount;
-    customer_sign = contract.customer_sign;
-    performer_sign = contract.performer_sign;
-
-    first_transaction_hash = contract.first_transaction_hash;
-    final_transaction_hash = contract.final_transaction_hash;
-
-    approve_complete_customer = contract.approve_complete_customer;
-    approve_complete_performer = contract.approve_complete_performer;
-
-    isCompleted = contract.isCompleted;
+    QList<QByteArray> list;
+    list << customer.toActorId() << performersSerialize() << _location << event << _contract_dateSerialize()
+         << _scope_of_workSerialize() << _agreement << _amount.toByteArray() << data;
+    return Serialization::universalSerialize(list, CONTRACT_FIELDS_SIZE);
 }
 
-bool Contract::operator==(const Contract &contract) const
+const QList<QByteArray> Contract::deserialize(const QByteArray &serialized) const
 {
-    if (customer != contract.customer || performer != contract.performer || location != contract.location
-        || event != contract.event || event_date != contract.event_date
-        || scope_of_work != contract.scope_of_work || agreement != contract.agreement
-        || amount != contract.amount || customer_sign != contract.customer_sign
-        || performer_sign != contract.performer_sign ||
-
-        approve_complete_customer != contract.approve_complete_customer
-        || approve_complete_performer != contract.approve_complete_performer
-        || isCompleted != contract.isCompleted)
-        return false;
-    return true;
-}
-
-QByteArray Contract::serialize() const
-{
-    QList<QByteArray> data = { customer.serialize(),
-                               performer.serialize(),
-                               location,
-                               event,
-                               QString::number(event_date.first).toUtf8(),
-                               QString::number(event_date.second).toUtf8(),
-                               Serialization::universalSerialize(scope_of_work,
-                                                                 Serialization::DEFAULT_FIELD_SIZE),
-                               agreement,
-                               amount.serialize(),
-                               customer_sign,
-                               performer_sign,
-                               first_transaction_hash,
-                               final_transaction_hash,
-                               QByteArray::number(approve_complete_customer),
-                               QByteArray::number(approve_complete_performer),
-                               QByteArray::number(isCompleted) };
-    return Serialization::universalSerialize(data, Serialization::DEFAULT_FIELD_SIZE);
-}
-
-QByteArray Contract::getSignData() const
-{
-    QList<QByteArray> data = { customer.serialize(),
-                               performer.serialize(),
-                               location,
-                               event,
-                               QString::number(event_date.first).toUtf8(),
-                               QString::number(event_date.second).toUtf8() };
-    data.append(scope_of_work);
-    data.append({ agreement, amount.serialize(), first_transaction_hash,
-                  QByteArray::number(approve_complete_customer),
-                  QByteArray::number(approve_complete_performer) });
-    return Serialization::universalSerialize(data, Serialization::DEFAULT_FIELD_SIZE);
-}
-
-void Contract::signByCustomer(const Actor<KeyPrivate> &actor)
-{
-    setCustomer_sign(calcDigSig(actor));
-}
-
-void Contract::signByPerformer(const Actor<KeyPrivate> &actor)
-{
-    setPerformer_sign(calcDigSig(actor));
+    return Serialization::universalDeserialize(serialized, CONTRACT_FIELDS_SIZE);
 }

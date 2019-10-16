@@ -8,12 +8,12 @@ SOURCES += \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
+    $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
     $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
     $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
     $$PWD/sources/enc/crypt_manager.cpp \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
-    $$PWD/sources/enc/algorithms/ecc/math.cpp \
     $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
@@ -73,8 +73,8 @@ HEADERS += \
     $$PWD/headers/enc/algorithms/aes.h \
     $$PWD/headers/enc/algorithms/blowfish_crypt.h \
     $$PWD/headers/enc/algorithms/ecc/curves.h \
+    $$PWD/headers/enc/algorithms/ecc/eccmath.h \
     $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
-    $$PWD/headers/enc/algorithms/ecc/math.h \
     $$PWD/headers/enc/algorithms/xor_encrypt.h \
     $$PWD/headers/enc/crypt_manager.h \
     $$PWD/headers/enc/key_private.h \
@@ -148,9 +148,7 @@ HEADERS += \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/utils/utils.h \
-    $$PWD/libs/gmp.h \
-    $$PWD/libs/gmpxx.h
+    $$PWD/headers/utils/utils.h
 
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
@@ -162,10 +160,11 @@ RCC_DIR = .qrc
 UI_DIR = .ui
 
 android {
-LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
+    INCLUDEPATH += $$PWD/libs
+    LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
 }
 linux:!android {
-LIBS += -lgmp -lgmpxx
+    LIBS += -lgmp -lgmpxx
 }
 
 QMAKE_SPEC_T = $$[QMAKE_SPEC]

@@ -12,7 +12,7 @@
 #include "enc/algorithms/blowfish_crypt.h"
 #include "enc/algorithms/ecc/ellipticpoint.h"
 #include "enc/algorithms/ecc/curves.h"
-#include "enc/algorithms/ecc/math.h"
+#include "enc/algorithms/ecc/eccmath.h"
 
 class KeyPrivate
 {

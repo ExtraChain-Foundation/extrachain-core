@@ -1,5 +1,5 @@
-#ifndef MATH_H
-#define MATH_H
+#ifndef ECCMATH_H
+#define ECCMATH_H
 
 #include "utils/bignumber.h"
 #include "ellipticpoint.h"

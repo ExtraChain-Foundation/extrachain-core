@@ -38,7 +38,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
     accounts = accountList;
     this->actorIndex = actorIndex;
-    setupActorIndexConnections();
+    //    setupActorIndexConnections();
     findLocal();
     qDebug() << local->ip();
     qDebug() << "NET MANAGER: init net fun start";
@@ -128,18 +128,34 @@ void NetManager::findLocal()
         }
     }
 
-    QList<QNetworkInterface> nl = QNetworkInterface::allInterfaces();
-    for (int i = 0; i < nl.size(); i++)
+    for (const auto &interface : QNetworkInterface::allInterfaces())
     {
-        foreach (QNetworkAddressEntry entry, nl.at(i).addressEntries())
+        for (const auto &entry : interface.addressEntries())
         {
+#ifdef Q_OS_WINDOWS
+            // hack for windows: TODO!
+            const auto flags = interface.flags();
+
+            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
+            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
+            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+
+            QTcpSocket *socket = new QTcpSocket;
+            socket->bind(entry.ip());
+            socket->connectToHost("8.8.8.8", 53);
+            bool isConnected = socket->waitForConnected(1000);
+            socket->deleteLater();
+            if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint || !isConnected)
+                continue;
+#endif
+
             if (localIpNotConnect.contains(entry.ip()))
             {
                 local = new QNetworkAddressEntry(entry);
                 qDebug() << "Discovered local: " << local->ip().toString();
-                if ((nl.at(i).type() == QNetworkInterface::Wifi)
-                    || (nl.at(i).type() == QNetworkInterface::Ethernet))
-                    i = nl.size();
+                if (interface.type() == QNetworkInterface::Wifi
+                    || interface.type() == QNetworkInterface::Ethernet)
+                    break;
             }
         }
     }
@@ -166,12 +182,15 @@ void NetManager::checkMyIdentificator()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
-    if (allowLocalServer)
-        if (net::readNetManagerIdentificator() == connection->getIdentificator())
 
-            connection->removeMe();
-    short counter = 0;
-    std::for_each(connections.begin(), connections.end(), [connection, &counter](SocketService *el) {
+    if (connection == nullptr)
+        return;
+
+    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator())
+        connection->removeMe();
+
+    // short counter = 0;
+    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
         if (el->getIdentificator() == connection->getIdentificator())
         {
             if (el == connection)
@@ -180,8 +199,8 @@ void NetManager::checkMyIdentificator()
                 emit el->removeMe();
         }
     });
-    if (counter == 0)
-        emit connection->setActiveSignal(true);
+    // if (counter == 0)
+    //    emit connection->setActiveSignal(true);
 }
 
 void NetManager::startNetwork()
@@ -203,15 +222,6 @@ void NetManager::startDiscovery()
     //    discoveryService = new DiscoveryService(extPort, netPort, local);
     //    ThreadPool::addThread(discoveryService);
     setupDiscoveryServiceConnections();
-}
-
-void NetManager::Verify(const QByteArray &block)
-{
-    const Block bl(block);
-    if (actorIndex->validateBlock(bl))
-        emit SendBlockExistence(bl);
-    else
-        qDebug() << "Error in local manager Verify, Block is not valid";
 }
 
 void NetManager::logDebug()
@@ -254,17 +264,6 @@ void NetManager::connectToServer()
             qDebug().noquote() << QString("Server: ignore %1:%2").arg(server).arg(port);
         }
     }
-}
-
-void NetManager::setupActorIndexConnections()
-{
-    qDebug() << "NET MANAGER: setupActorIndexConnections";
-    // from NetManager to ActorIndex
-    //    connect(this, &NetManager::NewActor, actorIndex, &ActorIndex::addActor);
-    connect(this, &NetManager::CheckActorExistence, actorIndex, &ActorIndex::handleNewActorCheck);
-
-    // from ActorIndex to NetManager
-    //    connect(actorIndex, &ActorIndex::ActorIsMissing, this, &NetManager::continueHandlingNewActor);
 }
 
 void NetManager::setupServerServiceConnections()
@@ -354,10 +353,11 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
 {
     BaseMessage msg(msgType);
+    msg.init(data);
     if (msgType != Messages::ACTOR_MESSAGE)
         signMessage(msg);
-
-    QByteArray message = msg.init(data);
+    qDebug() << "NetManager: send " << msgType;
+    QByteArray message = msg.serialize();
     //    if (!addResponseHandler(message, messageType))
     //    {
     //        FileList list;
@@ -368,11 +368,17 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
     broadcastMsg(message);
 }
 
+void NetManager::dfsMessageTmp(const DfsMessage &msg)
+{
+    broadcastMsg(msg.serialize());
+}
+
 void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,
                                      const QByteArray &requestHash, const SocketPair &receiver)
 {
     BaseMessageResponse rmsg(data, requestHash, msgType);
-    signMessage(rmsg);
+    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
+        signMessage(rmsg);
 
     emit sendMsg(rmsg.serialize(), receiver);
 }
@@ -529,140 +535,6 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
 }
 
 // Send messages //
-// void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray requestHash, const int port)
-//{
-//    for (auto i : reservedActorList)
-//        qDebug() << i;
-
-void NetManager::sendConnectionList(EnableConnections sendConList, SocketService *addressant)
-{
-    signMessage(sendConList);
-    SocketPair socketPair(addressant->getAddress().toStdString(), addressant->getPort(), this);
-    emit sendMsg(sendConList.serialize(), socketPair);
-}
-
-void NetManager::sendDfsPack(const Messages::DfsMessage &msg)
-{
-    broadcastMsg(msg.serialize());
-    //#ifdef ETALONIUM_CLIENT
-    //    for (SocketService *connect : entryPoints)
-    //    {
-    //        connect->sendMsg(msg.serialize());
-    //    }
-    //#endif
-}
-
-void NetManager::sendDfsMessageTo(DfsMessage dfs, QString peerAddress)
-{
-    //    signMessage(msg);
-    sendMsgToPeer(dfs, QHostAddress(peerAddress));
-}
-
-void NetManager::sendDfsRequest(const DfsRequest &msg)
-{
-    broadcastMsg(msg.serialize());
-    //#ifdef ETALONIUM_CLIENT
-    //    for (SocketService *connect : entryPoints)
-    //    {
-    //        connect->sendMsg(msg.serialize());
-    //    }
-    //#endif
-}
-
-// void NetManager::sendNewActor(Actor<KeyPublic> actor)
-//{
-//    qDebug() << "NET MANAGER: Send new actor";
-//    //    reservedActorList.removeAt(reservedActorList.indexOf(actor.getId()));
-//    EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
-//    GetEntityHandler<BigNumber> handler;
-//    handler.addResponse(actor.getId());
-//    getReserveActorHandlers.insert(calcHash(msg), handler);
-//    //    signMessage(msg);
-//    broadcastMsg(msg.serialize());
-//}
-
-// void NetManager::sendNewTx(Transaction tx)
-//{
-//    sendMessage(tx.serialize(), Messages::TX_MESSAGE);
-//}
-
-// void NetManager::sendNewContract(Contract contract)
-//{
-//    qDebug() << "NetManager::sendNewContract: " << contract.serialize();
-//    //    EntityMessage<Contract> msg = Messages::createContractMessage(contract);
-//    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
-//}
-
-// void NetManager::sendNewBlock(Block block)
-//{
-//    sendMessage(block.serialize(), Messages::BLOCK_MESSAGE);
-//}
-
-// void NetManager::sendTxResponse(Transaction tx, SearchEnum::TxParam param, QString value,
-//                                QHostAddress peerAddress, QByteArray requestHash)
-//{
-//    qDebug() << "NET MANAGER: Sending tx" << tx.getHash() << "to" << peerAddress.toString();
-//    EntityResponseMessage<Transaction> msg = Messages::createGetTxResponse(tx, requestHash);
-//    signMessage(msg);
-//    //    sendMsgToPeer(msg, peerAddress); fix it
-//}
-
-// void NetManager::sendTxPairResponse(TxPair pair, QHostAddress peerAddress, QByteArray requestHash)
-//{
-//    qDebug() << "NET MANAGER: Sending txPair" << pair.serialize() << "to" << peerAddress.toString();
-//    EntityResponseMessage<TxPair> msg = Messages::createGetTxPairResponse(pair, requestHash);
-//    signMessage(msg);
-//    //    sendMsgToPeer(msg, peerAddress); fix it
-//}
-
-// void NetManager::sendBlockResponse(Block block, SearchEnum::BlockParam param, QString value,
-//                                   QHostAddress peerAddress, QByteArray requestHash)
-//{
-//    qDebug() << "NET MANAGER: Sending block" << block.serialize() << "to" << peerAddress.toString();
-//    EntityResponseMessage<Block> msg = Messages::createGetBlockResponse(block, requestHash);
-//    signMessage(msg);
-//    sendMsgToPeer(msg, peerAddress);
-//}
-
-// void NetManager::sendBlockCountResponse(BigNumber blockCount, QHostAddress peerAddress,
-//                                        QByteArray requestHash)
-//{
-//    qDebug() << "NET MANAGER: Sending block count" << blockCount << "to" << peerAddress.toString();
-//    EntityResponseMessage<BigNumber> msg = createGetBlockCountResponse(blockCount, requestHash);
-//    //    signMessage(msg);
-//    sendMsgToPeer(msg, peerAddress);
-//}
-
-// void NetManager::sendActorCountResponse(BigNumber actorCount, QHostAddress peerAddress,
-//                                        QByteArray requestHash)
-//{
-//    qDebug() << "NET MANAGER: Sending actor count" << actorCount << "to" << peerAddress.toString();
-//    EntityResponseMessage<BigNumber> msg = createGetActorCountResponse(actorCount, requestHash);
-//    //    signMessage(msg);
-//    sendMsgToPeer(msg, peerAddress);
-//}
-
-void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
-{
-    qDebug() << "NET MANAGER: Sending genesis block";
-    GenesisBlock *genBlock = Blockchain::readGenesisBlock(prevBlock, prevGenHash);
-    if (genBlock == nullptr)
-    {
-        qCritical() << "NET MANAGER: Error while sending genesis block";
-        return;
-    }
-
-    // sign block
-    genBlock->sign(accounts->getCurrentActor());
-
-    sendMessage(genBlock->serialize(), Messages::GENESIS_BLOCK_MESSAGE);
-    //    EntityMessage<Block> msg = Messages::createGenesisBlockMessage(*genBlock);
-
-    delete genBlock;
-    QFile::remove(DataStorage::TMP_GENESIS_BLOCK);
-}
-
-// Send messages //
 
 // void NetManager::sendGetActor(BigNumber actorId)
 //{
@@ -673,20 +545,20 @@ void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
 //    broadcastMsg(msg.serialize());
 //}
 
-void NetManager::shareContract(Contract contract)
-{
-    //    if (contract.makeFirstTransction()) {
-    //        emit contractFirstTransaction(contract);
-    //        return;
-    //    }
-    qDebug() << contract.serialize();
-    if (contract.makeFinalTransaction())
-    {
-        emit contractFinalTransaction(contract);
-        return;
-    }
-    //    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
-}
+// void NetManager::shareContract(Contract contract)
+//{
+//    //    if (contract.makeFirstTransction()) {
+//    //        emit contractFirstTransaction(contract);
+//    //        return;
+//    //    }
+//    qDebug() << contract.serialize();
+//    if (contract.makeFinalTransaction())
+//    {
+//        //        emit contractFinalTransaction(contract);
+//        return;
+//    }
+//    //    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
+//}
 
 void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
 {
@@ -696,62 +568,3 @@ void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
     signMessage(msg);
     broadcastMsg(msg.serialize());
 }
-
-// void NetManager::sendGetBlock(BlockParam param, QString value)
-//{
-//    qDebug() << "NET MANAGER: Requesting block by" << toString(param) << "and" << value;
-//    GetBlockMessage msg(param, value.toLocal8Bit());
-//    //    signMessage(msg);
-//    getBlockHandlers.insert(calcHash(msg), GetEntityHandler<Block>());
-//    qDebug() << "<<<<<<<<<<<<<< " << calcHash((msg));
-//    broadcastMsg(msg.serialize());
-//}
-
-// void NetManager::sendGetBlockCount()
-//{
-//    qDebug() << "NET MANAGER: Requesting block count";
-//    BaseMessage msg = Messages::createGetBlockCountMessage();
-//    //    signMessage(msg);
-//    getCountHandlers.insert(calcHash(msg), GetCountHandler());
-//    broadcastMsg(msg.serialize());
-//}
-
-// void NetManager::sendGetActorCount()
-//{
-//    qDebug() << "NET MANAGER: Requesting actor count";
-//    BaseMessage msg = Messages::createGetActorCountMessage();
-//    //    signMessage(msg);
-//    getCountHandlers.insert(calcHash(msg), GetCountHandler());
-//    broadcastMsg(msg.serialize());
-
-//    //    emit creaTx();
-//}
-
-// void NetManager::sendGetTx(TxParam param, QString value)
-//{
-//    qDebug() << "NET MANAGER: Requesting tx by" << toString(param) << "and" << value;
-//    GetTxMessage msg(param, value.toLocal8Bit());
-//    signMessage(msg);
-//    getTxHandlers.insert(calcHash(msg), GetEntityHandler<Transaction>());
-//    broadcastMsg(msg.serialize());
-//}
-
-// void NetManager::sendGetTxPair(BigNumber sender, BigNumber receiver)
-//{
-//    qDebug() << "NET MANAGER: Requesting tx pair. Sender:" << sender << ", Receiver:" << receiver;
-//    GetTxPairMessage msg(sender, receiver);
-//    signMessage(msg);
-//    getTxPairHandlers.insert(calcHash(msg), GetEntityHandler<TxPair>());
-//    broadcastMsg(msg.serialize());
-//}
-
-// Handling messsages ///
-
-//===================================DFSpackage===================================
-// void NetManager::sendDfsPackage()
-//{
-//    EntityMessage<Actor<KeyPublic>> msg = Messages::createActorMessage(actor);
-//    signMessage(msg);
-//    broadcastMsg(msg);
-//}
-//================================================================================

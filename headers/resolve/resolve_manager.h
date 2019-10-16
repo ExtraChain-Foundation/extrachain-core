@@ -15,7 +15,8 @@ class ResolveManager : public QObject
     Q_OBJECT
 private:
     QList<ResolverService *> resolvers;
-    QMap<QByteArray, int> *requestResponseMap;
+    QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
+    QMap<QByteArray, int> *packageHandler = new QMap<QByteArray, int>();
 
 private:
     ActorIndex *actorIndex;
@@ -39,6 +40,7 @@ private:
 
 signals:
     void finished();
+    void coinRequest(BigNumber id, BigNumber amount);
 public slots:
     void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void setTask(QByteArray msg, const SocketPair &receiver);

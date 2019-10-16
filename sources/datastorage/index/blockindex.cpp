@@ -222,7 +222,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
         QList<Transaction> txs = lastBlock.extractTransactions();
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken().toByteArray() != token)
+            if (tx.getToken().toActorId() != token)
                 continue;
             switch (param)
             {
@@ -259,7 +259,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
             }
             case SearchEnum::TxParam::Hash:
             {
-                if (tx.getHash() == id.toByteArray())
+                if (tx.getHash() == id.toActorId())
                     return tx;
                 break;
             }
@@ -342,7 +342,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
             }
             case SearchEnum::TxParam::Hash:
             {
-                if (tx.getHash() == id.toByteArray() && tx.getToken() == token)
+                if (tx.getHash() == id.toActorId() && tx.getToken() == token)
                 {
                     currentTxs << tx;
                     ++currentCount;

@@ -49,7 +49,7 @@ QList<QByteArray> AccountController::getAccountID()
 {
     QList<QByteArray> list;
     for (int i = 0; i < accounts.size(); i++)
-        list.append(accounts[i]->getId().toByteArray());
+        list.append(accounts[i]->getId().toActorId());
     return list;
 }
 
@@ -65,7 +65,7 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     QFile file(KeyStore::user_actor_state);
     file.open(QIODevice::WriteOnly | QIODevice::Append);
     QByteArray str = "\n";
-    str += actor->getId().toByteArray() + Serialization::TX_PAIR_FIELD_SPLITTER + "0"
+    str += actor->getId().toActorId() + Serialization::TX_PAIR_FIELD_SPLITTER + "0"
         + Serialization::TX_PAIR_FIELD_SPLITTER;
     file.write(str);
     file.flush();
@@ -75,6 +75,7 @@ Actor<KeyPrivate> AccountController::createActor(bool account)
     savePrivateActor(*actor);
 
     accounts.append(actor);
+    userNum = accounts.size() - 1;
     if (account)
         emit initDfs();
     emit newActorIsCreated(this->getMainActor()->getId(), account);
@@ -122,8 +123,7 @@ Actor<KeyPrivate> AccountController::getActor(int number)
 
 Actor<KeyPrivate> *AccountController::getMainActor()
 {
-    //    if (accounts.size() == 0)
-    //        return &Actor<KeyPrivate>();
+    // assert(!accounts.isEmpty());
     return accounts.isEmpty() ? nullptr : accounts.first();
 }
 
@@ -147,12 +147,21 @@ void AccountController::loadActors()
             this->currentState[list.at(0)] = list.at(1);
     }
     QDir dir(path);
+    if (!dir.exists())
+    {
+        QDir().mkdir(path);
+    }
+    dir.cd(path);
     QStringList filters;
     filters << KeyStore::KEY_FILTER;
     dir.setNameFilters(filters);
 
     int loaded = 0;
 
+    if (dir.entryList().size() == 0)
+    {
+        return;
+    }
     for (QString fileName : dir.entryList())
     {
         QFile *file = new QFile(path + "/" + fileName);
@@ -161,8 +170,8 @@ void AccountController::loadActors()
             if (file->open(QIODevice::ReadOnly))
             {
                 QByteArray serialized;
-                QDataStream stream(file);
-                stream >> serialized;
+                serialized = file->readAll();
+                std::cout << serialized.toStdString() << std::endl;
                 qDebug() << serialized;
 
                 file->close();
@@ -213,8 +222,8 @@ void AccountController::setUserNum(int value)
 void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
-    emit editPrivateProfile(actor.getId().toByteArray());
-    QString fileName = KeyStore::makeKeyFileName(actor.getId().toByteArray());
+    emit editPrivateProfile(actor.getId().toActorId());
+    QString fileName = KeyStore::makeKeyFileName(actor.getId().toActorId());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
     QFile *file = new QFile(path);
@@ -224,20 +233,16 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 
     if (file->open(QIODevice::ReadWrite))
     {
-        QByteArray old;
-        QDataStream read(file);
-        read >> old;
+        QByteArray old = file->readAll();
         if (old == actor.serialize())
         {
             qDebug() << "Private actor with id =" << actor.getId() << "already exists";
         }
         else
         {
-            QDataStream stream(file);
-            qDebug() << "actor serial: ---- " << actor.serialize();
-            stream << actor.serialize();
+            qDebug() << "actor serialized: ---- " << actor.serialize();
+            file->write(actor.serialize());
             file->flush();
-            //            this->accounts << &actor;
             qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
         }
         file->close();

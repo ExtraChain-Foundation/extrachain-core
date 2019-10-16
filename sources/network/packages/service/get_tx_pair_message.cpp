@@ -19,13 +19,12 @@ GetTxPairMessage::~GetTxPairMessage()
 
 const QByteArray GetTxPairMessage::serialize() const
 {
-    return Serialization::universalSerialize({ senderId.toByteArray(), receiverId.toByteArray() },
-                                             FIELDS_SIZE);
+    return Serialization::universalSerialize({ senderId.toActorId(), receiverId.toActorId() }, FIELDS_SIZE);
 }
 
 void GetTxPairMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
     this->senderId = BigNumber(list.at(0));
     this->receiverId = BigNumber(list.at(1));
 }

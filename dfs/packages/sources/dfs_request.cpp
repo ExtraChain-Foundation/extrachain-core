@@ -47,7 +47,7 @@ DfsRequest::DfsRequest(const QByteArray &serialize)
     : BaseMessage(DFS_REQUEST_MESSAGE)
 {
     QList<QByteArray> list =
-        Serialization::universalDesirialize(serialize, Messages::FIELD_SIZES);
+        Serialization::universalDeserialize(serialize, Messages::FIELD_SIZES);
     initFields(list);
 }
 
@@ -81,6 +81,6 @@ QByteArray DfsRequest::serialize() const
 void DfsRequest::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> list =
-        Serialization::universalDesirialize(serialized, Messages::FIELD_SIZES);
+        Serialization::universalDeserialize(serialized, Messages::FIELD_SIZES);
     initFields(list);
 }

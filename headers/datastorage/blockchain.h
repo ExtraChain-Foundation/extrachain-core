@@ -42,6 +42,7 @@ private:
                             //    Actor<KeyPrivate>   approver;       // current user.
     AccountController *accountController;
     // service //
+    QList<GenesisDataRow> genBlockData; // actorid -> token
     int blocksFromLastGenesis = 0;
 
     bool launched;
@@ -69,8 +70,12 @@ private:
     bool shouldStartGenesisCreation();
     BigNumber getBalanceFromTx(BigNumber id, Transaction tx);
 
+    void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
+    QByteArray findRecordsInBlock(const Block &block);
+
 public:
-    void createGenesisBlock();
+    GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
+                                    QMap<BigNumber, BigNumber> states = QMap<BigNumber, BigNumber>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -96,15 +101,6 @@ private:
     Block validateAndReturnBlock(const Block &block);
 
 public:
-    /**
-     * @brief Handy method to read genesis block from temporary file.
-     * Delete pointer after using GenesisBlock.
-     * @param prevBlock
-     * @param prevGenesisHash
-     * @return genesis block (unsigned)
-     */
-    static GenesisBlock *readGenesisBlock(const Block &prevBlock, const QByteArray &prevGenesisHash);
-
     /**
      * Compares prevHash field of every block
      * with the hash of the prev block
@@ -265,20 +261,9 @@ signals:
      */
     void NewBlock(Block block);
 
-    /**
-     * @brief New genesis block is created in temp file TMP_GENESIS_BLOCK
-     */
-    void GenesisBlockCreated(Block prevBlock, QByteArray prevGenHash);
-
     // responses
-    void TxFound(Transaction tx, SearchEnum::TxParam param, QString value, QHostAddress peerAddress,
-                 QByteArray requestHash);
-
-    void TxPairFound(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
-    void BlockFound(Block block, SearchEnum::BlockParam param, QString value, QHostAddress peerAddress,
-                    QByteArray requestHash);
-    void BlockCount(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
-    void ActorCount(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
+    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+                       const SocketPair &receiver);
 
     /**
      * @brief There no such block in a local blockchain
@@ -307,16 +292,12 @@ public slots:
     void checkBlockExistence(const Block &block);
 
     // from node manager
-    void getTxFromBlockchain(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
-                             QByteArray requestHash);
+    void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
+                             const SocketPair &receiver, const QByteArray &request);
 
-    void getTxPairFromBlockChain(BigNumber sender, BigNumber receiver, QHostAddress peerAddress,
-                                 QByteArray requestHash);
-
-    void getBlockFromBlockchain(SearchEnum::BlockParam param, QByteArray value, QHostAddress peerAddress,
-                                QByteArray requestHash);
-    void getBlockCount(QHostAddress peerAddress, QByteArray requestHash);
-    void getActorCount(QHostAddress peerAddress, QByteArray requestHash);
+    void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
+                                const QByteArray &requestHash, const SocketPair &receiver);
+    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void addBlockToBlockchain(Block block);
 

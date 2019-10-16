@@ -9,7 +9,7 @@ void DfsIndex::createdDfsItemConnection(const DfsItem *dfsItem)
 void DfsIndex::appendsFromDirectory()
 {
     QDir *dir = new QDir(based_dfs_struct::ROOT_FOOLDER_NAME + '/'
-                         + accControler->getMainActor()->getId().toByteArray());
+                         + accControler->getMainActor()->getId().toActorId());
 }
 
 void DfsIndex::dfsSender(const QString &filePath, QString peerAdrress)
@@ -66,12 +66,14 @@ DfsIndex::DfsIndex(ActorIndex *actorIndex, AccountController *accountControler, 
     , accControler(accountControler)
     , actorIndex(actorIndex)
 {
-    Subscribtion sub;
-    QList<BigNumber> listUsers = sub.getAll();
-    std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
-        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
-        emit sendRequest(rqst);
-    });
+    // THERE IS NO MAIN ACTOR AT THIS STAGE
+    //    Subscribtion sub;
+    //    QList<BigNumber> listUsers = sub.getAll(accountControler->getMainActor()->getId());
+    //    std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
+    //        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toActorId());
+    //        emit sendRequest(rqst);
+    //    });
+
     //    QList<QString> cardList = {};
     //    std::for_each(listUsers.begin(), listUsers.end(), [&cardList](BigNumber userId) {
     //        for (auto &el : based_dfs_struct::typesVec)
@@ -137,13 +139,13 @@ int DfsIndex::makeSystemDir(const BigNumber &userId) const
     QList<QByteArray> list;
     for (based_dfs_struct::Type type : based_dfs_struct::typesVec)
     {
-        list << userId.toByteArray();
+        list << userId.toActorId();
         list << based_dfs_struct::toByteArray(type);
         if (type == based_dfs_struct::images)
             for (based_dfs_struct::SubType subType : based_dfs_struct::subTypesVec)
             {
                 if (list.isEmpty())
-                    list << userId.toByteArray() << based_dfs_struct::toByteArray(based_dfs_struct::images);
+                    list << userId.toActorId() << based_dfs_struct::toByteArray(based_dfs_struct::images);
                 list << based_dfs_struct::toByteArray(subType);
                 QString path = based_dfs_struct::ROOT_FOOLDER_NAME;
                 QDir().mkdir(path);

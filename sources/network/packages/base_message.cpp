@@ -149,14 +149,14 @@ QByteArray BaseMessage::serialize(const QList<QByteArray> &list) const
 void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor)
 {
     signer = actor.getId();
-    digSig = actor.getKey()->sign(concatenateAllData()).toBase64();
+    digSig = actor.getKey()->sign(concatenateAllData());
     qDebug() << "pubk: " << actor.convertToPublic().getKey()->extractPublicKey();
 }
 
 bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const
 {
     qDebug() << actor.getKey()->getPublicKey();
-    return actor.getKey()->verify(concatenateAllData(), QByteArray::fromBase64(digSig));
+    return actor.getKey()->verify(concatenateAllData(), digSig);
 }
 
 BaseMessage BaseMessage::deserializeMsg(const QByteArray serialized)
@@ -171,12 +171,9 @@ const QByteArray BaseMessage::hash() const
     return Utils::calcKeccak(msg_data);
 }
 
-const QByteArray BaseMessage::init(const QByteArray &data)
+void BaseMessage::init(const QByteArray &data)
 {
     this->msg_data = data;
-    QByteArray result = serialize();
-
-    return result;
 }
 
 // Getters

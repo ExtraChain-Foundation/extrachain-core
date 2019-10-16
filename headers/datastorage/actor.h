@@ -14,7 +14,12 @@
  * Acting entity.
  * Users, Smart-contracts
  */
-
+enum actorType
+{
+    WALLET = 0,
+    ACCOUNT = 1,
+    COMPANY = 2
+};
 template <typename T>
 class Actor
 {
@@ -23,13 +28,16 @@ class Actor
     const int FIELDS_SIZE = 4;
 
 private:
-    BigNumber id;
+    BigNumber id = -1;
     T *key;
     QByteArray hash;
-    bool account;
-    PublicProfile profile;
+    actorType account;
 
 public:
+    bool checkSumValid(QByteArray checkSum)
+    {
+        return checkSum == getChecksumPubKey();
+    }
     inline void setHash(QByteArray hash)
     {
         this->hash = hash;
@@ -43,14 +51,14 @@ public:
         id = 0;
         key = nullptr;
         hash = "";
-        account = true;
+        account = WALLET;
     }
     Actor(const Actor<T> &copyActor)
     {
         id = copyActor.getId();
         key = new T(*(copyActor.getKey()));
         hash = copyActor.getHash();
-        account = copyActor.getAccount();
+        account = static_cast<actorType>(copyActor.getAccount());
     }
     Actor(const QByteArray &serialized)
     {
@@ -69,7 +77,7 @@ public:
         id = copyActor.getId();
         key = new T(*(copyActor.getKey()));
         hash = copyActor.getHash();
-        account = copyActor.getAccount();
+        account = static_cast<actorType>(copyActor.getAccount());
         return *this;
     }
 
@@ -77,6 +85,33 @@ private:
     bool isPrivate() const
     {
         return std::is_same<T, KeyPrivate>::value;
+    }
+
+    QByteArray getChecksumPubKey()
+    {
+        QByteArray localPublicKey = "0";
+        if (typeid(T) == typeid(KeyPrivate))
+        {
+            localPublicKey = reinterpret_cast<KeyPrivate *>(key)->getPublicKey();
+        }
+        else if (typeid(T) == typeid(KeyPublic))
+        {
+            localPublicKey = reinterpret_cast<KeyPublic *>(key)->getPublicKey();
+        }
+        else
+            return "0";
+
+        QString hash = Utils::calcKeccak(localPublicKey);
+        while (hash.size() < localPublicKey.size())
+            hash = hash.append(hash);
+        for (int i = 0; i < localPublicKey.size(); i++)
+        {
+            if (QString(hash[i]).toInt(nullptr, 16) >= 8)
+            {
+                localPublicKey[i] = localPublicKey.toUpper()[i];
+            }
+        }
+        return localPublicKey;
     }
 
 public:
@@ -93,29 +128,20 @@ public:
                 // old method of serialize
                 //                QList<QByteArray> list = Serialization::deserialize(
                 //                    serialized, Serialization::DEFAULT_FIELD_SPLITTER);
-                QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+                QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
 
                 this->id = BigNumber(list.at(0));
-
-                QByteArray prKey = list.at(1);
-                QByteArray pubKey = list.at(2);
-                account = list.at(3).toInt();
-
-                QList<QByteArray> l;
-                l << prKey << pubKey;
-
-                QByteArray keyPair = Serialization::universalSerialize(l, FIELDS_SIZE);
-
-                this->key = new T(prKey);
+                this->key = new T(list.at(1));
+                account = static_cast<actorType>(list.at(2).toInt());
             }
             else
             {
-                QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+                QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
                 if (list.length() >= 2)
                 {
                     this->id = BigNumber(list.at(0));
                     this->key = new T(list.at(1));
-                    this->account = list.at(2).toInt();
+                    this->account = static_cast<actorType>(list.at(2).toInt());
                 }
             }
             QByteArray hashData(toString().toUtf8());
@@ -151,7 +177,7 @@ public:
             }
             QByteArray hashData(toString().toUtf8());
             hash = Utils::calcKeccak(hashData);
-            this->account = account;
+            this->account = static_cast<actorType>(account);
             return true;
         }
         else
@@ -162,16 +188,23 @@ public:
      * @param id
      * @param keydata - (private/public key)
      */
-    bool init(const BigNumber &id, const QByteArray &keydata, bool account)
+    bool init(const BigNumber &id, const QByteArray &keydata, int account)
     {
         this->id = id;
         this->key = new T(keydata);
-        this->account = account;
+        this->account = static_cast<actorType>(account);
         return true;
     }
 
     bool isEmpty() const
     {
+        if (key == nullptr)
+            return true;
+        if (!isPrivate())
+        {
+            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(key);
+            return pbKey->isEmpty();
+        }
         return id == BigNumber(-1) || key == nullptr;
     }
 
@@ -194,19 +227,9 @@ public:
                 KeyPrivate *prKey = reinterpret_cast<KeyPrivate *>(key);
                 QList<QByteArray> list;
 
-                qDebug() << this->id.toByteArray() << prKey->serialize() << pubKey;
+                qDebug() << this->id.toActorId() << prKey->serialize() << pubKey;
 
-                list << this->id.toByteArray() << prKey->serialize() << QByteArray::number(account);
-                //                list << this->id.toString().toLocal8Bit() <<
-                //                temp.CryptMessage(prKey) <<temp.CryptMessage( pubKey);
-                //                KeyPublic pubKey(key->extractPublicKey());
-
-                //                list << this->id.toString().toLocal8Bit() <<
-                //                key->encrypt(hash) << pubKey.encrypt(hash);
-                // old method serilaize
-                //                QByteArray serialized =
-                //                    Serialization::serialize(list,
-                //                    Serialization::ACTOR_FIELD_SPLITTER);
+                list << this->id.toActorId() << prKey->serialize() << QByteArray::number(account);
                 //
                 QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
                 return serialized;
@@ -214,14 +237,13 @@ public:
             else
             {
                 // key_public
-                list << id.toByteArray() << pubKey << QByteArray::number(account);
+                list << id.toActorId() << pubKey << QByteArray::number(account);
             }
         }
         else
         {
-            list << id.toByteArray();
+            list << id.toActorId();
         }
-        //        return Serialization::serialize(list, Serialization::ACTOR_FIELD_SPLITTER);//
         QByteArray serialized = Serialization::universalSerialize(list, 4);
         return serialized;
     }
@@ -229,7 +251,7 @@ public:
     QString toString() const
     {
         QList<QByteArray> list;
-        list << "id:" + id.toByteArray();
+        list << "id:" + id.toActorId();
         if (key != nullptr)
         {
             list << "pub_key:" + key->getPublicKey();
@@ -247,6 +269,13 @@ public:
         //        Serialization::ACTOR_FIELD_SPLITTER);//
         QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
         return QString(serialized);
+    }
+    PublicProfile profile()
+    {
+        QByteArray section = id.toActorId().right(2);
+        QByteArray pathToFolder = DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/"
+            + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8() + "/" + section;
+        return PublicProfile(id.toActorId(), pathToFolder);
     }
 
 public:
@@ -289,15 +318,6 @@ public:
     {
         return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->extractPublicKey(), getAccount())
                            : Actor<KeyPublic>();
-    }
-    PublicProfile getProfile()
-    {
-        return profile;
-    }
-
-    void setProfile(const PublicProfile &value)
-    {
-        profile = value;
     }
 };
 

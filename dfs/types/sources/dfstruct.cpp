@@ -247,7 +247,7 @@ based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct
     {
         int delimetrIndex = _file_name.indexOf('&');
         path = _file_name.mid(0, delimetrIndex).toUtf8();
-        QList<QByteArray> filePathList = Serialization::deserialize(_file_name.toUtf8() + '/', "/");
+        QList<QByteArray> filePathList = Serialization::deserialize(path + '/', "/");
         actorId = BigNumber(filePathList.at(1));
         type = based_dfs_struct::convertToDFType(filePathList.at(2));
         if (type == based_dfs_struct::images)
@@ -259,7 +259,7 @@ based_dfs_struct::DfStruct::DfStruct(const QString &_file_name, based_dfs_struct
         else
         {
             QByteArray t = filePathList.at(3);
-            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()));
+            name = BigNumber(t.mid(0, t.size() - based_dfs_struct::FILE_IDENTIFICATOR.size()), 36);
         }
         QString tempPath = _file_name.mid(delimetrIndex + 1);
         QFile file(tempPath);
@@ -417,7 +417,7 @@ bool based_dfs_struct::DfStruct::operator==(const based_dfs_struct::DfStruct &df
 QByteArray based_dfs_struct::DfStruct::madeFolderDir(const based_dfs_struct::Type &type) const
 {
     QList<QByteArray> list;
-    list << ROOT_FOOLDER_NAME.toUtf8() << this->actorId.toByteArray() << toByteArray(type);
+    list << ROOT_FOOLDER_NAME.toUtf8() << this->actorId.toActorId() << toByteArray(type);
     return Serialization::serialize(list, '/');
 }
 

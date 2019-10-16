@@ -73,7 +73,7 @@ const QByteArray based_dfs_struct::DfStruct::serialize() const
          << QString::number(this->based_dfs_struct::DfStruct::getTime().toMSecsSinceEpoch()).toUtf8()
          << based_dfs_struct::toByteArray(this->based_dfs_struct::DfStruct::getType())
          << based_dfs_struct::toByteArray(this->based_dfs_struct::DfStruct::getStatus())
-         << this->based_dfs_struct::DfStruct::getActorId().toByteArray()
+         << this->based_dfs_struct::DfStruct::getActorId().toActorId()
          << toByteArray(this->based_dfs_struct::DfStruct::getSubType());
     return Serialization::serialize(list, Serialization::DFS_DFSTRUCT_DELIMETR);
 }
@@ -145,7 +145,7 @@ BigNumber DfsItem::getActorId() const
 const QString DfsItem::makeDir() const
 {
     QList<QByteArray> list;
-    list << based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() << this->getActorId().toByteArray()
+    list << based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() << this->getActorId().toActorId()
          << toByteArray(this->getType());
 
     list.append(this->getType() == based_dfs_struct::images ? toByteArray(this->getSubType())
@@ -158,7 +158,7 @@ const QString DfsItem::makeDir() const
 const QString DfsItem::makeDir(const DfsItem *dfsItem) const
 {
     QList<QByteArray> list;
-    list << based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() << dfsItem->getActorId().toByteArray()
+    list << based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() << dfsItem->getActorId().toActorId()
          << toByteArray(dfsItem->getType());
 
     list.append(dfsItem->getType() == based_dfs_struct::images ? toByteArray(dfsItem->getSubType())
@@ -204,17 +204,17 @@ int DfsItem::makeChanges(QByteArray data)
 }
 void Subscribtion::add(const BigNumber &actorId)
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toByteArray() + fileName;
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + actorId.toActorId() + fileName;
     QFile file(path);
     file.open(QIODevice::WriteOnly | QIODevice::Append);
-    file.write(actorId.toByteArray());
+    file.write(actorId.toActorId());
     file.flush();
     file.close();
 }
 
 void Subscribtion::remove(const BigNumber &actorId)
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toByteArray() + fileName;
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + actorId.toActorId() + fileName;
     QFile file(path);
     file.open(QIODevice::ReadWrite);
     while (!file.atEnd())
@@ -233,9 +233,9 @@ void Subscribtion::remove(const BigNumber &actorId)
     file.close();
 }
 
-QList<BigNumber> Subscribtion::getAll() const
+QList<BigNumber> Subscribtion::getAll(const BigNumber &actorId) const
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + ownerId.toByteArray() + fileName;
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + actorId.toActorId() + fileName;
     QFile file(path);
     file.open(QIODevice::ReadOnly);
     QList<BigNumber> list;

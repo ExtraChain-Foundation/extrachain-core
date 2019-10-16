@@ -32,8 +32,8 @@ protected:
     QByteArray type; // simple block, or genesis block (or other)
     QByteArray data; // payload (serialized tx's, or other)
 private:
-    BigNumber index = BigNumber(0);    // block id
-    BigNumber approver = BigNumber(0); // block approver id
+    BigNumber index = BigNumber(-1);    // block id
+    BigNumber approver = BigNumber(-1); // block approver id
 
     long long date;
     QByteArray prevHash; // previous block hash
@@ -46,7 +46,7 @@ public:
     // Deserialize already constructed block
     Block(const QByteArray &serialized);
     // Initial block construction, prev = nullptr for first block
-    Block(const QByteArray &data, const Block *prev);
+    Block(const QByteArray &data, const Block &prev);
 
     virtual ~Block();
 

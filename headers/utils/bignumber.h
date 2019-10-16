@@ -11,12 +11,12 @@
 #include <QDebug>
 
 #include <iostream>
-#include "utils/utils.h"
+//#include "utils/utils.h"
 
 #include "gmpxx.h"
 
 #ifdef QT_DEBUG
-#define UPDATE_DEBUG() qdata = m_data->get_str(16).c_str();
+#define UPDATE_DEBUG() qdata = m_data.get_str(16).c_str();
 #else
 #define UPDATE_DEBUG()
 #endif
@@ -34,12 +34,12 @@ public:
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);
-    BigNumber(mpz_class data);
-    ~BigNumber();
+    BigNumber(mpz_class number);
+    ~BigNumber() = default;
 
 private:
-    mpz_class *m_data;
-    int m_base;
+    mpz_class m_data;
+    bool infinity = false;
 
 #ifdef QT_DEBUG
     QByteArray qdata;
@@ -75,23 +75,26 @@ public:
     BigNumber &operator/=(long long);
     BigNumber &operator%=(const BigNumber &);
     BigNumber &operator%=(long long);
-    BigNumber operator-();
+    BigNumber operator-() const;
 
 public:
     mpz_class data() const;
-    int base() const;
     int isProbPrime() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const; // todo: change to serialize
+    QByteArray toActorId() const;
     QByteArray serialize() const;
     BigNumber pow(unsigned long number);
     BigNumber sqrt(unsigned long number = 2) const;
+    BigNumber abs() const;
+    bool getInfinity() const;
+    void setInfinity(bool value);
 
     static BigNumber factorial(unsigned long number);
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
-    static BigNumber random(const BigNumber &max);
+    static BigNumber random(BigNumber max);
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r)

@@ -29,7 +29,7 @@ void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
                        const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
 {
     QString createdPath = based_dfs_struct::ROOT_FOOLDER_NAME + '/'
-        + accountControler->getMainActor()->getId().toByteArray() + '/' + based_dfs_struct::toString(type)
+        + accountControler->getMainActor()->getId().toActorId() + '/' + based_dfs_struct::toString(type)
         + '/';
     createdPath += based_dfs_struct::images == type ? based_dfs_struct::toString(subType) + '/' : "";
     if (type != based_dfs_struct::servic)
@@ -109,12 +109,12 @@ void Dfs::init()
     qDebug() << "[Dfs]:: dfs has been init";
     emit beginTest();
     Subscribtion sub;
-    QList<BigNumber> listUsers = sub.getAll();
+    QList<BigNumber> listUsers = sub.getAll(accountControler->getMainActor()->getId());
     for (const BigNumber &i : listUsers)
         if (actorIndex->getActor(i).getAccount() && (i != accountControler->getMainActor()->getId()))
             listUsers.append(i);
     std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
-        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
+        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toActorId());
         emit sendRequestf(rqst);
     });
 }
@@ -123,9 +123,9 @@ void Dfs::initUser(BigNumber userId)
 {
     dfsIndex->makeSystemDir(userId);
     CardManager::createdAllCards(userId);
-    Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
+    Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toActorId());
     emit sendRequestf(rqst);
-    qDebug() << "init start dfs for user - " << userId.toByteArray();
+    qDebug() << "init start dfs for user - " << userId.toActorId();
 }
 
 void Dfs::recieveRequest(Messages::DfsRequest request, QString peerAdress)

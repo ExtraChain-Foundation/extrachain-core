@@ -2,6 +2,7 @@
 #define NODE_MANAGER_H
 
 #include <QObject>
+#include <QMap>
 #include "network/network_manager.h"
 #include "managers/tx_manager.h"
 #include "managers/account_controller.h"
@@ -44,13 +45,14 @@ private:
     PrivateProfile *prProfile;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
+
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;
 
 #endif
     CryptManager *cryptManager;
-    ContractManager *contractManager;
+    //    ContractManager *contractManager;
 
 public:
     NodeManager();
@@ -94,7 +96,6 @@ private:
      */
     void connectResolveManager();
     void connectSmContractManager();
-    void connectNetManager();
     void connectTxManager();
     void connectUi();
     void connectContractManager();
@@ -108,6 +109,8 @@ private:
      * @brief Creates folders for work, if they not exist
      */
     void prepareFolders();
+    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                      BigNumber token = 0);
 
 signals:
 
@@ -122,7 +125,7 @@ signals:
 
     void sendActorIdSeva(bool status, BigNumber actorId);
     void requestProfile(QString actorId);
-    void saveProfile(Actor<KeyPrivate> *key, Profile profile);
+    void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     void addActorInActorIndex(Actor<KeyPublic> actor);
@@ -132,8 +135,8 @@ private slots:
     void setHashLoginPrivateProfile(QByteArray hash);
     void createNewActor(QByteArray hash, bool accountStatus);
 
-    void makeContractFirstTransaction(Contract &contract);
-    void makeContractFinalTransaction(Contract &contract);
+    //    void makeContractFirstTransaction(Contract &contract);
+    //    void makeContractFinalTransaction(Contract &contract);
 public slots:
 
     void tempareSlotForActors();
@@ -142,7 +145,7 @@ public slots:
     // test net & blockchain
 
     void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
-    void makeFirstContractTransaction(Contract contract);
+    //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
 #ifdef ETALONIUM_CLIENT
     void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);

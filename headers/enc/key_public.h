@@ -10,13 +10,14 @@
 //#include <QDebug>
 #include "enc/algorithms/blowfish_crypt.h"
 #include "utils/bignumber.h"
-#include "enc/algorithms/ecc/math.h"
+#include "enc/algorithms/ecc/eccmath.h"
 #include "enc/algorithms/ecc/curves.h"
 #include "enc/algorithms/ecc/ellipticpoint.h"
 
 class KeyPublic
 {
 private:
+    ECC::curve curve;
     EllipticPoint pbkey;
 
 public:
@@ -27,6 +28,7 @@ public:
     KeyPublic(EllipticPoint pubKey);
     KeyPublic(QByteArray pbKey);
     KeyPublic(const KeyPublic &keyPrivate);
+    KeyPublic();
     ~KeyPublic()
     {
     }
@@ -43,6 +45,8 @@ public:
      * @param key
      */
     bool loadPublicKey(const QByteArray &keyBase64);
+
+    bool isEmpty();
 
 public:
     /**

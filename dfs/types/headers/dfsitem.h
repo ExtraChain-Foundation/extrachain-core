@@ -16,7 +16,7 @@ class Subscribtion
 public:
     void add(const BigNumber &actorId);
     void remove(const BigNumber &actorId);
-    QList<BigNumber> getAll() const;
+    QList<BigNumber> getAll(const BigNumber &actorId) const;
 };
 class DfsItem : public QObject, based_dfs_struct::DfStruct
 {

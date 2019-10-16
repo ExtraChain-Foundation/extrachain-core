@@ -270,7 +270,7 @@ int Utils::qByteArrayToInt(const QByteArray &number)
     //    bool flag = false;
     while (i < number.size())
     {
-        if (number[i] == 0)
+        if (number[i] == '0')
             i++;
         else
             break;
@@ -323,7 +323,7 @@ QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, cons
     return serialized;
 }
 
-QList<QByteArray> Serialization::universalDesirialize(const QByteArray &serialized, const int &fiels_size)
+QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serialized, const int &fiels_size)
 {
     QList<QByteArray> list = {};
     int pos = 0;
@@ -352,10 +352,21 @@ void Utils::wipeDataFiles()
                 QFile::remove(file.filePath());
         }
     };
-    clearDir("blockchain/index/actors/0/profile", "0.profile");
-    clearDir("blockchain/index/actors/0");
-    clearDir("blockchain/index/blocks/0");
-    clearDir("keystore/personal", "0.key");
+
+    QByteArray companySection = TMP::companyActorId->right(2);
+    QDir actorDir("blockchain/index/actors");
+    auto dirsList = actorDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (auto &dir : dirsList)
+    {
+        qDebug() << dir.filePath();
+        if (dir.fileName() != companySection)
+            QDir(dir.filePath()).removeRecursively();
+    }
+
+    clearDir("blockchain/index/actors/" + companySection, *TMP::companyActorId);
+    clearDir("blockchain/index/blocks/0", "0");
+    clearDir("keystore/personal", *TMP::companyActorId + ".key");
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
     QFile(".fileList").remove();
@@ -372,6 +383,8 @@ void Utils::wipeDataFiles()
     QFile("user.private.login").remove();
     QFile(".fileList").remove();
 #endif
+    QFile(".etalonium.lock").remove();
+    QFile(".settings").remove();
 }
 
 FileList::FileList()
@@ -473,7 +486,8 @@ void FileList::add(QByteArray hash, QByteArray data)
     }
     else
     {
-        if (find(data.mid(0, FIELD_SIZE)) != indexList.end())
+        QList<indexRow>::iterator it = find(data.mid(0, FIELD_SIZE));
+        if (it != indexList.end())
         {
             fileList.seek(find(data.mid(0, FIELD_SIZE))->currentPosition);
             QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
@@ -521,7 +535,7 @@ QList<indexRow>::iterator FileList::find(QByteArray key)
         if (it->hash == key.toStdString())
             return it;
     }
-    return QList<indexRow>::iterator();
+    return indexList.end();
 }
 
 QByteArray FileList::operator[](int value)

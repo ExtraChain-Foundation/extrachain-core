@@ -10,18 +10,23 @@ ActorIndex::~ActorIndex()
 {
 }
 
-Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id) const
+Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
 {
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {
         return Actor<KeyPublic>(serializedActor);
     }
-    qDebug() << "There no actor with id:" << id;
-    return Actor<KeyPublic>();
+    else
+    {
+        Messages::GetActorMessage msg(id);
+        emit sendMessage(msg.serialize(), getActorMessage);
+        qDebug() << "There no actor with id:" << id;
+        return Actor<KeyPublic>();
+    }
 }
 
-bool ActorIndex::validateBlock(const Block &block) const
+bool ActorIndex::validateBlock(const Block &block)
 {
     Actor<KeyPublic> actor = this->getActor(block.getApprover());
     if (actor.isEmpty())
@@ -33,7 +38,7 @@ bool ActorIndex::validateBlock(const Block &block) const
     return block.verify(actor);
 }
 
-bool ActorIndex::validateTx(const Transaction &tx) const
+bool ActorIndex::validateTx(const Transaction &tx)
 {
     Actor<KeyPublic> actor = this->getActor(tx.getApprover());
     if (actor.isEmpty())
@@ -54,6 +59,8 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
+    if (actor.isEmpty())
+        return;
     emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
 }
 
@@ -85,121 +92,96 @@ void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
     }
 }
 
-void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
+void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &receiver)
 {
-    //    if (newProfile.sign == "" || newProfile.profile.list().at(2) == "")
-    //    {
-    //        qDebug() << "ActorIndex::saveProfileFromNetwork : empty sign";
-    //        return;
-    //    }
-    //    QString path = buildFilePath(BigNumber(newProfile.profile.at(2)));
-    //    Actor<KeyPublic> key = getActor(newProfile.profile.at(2));
-    //    if (key.getHash().isEmpty())
-    //    {
-    //        qDebug() << "saveProfileFromNetwork: Key " << newProfile.profile.at(2) << " is empty";
-    //        return;
-    //    }
 
-    //    if (!key.getKey()->verify(PublicProfile::serialize(newProfile.profile.list()), newProfile.sign))
-    //    {
-    //        qDebug() << "ActorIndex::saveProfileFromNetwork : profile isn`t verify";
-    //        return;
-    //    }
-
-    //    PublicProfile profile(newProfile.profile, newProfile.sign, path);
-    //    if (profile.profile.at(2) == "")
-    //        return;
-    //    else
-    //    {
-    //        qDebug() << "Save profile with id" << newProfile.profile.at(2);
-    //        key.setProfile(profile);
-    //        sendMessage(profile.serialize(), profileType);
-    //    }
+    qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->getRecords();
+    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
+                       requestHash, receiver);
 }
 
-void ActorIndex::saveProfile(Actor<KeyPrivate> *key, Profile newProfile)
+void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
+{
+    PublicProfile profile(newProfile);
+    if (profile.sign == "")
+        return;
+    Actor<KeyPublic> key = getActor(profile.id);
+    if (key.isEmpty())
+    {
+        qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
+        return;
+    }
+    qDebug() << "SEVA" << key.profile().getProfile() << key.profile().sign;
+    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+    {
+        qDebug() << "Save publicProfile with id:" << profile.id;
+        sendMessage(profile.serialize(), profileType);
+    }
+    else
+        qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
+}
+
+void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 {
     if (key->getHash().isEmpty())
         return;
     qDebug() << "Save profile with id" << newProfile.at(2);
-    QString path = buildFilePath(BigNumber(newProfile.at(2)));
-    QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile.list()));
-    PublicProfile pubProfile(newProfile, sign, path);
-    if (pubProfile.profile.at(2) == "")
+    QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
+    QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
+    PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
+    if (pubProfile.sign == "")
     {
         qDebug() << "saveProfile: incorrect profile" << newProfile.at(2);
         return;
     }
     else
     {
-        key->setProfile(pubProfile);
+        qDebug() << "SEVA" << key->profile().getProfile() << key->profile().sign;
         sendMessage(pubProfile.serialize(), profileType);
     }
 }
 
-PublicProfile ActorIndex::getProfileToSend(QString id)
-{
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
-
-    return PublicProfile::getProfile(path, id);
-}
-
 void ActorIndex::requestProfile(QString id)
 {
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
+    if (id == "0")
+    {
+        Profile profile;
+        profile.setUserId("0");
+        profile.setFirstName("Etalonium");
+        profile.setLastName("Fashion Group");
+        profile.setRegisterDate(1549290447779);
+        profile.setFacebook("https://www.facebook.com/etalonium/");
+        profile.setInstagram("etalonium");
+        profile.setAvatar({ "3" });
+        profile.setBio("ANOTHER WAY TO TOP:\n - Find a job\n - Create stars\n - Your ideal model");
+        profile.setUrl("https://etalonium.io/");
+        profile.setUrlName("Our site");
+        return emit sendProfileToUi("0", QByteArrayList(profile.list()));
+    }
+
+    QString path = buildFilePath(id.toUtf8());
     Actor<KeyPublic> key = getActor(id.toUtf8());
-    if (key.getHash().isEmpty())
-    {
-        qDebug() << "requestProfile: Key " << id << " is empty";
+    if (key.getKey() == nullptr || key.getHash().isEmpty())
         return;
-    }
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "")
-    {
-        qDebug() << "requestProfile: incorrect profile" << id;
-        return;
-    }
-    if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
-        emit sendProfileToUi(id, pubProfile.profile);
+    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+        emit sendProfileToUi(id, key.profile().getListProfile());
     else
         qDebug() << "requestProfile: incorrect profile" << id;
 }
 
-Profile ActorIndex::getProfile(QString id)
+QByteArrayList ActorIndex::getProfile(QString id)
 {
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
+    QString path = buildFilePath(id.toUtf8());
     Actor<KeyPublic> key = getActor(id.toUtf8());
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "" || key.getHash() == "")
-    {
-        qDebug() << "getProfile: incorrect profile" << id;
-        return Profile();
-    }
+    if (key.profile().sign == "")
+        return QByteArrayList();
 
-    if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
-        return pubProfile.profile;
+    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+        return key.profile().getListProfile();
     else
     {
         qDebug() << "getProfile: incorrect profile" << id;
-        return Profile();
-    }
-}
-PublicProfile ActorIndex::getPublicProfile(QString id)
-{
-    QString path = buildFilePath(BigNumber(id.toUtf8()));
-    Actor<KeyPublic> key = getActor(id.toUtf8());
-    PublicProfile pubProfile = PublicProfile::getProfile(path, id);
-    if (pubProfile.sign == "")
-    {
-        qDebug() << "getPublicProfile: incorrect profile";
-        return PublicProfile();
-    }
-    if (key.getKey()->verify(PublicProfile::serialize(pubProfile.profile.list()), pubProfile.sign))
-        return pubProfile;
-    else
-    {
-        qDebug() << "getPublicProfile: incorrect profile";
-        return PublicProfile();
+        return QByteArrayList();
     }
 }
 
@@ -209,10 +191,15 @@ bool ActorIndex::actorExist(BigNumber actorId)
         return false;
     return true;
 }
-QString ActorIndex::buildFilePath(const BigNumber &id) const
+
+QString ActorIndex::buildFilePath(const QByteArray &id) const
 {
-    BigNumber section = id.toByteArray().right(SECTION_NAME_SIZE);
-    QString pathToFolder = folderPath + section.toByteArray();
+    QByteArray Id = id;
+    if (Id.length() == 19)
+        Id = "0" + id;
+
+    QByteArray section = Id.right(SECTION_NAME_SIZE);
+    QString pathToFolder = folderPath + section;
 
     QDir dir(pathToFolder);
     if (!dir.exists())
@@ -222,8 +209,14 @@ QString ActorIndex::buildFilePath(const BigNumber &id) const
         dir.mkpath(pathToFolder);
     }
 
-    return pathToFolder + "/" + id.toByteArray();
+    return pathToFolder + "/" + Id;
 }
+
+void ActorIndex::setCompanyId(QByteArray *value)
+{
+    companyId = value;
+}
+
 BigNumber ActorIndex::getRecords() const
 {
     return records;
@@ -231,7 +224,7 @@ BigNumber ActorIndex::getRecords() const
 
 int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 {
-    QString path = buildFilePath(id);
+    QString path = buildFilePath(id.toActorId());
     QFile file(path);
 
     qDebug() << "Saving the file:" << path;
@@ -259,7 +252,7 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
 QByteArray ActorIndex::getById(const BigNumber &id) const
 {
-    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
+    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
     QFile file(filePath);
     if (!file.exists())
     {
@@ -281,9 +274,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 
         emit sendMessage(actor.serialize(), classType);
 
-        if (actor.getAccount())
+        if (actor.getAccount() == 1)
         {
-            qDebug() << "emit signal for init dfs for user" << actor.getId().toByteArray();
+            qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
             emit initDfs(actor.getId());
         }
     }
@@ -315,7 +308,7 @@ void ActorIndex::profileToSearch(SearchFilters filters)
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
         for (const QString &profilePath : profilePathList)
         {
-            Profile profile = getProfile(profilePath);
+            Profile profile = getProfile(profilePath.mid(0, profilePath.size() - 8));
 
             if (profile.at(2) == "")
                 continue;

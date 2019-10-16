@@ -1,6 +1,7 @@
 #ifndef MESSAGE_STRCUT_H
 #define MESSAGE_STRCUT_H
 
+#include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
 namespace Message {
 const short dfs_message_field_size = 4;
@@ -19,6 +20,10 @@ struct dfs_message
 
     const QByteArray serialize() const;
     const QList<QByteArray> deserialize(const QByteArray &serialized) const;
+};
+
+struct file_data_message
+{
 };
 }
 #endif // MESSAGE_STRCUT_H

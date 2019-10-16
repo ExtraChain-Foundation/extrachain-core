@@ -21,7 +21,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.clear();
     profileList.append("6");
     profileList.append("1");
-    profileList.append(actor->getId().toByteArray());
+    profileList.append(actor->getId().toActorId());
     profileList.append(tokenName);
     profileList.append(tokenCount);
     profileList.append(relAddress);
@@ -29,7 +29,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     actorIndex->saveProfile(actor, profileList);
     profileList.insert(2, actor->getKey()->sign(Serialization::universalSerialize(profileList, 4)));
 
-    QFile file(SmartContractStorage::CONTRACTPROFILE + actor->getId().toByteArray() + ".profile");
+    QFile file(SmartContractStorage::CONTRACTPROFILE + actor->getId().toActorId() + ".profile");
     if (file.exists())
     {
         qDebug() << "[SmartContractManager][createContractProfile] Error. Contract profile already exist";
@@ -85,23 +85,23 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
     // do
     // {
     //    index++;
-    // file->setFileName(SmartContractStorage::CONTRACTSTORE + actor->getId().toByteArray());
+    // file->setFileName(SmartContractStorage::CONTRACTSTORE + actor->getId().toActorId());
     // } while (file->exists());
     // file->open(QIODevice::WriteOnly);
     // QByteArray str = "";
     // str += Serialization::universalSerialize(
-    //    { actor->getId().toByteArray(), actor->getKey()->getPublicKey() }, 4);
+    //    { actor->getId().toActorId(), actor->getKey()->getPublicKey() }, 4);
     // file->write(str);
     // file->flush();
     // file->close();
     // qDebug() << "tokenName" << tokenName << "actor->getId()" << actor->getId();
     // qDebug() << "tokenId[actor->getId().toString()]" << tokenId[actor->getId().toString()];
     emit addContractActorInActorIndex(actor->convertToPublic());
-    emit saveActorInPrivateProfile(actor->getId().toByteArray());
+    emit saveActorInPrivateProfile(actor->getId().toActorId());
     //    actorIndex->addActor(actor->convertToPublic());
 
     savePrivateActor(*actor);
-    // return actor->getId().toByteArray();
+    // return actor->getId().toActorId();
 
     return actor;
 }
@@ -109,35 +109,31 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
 
-    QString fileName = KeyStore::makeKeyFileName(actor.getId().toByteArray());
+    QString fileName = KeyStore::makeKeyFileName(actor.getId().toActorId());
     QString path = SmartContractStorage::CONTRACTSTORE + fileName;
     qDebug() << "Path=" << path;
-    QFile *file = new QFile(path);
+    QFile file(path);
 
     // move to another place
     FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTSTORE);
 
-    if (file->open(QIODevice::ReadWrite))
+    if (file.open(QIODevice::ReadWrite))
     {
         QByteArray old;
-        QDataStream read(file);
-        read >> old;
+        old = file.readAll();
         if (old == actor.serialize())
         {
             qDebug() << "Private actor with id =" << actor.getId() << "already exists";
         }
         else
         {
-            QDataStream stream(file);
+            file.resize(0);
             qDebug() << "actor serial: ---- " << actor.serialize();
-            stream << actor.serialize();
-            file->flush();
-            //            this->accounts << &actor;
+            file.write(actor.serialize());
+            file.flush();
             qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
         }
-        file->close();
-        delete file;
-        //        loadActors();
+        file.close();
         return;
     }
 
@@ -155,7 +151,7 @@ void SmartContractManager::initializeTokenArray()
         if (file.open(QIODevice::ReadOnly))
         {
             QByteArray data = file.readLine();
-            QList<QByteArray> list = Serialization::universalDesirialize(data, 4);
+            QList<QByteArray> list = Serialization::universalDeserialize(data, 4);
             if (list.size() != 7)
             {
                 qDebug() << "[smm_manager][initializeTokenArray] Error when open file " << file.fileName()
