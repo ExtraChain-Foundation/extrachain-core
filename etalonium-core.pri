@@ -70,6 +70,7 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/headers/enc/algorithms/aes.h \
     $$PWD/headers/enc/algorithms/blowfish_crypt.h \
     $$PWD/headers/enc/algorithms/ecc/curves.h \
     $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \

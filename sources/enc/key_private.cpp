@@ -87,7 +87,22 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
 {
     //    //    qDebug() << "Sign data : " << data;
     //    //    qDebug() << "prKey" << this->prkey;
-    //    BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
+    BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
+    BigNumber r, s, k;
+    EllipticPoint point;
+    while ((r == 0) || (s == 0))
+    {
+        k = BigNumber::random(curve.n);
+        point = ECC::multiply(curve, k, curve.g);
+        r = point.X() % curve.n;
+        s = ((hashMessage + r * this->prkey) * ECC::inverseMod(k, curve.n)) % curve.n;
+    }
+    QList<QByteArray> list;
+    std::cout << "r: " << r.toByteArray().size() << std::endl << "s: " << s.toByteArray().size() << std::endl;
+    std::cout << r.toByteArray().toStdString() << " " << s.toByteArray().toStdString() << std::endl;
+    list.append(r.toByteArray());
+    list.append(s.toByteArray());
+    return Serialization::universalSerialize(list, 3);
     //    BigNumber kmodp("1");
     //    BigNumber r("1");
     //    BigNumber p = BigNumber("1");
@@ -116,11 +131,19 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
     //        result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
     //    } while (!(verify(data, result)));
     //    return result;
-    return "";
 }
 
 bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
 {
+    BigNumber z = BigNumber(Utils::calcKeccak(data));
+    QList<QByteArray> signature = Serialization::universalDesirialize(dsignBase64, 3);
+    BigNumber r(signature[0]), s(signature[1]);
+    BigNumber w = ECC::inverseMod(s, curve.n);
+    BigNumber u1 = (z * w) % curve.n;
+    BigNumber u2 = (r * w) % curve.n;
+    EllipticPoint point =
+        ECC::add(curve, (ECC::multiply(curve, u1, curve.g)), (ECC::multiply(curve, u2, pbkey)));
+    return r % curve.n == point.X() % curve.n;
     //    QList<QByteArray> res;
     //    res = Serialization::universalDesirialize(dsignBase64, Serialization::DEFAULT_FIELD_SIZE);
     //    BigNumber s = res.at(0);

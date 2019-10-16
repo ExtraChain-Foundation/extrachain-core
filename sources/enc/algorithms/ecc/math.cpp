@@ -33,6 +33,7 @@
 //}
 BigNumber ECC::inverseMod(BigNumber a, BigNumber b)
 {
+
     if (a < 0)
         return b - inverseMod(-a, b);
     //   qDebug() << "InverseMode: k=" << a;
@@ -42,6 +43,7 @@ BigNumber ECC::inverseMod(BigNumber a, BigNumber b)
         return b - inverseMod(-a, b);
     assert(a != 0);
     BigNumber b0 = b, t, q;
+
     BigNumber x0 = 0, x1 = 1;
     if (b == 1)
         return 1;
@@ -56,8 +58,10 @@ BigNumber ECC::inverseMod(BigNumber a, BigNumber b)
     }
     if (x1 < 0)
         x1 += b0;
+
     // assert((a * x1) % b == 1);
     //   qDebug() << " p=" << b << " result=" << x1;
+
     return x1;
     // std::cout << "k: " << kc.toByteArray(10).toStdString() << std::endl;
     // std::cout << "x1: " << x1.toByteArray(10).toStdString() << std::endl;
