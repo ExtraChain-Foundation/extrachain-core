@@ -9,6 +9,7 @@
 
 #include <QDebug>
 #include "utils/bignumber.h"
+#include "enc/algorithms/blowfish_crypt.h"
 #include "enc/algorithms/ecc/ellipticpoint.h"
 #include "enc/algorithms/ecc/curves.h"
 #include "enc/algorithms/ecc/math.h"

@@ -268,7 +268,7 @@ mpz_class BigNumber::data() const
 {
     if (m_data == nullptr)
     {
-        qDebug() << "BigNumber warning: data == nullptr";
+        // qDebug() << "BigNumber warning: data == nullptr";
         return 0;
     }
     else

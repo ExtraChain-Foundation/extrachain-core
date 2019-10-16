@@ -16,6 +16,7 @@ namespace ECC {
  * @return
  */
 BigNumber inverseMod(BigNumber k, BigNumber p);
+// BigNumber inverseMod2(BigNumber k, BigNumber p);
 /**
  * @brief isOnCurve
  * @param curve
@@ -46,7 +47,6 @@ EllipticPoint add(ECC::curve curve, EllipticPoint a, EllipticPoint b);
  * @return
  */
 EllipticPoint multiply(ECC::curve curve, BigNumber k, EllipticPoint point);
-
 }
 
 #endif // MATH_H
