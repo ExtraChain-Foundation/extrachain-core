@@ -71,10 +71,11 @@ private:
     BigNumber getBalanceFromTx(BigNumber id, Transaction tx);
 
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
-    QByteArray findRecordsInBlock(const Block &block, GenesisBlock &gblock);
+    QByteArray findRecordsInBlock(const Block &block);
 
 public:
-    void createGenesisBlock(QMap<BigNumber, BigNumber> states);
+    GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
+                                    QMap<BigNumber, BigNumber> states = QMap<BigNumber, BigNumber>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -100,15 +101,6 @@ private:
     Block validateAndReturnBlock(const Block &block);
 
 public:
-    /**
-     * @brief Handy method to read genesis block from temporary file.
-     * Delete pointer after using GenesisBlock.
-     * @param prevBlock
-     * @param prevGenesisHash
-     * @return genesis block (unsigned)
-     */
-    static GenesisBlock *readGenesisBlock(const Block &prevBlock, const QByteArray &prevGenesisHash);
-
     /**
      * Compares prevHash field of every block
      * with the hash of the prev block
@@ -268,11 +260,6 @@ signals:
      * @param block
      */
     void NewBlock(Block block);
-
-    /**
-     * @brief New genesis block is created in temp file TMP_GENESIS_BLOCK
-     */
-    void GenesisBlockCreated(Block prevBlock, QByteArray prevGenHash);
 
     // responses
     void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,

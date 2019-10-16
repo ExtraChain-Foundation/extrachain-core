@@ -17,7 +17,7 @@ GenesisBlock::GenesisBlock(const QByteArray &serialized)
     deserialize(serialized);
 }
 
-GenesisBlock::GenesisBlock(const QByteArray &data, const Block *prevBlock, const QByteArray &prevGenHash)
+GenesisBlock::GenesisBlock(const QByteArray &data, const Block &prevBlock, const QByteArray &prevGenHash)
     : Block(data, prevBlock)
     , prevGenHash(prevGenHash)
 {
@@ -75,6 +75,11 @@ bool GenesisBlock::isGenesisBlock(const QByteArray &serialized)
 {
     QByteArray type(serialized, Config::GENESIS_BLOCK_TYPE.size());
     return type.contains(Config::GENESIS_BLOCK_TYPE);
+}
+
+void GenesisBlock::setPrevGenHash(const QByteArray &value)
+{
+    prevGenHash = value;
 }
 
 QByteArray GenesisBlock::getPrevGenHash() const

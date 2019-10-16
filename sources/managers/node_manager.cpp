@@ -45,17 +45,20 @@ NodeManager::NodeManager()
     accController->loadActors();                                         //!!!
     TMP::companyActorId = new QByteArray(company.getId().toByteArray()); //!!!
     actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
-    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
-    newTransaction.setSenderBalance(BigNumber("0"));
-    newTransaction.setReceiverBalance(BigNumber("0"));
-    newTransaction.setGas(0);
-    newTransaction.setHop(0);
-    newTransaction.sign(company);
-    newTransaction.verify(company.convertToPublic());
-    txManager->addVerifiedTx(newTransaction);
+    QMap<BigNumber, BigNumber> tm;
+    tm.insert(0, 0);
+    blockchain->createGenesisBlock(company, tm);
+//    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
+//    newTransaction.setSenderBalance(BigNumber("0"));
+//    newTransaction.setReceiverBalance(BigNumber("0"));
+//    newTransaction.setGas(0);
+//    newTransaction.setHop(0);
+//    newTransaction.sign(company);
+//    newTransaction.verify(company.convertToPublic());
+//    txManager->addVerifiedTx(newTransaction);
 
-    Block block = txManager->makeBlock();
-    blockchain->addBlock(block, true);
+//    Block block = txManager->makeBlock();
+//    blockchain->addBlock(block, true);
 
 //    }
 #endif

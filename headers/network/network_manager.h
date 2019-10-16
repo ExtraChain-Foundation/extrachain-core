@@ -187,9 +187,6 @@ public slots:
     void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
                              const SocketPair &receiver);
 public slots:
-
-    void sendGenesisBlock(Block prevBlock, QByteArray prevGenHash);
-
     //    void shareContract(Contract contract);
     void sendMessageTo(BigNumber recipientId, QByteArray message);
 

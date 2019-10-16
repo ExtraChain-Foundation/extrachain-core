@@ -535,32 +535,6 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
 }
 
 // Send messages //
-// void NetManager::sendReserveActorRequest(QString peerAddress, QByteArray requestHash, const int port)
-//{
-//    for (auto i : reservedActorList)
-//        qDebug() << i;
-
-void NetManager::sendGenesisBlock(Block prevBlock, QByteArray prevGenHash)
-{
-    qDebug() << "NET MANAGER: Sending genesis block";
-    GenesisBlock *genBlock = Blockchain::readGenesisBlock(prevBlock, prevGenHash);
-    if (genBlock == nullptr)
-    {
-        qCritical() << "NET MANAGER: Error while sending genesis block";
-        return;
-    }
-
-    // sign block
-    genBlock->sign(accounts->getCurrentActor());
-
-    sendMessage(genBlock->serialize(), Messages::GENESIS_BLOCK_MESSAGE);
-    //    EntityMessage<Block> msg = Messages::createGenesisBlockMessage(*genBlock);
-
-    delete genBlock;
-    QFile::remove(DataStorage::TMP_GENESIS_BLOCK);
-}
-
-// Send messages //
 
 // void NetManager::sendGetActor(BigNumber actorId)
 //{

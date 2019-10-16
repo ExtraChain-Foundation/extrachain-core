@@ -112,7 +112,7 @@ Block TransactionManager::makeBlock()
     qDebug() << data;
     Block lastBlock = blockchain->getLastBlock();
 
-    Block block(data, &lastBlock);
+    Block block(data, lastBlock);
     // blockchain->signBlock(block); // Non-approved code
     block.sign(accountController->getCurrentActor());
 

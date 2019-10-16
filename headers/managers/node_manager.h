@@ -2,6 +2,7 @@
 #define NODE_MANAGER_H
 
 #include <QObject>
+#include <QMap>
 #include "network/network_manager.h"
 #include "managers/tx_manager.h"
 #include "managers/account_controller.h"
