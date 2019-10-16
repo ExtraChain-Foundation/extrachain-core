@@ -44,5 +44,5 @@ const QByteArray Message::dfs_message::serialize() const
 
 const QList<QByteArray> Message::dfs_message::deserialize(const QByteArray &serialized) const
 {
-    return Serialization::universalDesirialize(serialized, dfs_message_field_size);
+    return Serialization::universalDeserialize(serialized, dfs_message_field_size);
 }

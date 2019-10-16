@@ -7,7 +7,7 @@ KeyPrivate::KeyPrivate()
 }
 KeyPrivate::KeyPrivate(const QByteArray &keyPrivate)
 {
-    QList<QByteArray> list = Serialization::universalDesirialize(keyPrivate, 3);
+    QList<QByteArray> list = Serialization::universalDeserialize(keyPrivate, 3);
     this->prkey = BigNumber(list[0]);
     this->pbkey = EllipticPoint(list[1]);
 }
@@ -88,7 +88,7 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
 bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
 {
     BigNumber z = BigNumber(Utils::calcKeccak(data));
-    QList<QByteArray> signature = Serialization::universalDesirialize(dsignBase64, 3);
+    QList<QByteArray> signature = Serialization::universalDeserialize(dsignBase64, 3);
     BigNumber r(signature[0]), s(signature[1]);
     BigNumber w = ECC::inverseMod(s, curve.n);
     BigNumber u1 = (z * w) % curve.n;

@@ -8,7 +8,7 @@ EllipticPoint::EllipticPoint()
 
 EllipticPoint::EllipticPoint(const QByteArray &serialized)
 {
-    QList<QByteArray> list = Serialization::universalDesirialize(serialized, 2);
+    QList<QByteArray> list = Serialization::universalDeserialize(serialized, 2);
     x = BigNumber(list[0]);
     y = BigNumber(list[1]);
 }

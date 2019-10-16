@@ -176,7 +176,7 @@ QList<QString> deserialize(const QString &serialized, char delimiter);
 QByteArray serializeStored(const QList<QByteArray> list);
 QList<QByteArray> desirializeStored(const QByteArray &serialize);
 QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size);
-QList<QByteArray> universalDesirialize(const QByteArray &serialized, const int &fiels_size);
+QList<QByteArray> universalDeserialize(const QByteArray &serialized, const int &fiels_size);
 } // namespace Serialization
 
 namespace Utils {

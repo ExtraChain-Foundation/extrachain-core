@@ -48,7 +48,7 @@ bool ResolverService::validate(const Messages::IMessage &message)
         qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
         //        emit SendGetActor(signer);
         //        return false;
-        this->thread()->sleep(10000);
+        this->thread()->sleep(2);
         return validate(message);
     }
 }
@@ -186,6 +186,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     BaseMessage message;
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
+    qDebug() << "Resolver: receive " << msgType;
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE)
         && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
         if (MessageIsNotValid(message))
@@ -200,7 +201,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     else if (msgType == ACTOR_MESSAGE)
     {
-        qDebug() << "Resolver: save actor";
         Actor<KeyPublic> actor(message.getMsg_data());
         emit newActor(actor);
     }
@@ -263,7 +263,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     // request messages
     else if (msgType == GET_ACTOR_MESSAGE)
     {
-        qDebug() << "Resolver: get actor" << message.getMsg_data();
         GetActorMessage response(message.getMsg_data());
         emit getActor(response.getActorId(), calcHash(msg), receiver);
     }

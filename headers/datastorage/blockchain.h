@@ -42,6 +42,7 @@ private:
                             //    Actor<KeyPrivate>   approver;       // current user.
     AccountController *accountController;
     // service //
+    QList<GenesisDataRow> genBlockData; // actorid -> token
     int blocksFromLastGenesis = 0;
 
     bool launched;
@@ -69,8 +70,11 @@ private:
     bool shouldStartGenesisCreation();
     BigNumber getBalanceFromTx(BigNumber id, Transaction tx);
 
+    void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
+    QByteArray findRecordsInBlock(const Block &block, GenesisBlock &gblock);
+
 public:
-    void createGenesisBlock();
+    void createGenesisBlock(QMap<BigNumber, BigNumber> states);
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);

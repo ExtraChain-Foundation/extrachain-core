@@ -70,7 +70,7 @@ QByteArray Messages::DfsStatus::serialize() const
 
 void Messages::DfsStatus::deserialize(const QByteArray &serialized)
 {
-    QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELD_SIZES);
+    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELD_SIZES);
     initFields(list);
 }
 

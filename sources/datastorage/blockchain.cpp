@@ -5,6 +5,8 @@ Blockchain::Blockchain(AccountController *accountController, bool fileMode)
     , accountController(accountController)
 {
     actorIndex = accountController->getActorIndex();
+    genBlockData.clear();
+    gentmp.setFileName(DataStorage::TMP_GENESIS_BLOCK);
     connect(this, &Blockchain::NewBlock, this,
             &Blockchain::BlockIsMissing); // non-approved code
 }
@@ -129,7 +131,7 @@ QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id
 
 bool Blockchain::shouldStartGenesisCreation()
 {
-    return Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS <= this->blocksFromLastGenesis;
+    return Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == this->blocksFromLastGenesis;
 }
 
 BigNumber Blockchain::getBalanceFromTx(BigNumber id, Transaction tx)
@@ -142,63 +144,49 @@ BigNumber Blockchain::getBalanceFromTx(BigNumber id, Transaction tx)
         return 0;
 }
 
-void Blockchain::createGenesisBlock()
+void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2)
+{
+    for (int i = 0; i < genBlockData.size(); i++)
+    {
+        if (genBlockData[i].actorId == row1.actorId && genBlockData[i].token == row1.token)
+            return;
+    }
+    return true;
+    if (isNewRecord(row))
+    {
+        writeStream << row.serialize();
+        genBlockData.insert(row.actorId, row.tx.getToken());
+    }
+}
+
+QByteArray Blockchain::findRecordsInBlock(const Block &block, GenesisBlock &gblock)
+{
+    if (block.getType() == Config::GENESIS_BLOCK_TYPE)
+    {
+        return block.getHash();
+    }
+    else if (!block.isEmpty())
+    {
+        for (const Transaction &tx : block.extractTransactions())
+        {
+            if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
+                break;
+            GenesisDataRow recSender =
+                GenesisDataRow(tx.getSender(), tx.getSenderBalance() - tx.getAmount(), tx.getToken());
+            gblock.addRow(recSender);
+            GenesisDataRow recReceiver =
+                GenesisDataRow(tx.getReceiver(), tx.getReceiver() - tx.getAmount(), tx.getToken());
+            addRecordIfNew(recReceiver);
+        }
+    }
+    return QByteArray();
+}
+
+void Blockchain::createGenesisBlock(QMap<BigNumber, BigNumber> states)
 {
     using namespace std;
     qDebug() << "Creating genesis block";
-
-    // temporary file storage for constructed genesis block
-    QFile file(DataStorage::TMP_GENESIS_BLOCK);
-    if (!FileSystem::tryToOpen(file, QIODevice::WriteOnly))
-    {
-        qCritical() << "Error while creating genesis block, can't create tmp file";
-        return;
-    }
-
-    QDataStream writeStream(&file);
-
-    QMultiMap<BigNumber, BigNumber> alreadySaved; // actorid -> token
-
-    // function to check should we add a new record to map (actorId -> tx)
-    // @return true if @param tx should be added to the collectedData map
-    auto isNewTxRecord = [&alreadySaved](const GenesisDataRow &row) -> bool {
-        if (alreadySaved.contains(row.actorId))
-        {
-            return !alreadySaved.values(row.actorId).contains(row.tx.getToken()); // true = there no tx with
-                                                                                  // such data field yet
-        }
-        return true;
-    };
-
-    auto addRecordIfNew = [&](const GenesisDataRow &row) {
-        if (isNewTxRecord(row))
-        {
-            writeStream << row.serialize();
-            alreadySaved.insert(row.actorId, row.tx.getToken());
-        }
-    };
-
-    // @return previous genesis block hash (if found)
-    auto findRecordsInBlock = [&](const Block &block) -> QByteArray {
-        if (block.getType() == Config::GENESIS_BLOCK_TYPE)
-        {
-            return block.getHash();
-        }
-        else if (!block.isEmpty())
-        {
-            for (const Transaction &tx : block.extractTransactions())
-            {
-                if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
-                    break;
-                GenesisDataRow recSender = GenesisDataRow(tx.getSender(), tx);
-                addRecordIfNew(recSender);
-                GenesisDataRow recReceiver = GenesisDataRow(tx.getReceiver(), tx);
-                addRecordIfNew(recReceiver);
-            }
-        }
-        return QByteArray();
-    };
-
+    genBlockData.clear();
     QByteArray previousGenHash;
 
     // Collect data to collectedData map (block index or file index)
@@ -206,18 +194,35 @@ void Blockchain::createGenesisBlock()
     {
         if (blockIndex.getRecords() == 0)
         {
-            qCritical() << "Can't create genesis block, there no blocks in blockIndex";
+            if (blockIndex.getFirstSavedId() == 0 && blockIndex.getLastSavedId() == 0)
+            {
+                GenesisBlock nb("", nullptr, "");
+                for (QMap<BigNumber, BigNumber>::iterator i = states.begin(); i != states.end(); i++)
+                {
+                    nb.addRow(GenesisDataRow(i.key(), i.value(), 0));
+                }
+            }
+            else
+                qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return;
         }
 
-        BigNumber lastSavedId = blockIndex.getLastSavedId();
-        if (lastSavedId.isEmpty())
+        //        BigNumber lastSavedId = ;
+        if (blockIndex.getLastSavedId().isEmpty())
         {
             qCritical() << "Can't create genesis block, there no last saved id";
             return;
         }
 
         // Collect data: Iterating from last block to previous genesis block
+        Block b;
+        BigNumber i = blockIndex.getLastSavedId();
+        while ((blockIndex.getBlockById(i).getType() != Config::GENESIS_BLOCK_TYPE)
+               || (i >= blockIndex.getFirstSavedId()))
+        {
+            b = blockIndex.getBlockById(i);
+            i--;
+        }
         for (BigNumber i = lastSavedId - 1; i > 0; --i)
         {
             Block block = blockIndex.getBlockById(i);
@@ -255,7 +260,7 @@ void Blockchain::createGenesisBlock()
         }
     }
 
-    file.close();
+    //    file.close();
 
     Block prevBlock = getLastBlock();
 
@@ -486,16 +491,8 @@ bool Blockchain::validateBlock(const Block &block)
 
 Block Blockchain::validateAndReturnBlock(const Block &block)
 {
-    //    if (validateBlock(block))
-    //    {
+    // Get prev block hash and check if it exists in current one
     return block;
-    //    }
-    //    else
-    //    {
-    //        qWarning() << "Block:" << block.getIndex() << "it is corrupted";
-    //        emit BlockCorrupted(block);
-    //        return Block();
-    //    }
 }
 
 GenesisBlock *Blockchain::readGenesisBlock(const Block &prevBlock, const QByteArray &prevGenesisHash)

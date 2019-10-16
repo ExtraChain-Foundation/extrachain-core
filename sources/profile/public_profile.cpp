@@ -90,7 +90,7 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
     {
         file.open(QIODevice::ReadOnly);
         QByteArray dataFromFile = file.readAll();
-        QByteArrayList list = Serialization::universalDesirialize(dataFromFile, 4);
+        QByteArrayList list = Serialization::universalDeserialize(dataFromFile, 4);
         for (int i = 0; i < list.size(); i = i + 2)
         {
             if (id == list.at(i))
@@ -132,9 +132,8 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
         else
             profile.resize(0);
     }
-    QByteArray signWrite = sign + Utils::intToByteArray(sign.size(), 4);
     profile.open(QIODevice::WriteOnly);
-    profile.write(newProfile + signWrite);
+    profile.write(newProfile);
     profile.flush();
     profile.close();
 #ifdef ETALONIUM_CLIENT

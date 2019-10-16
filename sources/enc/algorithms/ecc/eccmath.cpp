@@ -4,7 +4,7 @@ BigNumber ECC::inverseMod(BigNumber k, BigNumber p)
 {
     if (k < 0)
         return p - inverseMod(-k, p);
-    assert(k != 0);
+    //    assert(k != 0);
     BigNumber kc = k, pc = p;
     BigNumber b0 = p, t, q;
     BigNumber x0 = 0, x1 = 1;

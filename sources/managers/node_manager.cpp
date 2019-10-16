@@ -45,7 +45,6 @@ NodeManager::NodeManager()
     accController->loadActors();                                         //!!!
     TMP::companyActorId = new QByteArray(company.getId().toByteArray()); //!!!
     actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
-    qDebug() << "Company id->" << *TMP::companyActorId << " " << company.getId().toByteArray();
     Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
     newTransaction.setSenderBalance(BigNumber("0"));
     newTransaction.setReceiverBalance(BigNumber("0"));

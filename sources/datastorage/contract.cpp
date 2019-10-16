@@ -230,5 +230,5 @@ const QByteArray Contract::serialize() const
 
 const QList<QByteArray> Contract::deserialize(const QByteArray &serialized) const
 {
-    return Serialization::universalDesirialize(serialized, CONTRACT_FIELDS_SIZE);
+    return Serialization::universalDeserialize(serialized, CONTRACT_FIELDS_SIZE);
 }

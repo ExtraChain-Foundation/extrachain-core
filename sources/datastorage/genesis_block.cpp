@@ -26,7 +26,7 @@ GenesisBlock::GenesisBlock(const QByteArray &data, const Block *prevBlock, const
 
 void GenesisBlock::addRow(const GenesisDataRow &row)
 {
-    this->data += (row.serialize() + Serialization::DEFAULT_LIST_SPLITTER);
+    this->data += row.serialize();
 }
 
 QByteArray GenesisBlock::getDataForDigSig() const
@@ -41,9 +41,7 @@ QByteArray GenesisBlock::getDataForHash() const
 
 bool GenesisBlock::deserialize(const QByteArray &serialized)
 {
-    //    QList<QByteArray> l = Serialization::deserialize(
-    //                serialized, Serialization::BLOCK_FIELD_SPLITTER);
-    QList<QByteArray> l = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
     qDebug() << "GenesisBlock::deserialize" << l.length();
     if (l.length() == 8)
     {
@@ -64,7 +62,7 @@ QByteArray GenesisBlock::serialize() const
 
 QList<GenesisDataRow> GenesisBlock::extractDataRows() const
 {
-    QList<QByteArray> txsData = Serialization::deserialize(data, Serialization::DEFAULT_LIST_SPLITTER);
+    QList<QByteArray> txsData = Serialization::universalDeserialize(data, Serialization::DEFAULT_FIELD_SIZE);
     QList<GenesisDataRow> genesisDataRows;
     for (const QByteArray &dataRow : txsData)
     {

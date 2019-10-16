@@ -356,7 +356,7 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
     msg.init(data);
     if (msgType != Messages::ACTOR_MESSAGE)
         signMessage(msg);
-
+    qDebug() << "NetManager: send " << msgType;
     QByteArray message = msg.serialize();
     //    if (!addResponseHandler(message, messageType))
     //    {

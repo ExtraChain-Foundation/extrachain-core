@@ -118,7 +118,6 @@ Block TransactionManager::makeBlock()
 
     qDebug() << QString("Created block: [%1]").arg(block.toString());
     QByteArray blockSerialize = block.serialize();
-    qDebug() << blockSerialize;
     emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
 
     this->pendingTxs.clear();

@@ -24,7 +24,7 @@ const QByteArray GetTxMessage::serialize() const
 
 void GetTxMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
     this->param = SearchEnum::fromStringTxParam(list.at(0));
     this->value = list.at(1);
 }

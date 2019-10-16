@@ -47,7 +47,7 @@ Block::Block(const QByteArray &serialized)
 Block::Block(const QByteArray &data, const Block *prev)
     : Block()
 {
-    if (prev->isEmpty())
+    if (prev == nullptr)
     {
         // qDebug() << "BLOCK: Construction first block";
         this->index = BigNumber("0");
@@ -124,7 +124,7 @@ bool Block::deserialize(const QByteArray &serialized)
 
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::BLOCK_FIELD_SPLITTER);
-    QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
 
     if (list.length() == 8)
     {
@@ -169,13 +169,12 @@ QList<Transaction> Block::extractTransactions() const
 {
     if (type != Config::DATA_BLOCK_TYPE)
     {
-        QList<Transaction> transactions;
-        return transactions;
+        return QList<Transaction>();
     }
 
     //    QList<QByteArray> txsData =
     //        Serialization::deserialize(data, Serialization::DEFAULT_LIST_SPLITTER);
-    QList<QByteArray> txsData = Serialization::universalDesirialize(data, FIELDS_SIZE);
+    QList<QByteArray> txsData = Serialization::universalDeserialize(data, FIELDS_SIZE);
     QList<Transaction> transactions;
     for (const QByteArray &trData : txsData)
     {
