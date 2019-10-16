@@ -27,7 +27,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
 {
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
-    QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELS_SIZE);
     if (list.size() == 14)
     {
         this->sender = BigNumber(list.at(0));

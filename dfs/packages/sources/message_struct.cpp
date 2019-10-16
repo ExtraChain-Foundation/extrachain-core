@@ -1,48 +1,42 @@
 #include "dfs/packages/headers/message_struct.h"
 
-Message::dfs_message::dfs_message(const QString &filePath, const long long &packageNumber,
-                                  const long long &countFilePackage, const QByteArray &data)
+Message::dfs_message::dfs_message(const QByteArray &hash, const long long &pckgNumber, const QByteArray &data)
+    : IDfs_Message(m_type)
 {
-    this->filePath = filePath;
-    this->packageNumber = packageNumber;
-    this->countFilePackage = countFilePackage;
-    this->data_size = data.size();
+    this->title_hash = hash;
+    this->pckgNumber = pckgNumber;
     this->data = data;
 }
 
 Message::dfs_message::dfs_message(const QByteArray &serialized)
+    : IDfs_Message(m_type)
 {
     QList<QByteArray> list = deserialize(serialized);
-    if (list.size() != 5)
+    if (list.size() != FIELDS_COUNT)
     {
         qDebug() << "[&Message::dfs_message_struct] incorrect list size";
         return;
     }
-    filePath = list.at(0);
-    packageNumber = list.at(1).toLong();
-    countFilePackage = list.at(2).toLong();
-    data_size = list.at(3).toInt();
-    data = list.at(4);
+    title_hash = list.takeFirst();
+    pckgNumber = list.takeFirst().toLong();
+    data = list.takeFirst();
 }
 
 Message::dfs_message::dfs_message(const Message::dfs_message &temp)
+    : IDfs_Message(m_type)
 {
-    filePath = temp.filePath;
-    packageNumber = temp.packageNumber;
-    countFilePackage = temp.countFilePackage;
-    data_size = temp.data_size;
+    title_hash = temp.title_hash;
+    pckgNumber = temp.pckgNumber;
     data = temp.data;
 }
 
-const QByteArray Message::dfs_message::serialize() const
+Message::dfs_message::~dfs_message()
 {
-    QList<QByteArray> list;
-    list << filePath.toUtf8() << QByteArray::number(packageNumber) << QByteArray::number(countFilePackage)
-         << QByteArray::number(data_size) << data;
-    return Serialization::universalSerialize(list, dfs_message_field_size);
 }
 
-const QList<QByteArray> Message::dfs_message::deserialize(const QByteArray &serialized) const
+const QList<QByteArray> Message::dfs_message::serializedParams() const
 {
-    return Serialization::universalDesirialize(serialized, dfs_message_field_size);
+    QList<QByteArray> list;
+    list << title_hash << QByteArray::number(pckgNumber) << data;
+    return list;
 }

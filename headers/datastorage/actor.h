@@ -123,7 +123,7 @@ public:
                 // old method of serialize
                 //                QList<QByteArray> list = Serialization::deserialize(
                 //                    serialized, Serialization::DEFAULT_FIELD_SPLITTER);
-                QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+                QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
 
                 this->id = BigNumber(list.at(0));
                 this->key = new T(list.at(1));
@@ -131,7 +131,7 @@ public:
             }
             else
             {
-                QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+                QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
                 if (list.length() >= 2)
                 {
                     this->id = BigNumber(list.at(0));

@@ -13,9 +13,6 @@
 // private:
 //    QList<Contract> contractList;
 
-// public:
-//    ContractManager(AccountController *accountController, Blockchain *blockchain);
-
 //    void saveContract(const Contract &contract);
 
 // public slots:

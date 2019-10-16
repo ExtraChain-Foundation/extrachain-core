@@ -72,7 +72,7 @@ signals:
      */
     //    void requestData(Messages::DfsRequest request);
 
-    void sendRequest(const Messages::DfsRequest &msg);
+    //    void sendRequest(const Messages::DfsRequest &msg);
 
     //
     void usersChanged(QByteArray data, based_dfs_struct::Type type, BigNumber actorId);

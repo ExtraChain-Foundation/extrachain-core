@@ -323,7 +323,7 @@ QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, cons
     return serialized;
 }
 
-QList<QByteArray> Serialization::universalDesirialize(const QByteArray &serialized, const int &fiels_size)
+QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serialized, const int &fiels_size)
 {
     QList<QByteArray> list = {};
     int pos = 0;

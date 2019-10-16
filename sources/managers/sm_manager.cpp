@@ -151,7 +151,7 @@ void SmartContractManager::initializeTokenArray()
         if (file.open(QIODevice::ReadOnly))
         {
             QByteArray data = file.readLine();
-            QList<QByteArray> list = Serialization::universalDesirialize(data, 4);
+            QList<QByteArray> list = Serialization::universalDeserialize(data, 4);
             if (list.size() != 7)
             {
                 qDebug() << "[smm_manager][initializeTokenArray] Error when open file " << file.fileName()

@@ -29,6 +29,6 @@ const QByteArray GetActorMessage::serialize() const
 
 void GetActorMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDesirialize(serilaized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
     this->actorId = BigNumber(list.at(0));
 }

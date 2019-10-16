@@ -43,7 +43,7 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
 {
     BigNumber z = BigNumber(Utils::calcKeccak(data));
-    QList<QByteArray> signature = Serialization::universalDesirialize(dsignBase64, 3);
+    QList<QByteArray> signature = Serialization::universalDeserialize(dsignBase64, 3);
     BigNumber r(signature[0]), s(signature[1]);
     BigNumber w = ECC::inverseMod(s, curve.n);
     BigNumber u1 = (z * w) % curve.n;

@@ -4,7 +4,7 @@ void Dfs::signalConnections()
 {
     qDebug() << connect(dfsIndex, &DfsIndex::sendData, this, &Dfs::sendMessage);
     qDebug() << "dfs request connection" << connect(dfsIndex, &DfsIndex::sendToUser, this, &Dfs::sendToPeer);
-    connect(dfsIndex, &DfsIndex::sendRequest, this, &Dfs::sendRequestf);
+    //    connect(dfsIndex, &DfsIndex::sendRequest, this, &Dfs::sendRequestf);
 }
 
 Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent)
@@ -108,47 +108,15 @@ void Dfs::init()
     }
     qDebug() << "[Dfs]:: dfs has been init";
     emit beginTest();
-    Subscribtion sub;
-    QList<BigNumber> listUsers = sub.getAll(accountControler->getMainActor()->getId());
-    for (const BigNumber &i : listUsers)
-        if (actorIndex->getActor(i).getAccount() && (i != accountControler->getMainActor()->getId()))
-            listUsers.append(i);
-    std::for_each(listUsers.begin(), listUsers.end(), [this](BigNumber userId) {
-        Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toActorId());
-        emit sendRequestf(rqst);
-    });
 }
 
 void Dfs::initUser(BigNumber userId)
 {
     dfsIndex->makeSystemDir(userId);
     CardManager::createdAllCards(userId);
-    Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toActorId());
-    emit sendRequestf(rqst);
     qDebug() << "init start dfs for user - " << userId.toActorId();
 }
 
-void Dfs::recieveRequest(Messages::DfsRequest request, QString peerAdress)
-{
-    switch (request.getRequest())
-    {
-    case DFS_REQUESTS::DFS_ALL:
-    {
-        QList<QString> list;
-        QList<BigNumber> actorList;
-        list << CardManager::getAllFiles(
-            BigNumber(request.getFilePath().toUtf8()) /*BigNumber(request.getFilePath().toUtf8())*/);
-        for (QString &el : list)
-            dfsIndex->dfsSender(el, peerAdress);
-        return;
-    }
-    case DFS_REQUESTS::FILE_REQUEST:
-    {
-        if (QFile(request.getFilePath()).exists())
-            dfsIndex->dfsSender(request.getFilePath(), "");
-    }
-    }
-}
 void Dfs::getUserDataAnswer(int request, QByteArray data)
 {
     switch (request)
@@ -213,10 +181,7 @@ void Dfs::recieve(Messages::DfsMessage msg)
         {
             QStringList requestList =
                 dfsIndex->fileCompareAndReturnDifference(file.fileName(), msg.getFilePath());
-            std::for_each(requestList.begin(), requestList.end(), [this](QString el) {
-                Messages::DfsRequest request(DFS_REQUESTS::FILE_REQUEST, el);
-                emit sendRequestf(request);
-            });
+
             return;
         }
     }
@@ -258,21 +223,6 @@ void Dfs::recieve(Messages::DfsMessage msg)
 
 void Dfs::process()
 {
-}
-
-void Dfs::getDfsRequest(const Messages::DfsRequest &msg)
-{
-    qDebug() << msg.serialize();
-}
-
-void Dfs::checkStatus(const Messages::DfsStatus &msg)
-{
-    std::vector<std::pair<std::string, std::string>> localFileList =
-        CardManager::getAllFileWithHash(msg.getActorId());
-    QStringList list = CardManager::getAllNotEmptyCardFile(msg.getActorId());
-    if (localFileList != msg.getList())
-        for (QString el : list)
-            dfsIndex->dfsSender(el, "");
 }
 
 void Dfs::resolveMsg(const Messages::DfsMessage &msg)

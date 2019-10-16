@@ -20,7 +20,7 @@ Q_DECLARE_METATYPE(Messages::DfsMessage)
 Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
 // Q_DECLARE_METATYPE(Contract)
-Q_DECLARE_METATYPE(Messages::DfsRequest)
+// Q_DECLARE_METATYPE(Messages::DfsRequest)
 Q_DECLARE_METATYPE(Messages::DownloadDfsRequestData)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
 Q_DECLARE_METATYPE(based_dfs_struct::Type)
@@ -43,7 +43,7 @@ void registerMetaTypes()
     qRegisterMetaType<QHostAddress>();
     qRegisterMetaType<Actor<KeyPublic>>();
     qRegisterMetaType<Transaction>();
-    qRegisterMetaType<Messages::DfsRequest>();
+    //    qRegisterMetaType<Messages::DfsRequest>();
     qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
     //    qRegisterMetaType<Contract>();

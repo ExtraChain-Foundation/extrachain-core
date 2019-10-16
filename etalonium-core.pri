@@ -6,6 +6,7 @@ SOURCES += \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/message_struct.cpp \
+    $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
     $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
@@ -69,7 +70,9 @@ SOURCES += \
     $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
+    $$PWD/dfs/packages/headers/dfs_message_interface.h \
     $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/dfs/packages/headers/title_message.h \
     $$PWD/headers/enc/algorithms/aes.h \
     $$PWD/headers/enc/algorithms/blowfish_crypt.h \
     $$PWD/headers/enc/algorithms/ecc/curves.h \

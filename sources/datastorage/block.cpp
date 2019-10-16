@@ -124,7 +124,7 @@ bool Block::deserialize(const QByteArray &serialized)
 
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::BLOCK_FIELD_SPLITTER);
-    QList<QByteArray> list = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
 
     if (list.length() == 8)
     {
@@ -175,7 +175,7 @@ QList<Transaction> Block::extractTransactions() const
 
     //    QList<QByteArray> txsData =
     //        Serialization::deserialize(data, Serialization::DEFAULT_LIST_SPLITTER);
-    QList<QByteArray> txsData = Serialization::universalDesirialize(data, FIELDS_SIZE);
+    QList<QByteArray> txsData = Serialization::universalDeserialize(data, FIELDS_SIZE);
     QList<Transaction> transactions;
     for (const QByteArray &trData : txsData)
     {

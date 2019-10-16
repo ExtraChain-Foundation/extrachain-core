@@ -43,7 +43,7 @@ bool GenesisBlock::deserialize(const QByteArray &serialized)
 {
     //    QList<QByteArray> l = Serialization::deserialize(
     //                serialized, Serialization::BLOCK_FIELD_SPLITTER);
-    QList<QByteArray> l = Serialization::universalDesirialize(serialized, FIELDS_SIZE);
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
     qDebug() << "GenesisBlock::deserialize" << l.length();
     if (l.length() == 8)
     {
