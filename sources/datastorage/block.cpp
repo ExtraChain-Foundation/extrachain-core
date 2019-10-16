@@ -290,8 +290,7 @@ bool Block::operator<(const Block &other)
 
 bool Block::isBlock(const QByteArray &data)
 {
-    QByteArray type(data, Config::DATA_BLOCK_TYPE.size() + Serialization::DEFAULT_FIELD_SIZE);
-    return type.contains(Config::DATA_BLOCK_TYPE);
+    return data.contains(Config::DATA_BLOCK_TYPE);
 }
 
 QList<Block> Block::getDataFromAllBlocks(QList<QByteArray> paths)

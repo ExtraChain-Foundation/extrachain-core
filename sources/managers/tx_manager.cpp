@@ -116,7 +116,7 @@ Block TransactionManager::makeBlock()
     // blockchain->signBlock(block); // Non-approved code
     block.sign(accountController->getCurrentActor());
 
-    qDebug() << QString("Created block: [%1]").arg(block.toString());
+    qDebug() << "Created block:" << block.getIndex();
     QByteArray blockSerialize = block.serialize();
     emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
 

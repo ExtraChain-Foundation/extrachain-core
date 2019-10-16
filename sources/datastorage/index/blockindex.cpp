@@ -82,7 +82,8 @@ Block BlockIndex::getBlockById(const BigNumber &id) const
 {
     QByteArray serializedBlock = this->getById(id);
     //    qDebug() << "BLOCK: " << serializedBlock;
-    if (!serializedBlock.isEmpty() && Block::isBlock(serializedBlock))
+    if (!serializedBlock.isEmpty()
+        && (Block::isBlock(serializedBlock) || GenesisBlock::isGenesisBlock(serializedBlock)))
     {
         return Block(serializedBlock);
     }

@@ -6,8 +6,6 @@ Blockchain::Blockchain(AccountController *accountController, bool fileMode)
 {
     actorIndex = accountController->getActorIndex();
     genBlockData.clear();
-    connect(this, &Blockchain::NewBlock, this,
-            &Blockchain::BlockIsMissing); // non-approved code
 }
 
 Blockchain::~Blockchain()
@@ -274,7 +272,6 @@ int Blockchain::mergeBlockWithLocal(const Block &received)
     {
         removeBlock(existed);
         int res = addBlock(received);
-        emit NewBlock(received);
         return res;
     }
 
@@ -327,7 +324,6 @@ int Blockchain::mergeBlockWithLocal(const Block &received)
     {
         addBlock(b);
     }
-    emit NewBlock(merged); // Non-approved code
     //  emit SendMergedBlock(existed, received, merged);
     return 0;
 }
@@ -458,7 +454,11 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     {
         qDebug() << "Adding a block" << block.getIndex() << "to storage";
     }
-
+    //    if (!GenesisBlock::isGenesisBlock(block.serialize()))
+    //    {
+    //        BigNumber id = block.getIndex() - 1;
+    //        emit sendMessage(id.toByteArray(), Messages::GET_BLOCK_MESSAGE);
+    //    }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -466,7 +466,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     case 0:
     {
         emit updateLastTransactionList(); // TODO: ?
-        qDebug() << "Block" << block.getIndex() << "is successfully added to blockchain";
+        qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         emit sendMessage(block.serialize(), block_message);
         break;
     }
@@ -837,7 +837,6 @@ void Blockchain::proveTx()
     qDebug() << "proveTx: started";
     QObject *s = QObject::sender();
     Transaction *tx = qobject_cast<Transaction *>(s);
-    qDebug() << tx->getSender() << *TMP::companyActorId << actorIndex->companyId << " SEVA 4Mo";
     if (tx->getSender() == BigNumber(*actorIndex->companyId))
     {
         bool sig = actorIndex->getActor(BigNumber(*actorIndex->companyId))

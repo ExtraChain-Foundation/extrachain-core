@@ -198,16 +198,19 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     if (msgType == PROFILE_FILE)
     {
         emit newProfile(message.getMsg_data());
+        emit TaskFinished();
     }
     else if (msgType == ACTOR_MESSAGE)
     {
         Actor<KeyPublic> actor(message.getMsg_data());
         emit newActor(actor);
+        emit TaskFinished();
     }
     else if (msgType == DFS_CHANGES_MESSAGE)
     {
         DfsMessage message(msg);
         emit newDfsPack(message);
+        emit TaskFinished();
     }
     else if (msgType == BLOCK_MESSAGE)
     {
@@ -218,16 +221,19 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             return;
         }
         emit newBlock(block);
+        emit TaskFinished();
     }
     else if (msgType == GENESIS_BLOCK_MESSAGE)
     {
         Block block = message.getMsg_data();
         emit newBlock(block);
+        emit TaskFinished();
     }
     else if (msgType == COIN_REQUEST)
     {
         BigNumber amount(message.getMsg_data());
         emit coinRequest(message.getSigner(), amount);
+        emit TaskFinished();
     }
     else if (msgType == TX_MESSAGE)
     {
@@ -238,24 +244,28 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             return;
         }
         emit newTx(tx);
+        emit TaskFinished();
     }
     else if (msgType == CONTRACT_MESSAGE)
     {
         //        Contract contract(message.getMsg_data());
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << CONTRACT_MESSAGE;
+        emit TaskFinished();
     }
 
     else if (msgType == MERGED_BLOCK_MESSAGE)
     {
         //
         qDebug() << "[resolve message] MERGED_BLOCK_MESSAGE";
+        emit TaskFinished();
     }
     else if (msgType == BLOCK_APPROVED_MESSAGE)
     {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << BLOCK_APPROVED_MESSAGE;
         BlockApprovedMessage r(message.getMsg_data());
+        emit TaskFinished();
 
         //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
     }
@@ -293,6 +303,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         BaseMessageResponse responseMessage(msg);
         if (checkResponseHandler(responseMessage.getDataHash()))
             emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        emit TaskFinished();
     }
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
     {
@@ -308,6 +319,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             return;
         }
         emit newTx(tx);
+        emit TaskFinished();
     }
     else if (msgType == GET_BLOCK_RESPONSE_MESSAGE)
     {
@@ -323,7 +335,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             qDebug() << "Received block" << block.getIndex() << "is not valid";
             return;
         }
-        emit newBlock(block);
+        emit handleBlock(block);
+        emit TaskFinished();
     }
     else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
     {
@@ -332,6 +345,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             return;
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_BLOCK_COUNT_RESPONSE_MESSAGE;
+        BigNumber count(responseMessage.getMsg_data());
+        BaseMessage msg1(GET_BLOCK_MESSAGE);
+        msg1.init(responseMessage.getMsg_data());
+        msg1.calcDigSig(ac->getCurrentActor());
+        emit secondWave(msg1.serialize());
+        emit TaskFinished();
     }
     else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
     {
@@ -340,6 +359,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             return;
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
+        emit TaskFinished();
     }
 }
 

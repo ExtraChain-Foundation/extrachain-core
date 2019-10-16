@@ -358,13 +358,6 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
         signMessage(msg);
     qDebug() << "NetManager: send " << msgType;
     QByteArray message = msg.serialize();
-    //    if (!addResponseHandler(message, messageType))
-    //    {
-    //        FileList list;
-    //        QFile file(".handler");
-    //        list.setFileList(file);
-    //        list.add(msg.hash(), "0");
-    //    }
     broadcastMsg(message);
 }
 

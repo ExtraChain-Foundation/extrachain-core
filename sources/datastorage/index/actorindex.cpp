@@ -111,7 +111,6 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
-    qDebug() << "SEVA" << key.profile().getProfile() << key.profile().sign;
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
@@ -128,6 +127,8 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     qDebug() << "Save profile with id" << newProfile.at(2);
     QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
+    if (key->profile().sign.isEmpty())
+        emit sendMessage("", Messages::GET_BLOCK_COUNT_MESSAGE);
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
     if (pubProfile.sign == "")
     {
@@ -136,8 +137,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     }
     else
     {
-        qDebug() << "SEVA" << key->profile().getProfile() << key->profile().sign;
-        sendMessage(pubProfile.serialize(), profileType);
+        emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
 

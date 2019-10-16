@@ -37,6 +37,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
+    connect(resolver, &ResolverService::handleBlock, blockchain, &Blockchain::addBlockToBlockchain);
     // response signals
     connect(actorIndex, &ActorIndex::responseReady, resolver, &ResolverService::responseReady);
     connect(blockchain, &Blockchain::responseReady, resolver, &ResolverService::responseReady);

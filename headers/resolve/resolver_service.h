@@ -195,6 +195,7 @@ signals:
     void getActorsCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
+    void handleBlock(const Block &block);
 
     // signal for thread pool
     void finished();

@@ -73,8 +73,7 @@ QList<GenesisDataRow> GenesisBlock::extractDataRows() const
 
 bool GenesisBlock::isGenesisBlock(const QByteArray &serialized)
 {
-    QByteArray type(serialized, Config::GENESIS_BLOCK_TYPE.size());
-    return type.contains(Config::GENESIS_BLOCK_TYPE);
+    return serialized.contains(Config::GENESIS_BLOCK_TYPE);
 }
 
 void GenesisBlock::setPrevGenHash(const QByteArray &value)
