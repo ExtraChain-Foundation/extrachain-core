@@ -114,25 +114,31 @@ NetManager::~NetManager()
 
 void NetManager::findLocal()
 {
+    const auto allInterfaces = QNetworkInterface::allInterfaces();
     const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
     QList<QHostAddress> localIpNotConnect;
-    for (const QNetworkInterface &ni : QNetworkInterface::allInterfaces())
+
+    for (const QNetworkInterface &interface : allInterfaces)
     {
-        for (const QNetworkAddressEntry &address : ni.addressEntries())
+        const auto entries = interface.addressEntries();
+
+        for (const QNetworkAddressEntry &address : entries)
         {
             if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
             {
-                qDebug() << "NET MANAGER: local ip: " << address.ip().toString() << " " << ni;
+                qDebug() << "NET MANAGER: local ip: " << address.ip().toString() << " " << interface;
                 localIpNotConnect.append(address.ip());
             }
         }
     }
 
-    for (const auto &interface : QNetworkInterface::allInterfaces())
+    for (const QNetworkInterface &interface : allInterfaces)
     {
-        for (const auto &entry : interface.addressEntries())
+        const auto entries = interface.addressEntries();
+
+        for (const QNetworkAddressEntry &entry : entries)
         {
-#ifdef Q_OS_WINDOWS
+#ifdef Q_OS_WIN
             // hack for windows: TODO!
             const auto flags = interface.flags();
 
@@ -145,6 +151,7 @@ void NetManager::findLocal()
             socket->connectToHost("8.8.8.8", 53);
             bool isConnected = socket->waitForConnected(1000);
             socket->deleteLater();
+
             if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint || !isConnected)
                 continue;
 #endif
