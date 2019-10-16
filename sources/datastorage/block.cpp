@@ -97,7 +97,7 @@ QByteArray Block::getDataForHash() const
 
 QByteArray Block::getDataForDigSig() const
 {
-    return type + data + index.serialize() + approver.toActorId() + QByteArray::number(date) + prevHash
+    return type + data + index.toByteArray() + approver.toActorId() + QByteArray::number(date) + prevHash
         + hash;
 }
 

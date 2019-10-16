@@ -62,7 +62,7 @@ short BaseMessage::getFieldsCount() const
 QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
-    l << protocol << msgType << signer.serialize() << digSig << msg_data;
+    l << protocol << msgType << signer.toActorId() << digSig << msg_data;
     return l;
 }
 

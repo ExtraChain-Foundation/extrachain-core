@@ -424,7 +424,7 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 {
     qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
     // accController->loadActors();
-    accController->changeUserNum(walletId.serialize());
+    accController->changeUserNum(walletId.toActorId());
     uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId, uiWallet->getCurrentToken()));
 
     // updateWalletList();

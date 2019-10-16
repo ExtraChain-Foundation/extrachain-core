@@ -269,7 +269,7 @@ void AccountController::changeUserNum(QByteArray wallId)
     for (auto currAcc : accounts)
     {
         qDebug() << "ACCOUNT CONTROLLER: change userNum" << currAcc->getId().toByteArray(10) << " " << wallId;
-        if (currAcc->getId().serialize() == wallId)
+        if (currAcc->getId().toActorId() == wallId)
         {
             emit updateTransactionListInModel();
             break;

@@ -131,9 +131,9 @@ void Transaction::calcHash()
 
 QByteArray Transaction::getDataForHash() const
 {
-    return (sender.serialize() + receiver.serialize() + amount.serialize() + QByteArray::number(date) + data
-            + token.toActorId() + senderBalance.serialize() + receiverBalance.serialize()
-            + prevBlock.serialize() + QByteArray::number(gas) + approver.serialize());
+    return (sender.toActorId() + receiver.toActorId() + amount.toByteArray() + QByteArray::number(date) + data
+            + token.toActorId() + senderBalance.toByteArray() + receiverBalance.toByteArray()
+            + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId());
 }
 
 QByteArray Transaction::getDataForDigSig() const

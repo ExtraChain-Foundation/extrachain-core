@@ -31,7 +31,7 @@ public:
     QByteArray serialize() const
     {
         QList<QByteArray> l;
-        l << actorId.serialize() << state.serialize() << token.serialize();
+        l << actorId.toActorId() << state.toByteArray() << token.toActorId();
         return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
     void deserialize(const QByteArray &serialized)

@@ -29,7 +29,7 @@ void BlockApprovedMessage::initFields(QLinkedList<QByteArray> &list)
 QList<QByteArray> BlockApprovedMessage::serializedParams() const
 {
     QList<QByteArray> l = BaseMessage::serializedParams();
-    l << blockId.serialize() << approver.serialize();
+    l << blockId.toByteArray() << approver.toActorId();
     return l;
 }
 
