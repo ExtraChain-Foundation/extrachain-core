@@ -5,6 +5,7 @@ KeyPublic::KeyPublic(EllipticPoint pbKey)
 }
 KeyPublic::KeyPublic(QByteArray pbKey)
 {
+
     this->pbkey = EllipticPoint(pbKey);
 }
 KeyPublic::KeyPublic(const KeyPublic &keyPublic)
@@ -18,26 +19,27 @@ KeyPublic::KeyPublic()
 }
 QByteArray KeyPublic::encrypt(const QByteArray &data)
 {
-    //    QList<QByteArray> res;
-    //    QByteArray result;
-    //    BigNumber r;
-    //    EllipticPoints R;
-    //    EllipticPoints S;
-    //    do
-    //    {
-    //        res.clear();
-    //        r = BigNumber::random(30);
-    //        R = ECC::GPoint * r;
-    //        S = this->pbkey * r;
-    //        res.append(S.CryptMessage(data));
-    //        res.append(R.getX().toByteArray());
-    //        res.append(R.getY().toByteArray());
-    //        result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
-    //        res.clear();
-    //        res = Serialization::universalDesirialize(result, Serialization::DEFAULT_FIELD_SIZE);
-    //    } while (res.size() != 3);
-    //    return result;
-    return "";
+    QList<QByteArray> res;
+    QByteArray result;
+    BigNumber r;
+    EllipticPoint R;
+    EllipticPoint S;
+    ECC::curve secpCurve;
+    do
+    {
+        res.clear();
+
+        r = BigNumber::random(64, curve.p);
+        R = ECC::multiply(secpCurve, r, secpCurve.g);
+        S = ECC::multiply(secpCurve, r, this->pbkey);
+        res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));
+        res.append(R.X().toByteArray());
+        res.append(R.Y().toByteArray());
+        result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
+        res.clear();
+        res = Serialization::universalDeserialize(result, Serialization::DEFAULT_FIELD_SIZE);
+    } while (res.size() != 3);
+    return result;
 }
 
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)

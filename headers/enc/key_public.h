@@ -8,7 +8,7 @@
 
 //#include <QDir>
 //#include <QDebug>
-
+#include "enc/algorithms/blowfish_crypt.h"
 #include "utils/bignumber.h"
 #include "enc/algorithms/ecc/eccmath.h"
 #include "enc/algorithms/ecc/curves.h"

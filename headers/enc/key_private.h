@@ -9,6 +9,7 @@
 
 #include <QDebug>
 #include "utils/bignumber.h"
+#include "enc/algorithms/blowfish_crypt.h"
 #include "enc/algorithms/ecc/ellipticpoint.h"
 #include "enc/algorithms/ecc/curves.h"
 #include "enc/algorithms/ecc/eccmath.h"
@@ -32,6 +33,9 @@ public:
     KeyPrivate(const QByteArray &keyPrivate);
     KeyPrivate(const KeyPrivate &keyPrivate);
     ~KeyPrivate();
+
+public:
+    EllipticPoint generate();
 
 public: // Cryptor interface
     QByteArray encrypt(const QByteArray &data);

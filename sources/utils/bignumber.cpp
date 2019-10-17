@@ -246,6 +246,7 @@ BigNumber BigNumber::operator-() const
 
 mpz_class BigNumber::data() const
 {
+
     return m_data;
 }
 
@@ -261,10 +262,7 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
-    QByteArray number(ch);
-    delete ch;
-    return number;
+    return QByteArray::fromStdString(m_data.get_str(base));
 }
 
 QByteArray BigNumber::toActorId() const
@@ -343,7 +341,6 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
     {
         result = random(n);
     } while (result >= max);
-    std::cout << "random n max: " << result.toByteArray().toStdString() << std::endl;
     return result;
 }
 
