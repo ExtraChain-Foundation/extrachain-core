@@ -113,8 +113,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 #ifdef Q_OS_ANDROID
             __android_log_print(ANDROID_LOG_DEBUG, "Etalonium", "%s", logStr.toStdString().c_str());
 #else
-        printf("%s\n", logStr.toStdString().c_str());
-//        std::cout << logStr.toStdString() << std::endl;
+        std::cout << logStr.toStdString() << "\n";
 #endif
     }
 
