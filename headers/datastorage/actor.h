@@ -166,8 +166,9 @@ public:
             key = new T();
             if (typeid(T) == typeid(KeyPrivate))
             {
-                QByteArray hashPubKey =
-                    Utils::calcKeccak(reinterpret_cast<KeyPrivate *>(key)->getPublicKey());
+                KeyPrivate *k = reinterpret_cast<KeyPrivate *>(key);
+                k->generate();
+                QByteArray hashPubKey = Utils::calcKeccak(k->getPublicKey());
                 if (hashPubKey.size() >= 20)
                 {
                     id = BigNumber(hashPubKey.mid(hashPubKey.size() - 20));
