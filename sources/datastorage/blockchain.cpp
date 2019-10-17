@@ -454,11 +454,14 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     {
         qDebug() << "Adding a block" << block.getIndex() << "to storage";
     }
-    //    if (!GenesisBlock::isGenesisBlock(block.serialize()))
-    //    {
-    //        BigNumber id = block.getIndex() - 1;
-    //        emit sendMessage(id.toByteArray(), Messages::GET_BLOCK_MESSAGE);
-    //    }
+    if (!GenesisBlock::isGenesisBlock(block.serialize()))
+    {
+        if (block.getIndex() != 0)
+        {
+            BigNumber id = block.getIndex() - 1;
+            emit sendMessage(id.toByteArray(), Messages::GET_BLOCK_MESSAGE);
+        }
+    }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -756,6 +759,12 @@ void Blockchain::checkBlockExistence(const Block &block)
             //      emit SendMergedBlock(last, block, merged);
         }
     }
+}
+
+void Blockchain::blockCountResponse(const BigNumber &count)
+{
+    if (blockIndex.getLastSavedId() < count)
+        emit sendMessage(count.toByteArray(), get_block_message);
 }
 
 void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,

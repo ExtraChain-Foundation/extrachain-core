@@ -34,6 +34,8 @@ private:
     void connectSignals(ResolverService *resolver);
     void disconnectSignals(ResolverService *resolver);
 
+    const QByteArray calcKeccak256(const QByteArray &msg) const;
+
 private:
     QList<ResolverService *> getActive();
     QList<ResolverService *> getFinished();
@@ -41,9 +43,11 @@ private:
 signals:
     void finished();
     void coinRequest(BigNumber id, BigNumber amount);
+    void sendMsg(const QByteArray &msg, const QByteArray &msgType);
 public slots:
     void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void setTask(QByteArray msg, const SocketPair &receiver);
+    void registrateMsg(const QByteArray &msg, const QByteArray &msgType);
     void taskFinished();
 public slots:
     void process();

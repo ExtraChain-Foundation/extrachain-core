@@ -60,11 +60,9 @@ private:
 private:
     ActorIndex *actorIndex;
     AccountController *accounts;
-
-    //    ResolverService *resolverService;
-    //    DiscoveryService *discoveryService;
     ServerService *serverService;
     QList<SocketService *> connections;
+    QMap<QByteArray, int> *handler;
 
 #ifdef ETALONIUM_CLIENT
     QTcpSocket *socket_wer;
@@ -75,7 +73,6 @@ public:
     ~NetManager();
 
     void showMessage(const QHostAddress &from, const QString &message);
-    void sendMessageTest();
 
     void resolverMessage(const QHostAddress &from, const QString &message);
 
@@ -110,11 +107,9 @@ private:
      * @param socketList
      */
     void restoreConnections(const QList<SocketPair> &socketList);
-    // create connect from signal to slot
-    //    void setupActorIndexConnections();
+
     void setupServerServiceConnections();
     void setupDiscoveryServiceConnections();
-    //    void setupResolverServiceConnections();
     /**
      * @brief signMessage
      * @param message
@@ -125,7 +120,13 @@ private:
      * @param message
      * @return
      */
-    QByteArray calcHash(Messages::IMessage &message) const;
+    QByteArray calcHash(const Messages::IMessage &message) const;
+    /**
+     * @brief NetManager::checkMsgCount
+     * @param msg
+     * @return
+     */
+    bool checkMsgCount(const Messages::IMessage &msg);
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -186,9 +187,6 @@ public slots:
      */
     void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
                              const SocketPair &receiver);
-public slots:
-    //    void shareContract(Contract contract);
-    void sendMessageTo(BigNumber recipientId, QByteArray message);
 
 signals:
     void MessageReceived(const QByteArray &msg, const SocketPair &receiver);

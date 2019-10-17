@@ -78,11 +78,6 @@ void NetManager::process()
     connectToServer();
 }
 
-void NetManager::sendMessageTest()
-{
-    sendMessageTo(BigNumber("24"), "Yo-ma-yo");
-}
-
 void NetManager::showMessage(const QHostAddress &from, const QString &message)
 {
     qDebug() << from.toIPv4Address() << " " << message;
@@ -287,69 +282,6 @@ void NetManager::setupDiscoveryServiceConnections()
     //            &NetManager::addConnectionFromPair);
 }
 
-// void NetManager::setupResolverServiceConnections()
-//{
-//    qDebug() << "NET MANAGER: setupResolverServiceConnections";
-
-//    connect(resolverService, &ResolverService::secondWave, this, &NetManager::broadcastMsg);
-
-//    //    connect(resolverService, &ResolverService::SendGetActor, this, &NetManager::sendGetActor);
-
-//    connect(resolverService, &ResolverService::newDfsPack, this, &NetManager::newDfsPack);
-
-//    connect(resolverService, &ResolverService::receiveProfile, this, &NetManager::receiveProfile);
-//    connect(this, &NetManager::receiveProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
-
-//    // spread signals
-
-//    connect(resolverService, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
-//    connect(resolverService, &ResolverService::getActor, actorIndex, &ActorIndex::getActor);
-//    connect(resolverService, &ResolverService::getActorsCount, this, &NetManager::GetActorCount);
-
-//    connect(resolverService, &ResolverService::newBlock, this, &NetManager::AddBlock);
-//    connect(resolverService, &ResolverService::getBlock, this, &NetManager::GetBlock);
-//    connect(resolverService, &ResolverService::getBlocksCount, this, &NetManager::GetBlockCount);
-//    //    connect(resolverService, &ResolverService::NewGenesisBlock, this,
-//    //    &NetManager::handleNewGenesisBlock);
-//    connect(resolverService, &ResolverService::newTx, this, &NetManager::NewTx);
-//    connect(resolverService, &ResolverService::getTx, this, &NetManager::GetTx);
-//    connect(resolverService, &ResolverService::getTxPair, this, &NetManager::GetTxPair);
-
-//    //    connect(resolverService, &ResolverService::BlockApproved, this, &NetManager::handleBlockApproved);
-
-//    // request signals
-//    connect(resolverService, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-//    /**
-//    connect(resolverService, &ResolverService::GetActor, this, &NetManager::handleGetActor);
-//    connect(resolverService, &ResolverService::GetTx, this, &NetManager::handleGetTx);
-//    connect(resolverService, &ResolverService::CoinRequest, this, &NetManager::coinRequest);
-//    connect(resolverService, &ResolverService::GetTxPair, this, &NetManager::handleGetTxPair);
-//    connect(resolverService, &ResolverService::GetBlock, this, &NetManager::handleGetBlock);
-//    connect(resolverService, &ResolverService::GetBlockCount, this, &NetManager::handleGetBlockCount);
-//    connect(resolverService, &ResolverService::GetActorCount, this, &NetManager::handleGetActorCount);
-//    */
-//    connect(this, &NetManager::requestBlockCount, this, &NetManager::sendGetBlockCount);
-//    connect(this, &NetManager::requestActorCount, this, &NetManager::sendGetActorCount);
-//    /*********************************************************************************************/
-
-//    // responses
-//    /**
-//    connect(resolverService, &ResolverService::GetActorResponse, this, &NetManager::handleGetActorResponse);
-//    connect(resolverService, &ResolverService::GetActorCountResponse, this,
-//            &NetManager::handleGetActorCountResponse);
-//    connect(resolverService, &ResolverService::GetTxResponse, this, &NetManager::handleGetTxResponse);
-//    connect(resolverService, &ResolverService::GetTxPairResponse, this,
-//    &NetManager::handleGetTxPairResponse); connect(resolverService, &ResolverService::GetBlockResponse,
-//    this, &NetManager::handleGetBlockResponse); connect(resolverService,
-//    &ResolverService::GetBlockCountResponse, this,
-//            &NetManager::handleGetBlockCountResponse);
-//    */
-
-//#ifdef ETALONIUM_CONSOLE
-//    // connect(resolverService, &ResolverService::contractFromNetwork, this, &NetManager::shareContract);
-//#endif
-//}
-
 // Basic methods
 void NetManager::broadcastMsg(const QByteArray &msg)
 {
@@ -364,10 +296,30 @@ void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
     if (msgType != Messages::ACTOR_MESSAGE)
         signMessage(msg);
     qDebug() << "NetManager: send " << msgType;
-    QByteArray message = msg.serialize();
-    broadcastMsg(message);
-}
 
+    QByteArray message = msg.serialize();
+    if (checkMsgCount(msg))
+        broadcastMsg(message);
+}
+bool NetManager::checkMsgCount(const Messages::IMessage &msg)
+{
+    bool flag_result = true;
+    bool value = 0;
+    QMap<QByteArray, int>::iterator it = handler->find(calcHash(msg));
+    if (it == handler->end())
+        handler->insert(calcHash(msg), value);
+    else
+    {
+
+        if (handler->find(calcHash(msg)).value()++ == connections.size())
+            handler->remove(calcHash(msg));
+        //        int t = it.value() + 1;
+        //        handler->remove(calcHash(msg));
+        //        handler->insert(calcHash(msg), t);
+        flag_result = false;
+    }
+    return flag_result;
+}
 void NetManager::dfsMessageTmp(const DfsMessage &msg)
 {
     broadcastMsg(msg.serialize());
@@ -380,6 +332,7 @@ void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &m
     if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
         signMessage(rmsg);
 
+    qDebug() << "NetManager: send " << msgType;
     emit sendMsg(rmsg.serialize(), receiver);
 }
 
@@ -394,11 +347,6 @@ void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int 
     SocketPair socketPair(peerAddress.toString().toStdString(), port, this);
     emit sendMsg(msg.serialize(), socketPair);
 }
-
-// ResolverService *NetManager::getResolverService()
-//{
-//    return resolverService;
-//}
 
 void NetManager::upnpErrDis(QString msg)
 {
@@ -463,53 +411,10 @@ void NetManager::signMessage(IMessage &message) const
     message.calcDigSig(accounts->getCurrentActor());
 }
 
-QByteArray NetManager::calcHash(Messages::IMessage &message) const
+QByteArray NetManager::calcHash(const Messages::IMessage &message) const
 {
     return Utils::calcKeccak(message.serialize());
 }
-
-// bool NetManager::addResponseHandler(const QByteArray &message, const QByteArray &msgType)
-//{
-//    QByteArray hash = Utils::calcKeccak(message);
-//    if (Messages::RESPONSE.contains(msgType))
-//    {
-//        requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
-//        return true;
-//    }
-//    else
-//    {
-//        return false;
-//    }
-
-//    //    FileList responseHandler;
-//    //    QFile file(".responseHamdler");
-//    //    responseHandler.setFileList(file);
-//    //    if (Messages::RESPONSE.contains(msgType))
-//    //    {
-//    //        responseHandler.add(message.hash(), message.serialize());
-//    //        return true;
-//    //    }
-//    //    else
-//    //        return false;
-//}
-
-// bool NetManager::checkResponseHandler(const QByteArray &message)
-//{
-//    QByteArray hash = Utils::calcKeccak(message);
-//    if (requestResponseMap->keys().contains(hash))
-//    {
-//        int t = requestResponseMap->value(hash) - 1;
-//        if (t <= 0)
-//        {
-//            requestResponseMap->remove(hash);
-//        }
-//        return true;
-//    }
-//    else
-//    {
-//        return false;
-//    }
-//}
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)
 {
@@ -532,39 +437,4 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
             connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
         }
     }
-}
-
-// Send messages //
-
-// void NetManager::sendGetActor(BigNumber actorId)
-//{
-//    qDebug() << "NET MANAGER: Requesting actor with id =" << actorId;
-//    GetActorMessage msg(actorId);
-//    //    signMessage(msg);
-//    getActorsHandlers.insert(calcHash(msg), GetEntityHandler<Actor<KeyPublic>>());
-//    broadcastMsg(msg.serialize());
-//}
-
-// void NetManager::shareContract(Contract contract)
-//{
-//    //    if (contract.makeFirstTransction()) {
-//    //        emit contractFirstTransaction(contract);
-//    //        return;
-//    //    }
-//    qDebug() << contract.serialize();
-//    if (contract.makeFinalTransaction())
-//    {
-//        //        emit contractFinalTransaction(contract);
-//        return;
-//    }
-//    //    sendMessage(contract.serialize(), Messages::CONTRACT_MESSAGE);
-//}
-
-void NetManager::sendMessageTo(BigNumber recipientId, QByteArray message)
-{
-    qDebug() << "NET MANAGER: send message to " << recipientId;
-    ChatMessage msg(recipientId, message);
-    qDebug() << msg.serialize();
-    signMessage(msg);
-    broadcastMsg(msg.serialize());
 }

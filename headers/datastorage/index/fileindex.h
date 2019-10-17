@@ -29,8 +29,8 @@ protected:
 
     // current state //
     BigNumber records = 0;
-    BigNumber firstSavedId = 0;
-    BigNumber lastSavedId = 0;
+    BigNumber firstSavedId = -1;
+    BigNumber lastSavedId = -1;
 
 public:
     FileIndex(const QString &folderName, int sectionSize = Config::DataStorage::SECTION_SIZE);

@@ -23,7 +23,6 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     connect(resolver, &ResolverService::responseReady, networkManager, &NetManager::sendMessageResponse);
-    connect(resolver, &ResolverService::secondWave, networkManager, &NetManager::broadcastMsg);
     connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
     // "New" signals
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
@@ -37,16 +36,16 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
-    connect(resolver, &ResolverService::handleBlock, blockchain, &Blockchain::addBlockToBlockchain);
     // response signals
     connect(actorIndex, &ActorIndex::responseReady, resolver, &ResolverService::responseReady);
     connect(blockchain, &Blockchain::responseReady, resolver, &ResolverService::responseReady);
+    connect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
 }
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)
 {
     //    disconnect(resolver)
-    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
+    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections aborted";
     disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     // "New" signals
     disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
@@ -65,19 +64,32 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(blockchain, &Blockchain::responseReady, resolver, &ResolverService::responseReady);
 }
 
+const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
+{
+    return Utils::calcKeccak(msg);
+}
+
 void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
-    resolvers.append(new ResolverService(actorIndex, packageHandler, requestResponseMap));
+    resolvers.append(new ResolverService(actorIndex, requestResponseMap));
     connectSignals(resolvers.last());
     resolvers.last()->setTask(msg, receiver);
     ThreadPool::addThread(resolvers.last());
 }
 
+void ResolveManager::registrateMsg(const QByteArray &msg, const QByteArray &msgType)
+{
+    handlerFileMutex.lock();
+    requestResponseMap->insert(calcKeccak256(msg), Config::Net::NECESSARY_RESPONSE_COUNT);
+    handlerFileMutex.unlock();
+    emit sendMsg(msg, msgType);
+}
+
 void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
-    resolvers.removeOne(resolver);
     disconnectSignals(resolver);
+    resolvers.removeOne(resolver);
     emit resolver->finished();
 }
 
@@ -109,5 +121,6 @@ QList<ResolverService *> ResolveManager::getFinished()
 
 void ResolveManager::resolveMessage(const QByteArray &msg, const SocketPair &receiver)
 {
+
     setTask(msg, receiver);
 }

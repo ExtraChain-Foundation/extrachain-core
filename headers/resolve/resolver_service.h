@@ -32,29 +32,28 @@ class ResolverService : public QObject
     Q_OBJECT
 
 private:
+    bool active = false;
+
     QByteArray msg;
     QByteArray hash;
     SocketPair senderAddress;
-    bool active = false;
     ActorIndex *actorIndex;
     AccountController *ac;
+
     QMap<QByteArray, int> *requestResponseMap;
-    QMap<QByteArray, int> *handler;
-    //    QMap<QByteArray, short> handlerList;
 
 public:
     /**
      * @brief ResolverService
      * @param parent
      */
-    ResolverService(QMap<QByteArray, int> *rrMap, QMap<QByteArray, int> *pckgH, QObject *parent = nullptr);
+    ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, int> *pckgH,
-                    QObject *parent = nullptr);
+    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
@@ -109,12 +108,6 @@ private:
      */
     bool MessageIsNotValid(const Messages::IMessage &message);
     /**
-     * @brief universalHandler
-     * @param msg
-     * @param msgType
-     */
-    bool universalHandler(const Messages::IMessage &msg);
-    /**
      * @brief addResponseHandler
      * @param message
      * @return
@@ -127,12 +120,11 @@ private:
      */
     bool checkResponseHandler(const QByteArray &hash);
     /**
-     * @brief checkMsgCount
-     * @param msg
-     * @param msgType
-     * @return
+     * @brief Process recieved messages - detect package type and emit
+     * corresponding signals
+     * @param msg - serialized packages
      */
-    bool checkMsgCount(const Messages::IMessage &msg);
+    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
 
 public slots:
     /**
@@ -141,12 +133,6 @@ public slots:
      * ready for work
      */
     void process();
-    /**
-     * @brief Process recieved messages - detect package type and emit
-     * corresponding signals
-     * @param msg - serialized packages
-     */
-    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
 
 signals:
     /**
@@ -154,13 +140,6 @@ signals:
      * the work have been finished you could kill me
      */
     void TaskFinished();
-    /**
-     * @brief secondWave
-     * NetManager::connect(resolverService, &ResolverService::secondWave, this,
-     * &NetManager::broadcastMsg);
-     * @param msg
-     */
-    void secondWave(const QByteArray &msg);
     /**
      * @brief responseReady to network manager
      * @param data
@@ -183,7 +162,6 @@ signals:
     void newTx(const Transaction &tx);
 
     // request
-
     void getActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
 
     void getTx(const SearchEnum::TxParam &param, const QByteArray &value, const SocketPair &receiver,
@@ -191,11 +169,15 @@ signals:
 
     void getBlock(const SearchEnum::BlockParam &param, const QByteArray &value, const QByteArray &requestHash,
                   const SocketPair &receiver);
+
     void coinRequest(BigNumber id, BigNumber amount);
+
     void getActorsCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
-    void handleBlock(const Block &block);
+
+    // response
+    void blockCount(const BigNumber &count);
 
     // signal for thread pool
     void finished();
