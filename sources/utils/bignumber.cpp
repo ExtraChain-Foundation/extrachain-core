@@ -134,7 +134,6 @@ BigNumber &BigNumber::operator=(const BigNumber &bigNumber)
 {
     m_data = bigNumber.data();
     UPDATE_DEBUG()
-    //    m_data = ;
     return *this;
 }
 
@@ -265,16 +264,6 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    //    std::string t = "";
-    //    char *ch = new char();
-    //    mpz_get_str(ch, base, m_data.get_mpz_t());
-    //    int size = mpz_sizeinbase(m_data.get_mpz_t(), base);
-    //    std::string d(ch);
-    //    QByteArray e = QByteArray::fromStdString(d);
-    //    if (t != "")
-    //        return QByteArray::fromStdString(t);
-    //    return QByteArray();
-    //    return e;
     return QByteArray::fromStdString(m_data.get_str(base));
 }
 
@@ -359,7 +348,6 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
     {
         result = random(n);
     } while (result >= max);
-    std::cout << "random n max: " << result.toByteArray().toStdString() << std::endl;
     return result;
 }
 

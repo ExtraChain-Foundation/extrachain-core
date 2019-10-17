@@ -16,7 +16,6 @@ namespace ECC {
  * @return
  */
 BigNumber inverseMod(BigNumber k, BigNumber p);
-// BigNumber inverseMod2(BigNumber k, BigNumber p);
 /**
  * @brief isOnCurve
  * @param curve

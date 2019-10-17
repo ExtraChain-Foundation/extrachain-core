@@ -29,29 +29,17 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
     {
         res.clear();
 
-        r = BigNumber("8e3a39507dba57c317710baf41abe94ac7a8db9184748988fd7ba5b4bb26d693");
-        qDebug() << "R===========" << r.toByteArray();
-        // r = BigNumber("979b09154d4109d3b41f773b4d46f59fcf89a4a013b61bbe2d6229575f32f09e");
-
+        r = BigNumber::random(64, curve.p);
         R = ECC::multiply(secpCurve, r, secpCurve.g);
-        qDebug() << "pb key =" << this->pbkey.X().toByteArray() + this->pbkey.Y().toByteArray();
-        //  S = this->pbkey * r;
         S = ECC::multiply(secpCurve, r, this->pbkey);
-
-        //        res.append(S.CryptMessage(data));
         res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));
-        qDebug() << "Encrypt crypt message="
-                 << blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray());
         res.append(R.X().toByteArray());
-        qDebug() << "Encrypt X=" << S.X().toByteArray();
         res.append(R.Y().toByteArray());
-        qDebug() << "Encrypt Y=" << S.Y().toByteArray();
         result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
         res.clear();
         res = Serialization::universalDeserialize(result, Serialization::DEFAULT_FIELD_SIZE);
     } while (res.size() != 3);
     return result;
-    // return "";
 }
 
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)

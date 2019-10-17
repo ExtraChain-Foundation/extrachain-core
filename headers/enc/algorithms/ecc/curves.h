@@ -24,24 +24,5 @@ struct curve
     BigNumber n = secp256k1::n;
     BigNumber h = secp256k1::h;
 };
-//    BigNumber eea(BigNumber a, BigNumber b)
-//    {
-//        BigNumber b0 = b, t, q;
-//        BigNumber x0 = 0, x1 = 1;
-
-//        if (b == 1)
-//            return 1;
-
-//        while (a > 1)
-//        {
-//            q = a / b;
-//            t = b, b = a % b, a = t;
-//            t = x0, x0 = x1 - q * x0, x1 = t;
-//        }
-
-//        if (x1 < 0)
-//            x1 = x1 + b0;
-//        return x1;
-//    }
 }
 #endif // CURVES_H

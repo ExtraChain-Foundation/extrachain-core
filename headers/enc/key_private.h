@@ -34,6 +34,9 @@ public:
     KeyPrivate(const KeyPrivate &keyPrivate);
     ~KeyPrivate();
 
+public:
+    EllipticPoint generate();
+
 public: // Cryptor interface
     QByteArray encrypt(const QByteArray &data);
     QByteArray decrypt(const QByteArray &data);
