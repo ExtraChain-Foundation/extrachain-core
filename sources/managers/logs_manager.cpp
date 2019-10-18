@@ -27,20 +27,31 @@ bool LogsManager::antiFilter = false;
 
 LogsManager::LogsManager()
 {
-    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog, Qt::QueuedConnection);
+    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
 }
 
 void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
     Q_UNUSED(type)
+
     static LogsManager logsManager;
+    emit logsManager.makeLogSignal(context.file, context.line, context.function, msg);
+}
+
+void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
+{
+    static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
+                         + ".log");
+
+    if (LogsManager::toFile && !logFile.isOpen())
+        logFile.open(QFile::Append | QFile::Text);
 
     QString message = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
 
 #ifdef QT_DEBUG
     // TODO: to std::string
-    QString fileName = context.file;
+    QString fileName = file;
     if (fileName.isEmpty())
         fileName = "global";
 
@@ -72,7 +83,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 #ifdef Q_OS_WIN
         fileNameQrc = QString("%1:%2").arg(fileName).arg(line);
 #else
-        fileNameQrc = QString("qrc:/%1:%2").arg(fileName).arg(context.line);
+        fileNameQrc = QString("qrc:/%1:%2").arg(fileName).arg(line);
 #endif
 
         if (message.left(fileNameQrc.length()) == fileNameQrc)
@@ -98,9 +109,8 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     const QString logStr = currentDateTime.toString("hh:mm:ss ")
 #ifdef QT_DEBUG
         + "["
-        + (fileNameQrc.length()
-               ? fileNameQrc
-               : fileNameStd + (fileNameStd == "global" ? "" : ":" + QString::number(context.line)))
+        + (fileNameQrc.length() ? fileNameQrc
+                                : fileNameStd + (fileNameStd == "global" ? "" : ":" + QString::number(line)))
         + "] "
 #endif
         + message;
@@ -113,22 +123,9 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 #ifdef Q_OS_ANDROID
             __android_log_print(ANDROID_LOG_DEBUG, "Etalonium", "%s", logStr.toStdString().c_str());
 #else
-        std::cout << logStr.toStdString() << "\n";
+        std::cout << logStr.toStdString() << std::endl;
 #endif
     }
-
-    emit logsManager.makeLogSignal(fileName, context.line, context.function, message);
-}
-
-void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
-{
-    auto currentDateTime = QDateTime::currentDateTime();
-    static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
-                         + ".log");
-    const QString logStr = currentDateTime.toString("hh:mm:ss ");
-
-    if (LogsManager::toFile && !logFile.isOpen())
-        logFile.open(QFile::Append | QFile::Text);
 
     if (LogsManager::toFile && logFile.isWritable())
     {

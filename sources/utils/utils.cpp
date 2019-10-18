@@ -359,7 +359,6 @@ void Utils::wipeDataFiles()
 
     for (auto &dir : dirsList)
     {
-        qDebug() << dir.filePath();
         if (dir.fileName() != companySection)
             QDir(dir.filePath()).removeRecursively();
     }
