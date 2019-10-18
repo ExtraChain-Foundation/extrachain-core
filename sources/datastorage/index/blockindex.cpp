@@ -91,7 +91,7 @@ Block BlockIndex::getBlockById(const BigNumber &id) const
     }
     else
     {
-        qDebug() << "is not block";
+        qDebug() << id << "is not block";
     }
     return Block();
 }

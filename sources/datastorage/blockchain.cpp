@@ -238,7 +238,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
             BigNumber i = blockIndex.getLastSavedId();
             nb = GenesisBlock("", blockIndex.getBlockById(blockIndex.getLastSavedId()), "");
             while ((blockIndex.getBlockById(i).getType() != Config::GENESIS_BLOCK_TYPE)
-                   || (i >= blockIndex.getFirstSavedId()))
+                   && (i >= blockIndex.getFirstSavedId()))
             {
                 b = blockIndex.getBlockById(i);
                 findRecordsInBlock(b);
@@ -496,15 +496,13 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0:
-    {
+    case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         emit sendMessage(block.serialize(), block_message);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS:
-    {
+    case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if (block.getType() == Config::DATA_BLOCK_TYPE)
         {
