@@ -94,7 +94,8 @@ void NodeManager::connectResolveManager()
     connect(netManager, &NetManager::MessageReceived, resolveManager, &ResolveManager::resolveMessage);
     connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
     // TODO: move
-    connect(txManager, &TransactionManager::SendBlock, netManager, &NetManager::sendMessage);
+    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
+    connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
 }
 
 void NodeManager::connectSmContractManager()
@@ -467,7 +468,8 @@ void NodeManager::connectUi()
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
 
-    connect(uiWallet, &WalletController::sendCoinRequestFromUi, netManager, &NetManager::sendMessage);
+    connect(uiWallet, &WalletController::sendCoinRequestFromUi, resolveManager,
+            &ResolveManager::registrateMsg);
     connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
         auto actor = accController->createActor(false);
         accController->savePrivateActor(actor);
@@ -480,6 +482,7 @@ void NodeManager::connectUi()
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
+    connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
 
     //======================================CONTRACT===========================================
     /*
@@ -544,8 +547,8 @@ void NodeManager::connectAccountController()
 
 void NodeManager::connectActorIndex()
 {
-    connect(actorIndex, &ActorIndex::sendMessage, netManager, &NetManager::sendMessage);
-    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::dfsMessageTmp);
+    connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::sendMessage);
     // this connect with service message
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);

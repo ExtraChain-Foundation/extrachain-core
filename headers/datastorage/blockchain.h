@@ -32,6 +32,7 @@ class Blockchain : public QObject
 {
     const int FIELS_SIZE = 4;
     const QByteArray block_message = Messages::BLOCK_MESSAGE;
+    const QByteArray get_block_message = Messages::GET_BLOCK_MESSAGE;
     Q_OBJECT
 private:
     // storage //
@@ -290,7 +291,11 @@ public slots:
      * @param block
      */
     void checkBlockExistence(const Block &block);
-
+    /**
+     * @brief blockCountResponse
+     * @param count
+     */
+    void blockCountResponse(const BigNumber &count);
     // from node manager
     void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
                              const SocketPair &receiver, const QByteArray &request);

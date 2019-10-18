@@ -1,19 +1,16 @@
 #include "headers/resolve/resolver_service.h"
 
-ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QMap<QByteArray, int> *pckgH, QObject *parent)
+ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent)
     : QObject(parent)
 {
     requestResponseMap = rrMap;
-    handler = pckgH;
 }
 
-ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap,
-                                 QMap<QByteArray, int> *pckgH, QObject *parent)
+ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent)
     : QObject(parent)
 {
     this->actorIndex = actorIndex;
     requestResponseMap = rrMap;
-    handler = pckgH;
 }
 
 ResolverService::~ResolverService()
@@ -48,7 +45,7 @@ bool ResolverService::validate(const Messages::IMessage &message)
         qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
         //        emit SendGetActor(signer);
         //        return false;
-        this->thread()->sleep(2);
+        this->thread()->sleep(5);
         return validate(message);
     }
 }
@@ -84,43 +81,28 @@ bool ResolverService::MessageIsNotValid(const Messages::IMessage &message)
     return true;
 }
 
-bool ResolverService::universalHandler(const Messages::IMessage &msg)
-{
-    // verify
-    if (checkMsgCount(msg))
-    {
-        emit secondWave(msg.serialize());
-        return true;
-    }
-    else
-        return false;
-}
-
 bool ResolverService::addResponseHandler(const QByteArray &message, const QByteArray &msgType)
 {
+    bool flag = false;
+    handlerFileMutex.lock();
     QByteArray hash = Utils::calcKeccak(message);
     if (Messages::RESPONSE.contains(msgType))
     {
         if (requestResponseMap->find(hash) == requestResponseMap->end())
         {
-            handlerFileMutex.lock();
             requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
-            handlerFileMutex.unlock();
-            return true;
+            flag = true;
         }
-        else
-            return false;
     }
-    else
-    {
-        return false;
-    }
+    handlerFileMutex.unlock();
+    return flag;
 }
 
 bool ResolverService::checkResponseHandler(const QByteArray &hash)
 {
     handlerFileMutex.lock();
-    bool flag = false;
+    bool flag = true;
+    int value = Config::Net::NECESSARY_RESPONSE_COUNT;
     QMap<QByteArray, int>::iterator it = requestResponseMap->find(hash);
     if (it != requestResponseMap->end())
     {
@@ -128,8 +110,8 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
         if (t <= 0)
         {
 
-            requestResponseMap->remove(hash);
-            flag = true;
+            //            requestResponseMap->remove(hash);
+            flag = false;
         }
         else
         {
@@ -139,40 +121,11 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
     }
     else
     {
-        requestResponseMap->insert(hash, 0);
+        requestResponseMap->insert(hash, value);
     }
 
     handlerFileMutex.unlock();
     return flag;
-}
-
-bool ResolverService::checkMsgCount(const Messages::IMessage &msg)
-{
-    handlerFileMutex.lock();
-    bool flag_result = true;
-    int value = 0;
-    QMap<QByteArray, int>::iterator it = handler->find(msg.hash());
-    if (it == handler->end())
-        handler->insert(msg.hash(), value);
-    else
-    {
-        int msg_count = it.value();
-        msg_count--;
-        if (msg_count == -1)
-        {
-            flag_result = false;
-            handler->remove(msg.hash());
-        }
-        else
-        {
-            int amount = it.value();
-            amount--;
-            handler->remove(msg.hash());
-            handler->insert(msg.hash(), amount);
-        }
-    }
-    handlerFileMutex.unlock();
-    return flag_result;
 }
 
 void ResolverService::process()
@@ -190,9 +143,6 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE)
         && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
         if (MessageIsNotValid(message))
-            return;
-    if (msgType != COIN_REQUEST)
-        if (!universalHandler(message))
             return;
     // spread messages
     if (msgType == PROFILE_FILE)
@@ -281,7 +231,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         GetTxMessage txMessage(message.getMsg_data());
         emit getTx(txMessage.getParam(), txMessage.getValue(), receiver, calcHash(msg));
     }
-    else if (msgType == GET_BLOCK_MESSAGE) // TODO 3 from 3
+    else if (msgType == GET_BLOCK_MESSAGE)
     {
         GetBlockMessage blMessage(message.getMsg_data());
         emit getBlock(blMessage.getParam(), blMessage.getValue(), calcHash(msg), receiver);
@@ -310,7 +260,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_TX_RESPONSE_MESSAGE;
         BaseMessageResponse responseMessage(msg);
-        if (!checkResponseHandler(responseMessage.getDataHash()))
+        if (checkResponseHandler(responseMessage.getDataHash()))
             return;
         Transaction tx(responseMessage.getMsg_data());
         if (!validate(tx))
@@ -327,7 +277,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
                  << "recieveMsg(): type: " << GET_BLOCK_RESPONSE_MESSAGE;
 
         BaseMessageResponse responseMessage(msg);
-        if (!checkResponseHandler(responseMessage.getDataHash()))
+        if (checkResponseHandler(responseMessage.getDataHash()))
             return;
         Block block(responseMessage.getMsg_data());
         if (!validate(block))
@@ -335,27 +285,24 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             qDebug() << "Received block" << block.getIndex() << "is not valid";
             return;
         }
-        emit handleBlock(block);
+        emit newBlock(block);
         emit TaskFinished();
     }
     else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
     {
         BaseMessageResponse responseMessage(msg);
-        if (!checkResponseHandler(responseMessage.getDataHash()))
+        if (checkResponseHandler(responseMessage.getDataHash()))
             return;
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_BLOCK_COUNT_RESPONSE_MESSAGE;
         BigNumber count(responseMessage.getMsg_data());
-        BaseMessage msg1(GET_BLOCK_MESSAGE);
-        msg1.init(responseMessage.getMsg_data());
-        msg1.calcDigSig(ac->getCurrentActor());
-        emit secondWave(msg1.serialize());
+        emit blockCount(count);
         emit TaskFinished();
     }
     else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
     {
         BaseMessageResponse responseMessage(msg);
-        if (!checkResponseHandler(responseMessage.getDataHash()))
+        if (checkResponseHandler(responseMessage.getDataHash()))
             return;
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
