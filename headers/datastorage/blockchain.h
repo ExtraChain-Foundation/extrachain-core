@@ -315,6 +315,7 @@ public slots:
 
     void addBlockToBlockchain(Block block);
 
+    void addGenBlockToBlockchain(const GenesisBlock &block);
     /**
      * @brief If there no such tx in a previous block
      * adds this tx to the list and emits VerifiedTx signal

@@ -159,6 +159,7 @@ signals:
     void newActor(const Actor<KeyPublic> &actor);
 
     void newBlock(const Block &block);
+    void newGenesisBlock(const GenesisBlock &block);
 
     void newTx(const Transaction &tx);
 

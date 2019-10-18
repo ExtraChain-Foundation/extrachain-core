@@ -186,8 +186,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     else if (msgType == GENESIS_BLOCK_MESSAGE)
     {
-        Block block = message.getMsg_data();
-        emit newBlock(block);
+        GenesisBlock block = message.getMsg_data();
+        emit newGenesisBlock(block);
         emit TaskFinished();
     }
     else if (msgType == COIN_REQUEST)
@@ -299,7 +299,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
                 qDebug() << "Received block" << gblock.getIndex() << "is not valid";
                 return;
             }
-            emit newBlock(gblock);
+            emit newGenesisBlock(gblock);
         }
         else
         {

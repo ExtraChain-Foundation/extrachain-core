@@ -36,6 +36,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     // "New" signals
     connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
+    connect(resolver, &ResolverService::newGenesisBlock, blockchain, &Blockchain::addGenBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     connect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
@@ -109,17 +110,6 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
     Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
     if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
         rmsg.calcDigSig(accountControler->getCurrentActor());
-    if (msgType == Messages::GET_BLOCK_RESPONSE_MESSAGE
-        || msgType == Messages::GET_BLOCK_COUNT_RESPONSE_MESSAGE)
-    {
-        if (rmsg.verifyDigSig(actorIndex->getActor(accountControler->getCurrentActor().getId())))
-        {
-            std::cout << "OOOPHG, Nicceee" << std::endl;
-            std::cout << rmsg.getDigSig().toStdString() << std::endl;
-        }
-        else
-            std::cout << "Smb fucking animal" << std::endl;
-    }
 
     qDebug() << "NetManager: send " << msgType;
     emit socketSendMsg(rmsg.serialize(), receiver);

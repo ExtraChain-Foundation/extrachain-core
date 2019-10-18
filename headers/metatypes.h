@@ -33,6 +33,7 @@ Q_DECLARE_METATYPE(Profile)
 Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
+Q_DECLARE_METATYPE(GenesisBlock)
 // Q_DECLARE_METATYPE(qintptr)
 
 void registerMetaTypes()
@@ -40,6 +41,7 @@ void registerMetaTypes()
     qRegisterMetaType<BigNumber>();
     qRegisterMetaType<Messages::DfsMessage>();
     qRegisterMetaType<Block>();
+    qRegisterMetaType<GenesisBlock>();
     qRegisterMetaType<QHostAddress>();
     qRegisterMetaType<Actor<KeyPublic>>();
     qRegisterMetaType<Transaction>();

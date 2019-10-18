@@ -822,6 +822,12 @@ void Blockchain::addBlockToBlockchain(Block block)
     addBlock(block);
 }
 
+void Blockchain::addGenBlockToBlockchain(const GenesisBlock &block)
+{
+    if (blockIndex.addBlock(block) == 0)
+        sendMessage(block.serialize(), Messages::GENESIS_BLOCK_MESSAGE);
+}
+
 // Actors //
 
 int Blockchain::addActor(const Actor<KeyPublic> &actor)
