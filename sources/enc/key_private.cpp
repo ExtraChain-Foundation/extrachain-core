@@ -30,7 +30,7 @@ EllipticPoint KeyPrivate::generate()
         this->pbkey = ECC::multiply(this->curve, this->prkey, curve.g);
         QByteArray s = this->sign("test");
         this->verify("test", s);
-    } catch (std::exception e)
+    } catch (std::exception &)
     {
         return this->generate();
     }
@@ -82,20 +82,33 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data)
 
 QByteArray KeyPrivate::sign(const QByteArray &data)
 {
-    BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
-    BigNumber r, s, k;
-    EllipticPoint point;
-    while ((r == 0) || (s == 0))
+    try
     {
-        k = BigNumber::random(curve.n);
-        point = ECC::multiply(curve, k, curve.g);
-        r = point.X() % curve.n;
-        s = ((hashMessage + r * this->prkey) * ECC::inverseMod(k, curve.n)) % curve.n;
+        BigNumber hashMessage = BigNumber(Utils::calcKeccak(data));
+        BigNumber r, s, k;
+        EllipticPoint point;
+
+        while ((r == 0) || (s == 0))
+        {
+            k = BigNumber::random(curve.n);
+            point = ECC::multiply(curve, k, curve.g);
+            r = point.X() % curve.n;
+            s = ((hashMessage + r * this->prkey) * ECC::inverseMod(k, curve.n)) % curve.n;
+        }
+
+        QList<QByteArray> list;
+        list.append(r.toByteArray());
+        list.append(s.toByteArray());
+
+        QByteArray dsignBase64 = Serialization::universalSerialize(list, 3);
+        assert(verify(data, dsignBase64));
+
+        return dsignBase64;
+    } catch (std::exception &)
+    {
+        qDebug() << "Cant create sign, redone";
+        return sign(data);
     }
-    QList<QByteArray> list;
-    list.append(r.toByteArray());
-    list.append(s.toByteArray());
-    return Serialization::universalSerialize(list, 3);
 }
 
 bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
