@@ -70,6 +70,7 @@ SOURCES += \
     $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
+    $$PWD/dfs/managers/headers/package_resolver.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
     $$PWD/dfs/packages/headers/message_struct.h \
     $$PWD/dfs/packages/headers/title_message.h \

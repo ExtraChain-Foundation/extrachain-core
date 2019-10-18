@@ -1,0 +1,4 @@
+#ifndef PACKAGE_RESOLVER_H
+#define PACKAGE_RESOLVER_H
+
+#endif // PACKAGE_RESOLVER_H
