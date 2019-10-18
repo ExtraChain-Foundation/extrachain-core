@@ -149,7 +149,6 @@ void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor)
 {
     signer = actor.getId();
     digSig = actor.getKey()->sign(concatenateAllData());
-    std::cout << "Data:sender" << concatenateAllData().toStdString() << "\n";
     qDebug() << "pubk: " << actor.convertToPublic().getKey()->extractPublicKey();
 }
 
@@ -157,7 +156,6 @@ bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const
 {
     qDebug() << actor.getKey()->getPublicKey();
     qDebug() << "PODPIS`" << digSig;
-    std::cout << "Data:receiver" << concatenateAllData().toStdString() << "\n";
     return actor.getKey()->verify(concatenateAllData(), digSig);
 }
 

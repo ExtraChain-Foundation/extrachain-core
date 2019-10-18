@@ -62,7 +62,7 @@ private:
     AccountController *accounts;
     ServerService *serverService;
     QList<SocketService *> connections;
-    QMap<QByteArray, int> *handler;
+    QMap<QByteArray, int> *handler = new QMap<QByteArray, int>;
 
 #ifdef ETALONIUM_CLIENT
     QTcpSocket *socket_wer;

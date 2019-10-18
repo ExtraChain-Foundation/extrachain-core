@@ -548,7 +548,7 @@ void NodeManager::connectAccountController()
 void NodeManager::connectActorIndex()
 {
     connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
-    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::sendMessage);
+    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::dfsMessageTmp);
     // this connect with service message
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);
