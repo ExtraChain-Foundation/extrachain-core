@@ -29,8 +29,8 @@ class Block
 
 protected:
     const int FIELDS_SIZE = 4;
-    QByteArray type; // simple block, or genesis block (or other)
-    QByteArray data; // payload (serialized tx's, or other)
+    QByteArray type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
+    QByteArray data;                           // payload (serialized tx's, or other)
 private:
     BigNumber index = BigNumber(-1);    // block id
     BigNumber approver = BigNumber(-1); // block approver id
@@ -98,6 +98,9 @@ public:
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
 
+protected:
+    void initFields(QList<QByteArray> &list);
+
 public:
     QList<Block> getDataFromAllBlocks(QList<QByteArray>);
     void setPrevHash(const QByteArray &value);
@@ -113,6 +116,7 @@ public:
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
+    void setApprover(const BigNumber &value);
 };
 
 inline bool operator<(const Block &l, const Block &r)
@@ -123,7 +127,8 @@ inline bool operator<(const Block &l, const Block &r)
 inline bool operator==(const Block &l, const Block &r)
 {
     return l.getIndex() == r.getIndex() && l.getApprover() == r.getApprover() && l.getData() == r.getData()
-        && l.getPrevHash() == r.getPrevHash() && l.getHash() == r.getHash() && l.getDigSig() == r.getDigSig();
+        && l.getDate() == r.getDate() && l.getPrevHash() == r.getPrevHash() && l.getHash() == r.getHash()
+        && l.getDigSig() == r.getDigSig();
 }
 
 #endif // MEMBLOCK_H

@@ -17,14 +17,6 @@ NodeManager::NodeManager()
     // accController->loadActors();
     blockchain = new Blockchain(accController, fileMode);
     BigNumber i = 0;
-    //    while (i <= blockchain->getLastBlock().getIndex())
-    //    {
-    //        for (auto j : blockchain->getBlock(BlockParam::Id, i.serialize()).extractTransactions())
-    //        {
-    //            qDebug() << j.toString() << '\n';
-    //        }
-    //        ++i;
-    //    }
     txManager = new TransactionManager(accController, blockchain);
     //    contractManager = new ContractManager(accController, blockchain);
 
@@ -35,7 +27,7 @@ NodeManager::NodeManager()
 #endif
     dfs = new Dfs(actorIndex, accController);
     cryptManager = new CryptManager(accController);
-    resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, dfs);
+    resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE

@@ -58,6 +58,8 @@ private:
     Block getBlockByData(const QByteArray &data);
     Block getBlockByHash(const QByteArray &hash);
 
+    QByteArray getBlockDataByIndex(const BigNumber &index);
+
     Transaction getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
     Transaction getTxBySender(const BigNumber &id, const QByteArray &token = "0");
     Transaction getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
@@ -122,6 +124,13 @@ public:
      * @return last blockchain block
      */
     Block getBlock(SearchEnum::BlockParam type, const QByteArray &value);
+    /**
+     * Gets the block from blockchain by *value* of a certain *type*
+     * @param value
+     * @param type of param
+     * @return last blockchain block
+     */
+    QByteArray getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
      * @param value

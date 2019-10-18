@@ -126,7 +126,7 @@ private:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const Messages::IMessage &msg);
+    bool checkMsgCount(const QByteArray &msg);
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -176,17 +176,8 @@ public slots:
      * @param data for send
      * @param messageType type to compress
      */
-    void sendMessage(const QByteArray &data, const QByteArray &msgType);
+    void sendMessage(const QByteArray &message);
     void dfsMessageTmp(const Messages::DfsMessage &msg);
-    /**
-     * @brief sendMessageResponse from resolver
-     * @param data
-     * @param msgType
-     * @param requestHash
-     * @param receiver
-     */
-    void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
-                             const SocketPair &receiver);
 
 signals:
     void MessageReceived(const QByteArray &msg, const SocketPair &receiver);

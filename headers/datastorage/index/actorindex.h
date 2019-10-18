@@ -134,10 +134,17 @@ signals:
      * @param data
      * @param type
      */
-
+    void sendMessage(const QByteArray &data, const QByteArray &type);
+    /**
+     * @brief responseReady
+     * @param data
+     * @param msgType
+     * @param requestHash
+     * @param receiver
+     */
     void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
                        const SocketPair &receiver);
-    void sendMessage(const QByteArray &data, const QByteArray &type);
+
     void sendProfileToUi(QString userID, QByteArrayList profile);
     void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused

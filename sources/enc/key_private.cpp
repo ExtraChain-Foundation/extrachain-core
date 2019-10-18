@@ -28,6 +28,8 @@ EllipticPoint KeyPrivate::generate()
     {
         this->prkey = BigNumber::random(64, curve.p);
         this->pbkey = ECC::multiply(this->curve, this->prkey, curve.g);
+        QByteArray s = this->sign("test");
+        this->verify("test", s);
     } catch (std::exception e)
     {
         return this->generate();

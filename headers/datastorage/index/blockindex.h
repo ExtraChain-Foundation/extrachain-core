@@ -44,6 +44,8 @@ public:
      */
     Block getBlockById(const BigNumber &id) const;
 
+    QByteArray getBlockDataById(const BigNumber &id) const;
+
     // todo: if genesis block is found -> return empty block, or skip in search logic
     Block getBlockByPosition(const BigNumber &position) const;
     Block getBlockByApprover(const BigNumber &approver) const;

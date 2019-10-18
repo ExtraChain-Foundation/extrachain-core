@@ -57,6 +57,11 @@ Block Blockchain::getBlockByIndex(const BigNumber &index)
     return validateAndReturnBlock(block);
 }
 
+QByteArray Blockchain::getBlockDataByIndex(const BigNumber &index)
+{
+    return blockIndex.getBlockDataById(index);
+}
+
 Block Blockchain::getBlockByApprover(const BigNumber &approver)
 {
     Block block = fileMode ? memIndex.getByApprover(approver) : blockIndex.getBlockByApprover(approver);
@@ -155,7 +160,7 @@ void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRo
         {
             b2 = true;
         }
-        if (b1 == b2 == true)
+        if (b1 && b2)
         {
             return;
         }
@@ -219,6 +224,9 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 {
                     genBlockData.append(GenesisDataRow(i.key(), i.value(), 0));
                 }
+                BigNumber comp = BigNumber(*(actorIndex->companyId));
+                //                nb.setApprover(BigNumber(*(actorIndex->companyId)));
+                nb.sign(accountController->getActor(comp));
             }
             else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
@@ -394,19 +402,40 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received)
 
 Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
 {
+    Block res;
     switch (type)
     {
     case SearchEnum::BlockParam::Id:
-        return getBlockByIndex(BigNumber(value));
+        res = getBlockByIndex(BigNumber(value));
+        break;
     case SearchEnum::BlockParam::Data:
-        return getBlockByData(value);
+        res = getBlockByData(value);
+        break;
     case SearchEnum::BlockParam::Hash:
-        return getBlockByHash(value);
+        res = getBlockByHash(value);
+        break;
     case SearchEnum::BlockParam::Approver:
-        return getBlockByApprover(BigNumber(value));
+        res = getBlockByApprover(BigNumber(value));
+        break;
     default:
-        return Block();
+        res = Block();
+        break;
     }
+    return res;
+}
+
+QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArray &value)
+{
+    QByteArray res = "";
+    switch (type)
+    {
+    case SearchEnum::BlockParam::Id:
+        res = getBlockDataByIndex(BigNumber(value));
+        break;
+    default:
+        break;
+    }
+    return res;
 }
 
 Transaction Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value)
@@ -459,7 +488,8 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         if (block.getIndex() != 0)
         {
             BigNumber id = block.getIndex() - 1;
-            emit sendMessage(id.toByteArray(), Messages::GET_BLOCK_MESSAGE);
+            Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, id.toByteArray());
+            emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
         }
     }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
@@ -764,21 +794,25 @@ void Blockchain::checkBlockExistence(const Block &block)
 void Blockchain::blockCountResponse(const BigNumber &count)
 {
     if (blockIndex.getLastSavedId() < count)
-        emit sendMessage(count.toByteArray(), get_block_message);
+    {
+        Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, count.toByteArray());
+        emit sendMessage(request.serialize(), get_block_message);
+    }
 }
 
 void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
                                         const QByteArray &requestHash, const SocketPair &receiver)
 {
-    Block block = getBlock(param, value);
-    if (block.isEmpty())
+    QByteArray srBlock = getBlockData(param, value);
+    if (srBlock.isEmpty())
         return;
-    emit responseReady(block.serialize(), Messages::GET_BLOCK_RESPONSE_MESSAGE, requestHash, receiver);
+    emit responseReady(srBlock, Messages::GET_BLOCK_RESPONSE_MESSAGE, requestHash, receiver);
 }
 
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
 {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
+
     emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
                        Messages::GET_BLOCK_COUNT_RESPONSE_MESSAGE, requestHash, receiver);
 }

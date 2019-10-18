@@ -82,16 +82,33 @@ Block BlockIndex::getBlockById(const BigNumber &id) const
 {
     QByteArray serializedBlock = this->getById(id);
     //    qDebug() << "BLOCK: " << serializedBlock;
-    if (!serializedBlock.isEmpty()
-        && (Block::isBlock(serializedBlock) || GenesisBlock::isGenesisBlock(serializedBlock)))
+    if (!serializedBlock.isEmpty())
     {
-        return Block(serializedBlock);
+        if (Block::isBlock(serializedBlock))
+            return Block(serializedBlock);
+        else if (GenesisBlock::isGenesisBlock(serializedBlock))
+            return GenesisBlock(serializedBlock);
     }
     else
     {
         qDebug() << "is not block";
     }
     return Block();
+}
+
+QByteArray BlockIndex::getBlockDataById(const BigNumber &id) const
+{
+    QByteArray serializedBlock = this->getById(id);
+    //    qDebug() << "BLOCK: " << serializedBlock;
+    if (!serializedBlock.isEmpty())
+    {
+        return serializedBlock;
+    }
+    else
+    {
+        qDebug() << "is not block";
+        return "";
+    }
 }
 
 Block BlockIndex::getBlockByPosition(const BigNumber &position) const

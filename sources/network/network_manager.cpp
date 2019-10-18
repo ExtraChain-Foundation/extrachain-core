@@ -289,30 +289,25 @@ void NetManager::broadcastMsg(const QByteArray &msg)
     emit sendMsg(msg, socketPair);
 }
 
-void NetManager::sendMessage(const QByteArray &data, const QByteArray &msgType)
+void NetManager::sendMessage(const QByteArray &message)
 {
-    BaseMessage msg(msgType);
-    msg.init(data);
-    if (msgType != Messages::ACTOR_MESSAGE)
-        signMessage(msg);
-    qDebug() << "NetManager: send " << msgType;
 
-    QByteArray message = msg.serialize();
-    if (checkMsgCount(msg))
+    if (checkMsgCount(message))
         broadcastMsg(message);
 }
-bool NetManager::checkMsgCount(const Messages::IMessage &msg)
+bool NetManager::checkMsgCount(const QByteArray &msg)
 {
     bool flag_result = true;
     bool value = 0;
-    QMap<QByteArray, int>::iterator it = handler->find(calcHash(msg));
+    QByteArray hashMsg = Utils::calcKeccak(msg);
+    QMap<QByteArray, int>::iterator it = handler->find(hashMsg);
     if (it == handler->end())
-        handler->insert(calcHash(msg), value);
+        handler->insert(hashMsg, value);
     else
     {
 
-        if (handler->find(calcHash(msg)).value()++ == connections.size())
-            handler->remove(calcHash(msg));
+        if (handler->find(hashMsg).value()++ == connections.size())
+            handler->remove(hashMsg);
         //        int t = it.value() + 1;
         //        handler->remove(calcHash(msg));
         //        handler->insert(calcHash(msg), t);
@@ -323,17 +318,6 @@ bool NetManager::checkMsgCount(const Messages::IMessage &msg)
 void NetManager::dfsMessageTmp(const DfsMessage &msg)
 {
     broadcastMsg(msg.serialize());
-}
-
-void NetManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,
-                                     const QByteArray &requestHash, const SocketPair &receiver)
-{
-    BaseMessageResponse rmsg(data, requestHash, msgType);
-    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
-        signMessage(rmsg);
-
-    qDebug() << "NetManager: send " << msgType;
-    emit sendMsg(rmsg.serialize(), receiver);
 }
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)

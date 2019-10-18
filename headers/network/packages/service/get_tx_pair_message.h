@@ -4,7 +4,6 @@
 #include "network/packages/base_message.h"
 
 namespace Messages {
-static const QByteArray GET_TX_PAIR_MESSAGE = "getTxPair";
 
 class GetTxPairMessage
 {

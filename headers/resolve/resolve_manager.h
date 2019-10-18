@@ -23,11 +23,13 @@ private:
     Blockchain *blockchain;
     NetManager *networkManager;
     TransactionManager *txManager;
+    AccountController *accountControler;
     Dfs *dfs;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
-                   TransactionManager *txManager, Dfs *dfs, QObject *parent = nullptr);
+                   TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
+                   QObject *parent = nullptr);
     ~ResolveManager();
 
 private:
@@ -43,11 +45,21 @@ private:
 signals:
     void finished();
     void coinRequest(BigNumber id, BigNumber amount);
-    void sendMsg(const QByteArray &msg, const QByteArray &msgType);
+    void sendMsg(const QByteArray &msg);
+    void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
     void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void setTask(QByteArray msg, const SocketPair &receiver);
-    void registrateMsg(const QByteArray &msg, const QByteArray &msgType);
+    void registrateMsg(const QByteArray &data, const QByteArray &msgType);
+    /**
+     * @brief sendMessageResponse from resolver
+     * @param data
+     * @param msgType
+     * @param requestHash
+     * @param receiver
+     */
+    void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+                             const SocketPair &receiver);
     void taskFinished();
 public slots:
     void process();

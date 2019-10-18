@@ -114,7 +114,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        sendMessage(profile.serialize(), profileType);
+        emit sendMessage(profile.serialize(), profileType);
     }
     else
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
@@ -128,7 +128,10 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
     if (key->profile().sign.isEmpty())
-        emit sendMessage("", Messages::GET_BLOCK_COUNT_MESSAGE);
+    {
+        Messages::BlockCount request;
+        emit sendMessage(request.serialize(), Messages::GET_BLOCK_COUNT_MESSAGE);
+    }
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
     if (pubProfile.sign == "")
     {

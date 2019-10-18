@@ -142,8 +142,19 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     qDebug() << "Resolver: receive " << msgType;
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE)
         && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
-        if (MessageIsNotValid(message))
-            return;
+    {
+        if (RESPONSE.contains(msgType))
+        {
+            BaseMessageResponse responseMessage(msg);
+            if (MessageIsNotValid(responseMessage))
+                return;
+        }
+        else
+        {
+            if (MessageIsNotValid(message))
+                return;
+        }
+    }
     // spread messages
     if (msgType == PROFILE_FILE)
     {
@@ -165,7 +176,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == BLOCK_MESSAGE)
     {
         Block block(message.getMsg_data());
-        if (!validate(block))
+        if (!validateBlock(block))
         {
             qDebug() << "Received block" << block.getIndex() << "is not valid";
             return;
@@ -252,7 +263,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
                  << "recieveMsg(): type: " << GET_ACTOR_RESPONSE_MESSAGE << "\nmessage: " << msg;
         BaseMessageResponse responseMessage(msg);
         if (checkResponseHandler(responseMessage.getDataHash()))
-            emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+            return;
+        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         emit TaskFinished();
     }
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
@@ -279,13 +291,26 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         BaseMessageResponse responseMessage(msg);
         if (checkResponseHandler(responseMessage.getDataHash()))
             return;
-        Block block(responseMessage.getMsg_data());
-        if (!validate(block))
+        if (GenesisBlock::isGenesisBlock(msg))
         {
-            qDebug() << "Received block" << block.getIndex() << "is not valid";
-            return;
+            GenesisBlock gblock(responseMessage.getMsg_data());
+            if (!validateBlock(gblock))
+            {
+                qDebug() << "Received block" << gblock.getIndex() << "is not valid";
+                return;
+            }
+            emit newBlock(gblock);
         }
-        emit newBlock(block);
+        else
+        {
+            Block block(responseMessage.getMsg_data());
+            if (!validateBlock(block))
+            {
+                qDebug() << "Received block" << block.getIndex() << "is not valid";
+                return;
+            }
+            emit newBlock(block);
+        }
         emit TaskFinished();
     }
     else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
@@ -312,7 +337,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
 
 // validation methods //
 
-bool ResolverService::validate(const Block &block)
+bool ResolverService::validateBlock(const Block &block)
 {
     qDebug() << "RESOLVER SERVICE: "
              << "validate(Block):";

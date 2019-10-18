@@ -6,6 +6,7 @@
 #include "network/packages/message_interface.h"
 #include "utils/bignumber.h"
 #include "utils/utils.h"
+#include "network/packages/service/response_messages.h"
 
 namespace Messages {
 /**

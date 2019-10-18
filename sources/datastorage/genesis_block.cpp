@@ -43,11 +43,11 @@ bool GenesisBlock::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
     qDebug() << "GenesisBlock::deserialize" << l.length();
-    if (l.length() == 8)
+    if (l.length() == 9)
     {
-        prevGenHash = l.at(7);
-        l.removeLast(); // !!!
-        return Block::deserialize(Serialization::universalSerialize(l, FIELDS_SIZE));
+        prevGenHash = l.takeLast();
+        initFields(l);
+        return true;
     }
     return false;
 }
@@ -55,8 +55,8 @@ bool GenesisBlock::deserialize(const QByteArray &serialized)
 QByteArray GenesisBlock::serialize() const
 {
     QList<QByteArray> list;
-    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << getData() << getPrevHash()
-         << getHash() << getDigSig() << getPrevGenHash();
+    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << getData()
+         << QByteArray::number(getDate()) << getPrevHash() << getHash() << getDigSig() << getPrevGenHash();
     return Serialization::universalSerialize(list, FIELDS_SIZE);
 }
 

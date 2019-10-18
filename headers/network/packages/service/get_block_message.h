@@ -4,7 +4,6 @@
 #include "network/packages/base_message.h"
 
 namespace Messages {
-static const QByteArray GET_BLOCK_MESSAGE = "getBlock";
 
 class GetBlockMessage
 {

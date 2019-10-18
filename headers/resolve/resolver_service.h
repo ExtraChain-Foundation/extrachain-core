@@ -17,6 +17,7 @@
 #include "network/packages/base_message_response.h"
 #include "network/packages/service/response_messages.h"
 #include "network/socket_pair.h"
+#include "datastorage/genesis_block.h"
 
 static QMutex handlerFileMutex;
 
@@ -76,7 +77,7 @@ private:
      * @param block
      * @return
      */
-    bool validate(const Block &block);
+    bool validateBlock(const Block &block);
     /**
      * @brief validate
      * @param tx
@@ -147,8 +148,8 @@ signals:
      * @param requestHash
      * @param receiver
      */
-    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
-                       const SocketPair &receiver);
+    //    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+    //                       const SocketPair &receiver);
     // retranslate package to their owners class
     // new data signals
     void newDfsPack(const Messages::DfsMessage &msg);
