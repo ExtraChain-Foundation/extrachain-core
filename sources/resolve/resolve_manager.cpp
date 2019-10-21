@@ -88,6 +88,8 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
 {
     Messages::BaseMessage msg(msgType);
     msg.init(data);
+    if (msgType == Messages::DFS_CHANGES_MESSAGE)
+        return;
     if (msgType != Messages::ACTOR_MESSAGE)
         msg.calcDigSig(accountControler->getCurrentActor());
 
