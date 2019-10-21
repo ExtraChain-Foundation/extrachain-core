@@ -488,21 +488,27 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         if (block.getIndex() != 0)
         {
             BigNumber id = block.getIndex() - 1;
-            Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, id.toByteArray());
-            emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
+            if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty())
+            {
+                Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, id.toByteArray());
+                emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
+            }
         }
     }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
     {
-    case 0: {
+    case 0:
+    {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
+        getSmContractMembers(block);
         emit sendMessage(block.serialize(), block_message);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS: {
+    case Errors::FILE_ALREADY_EXISTS:
+    {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if (block.getType() == Config::DATA_BLOCK_TYPE)
         {
@@ -743,6 +749,28 @@ void Blockchain::showBlockchain() const
     }
 }
 
+bool Blockchain::isSmContractTx(const Block &block) const
+{
+    if (block.getData().contains("initcontract"))
+        return true;
+    return false;
+}
+
+void Blockchain::getSmContractMembers(const Block &block) const
+{
+    if (!isSmContractTx(block))
+        return;
+    QList<Transaction> txList = block.extractTransactions();
+    for (const Transaction &tx : txList)
+    {
+        if (tx.getData() == "initcontract")
+        {
+            actorIndex->getActor(tx.getSender());
+            actorIndex->getActor(tx.getReceiver());
+        }
+    }
+}
+
 void Blockchain::process()
 {
 }
@@ -791,7 +819,8 @@ void Blockchain::checkBlockExistence(const Block &block)
 
 void Blockchain::blockCountResponse(const BigNumber &count)
 {
-    if (blockIndex.getLastSavedId() < count)
+    if (blockIndex.getLastSavedId() < count
+        || getBlock(SearchEnum::BlockParam::Id, count.toByteArray()).isEmpty())
     {
         Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, count.toByteArray());
         emit sendMessage(request.serialize(), get_block_message);
@@ -901,18 +930,17 @@ void Blockchain::proveTx()
             return;
         }
     }
-
     if (tx->getData() == "genesis")
     {
         // type = 6, token = correct
-        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
+        //        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
 
-        if (profile.type() != 6)
-        {
-            emit tx->NotApproved();
-            qDebug() << "Transaction not approved: genesis block is not from contract";
-            return;
-        }
+        //        if (profile.type() != 6)
+        //        {
+        //            emit tx->NotApproved();
+        //            qDebug() << "Transaction not approved: genesis block is not from contract";
+        //            return;
+        //        }
 
         if (tx->getSender() != tx->getToken())
         {
@@ -920,7 +948,6 @@ void Blockchain::proveTx()
             qDebug() << "Transaction not approved: sender != token in genesis block";
             return;
         }
-
         emit tx->Approved();
         return;
     }
@@ -941,6 +968,24 @@ void Blockchain::proveTx()
 
     // verify sender state
     BigNumber targetSender = tx->getSender();
+    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
+    if (senderActor.isEmpty())
+    {
+        emit tx->NotApproved();
+        return;
+    }
+    if (tx->getData() == "initcontract")
+    {
+        qDebug() << "Contract tx proving";
+        QByteArrayList profile = senderActor.profile().getListProfile();
+        if (profile[0] == "6" && profile[5] == tx->getReceiver())
+        {
+            qDebug() << "Contract tx proved";
+            tx->sign(accountController->getCurrentActor());
+            emit tx->Approved();
+            return;
+        }
+    }
     Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toActorId());
     BigNumber senderCurBal = getBalanceFromTx(targetSender, senderLastTx);
     bool senderBalanceIsValid = false;
@@ -958,13 +1003,16 @@ void Blockchain::proveTx()
     // qDebug() << "ASDASDASD" << senderCurBal - tx->getAmount();
     if (senderCurBal - tx->getAmount() < 0 /*|| receiverCurBal + tx->getAmount() < 0*/)
     {
-        qDebug() << "Transaction not approved: sender's or receiver's balance will be < 0";
+        qDebug() << senderCurBal << tx->getAmount();
+        qDebug() << "Transaction "
+                    "not approved: sender's or receiver's balance will be < 0";
         emit tx->NotApproved();
         return;
     }
 
     if (senderBalanceIsValid && receiverBalanceIsValid)
     {
+        tx->sign(accountController->getCurrentActor());
         emit tx->Approved();
         return;
     }

@@ -40,7 +40,7 @@ public:
     /**
      * @brief companyId
      */
-    QByteArray *companyId;
+    QByteArray *companyId = nullptr;
     /**
      * @brief ActorIndex
      */

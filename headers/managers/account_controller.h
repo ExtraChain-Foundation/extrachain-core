@@ -34,7 +34,7 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createActor(bool account);
+    Actor<KeyPrivate> createActor(int account);
     Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(BigNumber id);
     /**
@@ -76,7 +76,7 @@ public slots:
      * @param private actor
      */
     void savePrivateActor(Actor<KeyPrivate> actor);
-    void regNewUser(bool account);
+    //    void regNewUser(bool account);
 
     void changeUserNum(QByteArray);
 

@@ -71,7 +71,7 @@ NodeManager::NodeManager()
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
 {
-    accController->createActor(true);
+    accController->createActor(2);
 
     return *accController->getMainActor();
 }
@@ -87,6 +87,7 @@ void NodeManager::connectResolveManager()
     connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
     // TODO: move
     connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
+    connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
 }
 
@@ -105,8 +106,8 @@ void NodeManager::connectSmContractManager()
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
-    //    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, netManager,
-    //            &NetManager::sendMessage);
+    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
+            &ResolveManager::registrateMsg);
 
 #endif
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
@@ -232,8 +233,9 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actor.getId() == BigNumber(*actorIndex->companyId))
-            tx.setSenderBalance(BigNumber(0));
+        if (actorIndex->companyId != nullptr)
+            if (actor.getId() == BigNumber(*actorIndex->companyId))
+                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
     else
@@ -284,8 +286,9 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actor.getId() == BigNumber(*actorIndex->companyId))
-            tx.setSenderBalance(BigNumber(0));
+        if (actorIndex->companyId != nullptr)
+            if (actor.getId() == BigNumber(*actorIndex->companyId))
+                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
     else
@@ -333,11 +336,39 @@ void NodeManager::createNetManagerIdentificator()
 }
 
 #ifdef ETALONIUM_CLIENT
-void NodeManager::sendTransactionFromUi(BigNumber reciever, BigNumber amount, BigNumber token)
+void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
-    createTransaction(reciever, amount, token);
-}
+    Actor<KeyPrivate> actor = accController->getCurrentActor();
+    if (!actor.isEmpty())
+    {
+        qDebug() << actor.getId();
+        Transaction tx(actor.getId(), receiver, amount);
+        // add sent tx balances
+        BigNumber tempBalance = 0;
 
+        if (accController->sentTxList.getIndexSize() > 0)
+        {
+            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
+            {
+                Transaction tempTx(accController->sentTxList.at(i));
+                if (tempTx.getToken() != token)
+                    continue;
+                if (tempTx.getSender() == actor.getId())
+                    tempBalance -= tempTx.getAmount();
+                else
+                    tempBalance += tempTx.getAmount();
+            }
+        }
+
+        BigNumber actorBalance = blockchain->getUserBalance(actor.getId(), token);
+        BigNumber receiverBalance = blockchain->getUserBalance(receiver, token);
+        tx.setSenderBalance(actorBalance + tempBalance);
+        tx.setReceiverBalance(receiverBalance - tempBalance);
+
+        tx.setToken(token);
+        emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
+    }
+}
 void NodeManager::createWalletInUi()
 {
     // accController->loadActors();
@@ -465,7 +496,7 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::sendCoinRequestFromUi, resolveManager,
             &ResolveManager::registrateMsg);
     connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
-        auto actor = accController->createActor(false);
+        auto actor = accController->createActor(0);
         accController->savePrivateActor(actor);
         auto wallets = uiWallet->getCurrentWallets();
         uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
@@ -513,7 +544,7 @@ void NodeManager::connectUi()
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=]() { accController->savePrivateActor(accController->createActor(true)); });
+            [=]() { accController->savePrivateActor(accController->createActor(1)); });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -604,7 +635,7 @@ AccountController *NodeManager::getAccController() const
     return accController;
 }
 
-void NodeManager::createNewActor(QByteArray data, bool accountStatus)
+void NodeManager::createNewActor(QByteArray data, int accountStatus)
 {
     if (data.isEmpty())
     {

@@ -62,6 +62,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     if (actor.isEmpty())
         return;
     emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
+    emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
@@ -165,6 +166,8 @@ void ActorIndex::requestProfile(QString id)
     QString path = buildFilePath(id.toUtf8());
     Actor<KeyPublic> key = getActor(id.toUtf8());
     if (key.getKey() == nullptr || key.getHash().isEmpty())
+        return;
+    if (key.profile().getProfile() == "")
         return;
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
         emit sendProfileToUi(id, key.profile().getListProfile());
@@ -270,6 +273,11 @@ QByteArray ActorIndex::getById(const BigNumber &id) const
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
     int result = this->add(actor.getId(), actor.serialize());
+    if (actor.getAccount() == 2 && companyId == nullptr)
+    {
+        qDebug() << "Save company ID->" << actor.getId().toByteArray();
+        companyId = new QByteArray(actor.getId().toByteArray());
+    }
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "

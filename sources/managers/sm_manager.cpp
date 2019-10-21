@@ -47,19 +47,19 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
         return;
     }
 
-    sendTransaction(actor, relAddress, tokenCount);
+    sendInitialTransaction(actor, relAddress, tokenCount);
 }
 
 void SmartContractManager::process()
 {
 }
 
-void SmartContractManager::sendTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
-                                           QByteArray quantity)
+void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
+                                                  QByteArray quantity)
 {
 #ifdef ETALONIUM_CLIENT
     Transaction tx(sender->getId(), receiver, WalletController::toRealBigNumber(quantity));
-    tx.setData("genesis");
+    tx.setData("initcontract");
     tx.setSenderBalance(WalletController::toRealBigNumber(quantity));
 
     tx.setToken(sender->getId());

@@ -42,7 +42,6 @@ QByteArray GenesisBlock::getDataForHash() const
 bool GenesisBlock::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
-    qDebug() << "GenesisBlock::deserialize" << l.length();
     if (l.length() == 9)
     {
         prevGenHash = l.takeLast();

@@ -64,7 +64,7 @@ public:
     {
         this->init(serialized);
     }
-    Actor(const BigNumber &id, const QByteArray &keydata, bool account)
+    Actor(const BigNumber &id, const QByteArray &keydata, int account)
     {
         this->init(id, keydata, account);
     }
@@ -159,7 +159,7 @@ public:
      * @brief initial construction of new Actor
      * @param id
      */
-    bool init(bool account)
+    bool init(int account)
     {
         if (isPrivate())
         {
@@ -305,7 +305,7 @@ public:
         return key;
     }
 
-    bool getAccount() const
+    actorType getAccount() const
     {
         return account;
     }

@@ -139,7 +139,10 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
 #ifdef ETALONIUM_CLIENT
     if (newProfile.mid(0, 1) == "6")
     {
-        QByteArrayList list = deserialize(newProfile);
+        int signSize = Utils::qByteArrayToInt(newProfile.mid(newProfile.size() - 4, 4));
+        QByteArray sign = newProfile.mid(newProfile.size() - 4 - signSize, signSize);
+        QByteArray serializeData = newProfile.mid(0, newProfile.size() - 4 - signSize);
+        QByteArrayList list = deserialize(serializeData);
         saveTokenNames(list.at(2), list.at(3), list.at(6));
     }
 #endif
@@ -154,7 +157,7 @@ QByteArrayList PublicProfile::getListProfile()
     if (!profile.exists())
     {
         qDebug() << "Profile isn't exist" << id;
-        return {};
+        return { QByteArrayList() };
     }
     profile.open(QIODevice::ReadOnly);
     QByteArray serializeData = profile.readAll();
@@ -175,7 +178,7 @@ QByteArray PublicProfile::getProfile()
     if (!profile.exists())
     {
         qDebug() << "Profile isn't exist" << id;
-        return {};
+        return { "" };
     }
     profile.open(QIODevice::ReadOnly);
     QByteArray serializeData = profile.readAll();

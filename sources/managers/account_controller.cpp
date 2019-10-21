@@ -53,7 +53,7 @@ QList<QByteArray> AccountController::getAccountID()
     return list;
 }
 
-Actor<KeyPrivate> AccountController::createActor(bool account)
+Actor<KeyPrivate> AccountController::createActor(int account)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
     // todo: local last saved id can be outdated
@@ -256,12 +256,12 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 
 //
 
-void AccountController::regNewUser(bool account) // ~not ready yet
-{
-    Actor<KeyPrivate> keys = createActor(account);
-    qDebug() << "AccountController::regNewUser";
-    emit sentActorId(keys.getId());
-}
+// void AccountController::regNewUser(bool account) // ~not ready yet
+//{
+//    Actor<KeyPrivate> keys = createActor(account);
+//    qDebug() << "AccountController::regNewUser";
+//    emit sentActorId(keys.getId());
+//}
 
 void AccountController::changeUserNum(QByteArray wallId)
 {

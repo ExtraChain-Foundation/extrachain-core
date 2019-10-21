@@ -248,6 +248,9 @@ public:
      */
     void showBlockchain() const;
 
+    bool isSmContractTx(const Block &block) const;
+
+    void getSmContractMembers(const Block &block) const;
 signals:
     void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);

@@ -116,6 +116,7 @@ signals:
 
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
+    void sendMsg(const QByteArray &data, const QByteArray &msgType);
     // created keys for chat
     void sendKey(QByteArray key);
     void sendPrivateKey(QByteArray prKey);
@@ -133,7 +134,7 @@ signals:
 private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
-    void createNewActor(QByteArray hash, bool accountStatus);
+    void createNewActor(QByteArray hash, int accountStatus);
 
     //    void makeContractFirstTransaction(Contract &contract);
     //    void makeContractFinalTransaction(Contract &contract);

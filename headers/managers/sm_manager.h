@@ -22,7 +22,7 @@ private:
 
 private:
     void savePrivateActor(Actor<KeyPrivate> actor);
-    void sendTransaction(Actor<KeyPrivate> *sender, QByteArray receiver, QByteArray quantity);
+    void sendInitialTransaction(Actor<KeyPrivate> *sender, QByteArray receiver, QByteArray quantity);
     Actor<KeyPrivate> *createContract(QByteArray tokenName);
     void initializeTokenArray();
 

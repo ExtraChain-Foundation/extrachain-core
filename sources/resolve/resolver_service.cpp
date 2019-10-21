@@ -35,7 +35,6 @@ bool ResolverService::validate(const Messages::IMessage &message)
     BigNumber signer = message.getSigner();
 
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
-
     if (!actor.isEmpty())
     {
         return message.verifyDigSig(actor);
@@ -199,11 +198,11 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == TX_MESSAGE)
     {
         Transaction tx(message.getMsg_data());
-        if (!validate(tx))
-        {
-            qDebug() << "Received tx" << tx.getHash() << "is not valid";
-            return;
-        }
+        //        if (!validate(tx))
+        //        {
+        //            qDebug() << "Received tx" << tx.getHash() << "is not valid";
+        //            return;
+        //        }
         emit newTx(tx);
         emit TaskFinished();
     }
@@ -212,6 +211,13 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         //        Contract contract(message.getMsg_data());
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << CONTRACT_MESSAGE;
+        Transaction tx(message.getMsg_data());
+        if (!validate(tx))
+        {
+            qDebug() << "Received tx of contract" << tx.getHash() << "is not valid";
+            return;
+        }
+        emit newTx(tx);
         emit TaskFinished();
     }
 
@@ -348,5 +354,13 @@ bool ResolverService::validate(const Transaction &tx)
 {
     qDebug() << "RESOLVER SERVICE: "
              << "validate(Transaction):";
-    return actorIndex->validateTx(tx);
+    bool result = actorIndex->validateTx(tx);
+    //    if (tx.getData() == "initcontract")
+    //        result = (result && !actorIndex->getActor(tx.getSender()).profile().getProfile().isEmpty());
+    if (actorIndex->getActor(tx.getSender()).profile().getProfile().isEmpty())
+    {
+        this->thread()->sleep(5);
+        return validate(tx);
+    }
+    return result;
 }
