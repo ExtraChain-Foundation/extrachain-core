@@ -5,11 +5,14 @@
 #include "managers/account_controller.h"
 #include "enc/algorithms/blowfish_crypt.h"
 #include <QDir>
-class ChatManager
+#include <QObject>
+class ChatManager : public QObject
 {
+    Q_OBJECT
 private:
     QByteArray _chatId = "0";
     QByteArray _encryptionKey = "0";
+    QByteArray _currentSession = "-1";
     AccountController* _accountController;
 
 private:
@@ -24,7 +27,7 @@ private:
 public:
     ChatManager(QByteArray chatId, AccountController* accountController); //+
     void createNewChat();                                                 //-
-    void saveChatKey(QByteArray key);                                     //+
+    void saveChatKey(QByteArray key, QByteArray sessionNumb);             //+
     QByteArray unloadChatKey();                                           //+
     void addMemberToChat(BigNumber actorId);                              //-
     void removeMemberFromChat(BigNumber actorId);                         //-
@@ -32,7 +35,15 @@ public:
     QByteArray receiveMessage(QByteArray message);                        //+
     QByteArray encryptMessage(QByteArray message);                        //+
     QByteArray decryptMessage(QByteArray message);                        //+
-    ~ChatManager();
+    ~ChatManager()
+    {
+        delete _accountController;
+    };
+
+public slots:
+    void receiveInviteToChat(QByteArray chatId, QByteArray key, QByteArray sessionNumb); //+
+signals:
+    void sendInviteToChat(QByteArray chatId, BigNumber actorId, QByteArray key, QByteArray sessionNumb); //+
 };
 
 #endif // CHAT_MANAGER_H
