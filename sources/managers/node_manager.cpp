@@ -573,7 +573,7 @@ void NodeManager::connectSignals()
 void NodeManager::prepareFolders()
 {
     qDebug() << "Preparing folders";
-    qDebug() << "Working directory : " << QFileInfo(".").absolutePath();
+    qDebug() << "Working directory : " << QDir::currentPath();
 
     FileSystem::createFolderIfNotExist(KeyStore::USER_KEYSTORE);
     FileSystem::createFolderIfNotExist(DataStorage::TMP_FOLDER);
