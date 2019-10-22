@@ -3,6 +3,11 @@
 
 #include <QDateTime>
 
+void Block::setType(const QByteArray &value)
+{
+    type = value;
+}
+
 Block::Block()
 {
     this->type = Config::DATA_BLOCK_TYPE;

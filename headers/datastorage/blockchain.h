@@ -30,6 +30,9 @@
  */
 class Blockchain : public QObject
 {
+    //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
+    //                  "Your type is not supported."
+    //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     const int FIELS_SIZE = 4;
     const QByteArray block_message = Messages::BLOCK_MESSAGE;
     const QByteArray get_block_message = Messages::GET_BLOCK_MESSAGE;
@@ -53,7 +56,13 @@ public:
     ~Blockchain();
 
 private:
-    Block getBlockByIndex(const BigNumber &index);
+    //    template <typename T>
+    Block &getBlockByIndex(const BigNumber &index)
+    {
+        Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
+        Block block2 = validateAndReturnBlock(block);
+        return block2; /*static_cast<T>(*/ /*)*/
+    }
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
     Block getBlockByHash(const QByteArray &hash);

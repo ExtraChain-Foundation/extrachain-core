@@ -54,6 +54,7 @@ public:
 
 namespace Config {
 static const QByteArray GENESIS_BLOCK_TYPE = "genesis";
+static const QByteArray GENESIS_BLOCK_MERGE = "genesisMerge";
 }
 
 /**

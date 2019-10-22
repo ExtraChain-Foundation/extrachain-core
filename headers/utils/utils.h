@@ -82,6 +82,8 @@ namespace Config {
 // http://doc.qt.io/qt-5/qtglobal.html#qSetMessagePattern)
 const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{message}";
 
+const int NECESSARY_SAME_TX = 1;
+
 namespace DataStorage {
 
     // How many files one section folder will store

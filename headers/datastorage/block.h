@@ -22,6 +22,7 @@ struct BlockCompare
 
 namespace Config {
 static const QByteArray DATA_BLOCK_TYPE = "data";
+static const QByteArray MERGE_BLOCK = "dataMerge";
 }
 
 class Block
@@ -41,11 +42,23 @@ private:
     QByteArray digSig;   // digital signature (from all fields)
 public:
     Block();
-    // Copy constructor
+    /**
+     * @brief Block
+     * @param block
+     */
     Block(const Block &block);
-    // Deserialize already constructed block
+    /**
+     * @brief Block
+     * Deserialize already constructed block
+     * @param serialized
+     */
     Block(const QByteArray &serialized);
-    // Initial block construction, prev = nullptr for first block
+    /**
+     * @brief Block
+     * Initial block construction, prev = nullptr for first block
+     * @param data
+     * @param prev
+     */
     Block(const QByteArray &data, const Block &prev);
 
     virtual ~Block();
@@ -117,6 +130,8 @@ public:
     void setDate(long long value);
     Block operator=(const Block &block);
     void setApprover(const BigNumber &value);
+
+    void setType(const QByteArray &value);
 };
 
 inline bool operator<(const Block &l, const Block &r)
