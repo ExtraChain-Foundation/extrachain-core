@@ -395,6 +395,7 @@ void NodeManager::updateAvailableWalletList()
     QStringList actors = uiWallet->getAllActor(currentId);
 
     /*
+    QList<QByteArray> walletList;
     Subscribtion sub;
     QList<BigNumber> subActorsList = sub.getAll();
 
@@ -406,9 +407,9 @@ void NodeManager::updateAvailableWalletList()
             continue;
         walletList.append(curActor.getId().toActorId());
     }
-
-    uiWallet->updateAvailableListModel(&walletList);
     */
+
+    uiWallet->updateAvailableListModel(&actors);
 }
 
 void NodeManager::updateRecentActivities()
