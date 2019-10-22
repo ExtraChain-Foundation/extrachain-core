@@ -9,7 +9,7 @@
 #include <QTimer>
 
 #include "datastorage/blockchain.h"
-#include "crypt/crypt_interface.h"
+#include "enc/crypt_interface.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
 #include "datastorage/index/blockindex.h"
@@ -18,12 +18,11 @@
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
  */
-class TransactionManager : public QThread
+class TransactionManager : public QObject
 {
     Q_OBJECT
-private:
-    bool active = false;
 
+private:
     // to create block's from pending txs
     QTimer blockCreationTimer;
 
@@ -51,14 +50,6 @@ private:
     void removeTransaction(int i);
 
 public:
-    void run() override;
-
-public:
-    int exec();
-    void quit();
-    bool isActive() const;
-
-public:
     static QByteArray convertTxs(const QList<Transaction> &txs);
 
 public slots:
@@ -67,7 +58,7 @@ public slots:
      * Creates a memblock, and setup data field with serialized data.
      * Emits SendBlock signal.
      */
-    void makeBlock();
+    Block makeBlock();
 
     /**
      * If Transaction is valid, adds it to the txList.
@@ -104,6 +95,8 @@ public slots:
      * @param tx - already verified transaction
      */
     void addVerifiedTx(Transaction tx);
+    void process();
+
 signals:
     /**
      * @brief Signal to blockchain. We need to enshure, that this is really new tx.
@@ -116,7 +109,7 @@ signals:
      * @brief Sends new verified block to the network
      * @param block
      */
-    void SendBlock(QByteArray block);
+    void SendBlock(QByteArray block, QByteArray msgType);
     /**
      * @brief Send transaction request
      * @param senderId
@@ -134,6 +127,8 @@ signals:
      * @param Transaction compared between local blockchain and transaction
      */
     void GetTxResponse(Transaction tx);
+
+    void finished();
 };
 
 #endif // TX_MANAGER_H

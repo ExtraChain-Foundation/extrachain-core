@@ -4,7 +4,7 @@
 #include <QString>
 #include <QByteArray>
 #include "datastorage/actor.h"
-#include "crypt/sign_interface.h"
+#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/utils.h"
 

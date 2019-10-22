@@ -6,24 +6,22 @@ CoinPrice::CoinPrice(const Transaction &tr)
     this->userId = tr.getSender();
     this->tr = tr;
     // this ->price = tr.getToken();
-    this->tokenId = tr.getToken().toByteArray();
+    this->tokenId = tr.getToken().toActorId();
 }
 
 CoinPrice::CoinPrice(const QByteArray &serilaized)
 {
-    if (Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).count()
-        == 5)
+    if (Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).count() == 5)
     {
-        this->ammout = BigNumber(
-            Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(1));
-        this->userId = BigNumber(
-            Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(2));
-        this->tr = Transaction(
-            Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(3));
-        this->price = BigNumber(
-            Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(4));
-        this->tokenId =
-            Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(5);
+        this->ammout =
+            BigNumber(Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(1));
+        this->userId =
+            BigNumber(Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(2));
+        this->tr =
+            Transaction(Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(3));
+        this->price =
+            BigNumber(Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(4));
+        this->tokenId = Serialization::deserialize(serilaized, Serialization::Coin_Price_Delimiter).at(5);
     }
     else
     {
@@ -38,10 +36,9 @@ CoinPrice::~CoinPrice()
 QByteArray CoinPrice::serialized() const
 {
     QList<QByteArray> list;
-    list << this->userId.toByteArray() << this->ammout.toByteArray() << this->tr.serialize()
+    list << this->userId.toActorId() << this->ammout.toByteArray() << this->tr.serialize()
          << this->price.toByteArray() << this->tokenId;
-    QByteArray serializedData =
-        Serialization::serialize(list, Serialization::Coin_Price_Delimiter);
+    QByteArray serializedData = Serialization::serialize(list, Serialization::Coin_Price_Delimiter);
     return serializedData;
 }
 
@@ -67,11 +64,9 @@ void CoinPrice::upgradeFile(QFile *file)
 
     while (!file->atEnd())
     {
-        forSorting[Serialization::deserialize(file->readLine(),
-                                              Serialization::Coin_Price_Delimiter_2)
+        forSorting[Serialization::deserialize(file->readLine(), Serialization::Coin_Price_Delimiter_2)
                        .at(1)] =
-            Serialization::deserialize(file->readLine(), Serialization::Coin_Price_Delimiter_2)
-                .at(2);
+            Serialization::deserialize(file->readLine(), Serialization::Coin_Price_Delimiter_2).at(2);
     }
 
     file->close();

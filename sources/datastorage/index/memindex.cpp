@@ -193,14 +193,14 @@ Transaction MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam 
         QList<Transaction> txs = byPosition.extractTransactions();
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken() != token)
+            if (tx.getToken().toActorId() != token)
                 continue;
             switch (param)
             {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
             {
                 QList<QByteArray> data =
-                    Serialization::deserialize(id.toByteArray(), Serialization::TX_FIELD_SPLITTER);
+                    Serialization::deserialize(id.toActorId(), Serialization::TX_FIELD_SPLITTER);
                 if (data.size() != 2)
                 {
                     qDebug() << "[memindex.cpp][getLastTxByParam] Error when get Search parameter "
@@ -243,7 +243,7 @@ Transaction MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam 
             }
             case SearchEnum::TxParam::Hash:
             {
-                if (tx.getHash() == id.toByteArray())
+                if (tx.getHash() == id.toActorId())
                     return tx;
                 break;
             }

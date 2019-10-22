@@ -5,12 +5,17 @@ INCLUDEPATH += $$PWD/deprecated/headers
 SOURCES += \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
+    $$PWD/dfs/packages/sources/message_struct.cpp \
+    $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
-    $$PWD/sources/crypt/crypt_manager.cpp \
-    $$PWD/sources/crypt/ecc/ecc.cpp \
-    $$PWD/sources/crypt/ecc/key_private.cpp \
-    $$PWD/sources/crypt/ecc/key_public.cpp \
+    $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
+    $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
+    $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
+    $$PWD/sources/enc/crypt_manager.cpp \
+    $$PWD/sources/enc/key_private.cpp \
+    $$PWD/sources/enc/key_public.cpp \
+    $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/fileindex.cpp \
@@ -29,11 +34,15 @@ SOURCES += \
     $$PWD/sources/managers/tx_manager.cpp \
     $$PWD/sources/managers/thread_pool.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
+    $$PWD/sources/network/packages/base_message_response.cpp \
     $$PWD/sources/network/packages/service/list_connections.cpp \
     $$PWD/sources/network/socket_pair.cpp \
+    $$PWD/sources/profile/private_profile.cpp \
+    $$PWD/sources/profile/public_profile.cpp \
+    $$PWD/sources/resolve/resolve_manager.cpp \
+    $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/utils.cpp \
-    $$PWD/sources/EllipticPoints.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/managers/headers/card_manager.cpp \
@@ -56,13 +65,26 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
     $$PWD/sources/network/packages/service/merged_block_message.cpp \
-    $$PWD/sources/network/resolver_service.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
-    $$PWD/sources/network/upnpconnection.cpp \
-    $$PWD/headers/utils/bignumberdec.cpp
+    $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
+    $$PWD/dfs/managers/headers/package_resolver.h \
+    $$PWD/dfs/packages/headers/dfs_message_interface.h \
+    $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/dfs/packages/headers/title_message.h \
+    $$PWD/headers/enc/algorithms/aes.h \
+    $$PWD/headers/enc/algorithms/blowfish_crypt.h \
+    $$PWD/headers/enc/algorithms/ecc/curves.h \
+    $$PWD/headers/enc/algorithms/ecc/eccmath.h \
+    $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
+    $$PWD/headers/enc/algorithms/xor_encrypt.h \
+    $$PWD/headers/enc/crypt_manager.h \
+    $$PWD/headers/enc/key_private.h \
+    $$PWD/headers/enc/key_public.h \
+    $$PWD/headers/enc/crypt_interface.h \
+    $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
@@ -70,12 +92,6 @@ HEADERS += \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
-    $$PWD/headers/crypt/crypt_manager.h \
-    $$PWD/headers/crypt/ecc/ecc.h \
-    $$PWD/headers/crypt/ecc/key_private.h \
-    $$PWD/headers/crypt/ecc/key_public.h \
-    $$PWD/headers/crypt/crypt_interface.h \
-    $$PWD/headers/crypt/sign_interface.h \
     $$PWD/headers/datastorage/index/actorindex.h \
     $$PWD/headers/datastorage/index/blockindex.h \
     $$PWD/headers/datastorage/index/fileindex.h \
@@ -95,7 +111,12 @@ HEADERS += \
     $$PWD/headers/managers/tx_manager.h \
     $$PWD/headers/managers/thread_pool.h \
     $$PWD/headers/managers/logs_manager.h \
+    $$PWD/headers/network/packages/base_message_response.h \
     $$PWD/headers/network/socket_pair.h \
+    $$PWD/headers/profile/private_profile.h \
+    $$PWD/headers/profile/public_profile.h \
+    $$PWD/headers/resolve/resolve_manager.h \
+    $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/list_container.h \
@@ -128,14 +149,12 @@ HEADERS += \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/response_messages.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/resolver_service.h \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/utils/utils.h \
-    $$PWD/headers/utils/bignumberdec.h
+    $$PWD/headers/utils/utils.h
 
-linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
+linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android!ios: DESTDIR = Etalonium
 android: DESTDIR = android-build
@@ -143,6 +162,14 @@ OBJECTS_DIR = .obj
 MOC_DIR = .moc
 RCC_DIR = .qrc
 UI_DIR = .ui
+
+android {
+    INCLUDEPATH += $$PWD/libs
+    LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
+}
+linux:!android {
+    LIBS += -lgmp -lgmpxx
+}
 
 QMAKE_SPEC_T = $$[QMAKE_SPEC]
 contains(QMAKE_SPEC_T,.*win32.*) {
@@ -158,3 +185,14 @@ QMAKE_SUBSTITUTES += preconfig.h.in
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.12+")
 lessThan(QT_MINOR_VERSION, 12): error("requires Qt 5.12+")
 lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.12+")
+
+DISTFILES += \
+    $$PWD/android/AndroidManifest.xml \
+    $$PWD/android/build.gradle \
+    $$PWD/android/gradle/wrapper/gradle-wrapper.jar \
+    $$PWD/android/gradle/wrapper/gradle-wrapper.properties \
+    $$PWD/android/gradlew \
+    $$PWD/android/gradlew.bat \
+    $$PWD/android/libs/armeabi-v7a/libgmp.so \
+    $$PWD/android/libs/armeabi-v7a/libgmpxx.so \
+    $$PWD/android/res/values/libs.xml

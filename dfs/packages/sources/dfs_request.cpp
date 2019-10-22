@@ -1,86 +1,33 @@
+
 #include "dfs/packages/headers/dfs_request.h"
 
-using namespace Messages;
-
-int DfsRequest::getRequest() const
+Message::dfs_request::dfs_request(const QString &filePath, const QByteArray &asker)
+    : IDfs_Message(m_type)
 {
-    return request;
+    this->filePath = filePath;
+    this->asker = asker;
 }
 
-QString DfsRequest::getFilePath() const
+Message::dfs_request::dfs_request(const QByteArray &serialized)
+    : IDfs_Message(m_type)
 {
-    return filePath;
+    QList<QByteArray> list = deserialize(serialized);
+    if (list.size() != FIELDS_COUNT)
+    {
+        qDebug() << "request_message_struct << incorrect input data";
+        return;
+    }
+    filePath = QString::fromUtf8(list.takeFirst());
+    asker = list.takeFirst();
 }
 
-short DfsRequest::getFieldsCount() const
+Message::dfs_request::~dfs_request()
 {
-    return this->BaseMessage::getFieldsCount() + 2;
 }
 
-void DfsRequest::initFields(QList<QByteArray> &list)
+const QList<QByteArray> Message::dfs_request::serializedParams() const
 {
-    this->BaseMessage::initFields(list);
-    request = list.takeFirst().toInt();
-    filePath = list.takeFirst();
-}
-
-QList<QByteArray> DfsRequest::serializedParams() const
-{
-    QList<QByteArray> list = this->BaseMessage::serializedParams();
-    list << QByteArray::number(request) << filePath.toUtf8();
+    QList<QByteArray> list;
+    list << filePath.toUtf8() << asker;
     return list;
-}
-
-DfsRequest::DfsRequest()
-    : BaseMessage(DFS_REQUEST_MESSAGE)
-{
-}
-
-DfsRequest::DfsRequest(const int &reuest, const QString &filePath)
-    : BaseMessage(DFS_REQUEST_MESSAGE)
-    , request(reuest)
-    , filePath(filePath)
-{
-}
-
-DfsRequest::DfsRequest(const QByteArray &serialize)
-    : BaseMessage(DFS_REQUEST_MESSAGE)
-{
-    QList<QByteArray> list =
-        Serialization::universalDesirialize(serialize, Messages::FIELD_SIZES);
-    initFields(list);
-}
-
-DfsRequest::DfsRequest(const DfsRequest &value)
-    : BaseMessage(DFS_REQUEST_MESSAGE)
-    , request(value.request)
-    , filePath(value.filePath)
-{
-    QList<QByteArray> list = value.BaseMessage::serializedParams();
-    this->BaseMessage::initFields(list);
-}
-
-DfsRequest::~DfsRequest()
-{
-}
-
-DfsRequest DfsRequest::operator=(const DfsRequest &value)
-{
-    QList<QByteArray> list = value.BaseMessage::serializedParams();
-    this->BaseMessage::initFields(list);
-    request = value.request;
-    filePath = value.filePath;
-    return *this;
-}
-
-QByteArray DfsRequest::serialize() const
-{
-    return Serialization::universalSerialize(this->serializedParams(), Messages::FIELD_SIZES);
-}
-
-void DfsRequest::deserialize(const QByteArray &serialized)
-{
-    QList<QByteArray> list =
-        Serialization::universalDesirialize(serialized, Messages::FIELD_SIZES);
-    initFields(list);
 }

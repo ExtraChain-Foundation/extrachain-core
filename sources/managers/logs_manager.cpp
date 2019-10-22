@@ -27,26 +27,26 @@ bool LogsManager::antiFilter = false;
 
 LogsManager::LogsManager()
 {
-    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog, Qt::QueuedConnection);
+    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
 }
 
 void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
     Q_UNUSED(type)
+
     static LogsManager logsManager;
     emit logsManager.makeLogSignal(context.file, context.line, context.function, msg);
 }
 
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
 {
-    QString message = msg;
-
     static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
                          + ".log");
 
     if (LogsManager::toFile && !logFile.isOpen())
         logFile.open(QFile::Append | QFile::Text);
 
+    QString message = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
 
 #ifdef QT_DEBUG
@@ -60,7 +60,6 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #else
     fileName = fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
 #endif
-
 #endif
 
 #ifdef QT_DEBUG
@@ -128,7 +127,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #endif
     }
 
-    if (LogsManager::toFile)
+    if (LogsManager::toFile && logFile.isWritable())
     {
         logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd "), logStr).toUtf8());
         logFile.flush();
@@ -141,7 +140,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
                       { "date", currentDateTime.toMSecsSinceEpoch() }
 #ifdef QT_DEBUG
                       ,
-                      { "file", fileName },
+                      { "file", file },
                       { "line", line },
                       { "func", function }
 #endif

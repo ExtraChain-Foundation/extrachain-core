@@ -8,8 +8,13 @@
 #include <QJsonObject>
 #include <QList>
 #include <QString>
-//#include <hex.h>
+#include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+
+namespace TMP {
+static QByteArray *companyActorId = new QByteArray("0");
+};
+
 struct indexRow
 {
     indexRow(std::string _hash, long long pos, short use);
@@ -22,7 +27,7 @@ class FileList
 
 public:
     FileList();
-
+    ~FileList();
     void add(QByteArray hash, QByteArray data);
     void remove(QByteArray element);
     QByteArray operator[](int value);
@@ -34,13 +39,13 @@ public:
     void setFileList(const QFile &value);
 
 private:
+    QList<indexRow>::iterator find(QByteArray key);
     QList<indexRow> indexList;
     QFile fileList;
 
-    QList<indexRow>::iterator find(QByteArray key);
     void init();
     void checkForDelete();
-    bool check(QByteArray hash); // IF HASH HAVED-> END
+    bool check(QByteArray hash); // IF HASH HAVE -> END
     const QByteArray DATA_EMPTY = "null";
     const int FIELD_SIZE = 4;
 };
@@ -170,17 +175,15 @@ QStringList deserializeString(const QString &serialized);
 QList<QString> deserialize(const QString &serialized, char delimiter);
 QByteArray serializeStored(const QList<QByteArray> list);
 QList<QByteArray> desirializeStored(const QByteArray &serialize);
-QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size);
-QList<QByteArray> universalDesirialize(const QByteArray &serialized, const int &fiels_size);
+QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
+QList<QByteArray> universalDeserialize(const QByteArray &serialized,
+                                       const int &fiels_size = DEFAULT_FIELD_SIZE);
 } // namespace Serialization
 
 namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
-
-// user data
-static const QString USER_DATA_FILE_NAME = "user.private";
 
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);

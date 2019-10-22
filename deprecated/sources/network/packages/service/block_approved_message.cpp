@@ -29,13 +29,13 @@ void BlockApprovedMessage::initFields(QLinkedList<QByteArray> &list)
 QList<QByteArray> BlockApprovedMessage::serializedParams() const
 {
     QList<QByteArray> l = BaseMessage::serializedParams();
-    l << blockId.serialize() << approver.serialize();
+    l << blockId.toByteArray() << approver.toActorId();
     return l;
 }
 
 const QByteArray BlockApprovedMessage::hash() const
 {
-    return Utils::calcKeccak(blockId.toByteArray() + approver.toByteArray());
+    return Utils::calcKeccak(blockId.toByteArray() + approver.toActorId());
 }
 
 BigNumber BlockApprovedMessage::getBlockId() const

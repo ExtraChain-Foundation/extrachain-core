@@ -34,7 +34,7 @@ QList<QByteArray> ChatMessage::serializedParams() const
 {
     QList<QByteArray> l = BaseMessage::serializedParams();
     l << message;
-    l << recipient.serialize();
+    l << recipient.toActorId();
     qDebug() << "MESSAGES::CHATMESSAGE: serializedParams(): " << l;
     return l;
 }

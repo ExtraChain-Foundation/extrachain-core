@@ -7,7 +7,7 @@
 #include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
-#include "crypt/ecc/key_private.h"
+#include "enc/key_private.h"
 #include "datastorage/profile.h"
 #include "datastorage/transaction.h"
 
@@ -22,23 +22,26 @@ private:
 
 private:
     void savePrivateActor(Actor<KeyPrivate> actor);
-    void sendTransaction(Actor<KeyPrivate> *sender, QByteArray receiver, QByteArray quantity);
+    void sendInitialTransaction(Actor<KeyPrivate> *sender, QByteArray receiver, QByteArray quantity);
     Actor<KeyPrivate> *createContract(QByteArray tokenName);
     void initializeTokenArray();
 
 public:
     SmartContractManager(ActorIndex *actorIndex, QObject *parent = nullptr);
+    ~SmartContractManager() = default;
     // QList<QByteArray> getAccountID();
 
 public slots:
-    void createContractProfile(QByteArray tokenCount, QByteArray tokenName, QByteArray relAddress);
+    void createContractProfile(QByteArray tokenCount, QByteArray tokenName, QByteArray relAddress,
+                               QByteArray color);
     void process();
 
 signals:
     // void sendTokenBalance(QMap<BigNumber,QMap<BigNumber,BigNumber>> tokenBalance);
     void verifyActor(Actor<KeyPublic> actor);
-    void sendTransactionCreateContract(Transaction trans);
+    void sendTransactionCreateContract(const QByteArray &data, const QByteArray &type);
     void addContractActorInActorIndex(Actor<KeyPublic> actor);
+    void saveActorInPrivateProfile(QByteArray id);
     void finished();
 };
 

@@ -62,29 +62,23 @@ void SocketService::readData()
         QByteArray command;
         command = buffer.mid(0, _blockSize);
         buffer.remove(0, _blockSize);
-        // command = _sok->readAll();
 
-        // temp
-        static auto checkMsgType = [](const QByteArray &msg, const QByteArray &type) {
-            Messages::BaseMessage b;
-            b.deserialize(msg);
-            return b.getMsgType() == type;
-        };
-
-        //    if (!checkMsgType(command, Messages::DFS_CHANGES_MESSAGE))
-        //        qDebug() << "Received command " << command;
-
-        // _sok->readAll();
         if (!active)
         {
-//            active = true;
+            //            active = true;
+            if (command.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+            {
 
-            identificator = BigNumber(command);
+                identificator = BigNumber(command.mid(IDENTIFICATOR.size()));
+            }
             emit checkMe();
         }
         else
-            emit MessageReceived(command, this->address, this->port);
-
+        {
+            SocketPair receiver(address.toStdString(), port);
+            receiver.setId(identificator.toByteArray());
+            emit MessageReceived(command, receiver);
+        }
         _blockSize = 0;
     }
 };
@@ -204,7 +198,8 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    this->sendMsg(net::readNetManagerIdentificator(), SocketPair(this->address.toStdString(), this->port));
+    this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
+                  SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
     qDebug() << "SOCKET SERVICE: "

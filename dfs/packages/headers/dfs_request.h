@@ -1,36 +1,23 @@
-#ifndef DFS_REUEST_H
+﻿#ifndef DFS_REUEST_H
 #define DFS_REUEST_H
 
-#include "dfs/types/headers/dfstruct.h"
-#include "network/packages/base_message.h"
+#include "dfs_message_interface.h"
 
-namespace Messages {
+namespace Message {
 
-static const QByteArray DFS_REQUEST_MESSAGE = "dfsRequestMessage";
-
-class DfsRequest : public BaseMessage
+struct dfs_request : public IDfs_Message
 {
-    Q_OBJECT
+    const short FIELDS_COUNT = 2;
+    const int m_type = dfsMessageType::requestMessage;
 
-private:
-    int request;
     QString filePath;
+    QByteArray asker;
 
-    short getFieldsCount() const override;
-    void initFields(QList<QByteArray> &list) override;
-    QList<QByteArray> serializedParams() const override;
+    dfs_request(const QString &filePath, const QByteArray &asker);
+    dfs_request(const QByteArray &serialized);
+    ~dfs_request() override final;
 
-public:
-    DfsRequest();
-    DfsRequest(const int &reuest, const QString &filePath);
-    DfsRequest(const QByteArray &serialize);
-    DfsRequest(const DfsRequest &value);
-    ~DfsRequest() override;
-    DfsRequest operator=(const DfsRequest &value);
-    QByteArray serialize() const override final;
-    void deserialize(const QByteArray &serialized) override;
-    QString getFilePath() const;
-    int getRequest() const;
+    const QList<QByteArray> serializedParams() const override;
 };
 }
 #endif // DFS_REUEST_H

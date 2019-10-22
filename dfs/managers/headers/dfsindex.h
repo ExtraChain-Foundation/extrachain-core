@@ -3,7 +3,6 @@
 
 #include "dfs/types/headers/dfsitem.h"
 #include "managers/account_controller.h"
-#include "crypt/ecc/ecc.h"
 #include "utils/utils.h"
 #include "dfs/types/headers/stored.h"
 #include "dfs/managers/headers/card_manager.h"
@@ -73,7 +72,7 @@ signals:
      */
     //    void requestData(Messages::DfsRequest request);
 
-    void sendRequest(const Messages::DfsRequest &msg);
+    //    void sendRequest(const Messages::DfsRequest &msg);
 
     //
     void usersChanged(QByteArray data, based_dfs_struct::Type type, BigNumber actorId);

@@ -10,9 +10,16 @@
 #include <QRandomGenerator>
 #include <QDebug>
 
-#include "utils/utils.h"
+#include <iostream>
+//#include "utils/utils.h"
 
-using std::string;
+#include "gmpxx.h"
+
+#ifdef QT_DEBUG
+#define UPDATE_DEBUG() qdata = m_data.get_str(16).c_str();
+#else
+#define UPDATE_DEBUG()
+#endif
 
 /**
  * Data type for big hex numbers for addresses
@@ -23,30 +30,25 @@ class BigNumber
 {
 public:
     BigNumber();
-    BigNumber(const QByteArray &bigNumber);
+    BigNumber(const QByteArray &bigNumber, int base = 16);
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);
-    ~BigNumber();
+    BigNumber(mpz_class number);
+    ~BigNumber() = default;
 
 private:
-    QString hexValue = "";
-    bool positive = true;
-    static const int HEX_BASE = 16;
-    static const int DEC_BASE = 10;
-    static const int LONG_LONG_LENGTH = 19;
+    mpz_class m_data;
+    bool infinity = false;
 
-private:
-    QString toHex(const QString &dec) const;
-    QString toDec(const QString &hex) const;
-    QString fillZeros(const QString &number) const; // fill string with zeros up to 19 numbers
-    QString cutZeros(const QString &number) const;
-    static std::pair<BigNumber, BigNumber> naiveDivide(BigNumber &value, const BigNumber &divider);
+#ifdef QT_DEBUG
+    QByteArray qdata;
+#endif
 
 public:
-    static std::pair<BigNumber, BigNumber> divide(BigNumber val, BigNumber divider);
-    static int compare(const QString &one, const QString &two);
     BigNumber operator&(const BigNumber &);
+    BigNumber operator>>(const uint &);
+    BigNumber operator>>=(const uint &);
     BigNumber operator+(const BigNumber &);
     BigNumber operator+(long long);
     BigNumber operator-(const BigNumber &);
@@ -73,82 +75,95 @@ public:
     BigNumber &operator/=(long long);
     BigNumber &operator%=(const BigNumber &);
     BigNumber &operator%=(long long);
-    BigNumber &operator-();
+    BigNumber operator-() const;
 
 public:
-    bool isPrime() const;
+    mpz_class data() const;
+    int isProbPrime() const;
     bool isEmpty() const;
-    bool isPositive() const;
-    QString getHexValue() const;
-    QByteArray toBinary() const;
-    QString toString() const;
-    QByteArray toByteArray() const; // todo: change to serialize
-    QByteArray serialize() const;
+    QByteArray toByteArray(int base = 16) const; // todo: change to serialize
+    QByteArray toActorId() const;
+    BigNumber pow(unsigned long number);
+    BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
-    void setHexValue(const QString &hex);
-    void setPositive(bool newPositive);
-    BigNumber pow(unsigned long long number);
-    QString toStringDec() const;
-    void fromString(QString serialized);
+    bool getInfinity() const;
+    void setInfinity(bool value);
 
-    static BigNumber fromByteArray(QByteArray serialized);
-    static BigNumber factorial(int num);
-    static BigNumber sqrt(const BigNumber &);
+    static BigNumber factorial(unsigned long number);
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n);
     static BigNumber random(int n, const BigNumber &max);
-    static BigNumber fromDec(const QByteArray &dec);
+    static BigNumber random(BigNumber max);
 };
 
-inline bool operator<(const BigNumber &e1, const BigNumber &e2)
+inline bool operator<(const BigNumber &l, const BigNumber &r)
 {
-    if (!e1.isPositive() && e2.isPositive())
-        return true;
 
-    if (e1.isPositive() && !e2.isPositive())
-        return false;
-
-    if (!e1.isPositive() && !e2.isPositive())
-        return BigNumber::compare(e1.getHexValue(), e2.getHexValue()) > 0;
-
-    return BigNumber::compare(e1.getHexValue(), e2.getHexValue()) < 0;
+    return l.data() < r.data();
 }
 
-inline bool operator<=(const BigNumber &lhs, const BigNumber &rhs)
+inline bool operator>(const BigNumber &l, const BigNumber &r)
 {
-    return !(rhs < lhs);
+    return l.data() > r.data();
 }
 
-inline bool operator>(const BigNumber &lhs, const BigNumber &rhs)
+inline bool operator<=(const BigNumber &l, const BigNumber &r)
 {
-    return rhs < lhs;
+    return l.data() <= r.data();
 }
 
-inline bool operator>=(const BigNumber &lhs, const BigNumber &rhs)
+inline bool operator>=(const BigNumber &l, const BigNumber &r)
 {
-    return !(lhs < rhs);
+    return l.data() >= r.data();
 }
 
-inline bool operator==(const BigNumber &e1, const BigNumber &e2)
+inline bool operator==(const BigNumber &l, const BigNumber &r)
 {
-    return e1.getHexValue() == e2.getHexValue() && e1.isPositive() == e2.isPositive();
+    return l.data() == r.data();
 }
 
-inline bool operator!=(const BigNumber &e1, const BigNumber &e2)
+inline bool operator!=(const BigNumber &l, const BigNumber &r)
 {
-    return !(e1 == e2);
+    return l.data() != r.data();
+}
+
+inline bool operator<(const BigNumber &l, const int &r)
+{
+
+    return l.data() < r;
+}
+
+inline bool operator>(const BigNumber &l, const int &r)
+{
+    return l.data() > r;
+}
+
+inline bool operator<=(const BigNumber &l, const int &r)
+{
+    return l.data() <= r;
+}
+
+inline bool operator>=(const BigNumber &l, const int &r)
+{
+    return l.data() >= r;
+}
+
+inline bool operator==(const BigNumber &l, const int &r)
+{
+    return l.data() == r;
+}
+
+inline bool operator!=(const BigNumber &l, const int &r)
+{
+    return l.data() != r;
 }
 
 inline uint qHash(const BigNumber &key, uint seed)
 {
-    return qHash(key.getHexValue(), seed) ^ key.isPositive();
+    return qHash(key.toByteArray(), seed);
 }
 
-Q_DECLARE_METATYPE(BigNumber)
-Q_DECLARE_METATYPE(BigNumber *)
-
-QDataStream &operator<<(QDataStream &in, BigNumber &bigNumber);
-QDataStream &operator>>(QDataStream &out, BigNumber &bigNumber);
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
+QDebug operator<<(QDebug debug, const mpz_class &bigNumber);
 
 #endif // BIGNUMBER_H

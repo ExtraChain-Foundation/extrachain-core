@@ -1,6 +1,7 @@
 #ifndef CARD_MANAGER_H
 #define CARD_MANAGER_H
 
+#include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
 #include <iterator>
 

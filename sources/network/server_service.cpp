@@ -35,7 +35,6 @@ void ServerService::startListen()
     }
 }
 
-
 ServerService::~ServerService()
 {
     //    active = false;

@@ -14,7 +14,7 @@ Profile::Profile(const QByteArrayList &list)
 
 Profile::Profile(const QByteArray &serialize)
 {
-    this->m_list = PublicProfile::deserialize(serialize);
+    //    this->m_list = PublicProfile::deserialize(serialize);
 }
 
 Profile::Profile(const Profile &profile)
@@ -24,7 +24,8 @@ Profile::Profile(const Profile &profile)
 
 QByteArray Profile::serialize() const
 {
-    return PublicProfile::serialize(m_list);
+    //    return PublicProfile::serialize(m_list);
+    return "";
 }
 
 QString Profile::toString() const
@@ -74,7 +75,7 @@ bool Profile::isEmpty()
     {
         if (!at(i).isEmpty())
         {
-            qDebug() << i;
+            // qDebug() << i;
             isEmpty = false;
             break;
         }
@@ -187,11 +188,6 @@ qint16 Profile::birthYear() const
 qint16 Profile::gender() const
 {
     return qint16(value("gender").toInt());
-}
-
-qint32 Profile::rating() const
-{
-    return qint32(value("rating").toInt());
 }
 
 QStringList Profile::avatar() const
@@ -415,11 +411,6 @@ void Profile::setGender(qint16 gender)
     setValue("gender", QByteArray::number(gender));
 }
 
-void Profile::setRating(qint32 rating)
-{
-    setValue("rating", QByteArray::number(rating));
-}
-
 void Profile::setAvatar(QStringList avatar)
 {
     setValue("avatar", avatar.join(" ").toUtf8());
@@ -563,10 +554,10 @@ QString Profile::fromListInt(const QList<int> &list)
 }
 
 //
-const QStringList Profile::fieldsCustomer = { "type",         "version",  "userId", "firstName", "lastName",
-                                              "registerDate", "birthday", "gender", "rating",    "avatar",
-                                              "country",      "bio",      "url",    "urlName",   "facebook",
-                                              "instagram",    "ethereum" };
+const QStringList Profile::fieldsCustomer = { "type",     "version",      "userId",    "firstName",
+                                              "lastName", "registerDate", "birthday",  "gender",
+                                              "avatar",   "country",      "bio",       "url",
+                                              "urlName",  "facebook",     "instagram", "ethereum" };
 
 const QStringList Profile::fieldsModel = fieldsCustomer
     + QStringList({ "unit", "category", "body", "hair", "hairLength", "eye", "sizes", "ethnicity", "style",

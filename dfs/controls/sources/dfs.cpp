@@ -2,18 +2,9 @@
 #include <iterator>
 void Dfs::signalConnections()
 {
-    //    connect(this, &Dfs::sendRequests, accountControler,
-    //    &AccountController::requestsFromDfs); connect(accountControler,
-    //    &AccountController::sendDataToDfs, this,
-    //            &Dfs::getUserDataAnswer);
-    //
-    //    connect(dfsIndex, &DfsIndex::requestData, this, &Dfs::requestData);
-    //    connect(this, &Dfs::profileRequest, dfsIndex, &DfsIndex::getProfileById);
-    //    connect(dfsIndex, &DfsIndex::sendProfile, this, &Dfs::profileRecieve);
     qDebug() << connect(dfsIndex, &DfsIndex::sendData, this, &Dfs::sendMessage);
     qDebug() << "dfs request connection" << connect(dfsIndex, &DfsIndex::sendToUser, this, &Dfs::sendToPeer);
-    connect(dfsIndex, &DfsIndex::sendRequest, this, &Dfs::sendRequestf);
-    //    connect(dfsIndex, &DfsIndex::sendToUser, this, &Dfs::sendToPeer);
+    //    connect(dfsIndex, &DfsIndex::sendRequest, this, &Dfs::sendRequestf);
 }
 
 Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent)
@@ -27,8 +18,6 @@ Dfs::~Dfs()
 {
     // save last changes and last data of users -> in file user data
     delete dfsIndex;
-    // delete actorIndex;
-    // delete accountControler;
 }
 
 DfsIndex *Dfs::getDfsIndex() const
@@ -40,10 +29,11 @@ void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
                        const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
 {
     QString createdPath = based_dfs_struct::ROOT_FOOLDER_NAME + '/'
-        + accountControler->getMainActor()->getId().toString() + '/' + based_dfs_struct::toString(type) + '/';
+        + accountControler->getMainActor()->getId().toActorId() + '/' + based_dfs_struct::toString(type)
+        + '/';
     createdPath += based_dfs_struct::images == type ? based_dfs_struct::toString(subType) + '/' : "";
     if (type != based_dfs_struct::servic)
-        createdPath += CardManager::getNameForNewFile(type).toString();
+        createdPath += CardManager::getNameForNewFile(type).toByteArray();
     else
     {
         if (subType == based_dfs_struct::profil)
@@ -124,112 +114,9 @@ void Dfs::initUser(BigNumber userId)
 {
     dfsIndex->makeSystemDir(userId);
     CardManager::createdAllCards(userId);
-    Messages::DfsRequest rqst(DFS_REQUESTS::DFS_ALL, userId.toByteArray());
-    emit sendRequestf(rqst);
-    qDebug() << "init start dfs for user - " << userId.toByteArray();
+    qDebug() << "init start dfs for user - " << userId.toActorId();
 }
 
-// void Dfs::changeData(Messages::DfsMessage serialized)
-//{
-//    dfsIndex->changedData(serialized.getData());
-//}
-
-// void Dfs::createdMyChanges(QByteArray data)
-//{
-//    dfsIndex->changedData(data);
-//    return;
-//}
-
-void Dfs::recieveRequest(Messages::DfsRequest request, QString peerAdress)
-{
-    switch (request.getRequest())
-    {
-    case DFS_REQUESTS::DFS_ALL:
-    {
-        QList<QString> list;
-        QList<BigNumber> actorList;
-        BigNumber maxActor = actorIndex->getLastSavedId();
-        //        for (BigNumber i = 0; i < maxActor; i++)
-        //            actorList.append(i);
-        //        actorList.append(maxActor);
-        //        for (auto &el : actorList)
-        list << CardManager::getAllFiles(
-            BigNumber(request.getFilePath().toUtf8()) /*BigNumber(request.getFilePath().toUtf8())*/);
-        for (QString &el : list)
-            dfsIndex->dfsSender(el, peerAdress);
-        return;
-    }
-    case DFS_REQUESTS::FILE_REQUEST:
-    {
-        if (QFile(request.getFilePath()).exists())
-            dfsIndex->dfsSender(request.getFilePath(), "");
-    }
-        /*
-  case DFS_REQUESTS::POST_FILE_REQUEST:
-  {
-      QList<QByteArray> list = CardManager::getPosts(request.getSigner());
-      if (list.isEmpty())
-          break;
-      QStringList imageQueue = {};
-      for (QByteArray el : list)
-      {
-          DfsItem *dfsItem = new DfsItem(el);
-          QFile *file = new QFile(dfsItem->getPath());
-          file->open(QIODevice::ReadOnly);
-          QByteArray postData = file->readAll();
-          QStringList imageList = CardManager::getImagesFromJson(postData);
-          for (QString el : imageList)
-              imageQueue.append(el);
-          QList<QByteArray> listHeader = {};
-          listHeader << dfsItem->getActorId().toByteArray() << "0"
-                     << based_dfs_struct::toByteArray(based_dfs_struct::State::NEWSTATE)
-                     << dfsItem->getPath()
-                     << ui_messages::toByteArray(ui_messages::page::post);
-          QByteArray serializeHeader =
-              Serialization::serialize(listHeader, Serialization::DFS_STORED_DELIMETR);
-          QByteArray data = Serialization::serializeStored({ serializeHeader, postData });
-
-          Messages::DfsMessage temp(postData, postData.size(), QString(dfsItem->getPath()));
-
-          for (QString el : imageQueue)
-          {
-              QFile file(el);
-              file.open(QIODevice::ReadOnly);
-              QByteArray imageData = file.readAll();
-              dfsIndex->dfsSender(el, "");
-          }
-          emit sendToPeer(temp, peerAdress);
-          file->close();
-          delete dfsItem;
-          delete file;
-      }
-      break;
-  }
-  case DFS_REQUESTS::PROFILE_FILE_REQUEST:
-  {
-      QByteArray serialized = CardManager::getProfileById(request.getSigner());
-      DfsItem *dfsItem = new DfsItem(serialized);
-      QFile *file = new QFile(dfsItem->getPath());
-      file->open(QIODevice::ReadOnly);
-      QByteArray profileData = file->readAll();
-      QList<QByteArray> listHeader = {};
-      listHeader << dfsItem->getActorId().toByteArray() << "0"
-                 << based_dfs_struct::toByteArray(based_dfs_struct::State::NEWSTATE)
-                 << dfsItem->getPath()
-                 << ui_messages::toByteArray(ui_messages::page::profile);
-      QByteArray serializeHeader =
-          Serialization::serialize(listHeader, Serialization::DFS_STORED_DELIMETR);
-      QByteArray data = Serialization::serializeStored({ serializeHeader, profileData });
-
-      Messages::DfsMessage temp(profileData, profileData.size(),
-                                QString(dfsItem->getPath()));
-      emit sendToPeer(temp, peerAdress);
-      file->close();
-      delete dfsItem;
-      delete file;
-  }*/
-    }
-}
 void Dfs::getUserDataAnswer(int request, QByteArray data)
 {
     switch (request)
@@ -252,6 +139,7 @@ void Dfs::getUserDataAnswer(int request, QByteArray data)
 
 void Dfs::recieve(Messages::DfsMessage msg)
 {
+    emit sendMessage(msg);
     QString fileName = msg.getFilePath() + based_dfs_struct::FILE_IDENTIFICATOR;
     QList<QByteArray> pathList = Serialization::deserialize(msg.getFilePath().toUtf8() + '/', "/");
 
@@ -293,10 +181,7 @@ void Dfs::recieve(Messages::DfsMessage msg)
         {
             QStringList requestList =
                 dfsIndex->fileCompareAndReturnDifference(file.fileName(), msg.getFilePath());
-            std::for_each(requestList.begin(), requestList.end(), [this](QString el) {
-                Messages::DfsRequest request(DFS_REQUESTS::FILE_REQUEST, el);
-                emit sendRequestf(request);
-            });
+
             return;
         }
     }
@@ -306,8 +191,6 @@ void Dfs::recieve(Messages::DfsMessage msg)
             return;
     }
     file.open(QIODevice::WriteOnly | QIODevice::Append);
-    //    file.open(file.exists() ? QIODevice::ReadWrite | QIODevice::Append
-    //                            : QIODevice::WriteOnly | QIODevice::Truncate);
     file.seek(msg.getPackageNumber() * 512);
     file.write(msg.getData());
     file.flush();
@@ -342,23 +225,13 @@ void Dfs::process()
 {
 }
 
-void Dfs::getDfsRequest(const Messages::DfsRequest &msg)
+void Dfs::resolveMsg(const Messages::DfsMessage &msg)
 {
-    //
     qDebug() << msg.serialize();
 }
 
-void Dfs::checkStatus(const Messages::DfsStatus &msg)
+void Dfs::appendSubscribtion(const BigNumber &actorId)
 {
-    //    if ()
-    std::vector<std::pair<std::string, std::string>> localFileList =
-        CardManager::getAllFileWithHash(msg.getActorId());
-    QStringList list = CardManager::getAllNotEmptyCardFile(msg.getActorId());
-    if (localFileList != msg.getList())
-        for (QString el : list)
-            dfsIndex->dfsSender(el, "");
-}
-
-void Dfs::resolveMsg(const Messages::DfsMessage &msg)
-{
+    Subscribtion sub;
+    sub.add(actorId);
 }

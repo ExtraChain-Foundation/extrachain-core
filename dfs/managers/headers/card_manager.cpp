@@ -31,7 +31,7 @@ BigNumber CardManager::getLastSavedFile(const BigNumber &actorId, const based_df
     else if (type == based_dfs_struct::images)
         cardPath = based_dfs_struct::IMAGE_CARD_FILE_NAME;
     QString path =
-        Serialization::serialize({ based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8(), actorId.toByteArray() }, '/')
+        Serialization::serialize({ based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8(), actorId.toActorId() }, '/')
         + toByteArray(type) + cardPath;
     QFile file(path);
     file.open(QIODevice::ReadOnly);
@@ -62,7 +62,7 @@ QList<QByteArray> CardManager::getMyNew() //   +-
 QList<QByteArray> CardManager::getPosts(const BigNumber &userId) // +- ???
 {
     //вичитати пости с карт файла заданого ектора вам потрібна карта файлу цього екторв
-    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
+    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
                + toString(based_dfs_struct::postes) + based_dfs_struct::POST_CARD_FILE_NAME);
     QList<QByteArray> posts;
     if (!file.exists())
@@ -158,7 +158,7 @@ QList<QByteArray> CardManager::getEvents(const BigNumber &userId)
 // QList<QByteArray> CardManager::getEvents(const BigNumber &userId) // copied from getPosts
 //{
 //    //вичитати всі івенти з карти заданого ектора
-//    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toByteArray() + '/'
+//    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
 //               + toString(based_dfs_struct::events) +
 //               based_dfs_struct::EVENT_CARD_FILE_NAME);
 //    QList<QByteArray> events;
@@ -187,7 +187,7 @@ QList<QByteArray> CardManager::getAllMyChat()
 
 QByteArray CardManager::getProfileById(const BigNumber &userId)
 {
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
         + based_dfs_struct::toString(based_dfs_struct::Type::servic)
         + based_dfs_struct::SERVICE_CARD_FILE_NAME;
     QFile file(path);
@@ -221,7 +221,7 @@ BigNumber CardManager::getNameForNewFile(based_dfs_struct::Type type)
     BigNumber amout = cardFileData.isEmpty()
         ? BigNumber("-1")
         : BigNumber(
-              cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
+            cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
     amout++;
     cardFile->close();
     delete cardFile;
@@ -266,7 +266,7 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
      * rootCard file use DFS_ROOT_CARD_FILE_SECTION_DELIMITER
      */
 
-    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+    QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
         + based_dfs_struct::toString(type) + based_dfs_struct::typeCardFilesMap[type];
     QFile *file = new QFile(path);
     if (!file->exists())
@@ -358,7 +358,7 @@ void CardManager::createdAllCards(const BigNumber &userId)
 {
     for (auto &el : based_dfs_struct::typeCardFilesMap)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
             + based_dfs_struct::toString(el.first) + el.second;
         QFile file(path);
         file.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -407,7 +407,7 @@ QMap<based_dfs_struct::Type, QByteArray> CardManager::getCardHashFromRoot(const 
         QList<QByteArray> elementOfCards =
             Serialization::deserialize(el, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
         QList<QByteArray> desirializePath = Serialization::deserialize(elementOfCards.at(2), "/");
-        if (userId.toByteArray() == desirializePath.at(1))
+        if (userId.toActorId() == desirializePath.at(1))
             result[based_dfs_struct::convertToDFType(desirializePath.at(2))] = elementOfCards.at(1);
     }
     file->close();
@@ -437,7 +437,7 @@ int CardManager::createdCardFilesConnection(const BigNumber &userId)
     QList<QByteArray> list = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (!QFile(path).exists())
         {
@@ -455,7 +455,7 @@ QList<QString> CardManager::getAllFiles(const BigNumber &userId)
     QList<QString> cardList = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (QFile(path).exists())
         {
@@ -491,7 +491,7 @@ std::vector<std::pair<std::string, std::string>> CardManager::getAllFileWithHash
     QList<QString> cardList = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (QFile(path).exists())
         {
@@ -563,7 +563,7 @@ QStringList CardManager::getAllNotEmptyCardFile(const BigNumber &userId)
     QStringList cardList = {};
     for (auto &el : based_dfs_struct::typesVec)
     {
-        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toString() + '/'
+        QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
             + based_dfs_struct::toString(el) + based_dfs_struct::typeCardFilesMap[el];
         if (QFile(path).exists())
         {

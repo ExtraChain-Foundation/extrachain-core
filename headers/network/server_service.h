@@ -6,7 +6,7 @@
 #include <QtNetwork/QTcpSocket>
 #include <QNetworkAddressEntry>
 #include <QThread>
-#include "resolver_service.h"
+//#include "resolver_service.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "utils/utils.h"

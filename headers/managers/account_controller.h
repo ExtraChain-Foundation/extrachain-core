@@ -4,7 +4,7 @@
 #include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
-#include "crypt/ecc/key_private.h"
+#include "enc/key_private.h"
 #include <QDebug>
 #include <QObject>
 
@@ -13,9 +13,7 @@
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-namespace accountConst {
-static const BigNumber companyId = BigNumber("0");
-}
+
 class AccountController : public QObject
 {
     Q_OBJECT
@@ -36,7 +34,7 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createActor(bool account);
+    Actor<KeyPrivate> createActor(int account);
     Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(BigNumber id);
     /**
@@ -78,7 +76,7 @@ public slots:
      * @param private actor
      */
     void savePrivateActor(Actor<KeyPrivate> actor);
-    void regNewUser(bool account);
+    //    void regNewUser(bool account);
 
     void changeUserNum(QByteArray);
 
@@ -99,5 +97,6 @@ signals:
     void finished();
 
     void initDfs();
+    void editPrivateProfile(QByteArray id);
 };
 #endif // ACCOUNT_CONTROLLER_H

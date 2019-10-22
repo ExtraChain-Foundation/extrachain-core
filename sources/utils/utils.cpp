@@ -13,70 +13,6 @@ std::string to_string(T value)
     return os.str();
 }
 
-// QByteArray Utils::encodeHex(const QByteArray &dec)
-//{
-//    HexEncoder encoder;
-//    encoder.Initialize();
-//    encoder.Put(
-//                reinterpret_cast<const unsigned char*> (dec.toStdString().c_str()),
-//                dec.size()
-//                );
-//    encoder.MessageEnd();
-
-//    QByteArray result;
-//    std::string str;
-
-//    lword maxRetrievable = encoder.MaxRetrievable();
-//    if (maxRetrievable)
-//    {
-//            str.resize(maxRetrievable);
-//            encoder.Get((unsigned char*)&str[0], str.size());
-//            result = QByteArray::fromStdString(str);
-//            result = result.toLower();
-//    }
-//    return result;
-//}
-
-// QByteArray Utils::encodeHex(byte *dec)
-//{
-//    HexEncoder encoder;
-//    encoder.Put(dec, Keccak_256::DIGESTSIZE);
-//    encoder.MessageEnd();
-//    std::string sp;
-//    if (encoder.MaxRetrievable())
-//    {
-//        sp.resize(encoder.MaxRetrievable());
-//        encoder.Get((byte*)&sp[0],sp.size());
-//        QByteArray result = QByteArray::fromStdString(sp);
-//        result = result.toLower();
-//        return result;
-//    }
-//    return "";
-//}
-
-// QByteArray Utils::decodeHex(const QByteArray &hex)
-//{
-//    HexDecoder decoder;
-//    decoder.Initialize();
-//    decoder.Put(
-//                reinterpret_cast<const unsigned char*> (hex.toStdString().c_str()),
-//                hex.size()
-//                );
-//    decoder.MessageEnd();
-
-//    QByteArray result;
-//    std::string str;
-
-//    lword maxRetrievable = decoder.MaxRetrievable();
-//    if (maxRetrievable)
-//    {
-//            str.resize(maxRetrievable);
-//            decoder.Get((unsigned char*)&str[0], str.size());
-//            result = QByteArray::fromStdString(str);
-//    }
-//    return result;
-//}
-
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
     Keccak keccak;
@@ -100,16 +36,6 @@ QByteArray Serialization::serialize(const QList<QByteArray> &list, const QByteAr
     }
     return result;
 }
-
-// QByteArray Serialization::serialize(const QStringList &list, const QByteArray &delimiter)
-//{
-//    QByteArray result;
-//    for (const QString &v : list)
-//    {
-//        result.append(v.toUtf8()).append(delimiter);
-//    }
-//    return result;
-//}
 
 QByteArray Serialization::serialize(const QList<QByteArray> &list, char delimiter)
 {
@@ -344,7 +270,7 @@ int Utils::qByteArrayToInt(const QByteArray &number)
     //    bool flag = false;
     while (i < number.size())
     {
-        if (number[i] == 0)
+        if (number[i] == '0')
             i++;
         else
             break;
@@ -397,7 +323,7 @@ QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, cons
     return serialized;
 }
 
-QList<QByteArray> Serialization::universalDesirialize(const QByteArray &serialized, const int &fiels_size)
+QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serialized, const int &fiels_size)
 {
     QList<QByteArray> list = {};
     int pos = 0;
@@ -426,13 +352,27 @@ void Utils::wipeDataFiles()
                 QFile::remove(file.filePath());
         }
     };
-    clearDir("blockchain/index/actors/0/profile", "0.profile");
-    clearDir("blockchain/index/actors/0");
-    clearDir("blockchain/index/blocks/0");
-    clearDir("keystore/personal", "0.key");
+
+    QByteArray companySection = TMP::companyActorId->right(2);
+    QDir actorDir("blockchain/index/actors");
+    auto dirsList = actorDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (auto &dir : dirsList)
+    {
+        if (dir.fileName() != companySection)
+            QDir(dir.filePath()).removeRecursively();
+    }
+
+    clearDir("blockchain/index/actors/" + companySection, *TMP::companyActorId);
+    clearDir("blockchain/index/blocks/0", "0");
+    clearDir("keystore/personal", *TMP::companyActorId + ".key");
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
     QFile(".fileList").remove();
+    QFile("blockchain/index/actors/.first").remove();
+    QFile("blockchain/index/actors/.last").remove();
+    QFile("blockchain/index/blocks/.first").remove();
+    QFile("blockchain/index/blocks/.last").remove();
 #else
     QDir("blockchain").removeRecursively();
     QDir("data").removeRecursively();
@@ -442,6 +382,8 @@ void Utils::wipeDataFiles()
     QFile("user.private.login").remove();
     QFile(".fileList").remove();
 #endif
+    QFile(".etalonium.lock").remove();
+    QFile(".settings").remove();
 }
 
 FileList::FileList()
@@ -543,7 +485,8 @@ void FileList::add(QByteArray hash, QByteArray data)
     }
     else
     {
-        if (find(data.mid(0, FIELD_SIZE)) != indexList.end())
+        QList<indexRow>::iterator it = find(data.mid(0, FIELD_SIZE));
+        if (it != indexList.end() && !it->used)
         {
             fileList.seek(find(data.mid(0, FIELD_SIZE))->currentPosition);
             QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
@@ -657,4 +600,8 @@ indexRow::indexRow(std::string _hash, long long pos, short use)
     hash = _hash;
     currentPosition = pos;
     used = use;
+}
+FileList::~FileList()
+{
+    this->checkForDelete();
 }

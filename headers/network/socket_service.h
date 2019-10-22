@@ -12,7 +12,7 @@
 #include "datastorage/block.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "network/resolver_service.h"
+//#include "network/resolver_service.h"
 #include <QTimer>
 
 #include "network/socket_pair.h"
@@ -25,6 +25,8 @@ using namespace SearchEnum;
 class SocketService : public QObject
 {
     Q_OBJECT
+    const QByteArray IDENTIFICATOR = "Ind:";
+
 private:
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
@@ -43,7 +45,7 @@ public:
     ~SocketService() override;
 
 signals:
-    void MessageReceived(const QByteArray &msgS, const QString &peerAddressst, const int port);
+    void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
     /**
      * @brief has only one connection with &QTcpSocket::disconnected on client
      * and connection with &NetManager::removeConnection on server

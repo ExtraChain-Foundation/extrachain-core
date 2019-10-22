@@ -7,6 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
+
 class Dfs : public QObject
 {
     Q_OBJECT
@@ -46,7 +47,6 @@ signals:
 
     void sendMessage(const Messages::DfsMessage &msg);
     void sendToPeer(const Messages::DfsMessage &msg, const QString &peerAddress);
-    void sendRequestf(const Messages::DfsRequest &msg);
     void sendDfsStatus(const Messages::DfsStatus &status);
 public slots:
     void savedNewData(const QString &path, const based_dfs_struct::Type &type,
@@ -56,16 +56,16 @@ public slots:
     void downloadRequset(QByteArray header, QString peerAddress);
     void init();
     void initUser(BigNumber userId);
-    void recieveRequest(Messages::DfsRequest request, QString peerAddress);
     //
     void getUserDataAnswer(int request, QByteArray data);
     void recieve(Messages::DfsMessage msg);
     void process();
 
-    void getDfsRequest(const Messages::DfsRequest &msg);
-    void checkStatus(const Messages::DfsStatus &msg);
+    //    void checkStatus(const Messages::DfsStatus &msg);
 
     void resolveMsg(const Messages::DfsMessage &msg);
+
+    void appendSubscribtion(const BigNumber &actorId);
 };
 
 #endif // DFS_H

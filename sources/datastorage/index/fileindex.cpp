@@ -131,7 +131,7 @@ BigNumber FileIndex::getLastSection() const
 
 int FileIndex::removeById(const BigNumber &id)
 {
-    qDebug() << "Removing record with id" << id.toString();
+    qDebug() << "Removing record with id" << id.toActorId();
     if (id < firstSavedId)
     {
         removeAll();
@@ -181,7 +181,7 @@ int FileIndex::removeFromEnd(const BigNumber &count)
 QString FileIndex::buildFilePath(const BigNumber &id) const
 {
     BigNumber section = this->calcSection(id);
-    QString pathToFolder = getFolderPath() + "/" + section.toString();
+    QString pathToFolder = getFolderPath() + "/" + section.toByteArray();
 
     QDir dir(pathToFolder);
     if (!dir.exists())
@@ -191,7 +191,7 @@ QString FileIndex::buildFilePath(const BigNumber &id) const
         dir.mkpath(pathToFolder);
     }
 
-    return pathToFolder + "/" + id.toString();
+    return pathToFolder + "/" + id.toActorId();
 }
 
 QString FileIndex::getFolderName() const

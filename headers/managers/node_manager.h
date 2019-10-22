@@ -2,6 +2,7 @@
 #define NODE_MANAGER_H
 
 #include <QObject>
+#include <QMap>
 #include "network/network_manager.h"
 #include "managers/tx_manager.h"
 #include "managers/account_controller.h"
@@ -13,8 +14,12 @@
 #include "managers/thread_pool.h"
 #include "dfs/controls/headers/dfs.h"
 #include "managers/contract_manager.h"
-#include "crypt/crypt_manager.h"
+#include "enc/crypt_manager.h"
 #include "managers/sm_manager.h"
+
+#include "resolve/resolve_manager.h"
+
+#include "profile/private_profile.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
@@ -35,12 +40,19 @@ private:
     AccountController *accController;
     SmartContractManager *smContractController;
 
+    ResolveManager *resolveManager;
+
+    PrivateProfile *prProfile;
+    QByteArray idPrivateProfile;
+    QByteArray hashLoginPrivateProfile;
+
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;
+
 #endif
     CryptManager *cryptManager;
-    ContractManager *contractManager;
+    //    ContractManager *contractManager;
 
 public:
     NodeManager();
@@ -72,31 +84,39 @@ public:
     UiController *getUiController() const;
 #endif
 
+    QByteArray getIdPrivateProfile() const;
+
+    QByteArray getHashLoginPrivateProfile() const;
+
 private:
     Actor<KeyPrivate> CreateExtracoin();
     void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetManager and Blockchain
      */
+    void connectResolveManager();
     void connectSmContractManager();
-    void connectNetManager();
     void connectTxManager();
     void connectUi();
     void connectContractManager();
     void connectBlockchain();
     void connectAccountController();
     void connectActorIndex();
-    bool dfsConnection();
+    void dfsConnection();
     void connectSignals();
     //    void dfsConnection();
     /**
      * @brief Creates folders for work, if they not exist
      */
     void prepareFolders();
+    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                      BigNumber token = 0);
 
 signals:
+
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
+    void sendMsg(const QByteArray &data, const QByteArray &msgType);
     // created keys for chat
     void sendKey(QByteArray key);
     void sendPrivateKey(QByteArray prKey);
@@ -105,30 +125,27 @@ signals:
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
 
     void sendActorIdSeva(bool status, BigNumber actorId);
-    void sendProfile(PublicProfile profile);
     void requestProfile(QString actorId);
-    void saveProfile(Actor<KeyPrivate> *key, Profile profile);
+    void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     void addActorInActorIndex(Actor<KeyPublic> actor);
+    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
 private slots:
+    void setIdPrivateProfile(QByteArray id);
+    void setHashLoginPrivateProfile(QByteArray hash);
+    void createNewActor(QByteArray hash, int accountStatus);
 
-    void createNewActor(QByteArray hash, bool accountStatus);
-
-    void makeContractFirstTransaction(Contract &contract);
-    void makeContractFinalTransaction(Contract &contract);
+    //    void makeContractFirstTransaction(Contract &contract);
+    //    void makeContractFinalTransaction(Contract &contract);
 public slots:
-
-    void takePubKeyFordecr(BigNumber actorId);
-    void takePrKeyFordecr(BigNumber actorId);
-
     void tempareSlotForActors();
     void coinResponse(BigNumber receiver, BigNumber amount);
 
     // test net & blockchain
 
     void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
-    void makeFirstContractTransaction(Contract contract);
+    //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
 #ifdef ETALONIUM_CLIENT
     void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
@@ -140,6 +157,7 @@ private slots:
     void updateAvailableWalletList();
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
+
 #endif
 };
 #endif // NODE_MANAGER_H

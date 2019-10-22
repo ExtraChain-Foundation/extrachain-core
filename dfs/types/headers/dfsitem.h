@@ -6,7 +6,18 @@
 #include "managers/account_controller.h"
 #include "dfs/managers/headers/card_manager.h"
 //#include "dfs/managers/headers/card_manager.h"
+class Subscribtion
+{
+    BigNumber ownerId;
+    const QString fileName = "/.subscribtion";
 
+    bool verify();
+
+public:
+    void add(const BigNumber &actorId);
+    void remove(const BigNumber &actorId);
+    QList<BigNumber> getAll(const BigNumber &actorId) const;
+};
 class DfsItem : public QObject, based_dfs_struct::DfStruct
 {
     Q_OBJECT

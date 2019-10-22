@@ -82,15 +82,33 @@ Block BlockIndex::getBlockById(const BigNumber &id) const
 {
     QByteArray serializedBlock = this->getById(id);
     //    qDebug() << "BLOCK: " << serializedBlock;
-    if (!serializedBlock.isEmpty() && Block::isBlock(serializedBlock))
+    if (!serializedBlock.isEmpty())
     {
-        return Block(serializedBlock);
+        if (Block::isBlock(serializedBlock))
+            return Block(serializedBlock);
+        else if (GenesisBlock::isGenesisBlock(serializedBlock))
+            return GenesisBlock(serializedBlock);
+    }
+    else
+    {
+        qDebug() << id << "is not block";
+    }
+    return Block();
+}
+
+QByteArray BlockIndex::getBlockDataById(const BigNumber &id) const
+{
+    QByteArray serializedBlock = this->getById(id);
+    //    qDebug() << "BLOCK: " << serializedBlock;
+    if (!serializedBlock.isEmpty())
+    {
+        return serializedBlock;
     }
     else
     {
         qDebug() << "is not block";
+        return "";
     }
-    return Block();
 }
 
 Block BlockIndex::getBlockByPosition(const BigNumber &position) const
@@ -222,7 +240,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
         QList<Transaction> txs = lastBlock.extractTransactions();
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken() != token)
+            if (tx.getToken().toActorId() != token)
                 continue;
             switch (param)
             {
@@ -259,7 +277,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
             }
             case SearchEnum::TxParam::Hash:
             {
-                if (tx.getHash() == id.toByteArray())
+                if (tx.getHash() == id.toActorId())
                     return tx;
                 break;
             }
@@ -342,7 +360,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
             }
             case SearchEnum::TxParam::Hash:
             {
-                if (tx.getHash() == id.toByteArray() && tx.getToken() == token)
+                if (tx.getHash() == id.toActorId() && tx.getToken() == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
