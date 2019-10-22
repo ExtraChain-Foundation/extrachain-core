@@ -59,10 +59,10 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
-    if (actor.isEmpty())
-        return;
-    emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
-    emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    if (!actor.isEmpty())
+        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
+    if (!actor.profile().getProfile().isEmpty())
+        emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
@@ -128,11 +128,6 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     qDebug() << "Save profile with id" << newProfile.at(2);
     QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
-    if (key->profile().sign.isEmpty())
-    {
-        Messages::BlockCount request;
-        emit sendMessage(request.serialize(), Messages::GET_BLOCK_COUNT_MESSAGE);
-    }
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
     if (pubProfile.sign == "")
     {

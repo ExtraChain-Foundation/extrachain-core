@@ -139,7 +139,6 @@ private slots:
     //    void makeContractFirstTransaction(Contract &contract);
     //    void makeContractFinalTransaction(Contract &contract);
 public slots:
-
     void tempareSlotForActors();
     void coinResponse(BigNumber receiver, BigNumber amount);
 

@@ -534,6 +534,8 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
     connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController, &UiController::loginPrivateProfile);
+    connect(prProfile, &PrivateProfile::sendPrivateProfile, blockchain,
+            &Blockchain::updateBlockchainForSignIn);
     connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
 
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
@@ -554,6 +556,7 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
+    connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
 }
 #endif
 

@@ -775,6 +775,18 @@ void Blockchain::process()
 {
 }
 
+void Blockchain::updateBlockchain(BigNumber id, bool isUser)
+{
+    Messages::BlockCount request;
+    emit sendMessage(request.serialize(), Messages::GET_BLOCK_COUNT_MESSAGE);
+}
+
+void Blockchain::updateBlockchainForSignIn(QByteArray id, QByteArrayList idList)
+{
+    Messages::BlockCount request;
+    emit sendMessage(request.serialize(), Messages::GET_BLOCK_COUNT_MESSAGE);
+}
+
 void Blockchain::checkBlockExistence(const Block &block)
 {
     Block last = getLastBlock();
