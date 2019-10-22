@@ -64,6 +64,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
+
 #ifdef ETALONIUM_CONSOLE
     emit accController->initDfs();
 #endif
@@ -116,7 +117,7 @@ void NodeManager::connectSmContractManager()
 
 void NodeManager::connectTxManager()
 {
-    // TODOD delete later (sendMSG())//
+    // TODOD delete later (s)
     connect(this, &NodeManager::NewTx, txManager, &TransactionManager::addTransaction);
 }
 
@@ -237,6 +238,7 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
         if (actorIndex->companyId != nullptr)
             if (actor.getId() == BigNumber(*actorIndex->companyId))
                 tx.setSenderBalance(BigNumber(0));
+
         return this->createTransaction(tx);
     }
     else
@@ -393,7 +395,6 @@ void NodeManager::updateAvailableWalletList()
     QStringList actors = uiWallet->getAllActor(currentId);
 
     /*
-    QList<QByteArray> walletList;
     Subscribtion sub;
     QList<BigNumber> subActorsList = sub.getAll();
 
@@ -405,9 +406,9 @@ void NodeManager::updateAvailableWalletList()
             continue;
         walletList.append(curActor.getId().toActorId());
     }
-    */
 
-    uiWallet->updateAvailableListModel(&actors);
+    uiWallet->updateAvailableListModel(&walletList);
+    */
 }
 
 void NodeManager::updateRecentActivities()

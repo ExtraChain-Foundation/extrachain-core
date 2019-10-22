@@ -57,11 +57,11 @@ public:
 
 private:
     //    template <typename T>
-    Block &getBlockByIndex(const BigNumber &index)
+    Block getBlockByIndex(const BigNumber &index)
     {
         Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
         Block block2 = validateAndReturnBlock(block);
-        return block2; /*static_cast<T>(*/ /*)*/
+        return block2;
     }
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
@@ -261,6 +261,7 @@ public:
 
     void getSmContractMembers(const Block &block) const;
 signals:
+
     void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);
     /**
@@ -304,6 +305,7 @@ signals:
     void finished();
 
 public slots:
+
     void process();
     void updateBlockchain(BigNumber id, bool isUser);
     void updateBlockchainForSignIn(QByteArray id, QByteArrayList idList);
