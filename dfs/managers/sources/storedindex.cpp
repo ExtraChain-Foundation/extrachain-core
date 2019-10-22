@@ -400,6 +400,7 @@ Stored StoredIndex::getLastStoredByPath(QByteArray _path) const
         file.close();
         return Stored(serialized);
     }
+    return Stored();
 }
 void StoredIndex::addStoredInIndex(Stored getStored)
 {
