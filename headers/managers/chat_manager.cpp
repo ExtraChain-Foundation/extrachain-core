@@ -6,11 +6,14 @@ void ChatManager::createNewChat()
         _chatId = generateChatId();
     } while (!isValid(_chatId));
     QDir().mkpath(chatStore + _chatId + "/");
+    QFile file(chatStore + _chatId + "/0");
+    file.open(QIODevice::WriteOnly);
+    file.close();
     QByteArray privateChatKey = generateChatKey();
     saveChatKey(
         KeyPublic(_accountController->getCurrentActor().getKey()->getPublicKey()).encrypt(privateChatKey),
         getCurrentSession());
-    // send message in blockhain about chat creation
+    emit sendCreatedNewChat(_chatId);
 }
 void ChatManager::saveChatKey(QByteArray key, QByteArray sessionNumb)
 {
@@ -35,7 +38,11 @@ QByteArray ChatManager::unloadChatKey()
     if (!file.exists())
         return "0";
     if (file.open(QIODevice::ReadOnly))
-        return file.readLine();
+    {
+        QByteArray key = file.readLine();
+        file.close();
+        return key;
+    }
     qDebug() << "[Error] Chat manager can't open file to load the key";
     return "0";
 }
@@ -45,9 +52,8 @@ void ChatManager::addMemberToChat(BigNumber actorId)
     if (key != "0")
     {
         key = KeyPublic(_accountController->getActor(actorId).getKey()->getPublicKey())
-                  .encrypt(_accountController->getCurrentActor().getKey()->decrypt(key));
-        emit sendInviteToChat(this->_chatId, actorId, key, getCurrentSession());
-        // send in blockhain key
+                  .encrypt(getChatPrivateKey());
+        emit sendInviteToChat(this->_chatId, getCurrentSession(), actorId, key);
     }
 }
 void ChatManager::removeMemberFromChat(BigNumber actorId)
@@ -61,7 +67,7 @@ void ChatManager::removeMemberFromChat(BigNumber actorId)
         //    for(int i=0;i<quantityChatMember;i++)
         //    {
         // if(i!=actorId)
-        //        sendInviteToChat(chatid,i,key,session)
+        //        sendInviteToChat(chatid,session,i,key)
         //    }
     }
     else
@@ -77,8 +83,7 @@ QByteArray ChatManager::generateChatId()
 }
 bool ChatManager::isValid(BigNumber chatId)
 {
-    // if chat id is accessible for create chat with that id, then return true
-    return true;
+    return !QDir(chatStore + chatId.toByteArray()).exists();
 }
 QByteArray ChatManager::getCurrentSession()
 {
@@ -104,6 +109,7 @@ QByteArray ChatManager::getCurrentSession()
     if (file.open(QIODevice::ReadOnly))
     {
         this->_currentSession = file.readLine();
+        file.close();
         return this->_currentSession;
     }
     qDebug() << "[Error] Chat manager can't open file to load the key";
@@ -147,7 +153,7 @@ QByteArray ChatManager::decryptMessage(QByteArray message)
 {
     return encryptMessage(message);
 }
-void ChatManager::receiveInviteToChat(QByteArray chatId, QByteArray key, QByteArray sessionNumb)
+void ChatManager::receiveInviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray key)
 {
     this->_chatId = chatId;
     QDir().mkpath(chatStore + _chatId + "/");
@@ -157,8 +163,8 @@ void ChatManager::receiveInviteToChat(QByteArray chatId, QByteArray key, QByteAr
 }
 void ChatManager::sendMessage(QByteArray message)
 {
-    message = encryptMessage(message);
-    // send encrypt message to chat
+    emit sendMessageToChat(this->_chatId, getCurrentSession(), _accountController->getCurrentActor().getId(),
+                           encryptMessage(message));
 }
 
 QByteArray ChatManager::receiveMessage(QByteArray message)
