@@ -31,15 +31,26 @@ NodeManager::NodeManager()
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
-    Actor<KeyPrivate> company = CreateExtracoin();
+    accController->loadActors();
+    Actor<KeyPrivate> company;
+    if (accController->getAccountCount() == 0)
+    {
+        company = CreateExtracoin();
+    }
+    else
+    {
+        company = *accController->getAccounts()[0];
+    }
     QByteArray td = company.getKey()->sign("test");
     std::cout << company.getKey()->verify("test", td) << std::endl;
-    accController->loadActors();                                         //!!!
-    TMP::companyActorId = new QByteArray(company.getId().toByteArray()); //!!!
+    TMP::companyActorId = new QByteArray(company.getId().toByteArray());
     actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
-    QMap<BigNumber, BigNumber> tm;
-    tm.insert(0, 0);
-    blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+    if (blockchain->getRecords() <= 0)
+    {
+        QMap<BigNumber, BigNumber> tm;
+        tm.insert(0, 0);
+        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+    }
 //    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
 //    newTransaction.setSenderBalance(BigNumber("0"));
 //    newTransaction.setReceiverBalance(BigNumber("0"));
