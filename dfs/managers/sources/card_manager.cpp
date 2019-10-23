@@ -89,18 +89,24 @@ QList<QByteArray> CardManager::getPosts(const BigNumber &userId) // +- ???
     return list;
 }
 
-QList<QByteArray> CardManager::getAll(based_dfs_struct::Type type, QString cardFileName)
+QStringList CardManager::getAll(based_dfs_struct::Type type)
 {
-    QList<QByteArray> all;
+    QStringList all;
 
-    for (auto &userId : QDir(based_dfs_struct::ROOT_FOOLDER_NAME).entryList())
-        all << getForUser(type, cardFileName, userId);
+    const QStringList allUserIds =
+        QDir(based_dfs_struct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (auto &userId : allUserIds)
+    {
+        QStringList files = getFilesByType(userId.toLatin1(), type);
+        all << files;
+    }
 
     return all;
 }
 
-QList<QByteArray> CardManager::getForUser(based_dfs_struct::Type type, QString cardFileName, QString userId)
+QStringList CardManager::getForUser(based_dfs_struct::Type type, QString userId)
 {
+    /*
     QList<QByteArray> all;
     QString fileName =
         based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + toString(type) + cardFileName;
@@ -133,6 +139,8 @@ QList<QByteArray> CardManager::getForUser(based_dfs_struct::Type type, QString c
     file.close();
 
     return all;
+    */
+    return getFilesByType(userId.toLatin1(), type);
 }
 
 QList<QByteArray> CardManager::getMyEvents() // do i need to sort events?
@@ -221,7 +229,7 @@ BigNumber CardManager::getNameForNewFile(based_dfs_struct::Type type)
     BigNumber amout = cardFileData.isEmpty()
         ? BigNumber("-1")
         : BigNumber(
-              cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
+            cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
     amout++;
     cardFile->close();
     delete cardFile;
@@ -572,7 +580,8 @@ QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_stru
         QByteArray dType =
             Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
         if (based_dfs_struct::toByteArray(type) == dType)
-            result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(1);
+            result << "data/" + userId + "/"
+                    + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
     }
     return result;
 }

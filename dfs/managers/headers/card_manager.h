@@ -13,8 +13,8 @@ public:
     static BigNumber getLastSavedFile(const BigNumber &actorId, const based_dfs_struct::Type type);
     static QList<QByteArray> getMyNew();
     static QList<QByteArray> getPosts(const BigNumber &userId);
-    static QList<QByteArray> getAll(based_dfs_struct::Type type, QString cardFileName);
-    static QList<QByteArray> getForUser(based_dfs_struct::Type type, QString cardFileName, QString userId);
+    static QStringList getAll(based_dfs_struct::Type type);
+    static QStringList getForUser(based_dfs_struct::Type type, QString userId);
     static QList<QByteArray> getMyEvents();
     static QList<QByteArray> getEvents(const BigNumber &userId);
     static QList<QByteArray> getAllMyChat();
