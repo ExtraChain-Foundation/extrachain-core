@@ -40,6 +40,7 @@ public:
 
     static QStringList getAllNotEmptyCardFile(const BigNumber &userId);
 
+    static QStringList getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type);
     //    function to create
 };
 

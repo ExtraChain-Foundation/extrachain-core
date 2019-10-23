@@ -101,6 +101,7 @@ void NodeManager::connectResolveManager()
     connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
+    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
 void NodeManager::connectSmContractManager()

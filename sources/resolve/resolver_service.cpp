@@ -261,6 +261,10 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     {
         emit getBlocksCount(calcHash(msg), receiver);
     }
+    else if (msgType == DFS_STATUS_MESSAGE)
+    {
+        emit dfsStatusrequest();
+    }
 
     // response messages
     else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)

@@ -204,11 +204,6 @@ void SocketService::establishConnection()
 
     qDebug() << "SOCKET SERVICE: "
              << "socket isOpen - " << socket->isOpen();
-    QObject::connect(qApp, &QCoreApplication::aboutToQuit, [=]() {
-        qDebug() << "SOCKET SERVICE: disconnect";
-        // this->socket->disconnect();
-        this->socket->disconnectFromHost();
-    });
 }
 
 void SocketService::setActive(bool active)

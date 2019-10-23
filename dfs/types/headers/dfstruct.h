@@ -30,6 +30,8 @@ static const QString SERVICE_CARD_FILE_NAME = "/card_file.service";
 static const QString SYSTEM_CARD_FILE_NAME = "/card_file.system";
 // temp files
 static const QString FILE_IDENTIFICATOR = ".tmp";
+static const QString ACTOR_CARD_FILE = ".root";
+
 enum State
 {
     NEWSTATE,

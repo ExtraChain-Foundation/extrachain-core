@@ -5,6 +5,8 @@
 
 namespace Message {
 
+static const QByteArray DFS_STATUS_REQUEST_MESSAGE = "dfsRequest";
+
 struct dfs_request : public IDfs_Message
 {
     const short FIELDS_COUNT = 2;
@@ -18,6 +20,15 @@ struct dfs_request : public IDfs_Message
     ~dfs_request() override final;
 
     const QList<QByteArray> serializedParams() const override;
+};
+
+struct getStatus
+{
+    const QByteArray request = DFS_STATUS_REQUEST_MESSAGE;
+
+    getStatus()
+    {
+    }
 };
 }
 #endif // DFS_REUEST_H

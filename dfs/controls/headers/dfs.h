@@ -7,6 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
+#include "dfs/managers/headers/package_resolver.h"
 
 class Dfs : public QObject
 {
@@ -24,6 +25,16 @@ private:
     void signalConnections();
     //
 
+    /// tempquickfix
+
+    void initD(const QByteArray &userId);
+    void saveD(const QString &path, const based_dfs_struct::Type &type = based_dfs_struct::Type::images,
+               const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
+               const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW);
+    void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
+                 const QByteArray &type);
+    QByteArray setName(const QByteArray &userId);
+
 public:
     //    Dfs(QObject *parent = nullptr);
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
@@ -32,6 +43,8 @@ public:
     DfsIndex *getDfsIndex() const;
 
 signals:
+
+    void newSender(const QByteArray &data, const QByteArray &msgType);
 
     void construction();
     // changes from/to dfs
@@ -48,6 +61,7 @@ signals:
     void sendMessage(const Messages::DfsMessage &msg);
     void sendToPeer(const Messages::DfsMessage &msg, const QString &peerAddress);
     void sendDfsStatus(const Messages::DfsStatus &status);
+
 public slots:
     void savedNewData(const QString &path, const based_dfs_struct::Type &type,
                       const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
@@ -66,6 +80,8 @@ public slots:
     void resolveMsg(const Messages::DfsMessage &msg);
 
     void appendSubscribtion(const BigNumber &actorId);
+
+    void statusResponse();
 };
 
 #endif // DFS_H

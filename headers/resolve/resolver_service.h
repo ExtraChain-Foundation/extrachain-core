@@ -18,6 +18,7 @@
 #include "network/packages/service/response_messages.h"
 #include "network/socket_pair.h"
 #include "datastorage/genesis_block.h"
+#include "dfs/packages/headers/all.h"
 
 static QMutex handlerFileMutex;
 
@@ -178,6 +179,7 @@ signals:
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
 
+    void dfsStatusrequest();
     // response
     void blockCount(const BigNumber &count);
 

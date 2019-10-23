@@ -221,7 +221,7 @@ BigNumber CardManager::getNameForNewFile(based_dfs_struct::Type type)
     BigNumber amout = cardFileData.isEmpty()
         ? BigNumber("-1")
         : BigNumber(
-            cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
+              cardFileData.mid(0, cardFileData.indexOf(Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER)));
     amout++;
     cardFile->close();
     delete cardFile;
@@ -268,16 +268,18 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
 
     QString path = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
         + based_dfs_struct::toString(type) + based_dfs_struct::typeCardFilesMap[type];
+
     QFile *file = new QFile(path);
+
     if (!file->exists())
         file->open(QIODevice::WriteOnly | QIODevice::Truncate);
-    qDebug() << path;
     file->open(QIODevice::ReadOnly);
     QByteArray dataFile = file->readAll();
     QList<QByteArray> list =
         Serialization::deserialize(dataFile, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
     if (list.isEmpty())
         list.append("-1");
+
     BigNumber amount = BigNumber(list.at(0));
     file->remove();
     file->flush();
@@ -289,6 +291,7 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
     qDebug() << file->fileName().toUtf8()
              << Serialization::serialize(list, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
     QByteArray line = Serialization::serialize(list, Serialization::DFS_CARD_FILE_UNIVERSAL_DELIMITER);
+
     file->write(line);
     file->flush();
     file->close();
@@ -325,31 +328,6 @@ void CardManager::appendToCard(based_dfs_struct::Type type, const QByteArray &se
             Serialization::serialize(cardList, Serialization::DFS_ROOT_CARD_FILE_SECTION_DELIMITER));
         cardFile->flush();
         cardFile->close();
-        //        }
-        //        else
-        //        {
-        //        cardFile->open(QIODevice::ReadWrite);
-        //        QByteArray line = "";
-        //        bool flag = true;
-        //        while (flag)
-        //        {
-        //            char *ch = new char[1];
-        //            cardFile->read(ch, 1);
-        //            if (ch[0] == '-')
-        //            {
-        //                QByteArray delimetr = "";
-        //                delimetr += ch[0];
-        //                cardFile->read(ch, 1);
-        //                delimetr += ch;
-        //                if ((delimetr == Serialization::DFS_ROOT_CARD_FILE_DELIMITER)
-        //                    && (line == path.toUtf8()))
-        //                {
-        //                    flag = false;
-        //                }
-        //            }
-        //            line += ch;
-        //        }
-        //        }
     }
     delete cardFile;
 }
@@ -370,7 +348,10 @@ void CardManager::createdAllCards(const BigNumber &userId)
 int CardManager::checkDfsState(const BigNumber &userId) // not at
 {
     //    QList<QString> list = getAllFiles(userId);
-    return -1;
+    if (!QDir(based_dfs_struct::ROOT_FOOLDER_NAME).exists())
+        return -1;
+    else
+        return 0;
 }
 
 void CardManager::createdAllConnections()
@@ -575,4 +556,23 @@ QStringList CardManager::getAllNotEmptyCardFile(const BigNumber &userId)
         }
     }
     return cardList;
+}
+
+QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type)
+{
+    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    card.open(QIODevice::ReadOnly);
+    QList<QByteArray> list =
+        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    if (list.isEmpty())
+        return QStringList();
+    QStringList result;
+    for (const QByteArray &el : list)
+    {
+        QByteArray dType =
+            Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
+        if (based_dfs_struct::toByteArray(type) == dType)
+            result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(1);
+    }
+    return result;
 }

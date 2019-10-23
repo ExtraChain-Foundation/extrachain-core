@@ -3,6 +3,8 @@ INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
+    $$PWD/dfs/managers/sources/card_manager.cpp \
+    $$PWD/dfs/managers/sources/package_resolver.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/message_struct.cpp \
@@ -45,7 +47,6 @@ SOURCES += \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
-    $$PWD/dfs/managers/headers/card_manager.cpp \
     $$PWD/dfs/managers/sources/dfsindex.cpp \
     $$PWD/dfs/managers/sources/storedindex.cpp \
     $$PWD/dfs/packages/sources/dfs_universal.cpp \
@@ -71,6 +72,7 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/dfs/managers/headers/package_resolver.h \
+    $$PWD/dfs/packages/headers/all.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
     $$PWD/dfs/packages/headers/message_struct.h \
     $$PWD/dfs/packages/headers/title_message.h \

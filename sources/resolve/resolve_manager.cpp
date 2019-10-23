@@ -46,6 +46,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
+    connect(resolver, &ResolverService::dfsStatusrequest, dfs, &Dfs::statusResponse);
     // response signals
     connect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
 }
@@ -67,6 +68,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     disconnect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
     disconnect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
+    disconnect(resolver, &ResolverService::dfsStatusrequest, dfs, &Dfs::statusResponse);
     // response signals
     disconnect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
 }

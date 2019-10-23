@@ -128,8 +128,8 @@ int DfsIndex::changedData(const QString &path, const based_dfs_struct::Type &typ
     //    initNewDfsItem(dir, based_dfs_struct::REPLACE);
 
     dfsSender(dfsItemList.last()->getPath(), "");
-    emit usersChanged(dfsItemList.last()->getPath(), dfsItemList.last()->getType(),
-                      dfsItemList.last()->getActorId());
+    //    emit usersChanged(dfsItemList.last()->getPath(), dfsItemList.last()->getType(),
+    //                      dfsItemList.last()->getActorId());
     delete dfsItemList.last();
     return 0;
 }
