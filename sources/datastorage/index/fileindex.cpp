@@ -230,6 +230,7 @@ QByteArray FileIndex::getById(const BigNumber &id) const
         QByteArray data;
         data = file.readAll();
         file.close();
+        // very strange code
         if (data.mid(data.size() - 1, 1) == "\n")
             return data.mid(0, data.size() - 1);
         return data;

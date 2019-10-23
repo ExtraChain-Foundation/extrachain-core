@@ -113,10 +113,9 @@ private:
                                       BigNumber token = 0);
 
 signals:
-
+    void sendMsg(const QByteArray &data, const QByteArray &type);
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
-    void sendMsg(const QByteArray &data, const QByteArray &msgType);
     // created keys for chat
     void sendKey(QByteArray key);
     void sendPrivateKey(QByteArray prKey);
@@ -144,7 +143,7 @@ public slots:
 
     // test net & blockchain
 
-    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
+    //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
 #ifdef ETALONIUM_CLIENT

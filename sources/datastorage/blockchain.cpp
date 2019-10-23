@@ -51,12 +51,6 @@ Block Blockchain::getLastBlock()
     return validateAndReturnBlock(block);
 }
 
-Block Blockchain::getBlockByIndex(const BigNumber &index)
-{
-    Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-    return validateAndReturnBlock(block);
-}
-
 QByteArray Blockchain::getBlockDataByIndex(const BigNumber &index)
 {
     return blockIndex.getBlockDataById(index);
@@ -262,6 +256,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 
 int Blockchain::mergeBlockWithLocal(const Block &received)
 {
+
     Block existed = getBlockByIndex(received.getIndex());
     if (canMergeBlocks(received, existed))
     {
@@ -319,6 +314,7 @@ int Blockchain::mergeBlockWithLocal(const Block &received)
         {
             oldHash = b.getHash();
             b.setPrevHash(newHash);
+            b.setType(Config::MERGE_BLOCK);
             signBlock(b);
             newHash = b.getHash();
         }
@@ -378,6 +374,7 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received)
             {
                 oldHash = b.getHash();
                 b.setPrevHash(newHash);
+                b.setType(Config::GENESIS_BLOCK_MERGE);
                 signBlock(b);
                 newHash = b.getHash();
             }
@@ -469,7 +466,7 @@ bool Blockchain::validateBlock(const Block &block)
 
 Block Blockchain::validateAndReturnBlock(const Block &block)
 {
-    // Get prev block hash and check if it exists in current one
+    // Get prev block hash and check if it exists in current one :)
     return block;
 }
 
@@ -510,11 +507,12 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     case Errors::FILE_ALREADY_EXISTS:
     {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
-        if (block.getType() == Config::DATA_BLOCK_TYPE)
+        if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
             resultCode = mergeBlockWithLocal(block);
         }
-        else if (block.getType() == Config::GENESIS_BLOCK_TYPE)
+        else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
+                 || (block.getType() == Config::GENESIS_BLOCK_MERGE))
         {
             resultCode = mergeGenesisBlockWithLocal(dynamic_cast<const GenesisBlock &>(block));
         }
@@ -554,20 +552,9 @@ bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB)
     if (!blockA.getDigSig().isEmpty() && !blockB.getDigSig().isEmpty() && blockA.getType() == blockB.getType()
         && blockA.getIndex() == blockB.getIndex())
     {
-        if (blockA.getType() == Config::DATA_BLOCK_TYPE)
-        {
-            // 4) at least one common transaction
-            QList<Transaction> transactionsA = blockA.extractTransactions();
-            QList<Transaction> transactionsB = blockB.extractTransactions();
-            for (const Transaction &tr : transactionsA)
-            {
-                if (transactionsB.contains(tr))
-                {
-                    return true;
-                }
-            }
-        }
-        else if (blockA.getType() == Config::GENESIS_BLOCK_TYPE)
+        if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE))
+            return true;
+        else if (blockA.getType() == Config::GENESIS_BLOCK_MERGE)
         {
             // 4) at least one common data row
             QList<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(blockA).extractDataRows();
@@ -575,6 +562,19 @@ bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB)
             for (const GenesisDataRow &g : rowsA)
             {
                 if (rowsB.contains(g))
+                {
+                    return true;
+                }
+            }
+        }
+        else if (blockA.getType() == Config::MERGE_BLOCK)
+        {
+            // 4) at least one common transaction
+            QList<Transaction> transactionsA = blockA.extractTransactions();
+            QList<Transaction> transactionsB = blockB.extractTransactions();
+            for (const Transaction &tr : transactionsA)
+            {
+                if (transactionsB.contains(tr))
                 {
                     return true;
                 }
@@ -613,18 +613,21 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
         QList<Transaction> transactionsA = blockA.extractTransactions();
         QList<Transaction> transactionsB = blockB.extractTransactions();
 
-        ListContainer<Transaction> txs;
-        txs.addAll(transactionsB);
+        //        ListContainer<Transaction> txs;
+        QList<Transaction> resultList = transactionsA;
 
         for (const Transaction &tx : transactionsA)
         {
             if (!transactionsB.contains(tx))
             {
-                txs.add(tx);
+                resultList.append(tx);
             }
         }
-
-        Block mergedBlock(txs.serialize(), prev);
+        QList<QByteArray> list;
+        for (const Transaction &tx : resultList)
+            list << tx.serialize();
+        QByteArray dataBlock = Serialization::universalSerialize(list);
+        Block mergedBlock(dataBlock, prev);
         signBlock(mergedBlock);
         return mergedBlock;
     }
@@ -659,19 +662,24 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         // todo: make utils::combine(list, list) function;
         QList<GenesisDataRow> genDataRowsA = blockA.extractDataRows();
         QList<GenesisDataRow> genDataRowsB = blockB.extractDataRows();
-
-        ListContainer<GenesisDataRow> rows;
-        rows.addAll(genDataRowsB);
-
+        QList<GenesisDataRow> resultList = genDataRowsA;
+        int count = 0;
         for (const GenesisDataRow &r : genDataRowsA)
         {
             if (!genDataRowsB.contains(r))
             {
-                rows.add(r);
+                resultList.append(r);
             }
+            else
+                count++;
         }
-
-        GenesisBlock mergedBlock(rows.serialize(), prev, blockA.getPrevGenHash());
+        QList<QByteArray> list;
+        if (count < Config::NECESSARY_SAME_TX)
+            return GenesisBlock();
+        for (const GenesisDataRow &gn : resultList)
+            list << gn.serialize();
+        QByteArray genData = Serialization::universalSerialize(list);
+        GenesisBlock mergedBlock(genData, prev, blockA.getPrevGenHash());
         signBlock(mergedBlock);
         return mergedBlock;
     }

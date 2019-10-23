@@ -75,6 +75,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
+
 #ifdef ETALONIUM_CONSOLE
     emit accController->initDfs();
 #endif
@@ -127,6 +128,7 @@ void NodeManager::connectSmContractManager()
 
 void NodeManager::connectTxManager()
 {
+    // TODOD delete later (s)
     connect(this, &NodeManager::NewTx, txManager, &TransactionManager::addTransaction);
 }
 
@@ -247,6 +249,7 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
         if (actorIndex->companyId != nullptr)
             if (actor.getId() == BigNumber(*actorIndex->companyId))
                 tx.setSenderBalance(BigNumber(0));
+
         return this->createTransaction(tx);
     }
     else
@@ -309,33 +312,6 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
     }
     return Transaction();
 }
-void NodeManager::CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress)
-{
-    BigNumber currentBlockCount = blockchain->getLastBlock().getIndex();
-    if (currentBlockCount == BigNumber(-1))
-        currentBlockCount = 0;
-    if (currentBlockCount > blockCount)
-        return;
-    //    if (currentBlockCount == 0)
-    //    {
-    //    netManager->sendGetBlock(BlockParam::Id, BigNumber(0).toString());
-    //    }
-    while (currentBlockCount <= blockCount)
-    {
-        currentBlockCount = currentBlockCount + 1;
-        //        netManager->sendGetBlock(BlockParam::Id, currentBlockCount.toString());
-        qDebug() << "NodeManager::CheckBlockCount" << currentBlockCount;
-    }
-}
-// void NodeManager::makeFirstContractTransaction(Contract contract)
-//{
-//    qDebug() << contract.serialize();
-//    QByteArray hash = createTransaction(BigNumber(0), contract.getAmount()).getHash();
-//    qDebug() << hash;
-//    contract.setFirst_transaction_hash(hash);
-//    qDebug() << contract.serialize();
-//    contractManager->updateContract(contract);
-//}
 
 void NodeManager::createNetManagerIdentificator()
 {
