@@ -42,7 +42,7 @@ QString toString(State);
 
 enum Status
 {
-    NEW,
+    NEW = 0,
     MERGE,
     REPLACE
 };
@@ -52,7 +52,7 @@ QString toString(Status);
 
 enum SubType
 {
-    profil,
+    profil = 0,
     avatar,
     ievent,
     ipost,
@@ -65,7 +65,7 @@ QString toString(SubType);
 
 enum Type
 {
-    images,
+    images = 0,
     ivideo,
     events,
     system,
@@ -153,6 +153,30 @@ protected:
     int readRootFolder() const;
     int makeSystemDir() const;
 };
+struct dStruct : QObject
+{
+    Q_OBJECT
+public:
+    Type type;
+    Status status;  // status in worker
+    BigNumber name; // name in etalonium system
+    long long size;
+    QDateTime time;  // date and time when item have been created
+    QByteArray hash; // hash of object
+    QByteArray path; // path in etalonium system
+    SubType subType;
+    QByteArray data;   // information about location of object on the device
+    BigNumber actorId; // owner user ID
+
+    QByteArray serialize();
+    dStruct(const QByteArray &serialized);
+    dStruct(const dStruct &_dStruct);
+    bool isEmpty();
+
+protected:
+    dStruct operator=(const dStruct &dfStruct);
+    bool operator==(const dStruct &dStruct);
+};
 }
 namespace DFS_ERRORS {
 
@@ -198,4 +222,5 @@ static const int PROFILE_FILE_REQUEST = 5404;
 // request delimetrs
 static const QByteArray REQUESTS_DATA_DELIMETRS = "^";
 }
+
 #endif // DFSTRUCT_H

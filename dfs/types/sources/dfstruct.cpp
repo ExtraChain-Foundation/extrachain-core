@@ -450,3 +450,68 @@ QByteArray based_dfs_struct::DfStruct::madeFolderDir(const based_dfs_struct::Typ
 //    }
 //    return 0;
 //}
+
+based_dfs_struct::dStruct::dStruct(const QByteArray &serialized)
+{
+    QByteArrayList list = Serialization::universalDeserialize(serialized, 4);
+    if (list.size() == 9)
+    {
+        type = static_cast<Type>(list.at(0).toInt());
+        status = static_cast<Status>(list.at(1).toInt());
+        name = BigNumber(list.at(2));
+        size = list.at(3).toLongLong();
+        time = QDateTime::fromMSecsSinceEpoch(list.at(4).toInt());
+        hash = list.at(5);
+        path = list.at(6);
+        subType = based_dfs_struct::convertToDFSSubType(list.at(7));
+        actorId = BigNumber(list.at(8));
+    }
+}
+
+based_dfs_struct::dStruct::dStruct(const based_dfs_struct::dStruct &_dStruct)
+{
+    type = _dStruct.type;
+    status = _dStruct.status;
+    name = _dStruct.name;
+    size = _dStruct.size;
+    time = _dStruct.time;
+    hash = _dStruct.hash;
+    path = _dStruct.path;
+    subType = _dStruct.subType;
+    actorId = _dStruct.actorId;
+}
+
+QByteArray based_dfs_struct::dStruct::serialize()
+{
+    QByteArrayList list;
+    list << QByteArray::number(type) << QByteArray::number(status) << name.toByteArray()
+         << QByteArray::number(size) << QByteArray::number(time.toMSecsSinceEpoch()) << hash << path
+         << QByteArray::number(subType) << data << actorId.toByteArray();
+    QByteArray ser = Serialization::universalSerialize(list, 4);
+    return ser;
+}
+bool based_dfs_struct::dStruct::isEmpty()
+{
+    if (actorId.isEmpty() && name.isEmpty() && hash.isEmpty()) // ??
+        return true;
+    return false;
+}
+
+based_dfs_struct::dStruct based_dfs_struct::dStruct::operator=(const based_dfs_struct::dStruct &dStruct)
+{
+    type = dStruct.type;
+    status = dStruct.status;
+    name = dStruct.name;
+    size = dStruct.size;
+    time = dStruct.time;
+    hash = dStruct.hash;
+    path = dStruct.path;
+    subType = dStruct.subType;
+    actorId = dStruct.actorId;
+    return *this;
+}
+
+bool based_dfs_struct::dStruct::operator==(const based_dfs_struct::dStruct &dStruct)
+{
+    return ((hash == dStruct.hash) && (size == dStruct.size) && (time == dStruct.time));
+}
