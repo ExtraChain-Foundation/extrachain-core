@@ -132,61 +132,30 @@ Actor<KeyPrivate> AccountController::getCurrentActor()
     return getActor(this->userNum);
 }
 
-void AccountController::loadActors()
+void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 {
+    if (id.isEmpty())
+        return;
     accounts.clear();
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
-    QFile file(KeyStore::user_actor_state);
-    file.open(QIODevice::ReadOnly);
-    while (!file.atEnd())
-    {
-        QList<QByteArray> list =
-            Serialization::deserialize(file.readLine(), Serialization::TX_PAIR_FIELD_SPLITTER);
-        if (list.size() == 2)
-            this->currentState[list.at(0)] = list.at(1);
-    }
-    QDir dir(path);
-    if (!dir.exists())
-    {
-        QDir().mkdir(path);
-    }
-    dir.cd(path);
-    QStringList filters;
-    filters << KeyStore::KEY_FILTER;
-    dir.setNameFilters(filters);
-
     int loaded = 0;
-
-    if (dir.entryList().size() == 0)
+    for (const QByteArray &fileName : idList)
     {
-        return;
-    }
-    for (QString fileName : dir.entryList())
-    {
-        QFile *file = new QFile(path + "/" + fileName);
-        if (file->exists() && !file->isOpen())
+        QFile file(path + "/" + fileName + ".key");
+        if (file.exists() && file.open(QIODevice::ReadOnly))
         {
-            if (file->open(QIODevice::ReadOnly))
+            QByteArray serialized;
+            serialized = file.readAll();
+            qDebug() << serialized;
+            file.close();
+            if (!serialized.isEmpty())
             {
-                QByteArray serialized;
-                serialized = file->readAll();
-                std::cout << serialized.toStdString() << std::endl;
-                qDebug() << serialized;
-
-                file->close();
-                delete file;
-
                 Actor<KeyPrivate> *actor = new Actor<KeyPrivate>;
-                //                serialized
-                //                QByteArray
-                //                hasHH=Utils::calcKeccak("model@gmail.com--Pass1234567");
 
                 actor->init(serialized);
-                if (serialized.isEmpty())
-                    continue;
 
-                qDebug() << "Actor " << actor->getId() << "found locally - "
+                qDebug() << "Actor" << actor->getId() << "found locally -"
                          << actor->getKey()->getPrivateKey();
                 this->accounts.append(actor);
                 loaded++;
@@ -196,7 +165,8 @@ void AccountController::loadActors()
 
     if (loaded > 0)
     {
-        qDebug() << loaded << " accounts have been loaded";
+        qDebug() << loaded << " accounts have been loaded" << id;
+        emit loadWallets(id, idList);
     }
     else
     {
@@ -222,7 +192,8 @@ void AccountController::setUserNum(int value)
 void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
-    emit editPrivateProfile(actor.getId().toActorId());
+    if (!accounts.isEmpty())
+        emit editPrivateProfile(actor.getId().toActorId());
     QString fileName = KeyStore::makeKeyFileName(actor.getId().toActorId());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
@@ -247,11 +218,17 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
         }
         file->close();
         delete file;
-        //        loadActors();
         return;
     }
 
     qDebug() << "Can't save actor" << actor.getId();
+}
+
+void AccountController::clearAcc()
+{
+    accounts.clear();
+    userNum = 0;
+    qDebug() << accounts.size() << " acc after LogOut";
 }
 
 //
