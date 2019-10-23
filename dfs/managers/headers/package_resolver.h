@@ -20,7 +20,10 @@ private:
 public:
     DFSResolver(AccountController *account);
 
-    void sendFile(const QString &fileName); //??
+    void sendFile(const QString &fileName)
+    //??
+    {
+    }
     void validate();
     bool isActive() const;
     void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
@@ -31,7 +34,9 @@ signals:
     void sendMsg(const QByteArray &data, const QByteArray &msgType);
 
 public slots:
-    void process();
+    void process()
+    {
+    }
 };
 
 #endif // PACKAGE_RESOLVER_H
