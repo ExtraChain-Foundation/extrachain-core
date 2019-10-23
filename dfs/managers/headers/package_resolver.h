@@ -3,25 +3,81 @@
 
 #include "dfs/managers/headers/dfsindex.h"
 
-// class Sender : public QObject
-//{
-//    Q_OBJECT
+#include "dfs/packages/headers/dfs_message_interface.h"
 
-//    AccountController *account;
+class DFSResolver : public QObject
+{
+    Q_OBJECT
 
-// public:
-//    Sender(AccountController *account);
+private:
+    DFSResolver(QObject *parent = nullptr);
+    ~DFSResolver();
 
-//    void sendFile(const QString &fileName);
+    bool active = false;
+    QByteArray msg;
+    QByteArray hash;
 
-// signals:
+public:
+    DFSResolver(AccountController *account);
 
-//    void finished();
+    void sendFile(const QString &fileName)
+    //??
+    {
+    }
+    void validate();
+    bool isActive() const;
+    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
+signals:
 
-//    void sendMsg(const QByteArray &data, const QByteArray &msgType);
+    void finished();
 
-// public slots:
-//    void process();
-//};
+    void sendMsg(const QByteArray &data, const QByteArray &msgType);
+
+public slots:
+    void process()
+    {
+    }
+};
 
 #endif // PACKAGE_RESOLVER_H
+////
+// For cpp file:
+DFSResolver::DFSResolver(QObject *parent)
+    : QObject(parent)
+{
+}
+DFSResolver::~DFSResolver()
+{
+    emit finished();
+}
+bool DFSResolver::isActive() const
+{
+    return active;
+}
+void DFSResolver::validate()
+{
+}
+
+void DFSResolver::recieveMsg(const QByteArray &msgS, const SocketPair &receiver)
+{
+
+    int msgType = 0; /*msgS.getMsgType()*/ //????
+    if (msgType == Message::dfsMessageType::titleMessage)
+    {
+    }
+    else if (msgType == Message::dfsMessageType::statusMessage)
+    {
+    }
+    else if (msgType == Message::dfsMessageType::requestMessage)
+    {
+    }
+    else if (msgType == Message::dfsMessageType::storageMessage)
+    {
+    }
+    else if (msgType == Message::dfsMessageType::fileDataMessage)
+    {
+    }
+    else if (msgType == Message::dfsMessageType::responseMessage)
+    {
+    }
+}
