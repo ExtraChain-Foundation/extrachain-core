@@ -93,7 +93,7 @@ void PrivateProfile::profile(QByteArray hash)
                 idList = data.split('|');
                 emit setIdProfile(idList.first());
                 qDebug() << "Load private profile with id" << idList.first();
-                emit sendPrivateProfile(idList.first(), idList);
+                emit initPrivateProfile(idList.first(), idList);
             }
             else
                 continue;

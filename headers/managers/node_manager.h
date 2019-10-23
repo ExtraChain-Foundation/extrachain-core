@@ -78,7 +78,6 @@ public:
      */
     Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
     int getClientList();
-    void updateActors();
 
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
@@ -134,6 +133,7 @@ private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
     void createNewActor(QByteArray hash, int accountStatus);
+    void logOut();
 
     //    void makeContractFirstTransaction(Contract &contract);
     //    void makeContractFinalTransaction(Contract &contract);

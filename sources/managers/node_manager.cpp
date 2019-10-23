@@ -16,7 +16,7 @@ NodeManager::NodeManager()
     this->thread()->sleep(1);
     // accController->loadActors();
     blockchain = new Blockchain(accController, fileMode);
-    BigNumber i = 0;
+    //    BigNumber i = 0;  // UNCOMMENT IF NOT BUILD
     txManager = new TransactionManager(accController, blockchain);
     //    contractManager = new ContractManager(accController, blockchain);
 
@@ -83,7 +83,7 @@ NodeManager::NodeManager()
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
 {
-    accController->createActor(2);
+    accController->createActor(actorType::COMPANY);
 
     return *accController->getMainActor();
 }
@@ -445,9 +445,7 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
     updateAvailableWalletList();
     updateRecentActivities();
 }
-#endif
 
-#ifdef ETALONIUM_CLIENT
 void NodeManager::connectUi()
 {
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::connectToServer);
@@ -521,11 +519,12 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::sendPrivateProfile, uiController, &UiController::loginPrivateProfile);
-    connect(prProfile, &PrivateProfile::sendPrivateProfile, blockchain,
+    connect(prProfile, &PrivateProfile::initPrivateProfile, accController, &AccountController::loadActors);
+    connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
     connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
-
+    connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
+    connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
@@ -534,7 +533,7 @@ void NodeManager::connectUi()
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=]() { accController->savePrivateActor(accController->createActor(1)); });
+            [=]() { accController->createActor(1); });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -542,7 +541,6 @@ void NodeManager::connectUi()
     //=======================================ACCOUNT_CONTROLLER===============================
     connect(accController, &AccountController::newActorIsCreated, uiController,
             &UiController::userRegistrationCompletion);
-    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
 }
@@ -555,7 +553,6 @@ void NodeManager::connectContractManager()
 void NodeManager::connectAccountController()
 {
     // connect(accController, &AccountController::verifyActor, netManager, &NetManager::NewActor);
-    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateActors);
     connect(accController, &AccountController::addActorInActorIndex, this,
             &NodeManager::addActorInActorIndex);
     connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
@@ -604,17 +601,6 @@ void NodeManager::prepareFolders()
     FileSystem::createFolderIfNotExist(DataStorage::BLOCKCHAIN_INDEX + "/"
                                        + DataStorage::BLOCK_INDEX_FOLDER_NAME);
 }
-void NodeManager::updateActors()
-{
-    //    BigNumber t = accController->getMainActor()->getId();
-    //    for (BigNumber i = 1; i < t; ++i)
-    //    {
-    //        if (actorIndex->getById(i).isEmpty())
-    //        {
-    //        }
-    //        //            netManager->sendGetActor(i);
-    //    }
-}
 
 int NodeManager::getClientList()
 {
@@ -639,6 +625,10 @@ void NodeManager::createNewActor(QByteArray data, int accountStatus)
     {
         this->dfs = new Dfs(actorIndex, accController);
     }
+}
+
+void NodeManager::logOut()
+{
 }
 
 // void NodeManager::createActorWith
