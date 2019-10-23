@@ -268,7 +268,10 @@ QByteArray BigNumber::toByteArray(int base) const
 QByteArray BigNumber::toActorId() const
 {
     QByteArray actorId = this->toByteArray();
-    actorId = actorId.length() == 19 ? "0" + actorId : actorId;
+    while (actorId.length() < 20)
+    {
+        actorId.push_front('0');
+    }
     return actorId;
 }
 

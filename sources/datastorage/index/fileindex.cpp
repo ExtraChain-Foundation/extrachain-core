@@ -191,7 +191,7 @@ QString FileIndex::buildFilePath(const BigNumber &id) const
         dir.mkpath(pathToFolder);
     }
 
-    return pathToFolder + "/" + id.toActorId();
+    return pathToFolder + "/" + id.toByteArray();
 }
 
 QString FileIndex::getFolderName() const

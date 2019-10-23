@@ -52,11 +52,6 @@ public:
      */
     Actor<KeyPrivate> getCurrentActor();
 
-    /**
-     * @brief Loads actors from local disk to memory: QList accounts;
-     */
-    void loadActors();
-
     int getAccountCount();
 
     int getUserNum() const;
@@ -72,14 +67,17 @@ public:
 
 public slots:
     /**
+     * @brief Loads actors from local disk to memory: QList accounts;
+     */
+    void loadActors(QByteArray id = "", QByteArrayList idList = {});
+    /**
      * @brief Saves Private actor on local disk in serialized form
      * @param private actor
      */
     void savePrivateActor(Actor<KeyPrivate> actor);
     //    void regNewUser(bool account);
-
+    void clearAcc();
     void changeUserNum(QByteArray);
-
     void process();
 signals:
     /**
@@ -90,7 +88,7 @@ signals:
     void verifyActor(Actor<KeyPublic> actor);
     //
     void sentActorId(BigNumber actorId);
-
+    void loadWallets(QByteArray id, QByteArrayList idList);
     void updateTransactionListInModel();
     void newActorIsCreated(BigNumber id, bool isUser);
 
