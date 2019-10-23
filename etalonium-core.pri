@@ -164,14 +164,6 @@ MOC_DIR = .moc
 RCC_DIR = .qrc
 UI_DIR = .ui
 
-android {
-    INCLUDEPATH += $$PWD/libs
-    LIBS += -L$$PWD/android/libs/armeabi-v7a -lgmp -lgmpxx
-}
-linux:!android {
-    LIBS += -lgmp -lgmpxx
-}
-
 QMAKE_SPEC_T = $$[QMAKE_SPEC]
 contains(QMAKE_SPEC_T,.*win32.*) {
     COMPILE_DATE=$$system(date /t)
@@ -183,17 +175,8 @@ GIT_COMMIT_CORE = $$system(git --git-dir .git --work-tree $$PWD describe --alway
 GIT_BRANCH_CORE = $$system(git --git-dir .git --work-tree $$PWD symbolic-ref --short HEAD)
 QMAKE_SUBSTITUTES += preconfig.h.in
 
+include(../etalonium-libs/etalonium-libs.pri)
+
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.12+")
 lessThan(QT_MINOR_VERSION, 12): error("requires Qt 5.12+")
 lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.12+")
-
-DISTFILES += \
-    $$PWD/android/AndroidManifest.xml \
-    $$PWD/android/build.gradle \
-    $$PWD/android/gradle/wrapper/gradle-wrapper.jar \
-    $$PWD/android/gradle/wrapper/gradle-wrapper.properties \
-    $$PWD/android/gradlew \
-    $$PWD/android/gradlew.bat \
-    $$PWD/android/libs/armeabi-v7a/libgmp.so \
-    $$PWD/android/libs/armeabi-v7a/libgmpxx.so \
-    $$PWD/android/res/values/libs.xml
