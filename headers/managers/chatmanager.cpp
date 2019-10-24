@@ -27,9 +27,9 @@ QByteArray ChatManager::generateChatId()
     return generateChatKey();
 }
 
-bool ChatManager::isValid(BigNumber chatId)
+bool ChatManager::isValid(QByteArray chatId)
 {
-    return !QDir(chatStore + chatId.toByteArray()).exists();
+    return !QDir(chatStore + chatId).exists();
 }
 
 QByteArray ChatManager::generateChatKey()
@@ -44,7 +44,7 @@ ChatManager::ChatManager(AccountController *accController)
     InitializeConnectSignalSlot();
 }
 
-void ChatManager::removeMemberFromChat(QByteArray chatId, BigNumber actorId)
+void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
 {
     Chat tempChat(chatId, _accController);
     if (tempChat.createNewSession(
@@ -52,26 +52,36 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, BigNumber actorId)
             (BigNumber(tempChat.getCurrentSession()) + BigNumber("1")).toByteArray())
         != "-1")
     {
-        // send key to all member without actorId in blockchain
-        //    for(int i=0;i<quantityChatMember;i++)
-        //    {
-        // if(i!=actorId)
-        //        sendInviteToChat(chatid,session,i,key)
-        //    }
+        QDir directory(chatStore + chatId + "/users/");
+        QStringList filesList = directory.entryList(QStringList(), QDir::Files);
+        foreach (QString filename, filesList)
+        {
+            if (filename.toLocal8Bit() != actorId
+                && filename.toLocal8Bit() != _accController->getCurrentActor().getId().toByteArray())
+                emit sendInviteToChat(
+                    chatId, tempChat.getCurrentSession(), filename.toLocal8Bit(),
+                    QByteArray(
+                        KeyPublic(_accController->getActor(filename.toLocal8Bit()).getKey()->getPublicKey())
+                            .encrypt(tempChat.getChatPrivateKey())));
+        }
     }
     else
         qDebug() << "Error when remove Member from chat";
 }
 
-void ChatManager::addMemberToChat(QByteArray chatId, BigNumber actorId)
+void ChatManager::addMemberToChat(QByteArray chatId, QByteArray actorId)
 {
     Chat tempChat(chatId, _accController);
     QByteArray key = tempChat.unloadChatKey();
     if (key != "0")
     {
+        QByteArray currentId = _accController->getCurrentActor().getId().toByteArray();
         key = KeyPublic(_accController->getActor(actorId).getKey()->getPublicKey())
                   .encrypt(tempChat.getChatPrivateKey());
-        emit sendInviteToChat(chatId, tempChat.getCurrentSession(), actorId, key);
+
+        tempChat.InviteNewUser(currentId, _accController->getCurrentActor().getKey()->sign(currentId),
+                               actorId);
+        // also need to emit signal that share new user in blockhain by path chat/users/actorId
     }
 }
 
@@ -85,7 +95,8 @@ void ChatManager::CreateNewChat()
 
     QByteArray key =
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
-    _chatList.push_front(Chat(chatId, key, QByteArray("0"), _accController));
+    _chatList.push_front(Chat(chatId, key, QByteArray("0"), _accController,
+                              _accController->getCurrentActor().getId().toByteArray()));
     emit sendCreatedNewChat(chatId);
 }
 
@@ -98,4 +109,13 @@ ChatManager::~ChatManager()
 void ChatManager::receiveInviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray key)
 {
     _chatList.push_front(Chat(chatId, key, sessionNumb, _accController));
+}
+
+void ChatManager::addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
+                                     QByteArray invitedId)
+{
+    Chat tempChat(chatId, _accController);
+    tempChat.InviteNewUser(inviterId, inviterSign, invitedId);
+    if (!tempChat.isUserVerify(invitedId))
+        tempChat.removeUserFromChat(invitedId);
 }

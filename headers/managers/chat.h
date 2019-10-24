@@ -24,9 +24,9 @@ private:
     bool SaveSession(QByteArray sessionPath, QByteArray sessionNumb); //+
 public:
     Chat(QByteArray chatId, AccountController* accountController); //+
-    Chat(QByteArray chatId, QByteArray key, QByteArray currentSession,
-         AccountController* accountController); //+
-    Chat(const Chat& tempChat);                 //+
+    Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
+         QByteArray ownerId = "-1"); //+
+    Chat(const Chat& tempChat);      //+
 
     QByteArray unloadChatKey();                                          //+
     QByteArray getChatPrivateKey();                                      //+
@@ -39,7 +39,10 @@ public:
     QByteArray getEncryptionKey() const;             //+
     QByteArray getSession() const;                   //+
     AccountController* getAccountController() const; //+
-    ~Chat();                                         //+
+    void InviteNewUser(QByteArray inviterId, QByteArray inviterSign, QByteArray invitedId);
+    bool isUserVerify(QByteArray actorId);
+    void removeUserFromChat(QByteArray actorId);
+    ~Chat(); //+
 signals:
 
     void sendMessageToChat(QByteArray chatId, QByteArray sessionNumb, BigNumber senderId,

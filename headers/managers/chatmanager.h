@@ -17,19 +17,22 @@ private:
     void InitializeConnectSignalSlot(); //+
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
-    bool isValid(BigNumber chatId);     //+
+    bool isValid(QByteArray chatId);    //+
+    bool isUserVerify(QByteArray chatId, QByteArray actorId);
 
 public:
-    ChatManager(AccountController *accController);                   //+
-    void removeMemberFromChat(QByteArray chatId, BigNumber actorId); //-
-    void addMemberToChat(QByteArray chatId, BigNumber actorId);      //+
-    void CreateNewChat();                                            //+
+    ChatManager(AccountController *accController);                    //+
+    void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //-
+    void addMemberToChat(QByteArray chatId, QByteArray actorId);      //+
+    void CreateNewChat();                                             //+
     ~ChatManager();
 public slots:
     void receiveInviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray key); //+
+    void addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
+                            QByteArray invitedId);
 signals:
-    void sendInviteToChat(QByteArray chatId, QByteArray sessionNumb, BigNumber actorId, QByteArray key); //+
-    void sendCreatedNewChat(QByteArray chatId);                                                          //+
+    void sendInviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray actorId, QByteArray key); //+
+    void sendCreatedNewChat(QByteArray chatId);                                                           //+
 };
 
 #endif // CHATMANAGER_H

@@ -19,13 +19,24 @@ Chat::Chat(QByteArray chatId, AccountController* accountController)
     this->_currentSession = getCurrentSession();
 }
 
-Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController)
+Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
+           QByteArray ownerId)
 {
     QDir().mkpath(chatStore + chatId + "/");
+    QDir().mkpath(chatStore + chatId + "/users/");
     QDir().mkpath(keyStore + chatId + "/");
     QFile file(chatStore + chatId + "/0");
     file.open(QIODevice::WriteOnly);
     file.close();
+    if (ownerId != "-1")
+    {
+        file.setFileName(chatStore + chatId + "/users/" + ownerId);
+        if (file.open(QIODevice::WriteOnly))
+            file.write("owner");
+        else
+            qDebug() << "[Error] Cannot create Chat owner";
+        file.close();
+    }
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
@@ -164,6 +175,44 @@ QByteArray Chat::getSession() const
 AccountController* Chat::getAccountController() const
 {
     return this->_accountController;
+}
+
+void Chat::InviteNewUser(QByteArray inviterId, QByteArray inviterSign, QByteArray invitedId)
+{
+    QList<QByteArray> signData;
+    signData.append(inviterId);
+    signData.append(inviterSign);
+    QFile file(chatStore + this->_chatId + "/users/" + invitedId);
+    if (file.open(QIODevice::WriteOnly))
+        file.write(Serialization::universalSerialize(signData));
+    else
+        qDebug() << "[Error] when try to write data about new user";
+    file.close();
+}
+
+bool Chat::isUserVerify(QByteArray actorId)
+{
+    QFile file(chatStore + this->_chatId + "/users/" + actorId);
+    if (!file.exists())
+        return false;
+    if (file.open(QIODevice::ReadOnly))
+    {
+        QByteArray data = file.readLine();
+        if (data == "owner" || data == "owner\n")
+            return true;
+        QList<QByteArray> list = Serialization::universalDeserialize(data);
+        if (list.size() != 2)
+            return false;
+        if (!_accountController->getActor(BigNumber(list.at(0))).getKey()->verify(list.at(0), list.at(1)))
+            return false;
+        return isUserVerify(list.at(0));
+    }
+}
+
+void Chat::removeUserFromChat(QByteArray actorId)
+{
+    QFile file(chatStore + this->_chatId + "/users/" + actorId);
+    file.remove();
 }
 
 Chat::~Chat()
