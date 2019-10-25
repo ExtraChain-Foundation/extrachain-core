@@ -580,7 +580,7 @@ QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_stru
         QByteArray dType =
             Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
         if (based_dfs_struct::toByteArray(type) == dType)
-            result << "data/" + userId + "/"
+            result << based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
                     + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
     }
     return result;
@@ -594,7 +594,7 @@ QByteArray CardManager::getLastFileName(const QByteArray &userId)
     QList<QByteArray> list =
         Serialization::deserialize(file.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
     if (list.isEmpty())
-        return "1";
+        return "0";
     return Serialization::deserialize(list.takeLast(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
 }
 
