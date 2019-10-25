@@ -370,10 +370,11 @@ bool ResolverService::validate(const Transaction &tx)
     bool result = actorIndex->validateTx(tx);
     //    if (tx.getData() == "initcontract")
     //        result = (result && !actorIndex->getActor(tx.getSender()).profile().getProfile().isEmpty());
-    if (actorIndex->getActor(tx.getSender()).profile().getProfile().isEmpty())
-    {
-        this->thread()->sleep(5);
-        return validate(tx);
-    }
+    if (!actorIndex->getActor(tx.getSender()).isEmpty())
+        if (actorIndex->getActor(tx.getSender()).profile().getProfile().isEmpty())
+        {
+            this->thread()->sleep(5);
+            return validate(tx);
+        }
     return result;
 }
