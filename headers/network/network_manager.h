@@ -52,7 +52,7 @@ private:
 #else
         false;
 #endif
-    QString serverIp = "51.68.181.52;51.68.181.53";
+    QString serverIp = "51.68.181.52";
     quint16 serverPort = isDebug ? 2221 : 2222;
     bool allowLocalServer = false;
     QMap<QByteArray, int> *requestResponseMap;
