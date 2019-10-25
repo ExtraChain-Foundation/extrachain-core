@@ -77,6 +77,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         }
     }
 
+    if (!isPrint)
+        return;
+
     QString fileNameQrc, lineRow;
     if (fileName.right(3) == "qml")
     {
