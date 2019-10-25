@@ -20,6 +20,7 @@ public:
     ~SocketPair();
     BigNumber getId() const;
     void setId(const QByteArray &value);
+    bool isEmpty() const;
 };
 
 inline uint qHash(const SocketPair &v)

@@ -6,5 +6,9 @@
 #include "dfs_status.h"
 #include "message_struct.h"
 #include "dfs_universal.h"
-
+#include "dfs_message_interface.h"
+#include "status.h"
+namespace Messages {
+static const QByteArray DFS_MESSAGE = "dfsMessages";
+}
 #endif // ALL_H

@@ -10,6 +10,13 @@
 #include <tuple>
 #include "utils/bignumber.h"
 #include "utils/utils.h"
+namespace PathStruct {
+//"data/actorId/section/fileName"
+static const short rFolder = 0;
+static const short aId = 1;
+static const short section = 2;
+static const short name = 2;
+}
 
 namespace based_dfs_struct {
 

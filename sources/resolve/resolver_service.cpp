@@ -154,8 +154,16 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
                 return;
         }
     }
+    // dfs message
+    if (msgType == DFS_MESSAGE)
+    {
+        qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
+        Message::DUMessage dfsMsg(message.getMsg_data());
+        emit dfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
+        emit TaskFinished();
+    }
     // spread messages
-    if (msgType == PROFILE_FILE)
+    else if (msgType == PROFILE_FILE)
     {
         emit newProfile(message.getMsg_data());
         emit TaskFinished();
@@ -242,28 +250,29 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     {
         GetActorMessage response(message.getMsg_data());
         emit getActor(response.getActorId(), calcHash(msg), receiver);
+        emit TaskFinished();
     }
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage txMessage(message.getMsg_data());
         emit getTx(txMessage.getParam(), txMessage.getValue(), receiver, calcHash(msg));
+        emit TaskFinished();
     }
     else if (msgType == GET_BLOCK_MESSAGE)
     {
         GetBlockMessage blMessage(message.getMsg_data());
         emit getBlock(blMessage.getParam(), blMessage.getValue(), calcHash(msg), receiver);
+        emit TaskFinished();
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {
         emit getActorsCount(calcHash(msg), receiver);
+        emit TaskFinished();
     }
     else if (msgType == GET_BLOCK_COUNT_MESSAGE)
     {
         emit getBlocksCount(calcHash(msg), receiver);
-    }
-    else if (msgType == DFS_STATUS_MESSAGE)
-    {
-        emit dfsStatusrequest();
+        emit TaskFinished();
     }
 
     // response messages

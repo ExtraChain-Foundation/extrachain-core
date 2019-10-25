@@ -1,7 +1,7 @@
 #include "dfs/packages/headers/message_struct.h"
 
 Message::dfs_message::dfs_message(const QByteArray &hash, const long long &pckgNumber, const QByteArray &data)
-    : IDfs_Message(m_type)
+    : DUMessage(type_dfs_message)
 {
     this->title_hash = hash;
     this->pckgNumber = pckgNumber;
@@ -9,9 +9,14 @@ Message::dfs_message::dfs_message(const QByteArray &hash, const long long &pckgN
 }
 
 Message::dfs_message::dfs_message(const QByteArray &serialized)
-    : IDfs_Message(m_type)
+    : DUMessage(type_dfs_message)
 {
     QList<QByteArray> list = deserialize(serialized);
+    if (type_dfs_message != list.takeFirst().toInt())
+    {
+        qDebug() << "[dfs_message]"
+                 << "incorrect message type";
+    }
     if (list.size() != FIELDS_COUNT)
     {
         qDebug() << "[&Message::dfs_message_struct] incorrect list size";
@@ -23,7 +28,7 @@ Message::dfs_message::dfs_message(const QByteArray &serialized)
 }
 
 Message::dfs_message::dfs_message(const Message::dfs_message &temp)
-    : IDfs_Message(m_type)
+    : DUMessage(type_dfs_message)
 {
     title_hash = temp.title_hash;
     pckgNumber = temp.pckgNumber;
@@ -37,6 +42,6 @@ Message::dfs_message::~dfs_message()
 const QList<QByteArray> Message::dfs_message::serializedParams() const
 {
     QList<QByteArray> list;
-    list << title_hash << QByteArray::number(pckgNumber) << data;
+    list << QByteArray::number(type) << title_hash << QByteArray::number(pckgNumber) << data;
     return list;
 }

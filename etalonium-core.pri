@@ -3,8 +3,11 @@ INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
+    $$PWD/dfs/managers/headers/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
     $$PWD/dfs/managers/sources/package_resolver.cpp \
+    $$PWD/dfs/packages/headers/dumessage.cpp \
+    $$PWD/dfs/packages/headers/status.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/message_struct.cpp \
@@ -72,9 +75,12 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/dfs/managers/headers/package_resolver.h \
+    $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
+    $$PWD/dfs/packages/headers/dumessage.h \
     $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/dfs/packages/headers/status.h \
     $$PWD/dfs/packages/headers/title_message.h \
     $$PWD/headers/enc/algorithms/aes.h \
     $$PWD/headers/enc/algorithms/blowfish_crypt.h \

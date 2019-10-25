@@ -315,9 +315,21 @@ bool NetManager::checkMsgCount(const QByteArray &msg)
     }
     return flag_result;
 }
-void NetManager::dfsMessageTmp(const DfsMessage &msg)
+
+void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
 {
-    broadcastMsg(msg.serialize());
+    BaseMessage msg(msgType);
+    msg.init(data);
+
+    emit sendMsg(msg.serialize(), receiver);
+}
+
+void NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+{
+    if (checkMsgCount(msg))
+        emit MsgReceived(msg, receiver);
+    else
+        qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
 }
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)

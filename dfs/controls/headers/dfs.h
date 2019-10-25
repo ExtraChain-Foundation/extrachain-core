@@ -8,9 +8,12 @@
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
 #include "dfs/managers/headers/package_resolver.h"
+#include "dfs/packages/headers/all.h"
+#include "dfs/managers/headers/sender.h"
 
 class Dfs : public QObject
 {
+
     Q_OBJECT
     const QString temp_History = "history/";
     QMap<QByteArray, QString> filesQueue = {};
@@ -21,12 +24,14 @@ private:
     ActorIndex *actorIndex;
     // created here
     DfsIndex *dfsIndex;
+    Sender *sender;
+    DFSResolver *resolver;
     //
     void signalConnections();
     //
 
     /// tempquickfix
-
+    //    void dfsSender(const QString &filePath, const SocketPair &peerAdrress);
     void initD(const QByteArray &userId);
     void saveD(const QString &path, const based_dfs_struct::Type &type = based_dfs_struct::Type::images,
                const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
@@ -34,6 +39,8 @@ private:
     void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
                  const QByteArray &type);
     QByteArray setName(const QByteArray &userId);
+public slots:
+    void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
 
 public:
     //    Dfs(QObject *parent = nullptr);
@@ -42,9 +49,12 @@ public:
 
     DfsIndex *getDfsIndex() const;
 
+    Sender *getSender() const;
+
 signals:
 
     void newSender(const QByteArray &data, const QByteArray &msgType);
+    void newSenderToPeer(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
     void construction();
     // changes from/to dfs
@@ -61,27 +71,30 @@ signals:
     void sendMessage(const Messages::DfsMessage &msg);
     void sendToPeer(const Messages::DfsMessage &msg, const QString &peerAddress);
     void sendDfsStatus(const Messages::DfsStatus &status);
+    void sendToUser(const Messages::DfsMessage &msg, const SocketPair &receiver);
+
+    void sendQ(const QString &path, const based_dfs_struct::Type &type, const SocketPair &receiver);
+
+    void resolveMsg(const QByteArray &msg, int msgType, const SocketPair &receiver);
 
 public slots:
     void savedNewData(const QString &path, const based_dfs_struct::Type &type,
                       const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
 
     //    void downloadRecieve(Messages::DownloadDfsRequestData msg, QString sender);
-    void downloadRequset(QByteArray header, QString peerAddress);
+    //    void downloadRequset(QByteArray header, QString peerAddress);
     void init();
     void initUser(BigNumber userId);
     //
-    void getUserDataAnswer(int request, QByteArray data);
-    void recieve(Messages::DfsMessage msg);
+    //    void getUserDataAnswer(int request, QByteArray data);
+    void receive(const QByteArray &data, const int &msgType, const SocketPair &receiver);
     void process();
 
     //    void checkStatus(const Messages::DfsStatus &msg);
 
-    void resolveMsg(const Messages::DfsMessage &msg);
-
     void appendSubscribtion(const BigNumber &actorId);
 
-    void statusResponse();
+    //    void statusResponse(const QByteArray &data, const SocketPair &receiver);
 };
 
 #endif // DFS_H

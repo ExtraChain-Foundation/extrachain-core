@@ -39,9 +39,10 @@ public:
     static QStringList getImagesFromJson(const QByteArray &json);
 
     static QStringList getAllNotEmptyCardFile(const BigNumber &userId);
-
+    // new
     static QStringList getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type);
     static QByteArray getLastFileName(const QByteArray &userId);
+    static QStringList getAllFiles(const QByteArray &userId);
     //    function to create
 };
 

@@ -3,12 +3,11 @@
 
 #include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
-#include "dfs_message_interface.h"
+#include "dumessage.h"
 namespace Message {
-struct dfs_message : public IDfs_Message
+struct dfs_message : public DUMessage
 {
 
-    const int m_type = dfsMessageType::fileDataMessage;
     const short FIELDS_COUNT = 3;
 
     QByteArray title_hash;
@@ -21,10 +20,6 @@ struct dfs_message : public IDfs_Message
     ~dfs_message() override final;
 
     const QList<QByteArray> serializedParams() const override;
-};
-
-struct file_data_message
-{
 };
 }
 #endif // MESSAGE_STRCUT_H

@@ -179,7 +179,7 @@ signals:
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
 
-    void dfsStatusrequest();
+    void dfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
     // response
     void blockCount(const BigNumber &count);
 

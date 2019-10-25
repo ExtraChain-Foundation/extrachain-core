@@ -76,8 +76,13 @@ Actor<KeyPrivate> AccountController::createActor(int account)
 
     accounts.append(actor);
     userNum = accounts.size() - 1;
-    if (account)
+
+    qDebug() << "create actor finished" << account;
+    if (account > 0)
+    {
+        qDebug() << "Dfs hash init for me";
         emit initDfs();
+    }
     emit newActorIsCreated(this->getMainActor()->getId(), account);
 
     return *actor;

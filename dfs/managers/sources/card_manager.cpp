@@ -597,3 +597,19 @@ QByteArray CardManager::getLastFileName(const QByteArray &userId)
         return "1";
     return Serialization::deserialize(list.takeLast(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
 }
+
+QStringList CardManager::getAllFiles(const QByteArray &userId)
+{
+    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    card.open(QIODevice::ReadOnly);
+    QList<QByteArray> list =
+        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    if (list.isEmpty())
+        return QStringList();
+    QStringList result;
+    for (const QByteArray &el : list)
+
+        result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+
+    return result;
+}

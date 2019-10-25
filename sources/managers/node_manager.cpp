@@ -95,13 +95,13 @@ void NodeManager::showMessage(QString from, QString message)
 
 void NodeManager::connectResolveManager()
 {
-    connect(netManager, &NetManager::MessageReceived, resolveManager, &ResolveManager::resolveMessage);
+    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
     connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
     // TODO: move
     connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
-    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
+    //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
 void NodeManager::connectSmContractManager()
@@ -512,7 +512,6 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
-    connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
@@ -561,7 +560,6 @@ void NodeManager::connectAccountController()
 void NodeManager::connectActorIndex()
 {
     connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
-    connect(dfs, &Dfs::sendMessage, netManager, &NetManager::dfsMessageTmp);
     // this connect with service message
 
     connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);
@@ -573,6 +571,8 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
+    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
+    connect(dfs, &Dfs::newSenderToPeer, netManager, &NetManager::dfsToPeerTmp);
 }
 
 void NodeManager::connectSignals()

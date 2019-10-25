@@ -177,10 +177,11 @@ public slots:
      * @param messageType type to compress
      */
     void sendMessage(const QByteArray &message);
-    void dfsMessageTmp(const Messages::DfsMessage &msg);
+    void dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
-signals:
     void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+signals:
+    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);
