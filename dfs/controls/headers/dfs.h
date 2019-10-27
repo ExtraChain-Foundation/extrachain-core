@@ -10,13 +10,15 @@
 #include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
-
+#include <QTimer>
 class Dfs : public QObject
 {
 
     Q_OBJECT
     const QString temp_History = "history/";
     QMap<QByteArray, QString> filesQueue = {};
+
+    QMap<QString, QByteArray> tmpFiles;
 
 private:
     // send from nodeManger
@@ -39,8 +41,15 @@ private:
     void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
                  const QByteArray &type);
     QByteArray setName(const QByteArray &userId);
+    void statusD();
+
+
 public slots:
     void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+    void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
+    void tmpFileControl(const long long &size, const QString &path, const QByteArray &titleS);
+
+    void cleanTmpFile();
 
 public:
     //    Dfs(QObject *parent = nullptr);

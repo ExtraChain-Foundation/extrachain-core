@@ -25,7 +25,7 @@ Message::title_message::title_message(const QByteArray &serialized)
     QList<QByteArray> list = deserialize(serialized);
     if (type_title != list.takeFirst().toInt())
     {
-        qDebug() << "[dfs_request]"
+        qDebug() << "[type_title]"
                  << "incorrect message type";
     }
     if (list.size() != FIELDS_COUNT)

@@ -13,6 +13,9 @@ class Sender : public QObject
 
     QByteArray userId;
 
+    QMap<QByteArray, QString> titleHashs;
+    QMap<QString, QByteArray> serializedTitle;
+
 public:
     /**
      * @brief Sender
@@ -49,6 +52,12 @@ public slots:
      * @param receiver
      */
     void sendFile(const QString &filePath, const based_dfs_struct::Type &type, const SocketPair &receiver);
+    /**
+     * @brief checkClosing
+     * @param titleHash
+     * @param pckAF
+     */
+    void checkClosing(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver);
 };
 
 #endif // SENDER_H

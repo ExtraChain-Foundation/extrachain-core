@@ -21,13 +21,15 @@ enum dfsMessageType
     requestMessage,
     statusMessage,
     storageMessage,
-    responseMessage
+    responseMessage,
+    closingMessage
 };
 
 const int type_title = dfsMessageType::titleMessage;
 const int type_dfs_message = dfsMessageType::fileDataMessage;
 const int type_status = dfsMessageType::statusMessage;
 const int type_dfs_request = dfsMessageType::requestMessage;
+const int type_closing = dfsMessageType::closingMessage;
 
 class IDfs_Message : public QObject
 {

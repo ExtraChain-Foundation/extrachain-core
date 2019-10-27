@@ -29,6 +29,9 @@ public:
     void receiveMsg(const QByteArray &msg, int msgType, const SocketPair &receiver);
 signals:
     void save(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+    void checkStatus(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
+    void closingMsg(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver);
+    void startTimerD(const long long &size, const QString &path, const QByteArray &titleS);
     void finished();
 
 public slots:

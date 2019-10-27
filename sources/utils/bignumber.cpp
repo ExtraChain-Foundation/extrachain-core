@@ -318,7 +318,7 @@ BigNumber BigNumber::factorial(unsigned long number)
 
 BigNumber BigNumber::random(int n)
 {
-    const static std::vector<char> chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+    const  std::vector<char> chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
                                              '2', '3', '4', '5', '6', '7', '8', '9' };
     QByteArray str;
     str.reserve(n);
@@ -349,6 +349,8 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
 
 BigNumber BigNumber::random(BigNumber max)
 {
+    const  std::vector<char> chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+                                    '2', '3', '4', '5', '6', '7', '8', '9' };
     QByteArray maxdata = max.toByteArray();
     QByteArray b;
     b.clear();
@@ -361,7 +363,7 @@ BigNumber BigNumber::random(BigNumber max)
         res.clear();
         for (int i = 0; i < size; i++)
         {
-            res.append(QByteArray::number(QRandomGenerator::global()->bounded(0, 9)));
+            res.append(chars[QRandomGenerator::global()->bounded(0, 15)]);
         }
         t = BigNumber(res);
     }

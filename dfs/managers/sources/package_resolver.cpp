@@ -75,6 +75,8 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
             queueFiles.insert(message.hash(), path);
             counterPckg.insert(message.hash(), message.pckgsAmount);
             fileMap.insert(path, message.serialize());
+
+            emit startTimerD(message.fileSize, path, message.hash());
             qDebug() << "[ready for receive file]";
         }
         else
@@ -86,6 +88,7 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
     {
         qDebug() << "[statusMessagee:]";
         Message::Status message(msg);
+        emit checkStatus(message.dirOwner, message.currentState, receiver);
     }
     else if (msgType == Message::dfsMessageType::requestMessage)
     {
@@ -136,8 +139,16 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
     }
     else if (msgType == Message::dfsMessageType::responseMessage)
     {
-        qDebug() << "[fileDataMessage:]";
+        qDebug() << "[responseMessage:]";
     }
+    else if (msgType == Message::dfsMessageType::closingMessage)
+    {
+        qDebug() << "[closingMessage:]";
+        Message::DClosing message(msg);
+        emit closingMsg(message.title_hash, message.PckgAmoutR, receiver);
+    }
+    else
+        qDebug() << "[&DFSResolver] undifine message type";
 }
 
 void DFSResolver::process()

@@ -6,6 +6,7 @@ SOURCES += \
     $$PWD/dfs/managers/headers/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
     $$PWD/dfs/managers/sources/package_resolver.cpp \
+    $$PWD/dfs/packages/headers/dclosing.cpp \
     $$PWD/dfs/packages/headers/dumessage.cpp \
     $$PWD/dfs/packages/headers/status.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
@@ -77,6 +78,7 @@ HEADERS += \
     $$PWD/dfs/managers/headers/package_resolver.h \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \
+    $$PWD/dfs/packages/headers/dclosing.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
     $$PWD/dfs/packages/headers/dumessage.h \
     $$PWD/dfs/packages/headers/message_struct.h \

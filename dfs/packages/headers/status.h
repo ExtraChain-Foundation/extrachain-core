@@ -19,6 +19,7 @@ struct Status : public DUMessage
 
     const QList<QByteArray> serializedParams() const override;
 
+private:
     const QStringList deserializeState(const QByteArray &serialized);
     const QByteArray serializeState() const;
 };

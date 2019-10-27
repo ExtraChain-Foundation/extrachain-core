@@ -8,6 +8,7 @@
 #include "dfs_universal.h"
 #include "dfs_message_interface.h"
 #include "status.h"
+#include "dclosing.h"
 namespace Messages {
 static const QByteArray DFS_MESSAGE = "dfsMessages";
 }
