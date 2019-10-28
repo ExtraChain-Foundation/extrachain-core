@@ -52,6 +52,6 @@ const QByteArray Message::Status::serializeState() const
 const QList<QByteArray> Message::Status::serializedParams() const
 {
     QList<QByteArray> list;
-    list << hash << dirOwner << serializeState();
+    list << QByteArray::number(type) << hash << dirOwner << serializeState();
     return list;
 }

@@ -1,4 +1,5 @@
 #include "dfs/managers/headers/package_resolver.h"
+
 DFSResolver::DFSResolver(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent)
     , actorIndex(actorIndex)
@@ -14,11 +15,17 @@ bool DFSResolver::isActive() const
     return active;
 }
 
-bool DFSResolver::createTempFile(const QString &path, const long long &size)
+bool DFSResolver::titleMsg(const Message::title_message &msg)
 {
-    QFile *file = new QFile(path);
+    return true;
+}
+bool DFSResolver::createTempFile(const QString &path, const long long &size, const QByteArray &tHash)
+{
+
+    listFile.insert(tHash, new QFile(path));
+    QFile *file = listFile[tHash];
     qDebug() << "[&DfsResolver] start create tmp file";
-    if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate))
+    if (!file->open(QIODevice::ReadWrite | QIODevice::Truncate))
     {
         QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
@@ -34,7 +41,7 @@ bool DFSResolver::createTempFile(const QString &path, const long long &size)
                 delete file;
                 this->thread()->sleep(1);
                 qDebug() << "[actor not empty directory wasn't create]";
-                return createTempFile(path, size);
+                return createTempFile(path, size, tHash);
             }
         }
         else
@@ -43,15 +50,12 @@ bool DFSResolver::createTempFile(const QString &path, const long long &size)
             delete file;
             this->thread()->sleep(5);
             qDebug() << "[actor empty]";
-            return createTempFile(path, size);
+            return createTempFile(path, size, tHash);
         }
     }
-    QByteArray zeroData = QByteArray(size, '0');
-    file->write(zeroData);
-    //    file->resize(size);
-    file->close();
+
     qDebug() << "[&DfsResolver] finished";
-    delete file;
+
     return true;
 }
 void DFSResolver::validate()
@@ -67,15 +71,17 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
     {
         qDebug() << "[title message:]";
         Message::title_message message(msg);
-
         QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
         qDebug() << "[file path]" << path;
-        if (createTempFile(path, message.fileSize))
+        if (createTempFile(path, message.fileSize, message.hash()))
         {
             queueFiles.insert(message.hash(), path);
             counterPckg.insert(message.hash(), message.pckgsAmount);
             fileMap.insert(path, message.serialize());
-
+            QFile tmp(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + message.hash());
+            tmp.open(QIODevice::WriteOnly | QIODevice::Append);
+            tmp.write(Serialization::universalSerialize({ message.serialize() }));
+            tmp.close();
             emit startTimerD(message.fileSize, path, message.hash());
             qDebug() << "[ready for receive file]";
         }
@@ -120,17 +126,29 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
             qDebug() << "[already have finished]";
             return;
         }
+        if (listFile.find(message.title_hash) == listFile.end())
+        {
+
+            qDebug() << "tu sho ebobo" << message.hash();
+            return;
+        }
+        QFile tmp(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + message.title_hash);
+        tmp.open(QIODevice::WriteOnly | QIODevice::Append);
+        tmp.write(Serialization::universalSerialize({ message.serialize() }));
+        tmp.close();
+
         Message::title_message title(fileMap[path]);
-        QFile file(path);
-        file.open(QIODevice::ReadWrite);
+        //        QFile file(path);
+        //        file.open(QIODevice::ReadWrite);
         qDebug() << "[&receiver]" << message.pckgNumber << "[of file path=]" << title.filePath;
-        file.seek(message.pckgNumber * Message::dataSize);
-        if (file.write(message.data))
+        QFile *file = listFile[message.title_hash];
+        file->seek(message.pckgNumber * Message::dataSize);
+        if (file->write(message.data))
             counterPckg[message.title_hash]--;
-        file.flush();
-        file.close();
+        file->flush();
         if (counterPckg[message.title_hash] == 0)
         {
+            file->close();
             emit save(path, title.filePath, based_dfs_struct::convertToDFType(title.f_type));
             fileMap.erase(fileMap.find(path));
             queueFiles.erase(queueFiles.find(message.title_hash));

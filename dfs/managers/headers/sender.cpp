@@ -16,7 +16,11 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
     int pckgN = 0; // package number
     Message::title_message title(filePath);
     title.f_type = based_dfs_struct::toByteArray(type);
-
+    if (title.empty())
+    {
+        qDebug() << "empty title";
+        return;
+    }
     if (receiver.isEmpty())
         emit sendS(title.serialize(), Messages::DFS_MESSAGE);
     else
@@ -45,8 +49,8 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         // create package
         Message::dfs_message pck(title.hash(), pckgN, data); // package for send
                                                              //        pckgN++;
-//        if ((pckgN % 100) == 0)
-//            this->thread()->sleep(1);
+                                                             //        if ((pckgN % 100) == 0)
+                                                             //            this->thread()->sleep(1);
 
         if (receiver.isEmpty())
             emit sendS(pck.serialize(), Messages::DFS_MESSAGE); // send to Resolver Manager for reqister
@@ -67,13 +71,20 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
 void Sender::checkClosing(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver)
 {
     if (titleHashs.find(titleHash) == titleHashs.end())
-    { qDebug() << "I don't send this file"; return; }
+    {
+        qDebug() << "I don't send this file";
+        return;
+    }
     if (serializedTitle.find(titleHashs[titleHash]) == serializedTitle.end())
-    { qDebug() << "so it's not so good"; return; }
-    Message::title_message tmpTitle(serializedTitle[titleHashs[titleHash]]);    serializedTitle.erase(serializedTitle.find(titleHashs[titleHash]));
+    {
+        qDebug() << "so it's not so good";
+        return;
+    }
+    Message::title_message tmpTitle(serializedTitle[titleHashs[titleHash]]);
+    serializedTitle.erase(serializedTitle.find(titleHashs[titleHash]));
     titleHashs.erase(titleHashs.find(titleHash));
-    sendFile(titleHashs[titleHash],  based_dfs_struct::convertToDFType(tmpTitle.f_type), receiver);
+    sendFile(titleHashs[titleHash], based_dfs_struct::convertToDFType(tmpTitle.f_type), receiver);
 
-    qDebug() << "reapeat send for" << tmpTitle.filePath << "file because receiver have" <<
-                pckAF << "from" << tmpTitle.pckgsAmount;
+    qDebug() << "reapeat send for" << tmpTitle.filePath << "file because receiver have" << pckAF << "from"
+             << tmpTitle.pckgsAmount;
 }

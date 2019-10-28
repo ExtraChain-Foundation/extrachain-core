@@ -48,7 +48,8 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     // response signals
     connect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
     // dfs signal
-    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::receive, Qt::ConnectionType::QueuedConnection);
+    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg,
+            Qt::ConnectionType::QueuedConnection);
 }
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)
@@ -70,7 +71,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     // response signals
     disconnect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
     // dfs signal
-    disconnect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::receive);
+    disconnect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const

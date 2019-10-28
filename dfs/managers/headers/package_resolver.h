@@ -13,11 +13,13 @@ class DFSResolver : public QObject
 private:
     ActorIndex *actorIndex;
     bool active = false;
-    QByteArray msg;
-    QByteArray hash;
     QMap<QByteArray, long long> counterPckg;
     QMap<QByteArray, QString> queueFiles; //
     QMap<QString, QByteArray> fileMap;    // tmp with real path
+
+    QMap<QByteArray, QFile *> listFile = {};
+
+    bool titleMsg(const Message::title_message &msg);
 
 public:
     DFSResolver(ActorIndex *actorIndex, QObject *parent = nullptr);
@@ -25,7 +27,7 @@ public:
 
     void validate();
     bool isActive() const;
-    bool createTempFile(const QString &path, const long long &size);
+    bool createTempFile(const QString &path, const long long &size, const QByteArray &tHash);
     void receiveMsg(const QByteArray &msg, int msgType, const SocketPair &receiver);
 signals:
     void save(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);

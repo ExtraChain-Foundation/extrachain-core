@@ -1,13 +1,5 @@
 #include "dfs/controls/headers/dfs.h"
 #include <iterator>
-Sender *Dfs::getSender() const
-{
-    return sender;
-}
-
-void Dfs::signalConnections()
-{
-}
 
 void Dfs::initD(const QByteArray &userId)
 {
@@ -88,10 +80,12 @@ void Dfs::statusD()
                 emit newSender(status.serialize(), Messages::DFS_MESSAGE);
             }
         }
-
     }
-    else { Message::Status status("1", QStringList());
-        emit newSender(status.serialize(), Messages::DFS_MESSAGE);}
+    else
+    {
+        Message::Status status("1", QStringList());
+        emit newSender(status.serialize(), Messages::DFS_MESSAGE);
+    }
 }
 
 void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type)
@@ -136,13 +130,12 @@ void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const S
                 emit sendQ(file, ftype, receiver);
             }
         }
-
     }
     QDir dir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + actorId);
     if (!dir.exists())
     {
         qDebug() << "[&Dfs] Directory for actor" << actorId << "not found";
-//        emit newSender(request.serialize(), Messages::DFS_MESSAGE);
+        //        emit newSender(request.serialize(), Messages::DFS_MESSAGE);
         return;
     }
     QStringList fileList = CardManager::getAllFiles(actorId);
@@ -154,44 +147,10 @@ void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const S
                 based_dfs_struct::Type type = CardManager::getTypeByName(el, actorId);
                 if (type != based_dfs_struct::servic)
                     emit sendQ(el, type, receiver);
-                else qDebug() << "[&Dfs] the file with path" << el << "not have been found";
+                else
+                    qDebug() << "[&Dfs] the file with path" << el << "not have been found";
             }
     }
-}
-
-void Dfs::tmpFileControl(const long long &size, const QString &path, const QByteArray &titleS)
-{
-    long long time = 50000;
-    long long bonusT = (size - 5000) > 0 ? (size - 5000) * 124 : 0;
-    time += bonusT;
-    if (QFile(path).exists())
-        tmpFiles.insert(path, titleS);
-    QTimer::singleShot(time, this, SLOT(cleanTmpFile()));
-}
-
-void Dfs::cleanTmpFile()
-{
-    if (tmpFiles.empty())
-    {
-        qDebug() << "so sory I haven't register of tmp files";
-        return;
-    }
-    QMap<QString, QByteArray>::iterator it = tmpFiles.begin();
-    QString tPath = it.key();
-
-    if (QFile(tPath).exists())
-    {
-        qDebug() << "[&Dfs] try again";
-        Message::title_message tmpTitle(it.value());
-        qDebug() << it.value();
-        Message::DClosing msg(tmpTitle.hash(), tmpTitle.pckgsAmount);
-        emit newSender(msg.serialize(), Messages::DFS_MESSAGE);
-        QFile(tPath).remove();
-    }
-    else
-        qDebug() << "it's normal file";
-    tmpFiles.erase(it);
-
 }
 
 Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent)
@@ -203,13 +162,6 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
 
 Dfs::~Dfs()
 {
-    // save last changes and last data of users -> in file user data
-    delete dfsIndex;
-}
-
-DfsIndex *Dfs::getDfsIndex() const
-{
-    return this->dfsIndex;
 }
 
 void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
@@ -218,12 +170,10 @@ void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
     saveD(path, type, subType, status);
 }
 
-// void Dfs::downloadRequset(QByteArray header, QString peerAddress)
-//{
-//    QList<QByteArray> list = Serialization::deserialize(header, Serialization::DFS_STORED_DELIMETR);
-//    if (!QFile(list.at(3)).exists())
-//        emit downloadResponse(true, header, peerAddress);
-//}
+void Dfs::process()
+{
+}
+
 void Dfs::init()
 {
     statusD();
@@ -240,7 +190,6 @@ void Dfs::init()
             Qt::ConnectionType::BlockingQueuedConnection);
     connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
     connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
-    connect(resolver, &DFSResolver::startTimerD, this, &Dfs::tmpFileControl);
 
     ThreadPool::addThread(sender);
     ThreadPool::addThread(resolver);
@@ -250,31 +199,3 @@ void Dfs::initUser(BigNumber userId)
 {
     initD(userId.toActorId());
 }
-
-void Dfs::receive(const QByteArray &data, const int &msgType, const SocketPair &receiver)
-{
-    emit resolveMsg(data, msgType, receiver);
-}
-
-void Dfs::process()
-{
-}
-
-void Dfs::appendSubscribtion(const BigNumber &actorId)
-{
-    Subscribtion sub;
-    sub.add(actorId);
-}
-
-// void Dfs::statusResponse(const QByteArray &data, const SocketPair &receiver)
-//{
-//    Message::Status message(data);
-//    QStringList list = CardManager::getAllFiles(message.dirOwner);
-//    if (message.currentState != list)
-//    {
-//        for (const QString &el : list)
-//            if (!message.currentState.contains(el))
-//                dfsSender(el, receiver);
-//    }
-//    //    for (const QString &el : list)
-//}

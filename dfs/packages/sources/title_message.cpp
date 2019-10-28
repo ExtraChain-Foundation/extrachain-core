@@ -56,6 +56,19 @@ Message::title_message::~title_message()
 {
 }
 
+bool Message::title_message::empty() const
+{
+    if (filePath.isEmpty())
+        return true;
+    if (pckgsAmount == 0)
+        return true;
+    if (fileSize == 0)
+        return true;
+    if (dataHash.isEmpty())
+        return true;
+    return false;
+}
+
 const QList<QByteArray> Message::title_message::serializedParams() const
 {
     QList<QByteArray> list;

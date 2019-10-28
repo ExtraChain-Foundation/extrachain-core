@@ -21,6 +21,8 @@ struct title_message : public DUMessage
     title_message(const QString &filePath, const long long &pckgsAmount, const long long &fileSize,
                   const QByteArray &hash, const QByteArray &f_type);
     ~title_message() override final;
+
+    bool empty() const;
     const QList<QByteArray> serializedParams() const override final;
 };
 }

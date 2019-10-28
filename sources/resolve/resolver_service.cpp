@@ -159,6 +159,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     {
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         Message::DUMessage dfsMsg(message.getMsg_data());
+
         emit dfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
         emit TaskFinished();
     }

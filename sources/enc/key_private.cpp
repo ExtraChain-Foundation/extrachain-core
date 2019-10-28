@@ -120,6 +120,7 @@ bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
     BigNumber u1 = (z * w) % curve.n;
     BigNumber u2 = (r * w) % curve.n;
     EllipticPoint p1 = ECC::multiply(curve, u1, curve.g);
+    assert(!pbkey.isZero());
     EllipticPoint p2 = ECC::multiply(curve, u2, pbkey);
     EllipticPoint point = ECC::add(curve, p1, p2);
     return r % curve.n == point.X() % curve.n;
