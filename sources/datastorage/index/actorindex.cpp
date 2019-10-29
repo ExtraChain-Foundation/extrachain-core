@@ -192,6 +192,11 @@ bool ActorIndex::actorExist(BigNumber actorId)
     return true;
 }
 
+QString ActorIndex::getFolderPath() const
+{
+    return folderPath;
+}
+
 QString ActorIndex::buildFilePath(const QByteArray &id) const
 {
     QByteArray Id = id;

@@ -1,8 +1,26 @@
 #include "chatmanager.h"
 
+void ChatManager::createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath)
+{
+    QDir().mkpath(pathCreate + chatStore + "myChats/");
+    QFile file(pathCreate + chatStore + "myChats/" + chatId);
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(chatPath);
+        file.close();
+        return;
+    }
+
+    qDebug() << "[Warning] File not open to read. Create local chat file method";
+
+    // emit signal to share chat file
+}
+
 void ChatManager::Initialize()
 {
-    QDirIterator it(keyStore, QDirIterator::Subdirectories);
+    // send to chat it path
+    QDirIterator it(_actorPath + _currentActorId + "/" + chatStore + "myChats/",
+                    QDirIterator::Subdirectories);
     while (it.hasNext())
     {
         QFile file(it.next() + "/currentSession");
@@ -40,6 +58,8 @@ QByteArray ChatManager::generateChatKey()
 ChatManager::ChatManager(AccountController *accController)
 {
     this->_accController = accController;
+    this->_currentActorId = accController->getCurrentActor().getId().toByteArray();
+    this->_actorPath = accController->getActorIndex()->getFolderPath().toLocal8Bit();
     Initialize();
     InitializeConnectSignalSlot();
 }
@@ -58,7 +78,7 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
         {
             if (filename.toLocal8Bit() != actorId
                 && filename.toLocal8Bit() != _accController->getCurrentActor().getId().toByteArray())
-                emit sendInviteToChat(
+                InviteToChat(
                     chatId, tempChat.getCurrentSession(), filename.toLocal8Bit(),
                     QByteArray(
                         KeyPublic(_accController->getActor(filename.toLocal8Bit()).getKey()->getPublicKey())
@@ -81,6 +101,7 @@ void ChatManager::addMemberToChat(QByteArray chatId, QByteArray actorId)
 
         tempChat.InviteNewUser(currentId, _accController->getCurrentActor().getKey()->sign(currentId),
                                actorId);
+
         // also need to emit signal that share new user in blockhain by path chat/users/actorId
     }
 }
@@ -97,7 +118,13 @@ void ChatManager::CreateNewChat()
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
     _chatList.push_front(Chat(chatId, key, QByteArray("0"), _accController,
                               _accController->getCurrentActor().getId().toByteArray()));
-    emit sendCreatedNewChat(chatId);
+    emit sendCreatedNewChat(chatId, based_dfs_struct::Type::chates);
+}
+
+void ChatManager::InviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray actorId, QByteArray key)
+{
+    QDir().mkpath(this->_actorPath + actorId + "/" + chatStore + chatId + "/");
+    ewfwe
 }
 
 ChatManager::~ChatManager()

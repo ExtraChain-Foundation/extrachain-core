@@ -26,7 +26,8 @@ DfsIndex *Dfs::getDfsIndex() const
 }
 
 void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
-                       const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
+                       const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::mini,
+                       const based_dfs_struct::Status &status = based_dfs_struct::Status::REPLACE)
 {
     QString createdPath = based_dfs_struct::ROOT_FOOLDER_NAME + '/'
         + accountControler->getMainActor()->getId().toActorId() + '/' + based_dfs_struct::toString(type)

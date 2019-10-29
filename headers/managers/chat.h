@@ -14,17 +14,23 @@ private:
     QByteArray _chatId = "0";
     QByteArray _encryptionKey = "0";
     QByteArray _currentSession = "-1";
+    QByteArray _chatPath = "-1";
+    QByteArray _actorPath = "blabla";
+    QByteArray _currentActorId = "-1";
     AccountController* _accountController;
 
 private:
+    QByteArray getCurrentPathChatStore();
+    QByteArray getCurrentPathKeyStore();
     QByteArray findCurrentSession();                                  //+
     void saveChatKey(QByteArray key, QByteArray sessionNumb);         //+
     QByteArray encryptMessage(QByteArray message);                    //+
     QByteArray decryptMessage(QByteArray message);                    //+
     bool SaveSession(QByteArray sessionPath, QByteArray sessionNumb); //+
 public:
-    Chat(QByteArray chatId, AccountController* accountController); //+
+    Chat(QByteArray chatId, AccountController* accountController, QByteArray chatPath); //+
     Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
+         QByteArray chatPath,
          QByteArray ownerId = "-1"); //+
     Chat(const Chat& tempChat);      //+
 
@@ -43,6 +49,10 @@ public:
     bool isUserVerify(QByteArray actorId);
     void removeUserFromChat(QByteArray actorId);
     ~Chat(); //+
+    QByteArray getActorPath() const;
+
+    QByteArray getCurrentActorId() const;
+
 signals:
 
     void sendMessageToChat(QByteArray chatId, QByteArray sessionNumb, BigNumber senderId,
