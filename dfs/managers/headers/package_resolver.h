@@ -28,7 +28,7 @@ public:
     void validate();
     bool isActive() const;
     bool createTempFile(const QString &path, const long long &size, const QByteArray &tHash);
-    void receiveMsg(const QByteArray &msg, int msgType, const SocketPair &receiver);
+
 signals:
     void save(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
     void checkStatus(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
@@ -37,6 +37,7 @@ signals:
     void finished();
 
 public slots:
+    void receiveMsg(const QByteArray &msg, int msgType, const SocketPair &receiver);
     void process();
 };
 #endif

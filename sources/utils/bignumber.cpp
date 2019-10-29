@@ -316,24 +316,25 @@ BigNumber BigNumber::factorial(unsigned long number)
     return res;
 }
 
-BigNumber BigNumber::random(int n)
+BigNumber BigNumber::random(int n, bool zeroAllowed)
 {
-    const  std::vector<char> chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-                                             '2', '3', '4', '5', '6', '7', '8', '9' };
     QByteArray str;
     str.reserve(n);
     str[0] = '0';
 
     while (str[0] == '0')
-        str[0] = chars[std::size_t(QRandomGenerator::global()->bounded(16))];
+        str[0] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
 
     for (int i = 1; i != n; ++i)
-        str[i] = chars[std::size_t(QRandomGenerator::global()->bounded(16))];
+        str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
     std::cout << str.toStdString() << std::endl;
-    return BigNumber(str);
+    BigNumber res(str);
+    if (!zeroAllowed && res == 0)
+        return random(n, zeroAllowed);
+    return res;
 }
 
-BigNumber BigNumber::random(int n, const BigNumber &max)
+BigNumber BigNumber::random(int n, const BigNumber &max, bool zeroAllowed)
 {
     if (max.toByteArray(16).length() < n)
         return BigNumber(0);
@@ -342,20 +343,19 @@ BigNumber BigNumber::random(int n, const BigNumber &max)
 
     do
     {
-        result = random(n);
+        result = random(n, zeroAllowed);
     } while (result >= max);
     return result;
 }
 
-BigNumber BigNumber::random(BigNumber max)
+BigNumber BigNumber::random(BigNumber max, bool zeroAllowed)
 {
-    const  std::vector<char> chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-                                    '2', '3', '4', '5', '6', '7', '8', '9' };
     QByteArray maxdata = max.toByteArray();
     QByteArray b;
     b.clear();
     b.fill('f', maxdata.size());
     BigNumber t(b);
+
     while (t >= max)
     {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
@@ -363,11 +363,12 @@ BigNumber BigNumber::random(BigNumber max)
         res.clear();
         for (int i = 0; i < size; i++)
         {
-            res.append(chars[QRandomGenerator::global()->bounded(0, 15)]);
+            res.append(BigNumberUtils::Chars[QRandomGenerator::global()->bounded(0, 15)]);
         }
         t = BigNumber(res);
     }
-
+    if (!zeroAllowed && t == 0)
+        return random(max, zeroAllowed);
     return t;
 }
 

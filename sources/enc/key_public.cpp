@@ -29,7 +29,7 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
     {
         res.clear();
 
-        r = BigNumber::random(64, curve.p);
+        r = BigNumber::random(64, curve.p, false);
         R = ECC::multiply(secpCurve, r, secpCurve.g);
         S = ECC::multiply(secpCurve, r, this->pbkey);
         res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));

@@ -78,11 +78,11 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
             queueFiles.insert(message.hash(), path);
             counterPckg.insert(message.hash(), message.pckgsAmount);
             fileMap.insert(path, message.serialize());
-            QFile tmp(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + message.hash());
-            tmp.open(QIODevice::WriteOnly | QIODevice::Append);
-            tmp.write(Serialization::universalSerialize({ message.serialize() }));
-            tmp.close();
-            emit startTimerD(message.fileSize, path, message.hash());
+            //            QFile tmp(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + message.hash());
+            //            tmp.open(QIODevice::WriteOnly | QIODevice::Append);
+            //            tmp.write(Serialization::universalSerialize({ message.serialize() }));
+            //            tmp.close();
+            //            emit startTimerD(message.fileSize, path, message.hash());
             qDebug() << "[ready for receive file]";
         }
         else
@@ -132,10 +132,10 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
             qDebug() << "tu sho ebobo" << message.hash();
             return;
         }
-        QFile tmp(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + message.title_hash);
-        tmp.open(QIODevice::WriteOnly | QIODevice::Append);
-        tmp.write(Serialization::universalSerialize({ message.serialize() }));
-        tmp.close();
+        //        QFile tmp(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + message.title_hash);
+        //        tmp.open(QIODevice::WriteOnly | QIODevice::Append);
+        //        tmp.write(Serialization::universalSerialize({ message.serialize() }));
+        //        tmp.close();
 
         Message::title_message title(fileMap[path]);
         //        QFile file(path);

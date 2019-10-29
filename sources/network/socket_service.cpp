@@ -147,15 +147,15 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
 
 void SocketService::sockReady()
 {
-    QTcpSocket *_sok = this->socket;
-    while (_sok->bytesAvailable() < 4)
-        _sok->waitForReadyRead();
-    QByteArray _sok_data = _sok->read(4);
-    int _pck_size = Utils::qByteArrayToInt(_sok_data);
-    while (_sok->bytesAvailable() < _pck_size)
-        _sok->waitForReadyRead();
+    //    QTcpSocket *_sok = this->socket;
+    while (socket->bytesAvailable() < 4)
+        socket->waitForReadyRead();
+    QByteArray _sock_data = socket->read(4);
+    int _pck_size = Utils::qByteArrayToInt(_sock_data);
+    while (socket->bytesAvailable() < _pck_size)
+        socket->waitForReadyRead();
 
-    QByteArray pckg = _sok->read(_pck_size);
+    QByteArray pckg = socket->read(_pck_size);
     if (!active)
     {
         //            active = true;
@@ -172,16 +172,8 @@ void SocketService::sockReady()
         receiver.setId(identificator.toByteArray());
         emit MessageReceived(pckg, receiver);
     }
-
-    //    while (_sok->bytesAvailable())
-    //    {
-    //        buffer += _sok->readAll();
-    //    }
-    //    QTimer::singleShot(2000, this, SLOT(readData()));
-    // QDataStream in(_sok);
-
-    //    if (_sok->bytesAvailable() > 0)
-    //        sockReady();
+    if (socket->bytesAvailable())
+        sockReady();
 }
 
 void SocketService::closeSocket()

@@ -52,6 +52,7 @@ private:
 #else
         false;
 #endif
+protected:
     QString serverIp = "51.68.181.52";
     quint16 serverPort = isDebug ? 2221 : 2222;
     bool allowLocalServer = false;

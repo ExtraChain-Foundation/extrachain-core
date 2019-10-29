@@ -25,7 +25,10 @@
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
  */
-
+namespace BigNumberUtils {
+const static QVector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+                                     '2', '3', '4', '5', '6', '7', '8', '9' };
+}
 class BigNumber
 {
 public:
@@ -91,9 +94,9 @@ public:
 
     static BigNumber factorial(unsigned long number);
     static char binaryCompareAnd(char, char);
-    static BigNumber random(int n);
-    static BigNumber random(int n, const BigNumber &max);
-    static BigNumber random(BigNumber max);
+    static BigNumber random(int n, bool zeroAllowed = true);
+    static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
+    static BigNumber random(BigNumber max, bool zeroAllowed = true);
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r)
