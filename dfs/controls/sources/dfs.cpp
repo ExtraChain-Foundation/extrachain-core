@@ -76,14 +76,14 @@ void Dfs::statusD()
             if (el != based_dfs_struct::ACTOR_CARD_FILE)
             {
                 Message::Status status(el.toUtf8(), CardManager::getAllFiles(el.toUtf8()));
-                emit newSender(status.serialize(), Messages::DFS_MESSAGE);
+                emit newSender(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
             }
         }
     }
     else
     {
         Message::Status status("1", QStringList());
-        emit newSender(status.serialize(), Messages::DFS_MESSAGE);
+        emit newSender(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
     }
 }
 

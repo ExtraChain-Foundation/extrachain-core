@@ -1,16 +1,15 @@
-#include "network/network_manager.h"
-
-#include "network/packages/service/list_connections.h"
-
-#include <QNetworkConfigurationManager>
-#include <QRandomGenerator>
-#include <QSettings>
+﻿#include "network/network_manager.h"
 
 using namespace Messages;
 
 QList<SocketService *> NetManager::getConnections() const
 {
     return connections;
+}
+
+NetManager *NetManager::getMe()
+{
+    return this;
 }
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
@@ -88,6 +87,23 @@ void NetManager::resolverMessage(const QHostAddress &from, const QString &messag
     qDebug() << from.toIPv4Address() << " " << message;
 }
 
+void NetManager::connectSocket()
+{
+    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
+    connect(connections.last(), &SocketService::clientDisconnected, this, &NetManager::removeConnection);
+    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
+    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
+}
+
+void NetManager::disconnectSocket(SocketService *connection)
+{
+    disconnect(connection, &SocketService::clientRemove, this, &NetManager::removeConnection);
+    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
+    disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
+    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+}
+
 NetManager::~NetManager()
 {
     //    delete resolverService;
@@ -140,14 +156,15 @@ void NetManager::findLocal()
             bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
             bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
             bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+            if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint)
+                continue;
 
             QTcpSocket *socket = new QTcpSocket;
             socket->bind(entry.ip());
             socket->connectToHost("8.8.8.8", 53);
             bool isConnected = socket->waitForConnected(1000);
             socket->deleteLater();
-
-            if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint || !isConnected)
+            if (!isConnected)
                 continue;
 #endif
 
@@ -292,22 +309,22 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &message)
 {
 
-    if (checkMsgCount(message))
+    if (checkMsgCount(message, handler))
         broadcastMsg(message);
 }
-bool NetManager::checkMsgCount(const QByteArray &msg)
+bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> handler)
 {
     bool flag_result = true;
     bool value = 0;
     QByteArray hashMsg = Utils::calcKeccak(msg);
-    QMap<QByteArray, int>::iterator it = handler->find(hashMsg);
-    if (it == handler->end())
-        handler->insert(hashMsg, value);
+    QMap<QByteArray, int>::iterator it = handler.find(hashMsg);
+    if (it == handler.end())
+        handler.insert(hashMsg, value);
     else
     {
 
-        if (handler->find(hashMsg).value()++ == connections.size())
-            handler->remove(hashMsg);
+        if (handler.find(hashMsg).value()++ == connections.size())
+            handler.remove(hashMsg);
         //        int t = it.value() + 1;
         //        handler->remove(calcHash(msg));
         //        handler->insert(calcHash(msg), t);
@@ -326,10 +343,19 @@ void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType,
 
 void NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
-    if (checkMsgCount(msg))
+    if (checkMsgCount(msg, handler))
         emit MsgReceived(msg, receiver);
     else
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
+}
+
+void NetManager::MoveToDfsN()
+{
+    QObject *sender = QObject::sender();
+    SocketService *connection = qobject_cast<SocketService *>(sender);
+    disconnectSocket(connection);
+    connections.removeAt(connections.indexOf(connection));
+    emit newDfsSocket(connection);
 }
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
@@ -358,15 +384,9 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
 {
     SocketService *socket = new SocketService(address.toString(), port);
     connections.append(socket);
-    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
-    qDebug() << "[&netManager connection status] clientDisconnect with removeConnection connect:: status:"
-             << connect(connections.last(), &SocketService::clientDisconnected, this,
-                        &NetManager::removeConnection);
+    connectSocket();
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
-    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-    connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
-    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
     ThreadPool::addThread(connections.last());
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
@@ -376,13 +396,7 @@ void NetManager::addConnection(qint64 socketDescriptor)
 {
     SocketService *socket = new SocketService(socketDescriptor);
     connections.append(socket);
-    qDebug() << "[&netManager connection status] clientDisconnect with removeConnection connect:: status:"
-             << connect(connections.last(), &SocketService::clientDisconnected, this,
-                        &NetManager::removeConnection);
-    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
-    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-    connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
-    connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
+    connectSocket();
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(connections.last());
 }
@@ -391,12 +405,7 @@ void NetManager::removeConnection()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
-    disconnect(connection, &SocketService::clientRemove, this, &NetManager::removeConnection);
-    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
-    qDebug() << "[&netManager disconnect status] clientDisconnect with removeConnection disconnect::status:"
-             << disconnect(connection, &SocketService::clientDisconnected, this,
-                           &NetManager::removeConnection);
-    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    disconnectSocket(connection);
     connections.removeAt(connections.indexOf(connection));
     connection->finished();
     checkConnectionsStatus();
@@ -423,14 +432,7 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
         {
             connections.append(newSock);
             ThreadPool::addThread(connections.last());
-            connect(connections.last(), &SocketService::clientRemove, this, &NetManager::removeConnection);
-
-            connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
-            qDebug() << "NET MANAGER: New connection is established : " << newSock->getAddress() << ":"
-                     << newSock->getPort();
-            connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-            connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
-            connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
+            connectSocket();
         }
     }
 }

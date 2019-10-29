@@ -60,6 +60,14 @@ static QByteArray readNetManagerIdentificator()
     file.close();
     return id;
 }
+static QByteArray dfsreadNetManagerIdentificator()
+{
+    QFile file(".dsettings");
+    file.open(QIODevice::ReadOnly);
+    QByteArray id = file.readAll();
+    file.close();
+    return id;
+}
 }
 class Transaction;
 // using namespace CryptoPP;

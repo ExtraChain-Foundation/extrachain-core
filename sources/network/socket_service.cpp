@@ -109,6 +109,24 @@ bool SocketService::getActive() const
     return active;
 }
 
+SocketService::SocketService()
+{
+}
+
+SocketService::SocketService(const SocketService &value)
+{
+    connectionTry = value.connectionTry;
+    socketDescriptor = value.socketDescriptor;
+    active = value.active;
+    address = value.address;
+    port = value.port;
+    socket = value.socket;
+    identificator = value.identificator;
+    _blockSize = value._blockSize;
+    buffer = value.buffer;
+    reconnectTry = value.reconnectTry;
+}
+
 SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
     : QObject(parent)
 {
@@ -217,8 +235,12 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
-                  SocketPair(this->address.toStdString(), this->port));
+    if ((port == 2224) || (port == 2225))
+        sendMsg(IDENTIFICATOR + net::dfsreadNetManagerIdentificator(),
+                SocketPair(this->address.toStdString(), this->port));
+    else
+        this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
+                      SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
     qDebug() << "SOCKET SERVICE: "

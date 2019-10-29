@@ -7,11 +7,14 @@ NodeManager::NodeManager()
     prepareFolders();
     if (!QFile(".settings").exists())
         createNetManagerIdentificator();
+    if (!QFile(".dsettings").exists())
+        dfscreateNetManagerIdentificator();
     actorIndex = new ActorIndex();
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
-    netManager = new NetManager(accController, actorIndex);
+    dfsNetManager = new DFSNetManager(accController, actorIndex);
+    netManager = dfsNetManager->getNetManager();
     ThreadPool::addThread(netManager);
     this->thread()->sleep(1);
     // accController->loadActors();
@@ -97,6 +100,7 @@ void NodeManager::connectResolveManager()
 {
     connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
     connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
+    connect(dfsNetManager, &DFSNetManager::newMessage, resolveManager, &ResolveManager::resolveMessage);
     // TODO: move
     connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
@@ -322,7 +326,14 @@ void NodeManager::createNetManagerIdentificator()
     file.flush();
     file.close();
 }
-
+void NodeManager::dfscreateNetManagerIdentificator()
+{
+    QFile file(".dsettings");
+    file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    file.write(BigNumber::random(64).toByteArray());
+    file.flush();
+    file.close();
+}
 #ifdef ETALONIUM_CLIENT
 void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
@@ -573,8 +584,8 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
-    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
-    connect(dfs, &Dfs::newSenderToPeer, netManager, &NetManager::dfsToPeerTmp);
+    connect(dfs, &Dfs::newSender, dfsNetManager, &DFSNetManager::send);
+    connect(dfs, &Dfs::newSenderToPeer, dfsNetManager, &DFSNetManager::send);
 }
 
 void NodeManager::connectSignals()

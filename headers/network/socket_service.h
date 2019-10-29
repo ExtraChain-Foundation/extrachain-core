@@ -40,6 +40,8 @@ private:
     int reconnectTry = 0;
 
 public:
+    SocketService();
+    SocketService(const SocketService &value);
     SocketService(QString address, quint16 networkPort, QObject *parent = nullptr);
     SocketService(qintptr socketDescriptor, QObject *parent = nullptr);
     ~SocketService() override;
@@ -57,6 +59,7 @@ signals:
     void finished();
     void checkMe();
 
+    void moveMe();
     void setActiveSignal(bool active);
 private slots:
 

@@ -94,6 +94,8 @@ public:
 
     void setCompanyId(QByteArray *value);
 
+    QString getFolderPath() const;
+
 public slots:
     void process();
     void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
