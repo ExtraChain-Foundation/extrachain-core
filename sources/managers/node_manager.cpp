@@ -528,7 +528,7 @@ void NodeManager::connectUi()
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
     connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
-    connect(dfs, &Dfs::usersChanges, uiController, &UiController::dfsChanges);
+    connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
@@ -542,6 +542,8 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
+
+    uiController->startThreads();
 }
 #endif
 
