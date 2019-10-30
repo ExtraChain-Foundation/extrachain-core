@@ -251,6 +251,11 @@ void NetManager::logDebug()
     qDebug() << "Networkmanager in other thread is work";
 }
 
+void NetManager::reconnectUi()
+{
+    connectToServer(serverPort, local);
+}
+
 void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)
 {
 #ifdef ETALONIUM_CONSOLE

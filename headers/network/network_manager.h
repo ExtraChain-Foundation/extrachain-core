@@ -177,6 +177,7 @@ public slots:
     // test thread
     void process();
     void logDebug();
+    void reconnectUi();
     void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator

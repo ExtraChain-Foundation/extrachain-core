@@ -445,7 +445,7 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 
 void NodeManager::connectUi()
 {
-    connect(uiController, &UiController::connectToServer, netManager, &NetManager::connectToServer);
+    connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 
