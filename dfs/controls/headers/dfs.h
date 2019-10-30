@@ -43,8 +43,8 @@ public:
 
 signals:
     void finished();
-    void newSender(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
-    void newSenderToPeer(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
+    void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
+
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const based_dfs_struct::Type &type, const SocketPair &receiver);
     void usersChanges(const QByteArray &path, const based_dfs_struct::Type &type, const BigNumber &actorId);

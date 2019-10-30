@@ -76,14 +76,14 @@ void Dfs::statusD()
             if (el != based_dfs_struct::ACTOR_CARD_FILE)
             {
                 Message::Status status(el.toUtf8(), CardManager::getAllFiles(el.toUtf8()));
-                emit newSender(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
+                emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
             }
         }
     }
     else
     {
         Message::Status status("1", QStringList());
-        emit newSender(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
+        emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
     }
 }
 
@@ -182,8 +182,7 @@ void Dfs::init()
     resolver = new DFSResolver(actorIndex);
     //
     connect(this, &Dfs::sendQ, sender, &Sender::sendFile, Qt::ConnectionType::BlockingQueuedConnection);
-    connect(sender, &Sender::sendS, this, &Dfs::newSender);
-    connect(sender, &Sender::sendToPeer, this, &Dfs::newSenderToPeer);
+    connect(sender, &Sender::sendPckg, this, &Dfs::sendMsg);
     connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
     connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg,
             Qt::ConnectionType::BlockingQueuedConnection);

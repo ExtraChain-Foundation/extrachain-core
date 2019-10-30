@@ -29,18 +29,12 @@ signals:
      */
     void finished();
     /**
-     * @brief send
-     * @param msg
-     * @param msgType
-     */
-    void sendS(const QByteArray &msg, const QByteArray &msgType);
-    /**
      * @brief sendToPeer
      * @param msg
      * @param msgType
      * @param receiver
      */
-    void sendToPeer(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
+    void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
 public slots:
     /**
      * @brief process

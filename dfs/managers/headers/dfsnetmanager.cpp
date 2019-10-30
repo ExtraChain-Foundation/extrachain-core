@@ -21,19 +21,7 @@ void DFSNetManager::socketDisconnect(SocketService *connection)
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
     : NetManager(accountList, actInd)
 {
-    serverIp = "51.68.181.52";
     serverPort = isDebug ? 2224 : 2225;
-#ifdef ETALONIUM_CLIENT
-    QSettings settings;
-
-    if (!settings.value("network/serverIp").isValid())
-        settings.setValue("network/serverIp", "51.68.181.52");
-    if (!settings.value("network/allowLocalServer").isValid())
-        settings.setValue("network/allowLocalServer", "false");
-
-    serverIp = settings.value("network/serverIp").toString();
-    allowLocalServer = settings.value("network/allowLocalServer").toBool();
-#endif
 }
 
 DFSNetManager::~DFSNetManager()
@@ -76,6 +64,8 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
 
 void DFSNetManager::process()
 {
+    startNetwork(serverPort, local);
+    connectToServer(serverPort, local);
 }
 
 void DFSNetManager::removeConnection()

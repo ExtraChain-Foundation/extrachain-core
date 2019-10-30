@@ -584,8 +584,7 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
-    connect(dfs, &Dfs::newSender, dfsNetManager, &DFSNetManager::send);
-    connect(dfs, &Dfs::newSenderToPeer, dfsNetManager, &DFSNetManager::send);
+    connect(dfs, &Dfs::sendMsg, dfsNetManager, &DFSNetManager::send);
 }
 
 void NodeManager::connectSignals()

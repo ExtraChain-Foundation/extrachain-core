@@ -45,9 +45,7 @@ private:
     bool reservedActorListUse = false;
     bool active = false;
     quint16 extPort;
-    quint16 netPort;
     BigNumber maxBlockCount; // latest known block num in the blockchain
-    QNetworkAddressEntry *local = nullptr;
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
 
@@ -58,17 +56,21 @@ protected:
 #else
         false;
 #endif
-    QString serverIp = "51.68.181.52";
-    quint16 serverPort = isDebug ? 2221 : 2222;
-    bool allowLocalServer = false;
-    QMap<QByteArray, int> *requestResponseMap;
-
-protected:
     ActorIndex *actorIndex;
     AccountController *accounts;
+    QString serverIp = "51.68.181.52";
+    bool allowLocalServer = false;
+
+    QNetworkAddressEntry *local = nullptr;
 
 private:
+    quint16 serverPort = isDebug ? 2221 : 2222;
+    QMap<QByteArray, int> *requestResponseMap;
+
     ServerService *serverService;
+    quint16 netPort;
+
+private:
     QList<SocketService *> connections;
     QMap<QByteArray, int> handler = {};
 
@@ -157,7 +159,8 @@ private slots:
      */
     void addConnection(qint64 socketDescriptor);
     void checkConnectionsStatus();
-    void startNetwork();
+protected slots:
+    void startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local);
     void startDiscovery();
     // for upnpn
     void upnpErrDis(QString msg);
@@ -169,7 +172,7 @@ public slots:
     // test thread
     void process();
     void logDebug();
-    void connectToServer();
+    void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator
      */

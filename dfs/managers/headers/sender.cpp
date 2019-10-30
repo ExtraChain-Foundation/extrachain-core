@@ -21,10 +21,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         qDebug() << "empty title";
         return;
     }
-    if (receiver.isEmpty())
-        emit sendS(title.serialize(), Messages::DFS_MESSAGE);
-    else
-        emit sendToPeer(title.serialize(), Messages::DFS_MESSAGE, receiver);
+    emit sendPckg(title.serialize(), Messages::DFS_MESSAGE, receiver);
     titleHashs.insert(title.hash(), filePath);
     serializedTitle.insert(filePath, title.serialize());
     this->thread()->sleep(3);
@@ -33,10 +30,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         QByteArray data = file.read(data_offset);
         // create package
         Message::dfs_message pck(title.hash(), pckgN, data); // package for send
-        if (receiver.isEmpty())
-            emit sendS(pck.serialize(), Messages::DFS_MESSAGE); // send to Resolver Manager for reqister
-        else
-            emit sendToPeer(pck.serialize(), Messages::DFS_MESSAGE, receiver);
+        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
 
         qDebug() << "[&sender] send small file";
         return;
@@ -52,19 +46,12 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
                                                              //        if ((pckgN % 100) == 0)
                                                              //            this->thread()->sleep(1);
 
-        if (receiver.isEmpty())
-            emit sendS(pck.serialize(), Messages::DFS_MESSAGE); // send to Resolver Manager for reqister
-        else
-            emit sendToPeer(pck.serialize(), Messages::DFS_MESSAGE, receiver);
+        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     }
     // create last package
     QByteArray data = file.read(file.size() - file.pos());
-    Message::dfs_message pck(title.hash(), pckgN, data); // package for send
-    if (receiver.isEmpty())                              // check condition
-
-        emit sendS(pck.serialize(), Messages::DFS_MESSAGE); // send to Resolver Manager for reqister
-    else
-        sendToPeer(pck.serialize(), Messages::DFS_MESSAGE, receiver); // response request
+    Message::dfs_message pck(title.hash(), pckgN, data);        // package for send
+    sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver); // response request
     file.close();
 }
 

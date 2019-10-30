@@ -73,8 +73,8 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
 void NetManager::process()
 {
-    startNetwork();
-    connectToServer();
+    startNetwork(serverPort, local);
+    connectToServer(serverPort, local);
 }
 
 void NetManager::showMessage(const QHostAddress &from, const QString &message)
@@ -94,6 +94,7 @@ void NetManager::connectSocket()
     connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
+    connect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
 void NetManager::disconnectSocket(SocketService *connection)
@@ -102,6 +103,7 @@ void NetManager::disconnectSocket(SocketService *connection)
     disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
 NetManager::~NetManager()
@@ -222,7 +224,7 @@ void NetManager::checkMyIdentificator()
     //    emit connection->setActiveSignal(true);
 }
 
-void NetManager::startNetwork()
+void NetManager::startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local)
 {
     qDebug() << "NetManager::startNetwork()";
     netPort = serverPort;
@@ -248,7 +250,7 @@ void NetManager::logDebug()
     qDebug() << "Networkmanager in other thread is work";
 }
 
-void NetManager::connectToServer()
+void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)
 {
 #ifdef ETALONIUM_CONSOLE
     return;

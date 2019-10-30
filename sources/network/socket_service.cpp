@@ -236,8 +236,11 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
     if ((port == 2224) || (port == 2225))
+    {
         sendMsg(IDENTIFICATOR + net::dfsreadNetManagerIdentificator(),
                 SocketPair(this->address.toStdString(), this->port));
+        emit moveMe();
+    }
     else
         this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
                       SocketPair(this->address.toStdString(), this->port));
