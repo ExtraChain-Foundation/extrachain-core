@@ -71,6 +71,8 @@ void DFSResolver::receiveMsg(const QByteArray &msg, int dMsgType, const SocketPa
     {
         qDebug() << "[title message:]";
         Message::title_message message(msg);
+        if (QFile(message.filePath).exists())
+            return;
         QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
         qDebug() << "[file path]" << path;
         if (createTempFile(path, message.fileSize, message.hash()))

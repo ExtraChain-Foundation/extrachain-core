@@ -73,7 +73,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
 void NetManager::process()
 {
-    startNetwork(serverPort, local, serverService);
+    startNetwork();
     connectToServer(serverPort, local);
 }
 
@@ -94,7 +94,7 @@ void NetManager::connectSocket()
     connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
-    connect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+    //    connect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
 void NetManager::disconnectSocket(SocketService *connection)
@@ -103,7 +103,7 @@ void NetManager::disconnectSocket(SocketService *connection)
     disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+    //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
 NetManager::~NetManager()
@@ -224,15 +224,14 @@ void NetManager::checkMyIdentificator()
     //    emit connection->setActiveSignal(true);
 }
 
-void NetManager::startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local,
-                              ServerService *serverService)
+void NetManager::startNetwork()
 {
     qDebug() << "NetManager::startNetwork()";
     //        netPort = serverPort;
     qDebug() << "NetPort:" << serverPort;
     serverService = new ServerService(serverPort, local);
     //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections(serverService);
+    setupServerServiceConnections();
     serverService->startListen();
 }
 
@@ -293,9 +292,10 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
     }
 }
 
-void NetManager::setupServerServiceConnections(ServerService *serverService)
+void NetManager::setupServerServiceConnections()
 {
-    connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection);
+    connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection,
+            Qt::UniqueConnection);
 #ifdef ETALONIUM_CLIENT
     connect(serverService, &ServerService::serverStatus, this, &NetManager::qmlServerError);
 #endif
@@ -320,7 +320,7 @@ void NetManager::sendMessage(const QByteArray &message)
     if (checkMsgCount(message, handler))
         broadcastMsg(message);
 }
-bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> handler)
+bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler)
 {
     bool flag_result = true;
     bool value = 0;
@@ -357,14 +357,14 @@ void NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiv
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
 }
 
-void NetManager::MoveToDfsN()
-{
-    QObject *sender = QObject::sender();
-    SocketService *connection = qobject_cast<SocketService *>(sender);
-    disconnectSocket(connection);
-    connections.removeAt(connections.indexOf(connection));
-    emit newDfsSocket(connection);
-}
+// void NetManager::MoveToDfsN()
+//{
+//    QObject *sender = QObject::sender();
+//    SocketService *connection = qobject_cast<SocketService *>(sender);
+//    disconnectSocket(connection);
+//    connections.removeAt(connections.indexOf(connection));
+//    emit newDfsSocket(connection);
+//}
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {

@@ -23,6 +23,8 @@ private:
      */
     void socketConnection();
     void socketDisconnect(SocketService *connection);
+    void startNetwork() override;
+    void setupServerServiceConnections() override;
 
 public:
     NetManager *getNetManager();
@@ -39,6 +41,10 @@ public slots:
 private slots:
     void removeConnection();
     void checkMyIdentificator();
+    void addConnection(qint64 socketDescriptor) override;
+    void checkConnectionsStatus() override;
+    void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local) override;
+    SocketService *addConnectionFromPair(QHostAddress address, quint16 port) override;
 };
 
 #endif // DFSNETMANAGER_H

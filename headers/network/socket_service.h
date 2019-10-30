@@ -59,7 +59,7 @@ signals:
     void finished();
     void checkMe();
 
-    void moveMe();
+    //    void moveMe();
     void setActiveSignal(bool active);
 private slots:
 

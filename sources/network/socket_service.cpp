@@ -138,6 +138,7 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
     : QObject(parent)
 {
     this->socketDescriptor = socketDescriptor;
+    qDebug() << "Socket Descriptor" << socketDescriptor;
 }
 
 SocketService::~SocketService()
@@ -150,12 +151,14 @@ SocketService::~SocketService()
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
 {
     // check socket status
+    qDebug() << "TEST" << socketDescriptor << "isValid&";
     if (!socket->isValid())
         return;
     // take data from pair
     QString ipAddress = QString::fromStdString(socketData.first);
     qint64 portAddress = socketData.second;
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
+    qDebug() << "TEST" << socketDescriptor << " pckg" << data;
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
         QByteArray _wtSok = Serialization::universalSerialize({ data });
@@ -165,15 +168,15 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
 
 void SocketService::sockReady()
 {
-    //    QTcpSocket *_sok = this->socket;
-    while (socket->bytesAvailable() < 4)
-        socket->waitForReadyRead();
-    QByteArray _sock_data = socket->read(4);
-    int _pck_size = Utils::qByteArrayToInt(_sock_data);
-    while (socket->bytesAvailable() < _pck_size)
-        socket->waitForReadyRead();
+    QTcpSocket *_sok = this->socket;
+    while (_sok->bytesAvailable() < 4)
+        _sok->waitForReadyRead(1000);
+    QByteArray _sok_data = _sok->read(4);
+    int _pck_size = Utils::qByteArrayToInt(_sok_data);
+    while (_sok->bytesAvailable() < _pck_size)
+        _sok->waitForReadyRead(1000);
 
-    QByteArray pckg = socket->read(_pck_size);
+    QByteArray pckg = _sok->read(_pck_size);
     if (!active)
     {
         //            active = true;
@@ -188,6 +191,7 @@ void SocketService::sockReady()
     {
         SocketPair receiver(address.toStdString(), port);
         receiver.setId(identificator.toByteArray());
+        qDebug() << "TEST" << socketDescriptor << "pckg" << pckg;
         emit MessageReceived(pckg, receiver);
     }
     if (socket->bytesAvailable())
@@ -235,15 +239,9 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    if ((this->socket->localPort() == 2224) || (this->socket->localPort() == 2225))
-    {
-        sendMsg(IDENTIFICATOR + net::dfsreadNetManagerIdentificator(),
-                SocketPair(this->address.toStdString(), this->port));
-        emit moveMe();
-    }
-    else
-        this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
-                      SocketPair(this->address.toStdString(), this->port));
+
+    this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
+                  SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
     qDebug() << "SOCKET SERVICE: "

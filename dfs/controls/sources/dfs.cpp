@@ -107,6 +107,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
 
     appendC(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),
             based_dfs_struct::toByteArray(type));
+
+    emit sendQ(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type,
                       BigNumber(pathList.at(PathStruct::aId))); // TODO

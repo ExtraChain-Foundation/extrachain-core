@@ -120,14 +120,14 @@ protected:
      * @param local
      * @param serverService
      */
-    void startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local, ServerService *serverService);
+    virtual void startNetwork();
     /**
      * @brief restoreConnections
      * @param socketList
      */
     void restoreConnections(const QList<SocketPair> &socketList);
 
-    void setupServerServiceConnections(ServerService *serverService);
+    virtual void setupServerServiceConnections();
     void setupDiscoveryServiceConnections();
     /**
      * @brief signMessage
@@ -147,25 +147,27 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> handler);
+    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler);
 private slots:
     /**
      * @brief createNewConnectionsFromList
      * @param message
      */
     void createNewConnectionsFromList(const QByteArray &message);
+protected slots:
+    /**
+     * @brief addConnection
+     * @param socketDescriptor
+     */
+    virtual void addConnection(qint64 socketDescriptor);
+
     /**
      * @brief Creates new socket connection and adds it to connections
      * @param address
      * @param port
      */
-    SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
-    /**
-     * @brief addConnection
-     * @param socketDescriptor
-     */
-    void addConnection(qint64 socketDescriptor);
-    void checkConnectionsStatus();
+    virtual SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
+    virtual void checkConnectionsStatus();
     void startDiscovery();
     // for upnpn
     void upnpErrDis(QString msg);
@@ -178,7 +180,7 @@ public slots:
     void process();
     void logDebug();
     void reconnectUi();
-    void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
+    virtual void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator
      */
@@ -202,10 +204,10 @@ public slots:
 
     void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
-    void MoveToDfsN();
+    //    void MoveToDfsN();
 
 signals:
-    void newDfsSocket(SocketService *socket);
+    //    void newDfsSocket(SocketService *socket);
     void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
