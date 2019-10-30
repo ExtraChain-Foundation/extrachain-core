@@ -73,7 +73,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
 void NetManager::process()
 {
-    startNetwork(serverPort, local);
+    startNetwork(serverPort, local, serverService);
     connectToServer(serverPort, local);
 }
 
@@ -224,14 +224,15 @@ void NetManager::checkMyIdentificator()
     //    emit connection->setActiveSignal(true);
 }
 
-void NetManager::startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local)
+void NetManager::startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local,
+                              ServerService *serverService)
 {
     qDebug() << "NetManager::startNetwork()";
     netPort = serverPort;
     qDebug() << "NetPort:" << netPort;
     serverService = new ServerService(netPort, local);
     //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections();
+    setupServerServiceConnections(serverService);
     serverService->startListen();
 }
 
@@ -287,7 +288,7 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
     }
 }
 
-void NetManager::setupServerServiceConnections()
+void NetManager::setupServerServiceConnections(ServerService *serverService)
 {
     connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection);
 #ifdef ETALONIUM_CLIENT

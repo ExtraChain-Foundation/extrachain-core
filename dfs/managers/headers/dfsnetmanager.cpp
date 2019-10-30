@@ -64,7 +64,7 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
 
 void DFSNetManager::process()
 {
-    startNetwork(serverPort, local);
+    startNetwork(serverPort, local, serverService);
     connectToServer(serverPort, local);
 }
 

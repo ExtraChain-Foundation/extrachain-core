@@ -115,12 +115,19 @@ protected:
      */
     void findLocal();
     /**
+     * @brief startNetwork
+     * @param serverPort
+     * @param local
+     * @param serverService
+     */
+    void startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local, ServerService *serverService);
+    /**
      * @brief restoreConnections
      * @param socketList
      */
     void restoreConnections(const QList<SocketPair> &socketList);
 
-    void setupServerServiceConnections();
+    void setupServerServiceConnections(ServerService *serverService);
     void setupDiscoveryServiceConnections();
     /**
      * @brief signMessage
@@ -159,8 +166,6 @@ private slots:
      */
     void addConnection(qint64 socketDescriptor);
     void checkConnectionsStatus();
-protected slots:
-    void startNetwork(const quint16 &serverPort, QNetworkAddressEntry *local);
     void startDiscovery();
     // for upnpn
     void upnpErrDis(QString msg);

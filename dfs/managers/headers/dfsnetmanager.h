@@ -10,6 +10,7 @@ class DFSNetManager : public NetManager
     QList<SocketService *> socketsList;
     QMap<QByteArray, int> handler;
     quint16 serverPort;
+    ServerService *serverService;
 
 private:
     /**
