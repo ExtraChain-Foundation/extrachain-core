@@ -1,5 +1,16 @@
 #include "dfsnetmanager.h"
 
+DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
+    : NetManager(accountList, actInd)
+{
+    serverPort = isDebug ? 2224 : 2225;
+}
+
+DFSNetManager::~DFSNetManager()
+{
+    emit finished();
+}
+
 void DFSNetManager::socketConnection()
 {
     connect(socketsList.last(), &SocketService::clientDisconnected, this, &DFSNetManager::removeConnection);
@@ -16,17 +27,6 @@ void DFSNetManager::socketDisconnect(SocketService *connection)
     disconnect(connection, &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
     disconnect(connection, &SocketService::removeMe, this, &DFSNetManager::removeConnection);
     disconnect(connection, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
-}
-
-DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
-    : NetManager(accountList, actInd)
-{
-    serverPort = isDebug ? 2224 : 2225;
-}
-
-DFSNetManager::~DFSNetManager()
-{
-    emit finished();
 }
 
 NetManager *DFSNetManager::getNetManager()

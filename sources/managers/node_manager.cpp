@@ -13,13 +13,12 @@ NodeManager::NodeManager()
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
+    netManager = new NetManager(accController, actorIndex);
     dfsNetManager = new DFSNetManager(accController, actorIndex);
-    netManager = dfsNetManager->getNetManager();
     ThreadPool::addThread(netManager);
+    ThreadPool::addThread(dfsNetManager);
     this->thread()->sleep(1);
-    // accController->loadActors();
     blockchain = new Blockchain(accController, fileMode);
-    //    BigNumber i = 0;  // UNCOMMENT IF NOT BUILD
     txManager = new TransactionManager(accController, blockchain);
     //    contractManager = new ContractManager(accController, blockchain);
 
@@ -54,19 +53,6 @@ NodeManager::NodeManager()
         tm.insert(0, 0);
         blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
     }
-//    Transaction newTransaction(company.getId(), company.getId(), BigNumber("0"));
-//    newTransaction.setSenderBalance(BigNumber("0"));
-//    newTransaction.setReceiverBalance(BigNumber("0"));
-//    newTransaction.setGas(0);
-//    newTransaction.setHop(0);
-//    newTransaction.sign(company);
-//    newTransaction.verify(company.convertToPublic());
-//    txManager->addVerifiedTx(newTransaction);
-
-//    Block block = txManager->makeBlock();
-//    blockchain->addBlock(block, true);
-
-//    }
 #endif
 
     ThreadPool::addThread(blockchain);
@@ -585,6 +571,7 @@ void NodeManager::dfsConnection()
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
     connect(dfs, &Dfs::sendMsg, dfsNetManager, &DFSNetManager::send);
+    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
 }
 
 void NodeManager::connectSignals()

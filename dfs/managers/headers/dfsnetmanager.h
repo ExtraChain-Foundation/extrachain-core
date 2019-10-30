@@ -12,6 +12,10 @@ class DFSNetManager : public NetManager
     quint16 serverPort;
     ServerService *serverService;
 
+public:
+    DFSNetManager(AccountController *accountList, ActorIndex *actorIndex);
+    ~DFSNetManager();
+
 private:
     /**
      * @brief socketConnection
@@ -21,9 +25,6 @@ private:
     void socketDisconnect(SocketService *connection);
 
 public:
-    DFSNetManager(AccountController *accountList, ActorIndex *actorIndex);
-    ~DFSNetManager();
-
     NetManager *getNetManager();
 signals:
     void finished();

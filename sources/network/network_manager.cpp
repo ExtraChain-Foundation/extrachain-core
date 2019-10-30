@@ -228,9 +228,9 @@ void NetManager::startNetwork(const quint16 &serverPort, QNetworkAddressEntry *l
                               ServerService *serverService)
 {
     qDebug() << "NetManager::startNetwork()";
-    netPort = serverPort;
-    qDebug() << "NetPort:" << netPort;
-    serverService = new ServerService(netPort, local);
+    //        netPort = serverPort;
+    qDebug() << "NetPort:" << serverPort;
+    serverService = new ServerService(serverPort, local);
     //    resolverService = new ResolverService(actorIndex, requestResponseMap);
     setupServerServiceConnections(serverService);
     serverService->startListen();

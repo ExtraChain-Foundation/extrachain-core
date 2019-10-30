@@ -235,7 +235,7 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    if ((port == 2224) || (port == 2225))
+    if ((this->socket->localPort() == 2224) || (this->socket->localPort() == 2225))
     {
         sendMsg(IDENTIFICATOR + net::dfsreadNetManagerIdentificator(),
                 SocketPair(this->address.toStdString(), this->port));
