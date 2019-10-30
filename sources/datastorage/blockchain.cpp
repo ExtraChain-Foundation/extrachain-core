@@ -933,23 +933,35 @@ void Blockchain::proveTx()
     qDebug() << "proveTx: started";
     QObject *s = QObject::sender();
     Transaction *tx = qobject_cast<Transaction *>(s);
-    if (tx->getSender() == BigNumber(*actorIndex->companyId))
+    //    if (tx->getSender() == BigNumber(*actorIndex->companyId))
+    //    {
+    BigNumber targetSender = tx->getSender();
+    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
+    if (senderActor.isEmpty())
     {
-        bool sig = actorIndex->getActor(BigNumber(*actorIndex->companyId))
-                       .getKey()
-                       ->verify(tx->getDataForDigSig(), tx->getDigSig());
-        if (sig)
-        {
-            emit tx->Approved();
-            return;
-        }
-        else
-        {
-            emit tx->NotApproved();
-            qDebug() << "Transaction not approved: false zero user";
-            return;
-        }
+        qDebug() << "Tx" << tx->getHash() << "not approved: no such actor";
+        emit tx->NotApproved();
+        return;
     }
+    bool sig = senderActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
+    if (!sig)
+    {
+        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
+        emit tx->NotApproved();
+        return;
+    }
+    //        if (sig)
+    //        {
+    //            emit tx->Approved();
+    //            return;
+    //        }
+    //        else
+    //        {
+    //            emit tx->NotApproved();
+    //            qDebug() << "Transaction not approved: false zero user";
+    //            return;
+    //        }
+    //    }
     if (tx->getData() == "genesis")
     {
         // type = 6, token = correct
@@ -978,8 +990,7 @@ void Blockchain::proveTx()
         qDebug() << "Transaction not approved: sender == receiver";
         return;
     }
-
-    if (tx->getAmount() <= 0)
+    if (tx->getAmount() <= 0 && targetSender.toActorId() != *actorIndex->companyId)
     {
         emit tx->NotApproved();
         qDebug() << "Transaction not approved: amount <= 0";
@@ -987,8 +998,8 @@ void Blockchain::proveTx()
     }
 
     // verify sender state
-    BigNumber targetSender = tx->getSender();
-    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
+    //    BigNumber targetSender = tx->getSender();
+    //    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
     if (senderActor.isEmpty())
     {
         emit tx->NotApproved();
@@ -1006,10 +1017,17 @@ void Blockchain::proveTx()
             return;
         }
     }
-    Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toActorId());
-    BigNumber senderCurBal = getBalanceFromTx(targetSender, senderLastTx);
+    BigNumber senderCurBal = 0;
     bool senderBalanceIsValid = false;
-    if (tx->getSenderBalance() == senderCurBal)
+    if (targetSender.toActorId() != *actorIndex->companyId)
+    {
+        Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toActorId());
+        senderCurBal = getBalanceFromTx(targetSender, senderLastTx);
+
+        if (tx->getSenderBalance() == senderCurBal)
+            senderBalanceIsValid = true;
+    }
+    else
         senderBalanceIsValid = true;
 
     // verify receiver state
@@ -1021,7 +1039,8 @@ void Blockchain::proveTx()
         receiverBalanceIsValid = true;
 
     // qDebug() << "ASDASDASD" << senderCurBal - tx->getAmount();
-    if (senderCurBal - tx->getAmount() < 0 /*|| receiverCurBal + tx->getAmount() < 0*/)
+    if (senderCurBal - tx->getAmount() < 0
+        && targetSender.toActorId() != *actorIndex->companyId /*|| receiverCurBal + tx->getAmount() < 0*/)
     {
         qDebug() << senderCurBal << tx->getAmount();
         qDebug() << "Transaction "

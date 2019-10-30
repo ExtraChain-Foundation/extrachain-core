@@ -18,10 +18,6 @@ void DFSNetManager::socketConnection()
     qDebug() << connect(socketsList.last(), &SocketService::clientDisconnected, this,
                         &DFSNetManager::removeConnection);
     qDebug() << connect(this, &DFSNetManager::sendMsg, socketsList.last(), &SocketService::sendMsg);
-    qDebug() << connect(this, &DFSNetManager::sendMsg,
-                        [=](const QByteArray &msg, const SocketPair &receiver) {
-                            std::cout << "Qt SUUUUCK << " << receiver.first;
-                        });
     qDebug() << connect(socketsList.last(), &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
     qDebug() << connect(socketsList.last(), &SocketService::removeMe, this, &DFSNetManager::removeConnection);
     qDebug() << connect(socketsList.last(), &SocketService::checkMe, this,
@@ -88,7 +84,7 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     if (checkMsgCount(message, handler))
     {
         emit sendMsg(message, receiver);
-        qDebug() << "emit sendM from DFSNetManager";
+        //        qDebug() << "emit sendM from DFSNetManager";
     }
 }
 
