@@ -10,7 +10,7 @@
 
 namespace Message {
 
-const int dataSize = 512;   // bytes
+const int dataSize = 1024;  // bytes
 const short fieldsSize = 4; // bytes for size
 const QByteArray stateDelimetr = "|";
 

@@ -181,6 +181,7 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
     , actorIndex(actorIndex)
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
+    ThreadPool::addThread(dfsNetManager);
 }
 
 Dfs::~Dfs()
@@ -206,7 +207,6 @@ void Dfs::init()
     signalConnection();
     ThreadPool::addThread(sender);
     ThreadPool::addThread(resolver);
-    ThreadPool::addThread(dfsNetManager);
 
     statusD();
     initD(userId);

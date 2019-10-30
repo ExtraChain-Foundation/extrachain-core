@@ -9,6 +9,7 @@ DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
 DFSNetManager::~DFSNetManager()
 {
     emit finished();
+    delete serverService;
 }
 
 void DFSNetManager::socketConnection()
@@ -83,7 +84,6 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     if (msgType != Messages::ACTOR_MESSAGE)
         msg.calcDigSig(accounts->getCurrentActor());
 
-    qDebug() << "DFSNetManager: send " << msgType;
     QByteArray message = msg.serialize();
     if (checkMsgCount(message, handler))
     {
