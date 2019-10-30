@@ -41,6 +41,9 @@ bool DFSResolver::createTempFile(const QString &path, const long long &size, con
                 delete file;
                 this->thread()->sleep(1);
                 qDebug() << "[actor not empty directory wasn't create]";
+                counter++;
+                if (counter > 3)
+                    emit initDfs(actor.getId());
                 return createTempFile(path, size, tHash);
             }
         }

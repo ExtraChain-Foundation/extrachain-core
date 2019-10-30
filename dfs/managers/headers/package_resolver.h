@@ -10,6 +10,8 @@ class DFSResolver : public QObject
 {
     Q_OBJECT
 
+    int counter = 0;
+
 private:
     ActorIndex *actorIndex;
     bool active = false;
@@ -34,6 +36,7 @@ signals:
     void checkStatus(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
     void closingMsg(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver);
     void startTimerD(const long long &size, const QString &path, const QByteArray &titleS);
+    void initDfs(const BigNumber &userId);
     void finished();
 
 public slots:

@@ -35,7 +35,6 @@ private:
     Dfs *dfs;
     ActorIndex *actorIndex;
     Blockchain *blockchain;
-    DFSNetManager *dfsNetManager;
     NetManager *netManager;
     TransactionManager *txManager;
     AccountController *accController;

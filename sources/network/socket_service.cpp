@@ -151,14 +151,12 @@ SocketService::~SocketService()
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
 {
     // check socket status
-    qDebug() << "TEST" << socketDescriptor << "isValid&";
     if (!socket->isValid())
         return;
     // take data from pair
     QString ipAddress = QString::fromStdString(socketData.first);
     qint64 portAddress = socketData.second;
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
-    qDebug() << "TEST" << socketDescriptor << " pckg" << data;
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
         QByteArray _wtSok = Serialization::universalSerialize({ data });
@@ -191,7 +189,6 @@ void SocketService::sockReady()
     {
         SocketPair receiver(address.toStdString(), port);
         receiver.setId(identificator.toByteArray());
-        qDebug() << "TEST" << socketDescriptor << "pckg" << pckg;
         emit MessageReceived(pckg, receiver);
     }
     if (socket->bytesAvailable())

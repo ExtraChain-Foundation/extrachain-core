@@ -10,6 +10,7 @@
 #include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
+#include "dfs/managers/headers/dfsnetmanager.h"
 #include <QTimer>
 class Dfs : public QObject
 {
@@ -21,6 +22,7 @@ private:
     AccountController *accountControler;
     ActorIndex *actorIndex;
 
+    DFSNetManager *dfsNetManager;
     Sender *sender;
     DFSResolver *resolver;
 
@@ -32,6 +34,7 @@ private:
                  const QByteArray &type);
     QByteArray setName(const QByteArray &userId);
     void statusD();
+    void signalConnection();
 
 public slots:
     void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
@@ -40,6 +43,9 @@ public slots:
 public:
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
     ~Dfs();
+
+    DFSNetManager *getDfsNetManager() const;
+    void setDfsNetManager(DFSNetManager *value);
 
 signals:
     void finished();

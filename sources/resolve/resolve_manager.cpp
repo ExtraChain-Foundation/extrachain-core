@@ -48,8 +48,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     // response signals
     connect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
     // dfs signal
-    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg,
-            Qt::ConnectionType::QueuedConnection);
+    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)

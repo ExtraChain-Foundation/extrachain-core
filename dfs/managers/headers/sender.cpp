@@ -24,7 +24,6 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
     emit sendPckg(title.serialize(), Messages::DFS_MESSAGE, receiver);
     titleHashs.insert(title.hash(), filePath);
     serializedTitle.insert(filePath, title.serialize());
-    this->thread()->sleep(3);
     if (file.size() < data_offset + 1)
     {
         QByteArray data = file.read(data_offset);
@@ -42,9 +41,6 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         QByteArray data = file.read(data_offset);
         // create package
         Message::dfs_message pck(title.hash(), pckgN, data); // package for send
-                                                             //        pckgN++;
-                                                             //        if ((pckgN % 100) == 0)
-                                                             //            this->thread()->sleep(1);
 
         emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     }

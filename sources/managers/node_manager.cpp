@@ -14,9 +14,8 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
-    dfsNetManager = new DFSNetManager(accController, actorIndex);
+
     ThreadPool::addThread(netManager);
-    ThreadPool::addThread(dfsNetManager);
     this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     txManager = new TransactionManager(accController, blockchain);
@@ -86,7 +85,8 @@ void NodeManager::connectResolveManager()
 {
     connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
     connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
-    connect(dfsNetManager, &DFSNetManager::newMessage, resolveManager, &ResolveManager::resolveMessage);
+    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
+            &ResolveManager::resolveMessage);
     // TODO: move
     connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
@@ -570,7 +570,6 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
-    connect(dfs, &Dfs::sendMsg, dfsNetManager, &DFSNetManager::send);
     //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
 }
 

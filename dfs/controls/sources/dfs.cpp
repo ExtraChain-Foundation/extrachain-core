@@ -1,6 +1,16 @@
 #include "dfs/controls/headers/dfs.h"
 #include <iterator>
 
+DFSNetManager *Dfs::getDfsNetManager() const
+{
+    return dfsNetManager;
+}
+
+void Dfs::setDfsNetManager(DFSNetManager *value)
+{
+    dfsNetManager = value;
+}
+
 void Dfs::initD(const QByteArray &userId)
 {
 
@@ -87,6 +97,17 @@ void Dfs::statusD()
     }
 }
 
+void Dfs::signalConnection()
+{
+    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
+    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
+    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
+    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
+    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
+    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
+    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
+}
+
 void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type)
 {
     QFile file(tmpPath);
@@ -159,6 +180,7 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
     , accountControler(accControler)
     , actorIndex(actorIndex)
 {
+    dfsNetManager = new DFSNetManager(accountControler, actorIndex);
 }
 
 Dfs::~Dfs()
@@ -177,22 +199,17 @@ void Dfs::process()
 
 void Dfs::init()
 {
-    statusD();
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
-    initD(userId);
     sender = new Sender(userId);
     resolver = new DFSResolver(actorIndex);
     //
-    connect(this, &Dfs::sendQ, sender, &Sender::sendFile, Qt::ConnectionType::BlockingQueuedConnection);
-    connect(sender, &Sender::sendPckg, this, &Dfs::sendMsg);
-    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
-    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg,
-            Qt::ConnectionType::BlockingQueuedConnection);
-    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
-    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
-
+    signalConnection();
     ThreadPool::addThread(sender);
     ThreadPool::addThread(resolver);
+    ThreadPool::addThread(dfsNetManager);
+
+    statusD();
+    initD(userId);
 }
 
 void Dfs::initUser(BigNumber userId)
