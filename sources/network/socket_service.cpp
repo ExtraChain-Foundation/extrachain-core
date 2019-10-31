@@ -78,7 +78,8 @@ void SocketService::readData()
         {
             SocketPair receiver(address.toStdString(), port);
             receiver.setId(identificator.toByteArray());
-            emit MessageReceived(command, receiver);
+            //            emit MessageReceived(command, receiver);
+            netManager->MessageReceived(command, receiver);
         }
         _blockSize = 0;
     }
@@ -107,6 +108,11 @@ void SocketService::setIdentificator(const BigNumber &value)
 bool SocketService::getActive() const
 {
     return active;
+}
+
+void SocketService::setNetManager(NetManager *value)
+{
+    netManager = value;
 }
 
 SocketService::SocketService()
@@ -164,6 +170,25 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     }
 }
 
+void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketData)
+{
+    emit msgReady(data, socketData);
+    //    // check socket status
+    //    if (!socket->isValid())
+    //        return nullptr;
+    //    // take data from pair
+    //    QString ipAddress = QString::fromStdString(socketData.first);
+    //    qint64 portAddress = socketData.second;
+    //    // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
+    //    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress ==
+    //    0)))
+    //    {
+    //        QByteArray _wtSok = Serialization::universalSerialize({ data });
+    //        socket->write(_wtSok, _wtSok.size());
+    //    }
+    return nullptr;
+}
+
 void SocketService::sockReady()
 {
     QTcpSocket *_sok = this->socket;
@@ -189,7 +214,8 @@ void SocketService::sockReady()
     {
         SocketPair receiver(address.toStdString(), port);
         receiver.setId(identificator.toByteArray());
-        emit MessageReceived(pckg, receiver);
+        //        emit MessageReceived(pckg, receiver);
+        netManager->MessageReceived(pckg, receiver);
     }
     if (socket->bytesAvailable())
         sockReady();
@@ -209,6 +235,7 @@ void SocketService::process()
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
         connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady, Qt::QueuedConnection);
         connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
+        connect(this, &SocketService::msgReady, this, &SocketService::sendMsg);
         connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
                 [this](QAbstractSocket::SocketError socketError) {
                     Q_UNUSED(socketError)

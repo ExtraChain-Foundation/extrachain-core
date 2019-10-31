@@ -1,6 +1,30 @@
 ﻿#ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
+// FORWARD DECLARATION FOR CALLBACK INTEGRATION
+#ifndef SERVER_SERVICE_DEF
+#define SERVER_SERVICE_DEF
+class ServerService;
+#include "headers/network/server_service.h"
+#endif // SERVER_SERVICE
 
+#ifndef SOCKET_SERVICE_DEF
+#define SOCKET_SERVICE_DEF
+class SocketService;
+#include "headers/network/socket_service.h"
+#endif // SOCKET_SERVICE
+
+#ifndef UPNP_CONNECTION_DEF
+#define UPNP_CONNECTION_DEF
+class UPNPConnection;
+#include "headers/network/upnpconnection.h"
+#endif // UPNP_CONNECTION
+
+#ifndef DISCOVERY_SERVICE_DEF
+#define DISCOVERY_SERVICE_DEF
+class DiscoveryService;
+#include "headers/network/discovery_service.h"
+#endif
+//-------------------END-----------------------
 #include "dfs/packages/headers/dfs_universal.h"
 #include "network/packages/service/list_connections.h"
 #include <QMap>
@@ -28,6 +52,7 @@
 #include <QNetworkConfigurationManager>
 #include <QRandomGenerator>
 #include <QSettings>
+#include <QMutex>
 #include "network/packages/service/all_messages.h"
 #include "network/packages/service/downloaddfsrequest.h"
 
@@ -35,7 +60,7 @@
  * @brief The NetManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
-
+static QMutex mutex;
 class NetManager : public QObject
 {
     Q_OBJECT
@@ -202,7 +227,9 @@ public slots:
     void removeConnection();
     void dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
-    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+public:
+    void distMessage(const QByteArray &data, const SocketPair &socketData);
+    void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
     //    void MoveToDfsN();
 
