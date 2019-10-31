@@ -193,6 +193,11 @@ bool ActorIndex::actorExist(BigNumber actorId)
     return true;
 }
 
+QString ActorIndex::getFolderPath() const
+{
+    return folderPath;
+}
+
 QString ActorIndex::buildFilePath(const QByteArray &id) const
 {
     QByteArray Id = id;
@@ -280,7 +285,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 
         emit sendMessage(actor.serialize(), classType);
 
-        if (actor.getAccount() == 1)
+        if (actor.getAccount() > 0)
         {
             qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
             emit initDfs(actor.getId());

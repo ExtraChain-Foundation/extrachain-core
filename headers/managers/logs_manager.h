@@ -3,7 +3,10 @@
 
 #include <QString>
 #include <QObject>
-
+#include <QFile>
+#include <QDir>
+#include <QDateTime>
+#include <iostream>
 #ifdef ETALONIUM_CLIENT
 #include "ui/model/abstractmodel.h"
 #endif

@@ -16,7 +16,7 @@
 #include "managers/contract_manager.h"
 #include "enc/crypt_manager.h"
 #include "managers/sm_manager.h"
-
+#include "dfs/managers/headers/dfsnetmanager.h"
 #include "resolve/resolve_manager.h"
 
 #include "profile/private_profile.h"
@@ -146,6 +146,7 @@ public slots:
     //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
+    void dfscreateNetManagerIdentificator();
 #ifdef ETALONIUM_CLIENT
     void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
 

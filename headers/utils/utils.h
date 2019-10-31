@@ -10,6 +10,9 @@
 #include <QString>
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+#include <QStringList>
+#include <string>
+#include <sstream>
 
 namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
@@ -55,6 +58,14 @@ namespace net {
 static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
+    file.open(QIODevice::ReadOnly);
+    QByteArray id = file.readAll();
+    file.close();
+    return id;
+}
+static QByteArray dfsreadNetManagerIdentificator()
+{
+    QFile file(".dsettings");
     file.open(QIODevice::ReadOnly);
     QByteArray id = file.readAll();
     file.close();

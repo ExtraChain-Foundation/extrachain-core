@@ -1,9 +1,5 @@
 #include "utils/utils.h"
 
-#include <QStringList>
-#include <string>
-#include <sstream>
-
 template <typename T>
 
 std::string to_string(T value)

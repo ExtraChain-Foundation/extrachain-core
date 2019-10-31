@@ -34,6 +34,7 @@ void SocketService::reconnect()
 
 void SocketService::readData()
 {
+    //    while()
     while (buffer.size() > 0)
     {
         if (_blockSize == 0)
@@ -108,6 +109,24 @@ bool SocketService::getActive() const
     return active;
 }
 
+SocketService::SocketService()
+{
+}
+
+SocketService::SocketService(const SocketService &value)
+{
+    connectionTry = value.connectionTry;
+    socketDescriptor = value.socketDescriptor;
+    active = value.active;
+    address = value.address;
+    port = value.port;
+    socket = value.socket;
+    identificator = value.identificator;
+    _blockSize = value._blockSize;
+    buffer = value.buffer;
+    reconnectTry = value.reconnectTry;
+}
+
 SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
     : QObject(parent)
 {
@@ -119,6 +138,7 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
     : QObject(parent)
 {
     this->socketDescriptor = socketDescriptor;
+    qDebug() << "Socket Descriptor" << socketDescriptor;
 }
 
 SocketService::~SocketService()
@@ -139,22 +159,40 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        socket->write(QByteArray::number(data.size()) + ' ' + data,
-                      (QByteArray::number(data.size()) + ' ' + data).size());
+        QByteArray _wtSok = Serialization::universalSerialize({ data });
+        socket->write(_wtSok, _wtSok.size());
     }
 }
 
 void SocketService::sockReady()
 {
-    //    qDebug() << this->thread();
     QTcpSocket *_sok = this->socket;
-    while (_sok->bytesAvailable())
-        buffer += _sok->readAll();
-    QTimer::singleShot(2000, this, SLOT(readData()));
-    // QDataStream in(_sok);
+    while (_sok->bytesAvailable() < 4)
+        _sok->waitForReadyRead(1000);
+    QByteArray _sok_data = _sok->read(4);
+    int _pck_size = Utils::qByteArrayToInt(_sok_data);
+    while (_sok->bytesAvailable() < _pck_size)
+        _sok->waitForReadyRead(1000);
 
-    //    if (_sok->bytesAvailable() > 0)
-    //        sockReady();
+    QByteArray pckg = _sok->read(_pck_size);
+    if (!active)
+    {
+        //            active = true;
+        if (pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+        {
+
+            identificator = BigNumber(pckg.mid(IDENTIFICATOR.size()));
+        }
+        emit checkMe();
+    }
+    else
+    {
+        SocketPair receiver(address.toStdString(), port);
+        receiver.setId(identificator.toByteArray());
+        emit MessageReceived(pckg, receiver);
+    }
+    if (socket->bytesAvailable())
+        sockReady();
 }
 
 void SocketService::closeSocket()
@@ -169,7 +207,7 @@ void SocketService::process()
         this->socket = new QTcpSocket(this);
         connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
-        connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady);
+        connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady, Qt::QueuedConnection);
         connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
         connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
                 [this](QAbstractSocket::SocketError socketError) {
@@ -198,17 +236,13 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
+
     this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
                   SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
     qDebug() << "SOCKET SERVICE: "
              << "socket isOpen - " << socket->isOpen();
-    QObject::connect(qApp, &QCoreApplication::aboutToQuit, [=]() {
-        qDebug() << "SOCKET SERVICE: disconnect";
-        // this->socket->disconnect();
-        this->socket->disconnectFromHost();
-    });
 }
 
 void SocketService::setActive(bool active)

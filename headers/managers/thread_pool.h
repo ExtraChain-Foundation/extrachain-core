@@ -3,6 +3,8 @@
 
 #include <QThread>
 #include <QObject>
+#include <QCoreApplication>
+#include <QDebug>
 
 class ThreadPool : public QObject
 {

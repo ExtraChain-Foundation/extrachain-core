@@ -4,11 +4,6 @@
 #include <android/log.h>
 #endif
 
-#include <QFile>
-#include <QDir>
-#include <QDateTime>
-#include <iostream>
-
 bool LogsManager::toConsole = true;
 bool LogsManager::toFile = true;
 bool LogsManager::toQml =
@@ -76,6 +71,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
             }
         }
     }
+
+    if (!isPrint)
+        return;
 
     QString fileNameQrc, lineRow;
     if (fileName.right(3) == "qml")

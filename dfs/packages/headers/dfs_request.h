@@ -1,14 +1,13 @@
 ﻿#ifndef DFS_REUEST_H
 #define DFS_REUEST_H
 
-#include "dfs_message_interface.h"
+#include "dumessage.h"
 
 namespace Message {
 
-struct dfs_request : public IDfs_Message
+struct dfs_request : public DUMessage
 {
     const short FIELDS_COUNT = 2;
-    const int m_type = dfsMessageType::requestMessage;
 
     QString filePath;
     QByteArray asker;

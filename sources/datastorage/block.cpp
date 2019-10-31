@@ -1,7 +1,4 @@
 #include "datastorage/block.h"
-#include "utils/utils.h"
-
-#include <QDateTime>
 
 void Block::setType(const QByteArray &value)
 {

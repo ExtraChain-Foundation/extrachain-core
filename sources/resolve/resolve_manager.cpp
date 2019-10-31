@@ -39,7 +39,6 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newGenesisBlock, blockchain, &Blockchain::addGenBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
-    connect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
     connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
@@ -48,6 +47,8 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
     // response signals
     connect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
+    // dfs signal
+    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)
@@ -59,7 +60,6 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
     disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     disconnect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
-    disconnect(resolver, &ResolverService::newDfsPack, dfs, &Dfs::recieve);
 
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
@@ -69,6 +69,8 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     // response signals
     disconnect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
+    // dfs signal
+    disconnect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
@@ -88,12 +90,10 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
 {
     Messages::BaseMessage msg(msgType);
     msg.init(data);
-    if (msgType == Messages::DFS_CHANGES_MESSAGE)
-        return;
     if (msgType != Messages::ACTOR_MESSAGE)
         msg.calcDigSig(accountControler->getCurrentActor());
 
-    qDebug() << "NetManager: send " << msgType;
+    //    qDebug() << "NetManager: send " << msgType;
     QByteArray message = msg.serialize();
     if (Messages::GETTERS.contains(msgType))
     {

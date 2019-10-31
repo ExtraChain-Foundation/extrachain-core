@@ -8,6 +8,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAddressEntry>
+#include <QNetworkInterface>
+#include <QRandomGenerator>
+#include <chrono>
+#include <thread>
 
 #include "utils/utils.h"
 #include "network/packages/service/ping_pong_message.h"
@@ -37,20 +41,20 @@ private slots:
      */
     void recieveMsg();
 
-//public:
-//    /**
-//     * @brief enable
-//     */
-//    void enable();
-//    /**
-//     * @brief disable
-//     */
-//    void disable();
-//    /**
-//     * @brief isActive status
-//     * @return status
-//     */
-//    bool isActive() const;
+    // public:
+    //    /**
+    //     * @brief enable
+    //     */
+    //    void enable();
+    //    /**
+    //     * @brief disable
+    //     */
+    //    void disable();
+    //    /**
+    //     * @brief isActive status
+    //     * @return status
+    //     */
+    //    bool isActive() const;
 signals:
     /**
      * @brief ClientDiscovered signal for socket and server service

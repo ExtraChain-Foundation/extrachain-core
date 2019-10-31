@@ -1,8 +1,4 @@
 #include "network/discovery_service.h"
-#include <QNetworkInterface>
-#include <QRandomGenerator>
-#include <chrono>
-#include <thread>
 
 DiscoveryService::DiscoveryService(quint16 discoveryPort, quint16 networkPort, QNetworkAddressEntry *local)
     : local(local)

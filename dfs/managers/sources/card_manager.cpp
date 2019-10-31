@@ -1,0 +1,85 @@
+#include "dfs/managers/headers/card_manager.h"
+
+QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type)
+{
+    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    card.open(QIODevice::ReadOnly);
+    QList<QByteArray> list =
+        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    if (list.isEmpty())
+        return QStringList();
+    QStringList result;
+    for (const QByteArray &el : list)
+    {
+        QByteArray dType =
+            Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
+        if (based_dfs_struct::toByteArray(type) == dType)
+            result << based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
+                    + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    }
+    return result;
+}
+
+QByteArray CardManager::getLastFileName(const QByteArray &userId)
+{
+    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    file.open(QIODevice::ReadOnly);
+
+    QList<QByteArray> list =
+        Serialization::deserialize(file.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    if (list.isEmpty())
+        return "0";
+    return Serialization::deserialize(list.takeLast(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+}
+
+QStringList CardManager::getAllFiles(const QByteArray &userId)
+{
+    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    card.open(QIODevice::ReadOnly);
+    QList<QByteArray> list =
+        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    if (list.isEmpty())
+        return QStringList();
+    QStringList result;
+    for (const QByteArray &el : list)
+
+        result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+
+    return result;
+}
+
+based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QByteArray &uxerId)
+{
+    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + uxerId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    card.open(QIODevice::ReadOnly);
+    QList<QByteArray> list =
+        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    if (list.isEmpty())
+        return based_dfs_struct::servic;
+    for (const QByteArray &el : list)
+
+        if (path.toUtf8()
+            == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2))
+            return based_dfs_struct::convertToDFType(
+                Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
+    return based_dfs_struct::servic;
+}
+QStringList CardManager::getAll(based_dfs_struct::Type type)
+{
+    QStringList all;
+
+    const QStringList allUserIds =
+        QDir(based_dfs_struct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (auto &userId : allUserIds)
+    {
+        QStringList files = getFilesByType(userId.toLatin1(), type);
+        all << files;
+    }
+
+    return all;
+}
+
+QStringList CardManager::getForUser(based_dfs_struct::Type type, QString userId)
+{
+    return getFilesByType(userId.toLatin1(), type);
+}

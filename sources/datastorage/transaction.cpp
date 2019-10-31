@@ -1,7 +1,5 @@
 #include "datastorage/transaction.h"
 
-#include <QDateTime>
-
 Transaction::Transaction(QObject *parent)
 {
     this->sender = BigNumber(0);

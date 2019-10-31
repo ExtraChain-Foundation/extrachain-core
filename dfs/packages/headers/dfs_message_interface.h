@@ -7,9 +7,13 @@
 #include <iostream>
 #include <QObject>
 #include "utils/utils.h"
+
 namespace Message {
-const int dataSize = 512;   // bytes
+
+const int dataSize = 1024;  // bytes
 const short fieldsSize = 4; // bytes for size
+const QByteArray stateDelimetr = "|";
+
 enum dfsMessageType
 {
     titleMessage,
@@ -17,44 +21,35 @@ enum dfsMessageType
     requestMessage,
     statusMessage,
     storageMessage,
-    responseMessage
+    responseMessage,
+    closingMessage
 };
+
+const int type_title = dfsMessageType::titleMessage;
+const int type_dfs_message = dfsMessageType::fileDataMessage;
+const int type_status = dfsMessageType::statusMessage;
+const int type_dfs_request = dfsMessageType::requestMessage;
+const int type_closing = dfsMessageType::closingMessage;
 
 class IDfs_Message : public QObject
 {
     Q_OBJECT
 
-    dfsMessageType type;
-
-public:
-    IDfs_Message(const int &msgType, QObject *parent = nullptr)
+protected:
+    IDfs_Message(QObject *parent = nullptr)
         : QObject(parent)
     {
-        type = static_cast<dfsMessageType>(msgType);
     }
-
     virtual ~IDfs_Message()
     {
     }
+    virtual const QByteArray serialize() const = 0;
 
-protected:
     virtual const QList<QByteArray> serializedParams() const = 0;
-    virtual const QByteArray serialize() const
-    {
-        return Serialization::universalSerialize(serializedParams());
-    }
-    virtual const QList<QByteArray> deserialize(const QByteArray &serialized)
-    {
-        return Serialization::universalDeserialize(serialized);
-    }
-    virtual const QByteArray concatenate()
-    {
-        return serializedParams().join();
-    }
-    virtual const QByteArray hash()
-    {
-        return Utils::calcKeccak(concatenate());
-    }
+
+    virtual const QList<QByteArray> deserialize(const QByteArray &serialized) = 0;
+    virtual const QByteArray concatenate() = 0;
+    virtual const QByteArray hash() = 0;
 };
 }
 

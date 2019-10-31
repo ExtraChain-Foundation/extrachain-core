@@ -1,4 +1,5 @@
 #include "profile/public_profile.h"
+
 PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QByteArray path, QByteArray _id)
 {
     sign = _sign;

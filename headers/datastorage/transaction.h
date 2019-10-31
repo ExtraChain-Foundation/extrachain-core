@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QByteArray>
+#include <QDateTime>
 #include "datastorage/actor.h"
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"

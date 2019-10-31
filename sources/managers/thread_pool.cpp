@@ -1,8 +1,5 @@
 #include "managers/thread_pool.h"
 
-#include <QCoreApplication>
-#include <QDebug>
-
 QThread *ThreadPool::addThread(QObject *worker)
 {
     return ThreadPool::addThread(QList<QObject *>() << worker);

@@ -26,7 +26,7 @@ EllipticPoint KeyPrivate::generate()
 {
     try
     {
-        this->prkey = BigNumber::random(64, curve.p);
+        this->prkey = BigNumber::random(64, curve.p, false);
         this->pbkey = ECC::multiply(this->curve, this->prkey, curve.g);
         QByteArray s = this->sign("test");
         this->verify("test", s);
@@ -50,7 +50,7 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data)
     {
         res.clear();
 
-        r = BigNumber::random(64, curve.p);
+        r = BigNumber::random(64, curve.p, false);
         R = ECC::multiply(secpCurve, r, secpCurve.g);
         S = ECC::multiply(secpCurve, r, this->pbkey);
         res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));
@@ -90,7 +90,7 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
 
         while ((r == 0) || (s == 0))
         {
-            k = BigNumber::random(curve.n);
+            k = BigNumber::random(curve.n, false);
             point = ECC::multiply(curve, k, curve.g);
             r = point.X() % curve.n;
             s = ((hashMessage + r * this->prkey) * ECC::inverseMod(k, curve.n)) % curve.n;
@@ -120,6 +120,7 @@ bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignBase64)
     BigNumber u1 = (z * w) % curve.n;
     BigNumber u2 = (r * w) % curve.n;
     EllipticPoint p1 = ECC::multiply(curve, u1, curve.g);
+    assert(!pbkey.isZero());
     EllipticPoint p2 = ECC::multiply(curve, u2, pbkey);
     EllipticPoint point = ECC::add(curve, p1, p2);
     return r % curve.n == point.X() % curve.n;

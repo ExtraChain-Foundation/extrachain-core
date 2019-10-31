@@ -1,7 +1,5 @@
 #include "network/server_service.h"
 
-#include <iostream>
-
 ServerService::ServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent)
     : QTcpServer(parent)
     , localAddress(local)

@@ -23,6 +23,11 @@
 #include "network/upnpconnection.h"
 #include "network/socket_pair.h"
 
+#include "network/packages/service/list_connections.h"
+
+#include <QNetworkConfigurationManager>
+#include <QRandomGenerator>
+#include <QSettings>
 #include "network/packages/service/all_messages.h"
 #include "network/packages/service/downloaddfsrequest.h"
 
@@ -40,33 +45,34 @@ private:
     bool reservedActorListUse = false;
     bool active = false;
     quint16 extPort;
-    quint16 netPort;
     BigNumber maxBlockCount; // latest known block num in the blockchain
-    QNetworkAddressEntry *local = nullptr;
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
 
+protected:
     bool isDebug =
 #ifdef QT_DEBUG
         true;
 #else
         false;
 #endif
-    QString serverIp = "51.68.181.52;51.68.181.53";
-    quint16 serverPort = isDebug ? 2221 : 2222;
-    bool allowLocalServer = false;
-    QMap<QByteArray, int> *requestResponseMap;
-
-private:
     ActorIndex *actorIndex;
     AccountController *accounts;
-    ServerService *serverService;
-    QList<SocketService *> connections;
-    QMap<QByteArray, int> *handler = new QMap<QByteArray, int>;
+    QString serverIp = "51.68.181.52";
+    bool allowLocalServer = false;
 
-#ifdef ETALONIUM_CLIENT
-    QTcpSocket *socket_wer;
-#endif
+    QNetworkAddressEntry *local = nullptr;
+
+private:
+    quint16 serverPort = isDebug ? 2221 : 2222;
+    QMap<QByteArray, int> *requestResponseMap;
+
+    ServerService *serverService;
+    quint16 netPort;
+
+private:
+    QList<SocketService *> connections;
+    QMap<QByteArray, int> handler = {};
 
 public:
     NetManager(AccountController *accountList, ActorIndex *actorIndex);
@@ -76,15 +82,21 @@ public:
 
     void resolverMessage(const QHostAddress &from, const QString &message);
 
+private:
+    void connectSocket();
+    void disconnectSocket(SocketService *connection);
+
 public:
     ServerService *getServerService();
     //    ResolverService *getResolverService();
     QList<SocketService *> getConnections() const;
 
+protected:
+    NetManager *getMe();
 signals:
     void finished();
 
-private:
+protected:
     /**
      * @brief Send message directly to the selected peer
      * @param msg
@@ -103,12 +115,19 @@ private:
      */
     void findLocal();
     /**
+     * @brief startNetwork
+     * @param serverPort
+     * @param local
+     * @param serverService
+     */
+    virtual void startNetwork();
+    /**
      * @brief restoreConnections
      * @param socketList
      */
     void restoreConnections(const QList<SocketPair> &socketList);
 
-    void setupServerServiceConnections();
+    virtual void setupServerServiceConnections();
     void setupDiscoveryServiceConnections();
     /**
      * @brief signMessage
@@ -121,35 +140,34 @@ private:
      * @return
      */
     QByteArray calcHash(const Messages::IMessage &message) const;
+
+protected:
     /**
      * @brief NetManager::checkMsgCount
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg);
+    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler);
 private slots:
     /**
      * @brief createNewConnectionsFromList
      * @param message
      */
     void createNewConnectionsFromList(const QByteArray &message);
+protected slots:
+    /**
+     * @brief addConnection
+     * @param socketDescriptor
+     */
+    virtual void addConnection(qint64 socketDescriptor);
+
     /**
      * @brief Creates new socket connection and adds it to connections
      * @param address
      * @param port
      */
-    SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
-    /**
-     * @brief addConnection
-     * @param socketDescriptor
-     */
-    void addConnection(qint64 socketDescriptor);
-    /**
-     * @brief Remove connections from connection list
-     */
-    void removeConnection();
-    void checkConnectionsStatus();
-    void startNetwork();
+    virtual SocketService *addConnectionFromPair(QHostAddress address, quint16 port);
+    virtual void checkConnectionsStatus();
     void startDiscovery();
     // for upnpn
     void upnpErrDis(QString msg);
@@ -161,7 +179,8 @@ public slots:
     // test thread
     void process();
     void logDebug();
-    void connectToServer();
+    void reconnectUi();
+    virtual void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator
      */
@@ -170,17 +189,26 @@ public slots:
      * @brief Broadcast message to all connected peers
      * @param msg
      */
-    void broadcastMsg(const QByteArray &msg);
+    virtual void broadcastMsg(const QByteArray &msg);
     /**
      * @brief sendMessage
      * @param data for send
      * @param messageType type to compress
      */
     void sendMessage(const QByteArray &message);
-    void dfsMessageTmp(const Messages::DfsMessage &msg);
+    /**
+     * @brief Remove connections from connection list
+     */
+    void removeConnection();
+    void dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
+
+    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+
+    //    void MoveToDfsN();
 
 signals:
-    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+    //    void newDfsSocket(SocketService *socket);
+    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);

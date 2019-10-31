@@ -11,6 +11,14 @@
 #include "utils/bignumber.h"
 #include "utils/utils.h"
 
+namespace PathStruct {
+//"data/actorId/section/fileName"
+static const short rFolder = 0;
+static const short aId = 1;
+static const short section = 2;
+static const short name = 2;
+}
+
 namespace based_dfs_struct {
 
 static const QString ROOT_FOOLDER_NAME = "data";
@@ -30,6 +38,8 @@ static const QString SERVICE_CARD_FILE_NAME = "/card_file.service";
 static const QString SYSTEM_CARD_FILE_NAME = "/card_file.system";
 // temp files
 static const QString FILE_IDENTIFICATOR = ".tmp";
+static const QString ACTOR_CARD_FILE = ".root";
+
 enum State
 {
     NEWSTATE,
@@ -102,80 +112,6 @@ static std::unordered_map<QFile *, bool> fileStatus = {};
 
 class DfStruct
 {
-private:
-    Type type;
-    Status status;  // status in worker
-    BigNumber name; // name in etalonium system
-    long long size;
-    QDateTime time;  // date and time when item have been created
-    QByteArray hash; // hash of object
-    QByteArray path; // path in etalonium system
-    SubType subType;
-    QByteArray data;   // information about location of object on the device
-    BigNumber actorId; // owner user ID
-public:
-    DfStruct(const DfStruct &dfStruct);
-    DfStruct(const QString &_file_name, based_dfs_struct::Status status);
-    DfStruct(const QByteArray &serialized);
-    virtual ~DfStruct()
-    {
-    }
-
-public:
-    Type getType() const;
-    void setType(const Type &value);
-    Status getStatus() const;
-    void setStatus(const Status &value);
-    BigNumber getName() const;
-    void setName(const BigNumber &value);
-    long long getSize() const;
-    void setSize(long long value);
-    QDateTime getTime() const;
-    void setTime(const QDateTime &value);
-    QByteArray getHash() const;
-    void setHash(const QByteArray &value);
-    QByteArray getPath() const;
-    void setPath(const QByteArray &value);
-    SubType getSubType() const;
-    void setSubType(const SubType &value);
-    QByteArray getData() const;
-    void setData(const QByteArray &value);
-    BigNumber getActorId() const;
-    void setActorId(const BigNumber &value);
-
-protected:
-    QByteArray madeFolderDir(const Type &type) const;
-    DfStruct operator=(const DfStruct &dfStruct);
-    //    int makeSystemDir(const BigNumber &userId);
-    bool operator==(const DfStruct &dfStruct);
-    virtual const QByteArray serialize() const;
-    void setFileCardFile() const;
-    int readRootFolder() const;
-    int makeSystemDir() const;
-};
-struct dStruct : QObject
-{
-    Q_OBJECT
-public:
-    Type type;
-    Status status;  // status in worker
-    BigNumber name; // name in etalonium system
-    long long size;
-    QDateTime time;  // date and time when item have been created
-    QByteArray hash; // hash of object
-    QByteArray path; // path in etalonium system
-    SubType subType;
-    QByteArray data;   // information about location of object on the device
-    BigNumber actorId; // owner user ID
-
-    QByteArray serialize();
-    dStruct(const QByteArray &serialized);
-    dStruct(const dStruct &_dStruct);
-    bool isEmpty();
-
-protected:
-    dStruct operator=(const dStruct &dfStruct);
-    bool operator==(const dStruct &dStruct);
 };
 }
 namespace DFS_ERRORS {

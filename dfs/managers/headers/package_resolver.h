@@ -4,80 +4,43 @@
 #include "dfs/managers/headers/dfsindex.h"
 
 #include "dfs/packages/headers/dfs_message_interface.h"
+#include "dfs/packages/headers/all.h"
 
 class DFSResolver : public QObject
 {
     Q_OBJECT
 
-private:
-    DFSResolver(QObject *parent = nullptr);
-    ~DFSResolver();
+    int counter = 0;
 
+private:
+    ActorIndex *actorIndex;
     bool active = false;
-    QByteArray msg;
-    QByteArray hash;
+    QMap<QByteArray, long long> counterPckg;
+    QMap<QByteArray, QString> queueFiles; //
+    QMap<QString, QByteArray> fileMap;    // tmp with real path
+
+    QMap<QByteArray, QFile *> listFile = {};
+
+    bool titleMsg(const Message::title_message &msg);
 
 public:
-    DFSResolver(AccountController *account);
+    DFSResolver(ActorIndex *actorIndex, QObject *parent = nullptr);
+    ~DFSResolver();
 
-    void sendFile(const QString &fileName)
-    //??
-    {
-    }
     void validate();
     bool isActive() const;
-    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
-signals:
+    bool createTempFile(const QString &path, const long long &size, const QByteArray &tHash);
 
+signals:
+    void save(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+    void checkStatus(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
+    void closingMsg(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver);
+    void startTimerD(const long long &size, const QString &path, const QByteArray &titleS);
+    void initDfs(const BigNumber &userId);
     void finished();
 
-    void sendMsg(const QByteArray &data, const QByteArray &msgType);
-
 public slots:
-    void process()
-    {
-    }
+    void receiveMsg(const QByteArray &msg, int msgType, const SocketPair &receiver);
+    void process();
 };
-
-#endif // PACKAGE_RESOLVER_H
-////
-// For cpp file:
-DFSResolver::DFSResolver(QObject *parent)
-    : QObject(parent)
-{
-}
-DFSResolver::~DFSResolver()
-{
-    emit finished();
-}
-bool DFSResolver::isActive() const
-{
-    return active;
-}
-void DFSResolver::validate()
-{
-}
-
-void DFSResolver::recieveMsg(const QByteArray &msgS, const SocketPair &receiver)
-{
-
-    int msgType = 0; /*msgS.getMsgType()*/ //????
-    if (msgType == Message::dfsMessageType::titleMessage)
-    {
-    }
-    else if (msgType == Message::dfsMessageType::statusMessage)
-    {
-    }
-    else if (msgType == Message::dfsMessageType::requestMessage)
-    {
-    }
-    else if (msgType == Message::dfsMessageType::storageMessage)
-    {
-    }
-    else if (msgType == Message::dfsMessageType::fileDataMessage)
-    {
-    }
-    else if (msgType == Message::dfsMessageType::responseMessage)
-    {
-    }
-}
+#endif
