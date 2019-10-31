@@ -78,7 +78,8 @@ void SocketService::readData()
         {
             SocketPair receiver(address.toStdString(), port);
             receiver.setId(identificator.toByteArray());
-            emit MessageReceived(command, receiver);
+            netManager->MessageReceived(command, receiver);
+            //            emit MessageReceived(command, receiver);
         }
         _blockSize = 0;
     }
@@ -109,12 +110,20 @@ bool SocketService::getActive() const
     return active;
 }
 
-SocketService::SocketService()
+SocketService::SocketService(QObject *parent)
 {
+    this->netManager = reinterpret_cast<NetManager *>(parent);
+}
+
+SocketService::SocketService(NetManager *netManager, QObject *parent)
+    : QObject(parent)
+{
+    this->netManager = netManager;
 }
 
 SocketService::SocketService(const SocketService &value)
 {
+    qDebug() << "Copy Socket created";
     connectionTry = value.connectionTry;
     socketDescriptor = value.socketDescriptor;
     active = value.active;
@@ -127,16 +136,20 @@ SocketService::SocketService(const SocketService &value)
     reconnectTry = value.reconnectTry;
 }
 
-SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
+SocketService::SocketService(NetManager *netManager, QString address, quint16 networkPort, QObject *parent)
     : QObject(parent)
 {
+    qDebug() << "Pair Socket created";
+    this->netManager = netManager;
     this->address = address;
     this->port = networkPort;
 }
 
-SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
+SocketService::SocketService(NetManager *netManager, qintptr socketDescriptor, QObject *parent)
     : QObject(parent)
 {
+    qDebug() << "Desk Socket created";
+    this->netManager = netManager;
     this->socketDescriptor = socketDescriptor;
     qDebug() << "Socket Descriptor" << socketDescriptor;
 }
@@ -151,21 +164,28 @@ SocketService::~SocketService()
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
 {
     // check socket status
+    qDebug() << "In socket";
     if (!socket->isValid())
+    {
+        qDebug() << "In socket not valid";
         return;
+    }
     // take data from pair
     QString ipAddress = QString::fromStdString(socketData.first);
     qint64 portAddress = socketData.second;
+    qDebug() << ipAddress << portAddress << data;
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
         QByteArray _wtSok = Serialization::universalSerialize({ data });
-        socket->write(_wtSok, _wtSok.size());
+        qDebug() << socket->write(_wtSok, _wtSok.size());
+        qDebug() << ipAddress << portAddress << _wtSok;
     }
 }
 
 void SocketService::sockReady()
 {
+    qDebug() << "sockReady";
     QTcpSocket *_sok = this->socket;
     while (_sok->bytesAvailable() < 4)
         _sok->waitForReadyRead(1000);
@@ -182,14 +202,17 @@ void SocketService::sockReady()
         {
 
             identificator = BigNumber(pckg.mid(IDENTIFICATOR.size()));
+            std::cout << identificator.toByteArray().toStdString() << std::endl;
         }
         emit checkMe();
     }
     else
     {
+        qDebug() << "data incoming";
         SocketPair receiver(address.toStdString(), port);
         receiver.setId(identificator.toByteArray());
-        emit MessageReceived(pckg, receiver);
+        netManager->MessageReceived(pckg, receiver);
+        //        emit MessageReceived(pckg, receiver);
     }
     if (socket->bytesAvailable())
         sockReady();
@@ -207,7 +230,8 @@ void SocketService::process()
         this->socket = new QTcpSocket(this);
         connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
-        connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady, Qt::QueuedConnection);
+        connect(socket, &QTcpSocket::readyRead, this, [=]() { qDebug() << "ready read signal"; });
+        connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady);
         connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
         connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
                 [this](QAbstractSocket::SocketError socketError) {
@@ -248,6 +272,11 @@ void SocketService::establishConnection()
 void SocketService::setActive(bool active)
 {
     this->active = active;
+}
+
+void SocketService::setManager(NetManager *nm)
+{
+    this->netManager = nm;
 }
 
 bool *SocketService::socketStatus() const

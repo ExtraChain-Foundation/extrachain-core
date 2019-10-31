@@ -1,6 +1,12 @@
 #ifndef SOCKET_SERVICE_H
 #define SOCKET_SERVICE_H
 
+#ifndef NETWORK_MANAGER_DEF
+#define NETWORK_MANAGER_DEF
+class NetManager;
+#include "headers/network/network_manager.h"
+#endif
+
 #include <QObject>
 #include <QtNetwork/QTcpSocket>
 #include <QHostAddress>
@@ -28,6 +34,7 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
+    NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
     bool active = false;
@@ -40,14 +47,16 @@ private:
     int reconnectTry = 0;
 
 public:
-    SocketService();
-    SocketService(const SocketService &value);
-    SocketService(QString address, quint16 networkPort, QObject *parent = nullptr);
-    SocketService(qintptr socketDescriptor, QObject *parent = nullptr);
+    explicit SocketService(QObject *parent = nullptr);
+    explicit SocketService(NetManager *netManager, QObject *parent = nullptr);
+    explicit SocketService(const SocketService &value);
+    explicit SocketService(NetManager *netManager, QString address, quint16 networkPort,
+                           QObject *parent = nullptr);
+    explicit SocketService(NetManager *netManager, qintptr socketDescriptor, QObject *parent = nullptr);
     ~SocketService() override;
 
 signals:
-    void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
+    //    void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
     /**
      * @brief has only one connection with &QTcpSocket::disconnected on client
      * and connection with &NetManager::removeConnection on server
@@ -66,11 +75,7 @@ private slots:
     void reconnect();
     void readData();
 public slots:
-    /**
-     * @brief Send message using QTcpSocket
-     * @param message
-     */
-    void sendMsg(const QByteArray &data, const SocketPair &socketData);
+
     /**
      * @brief stops this thread
      */
@@ -81,6 +86,14 @@ public slots:
     void setActive(bool active);
 
 public:
+    void setManager(NetManager *nm);
+
+    /**
+     * @brief Send message using QTcpSocket
+     * @param message
+     */
+    void sendMsg(const QByteArray &data, const SocketPair &socketData);
+
     bool *socketStatus() const;
     bool isActive() const;
     QString getAddress() const;
