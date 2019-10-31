@@ -1,43 +1,59 @@
 #include "chatmanager.h"
 
-void ChatManager::createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath)
-{
-    QDir().mkpath(pathCreate + chatStore + "myChats/");
-    QFile file(pathCreate + chatStore + "myChats/" + chatId);
-    if (file.open(QIODevice::WriteOnly))
-    {
-        file.write(chatPath);
-        file.close();
-        return;
-    }
+// void ChatManager::createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath)
+//{
+//    QDir().mkpath(pathCreate + chatStore + "myChats/");
+//    QFile file(pathCreate + chatStore + "myChats/" + chatId);
+//    if (file.open(QIODevice::WriteOnly))
+//    {
+//        file.write(chatPath);
+//        file.close();
+//        return;
+//    }
 
-    qDebug() << "[Warning] File not open to read. Create local chat file method";
+//    qDebug() << "[Warning] File not open to read. Create local chat file method";
 
-    // emit signal to share chat file
-}
-
-void ChatManager::Initialize()
+//    // emit signal to share chat file
+//}
+void ChatManager::InitializeChatList()
 {
     // send to chat it path
-    QDirIterator it(_actorPath + _currentActorId + "/" + chatStore + "myChats/",
-                    QDirIterator::Subdirectories);
+    QDirIterator it(getPathToMyChats(), QDirIterator::Subdirectories);
+    QDir().mkpath(getPathToMyChats());
+    QByteArray chatPath = "-1";
     while (it.hasNext())
     {
-        QFile file(it.next() + "/currentSession");
-        if (!file.exists())
+        chatPath = convertChatIdToFullPath(it.fileName().toLocal8Bit());
+        if (chatPath == "-1")
             continue;
-        if (file.open(QIODevice::ReadOnly))
-        {
-            QByteArray currentSession = file.readLine();
-            Chat temp = Chat(it.fileName().toLocal8Bit(), _accController);
-            if (currentSession == temp.getCurrentSession())
-                _chatList.push_front(temp);
-        }
+
+        Chat *temp = new Chat(it.fileName().toLocal8Bit(), _accController, chatPath);
+        if (temp->getMyCurrentSession() == temp->getActualCurrentSession())
+            _chatList.push_front(temp);
     }
 }
 
 void ChatManager::InitializeConnectSignalSlot()
 {
+    foreach (Chat *currentChat, _chatList)
+        connect(currentChat, &Chat::sendDataToBlockchain, this, &ChatManager::getSignalFromChats);
+}
+
+QByteArray ChatManager::convertChatIdToFullPath(QByteArray chatId)
+{
+    QFile file(getPathToMyChats() + chatId + "/" + chatId + ".dat");
+    if (!file.exists())
+        return "-1";
+    if (file.open(QIODevice::ReadOnly))
+    {
+        QByteArray path = file.readLine();
+        file.close();
+        return path;
+    }
+    else
+        qDebug() << "[Warning] Cannot open file on write "
+                 << getPathToMyChats() + chatId + "/" + chatId + ".dat";
+    return "-1";
 }
 
 QByteArray ChatManager::generateChatId()
@@ -45,9 +61,9 @@ QByteArray ChatManager::generateChatId()
     return generateChatKey();
 }
 
-bool ChatManager::isValid(QByteArray chatId)
+QByteArray ChatManager::getPathToMyChats()
 {
-    return !QDir(chatStore + chatId).exists();
+    return _actorPath + _currentActorId + "/myChats/";
 }
 
 QByteArray ChatManager::generateChatKey()
@@ -60,71 +76,64 @@ ChatManager::ChatManager(AccountController *accController)
     this->_accController = accController;
     this->_currentActorId = accController->getCurrentActor().getId().toByteArray();
     this->_actorPath = accController->getActorIndex()->getFolderPath().toLocal8Bit();
-    Initialize();
+    InitializeChatList();
     InitializeConnectSignalSlot();
 }
 
 void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
 {
-    Chat tempChat(chatId, _accController);
-    if (tempChat.createNewSession(
+    Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+    if (!temp.isUserVerify(_currentActorId) || !temp.isOwner())
+    {
+        qDebug() << "[Warning] Can't invite to chat. User verify error, removeMemberFromChat. ChatManager";
+        return;
+    }
+    QByteArray currentSession = temp.getMyCurrentSession();
+    QByteArray newSession = (BigNumber(currentSession) + BigNumber("1")).toByteArray();
+    if (temp.createNewSession(
             KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey()),
-            (BigNumber(tempChat.getCurrentSession()) + BigNumber("1")).toByteArray())
+            newSession)
         != "-1")
     {
-        QDir directory(chatStore + chatId + "/users/");
+        QFile file(convertChatIdToFullPath(chatId) + "sessions/" + newSession);
+        file.open(QIODevice::WriteOnly);
+        file.close();
+        getSignalFromChats(convertChatIdToFullPath(chatId) + "sessions/" + newSession);
+
+        QDir directory(_actorPath + _currentActorId + "/chatStorage/" + chatId + "/users/");
         QStringList filesList = directory.entryList(QStringList(), QDir::Files);
         foreach (QString filename, filesList)
         {
-            if (filename.toLocal8Bit() != actorId
-                && filename.toLocal8Bit() != _accController->getCurrentActor().getId().toByteArray())
-                InviteToChat(
-                    chatId, tempChat.getCurrentSession(), filename.toLocal8Bit(),
-                    QByteArray(
-                        KeyPublic(_accController->getActor(filename.toLocal8Bit()).getKey()->getPublicKey())
-                            .encrypt(tempChat.getChatPrivateKey())));
+            if (temp.isUserActual(filename.toLocal8Bit(), currentSession))
+                InviteToChat(temp.getChatId(), actorId);
         }
     }
     else
-        qDebug() << "Error when remove Member from chat";
-}
-
-void ChatManager::addMemberToChat(QByteArray chatId, QByteArray actorId)
-{
-    Chat tempChat(chatId, _accController);
-    QByteArray key = tempChat.unloadChatKey();
-    if (key != "0")
-    {
-        QByteArray currentId = _accController->getCurrentActor().getId().toByteArray();
-        key = KeyPublic(_accController->getActor(actorId).getKey()->getPublicKey())
-                  .encrypt(tempChat.getChatPrivateKey());
-
-        tempChat.InviteNewUser(currentId, _accController->getCurrentActor().getKey()->sign(currentId),
-                               actorId);
-
-        // also need to emit signal that share new user in blockhain by path chat/users/actorId
-    }
+        qDebug() << "[Error] when remove Member from chat. RemoveMemberFromChat ChatManager";
 }
 
 void ChatManager::CreateNewChat()
 {
-    QByteArray chatId = "0";
-    do
-    {
-        chatId = generateChatId();
-    } while (!isValid(chatId));
-
+    QByteArray chatId = generateChatId();
     QByteArray key =
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
-    _chatList.push_front(Chat(chatId, key, QByteArray("0"), _accController,
-                              _accController->getCurrentActor().getId().toByteArray()));
-    emit sendCreatedNewChat(chatId, based_dfs_struct::Type::chates);
+    _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController, _currentActorId));
 }
 
-void ChatManager::InviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray actorId, QByteArray key)
+void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
-    QDir().mkpath(this->_actorPath + actorId + "/" + chatStore + chatId + "/");
-    ewfwe
+    Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+    if (!temp.isUserVerify(_currentActorId)
+        || !temp.isUserActual(_currentActorId, temp.getActualCurrentSession()))
+    {
+        qDebug() << "[Warning] Can't invite to chat. User verify error, InviteToChat. ChatManager";
+        return;
+    }
+    if (temp.isUserVerify(actorId))
+        return;
+    temp.InviteNewUser(KeyPublic(_accController->getActor(actorId).getKey()->getPublicKey())
+                           .encrypt(temp.getChatPrivateKey()),
+                       actorId);
 }
 
 ChatManager::~ChatManager()
@@ -133,16 +142,16 @@ ChatManager::~ChatManager()
     delete _accController;
 }
 
-void ChatManager::receiveInviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray key)
-{
-    _chatList.push_front(Chat(chatId, key, sessionNumb, _accController));
-}
+// void ChatManager::addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
+//                                     QByteArray invitedId)
+//{
+//    Chat tempChat(chatId, _accController);
+//    tempChat.InviteNewUser(inviterId, inviterSign, invitedId);
+//    if (!tempChat.isUserVerify(invitedId))
+//        tempChat.removeUserFromChat(invitedId);
+//}
 
-void ChatManager::addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
-                                     QByteArray invitedId)
+void ChatManager::getSignalFromChats(const QString &path)
 {
-    Chat tempChat(chatId, _accController);
-    tempChat.InviteNewUser(inviterId, inviterSign, invitedId);
-    if (!tempChat.isUserVerify(invitedId))
-        tempChat.removeUserFromChat(invitedId);
+    emit sendDataToBlockhainFromChatManager(path, based_dfs_struct::Type::chates);
 }

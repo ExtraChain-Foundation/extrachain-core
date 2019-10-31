@@ -6,7 +6,7 @@ Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray c
     this->_encryptionKey = unloadChatKey();
     this->_accountController = accountController;
     this->_actorPath = accountController->getActorIndex()->getFolderPath().toLocal8Bit();
-    this->_currentSession = getCurrentSession();
+    this->_currentSession = getMyCurrentSession();
     this->_currentActorId = accountController->getCurrentActor().getId().toByteArray();
     this->_chatPath = chatPath;
 }
@@ -14,21 +14,6 @@ Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray c
 Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
            QByteArray chatPath, QByteArray ownerId)
 {
-    QDir().mkpath(getCurrentPathChatStore() + chatId + "/");
-    QDir().mkpath(getCurrentPathChatStore() + chatId + "/users/");
-    QDir().mkpath(keyStore + chatId + "/");
-    QFile file(getCurrentPathChatStore() + chatId + "/0");
-    file.open(QIODevice::WriteOnly);
-    file.close();
-    if (ownerId != "-1")
-    {
-        file.setFileName(getCurrentPathChatStore() + chatId + "/users/" + ownerId);
-        if (file.open(QIODevice::WriteOnly))
-            file.write("owner");
-        else
-            qDebug() << "[Error] Cannot create Chat owner";
-        file.close();
-    }
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
@@ -36,6 +21,23 @@ Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, Account
     this->_currentActorId = accountController->getCurrentActor().getId().toByteArray();
     this->_currentSession = currentSession;
     this->_chatPath = chatPath;
+    InitializeOwnerPathNewChat();
+    QFile file(getPathToSessions() + "0");
+    file.open(QIODevice::WriteOnly);
+    file.close();
+    emit sendDataToBlockchain(getPathToSessions() + "0"); // creation 0 session
+    if (ownerId != "-1")
+    {
+        file.setFileName(getPathToUsers() + ownerId);
+        if (file.open(QIODevice::WriteOnly))
+        {
+            file.write("owner");
+            file.close();
+            emit sendDataToBlockchain(getPathToUsers() + ownerId);
+        }
+        else
+            qDebug() << "[Error] Cannot create Chat owner";
+    }
     createNewSession(key, currentSession);
 }
 
@@ -49,20 +51,46 @@ Chat::Chat(const Chat& tempChat)
     this->_currentActorId = tempChat.getCurrentActorId();
     this->_chatPath = tempChat.getChatPath();
 }
+
+bool Chat::isOwner()
+{
+    return QFile(_actorPath + _currentActorId + "/chatStorage/" + _chatId + "/users/" + _currentActorId)
+        .exists();
+}
+
+bool Chat::isUserActual(QByteArray actorId, QByteArray sessionNumb)
+{
+    QFile file(_actorPath + actorId + "myChats/" + _chatId + "/currentSession");
+    if (!file.exists())
+        return false;
+    if (file.open(QIODevice::ReadOnly))
+    {
+        QByteArray actorSession = file.readLine();
+        file.close();
+        return sessionNumb == actorSession;
+    }
+    else
+    {
+        qDebug() << "[Warning] Cann't open file on read. isUserActual in Chat. path="
+                 << _actorPath + actorId + "myChats/" + _chatId + "/currentSession";
+        return false;
+    }
+}
 void Chat::saveChatKey(QByteArray key, QByteArray sessionNumb)
 {
-    QFile file(keyStore + this->_chatId + "/key" + sessionNumb);
+    QFile file(getPathMyChatsKeyStore() + "key" + sessionNumb);
     if (file.open(QIODevice::WriteOnly))
     {
         file.write(key);
         file.close();
+        emit sendDataToBlockchain(getPathMyChatsKeyStore() + "key" + sessionNumb);
         return;
     }
     qDebug() << "[Error] Chat manager can't open file to save the key";
 }
 QByteArray Chat::unloadChatKey()
 {
-    QFile file(keyStore + this->_chatId + "/key" + getCurrentSession());
+    QFile file(getPathMyChatsKeyStore() + "key" + getMyCurrentSession());
     if (!file.exists())
         return "0";
     if (file.open(QIODevice::ReadOnly))
@@ -75,11 +103,11 @@ QByteArray Chat::unloadChatKey()
     return "0";
 }
 
-QByteArray Chat::getCurrentSession()
+QByteArray Chat::getMyCurrentSession()
 {
     if (this->_currentSession != "-1")
         return this->_currentSession;
-    QFile file(getCurrentPathChatStore() + this->_chatId + "/" + "currentSession");
+    QFile file(getPathMyChatsCurrentChat() + "currentSession");
     if (!file.exists())
     {
         QByteArray currentSession = "0";
@@ -89,6 +117,7 @@ QByteArray Chat::getCurrentSession()
             file.write(currentSession);
             file.close();
             this->_currentSession = currentSession;
+            emit sendDataToBlockchain(getPathMyChatsCurrentChat() + "currentSession");
             return currentSession;
         }
         else
@@ -120,14 +149,24 @@ QByteArray Chat::getChatPath() const
     return _chatPath;
 }
 
-QByteArray Chat::getCurrentPathChatStore()
+QByteArray Chat::getPathMyChatsCurrentChat()
 {
-    return this->_chatPath + "/" + chatStore;
+    return _actorPath + _currentActorId + "/myChats/" + _chatId + "/";
 }
 
-QByteArray Chat::getCurrentPathKeyStore()
+QByteArray Chat::getPathMyChatsKeyStore()
 {
-    return this->_actorPath + this->_currentActorId + "/" + chatStore;
+    return getPathMyChatsCurrentChat() + "keystore/";
+}
+
+QByteArray Chat::getPathToUsers()
+{
+    return _chatPath + "users/";
+}
+
+QByteArray Chat::getPathToSessions()
+{
+    return _chatPath + "sessions/";
 }
 
 QByteArray Chat::findCurrentSession()
@@ -137,16 +176,20 @@ QByteArray Chat::findCurrentSession()
     do
     {
         currentSession++;
-        file.setFileName(getCurrentPathChatStore() + this->_chatId + "/" + currentSession.toByteArray());
+        file.setFileName(getPathToSessions() + currentSession.toByteArray());
     } while (file.exists());
     currentSession--;
     return currentSession.toByteArray();
 }
+
+void Chat::InitializeOwnerPathNewChat()
+{
+    QDir().mkpath(getPathToUsers());
+    QDir().mkpath(getPathToSessions());
+}
 QByteArray Chat::createNewSession(QByteArray key, QByteArray sessionNumb)
 {
-    if (!SaveSession((getCurrentPathChatStore() + this->_chatId + "/" + "currentSession"), sessionNumb))
-        return "-1";
-    if (!SaveSession((keyStore + this->_chatId + "/" + "currentSession"), sessionNumb))
+    if (!SaveSession((getPathMyChatsCurrentChat() + "currentSession"), sessionNumb))
         return "-1";
     saveChatKey(key, sessionNumb);
     return sessionNumb;
@@ -154,6 +197,11 @@ QByteArray Chat::createNewSession(QByteArray key, QByteArray sessionNumb)
 QByteArray Chat::getChatPrivateKey()
 {
     return _accountController->getCurrentActor().getKey()->decrypt(unloadChatKey());
+}
+
+QByteArray Chat::getActualCurrentSession()
+{
+    return findCurrentSession();
 }
 QByteArray Chat::encryptMessage(QByteArray message)
 {
@@ -171,6 +219,7 @@ bool Chat::SaveSession(QByteArray sessionPath, QByteArray sessionNumb)
     {
         file.write(sessionNumb);
         file.close();
+        emit sendDataToBlockchain(sessionPath);
         return true;
     }
 
@@ -180,15 +229,18 @@ bool Chat::SaveSession(QByteArray sessionPath, QByteArray sessionNumb)
 
 void Chat::sendMessage(QByteArray message)
 {
-    emit sendMessageToChat(this->_chatId, getCurrentSession(), _accountController->getCurrentActor().getId(),
-                           encryptMessage(message));
-}
+    message.push_front(_currentActorId + ": ");
+    message.push_back("/n");
+    QFile file(getPathToSessions() + getMyCurrentSession());
+    if (file.open(QIODevice::Append))
+    {
+        file.write(encryptMessage(message));
+        file.close();
+        emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
+    }
+    else
 
-QByteArray Chat::receiveMessage(QByteArray message)
-{
-    QByteArray receiveMessage = decryptMessage(message);
-    // emit signall receive message
-    return receiveMessage;
+        qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
 }
 
 QByteArray Chat::getChatId() const
@@ -211,21 +263,65 @@ AccountController* Chat::getAccountController() const
     return this->_accountController;
 }
 
-void Chat::InviteNewUser(QByteArray inviterId, QByteArray inviterSign, QByteArray invitedId)
+void Chat::InviteNewUser(QByteArray inviterSign, QByteArray actorId)
 {
-    QList<QByteArray> signData;
-    signData.append(inviterId);
-    signData.append(inviterSign);
-    QFile file(getCurrentPathChatStore() + this->_chatId + "/users/" + invitedId);
+    QDir().mkpath(_actorPath + actorId + "/myChats/" + _chatId + "/");
+    QFile file(_actorPath + actorId + "/myChats/" + _chatId + "/" + _chatId + ".dat");
     if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(_chatPath);
+        file.close();
+        emit sendDataToBlockchain(_actorPath + actorId + "/myChats/" + _chatId + "/" + _chatId + ".dat");
+    }
+    else
+    {
+        qDebug() << "[Warning] Error open file on write when invite new user "
+                 << _actorPath + actorId + "/myChats/" + _chatId + "/" + _chatId + ".dat";
+    }
+    file.setFileName(_actorPath + actorId + "/myChats/" + _chatId + "/currentSession");
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(getMyCurrentSession());
+        file.close();
+        emit sendDataToBlockchain(_actorPath + actorId + "/myChats/" + _chatId + "/currentSession");
+    }
+    else
+    {
+        qDebug() << "[Warning] Error open file on write when invite new user "
+                 << _actorPath + actorId + "/myChats/" + _chatId + "/currentSession";
+    }
+    QDir().mkpath(_actorPath + actorId + "/myChats/" + _chatId + "/keystore/");
+    file.setFileName(_actorPath + actorId + "/myChats/" + _chatId + "/keystore/key" + getMyCurrentSession());
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(inviterSign);
+        file.close();
+        emit sendDataToBlockchain(_actorPath + actorId + "/myChats/" + _chatId + "/keystore/key"
+                                  + getMyCurrentSession());
+    }
+    else
+    {
+        qDebug() << "[Warning] Error open file on write when invite new user "
+                 << _actorPath + actorId + "/myChats/" + _chatId + "/keystore/key" + getMyCurrentSession();
+    }
+
+    QList<QByteArray> signData;
+    signData.append(_currentActorId);
+    signData.append(inviterSign);
+    file.setFileName(getPathToUsers() + actorId);
+    if (file.open(QIODevice::WriteOnly))
+    {
         file.write(Serialization::universalSerialize(signData));
+        file.close();
+        emit sendDataToBlockchain(getPathToUsers() + actorId);
+        return;
+    }
     else
         qDebug() << "[Error] when try to write data about new user";
-    file.close();
 }
 bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?!?!?!?!?!
 {
-    QFile file(getCurrentPathChatStore() + this->_chatId + "/users/" + actorId);
+    QFile file(getPathToUsers() + actorId);
     if (!file.exists())
         return false;
     if (file.open(QIODevice::ReadOnly))
@@ -242,12 +338,6 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
     }
     qDebug() << "[Error] Cannot open file for user verify in chat manager.";
     return false;
-}
-
-void Chat::removeUserFromChat(QByteArray actorId)
-{
-    QFile file(getCurrentPathChatStore() + this->_chatId + "/users/" + actorId);
-    file.remove();
 }
 
 Chat::~Chat()

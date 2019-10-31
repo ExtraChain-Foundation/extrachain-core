@@ -19,33 +19,33 @@ class ChatManager : public QObject
     Q_OBJECT
 private:
     AccountController *_accController;
-    QList<Chat> _chatList;
-    QByteArray _actorPath;
+    QList<Chat *> _chatList;
+    QByteArray _actorPath; // blockhain/index/actors/
     QByteArray _currentActorId;
 
 private:
-    void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath);
-    void Initialize();                  //+
-    void InitializeConnectSignalSlot(); //+
-    QByteArray generateChatId();        //+
-    QByteArray generateChatKey();       //+
-    bool isValid(QByteArray chatId);    //+
-    bool isUserVerify(QByteArray chatId, QByteArray actorId);
+    void InitializeChatList();                             //+
+    void InitializeConnectSignalSlot();                    //+
+    QByteArray convertChatIdToFullPath(QByteArray chatId); //+
+    QByteArray generateChatId();                           //+
+    QByteArray generateChatKey();                          //+
 
+    QByteArray getPathToMyChats(); //+ blockhain/index/actors/[myId]/myChats/
+                                   //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
+    // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
 public:
     ChatManager(AccountController *accController);                    //+
-    void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //-
-    void addMemberToChat(QByteArray chatId, QByteArray actorId);      //+
+    void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //+
     void CreateNewChat();                                             //+
-    void InviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray actorId, QByteArray key);
-    ~ChatManager();
+    void InviteToChat(QByteArray chatId, QByteArray actorId);         //+
+    ~ChatManager();                                                   //+
 public slots:
-    void receiveInviteToChat(QByteArray chatId, QByteArray sessionNumb, QByteArray key); //+
-    void addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
-                            QByteArray invitedId);
+    // void addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
+    //                      QByteArray invitedId);
+    void getSignalFromChats(const QString &path); //+ connect with Chats
 signals:
-    void sendInviteToChat(const QString &path, const based_dfs_struct::Type &type);   //+
-    void sendCreatedNewChat(const QString &path, const based_dfs_struct::Type &type); //+
+    void sendDataToBlockhainFromChatManager(const QString &path,
+                                            const based_dfs_struct::Type &type); //----- connet with dfs
 };
 
 #endif // CHATMANAGER_H
