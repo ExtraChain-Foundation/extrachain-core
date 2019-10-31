@@ -18,8 +18,7 @@ void DFSNetManager::socketConnection()
     qDebug() << connect(socketsList.last(), &SocketService::clientDisconnected, this,
                         &DFSNetManager::removeConnection);
     qDebug() << connect(this, &DFSNetManager::sendMsg, socketsList.last(), &SocketService::sendMsg);
-    //    qDebug() << connect(socketsList.last(), &SocketService::MessageReceived, this,
-    //    &DFSNetManager::newMsg);
+    qDebug() << connect(socketsList.last(), &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
     qDebug() << connect(socketsList.last(), &SocketService::removeMe, this, &DFSNetManager::removeConnection);
     qDebug() << connect(socketsList.last(), &SocketService::checkMe, this,
                         &DFSNetManager::checkMyIdentificator);
@@ -29,7 +28,7 @@ void DFSNetManager::socketDisconnect(SocketService *connection)
 {
     disconnect(connection, &SocketService::clientDisconnected, this, &DFSNetManager::removeConnection);
     disconnect(this, &DFSNetManager::sendMsg, connection, &SocketService::sendMsg);
-    //    disconnect(connection, &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
+    disconnect(connection, &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
     disconnect(connection, &SocketService::removeMe, this, &DFSNetManager::removeConnection);
     disconnect(connection, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
 }
@@ -130,7 +129,7 @@ void DFSNetManager::checkMyIdentificator()
 
 void DFSNetManager::addConnection(qint64 socketDescriptor)
 {
-    SocketService *socket = new SocketService(this, socketDescriptor);
+    SocketService *socket = new SocketService(socketDescriptor);
     socketsList.append(socket);
     socketConnection();
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
@@ -184,7 +183,7 @@ void DFSNetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEn
 
 SocketService *DFSNetManager::addConnectionFromPair(QHostAddress address, quint16 port)
 {
-    SocketService *socket = new SocketService(reinterpret_cast<NetManager *>(this), address.toString(), port);
+    SocketService *socket = new SocketService(address.toString(), port);
     socketsList.append(socket);
     socketConnection();
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;

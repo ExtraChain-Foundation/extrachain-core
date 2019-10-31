@@ -1,32 +1,6 @@
 ﻿#ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
-// FORWARD DECLARATION FOR CALLBACK INTEGRATION
-#ifndef SERVER_SERVICE_DEF
-#define SERVER_SERVICE_DEF
-class ServerService;
-#include "network/server_service.h"
-#endif // SERVER_SERVICE
-
-#ifndef SOCKET_SERVICE_DEF
-#define SOCKET_SERVICE_DEF
-class SocketService;
-#include "network/socket_service.h"
-#endif // SOCKET_SERVICE
-
-#ifndef UPNP_CONNECTION_DEF
-#define UPNP_CONNECTION_DEF
-class UPNPConnection;
-#include "network/upnpconnection.h"
-#endif // UPNP_CONNECTION
-
-#ifndef DISCOVERY_SERVICE_DEF
-#define DISCOVERY_SERVICE_DEF
-class DiscoveryService;
-#include "network/discovery_service.h"
-#endif
-//-------------------END-----------------------
-
 #include "dfs/packages/headers/dfs_universal.h"
 #include "network/packages/service/list_connections.h"
 #include <QMap>
@@ -42,7 +16,11 @@ class DiscoveryService;
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "managers/thread_pool.h"
-
+#include "network/discovery_service.h"
+//#include "network/resolver_service.h"
+#include "network/server_service.h"
+#include "network/socket_service.h"
+#include "network/upnpconnection.h"
 #include "network/socket_pair.h"
 
 #include "network/packages/service/list_connections.h"
@@ -107,10 +85,6 @@ public:
 private:
     void connectSocket();
     void disconnectSocket(SocketService *connection);
-
-public:
-    void processSendMsg(const QByteArray &data, const SocketPair &socketData);
-    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
 public:
     ServerService *getServerService();
@@ -227,12 +201,15 @@ public slots:
      */
     void removeConnection();
     void dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
-    void sendMsg(const QByteArray &data, const SocketPair &socketData);
+
+    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+
     //    void MoveToDfsN();
 
 signals:
     //    void newDfsSocket(SocketService *socket);
     void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
+    void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);
     void qmlServerError(bool serverError);
