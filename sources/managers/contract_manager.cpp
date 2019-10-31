@@ -1,9 +1,5 @@
-#include <QDir>
 
 #include "managers/contract_manager.h"
-#include "datastorage/contract.h"
-#include "managers/account_controller.h"
-#include "dfs/types/headers/dfstruct.h"
 
 // ContractManager::ContractManager(AccountController *accountController, Blockchain *blockchain)
 //{

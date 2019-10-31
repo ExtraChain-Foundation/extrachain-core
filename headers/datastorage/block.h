@@ -8,6 +8,8 @@
 #include "utils/utils.h"
 #include "datastorage/transaction.h"
 #include "actor.h"
+#include "utils/utils.h"
+#include <QDateTime>
 
 // Block comparison result
 struct BlockCompare

@@ -3,6 +3,9 @@
 
 #include <QObject>
 #include "datastorage/contract.h"
+#include <QDir>
+#include "managers/account_controller.h"
+#include "dfs/types/headers/dfstruct.h"
 
 // class AccountController;
 // class Blockchain;

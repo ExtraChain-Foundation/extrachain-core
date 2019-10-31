@@ -10,6 +10,9 @@
 #include <QString>
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+#include <QStringList>
+#include <string>
+#include <sstream>
 
 namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
