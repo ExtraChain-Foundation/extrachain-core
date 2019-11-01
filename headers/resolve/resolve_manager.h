@@ -1,10 +1,23 @@
-
 #ifndef RESOLVE_MANAGER_H
 #define RESOLVE_MANAGER_H
 
-#include <QObject>
-#include "headers/resolve/resolver_service.h"
+#ifndef NETWORK_MANAGER_DEF
+#define NETWORK_MANAGER_DEF
+class NetManager;
 #include "headers/network/network_manager.h"
+#endif
+#ifndef RESOLVER_SERVICE_DEF
+#define RESOLVER_SERVICE_DEF
+class ResolverService;
+#include "headers/resolve/resolver_service.h"
+#endif
+#ifndef NODE_MANAGER_DEF
+#define NODE_MANAGER_DEF
+class NodeManager;
+#include "headers/managers/node_manager.h"
+#endif
+
+#include <QObject>
 #include "headers/datastorage/blockchain.h"
 #include "headers/datastorage/index/actorindex.h"
 #include "headers/managers/tx_manager.h"
@@ -25,12 +38,15 @@ private:
     TransactionManager *txManager;
     AccountController *accountControler;
     Dfs *dfs;
+    NodeManager *node;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
                    TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
                    QObject *parent = nullptr);
     ~ResolveManager();
+
+    void setNode(NodeManager *value);
 
 private:
     void connectSignals(ResolverService *resolver);
@@ -44,8 +60,8 @@ private:
 
 signals:
     void finished();
-    void coinRequest(BigNumber id, BigNumber amount);
-    void sendMsg(const QByteArray &msg);
+    //    void coinRequest(BigNumber id, BigNumber amount);
+    //    void sendMsg(const QByteArray &msg);
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
     void resolveMessage(const QByteArray &msg, const SocketPair &receiver);

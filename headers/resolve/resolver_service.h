@@ -1,6 +1,41 @@
 ﻿#ifndef RESOLVERSERVICE_H
 #define RESOLVERSERVICE_H
 
+#ifndef RESOLVE_MANAGER_DEF
+#define RESOLVE_MANAGER_DEF
+class ResolveManager;
+#include "headers/resolve/resolve_manager.h"
+#endif
+#ifndef NODE_MANAGER_DEF
+#define NODE_MANAGER_DEF
+class NodeManager;
+#include "headers/managers/node_manager.h"
+#endif
+
+#ifndef ACTOR_INDEX_DEF
+#define ACTOR_INDEX_DEF
+class ActorIndex;
+#include "headers/datastorage/index/actorindex.h"
+#endif
+
+#ifndef BLOCKCHAIN_DEF
+#define BLOCKCHAIN_DEF
+class Blockchain;
+#include "headers/datastorage/blockchain.h"
+#endif
+
+#ifndef TX_MANAGER_DEF
+#define TX_MANAGER_DEF
+class TransactionManager;
+#include "headers/managers/tx_manager.h"
+#endif
+
+#ifndef DFS_DEF
+#define DFS_DEF
+class Dfs;
+#include "dfs/controls/headers/dfs.h"
+#endif
+
 #include <QHostAddress>
 #include <QJsonObject>
 #include <QObject>
@@ -9,7 +44,6 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "network/packages/service/all_messages.h"
@@ -32,6 +66,11 @@ static QMutex handlerFileMutex;
 class ResolverService : public QObject
 {
     Q_OBJECT
+private:
+    NodeManager *node;
+    ActorIndex *actorIndex;
+    Blockchain *blockchain;
+    Dfs *dfs;
 
 private:
     bool active = false;
@@ -39,7 +78,7 @@ private:
     QByteArray msg;
     QByteArray hash;
     SocketPair senderAddress;
-    ActorIndex *actorIndex;
+
     AccountController *ac;
 
     QMap<QByteArray, int> *requestResponseMap;
@@ -71,6 +110,12 @@ public:
      * @param receiver
      */
     void setTask(QByteArray msg, SocketPair receiver);
+
+    void setNode(NodeManager *value);
+
+    void setBlockchain(Blockchain *value);
+
+    void setDfs(Dfs *value);
 
 private:
     /**
@@ -157,9 +202,9 @@ signals:
 
     void newProfile(const QByteArray &msg);
 
-    void newActor(const Actor<KeyPublic> &actor);
+    //    void newActor(const Actor<KeyPublic> &actor);
 
-    void newBlock(const Block &block);
+    //    void newBlock(const Block &block);
     void newGenesisBlock(const GenesisBlock &block);
 
     void newTx(const Transaction &tx);
@@ -179,7 +224,7 @@ signals:
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
 
-    void dfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
+    //    void dfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
     // response
     void blockCount(const BigNumber &count);
 

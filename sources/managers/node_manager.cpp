@@ -1,7 +1,5 @@
 #include "managers/node_manager.h"
 
-#include "network/network_manager.h"
-
 NodeManager::NodeManager()
 {
     prepareFolders();
@@ -29,6 +27,7 @@ NodeManager::NodeManager()
     dfs = new Dfs(actorIndex, accController);
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
+    resolveManager->setNode(this);
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
@@ -84,11 +83,11 @@ void NodeManager::showMessage(QString from, QString message)
 void NodeManager::connectResolveManager()
 {
     connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
-    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
+    //    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
     connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
             &ResolveManager::resolveMessage);
     // TODO: move
-    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
+    //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);

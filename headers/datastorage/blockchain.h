@@ -304,6 +304,8 @@ signals:
     void sendMessage(const QByteArray &data, const QByteArray &type);
     void finished();
 
+public:
+    void addBlockToBlockchain(Block block);
 public slots:
 
     void process();
@@ -327,8 +329,6 @@ public slots:
     void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
                                 const QByteArray &requestHash, const SocketPair &receiver);
     void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
-
-    void addBlockToBlockchain(Block block);
 
     void addGenBlockToBlockchain(const GenesisBlock &block);
     /**

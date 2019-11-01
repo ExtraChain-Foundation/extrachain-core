@@ -1,5 +1,20 @@
 #include "headers/resolve/resolver_service.h"
 
+void ResolverService::setNode(NodeManager *value)
+{
+    node = value;
+}
+
+void ResolverService::setBlockchain(Blockchain *value)
+{
+    blockchain = value;
+}
+
+void ResolverService::setDfs(Dfs *value)
+{
+    dfs = value;
+}
+
 ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent)
     : QObject(parent)
 {
@@ -161,6 +176,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         Message::DUMessage dfsMsg(message.getMsg_data());
 
         emit dfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
+        dfs->resolveMsg(message.getMsg_data(), dfsMsg.getType(), receiver);
         emit TaskFinished();
     }
     // spread messages
@@ -172,7 +188,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == ACTOR_MESSAGE)
     {
         Actor<KeyPublic> actor(message.getMsg_data());
-        emit newActor(actor);
+        actorIndex->handleNewActor(actor);
+        //        emit newActor(actor);
         emit TaskFinished();
     }
     else if (msgType == DFS_CHANGES_MESSAGE)
@@ -189,7 +206,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             qDebug() << "Received block" << block.getIndex() << "is not valid";
             return;
         }
-        emit newBlock(block);
+        blockchain->addBlockToBlockchain(block);
+        //        emit newBlock(block);
         emit TaskFinished();
     }
     else if (msgType == GENESIS_BLOCK_MESSAGE)
@@ -201,7 +219,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == COIN_REQUEST)
     {
         BigNumber amount(message.getMsg_data());
-        emit coinRequest(message.getSigner(), amount);
+        node->coinResponse(message.getSigner(), amount);
+        //        emit coinRequest(message.getSigner(), amount);
         emit TaskFinished();
     }
     else if (msgType == TX_MESSAGE)
@@ -284,7 +303,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         BaseMessageResponse responseMessage(msg);
         if (checkResponseHandler(responseMessage.getDataHash()))
             return;
-        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         emit TaskFinished();
     }
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
@@ -329,7 +349,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
                 qDebug() << "Received block" << block.getIndex() << "is not valid";
                 return;
             }
-            emit newBlock(block);
+            blockchain->addBlockToBlockchain(block);
+            //            emit newBlock(block);
         }
         emit TaskFinished();
     }

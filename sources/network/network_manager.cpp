@@ -89,7 +89,7 @@ void NetManager::resolverMessage(const QHostAddress &from, const QString &messag
 
 void NetManager::connectSocket()
 {
-    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
+    //    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
     connect(connections.last(), &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     //    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
@@ -100,7 +100,7 @@ void NetManager::connectSocket()
 void NetManager::disconnectSocket(SocketService *connection)
 {
     disconnect(connection, &SocketService::clientRemove, this, &NetManager::removeConnection);
-    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
+    //    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     //    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);

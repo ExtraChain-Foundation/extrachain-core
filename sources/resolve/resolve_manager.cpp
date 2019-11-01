@@ -1,5 +1,10 @@
 #include "headers/resolve/resolve_manager.h"
 
+void ResolveManager::setNode(NodeManager *value)
+{
+    node = value;
+}
+
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
                                QObject *parent)
@@ -13,7 +18,7 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
     this->accountControler = accountControler;
     this->dfs = dfs;
 
-    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
+    //    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
 }
@@ -21,7 +26,7 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
 ResolveManager::~ResolveManager()
 {
 
-    disconnect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
+    //    disconnect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     disconnect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     disconnect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
     emit finished();
@@ -32,10 +37,10 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     //    connect(resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
-    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
+    //    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
     // "New" signals
-    connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
-    connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
+    //    connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
+    //    connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     connect(resolver, &ResolverService::newGenesisBlock, blockchain, &Blockchain::addGenBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
@@ -57,8 +62,8 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections aborted";
     disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     // "New" signals
-    disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
-    disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
+    //    disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
+    //    disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     disconnect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
 
     // request signals
@@ -81,6 +86,9 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
 void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
     resolvers.append(new ResolverService(actorIndex, requestResponseMap));
+    resolvers.last()->setNode(node);
+    resolvers.last()->setBlockchain(blockchain);
+    resolvers.last()->setDfs(dfs);
     connectSignals(resolvers.last());
     resolvers.last()->setTask(msg, receiver);
     ThreadPool::addThread(resolvers.last());
@@ -101,8 +109,8 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
         requestResponseMap->insert(calcKeccak256(message), Config::Net::NECESSARY_RESPONSE_COUNT);
         handlerFileMutex.unlock();
     }
-
-    emit sendMsg(message);
+    networkManager->broadcastMsg(message);
+    //    emit sendMsg(message);
 }
 
 void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,
@@ -114,7 +122,8 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
         rmsg.calcDigSig(accountControler->getCurrentActor());
 
     qDebug() << "NetManager: send " << msgType;
-    emit socketSendMsg(rmsg.serialize(), receiver);
+    networkManager->distMessage(rmsg.serialize(), receiver);
+    //    emit socketSendMsg(rmsg.serialize(), receiver);
 }
 
 void ResolveManager::taskFinished()

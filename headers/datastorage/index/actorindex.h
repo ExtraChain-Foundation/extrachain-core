@@ -96,14 +96,16 @@ public:
 
     QString getFolderPath() const;
 
-public slots:
-    void process();
-    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+public:
     /**
      * @brief Attempts to save actor to local storage
      * @param actor
      */
     void handleNewActor(Actor<KeyPublic> actor);
+public slots:
+    void process();
+    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+
     /**
      * @brief The same as handleNewActor, but emit's ActorIsMissing signal
      * if there no such actor in storage
