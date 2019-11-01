@@ -310,7 +310,7 @@ void NetManager::setupDiscoveryServiceConnections()
 // Basic methods
 void NetManager::broadcastMsg(const QByteArray &msg)
 {
-    SocketPair socketPair("0.0.0.0", 0, this);
+    SocketPair socketPair("0.0.0.0", 0);
     //    emit sendMsg(msg, socketPair);
     distMessage(msg, socketPair);
 }
@@ -379,14 +379,14 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
-    SocketPair socketPair(peerAddress.toString().toStdString(), 0, this);
+    SocketPair socketPair(peerAddress.toString().toStdString(), 0);
     //    emit sendMsg(msg.serialize(), socketPair);
     distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int port)
 {
-    SocketPair socketPair(peerAddress.toString().toStdString(), port, this);
+    SocketPair socketPair(peerAddress.toString().toStdString(), port);
     //    emit sendMsg(msg.serialize(), socketPair);
     distMessage(msg.serialize(), socketPair);
 }

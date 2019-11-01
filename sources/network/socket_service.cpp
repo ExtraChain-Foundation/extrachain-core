@@ -138,14 +138,14 @@ SocketService::SocketService(const SocketService &value)
 }
 
 SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
-    : QObject(parent)
+//    : QObject(parent)
 {
     this->address = address;
     this->port = networkPort;
 }
 
 SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
-    : QObject(parent)
+//    : QObject(parent)
 {
     this->socketDescriptor = socketDescriptor;
     qDebug() << "Socket Descriptor" << socketDescriptor;

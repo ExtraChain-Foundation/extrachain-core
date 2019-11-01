@@ -184,7 +184,10 @@ Transaction NodeManager::createTransaction(Transaction tx)
         // 2) sign transaction
         tx.sign(actor);
         qDebug() << tx.toString();
-        emit NewTx(tx);
+        if (tx.getSender().toActorId() == *actorIndex->companyId)
+            emit NewTx(tx);
+        else
+            emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
 
         accController->sentTxList.add(tx.getHash(), Serialization::universalSerialize({ tx.serialize() }, 4));
         return tx;
@@ -321,39 +324,7 @@ void NodeManager::dfscreateNetManagerIdentificator()
 #ifdef ETALONIUM_CLIENT
 void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
-
-    //    Actor<KeyPrivate> actor = accController->getCurrentActor();
-    //    if (!actor.isEmpty())
-    //    {
-    //        qDebug() << actor.getId();
-    //        Transaction tx(actor.getId(), receiver, amount);
-    //        // add sent tx balances
-    //        BigNumber tempBalance = 0;
-
-    //        if (accController->sentTxList.getIndexSize() > 0)
-    //        {
-    //            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
-    //            {
-    //                Transaction tempTx(accController->sentTxList.at(i));
-    //                if (tempTx.getToken() != token)
-    //                    continue;
-    //                if (tempTx.getSender() == actor.getId())
-    //                    tempBalance -= tempTx.getAmount();
-    //                else
-    //                    tempBalance += tempTx.getAmount();
-    //            }
-    //        }
-
-    //        BigNumber actorBalance = blockchain->getUserBalance(actor.getId(), token);
-    //        BigNumber receiverBalance = blockchain->getUserBalance(receiver, token);
-    //        tx.setSenderBalance(actorBalance + tempBalance);
-    //        tx.setReceiverBalance(receiverBalance - tempBalance);
-
-    //        tx.setToken(token);
     Transaction tx = this->createTransaction(receiver, amount, token);
-    if (!tx.isEmpty())
-        emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
-    //}
 }
 void NodeManager::createWalletInUi()
 {
