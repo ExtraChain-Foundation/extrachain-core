@@ -376,6 +376,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
 }
 
+void ResolverService::resolveDfsMessage(const QByteArray &data, const int &msgType,
+                                        const SocketPair &receiver)
+{
+    //
+}
+
 // validation methods //
 
 bool ResolverService::validateBlock(const Block &block)
