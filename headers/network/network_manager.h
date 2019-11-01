@@ -229,7 +229,7 @@ public slots:
 
 public:
     void distMessage(const QByteArray &data, const SocketPair &socketData);
-    void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+    virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
     //    void MoveToDfsN();
 

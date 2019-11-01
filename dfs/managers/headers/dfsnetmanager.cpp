@@ -58,6 +58,16 @@ NetManager *DFSNetManager::getNetManager()
     return this->getMe();
 }
 
+void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+{
+    if (checkMsgCount(msg, handler))
+        emit newMessage(msg, receiver);
+    else
+        qDebug()
+            << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
+    return nullptr;
+}
+
 void DFSNetManager::appendSocket(SocketService *socket)
 {
     socketsList.append(socket);
@@ -83,7 +93,8 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     QByteArray message = msg.serialize();
     if (checkMsgCount(message, handler))
     {
-        emit sendMsg(message, receiver);
+        std::for_each(socketsList.begin(), socketsList.end(),
+                      [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
         //        qDebug() << "emit sendM from DFSNetManager";
     }
 }
@@ -131,6 +142,7 @@ void DFSNetManager::addConnection(qint64 socketDescriptor)
 {
     SocketService *socket = new SocketService(socketDescriptor);
     socketsList.append(socket);
+    socketsList.last()->setNetManager(this);
     socketConnection();
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(socketsList.last());
@@ -185,6 +197,7 @@ SocketService *DFSNetManager::addConnectionFromPair(QHostAddress address, quint1
 {
     SocketService *socket = new SocketService(address.toString(), port);
     socketsList.append(socket);
+    socketsList.last()->setNetManager(this);
     socketConnection();
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 

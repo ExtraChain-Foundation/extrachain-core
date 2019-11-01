@@ -53,7 +53,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     // response signals
     connect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
     // dfs signal
-    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
+    //    connect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)
@@ -75,7 +75,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     // response signals
     disconnect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
     // dfs signal
-    disconnect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
+    //    disconnect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
@@ -85,7 +85,7 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
 
 void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
-    resolvers.append(new ResolverService(actorIndex, requestResponseMap));
+    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
     resolvers.last()->setNode(node);
     resolvers.last()->setBlockchain(blockchain);
     resolvers.last()->setDfs(dfs);

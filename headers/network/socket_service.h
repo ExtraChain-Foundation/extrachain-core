@@ -1,5 +1,16 @@
 #ifndef SOCKET_SERVICE_H
 #define SOCKET_SERVICE_H
+//#ifndef DFS_NETWORK_MANAGER_DEF
+//#define DFS_NETWORK_MANAGER_DEF
+// class DFSNetManager;
+//#include "dfs/managers/headers/dfsnetmanager.h"
+//#endif
+
+#ifndef NETWORK_MANAGER_DEF
+#define NETWORK_MANAGER_DEF
+class NetManager;
+#include "headers/network/network_manager.h"
+#endif
 
 #include <QObject>
 #include <QtNetwork/QTcpSocket>
@@ -14,13 +25,9 @@
 #include "managers/account_controller.h"
 //#include "network/resolver_service.h"
 #include <QTimer>
-#ifndef NETWORK_MANAGER_DEF
-#define NETWORK_MANAGER_DEF
-class NetManager;
-#include "headers/network/network_manager.h"
-#endif
-#include "network/socket_pair.h"
 
+#include "network/socket_pair.h"
+class DFSNetManager;
 using namespace SearchEnum;
 
 /**

@@ -1,5 +1,10 @@
 #ifndef DFSNETMANAGER_H
 #define DFSNETMANAGER_H
+#ifndef SOCKET_SERVICE_DEF
+#define SOCKET_SERVICE_DEF
+class SocketService;
+#include "headers/network/socket_service.h"
+#endif // SOCKET_SERVICE
 
 #include "headers/network/network_manager.h"
 #include "dfs/packages/headers/all.h"
@@ -14,7 +19,7 @@ class DFSNetManager : public NetManager
 
 public:
     DFSNetManager(AccountController *accountList, ActorIndex *actorIndex);
-    ~DFSNetManager();
+    ~DFSNetManager() override;
 
 private:
     /**
@@ -28,6 +33,7 @@ private:
 
 public:
     NetManager *getNetManager();
+    void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
 signals:
     void finished();
     void sendMsg(const QByteArray &message, const SocketPair &receiver);

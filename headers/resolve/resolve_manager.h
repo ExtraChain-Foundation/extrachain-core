@@ -26,10 +26,13 @@ class NodeManager;
 class ResolveManager : public QObject
 {
     Q_OBJECT
+
 private:
     QList<ResolverService *> resolvers;
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
-    QMap<QByteArray, int> *packageHandler = new QMap<QByteArray, int>();
+    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
+    QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
+    QMap<QByteArray, long long> *pckgCounter = new QMap<QByteArray, long long>();
 
 private:
     ActorIndex *actorIndex;

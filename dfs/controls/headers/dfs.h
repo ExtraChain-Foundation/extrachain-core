@@ -37,7 +37,7 @@ private:
     void signalConnection();
 
 public slots:
-    void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
@@ -46,7 +46,7 @@ public:
 
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
-
+    void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);

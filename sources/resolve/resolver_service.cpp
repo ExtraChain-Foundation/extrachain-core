@@ -15,17 +15,16 @@ void ResolverService::setDfs(Dfs *value)
     dfs = value;
 }
 
-ResolverService::ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent)
-    : QObject(parent)
-{
-    requestResponseMap = rrMap;
-}
-
-ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent)
+ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap,
+                                 QMap<QByteArray, QFile *> *listFile, QMap<QString, QByteArray> *fileMap,
+                                 QMap<QByteArray, long long> *pckgCounter, QObject *parent)
     : QObject(parent)
 {
     this->actorIndex = actorIndex;
     requestResponseMap = rrMap;
+    this->listFile = listFile;
+    this->fileMap = fileMap;
+    this->pckgCounter = pckgCounter;
 }
 
 ResolverService::~ResolverService()
@@ -174,9 +173,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     {
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         Message::DUMessage dfsMsg(message.getMsg_data());
-
-        emit dfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
-        dfs->resolveMsg(message.getMsg_data(), dfsMsg.getType(), receiver);
+        resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
         emit TaskFinished();
     }
     // spread messages
@@ -375,11 +372,147 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         emit TaskFinished();
     }
 }
-
-void ResolverService::resolveDfsMessage(const QByteArray &data, const int &msgType,
-                                        const SocketPair &receiver)
+void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType, const SocketPair &receiver)
 {
-    //
+    qDebug() << "[dfs resolve message]";
+    Message::dfsMessageType msgType = static_cast<Message::dfsMessageType>(mType);
+    // resolve msg
+    if (msgType == Message::dfsMessageType::titleMessage)
+    {
+        qDebug() << "[title message:]";
+        Message::title_message message(data);
+        QByteArray mHash = message.hash();
+        if (QFile(message.filePath).exists())
+            return;
+        QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
+        qDebug() << "[file path:]" << path;
+        // register title for receive
+        // PLEASE, APPEND TO MAPS DATA -_-
+    }
+    else if (msgType == Message::dfsMessageType::statusMessage)
+    {
+        qDebug() << "[statusMessagee:]";
+        Message::Status message(data);
+    }
+    else if (msgType == Message::dfsMessageType::requestMessage)
+    {
+        qDebug() << "[requestMessage:]";
+    }
+    else if (msgType == Message::dfsMessageType::storageMessage)
+    {
+        qDebug() << "[storageMessage:]";
+    }
+    else if (msgType == Message::dfsMessageType::fileDataMessage)
+    {
+        qDebug() << "[fileDataMessage:]";
+        Message::dfs_message message(data);
+        QByteArray title_hash = message.title_hash;
+        // setup iterator of Maps
+        handlerFileMutex.lock();
+        QMap<QByteArray, QFile *>::iterator listFileIT = listFile->find(title_hash);
+        QMap<QString, QByteArray>::iterator fileMapIT = fileMap->find(listFileIT.value()->fileName());
+        if (pckgCounter->find(title_hash) == pckgCounter->end())
+        {
+            qDebug() << "[&DFSResolver][maybe already have finished]";
+            return;
+        }
+        if (listFileIT == listFile->end())
+        {
+            qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
+            return;
+        }
+        if (fileMapIT == fileMap->end())
+        {
+            qDebug() << "[&DFSResolver][file not found]";
+            return;
+        }
+
+        Message::title_message title(fileMapIT.value());
+        listFileIT.value()->seek(message.pckgNumber * Message::dataSize);
+        if (listFileIT.value()->write(message.data))
+            pckgCounter->find(title_hash).value()--;
+        listFileIT.value()->flush();
+        QMap<QByteArray, long long>::iterator pckgCounterIT = pckgCounter->find(title_hash);
+        if (pckgCounterIT.value() == 0)
+        {
+            qDebug() << "[&DFSResolver][file succed written to tmp]";
+            listFileIT.value()->close();
+            dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
+                        based_dfs_struct::convertToDFType(title.f_type));
+            // finish save file
+            pckgCounter->erase(pckgCounterIT);
+            fileMap->erase(fileMapIT);
+            listFile->erase(listFileIT);
+        }
+        handlerFileMutex.unlock();
+    }
+    else if (msgType == Message::dfsMessageType::responseMessage)
+    {
+        qDebug() << "[responseMessage:]";
+    }
+    else if (msgType == Message::dfsMessageType::closingMessage)
+    {
+        qDebug() << "[closingMessage:]";
+        Message::DClosing message(msg);
+        //        emit closingMsg(message.title_hash, message.PckgAmoutR, receiver);
+    }
+    else
+        qDebug() << "[&DFSResolver] undifine message type";
+}
+
+bool ResolverService::createTempFile(const QString &path, const long long &size, const QByteArray &tHash)
+{
+    qDebug() << "[&DfsResolver] start create tmp file:" << path;
+    handlerFileMutex.lock();
+    QFile *file = listFile->insert(tHash, new QFile(path)).value();
+    if (!file->open(QIODevice::ReadWrite | QIODevice::Truncate))
+    {
+        // Take actorid of file owner
+        QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
+        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(pathList.at(PathStruct::aId)));
+
+        if (!actor.isEmpty())
+        {
+            if (QDir(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
+                file->open(QIODevice::WriteOnly | QIODevice::Truncate);
+            else
+            {
+                file->close();
+                delete file;
+                handlerFileMutex.unlock();
+                this->thread()->sleep(1);
+                qDebug() << "[&DfsResolver]-[actor not empty, but directory wasn't create]";
+                return createTempFile(path, size, tHash);
+            }
+        }
+        else
+        {
+            file->close();
+            delete file;
+            handlerFileMutex.unlock();
+            this->thread()->sleep(5);
+            qDebug() << "[&DfsResolver]-[actor empty]";
+            return createTempFile(path, size, tHash);
+        }
+    }
+    handlerFileMutex.unlock();
+    qDebug() << "[&DfsResolver] succed finished";
+    return true;
+}
+
+bool ResolverService::registerTitle(const QString &tmpPath, const long long &pckgAmount,
+                                    const long long &size, const QByteArray &titleSerialize,
+                                    const QByteArray &tHash)
+{
+    if (createTempFile(tmpPath, size, tHash))
+    {
+        handlerFileMutex.lock();
+        pckgCounter->insert(tHash, pckgAmount);
+        fileMap->insert(tmpPath, titleSerialize);
+        handlerFileMutex.unlock();
+        qDebug() << "[ready for receive file]";
+    }
+    return true;
 }
 
 // validation methods //

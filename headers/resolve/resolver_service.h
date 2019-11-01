@@ -82,19 +82,20 @@ private:
     AccountController *ac;
 
     QMap<QByteArray, int> *requestResponseMap;
+    // dfs Map
+    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
+    QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
+    QMap<QByteArray, long long> *pckgCounter = new QMap<QByteArray, long long>();
 
 public:
-    /**
-     * @brief ResolverService
-     * @param parent
-     */
-    ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
+    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, QFile *> *listFile,
+                    QMap<QString, QByteArray> *fileMap, QMap<QByteArray, long long> *pckgCounter,
+                    QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
@@ -172,7 +173,32 @@ private:
      * @param msg - serialized packages
      */
     void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
+    /**
+     * @brief resolveDfsMessage
+     * @param data
+     * @param msgType
+     * @param receiver
+     */
     void resolveDfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
+    /**
+     * @brief createTempFile
+     * @param path
+     * @param size
+     * @param tHash
+     * @return
+     */
+    bool createTempFile(const QString &path, const long long &size, const QByteArray &tHash);
+    /**
+     * @brief registerTitle
+     * @param tmpPath
+     * @param pckgAmount
+     * @param size
+     * @param titleSerialize
+     * @param tHash
+     * @return
+     */
+    bool registerTitle(const QString &tmpPath, const long long &pckgAmount, const long long &size,
+                       const QByteArray &titleSerialize, const QByteArray &tHash);
 public slots:
     /**
      * @brief process

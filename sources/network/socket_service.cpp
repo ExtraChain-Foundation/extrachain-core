@@ -1,6 +1,10 @@
 #include "network/socket_service.h"
 #include "dfs/packages/headers/dfs_universal.h"
-
+#ifndef DFS_NETWORK_MANAGER_DEF
+#define DFS_NETWORK_MANAGER_DEF
+class DFSNetManager;
+#include "dfs/managers/headers/dfsnetmanager.h"
+#endif
 QTcpSocket *SocketService::getSocket() const
 {
     return socket;
@@ -215,7 +219,12 @@ void SocketService::sockReady()
         SocketPair receiver(address.toStdString(), port);
         receiver.setId(identificator.toByteArray());
         //        emit MessageReceived(pckg, receiver);
-        netManager->MessageReceived(pckg, receiver);
+        if (socket->localPort() == 2223 || socket->localPort() == 2224)
+        {
+            reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(pckg, receiver);
+        }
+        else
+            netManager->MessageReceived(pckg, receiver);
     }
     if (socket->bytesAvailable())
         sockReady();
