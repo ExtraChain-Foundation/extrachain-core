@@ -172,7 +172,7 @@ private:
      * @param msg - serialized packages
      */
     void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
-
+    void resolveDfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
 public slots:
     /**
      * @brief process
