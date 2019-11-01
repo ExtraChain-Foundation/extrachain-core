@@ -329,25 +329,26 @@ void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, Bi
 void NodeManager::createWalletInUi()
 {
     // accController->loadActors();
-    uiWallet->setCurrentWalletId(accController->getCurrentActor().getId());
+    uiWallet->setCurrentWalletId(accController->getCurrentActor().getId().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
 
     updateWalletList();
     updateAvailableWalletList();
     updateRecentActivities();
+    uiWallet->walletsUpdated();
 }
 
 void NodeManager::updateWalletInUi()
 {
-    //    uiController->getWallet()->setCurrentWalletId(
-    //            accController->getCurrentActor().getId());
+    uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().getId().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
 
     updateWalletList();
     updateAvailableWalletList();
     updateRecentActivities();
+    uiWallet->walletsUpdated();
 }
 
 void NodeManager::updateWalletList()
@@ -496,7 +497,7 @@ void NodeManager::connectUi()
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
-    connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
+    // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
 
     //=============================================LOGIN & REG================================

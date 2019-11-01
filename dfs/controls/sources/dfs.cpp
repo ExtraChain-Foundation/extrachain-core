@@ -41,7 +41,7 @@ void Dfs::saveD(const QString &path, const based_dfs_struct::Type &type,
     dfsFile.close();
     emit sendQ(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(dfsPath, type, BigNumber("-2"));
+    emit usersChanges(dfsPath, type, userId); // TODO
 #endif
 }
 
@@ -131,8 +131,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
 
     emit sendQ(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(path.toUtf8(), type,
-                      BigNumber(pathList.at(PathStruct::aId))); // TODO
+    emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
 #endif
 }
 
