@@ -123,6 +123,18 @@ QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id
     // : memIndex.getLastTxBySenderOrReceiver(id);
 }
 
+void Blockchain::getBlockZero()
+{
+    Block zero = getBlockByIndex(0);
+    if (zero.isEmpty())
+    {
+        Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, QByteArray::number(0));
+        emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
+    }
+    else
+        actorIndex->setCompanyId(new QByteArray(zero.getApprover().toActorId()));
+}
+
 // Genesis block //
 
 bool Blockchain::shouldStartGenesisCreation()
@@ -492,6 +504,10 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
             }
         }
     }
+    if (block.getIndex() == 0)
+    {
+        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+    }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -781,6 +797,7 @@ void Blockchain::getSmContractMembers(const Block &block) const
 
 void Blockchain::process()
 {
+    //
 }
 
 void Blockchain::updateBlockchain(BigNumber id, bool isUser)
@@ -871,6 +888,10 @@ void Blockchain::addBlockToBlockchain(Block block)
 
 void Blockchain::addGenBlockToBlockchain(const GenesisBlock &block)
 {
+    if (block.getIndex() == 0)
+    {
+        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+    }
     if (blockIndex.addBlock(block) == 0)
         sendMessage(block.serialize(), Messages::GENESIS_BLOCK_MESSAGE);
 }

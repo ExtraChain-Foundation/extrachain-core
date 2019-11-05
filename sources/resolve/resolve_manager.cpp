@@ -160,8 +160,8 @@ QList<ResolverService *> ResolveManager::getFinished()
     return ret;
 }
 
-void ResolveManager::resolveMessage(const QByteArray &msg, const SocketPair &receiver)
-{
+// void ResolveManager::resolveMessage(const QByteArray &msg, const SocketPair &receiver)
+//{
 
-    setTask(msg, receiver);
-}
+//    setTask(msg, receiver);
+//}

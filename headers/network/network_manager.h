@@ -24,7 +24,9 @@ class UPNPConnection;
 class DiscoveryService;
 #include "headers/network/discovery_service.h"
 #endif
+class ResolveManager;
 //-------------------END-----------------------
+
 #include "dfs/packages/headers/dfs_universal.h"
 #include "network/packages/service/list_connections.h"
 #include <QMap>
@@ -83,6 +85,7 @@ protected:
 #endif
     ActorIndex *actorIndex;
     AccountController *accounts;
+    ResolveManager *resolveManager;
     QString serverIp = "51.68.181.52";
     bool allowLocalServer = false;
 
@@ -233,9 +236,11 @@ public:
 
     //    void MoveToDfsN();
 
+    void setResolveManager(ResolveManager *value);
+
 signals:
     //    void newDfsSocket(SocketService *socket);
-    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
+    //    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
     //    void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);

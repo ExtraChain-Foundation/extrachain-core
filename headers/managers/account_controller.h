@@ -7,7 +7,7 @@
 #include "enc/key_private.h"
 #include <QDebug>
 #include <QObject>
-
+class Blockchain;
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
@@ -20,6 +20,7 @@ class AccountController : public QObject
 private:
     // Current user, used in AccountController.
     int userNum = 0;
+    Blockchain *blockchain;
     QList<Actor<KeyPrivate> *> accounts;
     ActorIndex *actorIndex;
     QMap<QByteArray, QByteArray> currentState;
@@ -35,7 +36,7 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createActor(int account);
-    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
+    //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(BigNumber id);
     /**
      * @brief Gets Actor by public key
@@ -64,6 +65,8 @@ public:
 
     ActorIndex *getActorIndex() const;
     void setActorIndex(ActorIndex *value);
+
+    void setBlockchain(Blockchain *value);
 
 public slots:
     /**

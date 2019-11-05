@@ -36,11 +36,11 @@ public:
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
 signals:
     void finished();
-    void sendMsg(const QByteArray &message, const SocketPair &receiver);
-    void newMessage(const QByteArray &message, const SocketPair &receiver);
+    //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
+    //    void newMessage(const QByteArray &message, const SocketPair &receiver);
 public slots:
     void appendSocket(SocketService *socket);
-    void newMsg(const QByteArray &message, const SocketPair &receiver);
+    //    void newMsg(const QByteArray &message, const SocketPair &receiver);
     void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
               const SocketPair &receiver = SocketPair());
     void process();

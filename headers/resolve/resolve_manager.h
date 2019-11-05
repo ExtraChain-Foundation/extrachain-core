@@ -61,14 +61,16 @@ private:
     QList<ResolverService *> getActive();
     QList<ResolverService *> getFinished();
 
+public:
+    void setTask(QByteArray msg, const SocketPair &receiver);
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);
     //    void sendMsg(const QByteArray &msg);
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
-    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
-    void setTask(QByteArray msg, const SocketPair &receiver);
+    //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
+
     void registrateMsg(const QByteArray &data, const QByteArray &msgType);
     /**
      * @brief sendMessageResponse from resolver

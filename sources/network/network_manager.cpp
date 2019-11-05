@@ -1,4 +1,5 @@
 ﻿#include "network/network_manager.h"
+#include "headers/resolve/resolve_manager.h"
 
 using namespace Messages;
 
@@ -10,6 +11,11 @@ QList<SocketService *> NetManager::getConnections() const
 NetManager *NetManager::getMe()
 {
     return this;
+}
+
+void NetManager::setResolveManager(ResolveManager *value)
+{
+    resolveManager = value;
 }
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
@@ -361,7 +367,8 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
 {
     mutex.lock();
     if (checkMsgCount(msg, handler))
-        emit MsgReceived(msg, receiver);
+        resolveManager->setTask(msg, receiver);
+    //        emit MsgReceived(msg, receiver);
     else
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
     mutex.unlock();

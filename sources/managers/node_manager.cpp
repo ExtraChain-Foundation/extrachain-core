@@ -16,6 +16,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(netManager);
     this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
+    accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
     //    contractManager = new ContractManager(accController, blockchain);
 
@@ -28,6 +29,7 @@ NodeManager::NodeManager()
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     resolveManager->setNode(this);
+    netManager->setResolveManager(resolveManager);
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
@@ -82,10 +84,10 @@ void NodeManager::showMessage(QString from, QString message)
 
 void NodeManager::connectResolveManager()
 {
-    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
+    //    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
     //    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
-    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
-            &ResolveManager::resolveMessage);
+    //    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
+    //            &ResolveManager::resolveMessage);
     // TODO: move
     //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);

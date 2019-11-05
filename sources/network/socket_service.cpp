@@ -177,19 +177,6 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
 void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketData)
 {
     emit msgReady(data, socketData);
-    //    // check socket status
-    //    if (!socket->isValid())
-    //        return nullptr;
-    //    // take data from pair
-    //    QString ipAddress = QString::fromStdString(socketData.first);
-    //    qint64 portAddress = socketData.second;
-    //    // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
-    //    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress ==
-    //    0)))
-    //    {
-    //        QByteArray _wtSok = Serialization::universalSerialize({ data });
-    //        socket->write(_wtSok, _wtSok.size());
-    //    }
     return nullptr;
 }
 
@@ -273,7 +260,7 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
 
-    this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
+    this->distMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
                   SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 

@@ -1,4 +1,5 @@
 #include "dfsnetmanager.h"
+#include "headers/resolve/resolve_manager.h"
 
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
     : NetManager(accountList, actInd)
@@ -17,8 +18,9 @@ void DFSNetManager::socketConnection()
     qDebug() << "DFSNetManager connections:";
     qDebug() << connect(socketsList.last(), &SocketService::clientDisconnected, this,
                         &DFSNetManager::removeConnection);
-    qDebug() << connect(this, &DFSNetManager::sendMsg, socketsList.last(), &SocketService::sendMsg);
-    qDebug() << connect(socketsList.last(), &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
+    //    qDebug() << connect(this, &DFSNetManager::sendMsg, socketsList.last(), &SocketService::sendMsg);
+    //    qDebug() << connect(socketsList.last(), &SocketService::MessageReceived, this,
+    //    &DFSNetManager::newMsg);
     qDebug() << connect(socketsList.last(), &SocketService::removeMe, this, &DFSNetManager::removeConnection);
     qDebug() << connect(socketsList.last(), &SocketService::checkMe, this,
                         &DFSNetManager::checkMyIdentificator);
@@ -27,8 +29,8 @@ void DFSNetManager::socketConnection()
 void DFSNetManager::socketDisconnect(SocketService *connection)
 {
     disconnect(connection, &SocketService::clientDisconnected, this, &DFSNetManager::removeConnection);
-    disconnect(this, &DFSNetManager::sendMsg, connection, &SocketService::sendMsg);
-    disconnect(connection, &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
+    //    disconnect(this, &DFSNetManager::sendMsg, connection, &SocketService::sendMsg);
+    //    disconnect(connection, &SocketService::MessageReceived, this, &DFSNetManager::newMsg);
     disconnect(connection, &SocketService::removeMe, this, &DFSNetManager::removeConnection);
     disconnect(connection, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
 }
@@ -61,7 +63,7 @@ NetManager *DFSNetManager::getNetManager()
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     if (checkMsgCount(msg, handler))
-        emit newMessage(msg, receiver);
+        resolveManager->setTask(msg, receiver);
     else
         qDebug()
             << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
@@ -74,14 +76,14 @@ void DFSNetManager::appendSocket(SocketService *socket)
     socketConnection();
 }
 
-void DFSNetManager::newMsg(const QByteArray &message, const SocketPair &receiver)
-{
-    if (checkMsgCount(message, handler))
-        emit newMessage(message, receiver);
-    else
-        qDebug()
-            << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
-}
+// void DFSNetManager::newMsg(const QByteArray &message, const SocketPair &receiver)
+//{
+//    if (checkMsgCount(message, handler))
+//        resolveManager->setTask(message, receiver);
+//    else
+//        qDebug()
+//            << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
+//}
 
 void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
 {
