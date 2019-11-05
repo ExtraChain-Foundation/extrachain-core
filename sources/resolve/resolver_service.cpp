@@ -382,12 +382,17 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         qDebug() << "[title message:]";
         Message::title_message message(data);
         QByteArray mHash = message.hash();
+
         if (QFile(message.filePath).exists())
             return;
         QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
+        if (!registerTitle(path, message.pckgsAmount, message.fileSize, message.serialize(), mHash))
+        {
+            qDebug() << "Abort on register title";
+            return;
+        }
         qDebug() << "[file path:]" << path;
         // register title for receive
-        // PLEASE, APPEND TO MAPS DATA -_-
     }
     else if (msgType == Message::dfsMessageType::statusMessage)
     {
@@ -410,24 +415,26 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         // setup iterator of Maps
         handlerFileMutex.lock();
         QMap<QByteArray, QFile *>::iterator listFileIT = listFile->find(title_hash);
+        if (listFileIT == listFile->end())
+        {
+            qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
+            handlerFileMutex.unlock();
+            return;
+        }
         QMap<QString, QByteArray>::iterator fileMapIT = fileMap->find(listFileIT.value()->fileName());
         if (pckgCounter->find(title_hash) == pckgCounter->end())
         {
             qDebug() << "[&DFSResolver][maybe already have finished]";
-            return;
-        }
-        if (listFileIT == listFile->end())
-        {
-            qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
+            handlerFileMutex.unlock();
             return;
         }
         if (fileMapIT == fileMap->end())
         {
             qDebug() << "[&DFSResolver][file not found]";
+            handlerFileMutex.unlock();
             return;
         }
 
-        Message::title_message title(fileMapIT.value());
         listFileIT.value()->seek(message.pckgNumber * Message::dataSize);
         if (listFileIT.value()->write(message.data))
             pckgCounter->find(title_hash).value()--;
@@ -435,6 +442,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         QMap<QByteArray, long long>::iterator pckgCounterIT = pckgCounter->find(title_hash);
         if (pckgCounterIT.value() == 0)
         {
+            Message::title_message title(fileMapIT.value());
             qDebug() << "[&DFSResolver][file succed written to tmp]";
             listFileIT.value()->close();
             dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
