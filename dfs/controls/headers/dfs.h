@@ -44,9 +44,12 @@ public:
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
     ~Dfs();
 
+public:
+    void initDFSNetManager(ResolveManager *resolveManager);
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
     void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);

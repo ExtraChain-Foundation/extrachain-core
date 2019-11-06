@@ -30,6 +30,7 @@ NodeManager::NodeManager()
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     resolveManager->setNode(this);
     netManager->setResolveManager(resolveManager);
+    dfs->initDFSNetManager(resolveManager);
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE

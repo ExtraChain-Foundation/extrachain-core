@@ -179,12 +179,17 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
     , accountControler(accControler)
     , actorIndex(actorIndex)
 {
-    dfsNetManager = new DFSNetManager(accountControler, actorIndex);
-    ThreadPool::addThread(dfsNetManager);
 }
 
 Dfs::~Dfs()
 {
+}
+
+void Dfs::initDFSNetManager(ResolveManager *resolveManager)
+{
+    dfsNetManager = new DFSNetManager(accountControler, actorIndex);
+    dfsNetManager->setResolveManager(resolveManager);
+    ThreadPool::addThread(dfsNetManager);
 }
 
 void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
