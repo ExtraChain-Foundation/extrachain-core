@@ -7,7 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
-#include "dfs/managers/headers/package_resolver.h"
+//#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
@@ -24,7 +24,7 @@ private:
 
     DFSNetManager *dfsNetManager;
     Sender *sender;
-    DFSResolver *resolver;
+    //    DFSResolver *resolver;
 
     void initD(const QByteArray &userId);
     void saveD(const QString &path, const based_dfs_struct::Type &type = based_dfs_struct::Type::images,

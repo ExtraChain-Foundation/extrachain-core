@@ -39,7 +39,8 @@ void Dfs::saveD(const QString &path, const based_dfs_struct::Type &type,
     dfsFile.write(data);
     dfsFile.flush();
     dfsFile.close();
-    emit sendQ(dfsPath, type, SocketPair());
+    //    emit sendQ(dfsPath, type, SocketPair());
+    sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath, type, userId); // TODO
 #endif
@@ -100,12 +101,12 @@ void Dfs::statusD()
 void Dfs::signalConnection()
 {
     connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
-    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
-    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
-    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
-    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
-    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
-    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
+    //    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
+    //    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
+    //    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
+    //    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
+    //    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
+    //    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
 }
 
 void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type)
@@ -129,7 +130,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
     appendC(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),
             based_dfs_struct::toByteArray(type));
 
-    emit sendQ(path, type, SocketPair());
+    sender->sendFile(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
 #endif
@@ -148,7 +149,7 @@ void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const S
             for (const QString &file : fList)
             {
                 based_dfs_struct::Type ftype = CardManager::getTypeByName(file, el.toUtf8());
-                emit sendQ(file, ftype, receiver);
+                sender->sendFile(file, ftype, receiver);
             }
         }
     }
@@ -167,7 +168,7 @@ void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const S
             {
                 based_dfs_struct::Type type = CardManager::getTypeByName(el, actorId);
                 if (type != based_dfs_struct::servic)
-                    emit sendQ(el, type, receiver);
+                    sender->sendFile(el, type, receiver);
                 else
                     qDebug() << "[&Dfs] the file with path" << el << "not have been found";
             }
@@ -206,11 +207,12 @@ void Dfs::init()
 {
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     sender = new Sender(userId);
-    resolver = new DFSResolver(actorIndex);
+    sender->setNetManager(dfsNetManager);
+    //    resolver = new DFSResolver(actorIndex);
     //
     signalConnection();
     ThreadPool::addThread(sender);
-    ThreadPool::addThread(resolver);
+    //    ThreadPool::addThread(resolver);
 
     statusD();
     initD(userId);
