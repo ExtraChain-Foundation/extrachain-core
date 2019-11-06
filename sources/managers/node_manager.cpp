@@ -14,6 +14,7 @@ NodeManager::NodeManager()
     netManager = new NetManager(accController, actorIndex);
 
     ThreadPool::addThread(netManager);
+    //    QFuture<void> future1Net = QtConcurrent::run(netManager, &NetManager::process);
     this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
@@ -55,7 +56,6 @@ NodeManager::NodeManager()
         blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
     }
 #endif
-
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -100,8 +100,8 @@ void NodeManager::connectSmContractManager()
 {
     //    connect(smContractController, &SmartContractManager::verifyActor, netManager,
     //    &NetManager::NewActor); TODO!!!
-    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
-            &NodeManager::addActorInActorIndex);
+    //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
+    //            &NodeManager::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
     });
@@ -524,14 +524,6 @@ void NodeManager::connectContractManager()
 {
 }
 
-void NodeManager::connectAccountController()
-{
-    // connect(accController, &AccountController::verifyActor, netManager, &NetManager::NewActor);
-    connect(accController, &AccountController::addActorInActorIndex, this,
-            &NodeManager::addActorInActorIndex);
-    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
-}
-
 void NodeManager::connectActorIndex()
 {
     connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
@@ -557,7 +549,7 @@ void NodeManager::connectSignals()
 #endif
     connectResolveManager();
     connectContractManager();
-    connectAccountController();
+    //    connectAccountController();
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();

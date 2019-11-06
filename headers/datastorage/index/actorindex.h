@@ -102,6 +102,13 @@ public:
      * @param actor
      */
     void handleNewActor(Actor<KeyPublic> actor);
+    /**
+     * @brief Serializes an actor and make a file in fs.
+     * @param actor
+     * @return resultCode, 0 - actor is saved
+     */
+    int addActor(const Actor<KeyPublic> &actor);
+
 public slots:
     void process();
     void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
@@ -119,13 +126,6 @@ public slots:
     void requestProfile(QString id);
     QByteArrayList getProfile(QString id);
     void profileToSearch(SearchFilters filters);
-
-    /**
-     * @brief Serializes an actor and make a file in fs.
-     * @param actor
-     * @return resultCode, 0 - actor is saved
-     */
-    int addActor(const Actor<KeyPublic> &actor);
 
     /**
      * @brief

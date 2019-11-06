@@ -210,7 +210,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     else if (msgType == GENESIS_BLOCK_MESSAGE)
     {
         GenesisBlock block = message.getMsg_data();
-        emit newGenesisBlock(block);
+        blockchain->addGenBlockToBlockchain(block);
+        //        emit newGenesisBlock(block);
         emit TaskFinished();
     }
     else if (msgType == COIN_REQUEST)

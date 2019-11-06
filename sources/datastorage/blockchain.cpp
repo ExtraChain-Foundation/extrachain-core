@@ -890,7 +890,9 @@ void Blockchain::addGenBlockToBlockchain(const GenesisBlock &block)
 {
     if (block.getIndex() == 0)
     {
+        mutex.lock();
         this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+        mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0)
         sendMessage(block.serialize(), Messages::GENESIS_BLOCK_MESSAGE);

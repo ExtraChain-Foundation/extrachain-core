@@ -76,7 +76,8 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     file.write(str);
     file.flush();
     file.close();
-    emit addActorInActorIndex(actor->convertToPublic());
+    actorIndex->addActor(actor->convertToPublic());
+    //    emit addActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
 

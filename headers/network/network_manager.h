@@ -62,7 +62,7 @@ class ResolveManager;
  * @brief The NetManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
-static QMutex mutex;
+// static QMutex mutex;
 class NetManager : public QObject
 {
     Q_OBJECT

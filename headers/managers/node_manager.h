@@ -104,7 +104,7 @@ private:
     void connectUi();
     void connectContractManager();
     void connectBlockchain();
-    void connectAccountController();
+    //    void connectAccountController();
     void connectActorIndex();
     void dfsConnection();
     void connectSignals();
@@ -132,7 +132,7 @@ signals:
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
-    void addActorInActorIndex(Actor<KeyPublic> actor);
+    //    void addActorInActorIndex(Actor<KeyPublic> actor);
     void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
 private slots:
     void setIdPrivateProfile(QByteArray id);
