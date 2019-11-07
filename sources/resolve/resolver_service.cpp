@@ -153,8 +153,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
     qDebug() << "Resolver: receive " << msgType;
-    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE)
-        && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
+    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
     {
         if (RESPONSE.contains(msgType))
         {
@@ -452,6 +451,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             pckgCounter->erase(pckgCounterIT);
             fileMap->erase(fileMapIT);
             listFile->erase(listFileIT);
+            delete listFileIT.value();
         }
         handlerFileMutex.unlock();
     }
