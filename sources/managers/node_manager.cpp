@@ -519,6 +519,12 @@ void NodeManager::connectUi()
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
 
+    //=============================================CHAT=======================================
+    connect(uiController, &UiController::createChat, chatManger, &ChatManager::CreateNewChat);
+    connect(uiController, &UiController::inviteToChat, chatManger, &ChatManager::InviteToChat);
+    connect(uiController, &UiController::sendMessage, chatManger, &ChatManager::SendMessage);
+
+    //
     uiController->startThreads();
 }
 #endif
