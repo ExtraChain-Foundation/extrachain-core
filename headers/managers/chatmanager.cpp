@@ -141,6 +141,10 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
                        actorId);
 }
 
+void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
+{
+}
+
 ChatManager::~ChatManager()
 {
     _chatList.clear();
