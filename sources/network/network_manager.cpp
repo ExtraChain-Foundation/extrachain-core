@@ -375,15 +375,6 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
     return nullptr;
 }
 
-// void NetManager::MoveToDfsN()
-//{
-//    QObject *sender = QObject::sender();
-//    SocketService *connection = qobject_cast<SocketService *>(sender);
-//    disconnectSocket(connection);
-//    connections.removeAt(connections.indexOf(connection));
-//    emit newDfsSocket(connection);
-//}
-
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
     SocketPair socketPair(peerAddress.toString().toStdString(), 0);

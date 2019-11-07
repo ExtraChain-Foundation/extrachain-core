@@ -114,17 +114,18 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
     QFile file(tmpPath);
     if (!file.open(QIODevice::ReadOnly))
     {
-        qDebug() << "Fuck, fucking frick, where are files";
+        qDebug() << "SaveFN not succeded: file not opened";
         return;
     }
-    QByteArray data = file.readAll();
-    file.close();
-    file.remove();
-    QFile result(path);
-    result.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    result.write(data);
-    result.flush();
-    result.close();
+    file.rename(path);
+    //    QByteArray data = file.readAll();
+    //    file.close();
+    //    file.remove();
+    //    QFile result(path);
+    //    result.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    //    result.write(data);
+    //    result.flush();
+    //    result.close();
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
     appendC(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),

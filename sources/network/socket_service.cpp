@@ -177,6 +177,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
 void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketData)
 {
     emit msgReady(data, socketData);
+    QCoreApplication::processEvents();
     return nullptr;
 }
 
@@ -215,6 +216,7 @@ void SocketService::sockReady()
     }
     if (socket->bytesAvailable())
         sockReady();
+    QCoreApplication::processEvents();
 }
 
 void SocketService::closeSocket()
@@ -252,6 +254,7 @@ void SocketService::process()
     {
         this->socket->connectToHost(address, port);
     }
+    QCoreApplication::processEvents();
 }
 
 void SocketService::establishConnection()

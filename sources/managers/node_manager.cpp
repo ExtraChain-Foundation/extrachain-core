@@ -14,11 +14,11 @@ NodeManager::NodeManager()
     netManager = new NetManager(accController, actorIndex);
 
     ThreadPool::addThread(netManager);
-    //    QFuture<void> future1Net = QtConcurrent::run(netManager, &NetManager::process);
     this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
+    prProfile->setAccountController(accController);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
@@ -32,6 +32,7 @@ NodeManager::NodeManager()
     resolveManager->setNode(this);
     netManager->setResolveManager(resolveManager);
     dfs->initDFSNetManager(resolveManager);
+    prProfile->setDfs(dfs);
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE

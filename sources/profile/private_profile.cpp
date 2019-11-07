@@ -1,4 +1,16 @@
 #include <profile/private_profile.h>
+#include "headers/managers/account_controller.h"
+#include "dfs/controls/headers/dfs.h"
+
+void PrivateProfile::setAccountController(AccountController *value)
+{
+    acContorller = value;
+}
+
+void PrivateProfile::setDfs(Dfs *value)
+{
+    dfs = value;
+}
 
 void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, QByteArray id)
 {
@@ -93,7 +105,10 @@ void PrivateProfile::profile(QByteArray hash)
                 idList = data.split('|');
                 emit setIdProfile(idList.first());
                 qDebug() << "Load private profile with id" << idList.first();
-                emit initPrivateProfile(idList.first(), idList);
+                acContorller->loadActors(idList.first(), idList);
+                if (acContorller->getMainActor() != nullptr)
+                    dfs->init();
+                //                emit initPrivateProfile(idList.first(), idList);
             }
             else
                 continue;
