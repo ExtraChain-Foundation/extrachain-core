@@ -19,6 +19,7 @@ NodeManager::NodeManager()
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
     prProfile->setAccountController(accController);
+    chatManger = new ChatManager(accController);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
@@ -66,6 +67,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
+    ThreadPool::addThread(chatManger);
 
 #ifdef ETALONIUM_CONSOLE
     emit accController->initDfs();
@@ -539,6 +541,7 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
+    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
 }
 

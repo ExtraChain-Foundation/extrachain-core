@@ -44,8 +44,10 @@ public slots:
     //                      QByteArray invitedId);
     void getSignalFromChats(const QString &path); //+ connect with Chats
 signals:
-    void sendDataToBlockhainFromChatManager(const QString &path,
-                                            const based_dfs_struct::Type &type); //----- connet with dfs
+    void sendDataToBlockhainFromChatManager(
+        const QString &path, const based_dfs_struct::Type &type,
+        const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
+        const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW); //----- connet with dfs
 };
 
 #endif // CHATMANAGER_H

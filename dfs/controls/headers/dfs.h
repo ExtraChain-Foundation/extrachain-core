@@ -64,7 +64,8 @@ public slots:
     void initUser(BigNumber userId);
 
     void savedNewData(const QString &path, const based_dfs_struct::Type &type,
-                      const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
+                      const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
+                      const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW);
     void process();
 };
 

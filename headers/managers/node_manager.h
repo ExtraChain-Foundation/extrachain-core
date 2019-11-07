@@ -21,7 +21,7 @@ class ResolveManager;
 #include "enc/crypt_manager.h"
 #include "managers/sm_manager.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
-
+#include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 
 #ifdef ETALONIUM_CLIENT
@@ -42,7 +42,7 @@ private:
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
-
+    ChatManager *chatManger;
     ResolveManager *resolveManager;
 
     PrivateProfile *prProfile;
