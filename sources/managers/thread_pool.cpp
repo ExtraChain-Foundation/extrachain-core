@@ -20,9 +20,8 @@ QThread *ThreadPool::addThread(QList<QObject *> workers)
     }
 
     QObject::connect(thread, &QThread::finished, [thread, workers]() {
-        qDebug() << "Remove thread for" << workers << "from pool";
-
         threads.removeAt(threads.indexOf(thread));
+        qDebug() << "Remove thread for" << workers << "from pool with length" << threads.length();
         thread->deleteLater();
     });
 
@@ -39,7 +38,7 @@ QThread *ThreadPool::addThread(QList<QObject *> workers)
         isFirst = false;
     }
 
-    qDebug() << "Add thread for" << workers << "to pool";
+    qDebug() << "Add thread for" << workers << "to pool with length" << threads.length();
     thread->start();
     threads << thread;
 

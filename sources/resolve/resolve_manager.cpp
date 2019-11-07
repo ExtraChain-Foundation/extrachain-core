@@ -1,4 +1,4 @@
-#include "headers/resolve/resolve_manager.h"
+﻿#include "headers/resolve/resolve_manager.h"
 
 void ResolveManager::setNode(NodeManager *value)
 {
@@ -101,6 +101,8 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
         resolvers.last()->setDfs(dfs);
         connectSignals(resolvers.last());
         resolvers.last()->setTask(msg, receiver);
+        auto crutch = resolvers.last();
+        connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
         ThreadPool::addThread(resolvers.last());
         //        }
         mutex.unlock();
@@ -144,10 +146,10 @@ void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
     disconnectSignals(resolver);
-    //    emit resolver->finished();
     resolvers.removeOne(resolver);
-    resolver->thread()->deleteLater();
-    delete resolver;
+    emit resolver->finished();
+    // resolver->thread()->deleteLater();
+    // delete resolver;
     //    mutex.tryLock(100);
     //    if (unprocessed.size() > 0)
     //    {
