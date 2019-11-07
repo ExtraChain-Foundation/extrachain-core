@@ -34,15 +34,18 @@ private:
                                    //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
 public:
-    ChatManager(AccountController *accController);                    //+
-    void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //+
-    void CreateNewChat();                                             //+
-    void InviteToChat(QByteArray chatId, QByteArray actorId);         //+
-    ~ChatManager();                                                   //+
+    ChatManager(AccountController *accController); //+                            //+
+    ~ChatManager();                                //+
+
 public slots:
     // void addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
     //                      QByteArray invitedId);
-    void getSignalFromChats(const QString &path); //+ connect with Chats
+    void getSignalFromChats(const QString &path);                     //+ connect with Chats
+    void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //+
+    void CreateNewChat();
+    void InviteToChat(QByteArray chatId, QByteArray actorId); //+
+    void SendMessage(QByteArray chatId, QByteArray message);  //-
+
 signals:
     void sendDataToBlockhainFromChatManager(
         const QString &path, const based_dfs_struct::Type &type,
@@ -51,3 +54,14 @@ signals:
 };
 
 #endif // CHATMANAGER_H
+
+/*
+    get chat list
+    // chatId
+    // actorId, если диалог
+    // chatType = 1 - диалог, 2 - группа
+    // last message
+    // last message time
+
+
+*/

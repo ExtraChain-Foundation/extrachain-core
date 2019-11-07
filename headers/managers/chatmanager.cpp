@@ -18,18 +18,23 @@
 void ChatManager::InitializeChatList()
 {
     // send to chat it path
-    QDirIterator it(getPathToMyChats(), QDirIterator::Subdirectories);
     QDir().mkpath(getPathToMyChats());
+    QDirIterator it(getPathToMyChats(), QDirIterator::Subdirectories);
     QByteArray chatPath = "-1";
+
     while (it.hasNext())
     {
         chatPath = convertChatIdToFullPath(it.fileName().toLocal8Bit());
         if (chatPath == "-1")
+        {
+            it.next();
             continue;
+        }
 
         Chat *temp = new Chat(it.fileName().toLocal8Bit(), _accController, chatPath);
         if (temp->getMyCurrentSession() == temp->getActualCurrentSession())
             _chatList.push_front(temp);
+        it.next();
     }
 }
 
