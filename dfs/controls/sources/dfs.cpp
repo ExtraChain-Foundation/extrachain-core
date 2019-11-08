@@ -157,7 +157,7 @@ void Dfs::statusD()
 
 void Dfs::signalConnection()
 {
-    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
+    //    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
     //    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
     //    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
     //    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
@@ -194,7 +194,17 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
 
     appendC(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),
             based_dfs_struct::toByteArray(type));
-
+    QByteArray prevFile = pathList.at(PathStruct::name);
+    BigNumber prFB = BigNumber(prevFile);
+    prFB--;
+    QByteArray prevFilePath =
+        Serialization::serialize({ pathList.at(PathStruct::rFolder), pathList.at(PathStruct::aId) }, "/")
+        + prFB.toByteArray() + based_dfs_struct::FILE_IDENTIFICATOR.toUtf8();
+    if (QFile(prevFilePath).exists())
+    {
+        Message::dfs_request rqst(prevFilePath, accountControler->getCurrentActor().getId().toActorId());
+        dfsNetManager->send(rqst.serialize());
+    }
     sender->sendFile(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
@@ -315,4 +325,8 @@ void Dfs::init()
 void Dfs::initUser(BigNumber userId)
 {
     initD(userId.toActorId());
+    QString cPath = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
+        + based_dfs_struct::ACTOR_CARD_FILE;
+    Message::dfs_request rqst(cPath, accountControler->getCurrentActor().getId().toActorId());
+    dfsNetManager->send(rqst.serialize());
 }
