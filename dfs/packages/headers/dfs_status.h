@@ -3,7 +3,7 @@
 #include "network/packages/base_message.h"
 namespace Messages {
 
-static const QByteArray DFS_STATUS_MESSAGE = "dfsStatusMessage";
+// static const QByteArray DFS_STATUS_MESSAGE = "dfsStatusMessage";
 
 class DfsStatus : public BaseMessage
 {

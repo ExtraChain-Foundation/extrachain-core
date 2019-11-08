@@ -142,7 +142,7 @@ private:
      * @param msg
      * @return
      */
-    QByteArray checkMsgType(const QByteArray &msg) const;
+    //    QByteArray checkMsgType(const QByteArray &msg) const;
     /**
      * @brief calcHash
      * @param request
@@ -224,8 +224,6 @@ signals:
     //                       const SocketPair &receiver);
     // retranslate package to their owners class
     // new data signals
-    void newDfsPack(const Messages::DfsMessage &msg);
-
     void newProfile(const QByteArray &msg);
 
     //    void newActor(const Actor<KeyPublic> &actor);

@@ -1,4 +1,4 @@
-#include "headers/resolve/resolve_manager.h"
+﻿#include "headers/resolve/resolve_manager.h"
 
 void ResolveManager::setNode(NodeManager *value)
 {
@@ -83,15 +83,31 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
     return Utils::calcKeccak(msg);
 }
 
-void ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
+bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
-    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
-    resolvers.last()->setNode(node);
-    resolvers.last()->setBlockchain(blockchain);
-    resolvers.last()->setDfs(dfs);
-    connectSignals(resolvers.last());
-    resolvers.last()->setTask(msg, receiver);
-    ThreadPool::addThread(resolvers.last());
+    bool lockRes = mutex.tryLock(100);
+    if (lockRes)
+    {
+        //        if (resolvers.size() >= RESOLVER_MAX)
+        //        {
+        //            DataStruct d = { msg, receiver };
+        //            unprocessed.append(d);
+        //        }
+        //        else
+        //        {
+        resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
+        resolvers.last()->setNode(node);
+        resolvers.last()->setBlockchain(blockchain);
+        resolvers.last()->setDfs(dfs);
+        connectSignals(resolvers.last());
+        resolvers.last()->setTask(msg, receiver);
+        auto crutch = resolvers.last();
+        connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
+        ThreadPool::addThread(resolvers.last());
+        //        }
+        mutex.unlock();
+    }
+    return lockRes;
 }
 
 void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msgType)
@@ -132,6 +148,15 @@ void ResolveManager::taskFinished()
     disconnectSignals(resolver);
     resolvers.removeOne(resolver);
     emit resolver->finished();
+    // resolver->thread()->deleteLater();
+    // delete resolver;
+    //    mutex.tryLock(100);
+    //    if (unprocessed.size() > 0)
+    //    {
+    //        if (this->setTask(unprocessed[0].msg, unprocessed[0].receiver))
+    //            unprocessed.removeAt(0);
+    //    }
+    //    mutex.unlock();
 }
 
 void ResolveManager::process()

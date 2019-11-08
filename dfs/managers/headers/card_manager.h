@@ -14,7 +14,7 @@ public:
     static QStringList getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type);
     static QByteArray getLastFileName(const QByteArray &userId);
     static QStringList getAllFiles(const QByteArray &userId);
-    static based_dfs_struct::Type getTypeByName(const QString &path, const QByteArray &uxerId);
+    static based_dfs_struct::Type getTypeByName(const QString &path, const QByteArray &userId);
     //    function to create
 };
 

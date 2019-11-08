@@ -47,8 +47,10 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 bool ResolverService::validate(const Messages::IMessage &message)
 {
     BigNumber signer = message.getSigner();
-
+    if (signer == 0)
+        return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
+
     if (!actor.isEmpty())
     {
         return message.verifyDigSig(actor);
@@ -63,13 +65,13 @@ bool ResolverService::validate(const Messages::IMessage &message)
     }
 }
 
-QByteArray ResolverService::checkMsgType(const QByteArray &msg) const
-{
+// QByteArray ResolverService::checkMsgType(const QByteArray &msg) const
+//{
 
-    Messages::BaseMessage b;
-    b.deserialize(msg);
-    return b.getMsgType();
-}
+//    Messages::BaseMessage b;
+//    b.deserialize(msg);
+//    return b.getMsgType();
+//}
 
 QByteArray ResolverService::calcHash(const QByteArray &request) const
 {
@@ -153,18 +155,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
     qDebug() << "Resolver: receive " << msgType;
-    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_CHANGES_MESSAGE)
-        && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
+    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
     {
         if (RESPONSE.contains(msgType))
         {
             BaseMessageResponse responseMessage(msg);
             if (MessageIsNotValid(responseMessage))
-                return;
-        }
-        else
-        {
-            if (MessageIsNotValid(message))
                 return;
         }
     }
@@ -189,12 +185,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         //        emit newActor(actor);
         emit TaskFinished();
     }
-    else if (msgType == DFS_CHANGES_MESSAGE)
-    {
-        DfsMessage message(msg);
-        emit newDfsPack(message);
-        emit TaskFinished();
-    }
+    //    else if (msgType == DFS_CHANGES_MESSAGE)
+    //    {
+    //        DfsMessage message(msg);
+    //        emit newDfsPack(message);
+    //        emit TaskFinished();
+    //    }
     else if (msgType == BLOCK_MESSAGE)
     {
         Block block(message.getMsg_data());
@@ -372,6 +368,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
                  << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
         emit TaskFinished();
     }
+    else
+        emit TaskFinished();
 }
 void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType, const SocketPair &receiver)
 {
@@ -403,6 +401,8 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     else if (msgType == Message::dfsMessageType::requestMessage)
     {
         qDebug() << "[requestMessage:]";
+        Message::dfs_request message(data);
+        dfs->fileResponce(message.filePath, receiver);
     }
     else if (msgType == Message::dfsMessageType::storageMessage)
     {
@@ -452,6 +452,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             pckgCounter->erase(pckgCounterIT);
             fileMap->erase(fileMapIT);
             listFile->erase(listFileIT);
+            delete listFileIT.value();
         }
         handlerFileMutex.unlock();
     }
@@ -478,6 +479,7 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
     {
         // Take actorid of file owner
         QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
+        qDebug() << "Create temp file: actor - " << BigNumber(pathList.at(PathStruct::aId));
         Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(pathList.at(PathStruct::aId)));
 
         if (!actor.isEmpty())

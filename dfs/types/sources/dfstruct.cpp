@@ -73,6 +73,8 @@ based_dfs_struct::Type based_dfs_struct::convertToDFType(QByteArray type)
         return Type::chates;
     else if (type == "postes")
         return postes;
+    else if (type == "card")
+        return card;
     else
         return Type::servic;
 }
@@ -91,6 +93,8 @@ QByteArray based_dfs_struct::toByteArray(Type type)
         return "chates";
     else if (type == postes)
         return "postes";
+    else if (type == card)
+        return "card";
     else
         return "servic";
 }
@@ -108,6 +112,8 @@ QString based_dfs_struct::toString(Type type)
         return "chates";
     else if (type == postes)
         return "postes";
+    else if (type == card)
+        return "card";
     else
         return "servic";
 }

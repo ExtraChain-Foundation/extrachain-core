@@ -82,7 +82,8 @@ enum Type
     chates,
     postes,
     servic,
-    cdoctp
+    cdoctp,
+    card
 };
 Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);

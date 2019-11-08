@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QMutex>
 
 class ThreadPool : public QObject
 {

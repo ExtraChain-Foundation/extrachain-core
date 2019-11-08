@@ -28,6 +28,7 @@ class NetManager;
 
 #include "network/socket_pair.h"
 class DFSNetManager;
+class SocketWorker;
 using namespace SearchEnum;
 
 /**
@@ -39,6 +40,8 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
+    SocketWorker *readWorker;
+    QByteArray *dpBuffer;
     NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
@@ -95,6 +98,9 @@ public slots:
     void setActive(bool active);
 
 public:
+    void gotMessage(QByteArray msg, SocketPair rec);
+    BigNumber getID();
+    void processID(QByteArray id);
     /**
      * @brief Send message using QTcpSocket
      * @param message

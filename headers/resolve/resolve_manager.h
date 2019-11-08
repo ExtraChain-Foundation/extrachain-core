@@ -22,12 +22,19 @@ class NodeManager;
 #include "headers/datastorage/index/actorindex.h"
 #include "headers/managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
+struct DataStruct
+{
+    QByteArray msg;
+    SocketPair receiver;
+};
 
 class ResolveManager : public QObject
 {
     Q_OBJECT
 
 private:
+    const int RESOLVER_MAX = 100;
+    QList<DataStruct> unprocessed;
     QList<ResolverService *> resolvers;
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
     QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
@@ -62,7 +69,7 @@ private:
     QList<ResolverService *> getFinished();
 
 public:
-    void setTask(QByteArray msg, const SocketPair &receiver);
+    bool setTask(QByteArray msg, const SocketPair &receiver);
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);
