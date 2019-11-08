@@ -445,6 +445,18 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         {
             Message::title_message title(fileMapIT.value());
             qDebug() << "[&DFSResolver][file succed written to tmp]";
+            if (listFileIT.value()->size() != title.fileSize)
+            {
+                qDebug() << "[&DFSResolver][tmp file size not enought]";
+                QString path = listFileIT.value()->fileName();
+                path.chop(based_dfs_struct::FILE_IDENTIFICATOR.size());
+                Message::dfs_request rqst(path, ac->getCurrentActor().getId().toActorId());
+                dfs->dfsNetManager->send(rqst.serialize());
+                listFile->erase(listFileIT);
+                listFileIT.value()->remove();
+                delete listFileIT.value();
+                return;
+            }
             listFileIT.value()->close();
             dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
                         based_dfs_struct::convertToDFType(title.f_type));

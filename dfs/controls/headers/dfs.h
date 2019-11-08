@@ -22,7 +22,6 @@ private:
     AccountController *accountControler;
     ActorIndex *actorIndex;
 
-    DFSNetManager *dfsNetManager;
     Sender *sender;
     //    DFSResolver *resolver;
 
@@ -42,6 +41,7 @@ public slots:
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
+    DFSNetManager *dfsNetManager;
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
     ~Dfs();
 
