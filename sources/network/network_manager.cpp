@@ -25,7 +25,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
     QSettings settings;
 
     if (!settings.value("network/serverIp").isValid())
-        settings.setValue("network/serverIp", "51.68.181.52");
+        settings.setValue("network/serverIp", "51.68.181.53");
     if (!settings.value("network/allowLocalServer").isValid())
         settings.setValue("network/allowLocalServer", "false");
 
