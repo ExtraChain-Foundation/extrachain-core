@@ -3,6 +3,8 @@
 QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type)
 {
     QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    if (!card.exists())
+        return {};
     card.open(QIODevice::ReadOnly);
     QList<QByteArray> list =
         Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
@@ -23,6 +25,8 @@ QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_stru
 QByteArray CardManager::getLastFileName(const QByteArray &userId)
 {
     QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    if (!file.exists())
+        return "";
     file.open(QIODevice::ReadOnly);
 
     QList<QByteArray> list =
@@ -35,6 +39,8 @@ QByteArray CardManager::getLastFileName(const QByteArray &userId)
 QStringList CardManager::getAllFiles(const QByteArray &userId)
 {
     QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    if (!card.exists())
+        return {};
     card.open(QIODevice::ReadOnly);
     QList<QByteArray> list =
         Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
@@ -51,6 +57,8 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
 based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
 {
     QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    if (!card.exists())
+        return {};
     card.open(QIODevice::ReadOnly);
     QList<QByteArray> list =
         Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);

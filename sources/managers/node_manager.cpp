@@ -494,8 +494,7 @@ void NodeManager::connectUi()
     }); // FOR SEVA
     connect(uiController, &UiController::getInterests,
             [this]() { emit loadInterFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile()); });
-    connect(prProfile, &PrivateProfile::interestsToUi, uiController,
-            &UiController::loadInterests); // FOR SEVA
+    connect(prProfile, &PrivateProfile::interestsToUi, uiController, &UiController::loadInterests);
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);

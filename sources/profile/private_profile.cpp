@@ -14,13 +14,13 @@ void PrivateProfile::setDfs(Dfs *value)
 
 void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, QByteArray id)
 {
-    QDir().mkdir("keystore");
+    QDir().mkdir("keystore/profile");
     QByteArray data = login + password;
     QByteArray secureLogin = Utils::calcKeccak(data);
     data = secureLogin + id;
     blowFish_crypt crypt;
     data = crypt.EncryptBlowFish(data, secureLogin);
-    QFile file("keystore/" + id + ".private");
+    QFile file("keystore/profile/" + id + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
     file.flush();
@@ -31,8 +31,8 @@ void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, Q
 void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray _data,
                                         typeDataPrProfile type)
 {
-    QDir().mkdir("keystore");
-    QFile file("keystore/" + idProfile + ".private");
+    QDir().mkdir("keystore/profile");
+    QFile file("keystore/profile/" + idProfile + ".private");
     if (!file.exists())
     {
         qDebug() << "Don`t have private profile";
@@ -87,7 +87,7 @@ void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfi
 
 void PrivateProfile::loadInterestsFromPrivateProfile(QByteArray hash, QByteArray idProfile)
 {
-    QFile file("keystore/" + idProfile + ".private");
+    QFile file("keystore/profile/" + idProfile + ".private");
     file.open(QIODevice::ReadOnly);
     QByteArray data = file.readAll();
     file.flush();
@@ -125,8 +125,8 @@ void PrivateProfile::process()
 
 void PrivateProfile::profile(QByteArray hash)
 {
-    QDir().mkdir("keystore");
-    QDir dir("keystore");
+    QDir().mkdir("keystore/profile");
+    QDir dir("keystore/profile");
     QStringList users = dir.entryList(QDir::Files);
     QByteArrayList idList;
     if (users.isEmpty())
@@ -138,7 +138,7 @@ void PrivateProfile::profile(QByteArray hash)
     {
         for (QString &fileName : users)
         {
-            QFile file("keystore" + fileName);
+            QFile file("keystore/profile/" + fileName);
             file.open(QIODevice::ReadOnly);
             QByteArray data = file.readAll();
             file.flush();
