@@ -1,4 +1,5 @@
 #include "managers/account_controller.h"
+#include "headers/datastorage/blockchain.h"
 
 QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
 {
@@ -28,6 +29,11 @@ ActorIndex *AccountController::getActorIndex() const
 void AccountController::setActorIndex(ActorIndex *value)
 {
     actorIndex = value;
+}
+
+void AccountController::setBlockchain(Blockchain *value)
+{
+    blockchain = value;
 }
 
 AccountController::AccountController(ActorIndex *actorIndex)
@@ -70,7 +76,8 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     file.write(str);
     file.flush();
     file.close();
-    emit addActorInActorIndex(actor->convertToPublic());
+    actorIndex->addActor(actor->convertToPublic());
+    //    emit addActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
 
@@ -84,7 +91,8 @@ Actor<KeyPrivate> AccountController::createActor(int account)
         emit initDfs();
     }
     emit newActorIsCreated(this->getMainActor()->getId(), account);
-
+    if (!accounts.isEmpty())
+        blockchain->getBlockZero();
     return *actor;
 }
 
@@ -171,6 +179,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
     if (loaded > 0)
     {
         qDebug() << loaded << " accounts have been loaded" << id;
+        blockchain->getBlockZero();
         emit loadWallets(id, idList);
     }
     else

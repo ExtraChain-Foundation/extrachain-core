@@ -1,4 +1,5 @@
 ﻿#include "network/network_manager.h"
+#include "headers/resolve/resolve_manager.h"
 
 using namespace Messages;
 
@@ -10,6 +11,11 @@ QList<SocketService *> NetManager::getConnections() const
 NetManager *NetManager::getMe()
 {
     return this;
+}
+
+void NetManager::setResolveManager(ResolveManager *value)
+{
+    resolveManager = value;
 }
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
@@ -89,9 +95,9 @@ void NetManager::resolverMessage(const QHostAddress &from, const QString &messag
 
 void NetManager::connectSocket()
 {
-    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
+    //    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
     connect(connections.last(), &SocketService::clientDisconnected, this, &NetManager::removeConnection);
-    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    //    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
     //    connect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
@@ -100,9 +106,9 @@ void NetManager::connectSocket()
 void NetManager::disconnectSocket(SocketService *connection)
 {
     disconnect(connection, &SocketService::clientRemove, this, &NetManager::removeConnection);
-    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
+    //    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
-    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    //    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
@@ -310,8 +316,9 @@ void NetManager::setupDiscoveryServiceConnections()
 // Basic methods
 void NetManager::broadcastMsg(const QByteArray &msg)
 {
-    SocketPair socketPair("0.0.0.0", 0, this);
-    emit sendMsg(msg, socketPair);
+    SocketPair socketPair("0.0.0.0", 0);
+    //    emit sendMsg(msg, socketPair);
+    distMessage(msg, socketPair);
 }
 
 void NetManager::sendMessage(const QByteArray &message)
@@ -346,36 +353,40 @@ void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType,
     BaseMessage msg(msgType);
     msg.init(data);
 
-    emit sendMsg(msg.serialize(), receiver);
+    //    emit sendMsg(msg.serialize(), receiver);
+    distMessage(msg.serialize(), receiver);
 }
 
-void NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
+    for (int i = 0; i < connections.size(); i++)
+        connections[i]->distMsg(data, socketData);
+}
+
+void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+{
+    mutex.lock();
     if (checkMsgCount(msg, handler))
-        emit MsgReceived(msg, receiver);
+        resolveManager->setTask(msg, receiver);
+    //        emit MsgReceived(msg, receiver);
     else
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
+    mutex.unlock();
+    return nullptr;
 }
-
-// void NetManager::MoveToDfsN()
-//{
-//    QObject *sender = QObject::sender();
-//    SocketService *connection = qobject_cast<SocketService *>(sender);
-//    disconnectSocket(connection);
-//    connections.removeAt(connections.indexOf(connection));
-//    emit newDfsSocket(connection);
-//}
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
-    SocketPair socketPair(peerAddress.toString().toStdString(), 0, this);
-    emit sendMsg(msg.serialize(), socketPair);
+    SocketPair socketPair(peerAddress.toString().toStdString(), 0);
+    //    emit sendMsg(msg.serialize(), socketPair);
+    distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int port)
 {
-    SocketPair socketPair(peerAddress.toString().toStdString(), port, this);
-    emit sendMsg(msg.serialize(), socketPair);
+    SocketPair socketPair(peerAddress.toString().toStdString(), port);
+    //    emit sendMsg(msg.serialize(), socketPair);
+    distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::upnpErrDis(QString msg)
@@ -391,6 +402,7 @@ void NetManager::upnpErrNet(QString msg)
 SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 port)
 {
     SocketService *socket = new SocketService(address.toString(), port);
+    socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
@@ -403,6 +415,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
 void NetManager::addConnection(qint64 socketDescriptor)
 {
     SocketService *socket = new SocketService(socketDescriptor);
+    socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));

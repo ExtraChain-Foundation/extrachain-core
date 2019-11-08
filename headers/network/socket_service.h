@@ -1,5 +1,16 @@
 #ifndef SOCKET_SERVICE_H
 #define SOCKET_SERVICE_H
+//#ifndef DFS_NETWORK_MANAGER_DEF
+//#define DFS_NETWORK_MANAGER_DEF
+// class DFSNetManager;
+//#include "dfs/managers/headers/dfsnetmanager.h"
+//#endif
+
+#ifndef NETWORK_MANAGER_DEF
+#define NETWORK_MANAGER_DEF
+class NetManager;
+#include "headers/network/network_manager.h"
+#endif
 
 #include <QObject>
 #include <QtNetwork/QTcpSocket>
@@ -16,7 +27,8 @@
 #include <QTimer>
 
 #include "network/socket_pair.h"
-
+class DFSNetManager;
+class SocketWorker;
 using namespace SearchEnum;
 
 /**
@@ -28,6 +40,9 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
+    SocketWorker *readWorker;
+    QByteArray *dpBuffer;
+    NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
     bool active = false;
@@ -47,6 +62,7 @@ public:
     ~SocketService() override;
 
 signals:
+    void msgReady(const QByteArray &data, const SocketPair &socketData);
     void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
     /**
      * @brief has only one connection with &QTcpSocket::disconnected on client
@@ -71,6 +87,7 @@ public slots:
      * @param message
      */
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
+
     /**
      * @brief stops this thread
      */
@@ -81,6 +98,14 @@ public slots:
     void setActive(bool active);
 
 public:
+    void gotMessage(QByteArray msg, SocketPair rec);
+    BigNumber getID();
+    void processID(QByteArray id);
+    /**
+     * @brief Send message using QTcpSocket
+     * @param message
+     */
+    void *distMsg(const QByteArray &data, const SocketPair &socketData);
     bool *socketStatus() const;
     bool isActive() const;
     QString getAddress() const;
@@ -96,5 +121,6 @@ public:
     BigNumber getIdentificator() const;
     void setIdentificator(const BigNumber &value);
     bool getActive() const;
+    void setNetManager(NetManager *value);
 };
 #endif // SOCKET_SERVICE_H

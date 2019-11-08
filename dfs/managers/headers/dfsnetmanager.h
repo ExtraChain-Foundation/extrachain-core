@@ -1,5 +1,10 @@
 #ifndef DFSNETMANAGER_H
 #define DFSNETMANAGER_H
+#ifndef SOCKET_SERVICE_DEF
+#define SOCKET_SERVICE_DEF
+class SocketService;
+#include "headers/network/socket_service.h"
+#endif // SOCKET_SERVICE
 
 #include "headers/network/network_manager.h"
 #include "dfs/packages/headers/all.h"
@@ -14,7 +19,7 @@ class DFSNetManager : public NetManager
 
 public:
     DFSNetManager(AccountController *accountList, ActorIndex *actorIndex);
-    ~DFSNetManager();
+    ~DFSNetManager() override;
 
 private:
     /**
@@ -28,15 +33,16 @@ private:
 
 public:
     NetManager *getNetManager();
-signals:
-    void finished();
-    void sendMsg(const QByteArray &message, const SocketPair &receiver);
-    void newMessage(const QByteArray &message, const SocketPair &receiver);
-public slots:
-    void appendSocket(SocketService *socket);
-    void newMsg(const QByteArray &message, const SocketPair &receiver);
+    void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
     void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
               const SocketPair &receiver = SocketPair());
+signals:
+    void finished();
+    //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
+    //    void newMessage(const QByteArray &message, const SocketPair &receiver);
+public slots:
+    void appendSocket(SocketService *socket);
+    //    void newMsg(const QByteArray &message, const SocketPair &receiver);
     void process();
 private slots:
     void removeConnection();

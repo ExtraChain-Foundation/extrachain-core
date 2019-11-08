@@ -39,9 +39,10 @@ void Dfs::saveD(const QString &path, const based_dfs_struct::Type &type,
     dfsFile.write(data);
     dfsFile.flush();
     dfsFile.close();
-    emit sendQ(dfsPath, type, SocketPair());
+    //    emit sendQ(dfsPath, type, SocketPair());
+    sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(dfsPath, type, BigNumber("-2"));
+    emit usersChanges(dfsPath, type, userId); // TODO
 #endif
 }
 
@@ -75,6 +76,63 @@ QByteArray Dfs::setName(const QByteArray &userId)
         return "1";
 }
 
+QStringList Dfs::returnDifs(const QString &adin, const QString &dva)
+{
+    QFile file1(adin);
+    QFile file2(dva);
+    if (!file1.exists())
+    {
+        qDebug() << "first file is not exist";
+        return {};
+    }
+    file1.open(QIODevice::ReadOnly);
+    QByteArray data1 = file1.readAll();
+    file1.flush();
+    file1.close();
+    QStringList result;
+    if (!file2.exists())
+    {
+        QByteArrayList d1 = Serialization::deserialize(data1, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+        qDebug() << "second file is not exist";
+        for (const QByteArray &el : d1)
+        {
+            result.append(el);
+        }
+        return result;
+    }
+
+    file2.open(QIODevice::ReadOnly);
+    QByteArray data2 = file2.readAll();
+    file2.flush();
+    file2.close();
+    if (data1 == data2)
+    {
+        // Vsё ok
+    }
+    else
+    {
+        QByteArrayList d1 = Serialization::deserialize(data1, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+        QByteArrayList d2 = Serialization::deserialize(data2, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+
+        for (const QByteArray &el : d1)
+        {
+            if (!d2.contains(el))
+            {
+                result.append(el);
+            }
+        }
+        for (const QByteArray &el : d2)
+        {
+            if (!d1.contains(el))
+            {
+
+                result.append(el);
+            }
+        }
+    }
+    return result;
+}
+
 void Dfs::statusD()
 {
     if (QDir(based_dfs_struct::ROOT_FOOLDER_NAME).exists())
@@ -99,13 +157,13 @@ void Dfs::statusD()
 
 void Dfs::signalConnection()
 {
-    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
-    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
-    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
-    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
-    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
-    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
-    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
+    //    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
+    //    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
+    //    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
+    //    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
+    //    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
+    //    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
+    //    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
 }
 
 void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type)
@@ -113,27 +171,72 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
     QFile file(tmpPath);
     if (!file.open(QIODevice::ReadOnly))
     {
-        qDebug() << "Fuck, fucking frick, where are files";
+        qDebug() << "SaveFN not succeded: file not opened";
         return;
     }
-    QByteArray data = file.readAll();
+    if (type == based_dfs_struct::Type::card)
+    {
+        QStringList difs = returnDifs(tmpPath, path);
+        for (const QString &el : difs)
+        {
+            QByteArrayList res =
+                Serialization::deserialize(el.toUtf8(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR);
+            Message::dfs_request rqst(res.at(0), accountControler->getCurrentActor().getId().toActorId());
+            dfsNetManager->send(rqst.serialize());
+        }
+        file.remove();
+        return;
+    }
     file.close();
-    file.remove();
-    QFile result(path);
-    result.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    result.write(data);
-    result.flush();
-    result.close();
+    file.rename(path);
+
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
     appendC(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),
             based_dfs_struct::toByteArray(type));
+    QByteArray prevFile = pathList.at(PathStruct::name);
+    BigNumber prFB = BigNumber(prevFile);
+    prFB--;
+    QByteArray prevFilePath =
+        Serialization::serialize({ pathList.at(PathStruct::rFolder), pathList.at(PathStruct::aId) }, "/")
+        + prFB.toByteArray();
+    QDir dir(pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId));
+    QStringList list = dir.entryList({ "*.tmp" }, QDir::Files | QDir::NoDotAndDotDot);
+    if (!list.isEmpty())
+    {
+        for (QString el : list)
+        {
+            el.chop(based_dfs_struct::FILE_IDENTIFICATOR.size());
+            QString path = pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId) + '/' + el;
 
-    emit sendQ(path, type, SocketPair());
+            Message::dfs_request rqst(path, accountControler->getCurrentActor().getId().toActorId());
+            dfsNetManager->send(rqst.serialize());
+            QFile(path + based_dfs_struct::FILE_IDENTIFICATOR).remove();
+        }
+    }
+    //    if (QFile(prevFilePath + based_dfs_struct::FILE_IDENTIFICATOR.toUtf8()).exists())
+    //    {
+    //        Message::dfs_request rqst(prevFilePath,
+    //        accountControler->getCurrentActor().getId().toActorId()); dfsNetManager->send(rqst.serialize());
+    //    }
+    sender->sendFile(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(path.toUtf8(), type,
-                      BigNumber(pathList.at(PathStruct::aId))); // TODO
+    emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
 #endif
+}
+
+void Dfs::fileResponce(const QString path, const SocketPair &receiver)
+{
+    QFile file(path);
+    QByteArrayList pathList = Serialization::deserialize(path.toUtf8() + "/", "/");
+    if (file.exists())
+    {
+        based_dfs_struct::Type type = CardManager::getTypeByName(path, pathList.at(PathStruct::aId));
+        if (pathList.at(PathStruct::name) == based_dfs_struct::ACTOR_CARD_FILE)
+            type = based_dfs_struct::card;
+        sender->sendFile(path, type, receiver);
+    }
+    return;
 }
 
 void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver)
@@ -149,7 +252,7 @@ void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const S
             for (const QString &file : fList)
             {
                 based_dfs_struct::Type ftype = CardManager::getTypeByName(file, el.toUtf8());
-                emit sendQ(file, ftype, receiver);
+                sender->sendFile(file, ftype, receiver);
             }
         }
     }
@@ -168,7 +271,7 @@ void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const S
             {
                 based_dfs_struct::Type type = CardManager::getTypeByName(el, actorId);
                 if (type != based_dfs_struct::servic)
-                    emit sendQ(el, type, receiver);
+                    sender->sendFile(el, type, receiver);
                 else
                     qDebug() << "[&Dfs] the file with path" << el << "not have been found";
             }
@@ -180,12 +283,17 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
     , accountControler(accControler)
     , actorIndex(actorIndex)
 {
-    dfsNetManager = new DFSNetManager(accountControler, actorIndex);
-    ThreadPool::addThread(dfsNetManager);
 }
 
 Dfs::~Dfs()
 {
+}
+
+void Dfs::initDFSNetManager(ResolveManager *resolveManager)
+{
+    dfsNetManager = new DFSNetManager(accountControler, actorIndex);
+    dfsNetManager->setResolveManager(resolveManager);
+    ThreadPool::addThread(dfsNetManager);
 }
 
 void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
@@ -202,17 +310,37 @@ void Dfs::init()
 {
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     sender = new Sender(userId);
-    resolver = new DFSResolver(actorIndex);
+    sender->setNetManager(dfsNetManager);
+    //    resolver = new DFSResolver(actorIndex);
     //
     signalConnection();
     ThreadPool::addThread(sender);
-    ThreadPool::addThread(resolver);
+    //    ThreadPool::addThread(resolver);
 
     statusD();
     initD(userId);
+    QDir acDir(based_dfs_struct::ROOT_FOOLDER_NAME);
+    if (acDir.exists())
+    {
+        QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+        for (const QString &el : acList)
+        {
+            if (el.toUtf8() != accountControler->getCurrentActor().getId().toActorId())
+            {
+                QString cPath =
+                    based_dfs_struct::ROOT_FOOLDER_NAME + '/' + el + '/' + based_dfs_struct::ACTOR_CARD_FILE;
+                Message::dfs_request rqst(cPath, accountControler->getCurrentActor().getId().toActorId());
+                dfsNetManager->send(rqst.serialize());
+            }
+        }
+    }
 }
 
 void Dfs::initUser(BigNumber userId)
 {
     initD(userId.toActorId());
+    QString cPath = based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/'
+        + based_dfs_struct::ACTOR_CARD_FILE;
+    Message::dfs_request rqst(cPath, accountControler->getCurrentActor().getId().toActorId());
+    dfsNetManager->send(rqst.serialize());
 }

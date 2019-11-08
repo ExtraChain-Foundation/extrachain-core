@@ -1,6 +1,10 @@
 ﻿#ifndef NODE_MANAGER_H
 #define NODE_MANAGER_H
-
+#ifndef RESOLVE_MANAGER_DEF
+#define RESOLVE_MANAGER_DEF
+class ResolveManager;
+#include "headers/resolve/resolve_manager.h"
+#endif
 #include <QObject>
 #include <QMap>
 #include "network/network_manager.h"
@@ -17,7 +21,6 @@
 #include "enc/crypt_manager.h"
 #include "managers/sm_manager.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
-#include "resolve/resolve_manager.h"
 
 #include "profile/private_profile.h"
 
@@ -79,6 +82,8 @@ public:
     Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
     int getClientList();
 
+public:
+    void coinResponse(BigNumber receiver, BigNumber amount);
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
 #endif
@@ -99,7 +104,7 @@ private:
     void connectUi();
     void connectContractManager();
     void connectBlockchain();
-    void connectAccountController();
+    //    void connectAccountController();
     void connectActorIndex();
     void dfsConnection();
     void connectSignals();
@@ -127,8 +132,10 @@ signals:
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
-    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
+    //    void addActorInActorIndex(Actor<KeyPublic> actor);
+    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
+                            typeDataPrProfile type);
+    void loadInterFromPrProfile(QByteArray hash, QByteArray idProfile);
 private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
@@ -139,7 +146,6 @@ private slots:
     //    void makeContractFinalTransaction(Contract &contract);
 public slots:
     void tempareSlotForActors();
-    void coinResponse(BigNumber receiver, BigNumber amount);
 
     // test net & blockchain
 

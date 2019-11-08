@@ -7,7 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
-#include "dfs/managers/headers/package_resolver.h"
+//#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
@@ -22,9 +22,8 @@ private:
     AccountController *accountControler;
     ActorIndex *actorIndex;
 
-    DFSNetManager *dfsNetManager;
     Sender *sender;
-    DFSResolver *resolver;
+    //    DFSResolver *resolver;
 
     void initD(const QByteArray &userId);
     void saveD(const QString &path, const based_dfs_struct::Type &type = based_dfs_struct::Type::images,
@@ -33,27 +32,32 @@ private:
     void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
                  const QByteArray &type);
     QByteArray setName(const QByteArray &userId);
+    QStringList returnDifs(const QString &adin, const QString &dva);
     void statusD();
     void signalConnection();
 
 public slots:
-    void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
+    DFSNetManager *dfsNetManager;
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
     ~Dfs();
 
+public:
+    void initDFSNetManager(ResolveManager *resolveManager);
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
-
+    void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+    void fileResponce(const QString path, const SocketPair &receiver);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const based_dfs_struct::Type &type, const SocketPair &receiver);
-    void usersChanges(const QByteArray &path, const based_dfs_struct::Type &type, const BigNumber &actorId);
+    void usersChanges(const QByteArray &path, const based_dfs_struct::Type &type, const QByteArray &actorId);
 
 public slots:
 

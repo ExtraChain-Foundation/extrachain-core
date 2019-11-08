@@ -40,7 +40,7 @@ signals:
     // void sendTokenBalance(QMap<BigNumber,QMap<BigNumber,BigNumber>> tokenBalance);
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(const QByteArray &data, const QByteArray &type);
-    void addContractActorInActorIndex(Actor<KeyPublic> actor);
+    //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
     void saveActorInPrivateProfile(QByteArray id);
     void finished();
 };
