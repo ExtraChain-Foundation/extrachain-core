@@ -104,7 +104,8 @@ void NodeManager::connectSmContractManager()
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id,
+                                typeDataPrProfile::WALLETS);
     });
     connect(this, &NodeManager::editPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
@@ -464,7 +465,8 @@ void NodeManager::connectUi()
     });
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id,
+                                typeDataPrProfile::WALLETS);
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
     connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
@@ -486,6 +488,14 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+    connect(uiController, &UiController::editInterests, [this](QByteArray data) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), data,
+                                typeDataPrProfile::INTERESTS);
+    }); // FOR SEVA
+    connect(uiController, &UiController::getInterests,
+            [this]() { emit loadInterFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile()); });
+    connect(prProfile, &PrivateProfile::interestsToUi, uiController,
+            &UiController::loadInterests); // FOR SEVA
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);

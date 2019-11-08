@@ -133,7 +133,9 @@ signals:
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray id);
+    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
+                            typeDataPrProfile type);
+    void loadInterFromPrProfile(QByteArray hash, QByteArray idProfile);
 private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
