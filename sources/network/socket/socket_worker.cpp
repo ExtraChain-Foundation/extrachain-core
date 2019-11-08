@@ -48,7 +48,7 @@ void SocketWorker::doRead()
 {
     while (dpBuf->size() < 4)
     {
-        QThread::currentThread()->usleep(500);
+        QThread::currentThread()->msleep(500);
         //        doRead();
     }
     mutex.lock();
@@ -56,7 +56,7 @@ void SocketWorker::doRead()
     int pckSize = Utils::qByteArrayToInt(msgLength);
     dpBuf->remove(0, 4);
     while (dpBuf->size() < pckSize)
-        QThread::currentThread()->usleep(500);
+        QThread::currentThread()->msleep(500);
     QByteArray pckg = dpBuf->mid(0, pckSize);
     dpBuf->remove(0, pckSize);
     mutex.unlock();
