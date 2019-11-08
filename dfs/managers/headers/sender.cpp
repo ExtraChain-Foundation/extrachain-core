@@ -27,7 +27,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         return;
     }
     //    emit sendPckg(title.serialize(), Messages::DFS_MESSAGE, receiver);
-    NetManager->send(title.serialize());
+    NetManager->send(title.serialize(), Messages::DFS_MESSAGE, receiver);
     titleHashs.insert(title.hash(), filePath);
     serializedTitle.insert(filePath, title.serialize());
     if (file.size() < data_offset + 1)
@@ -36,7 +36,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         // create package
         Message::dfs_message pck(title.hash(), pckgN, data); // package for send
         //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
-        NetManager->send(pck.serialize());
+        NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
         qDebug() << "[&sender] send small file";
         return;
     }
@@ -49,12 +49,12 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         Message::dfs_message pck(title.hash(), pckgN, data); // package for send
 
         //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
-        NetManager->send(pck.serialize());
+        NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     }
     // create last package
     QByteArray data = file.read(file.size() - file.pos());
     Message::dfs_message pck(title.hash(), pckgN, data); // package for send
-    NetManager->send(pck.serialize());
+    NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     file.close();
 }
 

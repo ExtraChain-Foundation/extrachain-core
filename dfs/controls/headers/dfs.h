@@ -33,6 +33,7 @@ private:
     void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
                  const QByteArray &type);
     QByteArray setName(const QByteArray &userId);
+    QStringList returnDifs(const QString &adin, const QString &dva);
     void statusD();
     void signalConnection();
 
@@ -49,7 +50,7 @@ public:
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
     void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
-
+    void fileResponce(const QString path, const SocketPair &receiver);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);

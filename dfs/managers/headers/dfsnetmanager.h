@@ -34,8 +34,8 @@ private:
 public:
     NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
-    //    void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
-    //              const SocketPair &receiver = SocketPair());
+    void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
+              const SocketPair &receiver = SocketPair());
 signals:
     void finished();
     //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
@@ -43,8 +43,6 @@ signals:
 public slots:
     void appendSocket(SocketService *socket);
     //    void newMsg(const QByteArray &message, const SocketPair &receiver);
-    void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
-              const SocketPair &receiver = SocketPair());
     void process();
 private slots:
     void removeConnection();

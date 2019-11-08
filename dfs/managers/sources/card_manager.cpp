@@ -48,9 +48,9 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     return result;
 }
 
-based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QByteArray &uxerId)
+based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + uxerId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
     card.open(QIODevice::ReadOnly);
     QList<QByteArray> list =
         Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);

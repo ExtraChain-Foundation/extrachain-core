@@ -402,6 +402,8 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     else if (msgType == Message::dfsMessageType::requestMessage)
     {
         qDebug() << "[requestMessage:]";
+        Message::dfs_request message(data);
+        dfs->fileResponce(message.filePath, receiver);
     }
     else if (msgType == Message::dfsMessageType::storageMessage)
     {
