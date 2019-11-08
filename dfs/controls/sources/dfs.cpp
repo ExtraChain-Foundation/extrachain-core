@@ -199,8 +199,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
     prFB--;
     QByteArray prevFilePath =
         Serialization::serialize({ pathList.at(PathStruct::rFolder), pathList.at(PathStruct::aId) }, "/")
-        + prFB.toByteArray() + based_dfs_struct::FILE_IDENTIFICATOR.toUtf8();
-    if (QFile(prevFilePath).exists())
+        + prFB.toByteArray();
+    if (QFile(prevFilePath + based_dfs_struct::FILE_IDENTIFICATOR.toUtf8()).exists())
     {
         Message::dfs_request rqst(prevFilePath, accountControler->getCurrentActor().getId().toActorId());
         dfsNetManager->send(rqst.serialize());

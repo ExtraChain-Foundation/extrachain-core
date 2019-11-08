@@ -7,6 +7,9 @@ QThread *ThreadPool::addThread(QObject *worker)
 
 QThread *ThreadPool::addThread(QList<QObject *> workers)
 {
+    static int threadCount = 0;
+    static QMutex mutex;
+    mutex.tryLock();
     static QList<QThread *> threads;
     static bool isFirst = true;
 
@@ -20,16 +23,19 @@ QThread *ThreadPool::addThread(QList<QObject *> workers)
     }
 
     QObject::connect(thread, &QThread::finished, [thread, workers]() {
-        threads.removeAt(threads.indexOf(thread));
-        qDebug() << "Remove thread for" << workers << "from pool with length" << threads.length();
+        mutex.tryLock();
+        threadCount--;
+        //        threads.removeOne(thread); // ERROR!!!
+        qDebug() << "Remove thread for" << workers << "from pool with new length" << threadCount;
         thread->deleteLater();
+        mutex.unlock();
     });
 
     if (isFirst)
     {
         qDebug() << "Connected with qApp";
         QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-            qDebug() << "Remove all threads" << threads.count();
+            qDebug() << "Remove all threads" << threadCount;
 
             for (auto &&thread : threads)
                 thread->quit();
@@ -38,9 +44,10 @@ QThread *ThreadPool::addThread(QList<QObject *> workers)
         isFirst = false;
     }
 
-    qDebug() << "Add thread for" << workers << "to pool with length" << threads.length();
+    //    threads << thread;
+    threadCount++;
+    qDebug() << "Add thread for" << workers << "to pool with new length" << threadCount;
+    mutex.unlock();
     thread->start();
-    threads << thread;
-
     return thread;
 }

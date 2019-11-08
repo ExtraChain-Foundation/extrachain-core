@@ -48,14 +48,14 @@ void SocketWorker::doRead()
 {
     while (dpBuf->size() < 4)
     {
-        this->thread()->msleep(500);
+        QThread::currentThread()->usleep(500);
         //        doRead();
     }
     QByteArray msgLength = dpBuf->mid(0, 4);
     int pckSize = Utils::qByteArrayToInt(msgLength);
     dpBuf->remove(0, 4);
     while (dpBuf->size() < pckSize)
-        this->thread()->msleep(500);
+        QThread::currentThread()->usleep(500);
     QByteArray pckg = dpBuf->mid(0, pckSize);
     dpBuf->remove(0, pckSize);
     if (!socket->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)

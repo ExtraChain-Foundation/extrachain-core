@@ -47,7 +47,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         QByteArray data = file.read(data_offset);
         // create package
         Message::dfs_message pck(title.hash(), pckgN, data); // package for send
-
+        QThread::currentThread()->usleep(500);
         //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
         NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     }

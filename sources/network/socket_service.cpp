@@ -189,8 +189,13 @@ void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketDat
 
 void SocketService::sockReady()
 {
-    if (socket->bytesAvailable())
-        dpBuffer->append(socket->readAll());
+    long long s = 0;
+    if (socket->bytesAvailable() > 0)
+    {
+        s = socket->bytesAvailable();
+        qDebug() << "Bytes read:" << s;
+        dpBuffer->append(socket->read(s));
+    }
     //    QTcpSocket *_sok = this->socket;
     //    while (_sok->bytesAvailable() < 4)
     //        _sok->waitForReadyRead(1000);
