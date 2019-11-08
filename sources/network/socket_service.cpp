@@ -194,7 +194,9 @@ void SocketService::sockReady()
     {
         s = socket->bytesAvailable();
         qDebug() << "Bytes read:" << s;
+        mutex.lock();
         dpBuffer->append(socket->read(s));
+        mutex.unlock();
     }
     //    QTcpSocket *_sok = this->socket;
     //    while (_sok->bytesAvailable() < 4)

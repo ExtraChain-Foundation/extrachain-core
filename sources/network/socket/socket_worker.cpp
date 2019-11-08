@@ -51,6 +51,7 @@ void SocketWorker::doRead()
         QThread::currentThread()->usleep(500);
         //        doRead();
     }
+    mutex.lock();
     QByteArray msgLength = dpBuf->mid(0, 4);
     int pckSize = Utils::qByteArrayToInt(msgLength);
     dpBuf->remove(0, 4);
@@ -58,6 +59,7 @@ void SocketWorker::doRead()
         QThread::currentThread()->usleep(500);
     QByteArray pckg = dpBuf->mid(0, pckSize);
     dpBuf->remove(0, pckSize);
+    mutex.unlock();
     if (!socket->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
     {
         QByteArray b = pckg.mid(IDENTIFICATOR.size());
