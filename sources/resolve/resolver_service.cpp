@@ -147,7 +147,12 @@ void ResolverService::process()
 {
     recieveMsg(this->msg, this->senderAddress);
 }
+// getAllActors
+// return all id actors that have current actor from actorIndex
 
+/*
+
+ */
 void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiver)
 {
     using namespace Messages;
@@ -266,6 +271,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         emit getActor(response.getActorId(), calcHash(msg), receiver);
         emit TaskFinished();
     }
+    else if (msgType == GET_ALL_ACTORS)
+    {
+        GetAllActorMessage response(message.getMsg_data());
+        emit handleGetAllActor(calcHash(msg), receiver);
+        emit TaskFinished();
+    }
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage txMessage(message.getMsg_data());
@@ -298,6 +309,17 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         if (checkResponseHandler(responseMessage.getDataHash()))
             return;
         actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        emit TaskFinished();
+    }
+    else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
+    {
+        qDebug() << "RESOLVER SERVICE: "
+                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " << msg;
+        BaseMessageResponse responseMessage(msg);
+        if (checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.getMsg_data(), 4));
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         emit TaskFinished();
     }

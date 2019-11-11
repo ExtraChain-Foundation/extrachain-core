@@ -155,13 +155,9 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
     int loaded = 0;
-    QDir directory(path);
-    if (!directory.exists())
-            return;
-    QStringList files = directory.entryList({"*.key"}, QDir::Files);
-    for (const QString &fileName : files)
+    for (const QByteArray &fileName : idList)
     {
-        QFile file(path + "/" + fileName);
+        QFile file(path + "/" + fileName + ".key");
         if (file.exists() && file.open(QIODevice::ReadOnly))
         {
             QByteArray serialized;
@@ -176,10 +172,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 
                 qDebug() << "Actor" << actor->getId() << "found locally -"
                          << actor->getKey()->getPrivateKey();
-                if(actor->getId().toActorId() == id)
-                    this->accounts.push_front(actor);
-                else
-                    this->accounts.append(actor);
+                this->accounts.append(actor);
                 loaded++;
             }
         }

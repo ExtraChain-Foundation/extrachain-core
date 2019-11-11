@@ -65,6 +65,34 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
 }
 
+void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receiver)
+{
+    QByteArrayList result;
+    QDir folder(folderPath);
+    QStringList listFolder = folder.entryList(QDir::Dirs);
+    for (const QString &folderName : listFolder)
+    {
+        QDir folderActor(folderName);
+        QStringList listActor = folder.entryList(QDir::Files | QDir::NoDot);
+        for (const QString &nameActor : listActor)
+        {
+            result.append(nameActor.toUtf8());
+        }
+    }
+    if (!result.isEmpty())
+    {
+        emit responseReady(Serialization::universalSerialize(result, 4),
+                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
+    }
+    return;
+}
+
+void ActorIndex::getAllActors(BigNumber id, bool isUser)
+{
+    Messages::GetAllActorMessage msg(id);
+    emit sendMessage(msg.serialize(), getAllActorMessage);
+}
+
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
 {
     //    qDebug() << "adfklsfkl;adskl;afsdl;afsdl;";
@@ -82,6 +110,12 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
     default:
         qWarning() << "Error: unexpected return type";
     }
+}
+
+void ActorIndex::handleNewAllActors(QByteArrayList actors)
+{
+    for (const QByteArray &actor : actors)
+        getActor(actor);
 }
 
 void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)

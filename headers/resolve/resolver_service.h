@@ -236,6 +236,8 @@ signals:
     // request
     void getActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
 
+    void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
+
     void getTx(const SearchEnum::TxParam &param, const QByteArray &value, const SocketPair &receiver,
                const QByteArray &request);
 

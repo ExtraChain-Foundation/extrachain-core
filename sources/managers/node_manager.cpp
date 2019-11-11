@@ -19,7 +19,7 @@ NodeManager::NodeManager()
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
     prProfile->setAccountController(accController);
-    chatManger = new ChatManager(accController,actorIndex);
+    chatManger = new ChatManager(accController, actorIndex);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
@@ -529,6 +529,7 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
+    connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
     //=============================================CHAT=======================================
     connect(uiController, &UiController::createChat, chatManger, &ChatManager::CreateNewChat);

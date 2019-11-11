@@ -46,6 +46,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
+    connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
@@ -68,6 +69,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
 
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
+    disconnect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     disconnect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     disconnect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     disconnect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);

@@ -23,6 +23,7 @@ class ActorIndex : public QObject
     const QByteArray classType = Messages::ACTOR_MESSAGE;
     const QByteArray profileType = Messages::PROFILE_FILE;
     const QByteArray getActorMessage = Messages::GET_ACTOR_MESSAGE;
+    const QByteArray getAllActorMessage = Messages::GET_ALL_ACTORS;
 
 private:
     BigNumber records = 0;
@@ -108,11 +109,12 @@ public:
      * @return resultCode, 0 - actor is saved
      */
     int addActor(const Actor<KeyPublic> &actor);
-
+    void handleNewAllActors(const QByteArrayList actors);
 public slots:
     void process();
     void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
-
+    void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
+    void getAllActors(BigNumber id, bool isUser);
     /**
      * @brief The same as handleNewActor, but emit's ActorIsMissing signal
      * if there no such actor in storage

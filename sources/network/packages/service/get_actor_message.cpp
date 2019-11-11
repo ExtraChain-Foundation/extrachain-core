@@ -23,7 +23,6 @@ GetActorMessage::~GetActorMessage()
 
 const QByteArray GetActorMessage::serialize() const
 {
-
     return Serialization::universalSerialize({ actorId.toActorId() }, FIELDS_SIZE);
 }
 
