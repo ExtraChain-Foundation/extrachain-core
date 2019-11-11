@@ -22,6 +22,7 @@ void ChatManager::InitializeChatList()
     QDir().mkpath(getPathToMyChats());
     QDirIterator it(getPathToMyChats(), QDirIterator::Subdirectories);
     QByteArray chatPath = "-1";
+    _chatList.clear();
 
     while (it.hasNext())
     {
