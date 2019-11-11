@@ -498,6 +498,9 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManger, &ChatManager::ActorInit);
+    connect(prProfile, &PrivateProfile::initActorChatM,
+            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
     connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {

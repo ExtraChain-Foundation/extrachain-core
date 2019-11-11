@@ -137,6 +137,7 @@ signals:
                             typeDataPrProfile type);
     void loadInterFromPrProfile(QByteArray hash, QByteArray idProfile);
     void savePrivateProfile(QByteArray hash, QByteArray id);
+    void getAllActorsNode(QByteArray id, bool acc);
 private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);

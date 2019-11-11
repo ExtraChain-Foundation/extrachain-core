@@ -60,23 +60,27 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.isEmpty())
+    {
         emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
-    if (!actor.profile().getProfile().isEmpty())
-        emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+        if (!actor.profile().getProfile().isEmpty())
+            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    }
 }
 
 void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receiver)
 {
     QByteArrayList result;
     QDir folder(folderPath);
-    QStringList listFolder = folder.entryList(QDir::Dirs);
+    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (const QString &folderName : listFolder)
     {
-        QDir folderActor(folderName);
-        QStringList listActor = folder.entryList(QDir::Files | QDir::NoDot);
+        QDir folderActor(folderPath + "/" + folderName);
+        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
         for (const QString &nameActor : listActor)
         {
-            result.append(nameActor.toUtf8());
+            QFile file(folderPath + "/" + folderName + "/" + nameActor);
+            if (file.exists())
+                result.append(nameActor.toUtf8());
         }
     }
     if (!result.isEmpty())
@@ -310,7 +314,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     if (actor.getAccount() == 2 && companyId == nullptr)
     {
         qDebug() << "Save company ID->" << actor.getId().toByteArray();
-        companyId = new QByteArray(actor.getId().toByteArray());
+        companyId = new QByteArray(actor.getId().toActorId());
     }
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
