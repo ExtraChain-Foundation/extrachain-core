@@ -158,15 +158,17 @@ QByteArray Chat::getChatPath() const
 
 QStringList Chat::getAllUsers()
 {
-    QStringList usersList;
-      QDirIterator it(   getPathToUsers(), QDirIterator::Subdirectories);
-      while (it.hasNext())
-      {
-          usersList.append(it.fileName().toLocal8Bit());
+//    QStringList usersList;
 
-          it.next();
-      }
-      return usersList;
+    return QDir(getPathToUsers()).entryList(QDir::Dirs|QDir::NoDotAndDotDot);
+
+//      while (it.hasNext())
+//      {
+//          usersList.append(it.fileName().toLocal8Bit());
+
+//          it.next();
+//      }
+//      return usersList;
 }
 
 ActorIndex *Chat::getActorIndex() const
