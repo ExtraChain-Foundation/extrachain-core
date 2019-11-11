@@ -42,7 +42,7 @@ public slots:
     //                      QByteArray invitedId);
     void getSignalFromChats(const QString &path);                     //+ connect with Chats
     void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //+
-    void CreateNewChat();
+    QByteArray CreateNewChat();
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void SendMessage(QByteArray chatId, QByteArray message);  //-
     void UIreceiveAllChats();                                 // need connect to UI

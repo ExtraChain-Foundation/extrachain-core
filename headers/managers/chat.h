@@ -11,12 +11,22 @@ struct UIChat
 {
     QStringList users;
     QString chatId;
+    UIChat(QStringList _users, QString _chatid)
+    {
+        users=_users;
+        chatId=_chatid;
+    }
 };
 
 struct UIMessage
 {
     QString userId;
     QString message;
+    UIMessage(QString _userId, QString _message)
+    {
+        userId=_userId;
+        message=_message;
+    }
 };
 
 class Chat : public QObject
@@ -69,7 +79,7 @@ public:
     QByteArray getActorPath() const;                                //+
     QByteArray getCurrentActorId() const;                           //+
     QByteArray getChatPath() const;                                 //+
-    QList<QByteArray> getAllUsers();
+    QStringList getAllUsers();
 signals:
     void sendDataToBlockchain(const QString& path); //+ send to blockchain. Connect with ChatManager
 };

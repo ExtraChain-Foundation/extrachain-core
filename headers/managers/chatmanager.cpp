@@ -114,7 +114,7 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
         qDebug() << "[Error] when remove Member from chat. RemoveMemberFromChat ChatManager";
 }
 
-void ChatManager::CreateNewChat()
+QByteArray ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
@@ -128,6 +128,7 @@ void ChatManager::CreateNewChat()
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
     _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController,
                                   _actorPath + _currentActorId + "/chatStorage/" + chatId, _currentActorId));
+    return chatId;
 }
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
@@ -160,10 +161,23 @@ void ChatManager::UIreceiveAllChats()
 
 void ChatManager::createDialogue(QByteArray actorId)
 {
+    QList<UIChat> chats;
+     InviteToChat(CreateNewChat(), actorId);
+     foreach (Chat *currentChat, _chatList)
+        chats.append(UIChat(currentChat->getAllUsers(),currentChat->getChatId()));
+
+
+     emit chatListSend(chats);
 }
 
 void ChatManager::requestChatList()
 {
+    QList<UIChat> chats;
+     foreach (Chat *currentChat, _chatList)
+        chats.append(UIChat(currentChat->getAllUsers(),currentChat->getChatId()));
+
+
+     emit chatListSend(chats);
 }
 
 void ChatManager::requestChat(QByteArray chatId)
