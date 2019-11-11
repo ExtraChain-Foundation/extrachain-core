@@ -94,7 +94,7 @@ signals:
     void loadWallets(QByteArray id, QByteArrayList idList);
     void updateTransactionListInModel();
     void newActorIsCreated(BigNumber id, bool isUser);
-
+    void savePrivateProfile(QByteArray id);
     void finished();
 
     void initDfs();

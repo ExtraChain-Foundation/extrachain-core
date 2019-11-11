@@ -136,6 +136,7 @@ signals:
     void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
                             typeDataPrProfile type);
     void loadInterFromPrProfile(QByteArray hash, QByteArray idProfile);
+    void savePrivateProfile(QByteArray hash, QByteArray id);
 private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
@@ -163,6 +164,7 @@ private slots:
     void updateAvailableWalletList();
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
+    void addNewWallet();
 
 #endif
 };

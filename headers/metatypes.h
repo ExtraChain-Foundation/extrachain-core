@@ -12,6 +12,7 @@
 #include "datastorage/profile.h"
 #include "datastorage/searchfilters.h"
 #include "network/network_manager.h"
+#include "profile/private_profile.h"
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
@@ -34,7 +35,7 @@ Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
-// Q_DECLARE_METATYPE(qintptr)
+Q_DECLARE_METATYPE(typeDataPrProfile)
 
 void registerMetaTypes()
 {
@@ -45,10 +46,10 @@ void registerMetaTypes()
     qRegisterMetaType<Actor<KeyPublic>>();
     qRegisterMetaType<Transaction>();
     qRegisterMetaType<SocketService>();
-    //    qRegisterMetaType<SocketService*>();
+    // qRegisterMetaType<SocketService*>();
     qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
-    //    qRegisterMetaType<Contract>();
+    // qRegisterMetaType<Contract>();
     qRegisterMetaType<based_dfs_struct::Type>();
     qRegisterMetaType<based_dfs_struct::SubType>();
     qRegisterMetaType<based_dfs_struct::Status>();
@@ -58,8 +59,7 @@ void registerMetaTypes()
     qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
-
-    // qRegisterMetaType<qintptr>();
+    qRegisterMetaType<typeDataPrProfile>();
 }
 
 #endif

@@ -80,7 +80,8 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     //    emit addActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
-
+    if (accounts.isEmpty())
+        emit savePrivateProfile(actor->getId().toActorId());
     accounts.append(actor);
     userNum = accounts.size() - 1;
 
@@ -91,6 +92,7 @@ Actor<KeyPrivate> AccountController::createActor(int account)
         emit initDfs();
     }
     emit newActorIsCreated(this->getMainActor()->getId(), account);
+
     if (!accounts.isEmpty())
         blockchain->getBlockZero();
     return *actor;

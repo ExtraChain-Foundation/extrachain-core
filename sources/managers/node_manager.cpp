@@ -449,20 +449,14 @@ void NodeManager::connectUi()
     //=======================================WALLET=========================================
     connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
     connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
-    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
+    //    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
 
     connect(uiWallet, &WalletController::sendCoinRequestFromUi, resolveManager,
             &ResolveManager::registrateMsg);
-    connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
-        auto actor = accController->createActor(0);
-        accController->savePrivateActor(actor);
-        auto wallets = uiWallet->getCurrentWallets();
-        uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
-        uiWallet->createWalletToNode();
-    });
+    connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id,
@@ -504,7 +498,11 @@ void NodeManager::connectUi()
     connect(prProfile, &PrivateProfile::initPrivateProfile, accController, &AccountController::loadActors);
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
-    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
+        setIdPrivateProfile(id);
+        emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
+    });
+    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
     connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
     connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
@@ -515,7 +513,10 @@ void NodeManager::connectUi()
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=]() { accController->createActor(1); });
+            [=](QByteArray hash, const bool account) {
+                setHashLoginPrivateProfile(hash);
+                accController->createActor(1);
+            });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -527,6 +528,15 @@ void NodeManager::connectUi()
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
 
     uiController->startThreads();
+}
+void NodeManager::addNewWallet()
+{
+    auto actor = accController->createActor(0);
+    accController->savePrivateActor(actor);
+    auto wallets = uiWallet->getCurrentWallets();
+    uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
+    this->createWalletInUi();
+    //    uiWallet->createWalletToNode();
 }
 #endif
 

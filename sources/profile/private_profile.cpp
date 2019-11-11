@@ -12,21 +12,17 @@ void PrivateProfile::setDfs(Dfs *value)
     dfs = value;
 }
 
-void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, QByteArray id)
+void PrivateProfile::savePrivateProfile(QByteArray hash, QByteArray id)
 {
     QDir().mkdir("keystore/profile");
-    QByteArray data = login + password;
-    QByteArray secureLogin = Utils::calcKeccak(data);
-    data = secureLogin + id;
+    QByteArray data = hash + id;
     blowFish_crypt crypt;
-    data = crypt.EncryptBlowFish(data, secureLogin);
+    data = crypt.EncryptBlowFish(data, hash);
     QFile file("keystore/profile/" + id + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
     file.flush();
     file.close();
-    emit setIdProfile(id);
-    emit setHashProfile(secureLogin);
 }
 void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray _data,
                                         typeDataPrProfile type)

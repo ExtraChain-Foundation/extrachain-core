@@ -18,7 +18,7 @@ private:
     AccountController *acContorller;
     Dfs *dfs;
 public slots:
-    void savePrivateProfile(QByteArray login, QByteArray password, QByteArray id);
+    void savePrivateProfile(QByteArray hash, QByteArray id);
     void loadPrivateProfile(QByteArray login, QByteArray password);
     void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
                             typeDataPrProfile type);
