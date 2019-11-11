@@ -186,7 +186,7 @@ void ChatManager::requestChatList()
 
 void ChatManager::requestChat(QByteArray chatId)
 {
-    //emit chatSend;
+    emit chatSend(chatId,  Chat(chatId,_actorIndex,_accController, convertChatIdToFullPath(chatId)).getAllMessages());
 }
 
 ChatManager::~ChatManager()

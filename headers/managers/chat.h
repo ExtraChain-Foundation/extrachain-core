@@ -72,7 +72,7 @@ public:
     QByteArray getCurrentActorId() const;                           //+
     QByteArray getChatPath() const;                                 //+
     QStringList getAllUsers();
-    QByteArray getAllMessages();
+    QList<UIMessage> getAllMessages();
     ActorIndex *getActorIndex() const;
 
 signals:

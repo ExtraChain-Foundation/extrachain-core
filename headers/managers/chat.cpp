@@ -163,6 +163,40 @@ QStringList Chat::getAllUsers()
     return usersList;
 }
 
+QList<UIMessage> Chat::getAllMessages()
+{
+    QByteArray messages;
+    QList<UIMessage> messageList;
+    QFile chats;
+    QList<QByteArray> qlistMessages;
+    QStringList keyList= QDir(getPathMyChatsKeyStore()).entryList(QDir::Files|QDir::NoDotAndDotDot);
+    for ( QString& i : keyList ) {
+        i.remove(0,3);
+         chats.setFileName(getPathToSessions()+i);
+       if(chats.open(QIODevice::ReadOnly))
+       {
+            while(!chats.atEnd()){
+                messages=chats.readLine();
+                messages=decryptMessage(messages);
+                qlistMessages=Serialization::universalDeserialize(messages);
+                if(qlistMessages.size()!=2)
+                {
+                    qDebug()<<"[Error] Chat. getAllMessages. Qlist.size!=2";
+                    continue;
+                }
+                messageList.append(UIMessage{qlistMessages.at(0),qlistMessages.at(1)});
+            }
+       }
+       else
+           qDebug()<<"[Error] Chat. getAllMessages. Can't open the file"<<getPathToSessions()+i;
+        chats.close();
+
+
+    }
+
+    return messageList;
+}
+
 ActorIndex *Chat::getActorIndex() const
 {
     return _actorIndex;
@@ -249,7 +283,11 @@ bool Chat::SaveSession(QByteArray sessionPath, QByteArray sessionNumb)
 
 void Chat::sendMessage(QByteArray message)
 {
-    message.push_front(_currentActorId + ": ");
+    QList<QByteArray> messageList;
+       messageList.append(_currentActorId);
+       messageList.append(message);
+    message=Serialization::universalSerialize(messageList);
+
     QFile file(getPathToSessions() + getMyCurrentSession());
     if (file.open(QIODevice::Append))
     {
