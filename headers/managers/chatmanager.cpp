@@ -119,17 +119,12 @@ void ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/" );
-    QByteArray qw=getPathToMyChats() + chatId + "/" + chatId + ".dat";
     QFile file(getPathToMyChats() + chatId + "/" + chatId + ".dat");
     if (file.open(QIODevice::WriteOnly))
     {
         file.write(_actorPath+_currentActorId+"/chatStorage/"+chatId+"/");
         file.close();
     }
-    // blockhain/index/actors/[ownerId]/chatStorage/[chatId]/
-
-
-    qDebug()<<"XYU"<<_currentActorId;
     QByteArray key =
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
     _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController,_actorPath+_currentActorId+"/chatStorage/"+chatId, _currentActorId));

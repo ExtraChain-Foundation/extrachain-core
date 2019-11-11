@@ -16,7 +16,6 @@ Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray c
 Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
            QByteArray chatPath, QByteArray ownerId)
 {
-       qDebug()<<"XYU";
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
@@ -166,7 +165,6 @@ QByteArray Chat::getPathMyChatsKeyStore()
 
 QByteArray Chat::getPathToUsers()
 {
-    qDebug()<<"XYU"<<_chatPath <<"users";
     return _chatPath + "/users/";
 }
 
