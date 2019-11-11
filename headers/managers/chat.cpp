@@ -1,6 +1,6 @@
 #include "chat.h"
 
-Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray chatPath)
+Chat::Chat(QByteArray chatId,ActorIndex *actorIndex, AccountController* accountController, QByteArray chatPath)
 {
      InitializeOwnerPathNewChat();
     this->_chatId = chatId;
@@ -10,10 +10,11 @@ Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray c
     this->_currentSession = getMyCurrentSession();
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_chatPath = chatPath;
+     this->_actorIndex=actorIndex;
 
 }
 
-Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
+Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession,ActorIndex *actorIndex, AccountController* accountController,
            QByteArray chatPath, QByteArray ownerId)
 {
     this->_chatId = chatId;
@@ -23,6 +24,7 @@ Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, Account
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_currentSession = currentSession;
     this->_chatPath = chatPath;
+      this->_actorIndex=actorIndex;
     InitializeOwnerPathNewChat();
     QFile file(getPathToSessions() + "0");
     file.open(QIODevice::WriteOnly);
@@ -53,6 +55,7 @@ Chat::Chat(const Chat& tempChat)
     this->_actorPath = tempChat.getActorPath();
     this->_currentActorId = tempChat.getCurrentActorId();
     this->_chatPath = tempChat.getChatPath();
+        this->_actorIndex=tempChat.getActorIndex();
 
 }
 
@@ -164,6 +167,11 @@ QStringList Chat::getAllUsers()
           it.next();
       }
       return usersList;
+}
+
+ActorIndex *Chat::getActorIndex() const
+{
+    return _actorIndex;
 }
 
 QByteArray Chat::getPathMyChatsCurrentChat()
@@ -351,7 +359,7 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
         QList<QByteArray> list = Serialization::universalDeserialize(data);
         if (list.size() != 2)
             return false;
-        if (!_accountController->getActor(BigNumber(list.at(0))).getKey()->verify(list.at(0), list.at(1)))
+        if (!_actorIndex->getActor(BigNumber(list.at(0))).getKey()->verify(list.at(0), list.at(1)))
             return false;
         return isUserVerify(list.at(0));
     }

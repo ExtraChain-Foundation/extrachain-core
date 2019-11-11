@@ -32,7 +32,7 @@ void ChatManager::InitializeChatList()
             continue;
         }
 
-        Chat *temp = new Chat(it.fileName().toLocal8Bit(), _accController, chatPath);
+        Chat *temp = new Chat(it.fileName().toLocal8Bit(),_actorIndex, _accController, chatPath);
         if (temp->getMyCurrentSession() == temp->getActualCurrentSession())
             _chatList.push_front(temp);
         it.next();
@@ -77,14 +77,15 @@ QByteArray ChatManager::generateChatKey()
     return Utils::calcKeccak(BigNumber::random(64).toByteArray());
 }
 
-ChatManager::ChatManager(AccountController *accController)
+ChatManager::ChatManager(AccountController *accController, ActorIndex *actorIndex)
 {
-    this->_accController = accController;
+    this->_actorIndex = actorIndex;
+    this->_accController=accController;
 }
 
 void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
 {
-    Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+    Chat temp(chatId, _actorIndex,_accController, convertChatIdToFullPath(chatId));
     if (!temp.isUserVerify(_currentActorId) || !temp.isOwner())
     {
         qDebug() << "[Warning] Can't invite to chat. User verify error, removeMemberFromChat. ChatManager";
@@ -126,14 +127,14 @@ QByteArray ChatManager::CreateNewChat()
     }
     QByteArray key =
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
-    _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController,
+    _chatList.push_front(new Chat(chatId, key, QByteArray("0"),_actorIndex, _accController,
                                   _actorPath + _currentActorId + "/chatStorage/" + chatId, _currentActorId));
     return chatId;
 }
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
-    Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+    Chat temp(chatId, _actorIndex,_accController, convertChatIdToFullPath(chatId));
 
     if (!temp.isUserVerify(_currentActorId)
         || !temp.isUserActual(_currentActorId, temp.getActualCurrentSession()))
@@ -150,7 +151,7 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
-    Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+    Chat temp(chatId,_actorIndex,_accController, convertChatIdToFullPath(chatId));
     temp.sendMessage(message);
 }
 
@@ -164,7 +165,9 @@ void ChatManager::createDialogue(QByteArray actorId)
     QList<UIChat> chats;
      InviteToChat(CreateNewChat(), actorId);
      foreach (Chat *currentChat, _chatList)
-        chats.append(UIChat(currentChat->getAllUsers(),currentChat->getChatId()));
+
+
+         chats.append(UIChat{currentChat->getAllUsers(),currentChat->getChatId()});
 
 
      emit chatListSend(chats);
@@ -174,7 +177,8 @@ void ChatManager::requestChatList()
 {
     QList<UIChat> chats;
      foreach (Chat *currentChat, _chatList)
-        chats.append(UIChat(currentChat->getAllUsers(),currentChat->getChatId()));
+
+         chats.append(UIChat{currentChat->getAllUsers(),currentChat->getChatId()});
 
 
      emit chatListSend(chats);
@@ -182,6 +186,7 @@ void ChatManager::requestChatList()
 
 void ChatManager::requestChat(QByteArray chatId)
 {
+    //emit chatSend;
 }
 
 ChatManager::~ChatManager()

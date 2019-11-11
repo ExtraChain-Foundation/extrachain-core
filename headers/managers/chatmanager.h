@@ -18,6 +18,7 @@ class ChatManager : public QObject
     Q_OBJECT
 private:
     AccountController *_accController;
+    ActorIndex *_actorIndex;
     QList<Chat *> _chatList;
     QByteArray _actorPath; // blockhain/index/actors/
     QByteArray _currentActorId;
@@ -33,7 +34,7 @@ private:
                                    //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
 public:
-    ChatManager(AccountController *accController); //+                            //+
+    ChatManager(AccountController *accController, ActorIndex *actorIndex); //+                            //+
     ~ChatManager();                                //+
 
 public slots:

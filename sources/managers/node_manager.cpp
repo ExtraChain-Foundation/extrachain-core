@@ -19,7 +19,7 @@ NodeManager::NodeManager()
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
     prProfile->setAccountController(accController);
-    chatManger = new ChatManager(accController);
+    chatManger = new ChatManager(accController,actorIndex);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT

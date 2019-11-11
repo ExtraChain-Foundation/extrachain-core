@@ -11,22 +11,13 @@ struct UIChat
 {
     QStringList users;
     QString chatId;
-    UIChat(QStringList _users, QString _chatid)
-    {
-        users=_users;
-        chatId=_chatid;
-    }
 };
 
 struct UIMessage
 {
     QString userId;
     QString message;
-    UIMessage(QString _userId, QString _message)
-    {
-        userId=_userId;
-        message=_message;
-    }
+
 };
 
 class Chat : public QObject
@@ -40,6 +31,7 @@ private:
     QByteArray _actorPath = "blabla"; // blockhain/index/actors/
     QByteArray _currentActorId = "-1";
     AccountController* _accountController;
+    ActorIndex * _actorIndex;
 
 private:
     // paths getters:
@@ -56,8 +48,8 @@ private:
     bool SaveSession(QByteArray sessionPath, QByteArray sessionNumb); //+
 
 public:
-    Chat(QByteArray chatId, AccountController* accountController, QByteArray chatPath);
-    Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
+    Chat(QByteArray chatId,ActorIndex *actorIndex, AccountController* accountController, QByteArray chatPath);
+    Chat(QByteArray chatId, QByteArray key, QByteArray currentSession,ActorIndex *actorIndex, AccountController* accountController,
          QByteArray chatPath, QByteArray ownerId = "-1"); //+
     Chat(const Chat& tempChat);                           //+
     bool isOwner();                                       //+
@@ -80,6 +72,9 @@ public:
     QByteArray getCurrentActorId() const;                           //+
     QByteArray getChatPath() const;                                 //+
     QStringList getAllUsers();
+    QByteArray getAllMessages();
+    ActorIndex *getActorIndex() const;
+
 signals:
     void sendDataToBlockchain(const QString& path); //+ send to blockchain. Connect with ChatManager
 };
