@@ -47,7 +47,7 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 bool ResolverService::validate(const Messages::IMessage &message)
 {
     BigNumber signer = message.getSigner();
-    if (signer == 0)
+    if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
@@ -166,6 +166,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         {
             BaseMessageResponse responseMessage(msg);
             if (MessageIsNotValid(responseMessage))
+                return;
+        }
+        else
+        {
+            qDebug() << "received msg signature:" << message.getDigSig();
+            if (MessageIsNotValid(message))
                 return;
         }
     }

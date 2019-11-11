@@ -22,6 +22,7 @@ private:
     SocketService *socket;
     bool active = false;
     QTimer *timer;
+    int pendMsgSize = 0;
 
 public:
     SocketWorker(net::Worker type, QByteArray *buf, QObject *parent = nullptr);
@@ -32,7 +33,7 @@ public:
     void setSocket(SocketService *value);
 
 private:
-    //    void continueDoRead();
+    void continueDoRead();
 private slots:
     void doRead();
     void doAdd();

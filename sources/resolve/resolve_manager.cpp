@@ -118,7 +118,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
     msg.init(data);
     if (msgType != Messages::ACTOR_MESSAGE)
         msg.calcDigSig(accountControler->getCurrentActor());
-
+    qDebug() << "msg signature:" << msg.getDigSig();
     //    qDebug() << "NetManager: send " << msgType;
     QByteArray message = msg.serialize();
     if (Messages::GETTERS.contains(msgType))
