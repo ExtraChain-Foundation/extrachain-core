@@ -80,7 +80,6 @@ QByteArray ChatManager::generateChatKey()
 ChatManager::ChatManager(AccountController *accController)
 {
     this->_accController = accController;
-
 }
 
 void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
@@ -118,16 +117,17 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
 void ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
-    QDir().mkpath(getPathToMyChats() + chatId + "/" );
+    QDir().mkpath(getPathToMyChats() + chatId + "/");
     QFile file(getPathToMyChats() + chatId + "/" + chatId + ".dat");
     if (file.open(QIODevice::WriteOnly))
     {
-        file.write(_actorPath+_currentActorId+"/chatStorage/"+chatId+"/");
+        file.write(_actorPath + _currentActorId + "/chatStorage/" + chatId + "/");
         file.close();
     }
     QByteArray key =
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
-    _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController,_actorPath+_currentActorId+"/chatStorage/"+chatId, _currentActorId));
+    _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController,
+                                  _actorPath + _currentActorId + "/chatStorage/" + chatId, _currentActorId));
 }
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
@@ -156,6 +156,18 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 void ChatManager::UIreceiveAllChats()
 {
     emit UIsendAllChats(_chatList);
+}
+
+void ChatManager::createDialogue(QByteArray actorId)
+{
+}
+
+void ChatManager::requestChatList()
+{
+}
+
+void ChatManager::requestChat(QByteArray chatId)
+{
 }
 
 ChatManager::~ChatManager()

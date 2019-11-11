@@ -45,14 +45,21 @@ public slots:
     void CreateNewChat();
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void SendMessage(QByteArray chatId, QByteArray message);  //-
-    void UIreceiveAllChats();//need connect to UI
+    void UIreceiveAllChats();                                 // need connect to UI
+
+    void createDialogue(QByteArray actorId);
+    void requestChatList();
+    void requestChat(QByteArray chatId);
 
 signals:
-    void UIsendAllChats(QList<Chat*> chatList);//need connect to UI
+    void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(
         const QString &path, const based_dfs_struct::Type &type,
         const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
         const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW); //----- connet with dfs
+
+    void chatListSend(QList<UIChat> chats);
+    void chatSend(QList<UIMessage> messages);
 };
 
 #endif // CHATMANAGER_H

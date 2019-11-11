@@ -535,6 +535,12 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::inviteToChat, chatManger, &ChatManager::InviteToChat);
     connect(uiController, &UiController::sendMessage, chatManger, &ChatManager::SendMessage);
 
+    connect(uiController, &UiController::createDialogue, chatManger, &ChatManager::createDialogue);
+    connect(uiController, &UiController::requestChatList, chatManger, &ChatManager::requestChatList);
+    connect(uiController, &UiController::requestChat, chatManger, &ChatManager::requestChat);
+    connect(chatManger, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
+    connect(chatManger, &ChatManager::chatSend, uiController, &UiController::chatReceived);
+
     //
     uiController->startThreads();
 }
