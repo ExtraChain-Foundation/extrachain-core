@@ -153,6 +153,18 @@ QByteArray Chat::getChatPath() const
     return _chatPath;
 }
 
+QList<QByteArray> Chat::getAllUsers()
+{
+    QList<QByteArray> usersList;
+      QDirIterator it(   getPathToUsers(), QDirIterator::Subdirectories);
+      while (it.hasNext())
+      {
+          usersList.append(it.fileName().toLocal8Bit());
+          it.next();
+      }
+      return usersList;
+}
+
 QByteArray Chat::getPathMyChatsCurrentChat()
 {
     return _actorPath + _currentActorId + "/myChats/" + _chatId + "/";

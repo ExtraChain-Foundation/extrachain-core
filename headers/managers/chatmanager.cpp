@@ -153,6 +153,11 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
     temp.sendMessage(message);
 }
 
+void ChatManager::UIreceiveAllChats()
+{
+    emit UIsendAllChats(_chatList);
+}
+
 ChatManager::~ChatManager()
 {
     _chatList.clear();

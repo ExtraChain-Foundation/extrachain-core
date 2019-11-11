@@ -3,7 +3,6 @@
 
 #include "chat.h"
 #include <QObject>
-#include <QDirIterator>
 #include <QList>
 #include "dfs/types/headers/dfstruct.h"
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
@@ -46,8 +45,10 @@ public slots:
     void CreateNewChat();
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void SendMessage(QByteArray chatId, QByteArray message);  //-
+    void UIreceiveAllChats();//need connect to UI
 
 signals:
+    void UIsendAllChats(QList<Chat*> chatList);//need connect to UI
     void sendDataToBlockhainFromChatManager(
         const QString &path, const based_dfs_struct::Type &type,
         const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,

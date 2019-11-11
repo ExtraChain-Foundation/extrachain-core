@@ -4,6 +4,7 @@
 #include "managers/account_controller.h"
 #include "enc/algorithms/blowfish_crypt.h"
 #include <QDir>
+#include <QDirIterator>
 #include <QObject>
 class Chat : public QObject
 {
@@ -55,6 +56,7 @@ public:
     QByteArray getActorPath() const;                                //+
     QByteArray getCurrentActorId() const;                           //+
     QByteArray getChatPath() const;                                 //+
+    QList<QByteArray> getAllUsers();
 signals:
     void sendDataToBlockchain(const QString& path); //+ send to blockchain. Connect with ChatManager
 };
