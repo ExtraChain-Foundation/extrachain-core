@@ -6,6 +6,19 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QObject>
+
+struct UIChat
+{
+    QStringList users;
+    QString chatId;
+};
+
+struct UIMessage
+{
+    QString userId;
+    QString message;
+};
+
 class Chat : public QObject
 {
     Q_OBJECT

@@ -13,6 +13,7 @@
 #include "datastorage/searchfilters.h"
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
+#include "managers/chat.h"
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
@@ -36,6 +37,8 @@ Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
 Q_DECLARE_METATYPE(typeDataPrProfile)
+Q_DECLARE_METATYPE(UIChat)
+Q_DECLARE_METATYPE(UIMessage)
 
 void registerMetaTypes()
 {
@@ -60,6 +63,8 @@ void registerMetaTypes()
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
     qRegisterMetaType<typeDataPrProfile>();
+    qRegisterMetaType<UIChat>();
+    qRegisterMetaType<UIMessage>();
 }
 
 #endif
