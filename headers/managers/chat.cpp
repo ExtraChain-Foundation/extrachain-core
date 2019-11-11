@@ -1,8 +1,9 @@
 #include "chat.h"
 
-Chat::Chat(QByteArray chatId,ActorIndex *actorIndex, AccountController* accountController, QByteArray chatPath)
+Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
+           QByteArray chatPath)
 {
-     InitializeOwnerPathNewChat();
+    InitializeOwnerPathNewChat();
     this->_chatId = chatId;
     this->_encryptionKey = unloadChatKey();
     this->_accountController = accountController;
@@ -10,12 +11,11 @@ Chat::Chat(QByteArray chatId,ActorIndex *actorIndex, AccountController* accountC
     this->_currentSession = getMyCurrentSession();
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_chatPath = chatPath;
-     this->_actorIndex=actorIndex;
-
+    this->_actorIndex = actorIndex;
 }
 
-Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession,ActorIndex *actorIndex, AccountController* accountController,
-           QByteArray chatPath, QByteArray ownerId)
+Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, ActorIndex* actorIndex,
+           AccountController* accountController, QByteArray chatPath, QByteArray ownerId)
 {
     this->_chatId = chatId;
     this->_encryptionKey = key;
@@ -24,7 +24,7 @@ Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession,ActorInd
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_currentSession = currentSession;
     this->_chatPath = chatPath;
-      this->_actorIndex=actorIndex;
+    this->_actorIndex = actorIndex;
     InitializeOwnerPathNewChat();
     QFile file(getPathToSessions() + "0");
     file.open(QIODevice::WriteOnly);
@@ -47,7 +47,7 @@ Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession,ActorInd
 
 Chat::Chat(const Chat& tempChat)
 {
-        InitializeOwnerPathNewChat();
+    InitializeOwnerPathNewChat();
     this->_chatId = tempChat.getChatId();
     this->_encryptionKey = tempChat.getEncryptionKey();
     this->_currentSession = tempChat.getSession();
@@ -55,8 +55,7 @@ Chat::Chat(const Chat& tempChat)
     this->_actorPath = tempChat.getActorPath();
     this->_currentActorId = tempChat.getCurrentActorId();
     this->_chatPath = tempChat.getChatPath();
-        this->_actorIndex=tempChat.getActorIndex();
-
+    this->_actorIndex = tempChat.getActorIndex();
 }
 
 bool Chat::isOwner()
@@ -169,35 +168,35 @@ QList<UIMessage> Chat::getAllMessages()
     QList<UIMessage> messageList;
     QFile chats;
     QList<QByteArray> qlistMessages;
-    QStringList keyList= QDir(getPathMyChatsKeyStore()).entryList(QDir::Files|QDir::NoDotAndDotDot);
-    for ( QString& i : keyList ) {
-        i.remove(0,3);
-         chats.setFileName(getPathToSessions()+i);
-       if(chats.open(QIODevice::ReadOnly))
-       {
-            while(!chats.atEnd()){
-                messages=chats.readLine();
-                messages=decryptMessage(messages);
-                qlistMessages=Serialization::universalDeserialize(messages);
-                if(qlistMessages.size()!=2)
+    QStringList keyList = QDir(getPathMyChatsKeyStore()).entryList(QDir::Files);
+    for (QString& i : keyList)
+    {
+        i.remove(0, 3);
+        chats.setFileName(getPathToSessions() + i);
+        if (chats.open(QIODevice::ReadOnly))
+        {
+            while (!chats.atEnd())
+            {
+                messages = chats.readLine();
+                messages = decryptMessage(messages);
+                qlistMessages = Serialization::universalDeserialize(messages);
+                if (qlistMessages.size() != 2)
                 {
-                    qDebug()<<"[Error] Chat. getAllMessages. Qlist.size!=2";
+                    qDebug() << "[Error] Chat. getAllMessages. Qlist.size!=2";
                     continue;
                 }
-                messageList.append(UIMessage{qlistMessages.at(0),qlistMessages.at(1)});
+                messageList.append(UIMessage { qlistMessages.at(0), qlistMessages.at(1) });
             }
-       }
-       else
-           qDebug()<<"[Error] Chat. getAllMessages. Can't open the file"<<getPathToSessions()+i;
+        }
+        else
+            qDebug() << "[Error] Chat. getAllMessages. Can't open the file" << getPathToSessions() + i;
         chats.close();
-
-
     }
 
     return messageList;
 }
 
-ActorIndex *Chat::getActorIndex() const
+ActorIndex* Chat::getActorIndex() const
 {
     return _actorIndex;
 }
@@ -284,14 +283,14 @@ bool Chat::SaveSession(QByteArray sessionPath, QByteArray sessionNumb)
 void Chat::sendMessage(QByteArray message)
 {
     QList<QByteArray> messageList;
-       messageList.append(_currentActorId);
-       messageList.append(message);
-    message=Serialization::universalSerialize(messageList);
+    messageList.append(_currentActorId);
+    messageList.append(message);
+    message = Serialization::universalSerialize(messageList);
 
     QFile file(getPathToSessions() + getMyCurrentSession());
     if (file.open(QIODevice::Append))
     {
-        message=encryptMessage(message);
+        message = encryptMessage(message);
         message.push_back("/n");
         file.write(encryptMessage(message));
         file.close();
@@ -401,5 +400,4 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
 
 Chat::~Chat()
 {
-
 }
