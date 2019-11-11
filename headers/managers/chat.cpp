@@ -2,6 +2,7 @@
 
 Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray chatPath)
 {
+     InitializeOwnerPathNewChat();
     this->_chatId = chatId;
     this->_encryptionKey = unloadChatKey();
     this->_accountController = accountController;
@@ -45,6 +46,7 @@ Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, Account
 
 Chat::Chat(const Chat& tempChat)
 {
+        InitializeOwnerPathNewChat();
     this->_chatId = tempChat.getChatId();
     this->_encryptionKey = tempChat.getEncryptionKey();
     this->_currentSession = tempChat.getSession();
@@ -52,6 +54,7 @@ Chat::Chat(const Chat& tempChat)
     this->_actorPath = tempChat.getActorPath();
     this->_currentActorId = tempChat.getCurrentActorId();
     this->_chatPath = tempChat.getChatPath();
+
 }
 
 bool Chat::isOwner()
@@ -189,6 +192,7 @@ void Chat::InitializeOwnerPathNewChat()
 {
     QDir().mkpath(getPathToUsers());
     QDir().mkpath(getPathToSessions());
+    QDir().mkpath(getPathMyChatsKeyStore());
 }
 QByteArray Chat::createNewSession(QByteArray key, QByteArray sessionNumb)
 {
