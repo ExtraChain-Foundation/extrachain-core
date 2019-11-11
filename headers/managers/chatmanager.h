@@ -59,7 +59,7 @@ signals:
         const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW); //----- connet with dfs
 
     void chatListSend(QList<UIChat> chats);
-    void chatSend(QList<UIMessage> messages);
+    void chatSend(QByteArray chatId, QList<UIMessage> messages);
 };
 
 #endif // CHATMANAGER_H
