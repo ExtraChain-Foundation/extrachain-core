@@ -233,10 +233,11 @@ bool Chat::SaveSession(QByteArray sessionPath, QByteArray sessionNumb)
 void Chat::sendMessage(QByteArray message)
 {
     message.push_front(_currentActorId + ": ");
-    message.push_back("/n");
     QFile file(getPathToSessions() + getMyCurrentSession());
     if (file.open(QIODevice::Append))
     {
+        message=encryptMessage(message);
+        message.push_back("/n");
         file.write(encryptMessage(message));
         file.close();
         emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
