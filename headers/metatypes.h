@@ -38,7 +38,9 @@ Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
 Q_DECLARE_METATYPE(typeDataPrProfile)
 Q_DECLARE_METATYPE(UIChat)
+Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
+Q_DECLARE_METATYPE(QList<UIMessage>)
 
 void registerMetaTypes()
 {
@@ -64,7 +66,9 @@ void registerMetaTypes()
     qRegisterMetaType<SearchFilters>();
     qRegisterMetaType<typeDataPrProfile>();
     qRegisterMetaType<UIChat>();
+    qRegisterMetaType<QList<UIChat>>();
     qRegisterMetaType<UIMessage>();
+    qRegisterMetaType<QList<UIMessage>>();
 }
 
 #endif
