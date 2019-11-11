@@ -10,7 +10,7 @@ SocketWorker::SocketWorker(net::Worker type, QByteArray *buf, QObject *parent)
 
 SocketWorker::~SocketWorker()
 {
-    //
+    delete timer;
 }
 
 bool SocketWorker::isActive()
@@ -20,23 +20,31 @@ bool SocketWorker::isActive()
 
 void SocketWorker::process()
 {
-    active = true;
-    while (isActive())
+    timer = new QTimer(this);
+    if (this->type == net::Worker::Read)
     {
-        if (this->type == net::Worker::Read)
-        {
-            doRead();
-        }
-        else if (this->type == net::Worker::Add)
-        {
-            doAdd();
-        }
+        connect(timer, &QTimer::timeout, this, &SocketWorker::doRead);
     }
+    else if (this->type == net::Worker::Add)
+    {
+        connect(timer, &QTimer::timeout, this, &SocketWorker::doAdd);
+    }
+    timer->start(50);
+    active = true;
 }
 
 void SocketWorker::killWorker()
 {
-    //
+    timer->stop();
+    if (this->type == net::Worker::Read)
+    {
+        disconnect(timer, &QTimer::timeout, this, &SocketWorker::doRead);
+    }
+    else if (this->type == net::Worker::Add)
+    {
+        disconnect(timer, &QTimer::timeout, this, &SocketWorker::doAdd);
+    }
+    active = false;
 }
 
 void SocketWorker::setSocket(SocketService *value)
@@ -46,17 +54,16 @@ void SocketWorker::setSocket(SocketService *value)
 
 void SocketWorker::doRead()
 {
-    while (dpBuf->size() < 4)
+    if (dpBuf->size() < 4)
     {
-        QThread::currentThread()->msleep(500);
-        //        doRead();
+        return;
     }
     mutex.lock();
     QByteArray msgLength = dpBuf->mid(0, 4);
     int pckSize = Utils::qByteArrayToInt(msgLength);
     dpBuf->remove(0, 4);
     while (dpBuf->size() < pckSize)
-        QThread::currentThread()->msleep(500);
+        QThread::currentThread()->msleep(50);
     QByteArray pckg = dpBuf->mid(0, pckSize);
     dpBuf->remove(0, pckSize);
     mutex.unlock();
@@ -72,8 +79,8 @@ void SocketWorker::doRead()
         receiver.setId(socket->getID().toByteArray());
         socket->gotMessage(pckg, receiver);
     }
-    if (socket->getSocket()->bytesAvailable())
-        doRead();
+    //    if (socket->getSocket()->bytesAvailable())
+    //        doRead();
 }
 
 void SocketWorker::doAdd()
