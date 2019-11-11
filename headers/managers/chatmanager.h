@@ -38,6 +38,7 @@ public:
     ~ChatManager();                                //+
 
 public slots:
+    void ActorInit();
     // void addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
     //                      QByteArray invitedId);
     void getSignalFromChats(const QString &path);                     //+ connect with Chats

@@ -15,6 +15,7 @@
 
 //    // emit signal to share chat file
 //}
+
 void ChatManager::InitializeChatList()
 {
     // send to chat it path
@@ -79,10 +80,7 @@ QByteArray ChatManager::generateChatKey()
 ChatManager::ChatManager(AccountController *accController)
 {
     this->_accController = accController;
-    this->_currentActorId = accController->getCurrentActor().getId().toByteArray();
-    this->_actorPath = accController->getActorIndex()->getFolderPath().toLocal8Bit();
-    InitializeChatList();
-    InitializeConnectSignalSlot();
+
 }
 
 void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
@@ -120,14 +118,27 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
 void ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
+    QDir().mkpath(getPathToMyChats() + chatId + "/" );
+    QByteArray qw=getPathToMyChats() + chatId + "/" + chatId + ".dat";
+    QFile file(getPathToMyChats() + chatId + "/" + chatId + ".dat");
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(_actorPath+_currentActorId+"/chatStorage/"+chatId+"/");
+        file.close();
+    }
+    // blockhain/index/actors/[ownerId]/chatStorage/[chatId]/
+
+
+    qDebug()<<"XYU"<<_currentActorId;
     QByteArray key =
         KeyPublic(_accController->getCurrentActor().getKey()->getPublicKey()).encrypt(generateChatKey());
-    _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController, _currentActorId));
+    _chatList.push_front(new Chat(chatId, key, QByteArray("0"), _accController,_actorPath+_currentActorId+"/chatStorage/"+chatId, _currentActorId));
 }
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
     Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+
     if (!temp.isUserVerify(_currentActorId)
         || !temp.isUserActual(_currentActorId, temp.getActualCurrentSession()))
     {
@@ -136,19 +147,29 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     }
     if (temp.isUserVerify(actorId))
         return;
-    temp.InviteNewUser(KeyPublic(_accController->getActor(actorId).getKey()->getPublicKey())
+    temp.InviteNewUser(KeyPublic(_accController->getActor(BigNumber(actorId)).getKey()->getPublicKey())
                            .encrypt(temp.getChatPrivateKey()),
                        actorId);
 }
 
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
+    Chat temp(chatId, _accController, convertChatIdToFullPath(chatId));
+    temp.sendMessage(message);
 }
 
 ChatManager::~ChatManager()
 {
     _chatList.clear();
     delete _accController;
+}
+
+void ChatManager::ActorInit()
+{
+    this->_currentActorId = this->_accController->getMainActor()->getId().toActorId();
+    this->_actorPath = this->_accController->getActorIndex()->getFolderPath().toLocal8Bit();
+    InitializeChatList();
+    InitializeConnectSignalSlot();
 }
 
 // void ChatManager::addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,

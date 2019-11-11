@@ -7,18 +7,20 @@ Chat::Chat(QByteArray chatId, AccountController* accountController, QByteArray c
     this->_accountController = accountController;
     this->_actorPath = accountController->getActorIndex()->getFolderPath().toLocal8Bit();
     this->_currentSession = getMyCurrentSession();
-    this->_currentActorId = accountController->getCurrentActor().getId().toByteArray();
+    this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_chatPath = chatPath;
+
 }
 
 Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, AccountController* accountController,
            QByteArray chatPath, QByteArray ownerId)
 {
+       qDebug()<<"XYU";
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
     this->_actorPath = accountController->getActorIndex()->getFolderPath().toLocal8Bit();
-    this->_currentActorId = accountController->getCurrentActor().getId().toByteArray();
+    this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_currentSession = currentSession;
     this->_chatPath = chatPath;
     InitializeOwnerPathNewChat();
@@ -60,7 +62,7 @@ bool Chat::isOwner()
 
 bool Chat::isUserActual(QByteArray actorId, QByteArray sessionNumb)
 {
-    QFile file(_actorPath + actorId + "myChats/" + _chatId + "/currentSession");
+    QFile file(_actorPath + actorId + "/myChats/" + _chatId + "/currentSession");
     if (!file.exists())
         return false;
     if (file.open(QIODevice::ReadOnly))
@@ -72,7 +74,7 @@ bool Chat::isUserActual(QByteArray actorId, QByteArray sessionNumb)
     else
     {
         qDebug() << "[Warning] Cann't open file on read. isUserActual in Chat. path="
-                 << _actorPath + actorId + "myChats/" + _chatId + "/currentSession";
+                 << _actorPath + actorId + "/myChats/" + _chatId + "/currentSession";
         return false;
     }
 }
@@ -161,12 +163,13 @@ QByteArray Chat::getPathMyChatsKeyStore()
 
 QByteArray Chat::getPathToUsers()
 {
-    return _chatPath + "users/";
+    qDebug()<<"XYU"<<_chatPath <<"users";
+    return _chatPath + "/users/";
 }
 
 QByteArray Chat::getPathToSessions()
 {
-    return _chatPath + "sessions/";
+    return _chatPath + "/sessions/";
 }
 
 QByteArray Chat::findCurrentSession()
@@ -196,7 +199,7 @@ QByteArray Chat::createNewSession(QByteArray key, QByteArray sessionNumb)
 }
 QByteArray Chat::getChatPrivateKey()
 {
-    return _accountController->getCurrentActor().getKey()->decrypt(unloadChatKey());
+    return _accountController->getMainActor()->getKey()->decrypt(unloadChatKey());
 }
 
 QByteArray Chat::getActualCurrentSession()
@@ -342,5 +345,5 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
 
 Chat::~Chat()
 {
-    delete _accountController;
+
 }

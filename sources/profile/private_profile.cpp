@@ -153,7 +153,7 @@ void PrivateProfile::profile(QByteArray hash)
                 acContorller->loadActors(idList.first(), idList);
                 if (acContorller->getMainActor() != nullptr)
                     dfs->init();
-                //                emit initPrivateProfile(idList.first(), idList);
+                 emit initActorChatM();
             }
             else
                 continue;

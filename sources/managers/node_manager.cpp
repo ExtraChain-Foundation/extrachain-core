@@ -497,13 +497,14 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::initPrivateProfile, accController, &AccountController::loadActors);
+    connect(prProfile, &PrivateProfile::initActorChatM, chatManger, &ChatManager::ActorInit);
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
     connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
         setIdPrivateProfile(id);
         emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
     });
+    connect(accController, &AccountController::savePrivateProfile, chatManger, &ChatManager::ActorInit);
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
     connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
     connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);

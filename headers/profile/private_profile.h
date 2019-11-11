@@ -33,7 +33,7 @@ public:
 signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
-    void initPrivateProfile(QByteArray id, QByteArrayList idList);
+    void initActorChatM();
     void interestsToUi(QByteArray interes);
 
     void finished();
