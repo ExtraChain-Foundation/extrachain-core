@@ -3,7 +3,7 @@
 Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
            QByteArray chatPath)
 {
-    InitializeOwnerPathNewChat();
+
     this->_chatId = chatId;
     this->_encryptionKey = unloadChatKey();
     this->_accountController = accountController;
@@ -12,6 +12,7 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_chatPath = chatPath;
     this->_actorIndex = actorIndex;
+    InitializeOwnerPathNewChat();
 }
 
 Chat::Chat(QByteArray chatId, QByteArray key, QByteArray currentSession, ActorIndex* actorIndex,
@@ -290,8 +291,13 @@ void Chat::sendMessage(QByteArray message)
     QFile file(getPathToSessions() + getMyCurrentSession());
     if (file.open(QIODevice::Append))
     {
+        qDebug()<<"KeyPRivate ewfwe="<<getChatPrivateKey();
+        qDebug()<<"message="<<message;
+        qDebug()<<"EncryptMEssage="<<encryptMessage(message);
+        qDebug()<<"Decrypt message="<<decryptMessage(encryptMessage(message));
         message = encryptMessage(message) + "\n";
         file.write(message);
+
         file.close();
         emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
     }
