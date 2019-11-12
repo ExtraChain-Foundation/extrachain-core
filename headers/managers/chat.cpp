@@ -217,7 +217,7 @@ QByteArray Chat::getPathToUsers()
 BigNumber Chat::findCurrentSession()
 {
     BigNumber currentSession("-1");
-    QStringList allSessions = QDir(getPathCurrentChat()).entryList(QDir::Dirs);
+    QStringList allSessions = QDir(getPathCurrentChat()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (QString temp : allSessions)
     {
         if (BigNumber(temp.toUtf8()) > currentSession)

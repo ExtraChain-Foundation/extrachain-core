@@ -52,7 +52,7 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
 
 void ChatManager::InitializeChatList()
 {
-    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs);
+    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     QByteArray chatPath = "-1";
     _chatList.clear();
     for (QString chat : chatList)
@@ -105,7 +105,7 @@ ChatManager::ChatManager(AccountController *accController, ActorIndex *actorInde
     this->_actorIndex = actorIndex;
     this->_accController = accController;
     QDir().mkpath(getPathToMyChats());
-    InitializeChatList();
+    //  InitializeChatList();
 }
 
 void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
@@ -276,6 +276,7 @@ void ChatManager::ActorInit()
 {
     this->_currentActorId = this->_accController->getMainActor()->getId().toActorId();
     InitializeConnectSignalSlot();
+    InitializeChatList();
 }
 
 // void ChatManager::addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
