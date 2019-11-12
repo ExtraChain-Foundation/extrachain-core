@@ -324,10 +324,11 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &message)
 {
 
-    if (checkMsgCount(message, handler))
+    if (checkMsgCount(message, handler, connections))
         broadcastMsg(message);
 }
-bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler)
+bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
+                               const QList<SocketService *> list)
 {
     bool flag_result = true;
     bool value = 0;
@@ -337,13 +338,14 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
         handler.insert(hashMsg, value);
     else
     {
-
-        if (handler.find(hashMsg).value()++ == connections.size())
+        if (handler.find(hashMsg).value() == list.size())
+        {
             handler.remove(hashMsg);
-        //        int t = it.value() + 1;
-        //        handler->remove(calcHash(msg));
-        //        handler->insert(calcHash(msg), t);
-        flag_result = false;
+            flag_result = false;
+        }
+        else
+            flag_result = true;
+        handler.find(hashMsg).value()++;
     }
     return flag_result;
 }
@@ -366,7 +368,7 @@ void NetManager::distMessage(const QByteArray &data, const SocketPair &socketDat
 void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     mutex.lock();
-    if (checkMsgCount(msg, handler))
+    if (checkMsgCount(msg, handler, connections))
         resolveManager->setTask(msg, receiver);
     //        emit MsgReceived(msg, receiver);
     else

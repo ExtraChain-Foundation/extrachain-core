@@ -175,7 +175,8 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler);
+    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
+                       const QList<SocketService *> list);
 private slots:
     /**
      * @brief createNewConnectionsFromList
