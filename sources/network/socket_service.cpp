@@ -198,6 +198,8 @@ void SocketService::sockReady()
         dpBuffer->append(socket->read(s));
         mutex.unlock();
     }
+    if (socket->bytesAvailable())
+        sockReady();
     //    QTcpSocket *_sok = this->socket;
     //    while (_sok->bytesAvailable() < 4)
     //        _sok->waitForReadyRead(1000);
