@@ -153,6 +153,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
         return;
     if (id == "-1")
     {
+        accounts.clear();
         qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
         QString path = KeyStore::USER_KEYSTORE;
         int loaded = 0;

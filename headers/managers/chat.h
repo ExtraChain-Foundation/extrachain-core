@@ -61,6 +61,7 @@ public:
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
                           QByteArray ownerId = "-1"); //+
     void sendMessage(QByteArray message);             //+
+    void receiveMessage(QByteArray message);
     // getters setters
     QByteArray getChatId() const;                    //+
     QByteArray getEncryptionKey() const;             //+
@@ -74,6 +75,8 @@ public:
     QList<UIMessage> getAllMessages();    //-
     ActorIndex* getActorIndex() const;    //+
     QByteArray getOwner();                //-
+    QByteArray encryptByChatKey(QByteArray data);
+    QByteArray decryptByChatKey(QByteArray data);
 
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager

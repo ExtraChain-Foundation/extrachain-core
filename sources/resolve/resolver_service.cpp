@@ -15,6 +15,11 @@ void ResolverService::setDfs(Dfs *value)
     dfs = value;
 }
 
+void ResolverService::setChatManager(ChatManager *value)
+{
+    chatManager = value;
+}
+
 ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap,
                                  QMap<QByteArray, QFile *> *listFile, QMap<QString, QByteArray> *fileMap,
                                  QMap<QByteArray, long long> *pckgCounter, QObject *parent)
@@ -186,6 +191,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         Message::DUMessage dfsMsg(message.getMsg_data());
         resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
+        emit TaskFinished();
+    }
+    else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
+    {
+        //
+        chatManager->msgReceiver(message);
         emit TaskFinished();
     }
     // spread messages

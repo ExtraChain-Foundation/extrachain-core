@@ -13,7 +13,7 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
         this->_currentSession = getActualCurrentSession();
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_actorIndex = actorIndex;
-    InitializeOwnerPathNewChat();
+    InitializeAllPaths();
 }
 
 Chat::Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
@@ -189,6 +189,16 @@ QByteArray Chat::getOwner()
     return "-1";
 }
 
+QByteArray Chat::encryptByChatKey(QByteArray data)
+{
+    return encryptMessage(data);
+}
+
+QByteArray Chat::decryptByChatKey(QByteArray data)
+{
+    return encryptByChatKey(data);
+}
+
 QByteArray Chat::getPathCurrentChat()
 {
     return ChatStorage::STORED_CHATS + _chatId + "/";
@@ -326,10 +336,30 @@ void Chat::sendMessage(QByteArray message)
     QFile file(pathToSession(_currentSession) + "/session");
     if (file.open(QIODevice::Append))
     {
-        qDebug()<<"KeyPRivate ewfwe="<<getChatPrivateKey();
-        qDebug()<<"message="<<message;
-        qDebug()<<"EncryptMEssage="<<encryptMessage(message);
-        qDebug()<<"Decrypt message="<<decryptMessage(encryptMessage(message));
+        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
+        qDebug() << "message=" << message;
+        qDebug() << "EncryptMEssage=" << encryptMessage(message);
+        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
+        message = encryptMessage(message) + "\n";
+        file.write(message);
+
+        file.close();
+        //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
+    }
+    else
+
+        qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
+}
+
+void Chat::receiveMessage(QByteArray message)
+{
+    QFile file(pathToSession(_currentSession) + "/session");
+    if (file.open(QIODevice::Append))
+    {
+        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
+        qDebug() << "message=" << message;
+        qDebug() << "EncryptMEssage=" << encryptMessage(message);
+        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
         message = encryptMessage(message) + "\n";
         file.write(message);
 

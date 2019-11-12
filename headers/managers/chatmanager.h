@@ -13,16 +13,46 @@
 // blockhain/index/actor/[ownerId]/chatStorage/[chatId]  /users/[IdAddedUsers]     //files that contain sign
 // of inviter and it id blockhain/index/actor/[ownerId]/chatStorage/[chatId]  /[sessionNumb]            //file
 // that content user messages
+
+#ifndef NETWORK_MANAGER_DEF
+#define NETWORK_MANAGER_DEF
+class NetManager;
+#include "headers/network/network_manager.h"
+#endif
+struct InviteChatMessages
+{
+    QByteArray id;
+    QByteArray owner;
+    QByteArray key;
+    const QByteArray serialize();
+    InviteChatMessages();
+    InviteChatMessages(const QByteArray &serialized);
+};
+
+struct ChatMessage
+{
+    QByteArray id;
+    QByteArray senderMsg;
+    QByteArray message;
+    QByteArray salt;
+    const QByteArray serialize();
+    ChatMessage();
+    ChatMessage(const QByteArray &serialized);
+};
+
 class ChatManager : public QObject
 {
     Q_OBJECT
 private:
+    const QByteArray _salt = "invitetochat";
     AccountController *_accController;
     ActorIndex *_actorIndex;
     QList<Chat *> _chatList;
     QByteArray _currentActorId;
+    NetManager *netManager;
 
 private:
+    void AddChat(QByteArray chatId, QByteArray key, QByteArray owner);
     void InitializeChatList();          //+
     void InitializeConnectSignalSlot(); //-
     QByteArray generateChatId();        //+
@@ -34,7 +64,11 @@ private:
     // QByteArray convertChatIdToFullPath(QByteArray chatId); //
 public:
     ChatManager(AccountController *accController, ActorIndex *actorIndex); //+
-    ~ChatManager();                                                        //+
+    void msgReceiver(const Messages::BaseMessage &msg);
+    bool isChatExist(QByteArray chatId);
+    ~ChatManager(); //+
+
+    void setNetManager(NetManager *value);
 
 public slots:
     void ActorInit(); //+
@@ -60,6 +94,7 @@ signals:
 
     void chatListSend(QList<UIChat> chats);
     void chatSend(QByteArray chatId, QList<UIMessage> messages);
+    void sendMessage(const QByteArray &data, const QByteArray &type);
 };
 
 #endif // CHATMANAGER_H

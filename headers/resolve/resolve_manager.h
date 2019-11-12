@@ -17,6 +17,8 @@ class NodeManager;
 #include "headers/managers/node_manager.h"
 #endif
 
+#include "managers/chatmanager.h"
+class ChatManager;
 static const short ResolverServicePoolMaxSize = 100;
 
 #include <QObject>
@@ -52,6 +54,7 @@ private:
     AccountController *accountControler;
     Dfs *dfs;
     NodeManager *node;
+    ChatManager *chatManager;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
@@ -78,6 +81,8 @@ private:
 
 public:
     bool setTask(QByteArray msg, const SocketPair &receiver);
+    void setChatManager(ChatManager *value);
+
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);

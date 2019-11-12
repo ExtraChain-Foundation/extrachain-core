@@ -5,6 +5,11 @@ void ResolveManager::setNode(NodeManager *value)
     node = value;
 }
 
+void ResolveManager::setChatManager(ChatManager *value)
+{
+    chatManager = value;
+}
+
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
                                QObject *parent)
@@ -91,6 +96,7 @@ void ResolveManager::createNewResolver(const DataStruct &task)
     resolvers.last()->setNode(node);
     resolvers.last()->setBlockchain(blockchain);
     resolvers.last()->setDfs(dfs);
+    resolvers.last()->setChatManager(chatManager);
     connectSignals(resolvers.last());
     // get task from queue
     resolvers.last()->setTask(task.msg, task.receiver);

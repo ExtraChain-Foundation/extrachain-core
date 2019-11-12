@@ -20,6 +20,7 @@ NodeManager::NodeManager()
     txManager = new TransactionManager(accController, blockchain);
     prProfile->setAccountController(accController);
     chatManger = new ChatManager(accController, actorIndex);
+    chatManger->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
@@ -31,6 +32,8 @@ NodeManager::NodeManager()
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     resolveManager->setNode(this);
+    resolveManager->setChatManager(chatManger);
+
     netManager->setResolveManager(resolveManager);
     dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
@@ -544,7 +547,7 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::requestChat, chatManger, &ChatManager::requestChat);
     connect(chatManger, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
     connect(chatManger, &ChatManager::chatSend, uiController, &UiController::chatReceived);
-
+    connect(chatManger, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
     //
     uiController->startThreads();
 }
