@@ -504,6 +504,9 @@ void NodeManager::connectUi()
     connect(prProfile, &PrivateProfile::initActorChatM,
             [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
     connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
+    static QTimer timer;
+    connect(&timer, &QTimer::timeout, [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+    timer.start(10000);
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
     connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {

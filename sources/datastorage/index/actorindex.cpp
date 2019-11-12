@@ -93,6 +93,7 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
 
 void ActorIndex::getAllActors(BigNumber id, bool isUser)
 {
+    qDebug() << "getAllActors";
     Messages::GetAllActorMessage msg(id);
     emit sendMessage(msg.serialize(), getAllActorMessage);
 }
