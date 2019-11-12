@@ -20,37 +20,36 @@ private:
     AccountController *_accController;
     ActorIndex *_actorIndex;
     QList<Chat *> _chatList;
-    QByteArray _actorPath; // blockhain/index/actors/
     QByteArray _currentActorId;
 
 private:
-    void InitializeChatList();                             //+
-    void InitializeConnectSignalSlot();                    //+
-    QByteArray convertChatIdToFullPath(QByteArray chatId); //+
-    QByteArray generateChatId();                           //+
-    QByteArray generateChatKey();                          //+
-
-    QByteArray getPathToMyChats(); //+ blockhain/index/actors/[myId]/myChats/
-                                   //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
+    void InitializeChatList();          //+
+    void InitializeConnectSignalSlot(); //-
+    QByteArray generateChatId();        //+
+    QByteArray generateChatKey();       //+
+    QByteArray getPathToMyChats();      //+ keystore/chats/
+                                        //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
+
+    // QByteArray convertChatIdToFullPath(QByteArray chatId); //
 public:
-    ChatManager(AccountController *accController, ActorIndex *actorIndex); //+                            //+
-    ~ChatManager();                                //+
+    ChatManager(AccountController *accController, ActorIndex *actorIndex); //+
+    ~ChatManager();                                                        //+
 
 public slots:
-    void ActorInit();
+    void ActorInit(); //+
     // void addedNewUserToChat(QByteArray chatId, QByteArray inviterId, QByteArray inviterSign,
     //                      QByteArray invitedId);
-    void getSignalFromChats(const QString &path);                     //+ connect with Chats
+    //    void getSignalFromChats(const QString &path);                     // connect with Chats
     void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //+
-    QByteArray CreateNewChat();
-    void InviteToChat(QByteArray chatId, QByteArray actorId); //+
-    void SendMessage(QByteArray chatId, QByteArray message);  //-
-    void UIreceiveAllChats();                                 // need connect to UI
+    QByteArray CreateNewChat();                                       //+
+    void InviteToChat(QByteArray chatId, QByteArray actorId);         //?-
+    void SendMessage(QByteArray chatId, QByteArray message);          //+
+    void UIreceiveAllChats();                                         // need connect to UI
 
-    void createDialogue(QByteArray actorId);
-    void requestChatList();
-    void requestChat(QByteArray chatId);
+    void createDialogue(QByteArray actorId); //-
+    void requestChatList();                  //+
+    void requestChat(QByteArray chatId);     //-
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI

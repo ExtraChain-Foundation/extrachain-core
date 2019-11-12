@@ -218,7 +218,11 @@ int compare(const QByteArray &one, const QByteArray &two);
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 } // namespace Utils
-
+namespace ChatStorage {
+// keystore/chats/[chat ID]/[sessionID]/ users,key etc.
+static const QByteArray STORED_CHATS = "keystore/chats/";
+// static const QByteArray SESSIONS = "/sessions/";
+}
 namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";
