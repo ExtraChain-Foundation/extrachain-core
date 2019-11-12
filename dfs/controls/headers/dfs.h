@@ -12,6 +12,10 @@
 #include "dfs/managers/headers/sender.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
 #include <QTimer>
+#ifdef ETALONIUM_CLIENT
+#include <QImage>
+#endif
+
 class Dfs : public QObject
 {
 

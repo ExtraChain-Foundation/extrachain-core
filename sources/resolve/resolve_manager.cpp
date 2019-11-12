@@ -109,6 +109,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     if (lockRes)
     {
         DataStruct currentTask = unprocessed.front();
+        unprocessed.pop();
         createNewResolver(currentTask);
     }
 
@@ -117,12 +118,15 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 
 void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msgType)
 {
+
     Messages::BaseMessage msg(msgType);
     msg.init(data);
     if (msgType != Messages::ACTOR_MESSAGE)
         msg.calcDigSig(accountControler->getCurrentActor());
+
     qDebug() << "msg signature:" << msg.getDigSig();
-    //    qDebug() << "NetManager: send " << msgType;
+
+    qDebug() << "send " << msgType;
     QByteArray message = msg.serialize();
     if (Messages::GETTERS.contains(msgType))
     {
@@ -153,11 +157,11 @@ void ResolveManager::taskFinished()
     disconnectSignals(resolver);
     resolvers.removeOne(resolver);
     emit resolver->finished();
-    if ((resolvers.size() == 0)&&(unprocessed.size() != 0))
+    if ((resolvers.size() == 0) && (unprocessed.size() != 0))
     {
         createNewResolver(unprocessed.front());
+        unprocessed.pop();
     }
-
 }
 
 void ResolveManager::process()

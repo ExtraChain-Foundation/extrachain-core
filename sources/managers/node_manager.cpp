@@ -37,7 +37,7 @@ NodeManager::NodeManager()
     connectSignals();
 
 #ifdef ETALONIUM_CONSOLE
-    accController->loadActors();
+    accController->loadActors("-1");
     Actor<KeyPrivate> company;
     if (accController->getAccountCount() == 0)
     {

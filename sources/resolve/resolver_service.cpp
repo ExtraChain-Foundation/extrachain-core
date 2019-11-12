@@ -158,6 +158,11 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     using namespace Messages;
     BaseMessage message;
     message.deserialize(msg);
+    if (message.getMsg_data().isEmpty())
+    {
+        emit TaskFinished();
+        return;
+    }
     QByteArray msgType = message.getMsgType();
     qDebug() << "Resolver: receive " << msgType;
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
