@@ -5,6 +5,11 @@ void ResolveManager::setNode(NodeManager *value)
     node = value;
 }
 
+void ResolveManager::setChatManager(ChatManager *value)
+{
+    chatManager = value;
+}
+
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
                                QObject *parent)
@@ -46,6 +51,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
+    connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
@@ -68,6 +74,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
 
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
+    disconnect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     disconnect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     disconnect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     disconnect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
@@ -83,41 +90,54 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
     return Utils::calcKeccak(msg);
 }
 
+void ResolveManager::createNewResolver(const DataStruct &task)
+{
+    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
+    resolvers.last()->setNode(node);
+    resolvers.last()->setBlockchain(blockchain);
+    resolvers.last()->setDfs(dfs);
+    resolvers.last()->setChatManager(chatManager);
+    connectSignals(resolvers.last());
+    // get task from queue
+    resolvers.last()->setTask(task.msg, task.receiver);
+    auto crutch = resolvers.last();
+    connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
+    ThreadPool::addThread(resolvers.last());
+}
+
 bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
-    bool lockRes = mutex.tryLock(100);
+    DataStruct task;
+    task.msg = msg;
+    task.receiver = receiver;
+    mutex.lock();
+    unprocessed.push(task);
+    bool lockRes = resolvers.size() < ResolverServicePoolMaxSize;
     if (lockRes)
     {
-        //        if (resolvers.size() >= RESOLVER_MAX)
-        //        {
-        //            DataStruct d = { msg, receiver };
-        //            unprocessed.append(d);
-        //        }
-        //        else
-        //        {
-        resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
-        resolvers.last()->setNode(node);
-        resolvers.last()->setBlockchain(blockchain);
-        resolvers.last()->setDfs(dfs);
-        connectSignals(resolvers.last());
-        resolvers.last()->setTask(msg, receiver);
-        auto crutch = resolvers.last();
-        connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
-        ThreadPool::addThread(resolvers.last());
-        //        }
-        mutex.unlock();
+        DataStruct currentTask = unprocessed.front();
+        unprocessed.pop();
+        createNewResolver(currentTask);
     }
+    mutex.unlock();
     return lockRes;
 }
 
 void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msgType)
 {
+
     Messages::BaseMessage msg(msgType);
     msg.init(data);
-    if (msgType != Messages::ACTOR_MESSAGE)
-        msg.calcDigSig(accountControler->getCurrentActor());
 
-    //    qDebug() << "NetManager: send " << msgType;
+    if (msgType != Messages::ACTOR_MESSAGE)
+    {
+        if (accountControler->getAccountCount() == 0)
+            return;
+        msg.calcDigSig(accountControler->getCurrentActor());
+    }
+    //    qDebug() << "msg signature:" << msg.getDigSig();
+
+    //    qDebug() << "send " << msgType;
     QByteArray message = msg.serialize();
     if (Messages::GETTERS.contains(msgType))
     {
@@ -134,10 +154,11 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
 
 {
     Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
-    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
+    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE
+        /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
         rmsg.calcDigSig(accountControler->getCurrentActor());
 
-    qDebug() << "NetManager: send " << msgType;
+    //    qDebug() << "NetManager: send " << msgType;
     networkManager->distMessage(rmsg.serialize(), receiver);
     //    emit socketSendMsg(rmsg.serialize(), receiver);
 }
@@ -148,15 +169,11 @@ void ResolveManager::taskFinished()
     disconnectSignals(resolver);
     resolvers.removeOne(resolver);
     emit resolver->finished();
-    // resolver->thread()->deleteLater();
-    // delete resolver;
-    //    mutex.tryLock(100);
-    //    if (unprocessed.size() > 0)
-    //    {
-    //        if (this->setTask(unprocessed[0].msg, unprocessed[0].receiver))
-    //            unprocessed.removeAt(0);
-    //    }
-    //    mutex.unlock();
+    if ((resolvers.size() == 0) && (unprocessed.size() != 0))
+    {
+        createNewResolver(unprocessed.front());
+        unprocessed.pop();
+    }
 }
 
 void ResolveManager::process()

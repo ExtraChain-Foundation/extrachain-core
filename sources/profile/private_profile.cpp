@@ -12,22 +12,19 @@ void PrivateProfile::setDfs(Dfs *value)
     dfs = value;
 }
 
-void PrivateProfile::savePrivateProfile(QByteArray login, QByteArray password, QByteArray id)
+void PrivateProfile::savePrivateProfile(QByteArray hash, QByteArray id)
 {
     QDir().mkdir("keystore/profile");
-    QByteArray data = login + password;
-    QByteArray secureLogin = Utils::calcKeccak(data);
-    data = secureLogin + id;
+    QByteArray data = hash + id;
     blowFish_crypt crypt;
-    data = crypt.EncryptBlowFish(data, secureLogin);
+    data = crypt.EncryptBlowFish(data, hash);
     QFile file("keystore/profile/" + id + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
     file.flush();
     file.close();
-    emit setIdProfile(id);
-    emit setHashProfile(secureLogin);
 }
+
 void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray _data,
                                         typeDataPrProfile type)
 {
@@ -129,6 +126,7 @@ void PrivateProfile::profile(QByteArray hash)
     QDir dir("keystore/profile");
     QStringList users = dir.entryList(QDir::Files);
     QByteArrayList idList;
+
     if (users.isEmpty())
     {
         qDebug() << "ERROR: empty keystore";
@@ -157,10 +155,16 @@ void PrivateProfile::profile(QByteArray hash)
                 acContorller->loadActors(idList.first(), idList);
                 if (acContorller->getMainActor() != nullptr)
                     dfs->init();
-                //                emit initPrivateProfile(idList.first(), idList);
+                emit initActorChatM();
             }
             else
+            {
+#ifdef ETALONIUM_CONSOLE
+                std::cout << "Incorrect password" << std::endl;
+                std::exit(0);
+#endif
                 continue;
+            }
         }
     }
     return;

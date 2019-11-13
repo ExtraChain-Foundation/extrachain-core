@@ -30,12 +30,14 @@ private:
     void socketDisconnect(SocketService *connection);
     void startNetwork() override;
     void setupServerServiceConnections() override;
+    //    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler) override;
 
 public:
     NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
     void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
               const SocketPair &receiver = SocketPair());
+
 signals:
     void finished();
     //    void sendMsg(const QByteArray &message, const SocketPair &receiver);

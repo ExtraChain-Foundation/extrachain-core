@@ -15,6 +15,11 @@ void ResolverService::setDfs(Dfs *value)
     dfs = value;
 }
 
+void ResolverService::setChatManager(ChatManager *value)
+{
+    chatManager = value;
+}
+
 ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap,
                                  QMap<QByteArray, QFile *> *listFile, QMap<QString, QByteArray> *fileMap,
                                  QMap<QByteArray, long long> *pckgCounter, QObject *parent)
@@ -47,7 +52,7 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 bool ResolverService::validate(const Messages::IMessage &message)
 {
     BigNumber signer = message.getSigner();
-    if (signer == 0)
+    if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
@@ -75,8 +80,8 @@ bool ResolverService::validate(const Messages::IMessage &message)
 
 QByteArray ResolverService::calcHash(const QByteArray &request) const
 {
-    qDebug() << "RESOLVER SERVICE: "
-             << "calcHash()";
+    //    qDebug() << "RESOLVER SERVICE: "
+    //             << "calcHash()";
     return Utils::calcKeccak(request);
 }
 
@@ -147,13 +152,24 @@ void ResolverService::process()
 {
     recieveMsg(this->msg, this->senderAddress);
 }
+// getAllActors
+// return all id actors that have current actor from actorIndex
 
+/*
+
+ */
 void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiver)
 {
     using namespace Messages;
     BaseMessage message;
     message.deserialize(msg);
     QByteArray msgType = message.getMsgType();
+    if (message.getMsg_data().isEmpty() && msgType != GET_ALL_ACTORS && msgType != GET_BLOCK_COUNT_MESSAGE)
+    {
+        emit TaskFinished();
+        return;
+    }
+
     qDebug() << "Resolver: receive " << msgType;
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
     {
@@ -163,6 +179,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
             if (MessageIsNotValid(responseMessage))
                 return;
         }
+        else
+        {
+            //            qDebug() << "received msg signature:" << message.getDigSig();
+            if (MessageIsNotValid(message))
+                return;
+        }
     }
     // dfs message
     if (msgType == DFS_MESSAGE)
@@ -170,6 +192,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         Message::DUMessage dfsMsg(message.getMsg_data());
         resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
+        emit TaskFinished();
+    }
+    else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
+    {
+        //
+        chatManager->msgReceiver(message);
         emit TaskFinished();
     }
     // spread messages
@@ -266,6 +294,12 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         emit getActor(response.getActorId(), calcHash(msg), receiver);
         emit TaskFinished();
     }
+    else if (msgType == GET_ALL_ACTORS)
+    {
+        //        GetAllActorMessage response(message.getMsg_data());
+        emit handleGetAllActor(calcHash(msg), receiver);
+        emit TaskFinished();
+    }
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage txMessage(message.getMsg_data());
@@ -298,6 +332,18 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         if (checkResponseHandler(responseMessage.getDataHash()))
             return;
         actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        emit TaskFinished();
+    }
+    else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
+    {
+        //        qDebug() << "RESOLVER SERVICE: "
+        //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
+        //                 msg;
+        BaseMessageResponse responseMessage(msg);
+        if (checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.getMsg_data(), 4));
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         emit TaskFinished();
     }

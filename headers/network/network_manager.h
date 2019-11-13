@@ -86,7 +86,7 @@ protected:
     ActorIndex *actorIndex;
     AccountController *accounts;
     ResolveManager *resolveManager;
-    QString serverIp = "51.68.181.52";
+    QString serverIp = "51.68.181.53";
     bool allowLocalServer = false;
 
     QNetworkAddressEntry *local = nullptr;
@@ -175,7 +175,8 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler);
+    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
+                       const QList<SocketService *> list);
 private slots:
     /**
      * @brief createNewConnectionsFromList

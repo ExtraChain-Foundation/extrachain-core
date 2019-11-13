@@ -12,13 +12,15 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
-
+    actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
     this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
     prProfile->setAccountController(accController);
+    chatManger = new ChatManager(accController, actorIndex);
+    chatManger->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
@@ -30,33 +32,17 @@ NodeManager::NodeManager()
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     resolveManager->setNode(this);
+    resolveManager->setChatManager(chatManger);
+
     netManager->setResolveManager(resolveManager);
     dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
+    actorIndex->setResolveManager(resolveManager);
     connectSignals();
-
-#ifdef ETALONIUM_CONSOLE
-    accController->loadActors();
-    Actor<KeyPrivate> company;
-    if (accController->getAccountCount() == 0)
-    {
-        company = CreateExtracoin();
-    }
-    else
-    {
-        company = *accController->getAccounts()[0];
-    }
-    QByteArray td = company.getKey()->sign("test");
-    std::cout << company.getKey()->verify("test", td) << std::endl;
-    TMP::companyActorId = new QByteArray(company.getId().toByteArray());
-    actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
-    if (blockchain->getRecords() <= 0)
-    {
-        QMap<BigNumber, BigNumber> tm;
-        tm.insert(0, 0);
-        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
-    }
-#endif
+    static QTimer timer;
+    connect(&timer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+    timer.start(10000);
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -66,10 +52,43 @@ NodeManager::NodeManager()
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
+    ThreadPool::addThread(chatManger);
+}
 
+void NodeManager::createCompanyActor(const QString &password)
+{
 #ifdef ETALONIUM_CONSOLE
-    emit accController->initDfs();
+    // accController->loadActors("-1");
+    Actor<KeyPrivate> company;
+    QByteArray consoleHash = Utils::calcKeccak(password.toUtf8());
+
+    if (QDir("keystore/profile").isEmpty())
+    {
+        company = CreateExtracoin();
+        emit savePrivateProfile(consoleHash, company.getId().toActorId());
+    }
+    else
+    {
+        // company = *accController->getAccounts()[0];
+        emit loadProfileForConsoleLogin(consoleHash);
+    }
+
+    if (blockchain->getRecords() <= 0)
+    {
+        QByteArray td = company.getKey()->sign("test");
+        std::cout << company.getKey()->verify("test", td) << std::endl;
+        TMP::companyActorId = new QByteArray(company.getId().toByteArray());
+        actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
+
+        QMap<BigNumber, BigNumber> tm;
+        tm.insert(0, 0);
+        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+    }
 #endif
+
+
+
+
 }
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
@@ -310,6 +329,26 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
     return Transaction();
 }
 
+void NodeManager::getAllActors()
+{
+    QByteArray res = getIdPrivateProfile();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+}
+void NodeManager::getAllActorsTimerCall()
+{
+#ifdef ETALONIUM_CLIENT
+    QByteArray res = getIdPrivateProfile();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+#endif
+#ifdef ETALONIUM_CONSOLE
+    QByteArray res = accController->getMainActor()->getId().toActorId();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+#endif
+}
+
 void NodeManager::createNetManagerIdentificator()
 {
     QFile file(".settings");
@@ -449,20 +488,14 @@ void NodeManager::connectUi()
     //=======================================WALLET=========================================
     connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
     connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
-    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
+    //    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
 
     connect(uiWallet, &WalletController::sendCoinRequestFromUi, resolveManager,
             &ResolveManager::registrateMsg);
-    connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
-        auto actor = accController->createActor(0);
-        accController->savePrivateActor(actor);
-        auto wallets = uiWallet->getCurrentWallets();
-        uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
-        uiWallet->createWalletToNode();
-    });
+    connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id,
@@ -501,10 +534,18 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::initPrivateProfile, accController, &AccountController::loadActors);
+    connect(prProfile, &PrivateProfile::initActorChatM, chatManger, &ChatManager::ActorInit);
+    //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
+    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
-    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
+        setIdPrivateProfile(id);
+        emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
+    });
+    connect(accController, &AccountController::savePrivateProfile, chatManger, &ChatManager::ActorInit);
+    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
     connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
     connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
@@ -515,7 +556,10 @@ void NodeManager::connectUi()
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=]() { accController->createActor(1); });
+            [=](QByteArray hash, const bool account) {
+                setHashLoginPrivateProfile(hash);
+                accController->createActor(1);
+            });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -525,8 +569,37 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
+    connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
+    //=============================================CHAT=======================================
+    connect(uiController, &UiController::createChat, chatManger, &ChatManager::CreateNewChat);
+    connect(uiController, &UiController::inviteToChat, chatManger, &ChatManager::InviteToChat);
+    connect(uiController, &UiController::sendMessage, chatManger, &ChatManager::SendMessage);
+
+    connect(uiController, &UiController::createDialogue, chatManger, &ChatManager::createDialogue);
+    connect(uiController, &UiController::requestChatList, chatManger, &ChatManager::requestChatList);
+    connect(uiController, &UiController::requestChat, chatManger, &ChatManager::requestChat);
+    connect(chatManger, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
+    connect(chatManger, &ChatManager::chatSend, uiController, &UiController::chatReceived);
+    connect(chatManger, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+    //
     uiController->startThreads();
+}
+void NodeManager::addNewWallet()
+{
+    auto actor = accController->createActor(0);
+    accController->savePrivateActor(actor);
+    auto wallets = uiWallet->getCurrentWallets();
+    uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
+    this->createWalletInUi();
+    //    uiWallet->createWalletToNode();
+}
+#elif ETALONIUM_CONSOLE
+void NodeManager::connectConsole()
+{
+    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(this, &NodeManager::loadProfileForConsoleLogin, prProfile,
+            &PrivateProfile::loadProfileForAutoLogin);
 }
 #endif
 
@@ -548,6 +621,7 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
+    //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
 }
 
@@ -556,6 +630,8 @@ void NodeManager::connectSignals()
     connectTxManager();
 #ifdef ETALONIUM_CLIENT
     connectUi();
+#elif ETALONIUM_CONSOLE
+    connectConsole();
 #endif
     connectResolveManager();
     connectContractManager();
@@ -563,6 +639,7 @@ void NodeManager::connectSignals()
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
+    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
 void NodeManager::prepareFolders()
@@ -636,6 +713,7 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
     createTransactionFrom(BigNumber(*actorIndex->companyId), receiver, amount);
 }
+
 QByteArray NodeManager::getIdPrivateProfile() const
 {
     return idPrivateProfile;

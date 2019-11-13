@@ -17,7 +17,13 @@ class NodeManager;
 #include "headers/managers/node_manager.h"
 #endif
 
+#include "managers/chatmanager.h"
+class ChatManager;
+static const short ResolverServicePoolMaxSize = 30;
+
 #include <QObject>
+#include <QQueue>
+#include <queue>
 #include "headers/datastorage/blockchain.h"
 #include "headers/datastorage/index/actorindex.h"
 #include "headers/managers/tx_manager.h"
@@ -33,8 +39,7 @@ class ResolveManager : public QObject
     Q_OBJECT
 
 private:
-    const int RESOLVER_MAX = 100;
-    QList<DataStruct> unprocessed;
+    std::queue<DataStruct> unprocessed;
     QList<ResolverService *> resolvers;
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
     QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
@@ -49,6 +54,7 @@ private:
     AccountController *accountControler;
     Dfs *dfs;
     NodeManager *node;
+    ChatManager *chatManager;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
@@ -63,6 +69,11 @@ private:
     void disconnectSignals(ResolverService *resolver);
 
     const QByteArray calcKeccak256(const QByteArray &msg) const;
+    /**
+     * @brief createNewResolver
+     * @param task
+     */
+    void createNewResolver(const DataStruct &task);
 
 private:
     QList<ResolverService *> getActive();
@@ -70,6 +81,8 @@ private:
 
 public:
     bool setTask(QByteArray msg, const SocketPair &receiver);
+    void setChatManager(ChatManager *value);
+
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);

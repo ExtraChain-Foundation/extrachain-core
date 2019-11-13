@@ -80,8 +80,10 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     //    emit addActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
-
     accounts.append(actor);
+    if (accounts.size() - 1 == 0)
+        emit savePrivateProfile(actor->getId().toActorId());
+
     userNum = accounts.size() - 1;
 
     qDebug() << "create actor finished" << account;
@@ -91,6 +93,7 @@ Actor<KeyPrivate> AccountController::createActor(int account)
         emit initDfs();
     }
     emit newActorIsCreated(this->getMainActor()->getId(), account);
+
     if (!accounts.isEmpty())
         blockchain->getBlockZero();
     return *actor;
@@ -149,6 +152,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 {
     if (id.isEmpty())
         return;
+
     accounts.clear();
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
@@ -178,7 +182,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 
     if (loaded > 0)
     {
-        qDebug() << loaded << " accounts have been loaded" << id;
+        qDebug() << loaded << "accounts have been loaded" << id;
         blockchain->getBlockZero();
         emit loadWallets(id, idList);
     }

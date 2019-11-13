@@ -1,4 +1,10 @@
 #include "datastorage/index/actorindex.h"
+#include "headers/resolve/resolve_manager.h"
+
+void ActorIndex::setAccController(AccountController *value)
+{
+    accController = value;
+}
 
 ActorIndex::ActorIndex(QObject *parent)
     : QObject(parent)
@@ -20,7 +26,8 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     else
     {
         Messages::GetActorMessage msg(id);
-        emit sendMessage(msg.serialize(), getActorMessage);
+        resolveManager->registrateMsg(msg.serialize(), getActorMessage);
+        //        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
     }
@@ -60,9 +67,53 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.isEmpty())
-        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
-    if (!actor.profile().getProfile().isEmpty())
-        emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    {
+        resolveManager->sendMessageResponse(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
+                                            receiver);
+        //        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
+        //        receiver);
+        if (!actor.profile().getProfile().isEmpty())
+            resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
+        //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    }
+}
+
+void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receiver)
+{
+    if (accController->getAccountCount() == 0)
+        return;
+    QByteArrayList result;
+    QDir folder(folderPath);
+    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString &folderName : listFolder)
+    {
+        QDir folderActor(folderPath + "/" + folderName);
+        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
+        for (const QString &nameActor : listActor)
+        {
+            QFile file(folderPath + "/" + folderName + "/" + nameActor);
+            if (file.exists())
+                result.append(nameActor.toUtf8());
+        }
+    }
+    if (!result.isEmpty())
+    {
+        resolveManager->sendMessageResponse(Serialization::universalSerialize(result, 4),
+                                            Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
+        //        emit responseReady(Serialization::universalSerialize(result, 4),
+        //                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
+    }
+    return;
+}
+
+void ActorIndex::getAllActors(BigNumber id, bool isUser)
+{
+    if (accController->getAccountCount() > 0)
+    {
+        Messages::GetAllActorMessage msg(id);
+        resolveManager->registrateMsg(msg.serialize(), getAllActorMessage);
+        //    emit sendMessage(msg.serialize(), getAllActorMessage);
+    }
 }
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
@@ -84,6 +135,12 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
     }
 }
 
+void ActorIndex::handleNewAllActors(QByteArrayList actors)
+{
+    for (const QByteArray &actor : actors)
+        getActor(actor);
+}
+
 void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
 {
     if (getActor(actor.getId()).isEmpty())
@@ -93,12 +150,19 @@ void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
     }
 }
 
+void ActorIndex::setResolveManager(ResolveManager *value)
+{
+    resolveManager = value;
+}
+
 void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &receiver)
 {
 
     qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->getRecords();
-    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
-                       requestHash, receiver);
+    resolveManager->sendMessageResponse(this->getRecords().toByteArray(),
+                                        Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE, requestHash, receiver);
+    //    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
+    //                       requestHash, receiver);
 }
 
 void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
@@ -115,7 +179,8 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        emit sendMessage(profile.serialize(), profileType);
+        resolveManager->registrateMsg(profile.serialize(), profileType);
+        //        emit sendMessage(profile.serialize(), profileType);
     }
     else
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
@@ -136,7 +201,8 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     }
     else
     {
-        emit sendMessage(pubProfile.serialize(), profileType);
+        resolveManager->registrateMsg(pubProfile.serialize(), profileType);
+        //        emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
 
@@ -276,14 +342,14 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     if (actor.getAccount() == 2 && companyId == nullptr)
     {
         qDebug() << "Save company ID->" << actor.getId().toByteArray();
-        companyId = new QByteArray(actor.getId().toByteArray());
+        companyId = new QByteArray(actor.getId().toActorId());
     }
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
                  << "lsd: ";
-
-        emit sendMessage(actor.serialize(), classType);
+        resolveManager->registrateMsg(actor.serialize(), classType);
+        //        emit sendMessage(actor.serialize(), classType);
 
         if (actor.getAccount() > 0)
         {

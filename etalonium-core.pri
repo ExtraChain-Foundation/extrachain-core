@@ -43,6 +43,7 @@ SOURCES += \
     $$PWD/sources/managers/thread_pool.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
     $$PWD/sources/network/packages/base_message_response.cpp \
+    $$PWD/sources/network/packages/service/get_all_actor_message.cpp \
     $$PWD/sources/network/packages/service/list_connections.cpp \
     $$PWD/sources/network/socket/socket_worker.cpp \
     $$PWD/sources/network/socket_pair.cpp \
@@ -127,6 +128,7 @@ HEADERS += \
     $$PWD/headers/managers/thread_pool.h \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/network/packages/base_message_response.h \
+    $$PWD/headers/network/packages/service/get_all_actor_message.h \
     $$PWD/headers/network/socket/socket_worker.h \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \

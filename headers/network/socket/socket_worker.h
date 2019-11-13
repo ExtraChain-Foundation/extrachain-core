@@ -2,6 +2,7 @@
 #define SOCKET_WORKER_H
 #include <QObject>
 #include <QTcpSocket>
+#include <QTimer>
 
 namespace net {
 enum Worker
@@ -20,6 +21,8 @@ private:
     net::Worker type;
     SocketService *socket;
     bool active = false;
+    QTimer *timer;
+    int pendMsgSize = 0;
 
 public:
     SocketWorker(net::Worker type, QByteArray *buf, QObject *parent = nullptr);
@@ -30,6 +33,8 @@ public:
     void setSocket(SocketService *value);
 
 private:
+    void continueDoRead();
+private slots:
     void doRead();
     void doAdd();
 public slots:

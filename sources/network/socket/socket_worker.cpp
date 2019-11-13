@@ -10,7 +10,7 @@ SocketWorker::SocketWorker(net::Worker type, QByteArray *buf, QObject *parent)
 
 SocketWorker::~SocketWorker()
 {
-    //
+    delete timer;
 }
 
 bool SocketWorker::isActive()
@@ -20,23 +20,31 @@ bool SocketWorker::isActive()
 
 void SocketWorker::process()
 {
-    active = true;
-    while (isActive())
+    timer = new QTimer(this);
+    if (this->type == net::Worker::Read)
     {
-        if (this->type == net::Worker::Read)
-        {
-            doRead();
-        }
-        else if (this->type == net::Worker::Add)
-        {
-            doAdd();
-        }
+        connect(timer, &QTimer::timeout, this, &SocketWorker::doRead);
     }
+    else if (this->type == net::Worker::Add)
+    {
+        connect(timer, &QTimer::timeout, this, &SocketWorker::doAdd);
+    }
+    timer->start(5);
+    active = true;
 }
 
 void SocketWorker::killWorker()
 {
-    //
+    timer->stop();
+    if (this->type == net::Worker::Read)
+    {
+        disconnect(timer, &QTimer::timeout, this, &SocketWorker::doRead);
+    }
+    else if (this->type == net::Worker::Add)
+    {
+        disconnect(timer, &QTimer::timeout, this, &SocketWorker::doAdd);
+    }
+    active = false;
 }
 
 void SocketWorker::setSocket(SocketService *value)
@@ -46,25 +54,39 @@ void SocketWorker::setSocket(SocketService *value)
 
 void SocketWorker::doRead()
 {
-    while (dpBuf->size() < 4)
+    if (pendMsgSize > 0)
     {
-        QThread::currentThread()->usleep(500);
-        //        doRead();
+        continueDoRead();
     }
+    else
+    {
+        if (dpBuf->size() < 4)
+        {
+            return;
+        }
+        mutex.lock();
+        QByteArray msgLength = dpBuf->mid(0, 4);
+        pendMsgSize = Utils::qByteArrayToInt(msgLength);
+        dpBuf->remove(0, 4);
+        mutex.unlock();
+        if (dpBuf->size() >= pendMsgSize)
+            continueDoRead();
+        else
+            return;
+    }
+}
+
+void SocketWorker::continueDoRead()
+{
     mutex.lock();
-    QByteArray msgLength = dpBuf->mid(0, 4);
-    int pckSize = Utils::qByteArrayToInt(msgLength);
-    dpBuf->remove(0, 4);
-    while (dpBuf->size() < pckSize)
-        QThread::currentThread()->usleep(500);
-    QByteArray pckg = dpBuf->mid(0, pckSize);
-    dpBuf->remove(0, pckSize);
+    QByteArray pckg = dpBuf->mid(0, pendMsgSize);
+    dpBuf->remove(0, pendMsgSize);
+    pendMsgSize = 0;
     mutex.unlock();
     if (!socket->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
     {
         QByteArray b = pckg.mid(IDENTIFICATOR.size());
         socket->processID(b);
-        return;
     }
     else
     {
@@ -72,8 +94,6 @@ void SocketWorker::doRead()
         receiver.setId(socket->getID().toByteArray());
         socket->gotMessage(pckg, receiver);
     }
-    if (socket->getSocket()->bytesAvailable())
-        doRead();
 }
 
 void SocketWorker::doAdd()

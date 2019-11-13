@@ -210,8 +210,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
             QString path = pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId) + '/' + el;
 
             Message::dfs_request rqst(path, accountControler->getCurrentActor().getId().toActorId());
-            dfsNetManager->send(rqst.serialize());
-            QFile(path + based_dfs_struct::FILE_IDENTIFICATOR).remove();
+            //            dfsNetManager->send(rqst.serialize());
+            //            QFile(path + based_dfs_struct::FILE_IDENTIFICATOR).remove();
         }
     }
     //    if (QFile(prevFilePath + based_dfs_struct::FILE_IDENTIFICATOR.toUtf8()).exists())
@@ -299,6 +299,19 @@ void Dfs::initDFSNetManager(ResolveManager *resolveManager)
 void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
                        const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
 {
+#ifdef ETALONIUM_CLIENT
+    if (type == based_dfs_struct::Type::images)
+    {
+        QImage im(path);
+        if (im.save("temp", "jpeg", 50))
+        {
+            saveD("temp", type, subType, status);
+            QFile filed("temp");
+            filed.remove();
+            return;
+        }
+    }
+#endif
     saveD(path, type, subType, status);
 }
 

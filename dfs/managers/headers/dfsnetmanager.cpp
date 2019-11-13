@@ -63,7 +63,7 @@ NetManager *DFSNetManager::getNetManager()
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     //    mutex.lock();
-    if (checkMsgCount(msg, handler))
+    if (checkMsgCount(msg, handler, socketsList))
         resolveManager->setTask(msg, receiver);
     else
         qDebug()
@@ -95,7 +95,7 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     //        msg.calcDigSig(accounts->getCurrentActor());
 
     QByteArray message = msg.serialize();
-    if (checkMsgCount(message, handler))
+    if (checkMsgCount(message, handler, socketsList))
     {
         std::for_each(socketsList.begin(), socketsList.end(),
                       [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });

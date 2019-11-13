@@ -36,6 +36,9 @@ class Dfs;
 #include "dfs/controls/headers/dfs.h"
 #endif
 
+#include "managers/chatmanager.h"
+class ChatManager;
+
 #include <QHostAddress>
 #include <QJsonObject>
 #include <QObject>
@@ -71,6 +74,7 @@ private:
     ActorIndex *actorIndex;
     Blockchain *blockchain;
     Dfs *dfs;
+    ChatManager *chatManager;
 
 private:
     bool active = false;
@@ -117,6 +121,8 @@ public:
     void setBlockchain(Blockchain *value);
 
     void setDfs(Dfs *value);
+
+    void setChatManager(ChatManager *value);
 
 private:
     /**
@@ -235,6 +241,8 @@ signals:
 
     // request
     void getActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+
+    void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
 
     void getTx(const SearchEnum::TxParam &param, const QByteArray &value, const SocketPair &receiver,
                const QByteArray &request);

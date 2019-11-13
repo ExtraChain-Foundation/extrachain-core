@@ -18,7 +18,7 @@ private:
     AccountController *acContorller;
     Dfs *dfs;
 public slots:
-    void savePrivateProfile(QByteArray login, QByteArray password, QByteArray id);
+    void savePrivateProfile(QByteArray hash, QByteArray id);
     void loadPrivateProfile(QByteArray login, QByteArray password);
     void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
                             typeDataPrProfile type);
@@ -33,7 +33,7 @@ public:
 signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
-    void initPrivateProfile(QByteArray id, QByteArrayList idList);
+    void initActorChatM();
     void interestsToUi(QByteArray interes);
 
     void finished();
