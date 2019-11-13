@@ -97,7 +97,7 @@ QByteArray ChatManager::getPathToMyChats()
 
 QByteArray ChatManager::generateChatKey()
 {
-    return Utils::calcKeccak(BigNumber::random(64).toByteArray());
+    return Utils::calcKeccak(BigNumber::random(65).toByteArray());
 }
 
 ChatManager::ChatManager(AccountController *accController, ActorIndex *actorIndex)
@@ -177,8 +177,7 @@ QByteArray ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
-    QByteArray key = _accController->getCurrentActor().getKey()->encrypt(generateChatKey());
-    _chatList.push_front(new Chat(chatId, key, 0, _actorIndex, _accController,
+    _chatList.push_front(new Chat(chatId, generateChatKey(), 0, _actorIndex, _accController,
                                   QList<QByteArray>{ _currentActorId }, _currentActorId));
     return chatId;
     //    QDir().mkpath(getPathToMyChats() + chatId);
@@ -196,7 +195,7 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     temp.InviteNewUser(actorId);
     InviteChatMessages msg;
     msg.id = chatId;
-    msg.key = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(temp.getChatPrivateKey());
+    msg.key = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(temp.unloadChatKey());
     msg.owner = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(_currentActorId); // encrypt
     sendMessage(msg.serialize(), Messages::INVITE_CHAT_MESSAGE);
     //    if (!temp.isUserVerify(_currentActorId)

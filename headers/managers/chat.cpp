@@ -5,12 +5,13 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
 {
 
     this->_chatId = chatId;
-    this->_encryptionKey = unloadChatKey();
+
     this->_accountController = accountController;
     if (sessionNumb != -1)
         this->_currentSession = sessionNumb;
     else
         this->_currentSession = getActualCurrentSession();
+    this->_encryptionKey = unloadChatKey();
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_actorIndex = actorIndex;
     InitializeAllPaths();
@@ -82,7 +83,7 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb)
 }
 QByteArray Chat::unloadChatKey()
 {
-    QFile file(pathToSession(getActualCurrentSession().toByteArray()) + "/key");
+    QFile file(pathToSession(_currentSession) + "/key");
     if (!file.exists())
         return "0";
     if (file.open(QIODevice::ReadOnly))
@@ -149,36 +150,41 @@ QList<QByteArray> Chat::getAllUsers()
 
 QList<UIMessage> Chat::getAllMessages()
 {
-    //    QByteArray messages;
-    QList<UIMessage> messageList;
-    //    QFile chats;
-    //    QList<QByteArray> qlistMessages;
-    //    QStringList keyList = QDir(getPathMyChatsKeyStore()).entryList(QDir::Files);
-    //    for (QString& i : keyList)
-    //    {
-    //        i.remove(0, 3);
-    //        chats.setFileName(getPathToSessions() + i);
-    //        if (chats.open(QIODevice::ReadOnly))
-    //        {
-    //            while (!chats.atEnd())
-    //            {
-    //                messages = chats.readLine();
-    //                messages = decryptMessage(messages);
-    //                qlistMessages = Serialization::universalDeserialize(messages);
-    //                if (qlistMessages.size() != 2)
-    //                {
-    //                    qDebug() << "[Error] Chat. getAllMessages. Qlist.size!=2";
-    //                    continue;
-    //                }
-    //                messageList.append(UIMessage { qlistMessages.at(0), qlistMessages.at(1) });
-    //            }
-    //        }
-    //        else
-    //            qDebug() << "[Error] Chat. getAllMessages. Can't open the file" << getPathToSessions() + i;
-    //        chats.close();
-    //    }
 
-    return messageList;
+    QList<QByteArray> allMessages = getAllMessagesByteArray();
+    if (allMessages.empty())
+        return {};
+    QList<UIMessage> result;
+    QList<QByteArray> currentData;
+
+    QByteArray decryptedCurrentMessage;
+    for (QByteArray msginList : allMessages)
+    {
+        decryptedCurrentMessage = decryptMessage(msginList);
+        currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
+        if (currentData.size() == 2)
+            result.append(UIMessage{ currentData.at(0), currentData.at(1) });
+
+        else
+
+            qDebug() << "[Error] Size !=2 in getAllMessages Chat";
+    }
+    return result;
+}
+
+QList<QByteArray> Chat::getAllMessagesByteArray()
+{
+    QList<QByteArray> list;
+    QFile file(pathToSession(_currentSession) + "/session");
+    if (file.open(QIODevice::ReadOnly))
+    {
+
+        list = Serialization::universalDeserialize(file.readAll());
+        file.close();
+        return list;
+    }
+    qDebug() << "[Error] File with session doesn't open. getAllMessagesByteArray Chat";
+    return {};
 }
 
 ActorIndex* Chat::getActorIndex() const
@@ -290,10 +296,10 @@ bool Chat::createNewSession(QByteArray key, QList<QByteArray> users, QByteArray 
     //            users = { _currentActorId };
     //    }
 }
-QByteArray Chat::getChatPrivateKey()
-{
-    return _accountController->getMainActor()->getKey()->decrypt(unloadChatKey());
-}
+// QByteArray Chat::getChatPrivateKey()
+//{
+//    return _accountController->getMainActor()->getKey()->decrypt(unloadChatKey());
+//}
 
 BigNumber Chat::getActualCurrentSession()
 {
@@ -301,11 +307,11 @@ BigNumber Chat::getActualCurrentSession()
 }
 QByteArray Chat::encryptMessage(QByteArray message)
 {
-    return blowFish_crypt().EncryptBlowFish(message, getChatPrivateKey());
+    return blowFish_crypt().EncryptBlowFish(message, unloadChatKey());
 }
 QByteArray Chat::decryptMessage(QByteArray message)
 {
-    return encryptMessage(message);
+    return blowFish_crypt().DecryptBlowFish(message, unloadChatKey());
 }
 
 void Chat::loadUsers(QList<QByteArray> userList, QList<QByteArray> userData)
@@ -331,21 +337,45 @@ bool Chat::isUserExist(QByteArray actorId, QList<QByteArray> userList)
 }
 
 void Chat::sendMessage(QByteArray message)
-{
-    QList<QByteArray> messageList;
-    messageList.append(_currentActorId);
-    messageList.append(message);
-    message = Serialization::universalSerialize(messageList);
+{ //    // test
+    //    QByteArray needToencrypt = "fwefwefwefwefwefwef";
+    //    QByteArray encrypt = blowFish_crypt().EncryptBlowFish(needToencrypt, "12345453");
+    //    QByteArray decrypt = blowFish_crypt().DecryptBlowFish(encrypt, "12345453");
+
+    //    QByteArray messageeee;
+    //    QList<QByteArray> list2;
+    //    if (!allmessageList.empty())
+    //        for (QByteArray msginList : allmessageList)
+    //        {
+    //            messageeee = decryptMessage(msginList);
+    //            list2 = Serialization::universalDeserialize(messageeee);
+    //            if (list2.size() != 2)
+    //            {
+    //                qDebug() << "[Error] Size !=2 bla bla send message";
+    //            }
+    //            else
+    //            {
+    //                qDebug() << "Message: " << list2.at(0) << " : " << list2.at(1);
+    //            }
+    //        }
+    //    // test end
+
+    QList<QByteArray> allmessageList = getAllMessagesByteArray();
+
+    QList<QByteArray> currentMessage;
+    currentMessage.append(_currentActorId);
+    currentMessage.append(message);
+    allmessageList.append(encryptMessage(Serialization::universalSerialize(currentMessage)));
 
     QFile file(pathToSession(_currentSession) + "/session");
-    if (file.open(QIODevice::Append))
+    if (file.open(QIODevice::WriteOnly))
     {
         //        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
         //        qDebug() << "message=" << message;
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
-        message = encryptMessage(message) + "\n";
-        file.write(message);
+
+        file.write(Serialization::universalSerialize(allmessageList));
 
         file.close();
         //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
@@ -360,10 +390,7 @@ void Chat::receiveMessage(QByteArray message)
     QFile file(pathToSession(_currentSession) + "/session");
     if (file.open(QIODevice::Append))
     {
-        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
-        qDebug() << "message=" << message;
-        qDebug() << "EncryptMEssage=" << encryptMessage(message);
-        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
+
         message = encryptMessage(message) + "\n";
         file.write(message);
 

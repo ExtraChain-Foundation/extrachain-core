@@ -55,8 +55,8 @@ public:
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-
     QByteArray unloadChatKey();                                   //+
-    QByteArray getChatPrivateKey();                               //+
-    BigNumber getActualCurrentSession();                          //+
+    // QByteArray getChatPrivateKey();                               //+
+    BigNumber getActualCurrentSession(); //+
     // BigNumber getMyCurrentSession();                              //
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
                           QByteArray ownerId = "-1"); //+
@@ -73,8 +73,9 @@ public:
     QByteArray getCurrentActorId() const; //+
     QList<QByteArray> getAllUsers();      //+
     QList<UIMessage> getAllMessages();    //-
-    ActorIndex* getActorIndex() const;    //+
-    QByteArray getOwner();                //-
+    QList<QByteArray> getAllMessagesByteArray();
+    ActorIndex* getActorIndex() const; //+
+    QByteArray getOwner();             //-
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
 
