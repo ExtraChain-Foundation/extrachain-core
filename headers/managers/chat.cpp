@@ -360,25 +360,27 @@ QByteArray Chat::sendMessage(QByteArray message)
     //        }
     //    // test end
 
-    QList<QByteArray> allmessageList = getAllMessagesByteArray();
+    //  QList<QByteArray> allmessageList = getAllMessagesByteArray();
 
     QList<QByteArray> currentMessage;
+
     currentMessage.append(_currentActorId);
     currentMessage.append(message);
-    allmessageList.append(encryptMessage(Serialization::universalSerialize(currentMessage)));
+    QByteArray currentMessageByteArray = encryptMessage(Serialization::universalSerialize(currentMessage));
+    //  allmessageList.append(currentMessageByteArray);
 
     QFile file(pathToSession(_currentSession) + "/session");
-    if (file.open(QIODevice::WriteOnly))
+    if (file.open(QIODevice::Append))
     {
         //        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
         //        qDebug() << "message=" << message;
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
-        QByteArray encryptedMessage = Serialization::universalSerialize(allmessageList);
-        file.write(encryptedMessage);
+
+        file.write(currentMessageByteArray);
 
         file.close();
-        return encryptedMessage;
+        return currentMessageByteArray;
         //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
     }
     else
@@ -394,7 +396,7 @@ void Chat::receiveMessage(QByteArray message)
     // allmessageList.append(message);
 
     QFile file(pathToSession(_currentSession) + "/session");
-    if (file.open(QIODevice::WriteOnly))
+    if (file.open(QIODevice::Append))
     {
         //        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
         //        qDebug() << "message=" << message;
