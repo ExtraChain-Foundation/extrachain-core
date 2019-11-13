@@ -163,7 +163,7 @@ QList<UIMessage> Chat::getAllMessages()
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
         if (currentData.size() == 2)
-            result.append(UIMessage { currentData.at(0), currentData.at(1) });
+            result.append(UIMessage{ currentData.at(0), currentData.at(1) });
 
         else
 
@@ -389,9 +389,9 @@ QByteArray Chat::sendMessage(QByteArray message)
 
 void Chat::receiveMessage(QByteArray message)
 {
-    QList<QByteArray> allmessageList = getAllMessagesByteArray();
+    // QList<QByteArray> allmessageList = getAllMessagesByteArray();
 
-    allmessageList.append(message);
+    // allmessageList.append(message);
 
     QFile file(pathToSession(_currentSession) + "/session");
     if (file.open(QIODevice::WriteOnly))
@@ -400,8 +400,8 @@ void Chat::receiveMessage(QByteArray message)
         //        qDebug() << "message=" << message;
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
-        QByteArray encryptedMessage = Serialization::universalSerialize(allmessageList);
-        file.write(encryptedMessage);
+        //  QByteArray encryptedMessage = Serialization::universalSerialize(allmessageList);
+        file.write(message);
 
         file.close();
 
