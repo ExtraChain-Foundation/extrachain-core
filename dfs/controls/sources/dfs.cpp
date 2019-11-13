@@ -300,7 +300,7 @@ void Dfs::savedNewData(const QString &path, const based_dfs_struct::Type &type,
                        const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
 {
 #ifdef ETALONIUM_CLIENT
-    if (type == based_dfs_struct::Type::images)
+    if (type == based_dfs_struct::Type::images && subType != based_dfs_struct::SubType::mini)
     {
         QImage im(path);
         if (im.save("temp", "jpeg", 50))

@@ -11,12 +11,14 @@ struct UIChat
 {
     QStringList users;
     QString chatId;
+    qint64 lastMessageDate;
 };
 
 struct UIMessage
 {
     QString userId;
     QString message;
+    qint64 date;
 };
 
 class Chat : public QObject

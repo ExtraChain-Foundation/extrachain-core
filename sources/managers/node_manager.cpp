@@ -85,10 +85,6 @@ void NodeManager::createCompanyActor(const QString &password)
         blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
     }
 #endif
-
-
-
-
 }
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
