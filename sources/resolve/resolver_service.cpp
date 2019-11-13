@@ -163,12 +163,13 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     using namespace Messages;
     BaseMessage message;
     message.deserialize(msg);
-    if (message.getMsg_data().isEmpty())
+    QByteArray msgType = message.getMsgType();
+    if (message.getMsg_data().isEmpty() && msgType != GET_ALL_ACTORS && msgType != GET_BLOCK_COUNT_MESSAGE)
     {
         emit TaskFinished();
         return;
     }
-    QByteArray msgType = message.getMsgType();
+
     qDebug() << "Resolver: receive " << msgType;
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
     {
@@ -180,7 +181,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         }
         else
         {
-            qDebug() << "received msg signature:" << message.getDigSig();
+            //            qDebug() << "received msg signature:" << message.getDigSig();
             if (MessageIsNotValid(message))
                 return;
         }
@@ -295,7 +296,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     else if (msgType == GET_ALL_ACTORS)
     {
-        GetAllActorMessage response(message.getMsg_data());
+        //        GetAllActorMessage response(message.getMsg_data());
         emit handleGetAllActor(calcHash(msg), receiver);
         emit TaskFinished();
     }

@@ -12,7 +12,7 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
-
+    actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
     this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
@@ -37,8 +37,12 @@ NodeManager::NodeManager()
     netManager->setResolveManager(resolveManager);
     dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
+    actorIndex->setResolveManager(resolveManager);
     connectSignals();
-
+    static QTimer timer;
+    connect(&timer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+    timer.start(10000);
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -80,9 +84,11 @@ void NodeManager::createCompanyActor(const QString &password)
         tm.insert(0, 0);
         blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
     }
-
-    // emit accController->initDfs();
 #endif
+
+
+
+
 }
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin()
@@ -323,6 +329,26 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
     return Transaction();
 }
 
+void NodeManager::getAllActors()
+{
+    QByteArray res = getIdPrivateProfile();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+}
+void NodeManager::getAllActorsTimerCall()
+{
+#ifdef ETALONIUM_CLIENT
+    QByteArray res = getIdPrivateProfile();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+#endif
+#ifdef ETALONIUM_CONSOLE
+    QByteArray res = accController->getMainActor()->getId().toActorId();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+#endif
+}
+
 void NodeManager::createNetManagerIdentificator()
 {
     QFile file(".settings");
@@ -509,12 +535,9 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManger, &ChatManager::ActorInit);
-    connect(prProfile, &PrivateProfile::initActorChatM,
-            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
-    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
-    static QTimer timer;
-    connect(&timer, &QTimer::timeout, [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
-    timer.start(10000);
+    //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
+    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
     connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
@@ -616,6 +639,7 @@ void NodeManager::connectSignals()
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
+    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
 void NodeManager::prepareFolders()
