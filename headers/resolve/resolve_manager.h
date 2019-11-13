@@ -78,6 +78,7 @@ private:
 private:
     QList<ResolverService *> getActive();
     QList<ResolverService *> getFinished();
+    bool popUnprocces();
 
 public:
     bool setTask(QByteArray msg, const SocketPair &receiver);
