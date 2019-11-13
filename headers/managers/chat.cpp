@@ -163,7 +163,7 @@ QList<UIMessage> Chat::getAllMessages()
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
         if (currentData.size() == 2)
-            result.append(UIMessage{ currentData.at(0), currentData.at(1) });
+            result.append(UIMessage { currentData.at(0), currentData.at(1) });
 
         else
 
@@ -367,6 +367,7 @@ QByteArray Chat::sendMessage(QByteArray message)
     currentMessage.append(_currentActorId);
     currentMessage.append(message);
     QByteArray currentMessageByteArray = encryptMessage(Serialization::universalSerialize(currentMessage));
+
     //  allmessageList.append(currentMessageByteArray);
 
     QFile file(pathToSession(_currentSession) + "/session");
@@ -377,7 +378,7 @@ QByteArray Chat::sendMessage(QByteArray message)
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
 
-        file.write(currentMessageByteArray);
+        file.write(Serialization::universalSerialize({ currentMessageByteArray }));
 
         file.close();
         return currentMessageByteArray;
@@ -403,7 +404,7 @@ void Chat::receiveMessage(QByteArray message)
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
         //  QByteArray encryptedMessage = Serialization::universalSerialize(allmessageList);
-        file.write(message);
+        file.write(Serialization::universalSerialize({ message }));
 
         file.close();
 
