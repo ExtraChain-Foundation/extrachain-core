@@ -80,9 +80,10 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     //    emit addActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
-    if (accounts.isEmpty())
-        emit savePrivateProfile(actor->getId().toActorId());
     accounts.append(actor);
+    if (accounts.size() - 1 == 0)
+        emit savePrivateProfile(actor->getId().toActorId());
+
     userNum = accounts.size() - 1;
 
     qDebug() << "create actor finished" << account;

@@ -142,6 +142,8 @@ signals:
     void loadProfileForConsoleLogin(QByteArray);
 
 private slots:
+    void getAllActors();
+    void getAllActorsTimerCall();
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
     void createNewActor(QByteArray hash, int accountStatus);

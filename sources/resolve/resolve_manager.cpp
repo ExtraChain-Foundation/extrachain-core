@@ -110,6 +110,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     DataStruct task;
     task.msg = msg;
     task.receiver = receiver;
+    mutex.lock();
     unprocessed.push(task);
     bool lockRes = resolvers.size() < ResolverServicePoolMaxSize;
     if (lockRes)
@@ -118,7 +119,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
         unprocessed.pop();
         createNewResolver(currentTask);
     }
-
+    mutex.unlock();
     return lockRes;
 }
 
@@ -127,12 +128,16 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
 
     Messages::BaseMessage msg(msgType);
     msg.init(data);
+
     if (msgType != Messages::ACTOR_MESSAGE)
+    {
+        if (accountControler->getAccountCount() == 0)
+            return;
         msg.calcDigSig(accountControler->getCurrentActor());
+    }
+    //    qDebug() << "msg signature:" << msg.getDigSig();
 
-    qDebug() << "msg signature:" << msg.getDigSig();
-
-    qDebug() << "send " << msgType;
+    //    qDebug() << "send " << msgType;
     QByteArray message = msg.serialize();
     if (Messages::GETTERS.contains(msgType))
     {
@@ -149,7 +154,8 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
 
 {
     Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
-    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
+    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE
+        /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
         rmsg.calcDigSig(accountControler->getCurrentActor());
 
     qDebug() << "NetManager: send " << msgType;
