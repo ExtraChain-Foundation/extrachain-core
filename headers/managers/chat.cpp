@@ -163,7 +163,7 @@ QList<UIMessage> Chat::getAllMessages()
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
         if (currentData.size() == 2)
-            result.append(UIMessage{ currentData.at(0), currentData.at(1) });
+            result.append(UIMessage { currentData.at(0), currentData.at(1) });
 
         else
 
@@ -204,7 +204,7 @@ QByteArray Chat::encryptByChatKey(QByteArray data)
 
 QByteArray Chat::decryptByChatKey(QByteArray data)
 {
-    return encryptByChatKey(data);
+    return decryptMessage(data);
 }
 
 QByteArray Chat::getPathCurrentChat()
