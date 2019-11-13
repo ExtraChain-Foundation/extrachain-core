@@ -163,7 +163,7 @@ QList<UIMessage> Chat::getAllMessages()
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
         if (currentData.size() == 2)
-            result.append(UIMessage{ currentData.at(0), currentData.at(1) });
+            result.append(UIMessage { currentData.at(0), currentData.at(1) });
 
         else
 
@@ -204,7 +204,7 @@ QByteArray Chat::encryptByChatKey(QByteArray data)
 
 QByteArray Chat::decryptByChatKey(QByteArray data)
 {
-    return encryptByChatKey(data);
+    return decryptMessage(data);
 }
 
 QByteArray Chat::getPathCurrentChat()
@@ -336,7 +336,7 @@ bool Chat::isUserExist(QByteArray actorId, QList<QByteArray> userList)
     return false;
 }
 
-void Chat::sendMessage(QByteArray message)
+QByteArray Chat::sendMessage(QByteArray message)
 { //    // test
     //    QByteArray needToencrypt = "fwefwefwefwefwefwef";
     //    QByteArray encrypt = blowFish_crypt().EncryptBlowFish(needToencrypt, "12345453");
@@ -360,46 +360,72 @@ void Chat::sendMessage(QByteArray message)
     //        }
     //    // test end
 
-    QList<QByteArray> allmessageList = getAllMessagesByteArray();
+    //  QList<QByteArray> allmessageList = getAllMessagesByteArray();
 
     QList<QByteArray> currentMessage;
+
     currentMessage.append(_currentActorId);
     currentMessage.append(message);
-    allmessageList.append(encryptMessage(Serialization::universalSerialize(currentMessage)));
+    QByteArray currentMessageByteArray = encryptMessage(Serialization::universalSerialize(currentMessage));
+
+    //  allmessageList.append(currentMessageByteArray);
 
     QFile file(pathToSession(_currentSession) + "/session");
-    if (file.open(QIODevice::WriteOnly))
+    if (file.open(QIODevice::Append))
     {
         //        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
         //        qDebug() << "message=" << message;
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
 
-        file.write(Serialization::universalSerialize(allmessageList));
+        file.write(Serialization::universalSerialize({ currentMessageByteArray }));
 
         file.close();
+        return currentMessageByteArray;
         //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
     }
     else
-
         qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
+
+    return "";
 }
 
 void Chat::receiveMessage(QByteArray message)
 {
+    // QList<QByteArray> allmessageList = getAllMessagesByteArray();
+
+    // allmessageList.append(message);
+
     QFile file(pathToSession(_currentSession) + "/session");
     if (file.open(QIODevice::Append))
     {
-
-        message = encryptMessage(message) + "\n";
-        file.write(message);
+        //        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
+        //        qDebug() << "message=" << message;
+        //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
+        //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
+        //  QByteArray encryptedMessage = Serialization::universalSerialize(allmessageList);
+        file.write(Serialization::universalSerialize({ message }));
 
         file.close();
+
         //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
     }
     else
 
-        qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
+        qDebug() << "[Warning] Cannot open file with session to send message. receiveMessage, Chat";
+    //    QFile file(pathToSession(_currentSession) + "/session");
+    //    if (file.open(QIODevice::Append))
+    //    {
+
+    //        message = encryptMessage(message) + "\n";
+    //        file.write(message);
+
+    //        file.close();
+    //        //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
+    //    }
+    //    else
+
+    //        qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
 }
 
 QByteArray Chat::getChatId() const

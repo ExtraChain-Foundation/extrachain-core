@@ -112,13 +112,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     task.receiver = receiver;
     mutex.lock();
     unprocessed.push(task);
-    bool lockRes = resolvers.size() < ResolverServicePoolMaxSize;
-    if (lockRes)
-    {
-        DataStruct currentTask = unprocessed.front();
-        unprocessed.pop();
-        createNewResolver(currentTask);
-    }
+    bool lockRes = popUnprocces();
     mutex.unlock();
     return lockRes;
 }
@@ -168,11 +162,13 @@ void ResolveManager::taskFinished()
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
     disconnectSignals(resolver);
     resolvers.removeOne(resolver);
-    emit resolver->finished();
-    if ((resolvers.size() == 0) && (unprocessed.size() != 0))
+    if (resolver != nullptr)
+        emit resolver->finished();
+    if (unprocessed.size() != 0)
     {
-        createNewResolver(unprocessed.front());
-        unprocessed.pop();
+        mutex.lock();
+        popUnprocces();
+        mutex.unlock();
     }
 }
 
@@ -200,6 +196,18 @@ QList<ResolverService *> ResolveManager::getFinished()
             ret.append(resolver);
     }
     return ret;
+}
+
+bool ResolveManager::popUnprocces()
+{
+    bool res = false;
+    while (resolvers.size() < ResolverServicePoolMaxSize && !unprocessed.empty())
+    {
+        createNewResolver(unprocessed.front());
+        unprocessed.pop();
+        res = true;
+    }
+    return res;
 }
 
 // void ResolveManager::resolveMessage(const QByteArray &msg, const SocketPair &receiver)

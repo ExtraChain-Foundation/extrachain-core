@@ -192,9 +192,9 @@ void SocketService::sockReady()
     long long s = 0;
     if (socket->bytesAvailable() > 0)
     {
+        mutex.lock();
         s = socket->bytesAvailable();
         qDebug() << "Bytes read:" << s;
-        mutex.lock();
         dpBuffer->append(socket->read(s));
         mutex.unlock();
     }
