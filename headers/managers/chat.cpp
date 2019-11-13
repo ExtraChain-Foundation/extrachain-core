@@ -163,7 +163,7 @@ QList<UIMessage> Chat::getAllMessages()
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
         if (currentData.size() == 2)
-            result.append(UIMessage{ currentData.at(0), currentData.at(1) });
+            result.append(UIMessage { currentData.at(0), currentData.at(1) });
 
         else
 
@@ -382,8 +382,9 @@ QByteArray Chat::sendMessage(QByteArray message)
         //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
     }
     else
-
         qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
+
+    return "";
 }
 
 void Chat::receiveMessage(QByteArray message)
