@@ -224,11 +224,6 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
     emit sendMessage(msg.serialize(), Messages::CHAT_MESSAGE);
 }
 
-void ChatManager::UIreceiveAllChats()
-{
-    emit UIsendAllChats(_chatList);
-}
-
 void ChatManager::createDialogue(QByteArray actorId)
 {
     QList<UIChat> chats;
@@ -237,11 +232,13 @@ void ChatManager::createDialogue(QByteArray actorId)
     QList<QByteArray> tempUsers;
     QStringList tempusersList;
     foreach (Chat *currentChat, _chatList)
+    {
+        tempUsers.clear();
         tempUsers = currentChat->getAllUsers();
-    for (auto user : tempUsers)
-        tempusersList.append(user);
-    chats.append(UIChat{ tempusersList, chatId });
-
+        for (auto user : tempUsers)
+            tempusersList.append(user);
+        chats.append(UIChat{ tempusersList, chatId });
+    }
     emit chatListSend(chats);
 }
 

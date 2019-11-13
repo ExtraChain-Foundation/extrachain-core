@@ -3,7 +3,7 @@
 Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
            BigNumber sessionNumb)
 {
-    InitializeAllPaths();
+
     this->_chatId = chatId;
     this->_encryptionKey = unloadChatKey();
     this->_accountController = accountController;
@@ -19,25 +19,27 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
 Chat::Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
            AccountController* accountController, QList<QByteArray> users, QByteArray ownerId)
 {
-    InitializeAllPaths();
+
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_currentSession = currentSession;
     this->_actorIndex = actorIndex;
+    InitializeAllPaths();
     createNewSession(key, users, ownerId);
 }
 
 Chat::Chat(const Chat& tempChat)
 {
-    InitializeAllPaths();
+
     this->_chatId = tempChat.getChatId();
     this->_encryptionKey = tempChat.getEncryptionKey();
     this->_currentSession = tempChat.getSession();
     this->_accountController = tempChat.getAccountController();
     this->_currentActorId = tempChat.getCurrentActorId();
     this->_actorIndex = tempChat.getActorIndex();
+    InitializeAllPaths();
 }
 
 bool Chat::isOwner()
@@ -238,6 +240,8 @@ BigNumber Chat::findCurrentSession()
 void Chat::InitializeAllPaths()
 {
     QDir().mkpath(getPathToUsers());
+    QDir().mkpath(pathToSession(_currentSession));
+    QDir().mkpath(getPathToUsers());
 }
 
 // void Chat::InitializeOwnerPathNewChat()
@@ -336,10 +340,10 @@ void Chat::sendMessage(QByteArray message)
     QFile file(pathToSession(_currentSession) + "/session");
     if (file.open(QIODevice::Append))
     {
-        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
-        qDebug() << "message=" << message;
-        qDebug() << "EncryptMEssage=" << encryptMessage(message);
-        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
+        //        qDebug() << "KeyPRivate ewfwe=" << getChatPrivateKey();
+        //        qDebug() << "message=" << message;
+        //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
+        //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
         message = encryptMessage(message) + "\n";
         file.write(message);
 

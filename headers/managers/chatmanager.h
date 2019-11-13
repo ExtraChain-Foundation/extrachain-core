@@ -77,13 +77,12 @@ public slots:
     //    void getSignalFromChats(const QString &path);                     // connect with Chats
     void removeMemberFromChat(QByteArray chatId, QByteArray actorId); //+
     QByteArray CreateNewChat();                                       //+
-    void InviteToChat(QByteArray chatId, QByteArray actorId);         //?-
-    void SendMessage(QByteArray chatId, QByteArray message);          //+
-    void UIreceiveAllChats();                                         // need connect to UI
 
-    void createDialogue(QByteArray actorId); //-
-    void requestChatList();                  //+
-    void requestChat(QByteArray chatId);     //-
+    void InviteToChat(QByteArray chatId, QByteArray actorId); //+
+    void SendMessage(QByteArray chatId, QByteArray message);  //+
+    void createDialogue(QByteArray actorId);                  //+
+    void requestChatList();                                   //+
+    void requestChat(QByteArray chatId);                      //-
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
