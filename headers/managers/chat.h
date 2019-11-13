@@ -60,7 +60,7 @@ public:
     // BigNumber getMyCurrentSession();                              //
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
                           QByteArray ownerId = "-1"); //+
-    void sendMessage(QByteArray message);             //+
+    QByteArray sendMessage(QByteArray message);       //+
     void receiveMessage(QByteArray message);
     // getters setters
     QByteArray getChatId() const;                    //+
