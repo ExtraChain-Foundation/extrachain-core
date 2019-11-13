@@ -62,6 +62,7 @@ public:
     ~NodeManager();
 
 public:
+    void createCompanyActor(const QString &password);
     Blockchain *getBlockchain();
     NetManager *getNetManager();
     AccountController *getAccController() const;
@@ -89,7 +90,6 @@ public:
 #endif
 
     QByteArray getIdPrivateProfile() const;
-
     QByteArray getHashLoginPrivateProfile() const;
 
 private:
@@ -102,6 +102,7 @@ private:
     void connectSmContractManager();
     void connectTxManager();
     void connectUi();
+    void connectConsole();
     void connectContractManager();
     void connectBlockchain();
     //    void connectAccountController();
@@ -138,6 +139,8 @@ signals:
     void loadInterFromPrProfile(QByteArray hash, QByteArray idProfile);
     void savePrivateProfile(QByteArray hash, QByteArray id);
     void getAllActorsNode(QByteArray id, bool acc);
+    void loadProfileForConsoleLogin(QByteArray);
+
 private slots:
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);

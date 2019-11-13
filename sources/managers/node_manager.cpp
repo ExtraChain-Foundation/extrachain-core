@@ -39,28 +39,6 @@ NodeManager::NodeManager()
     prProfile->setDfs(dfs);
     connectSignals();
 
-#ifdef ETALONIUM_CONSOLE
-    accController->loadActors("-1");
-    Actor<KeyPrivate> company;
-    if (accController->getAccountCount() == 0)
-    {
-        company = CreateExtracoin();
-    }
-    else
-    {
-        company = *accController->getAccounts()[0];
-    }
-    QByteArray td = company.getKey()->sign("test");
-    std::cout << company.getKey()->verify("test", td) << std::endl;
-    TMP::companyActorId = new QByteArray(company.getId().toByteArray());
-    actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
-    if (blockchain->getRecords() <= 0)
-    {
-        QMap<BigNumber, BigNumber> tm;
-        tm.insert(0, 0);
-        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
-    }
-#endif
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -71,9 +49,39 @@ NodeManager::NodeManager()
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManger);
+}
 
+void NodeManager::createCompanyActor(const QString &password)
+{
 #ifdef ETALONIUM_CONSOLE
-    emit accController->initDfs();
+    // accController->loadActors("-1");
+    Actor<KeyPrivate> company;
+    QByteArray consoleHash = Utils::calcKeccak(password.toUtf8());
+
+    if (QDir("keystore/profile").isEmpty())
+    {
+        company = CreateExtracoin();
+        emit savePrivateProfile(consoleHash, company.getId().toActorId());
+    }
+    else
+    {
+        // company = *accController->getAccounts()[0];
+        emit loadProfileForConsoleLogin(consoleHash);
+    }
+
+    if (blockchain->getRecords() <= 0)
+    {
+        QByteArray td = company.getKey()->sign("test");
+        std::cout << company.getKey()->verify("test", td) << std::endl;
+        TMP::companyActorId = new QByteArray(company.getId().toByteArray());
+        actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
+
+        QMap<BigNumber, BigNumber> tm;
+        tm.insert(0, 0);
+        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+    }
+
+    // emit accController->initDfs();
 #endif
 }
 
@@ -563,6 +571,13 @@ void NodeManager::addNewWallet()
     this->createWalletInUi();
     //    uiWallet->createWalletToNode();
 }
+#elif ETALONIUM_CONSOLE
+void NodeManager::connectConsole()
+{
+    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(this, &NodeManager::loadProfileForConsoleLogin, prProfile,
+            &PrivateProfile::loadProfileForAutoLogin);
+}
 #endif
 
 void NodeManager::connectContractManager()
@@ -592,6 +607,8 @@ void NodeManager::connectSignals()
     connectTxManager();
 #ifdef ETALONIUM_CLIENT
     connectUi();
+#elif ETALONIUM_CONSOLE
+    connectConsole();
 #endif
     connectResolveManager();
     connectContractManager();
@@ -672,6 +689,7 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
 {
     createTransactionFrom(BigNumber(*actorIndex->companyId), receiver, amount);
 }
+
 QByteArray NodeManager::getIdPrivateProfile() const
 {
     return idPrivateProfile;

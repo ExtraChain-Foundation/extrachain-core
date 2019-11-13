@@ -24,6 +24,7 @@ void PrivateProfile::savePrivateProfile(QByteArray hash, QByteArray id)
     file.flush();
     file.close();
 }
+
 void PrivateProfile::editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray _data,
                                         typeDataPrProfile type)
 {
@@ -125,6 +126,7 @@ void PrivateProfile::profile(QByteArray hash)
     QDir dir("keystore/profile");
     QStringList users = dir.entryList(QDir::Files);
     QByteArrayList idList;
+
     if (users.isEmpty())
     {
         qDebug() << "ERROR: empty keystore";
@@ -153,10 +155,16 @@ void PrivateProfile::profile(QByteArray hash)
                 acContorller->loadActors(idList.first(), idList);
                 if (acContorller->getMainActor() != nullptr)
                     dfs->init();
-                 emit initActorChatM();
+                emit initActorChatM();
             }
             else
+            {
+#ifdef ETALONIUM_CONSOLE
+                std::cout << "Incorrect password" << std::endl;
+                std::exit(0);
+#endif
                 continue;
+            }
         }
     }
     return;

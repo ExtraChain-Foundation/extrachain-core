@@ -151,56 +151,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 {
     if (id.isEmpty())
         return;
-    if (id == "-1")
-    {
-        accounts.clear();
-        qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
-        QString path = KeyStore::USER_KEYSTORE;
-        int loaded = 0;
-        QDir dir(path);
-        QStringList pathes = dir.entryList({ "*.key" }, QDir::Files);
-        for (const QString &fileName : pathes)
-        {
-            QFile file(path + "/" + fileName);
-            if (file.exists() && file.open(QIODevice::ReadOnly))
-            {
-                QByteArray serialized;
-                serialized = file.readAll();
-                qDebug() << serialized;
-                file.close();
-                if (!serialized.isEmpty())
-                {
-                    Actor<KeyPrivate> *actor = new Actor<KeyPrivate>;
 
-                    actor->init(serialized);
-
-                    qDebug() << "Actor" << actor->getId() << "found locally -"
-                             << actor->getKey()->getPrivateKey();
-                    if (actor->getAccount() == actorType::COMPANY)
-                    {
-                        accounts.push_front(actor);
-                    }
-                    else
-                    {
-                        this->accounts.append(actor);
-                    }
-                    loaded++;
-                }
-            }
-        }
-
-        if (loaded > 0)
-        {
-            qDebug() << loaded << " accounts have been loaded";
-            blockchain->getBlockZero();
-            emit loadWallets(id, idList);
-        }
-        else
-        {
-            qDebug() << "There no accounts found locally";
-        }
-        return;
-    }
     accounts.clear();
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
@@ -230,7 +181,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 
     if (loaded > 0)
     {
-        qDebug() << loaded << " accounts have been loaded" << id;
+        qDebug() << loaded << "accounts have been loaded" << id;
         blockchain->getBlockZero();
         emit loadWallets(id, idList);
     }
