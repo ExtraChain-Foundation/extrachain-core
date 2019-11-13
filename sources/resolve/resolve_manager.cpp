@@ -158,7 +158,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
         /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
         rmsg.calcDigSig(accountControler->getCurrentActor());
 
-    qDebug() << "NetManager: send " << msgType;
+    //    qDebug() << "NetManager: send " << msgType;
     networkManager->distMessage(rmsg.serialize(), receiver);
     //    emit socketSendMsg(rmsg.serialize(), receiver);
 }

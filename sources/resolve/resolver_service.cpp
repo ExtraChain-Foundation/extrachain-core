@@ -80,8 +80,8 @@ bool ResolverService::validate(const Messages::IMessage &message)
 
 QByteArray ResolverService::calcHash(const QByteArray &request) const
 {
-    qDebug() << "RESOLVER SERVICE: "
-             << "calcHash()";
+    //    qDebug() << "RESOLVER SERVICE: "
+    //             << "calcHash()";
     return Utils::calcKeccak(request);
 }
 
@@ -337,8 +337,9 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
     {
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " << msg;
+        //        qDebug() << "RESOLVER SERVICE: "
+        //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
+        //                 msg;
         BaseMessageResponse responseMessage(msg);
         if (checkResponseHandler(responseMessage.getDataHash()))
             return;
