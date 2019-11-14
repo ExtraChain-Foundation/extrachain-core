@@ -162,12 +162,12 @@ QList<UIMessage> Chat::getAllMessages()
     {
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
-        if (currentData.size() == 2)
-            result.append(UIMessage { currentData.at(0), currentData.at(1) });
+        if (currentData.size() == 3)
+            result.append(UIMessage{ currentData.at(0), currentData.at(1), currentData.at(2) });
 
         else
 
-            qDebug() << "[Error] Size !=2 in getAllMessages Chat";
+            qDebug() << "[Error] Size !=3 in getAllMessages Chat";
     }
     return result;
 }
@@ -361,12 +361,17 @@ QByteArray Chat::sendMessage(QByteArray message)
     //    // test end
 
     //  QList<QByteArray> allmessageList = getAllMessagesByteArray();
-
+    QList<QByteArray> dateList;
+    dateList.append(QDate::currentDate().toString("dd.MM.yyyy").toUtf8());
+    dateList.append(QTime::currentTime().toString("hh:mm").toUtf8());
+    QByteArray currneDate = Serialization::serialize(dateList);
     QList<QByteArray> currentMessage;
 
     currentMessage.append(_currentActorId);
     currentMessage.append(message);
     QByteArray currentMessageByteArray = encryptMessage(Serialization::universalSerialize(currentMessage));
+    currentMessage.append(currneDate);
+    QByteArray currentMessageWithDate = encryptMessage(Serialization::universalSerialize(currentMessage));
 
     //  allmessageList.append(currentMessageByteArray);
 
@@ -378,7 +383,7 @@ QByteArray Chat::sendMessage(QByteArray message)
         //        qDebug() << "EncryptMEssage=" << encryptMessage(message);
         //        qDebug() << "Decrypt message=" << decryptMessage(encryptMessage(message));
 
-        file.write(Serialization::universalSerialize({ currentMessageByteArray }));
+        file.write(Serialization::universalSerialize({ currentMessageWithDate }));
 
         file.close();
         return currentMessageByteArray;
@@ -392,6 +397,13 @@ QByteArray Chat::sendMessage(QByteArray message)
 
 void Chat::receiveMessage(QByteArray message)
 {
+    QList<QByteArray> dateList;
+    dateList.append(QDate::currentDate().toString("dd.MM.yyyy").toUtf8());
+    dateList.append(QTime::currentTime().toString("hh:mm").toUtf8());
+    QByteArray currneDate = Serialization::serialize(dateList);
+    QByteArray decryptedMessage = decryptMessage(message);
+    message.append(Serialization::universalSerialize({ currneDate }));
+    message = encryptMessage(message);
     // QList<QByteArray> allmessageList = getAllMessagesByteArray();
 
     // allmessageList.append(message);

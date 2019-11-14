@@ -18,7 +18,7 @@ struct UIMessage
 {
     QString userId;
     QString message;
-    qint64 date;
+    QString date;
 };
 
 class Chat : public QObject
