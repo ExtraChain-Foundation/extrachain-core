@@ -157,7 +157,6 @@ void NetManager::findLocal()
 
         for (const QNetworkAddressEntry &entry : entries)
         {
-#ifdef Q_OS_WIN
             // hack for windows: TODO!
             const auto flags = interface.flags();
 
@@ -174,7 +173,6 @@ void NetManager::findLocal()
             socket->deleteLater();
             if (!isConnected)
                 continue;
-#endif
 
             if (localIpNotConnect.contains(entry.ip()))
             {

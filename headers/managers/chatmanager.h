@@ -83,6 +83,7 @@ public slots:
     void createDialogue(QByteArray actorId);                  //+
     void requestChatList();                                   //+
     void requestChat(QByteArray chatId);                      //-
+    void chatRemoved(QByteArray chatId);
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
@@ -94,6 +95,9 @@ signals:
     void chatListSend(QList<UIChat> chats);
     void chatSend(QByteArray chatId, QList<UIMessage> messages);
     void sendMessage(const QByteArray &data, const QByteArray &type);
+
+    void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
+    void chatCreated(UIChat);
 };
 
 #endif // CHATMANAGER_H
