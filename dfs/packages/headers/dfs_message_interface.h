@@ -8,10 +8,10 @@
 #include <QObject>
 #include "utils/utils.h"
 
-namespace Message {
+namespace DFSMessage {
 
-const int dataSize = 1024;  // bytes
-const short fieldsSize = 4; // bytes for size
+const unsigned int dataSize = 1024; // bytes
+const short fieldsSize = 4;         // bytes for size
 const QByteArray stateDelimetr = "|";
 
 enum dfsMessageType

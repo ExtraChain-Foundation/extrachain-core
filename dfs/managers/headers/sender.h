@@ -15,7 +15,7 @@ class DFSNetManager;
 class Sender : public QObject
 {
     Q_OBJECT
-    const int data_offset = Message::dataSize;
+    const int data_offset = DFSMessage::dataSize;
     DFSNetManager *NetManager;
     QByteArray userId;
 
@@ -28,7 +28,7 @@ public:
      * @param userId
      */
     Sender(const QByteArray &userId, QObject *parent = nullptr);
-
+    void reloadFragments(QString path, QList<QByteArray> frags);
     void setNetManager(DFSNetManager *value);
     /**
      * @brief sendFile

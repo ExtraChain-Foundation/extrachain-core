@@ -1,6 +1,7 @@
 #include "dfs/packages/headers/message_struct.h"
 
-Message::dfs_message::dfs_message(const QByteArray &hash, const long long &pckgNumber, const QByteArray &data)
+DFSMessage::dfs_message::dfs_message(const QByteArray &hash, const long long &pckgNumber,
+                                     const QByteArray &data)
     : DUMessage(type_dfs_message)
 {
     this->title_hash = hash;
@@ -8,7 +9,7 @@ Message::dfs_message::dfs_message(const QByteArray &hash, const long long &pckgN
     this->data = data;
 }
 
-Message::dfs_message::dfs_message(const QByteArray &serialized)
+DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
     : DUMessage(type_dfs_message)
 {
     QList<QByteArray> list = deserialize(serialized);
@@ -27,7 +28,7 @@ Message::dfs_message::dfs_message(const QByteArray &serialized)
     data = list.takeFirst();
 }
 
-Message::dfs_message::dfs_message(const Message::dfs_message &temp)
+DFSMessage::dfs_message::dfs_message(const DFSMessage::dfs_message &temp)
     : DUMessage(type_dfs_message)
 {
     title_hash = temp.title_hash;
@@ -35,13 +36,14 @@ Message::dfs_message::dfs_message(const Message::dfs_message &temp)
     data = temp.data;
 }
 
-Message::dfs_message::~dfs_message()
+DFSMessage::dfs_message::~dfs_message()
 {
 }
 
-const QList<QByteArray> Message::dfs_message::serializedParams() const
+const QList<QByteArray> DFSMessage::dfs_message::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << title_hash << QByteArray::number(pckgNumber) << data;
+    list << QByteArray::number(type) << title_hash << QByteArray::number(static_cast<long long>(pckgNumber))
+         << data;
     return list;
 }

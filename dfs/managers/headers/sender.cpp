@@ -10,6 +10,11 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
 {
     this->userId = userId;
 }
+
+void Sender::reloadFragments(QString path, QList<QByteArray> frags)
+{
+    //    NetManager->send()
+}
 void Sender::process()
 {
 }
@@ -19,7 +24,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
     file.open(QIODevice::ReadOnly);
     // create title_message
     int pckgN = 0; // package number
-    Message::title_message title(filePath);
+    DFSMessage::title_message title(filePath);
     title.f_type = based_dfs_struct::toByteArray(type);
     if (title.empty())
     {
@@ -35,14 +40,13 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         // First step read offset data from file
         QByteArray data = file.read(data_offset);
         // create package
-        Message::dfs_message pck(title.hash(), pckgN, data); // package for send
-        QThread::currentThread()->msleep(5);
+        DFSMessage::dfs_message pck(title.hash(), pckgN, data); // package for send
         //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
         NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     }
     // create last package
     QByteArray data = file.read(file.size() - file.pos());
-    Message::dfs_message pck(title.hash(), pckgN, data); // package for send
+    DFSMessage::dfs_message pck(title.hash(), pckgN, data); // package for send
     NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     file.close();
 }
@@ -59,7 +63,7 @@ void Sender::checkClosing(const QByteArray &titleHash, const long long &pckAF, c
         qDebug() << "so it's not so good";
         return;
     }
-    Message::title_message tmpTitle(serializedTitle[titleHashs[titleHash]]);
+    DFSMessage::title_message tmpTitle(serializedTitle[titleHashs[titleHash]]);
     serializedTitle.erase(serializedTitle.find(titleHashs[titleHash]));
     titleHashs.erase(titleHashs.find(titleHash));
     sendFile(titleHashs[titleHash], based_dfs_struct::convertToDFType(tmpTitle.f_type), receiver);

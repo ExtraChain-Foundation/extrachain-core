@@ -10,11 +10,37 @@ void ResolveManager::setChatManager(ChatManager *value)
     chatManager = value;
 }
 
+QMap<QByteArray, QTimer *> *ResolveManager::getLoadCheckers() const
+{
+    return loadCheckers;
+}
+
+QMap<QByteArray, std::vector<bool>> *ResolveManager::getDataCheckers() const
+{
+    return dataCheckers;
+}
+
+QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
+{
+    return pckgCounter;
+}
+
+void ResolveManager::setCheckTask()
+{
+    QTimer *sender = qobject_cast<QTimer *>(QObject::sender());
+    QByteArray hash = loadCheckers->key(sender);
+    QList<QByteArray> list = { "int", "status", hash };
+    setTask(Serialization::universalSerialize(list), nullptr); // DANGEROUS!!!
+}
+
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
                                QObject *parent)
     : QObject(parent)
 {
+    loadCheckers = new QMap<QByteArray, QTimer *>();
+    dataCheckers = new QMap<QByteArray, std::vector<bool>>();
+
     requestResponseMap = new QMap<QByteArray, int>();
     this->actorIndex = actorIndex;
     this->blockchain = blockchain;
@@ -92,7 +118,8 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
 
 void ResolveManager::createNewResolver(const DataStruct &task)
 {
-    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
+    resolvers.append(
+        new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter, this));
     resolvers.last()->setNode(node);
     resolvers.last()->setBlockchain(blockchain);
     resolvers.last()->setDfs(dfs);

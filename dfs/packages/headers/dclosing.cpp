@@ -1,7 +1,7 @@
 #include "dclosing.h"
 
 
-Message::DClosing::DClosing(const QByteArray &title_hash, const long long &pckAF)
+DFSMessage::DClosing::DClosing(const QByteArray &title_hash, const long long &pckAF)
     : DUMessage(type_closing)
 {
     this->title_hash = title_hash;
@@ -9,7 +9,7 @@ Message::DClosing::DClosing(const QByteArray &title_hash, const long long &pckAF
 
 }
 
-Message::DClosing::DClosing(const QByteArray &serialized)
+DFSMessage::DClosing::DClosing(const QByteArray &serialized)
     : DUMessage(type_closing)
 {
     QList<QByteArray> list = deserialize(serialized);
@@ -28,12 +28,12 @@ Message::DClosing::DClosing(const QByteArray &serialized)
 //    pckgUpset = pckgUpsetDeserialize(list.takeFirst());
 }
 
-Message::DClosing::~DClosing()
+DFSMessage::DClosing::~DClosing()
 {
 
 }
 
-const QList<QByteArray> Message::DClosing::serializedParams() const
+const QList<QByteArray> DFSMessage::DClosing::serializedParams() const
 {
     QList<QByteArray> list;
     list << title_hash << QByteArray::number(PckgAmoutR);// << pckgUpsetSerialize();

@@ -1,7 +1,7 @@
 #ifndef DUMESSAGE_H
 #define DUMESSAGE_H
 #include "dfs_message_interface.h"
-namespace Message {
+namespace DFSMessage {
 
 class DUMessage : public IDfs_Message
 {

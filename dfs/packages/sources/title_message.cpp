@@ -1,6 +1,6 @@
 #include "dfs/packages/headers/title_message.h"
 
-Message::title_message::title_message(const QString &filePath)
+DFSMessage::title_message::title_message(const QString &filePath)
     : DUMessage(type_title)
 {
     QFile file(filePath);
@@ -19,7 +19,7 @@ Message::title_message::title_message(const QString &filePath)
     file.close();
 }
 
-Message::title_message::title_message(const QByteArray &serialized)
+DFSMessage::title_message::title_message(const QByteArray &serialized)
     : DUMessage(type_title)
 {
     QList<QByteArray> list = deserialize(serialized);
@@ -40,9 +40,9 @@ Message::title_message::title_message(const QByteArray &serialized)
     f_type = list.takeFirst();
 }
 
-Message::title_message::title_message(const QString &filePath, const long long &pckgsAmount,
-                                      const long long &fileSize, const QByteArray &hash,
-                                      const QByteArray &f_type)
+DFSMessage::title_message::title_message(const QString &filePath, const long long &pckgsAmount,
+                                         const long long &fileSize, const QByteArray &hash,
+                                         const QByteArray &f_type)
     : DUMessage(type_title)
 {
     this->filePath = filePath;
@@ -52,11 +52,11 @@ Message::title_message::title_message(const QString &filePath, const long long &
     this->f_type = f_type;
 }
 
-Message::title_message::~title_message()
+DFSMessage::title_message::~title_message()
 {
 }
 
-bool Message::title_message::empty() const
+bool DFSMessage::title_message::empty() const
 {
     if (filePath.isEmpty())
         return true;
@@ -69,10 +69,11 @@ bool Message::title_message::empty() const
     return false;
 }
 
-const QList<QByteArray> Message::title_message::serializedParams() const
+const QList<QByteArray> DFSMessage::title_message::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << filePath.toUtf8() << QByteArray::number(pckgsAmount)
-         << QByteArray::number(fileSize) << dataHash << f_type;
+    list << QByteArray::number(type) << filePath.toUtf8()
+         << QByteArray::number(static_cast<long long>(pckgsAmount)) << QByteArray::number(fileSize)
+         << dataHash << f_type;
     return list;
 }

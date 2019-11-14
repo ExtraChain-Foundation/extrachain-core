@@ -3,14 +3,14 @@
 
 #include "dumessage.h"
 #include <QFile>
-namespace Message {
+namespace DFSMessage {
 
 struct title_message : public DUMessage
 {
     const short FIELDS_COUNT = 5;
 
     QString filePath;
-    long long pckgsAmount = 0;
+    unsigned long pckgsAmount = 0;
     long long fileSize = 0;
     QByteArray f_type;
 
