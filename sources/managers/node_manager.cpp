@@ -19,8 +19,8 @@ NodeManager::NodeManager()
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
     prProfile->setAccountController(accController);
-    chatManger = new ChatManager(accController, actorIndex);
-    chatManger->setNetManager(netManager);
+    chatManager = new ChatManager(accController, actorIndex);
+    chatManager->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
@@ -32,7 +32,7 @@ NodeManager::NodeManager()
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     resolveManager->setNode(this);
-    resolveManager->setChatManager(chatManger);
+    resolveManager->setChatManager(chatManager);
 
     netManager->setResolveManager(resolveManager);
     dfs->initDFSNetManager(resolveManager);
@@ -52,7 +52,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
-    ThreadPool::addThread(chatManger);
+    ThreadPool::addThread(chatManager);
 }
 
 void NodeManager::createCompanyActor(const QString &password)
@@ -530,7 +530,7 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::initActorChatM, chatManger, &ChatManager::ActorInit);
+    connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
 
@@ -540,7 +540,7 @@ void NodeManager::connectUi()
         setIdPrivateProfile(id);
         emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
     });
-    connect(accController, &AccountController::savePrivateProfile, chatManger, &ChatManager::ActorInit);
+    connect(accController, &AccountController::savePrivateProfile, chatManager, &ChatManager::ActorInit);
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
     connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
     connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);
@@ -568,19 +568,31 @@ void NodeManager::connectUi()
     connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
     //=============================================CHAT=======================================
-    connect(uiController, &UiController::createChat, chatManger, &ChatManager::CreateNewChat);
-    connect(uiController, &UiController::inviteToChat, chatManger, &ChatManager::InviteToChat);
-    connect(uiController, &UiController::sendMessage, chatManger, &ChatManager::SendMessage);
+    connect(uiController, &UiController::createChat, chatManager, &ChatManager::CreateNewChat);
+    connect(uiController, &UiController::inviteToChat, chatManager, &ChatManager::InviteToChat);
+    connect(uiController, &UiController::createDialogue, chatManager, &ChatManager::createDialogue);
 
-    connect(uiController, &UiController::createDialogue, chatManger, &ChatManager::createDialogue);
-    connect(uiController, &UiController::requestChatList, chatManger, &ChatManager::requestChatList);
-    connect(uiController, &UiController::requestChat, chatManger, &ChatManager::requestChat);
-    connect(chatManger, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
-    connect(chatManger, &ChatManager::chatSend, uiController, &UiController::chatReceived);
-    connect(chatManger, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+    connect(uiController, &UiController::sendMessage, chatManager, &ChatManager::SendMessage);
+    connect(chatManager, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+
+    connect(uiController, &UiController::requestChatList, chatManager, &ChatManager::requestChatList);
+    connect(uiController, &UiController::requestChat, chatManager, &ChatManager::requestChat);
+
+    connect(chatManager, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
+    connect(chatManager, &ChatManager::chatSend, uiController, &UiController::chatReceived);
+    connect(chatManager, &ChatManager::chatCreated, uiController->getChatListModel(),
+            &ChatListModel::chatAdded);
+    connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatModel(),
+            &ChatModel::messageReceived);
+    connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatListModel(),
+            &ChatListModel::messageReceived);
+
+    connect(uiController, &UiController::removeChat, chatManager, &ChatManager::chatRemoved);
+
     //
     uiController->startThreads();
 }
+
 void NodeManager::addNewWallet()
 {
     auto actor = accController->createActor(0);

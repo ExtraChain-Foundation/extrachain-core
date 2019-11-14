@@ -11,14 +11,14 @@ struct UIChat
 {
     QStringList users;
     QString chatId;
-    qint64 lastMessageDate;
+    QDateTime lastMessageDate;
 };
 
 struct UIMessage
 {
     QString userId;
     QString message;
-    QString date;
+    QDateTime date;
 };
 
 class Chat : public QObject
@@ -42,8 +42,7 @@ private:
     BigNumber findCurrentSession();                                              //+
     void InitializeAllPaths();                                                   //+
     void saveChatKey(QByteArray key, BigNumber sessionNumb);                     //+
-    QByteArray encryptMessage(QByteArray message);                               //+
-    QByteArray decryptMessage(QByteArray message);                               //+
+                                                                                 //+
     void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
     bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
 
@@ -80,6 +79,10 @@ public:
     QByteArray getOwner();             //-
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
+    QDateTime getLastMessageTime();
+    void removeAllChatData();
+    QByteArray encryptMessage(QByteArray message); //+
+    QByteArray decryptMessage(QByteArray message);
 
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager

@@ -92,6 +92,7 @@ public:
     bool getInfinity() const;
     void setInfinity(bool value);
 
+    static bool isValid(const QByteArray &bigNumber, int base = 16);
     static BigNumber factorial(unsigned long number);
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n, bool zeroAllowed = true);

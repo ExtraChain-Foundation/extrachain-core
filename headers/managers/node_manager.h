@@ -42,7 +42,7 @@ private:
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
-    ChatManager *chatManger;
+    ChatManager *chatManager;
     ResolveManager *resolveManager;
 
     PrivateProfile *prProfile;

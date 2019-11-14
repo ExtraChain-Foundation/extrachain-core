@@ -163,11 +163,14 @@ QList<UIMessage> Chat::getAllMessages()
         decryptedCurrentMessage = decryptMessage(msginList);
         currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
         if (currentData.size() == 3)
-            result.append(UIMessage{ currentData.at(0), currentData.at(1), currentData.at(2) });
-
+        {
+            result.append(UIMessage { currentData.at(0), currentData.at(1),
+                                      QDateTime::fromMSecsSinceEpoch(currentData.at(2).toLongLong()) });
+        }
         else
-
+        {
             qDebug() << "[Error] Size !=3 in getAllMessages Chat";
+        }
     }
     return result;
 }
@@ -205,6 +208,27 @@ QByteArray Chat::encryptByChatKey(QByteArray data)
 QByteArray Chat::decryptByChatKey(QByteArray data)
 {
     return decryptMessage(data);
+}
+
+QDateTime Chat::getLastMessageTime()
+{
+    QList<QByteArray> messagesList = getAllMessagesByteArray();
+    if (messagesList.isEmpty())
+        return QDateTime();
+    QByteArray lastMessage = decryptMessage(messagesList.last());
+    messagesList = Serialization::universalDeserialize(lastMessage);
+    if (messagesList.size() != 3)
+    {
+        qDebug() << "[Error] In getLastMessageTime chat";
+        return QDateTime();
+    }
+
+    return QDateTime::fromMSecsSinceEpoch(messagesList.at(2).toLongLong());
+}
+
+void Chat::removeAllChatData()
+{
+    QDir(getPathCurrentChat()).removeRecursively();
 }
 
 QByteArray Chat::getPathCurrentChat()
@@ -361,16 +385,13 @@ QByteArray Chat::sendMessage(QByteArray message)
     //    // test end
 
     //  QList<QByteArray> allmessageList = getAllMessagesByteArray();
-    QList<QByteArray> dateList;
-    dateList.append(QDate::currentDate().toString("dd.MM.yyyy").toUtf8());
-    dateList.append(QTime::currentTime().toString("hh:mm").toUtf8());
-    QByteArray currneDate = Serialization::serialize(dateList);
+    QByteArray dateList = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
     QList<QByteArray> currentMessage;
 
     currentMessage.append(_currentActorId);
     currentMessage.append(message);
     QByteArray currentMessageByteArray = encryptMessage(Serialization::universalSerialize(currentMessage));
-    currentMessage.append(currneDate);
+    currentMessage.append(dateList);
     QByteArray currentMessageWithDate = encryptMessage(Serialization::universalSerialize(currentMessage));
 
     //  allmessageList.append(currentMessageByteArray);
@@ -397,13 +418,10 @@ QByteArray Chat::sendMessage(QByteArray message)
 
 void Chat::receiveMessage(QByteArray message)
 {
-    QList<QByteArray> dateList;
-    dateList.append(QDate::currentDate().toString("dd.MM.yyyy").toUtf8());
-    dateList.append(QTime::currentTime().toString("hh:mm").toUtf8());
-    QByteArray currneDate = Serialization::serialize(dateList);
+    QByteArray date = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
     QByteArray decryptedMessage = decryptMessage(message);
-    message.append(Serialization::universalSerialize({ currneDate }));
-    message = encryptMessage(message);
+    decryptedMessage.append(Serialization::universalSerialize({ date }));
+    message = encryptMessage(decryptedMessage);
     // QList<QByteArray> allmessageList = getAllMessagesByteArray();
 
     // allmessageList.append(message);
