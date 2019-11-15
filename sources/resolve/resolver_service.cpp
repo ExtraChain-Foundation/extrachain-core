@@ -224,8 +224,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
         emit TaskFinished();
         return;
     }
-
-    qDebug() << "Resolver: receive " << msgType;
+    if (msgType != GET_ALL_ACTORS && msgType != GET_ALL_ACTORS_RESPONSE_MESSAGE)
+        qDebug() << "Resolver: receive " << msgType;
     if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
     {
         if (RESPONSE.contains(msgType))
@@ -509,7 +509,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     {
         qDebug() << "[requestMessage:]";
         DFSMessage::dfs_request message(data);
-        dfs->fileResponce(message.filePath, receiver);
+        dfs->fileResponse(message.filePath, receiver);
     }
     else if (msgType == DFSMessage::dfsMessageType::storageMessage)
     {

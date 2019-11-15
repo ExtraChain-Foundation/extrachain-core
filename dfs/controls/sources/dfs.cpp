@@ -225,7 +225,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
 #endif
 }
 
-void Dfs::fileResponce(const QString path, const SocketPair &receiver)
+void Dfs::fileResponse(const QString path, const SocketPair &receiver)
 {
     QFile file(path);
     QByteArrayList pathList = Serialization::deserialize(path.toUtf8() + "/", "/");

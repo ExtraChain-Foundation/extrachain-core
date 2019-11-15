@@ -27,6 +27,8 @@ void ResolveManager::restartLoadChecker()
 
 void ResolveManager::checkStatus()
 {
+    qDebug() << "====================FILE STATUS CHECK==================";
+    qDebug() << "Download map size:" << dataCheckers->size() << "entries";
     if (!dataCheckers->isEmpty())
     {
         QMap<QByteArray, std::vector<bool>>::iterator prev;
@@ -76,12 +78,11 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
     this->txManager = txManager;
     this->accountControler = accountControler;
     this->dfs = dfs;
-    loadChecker = new QTimer();
-    connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
+
     //    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
-    loadChecker->start(5000);
+    //    loadChecker->start(5000);
 }
 
 ResolveManager::~ResolveManager()
@@ -96,7 +97,7 @@ ResolveManager::~ResolveManager()
 void ResolveManager::connectSignals(ResolverService *resolver)
 {
     //    connect(resolver)
-    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
+    //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     connect(resolver, &ResolverService::restartLoadChecker, this, &ResolveManager::restartLoadChecker);
     //    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
@@ -122,7 +123,8 @@ void ResolveManager::connectSignals(ResolverService *resolver)
 void ResolveManager::disconnectSignals(ResolverService *resolver)
 {
     //    disconnect(resolver)
-    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections aborted";
+    //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections
+    //    aborted";
     disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     // "New" signals
     //    disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
@@ -232,7 +234,12 @@ void ResolveManager::taskFinished()
 
 void ResolveManager::process()
 {
-    //
+    loadChecker = new QTimer();
+    bool udav = connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
+    qDebug() << "==================== FILE STATUS CHECK ==================";
+    if (udav)
+        qDebug() << "======================== STARTED =====================";
+    loadChecker->start(5000);
 }
 
 QList<ResolverService *> ResolveManager::getActive()
