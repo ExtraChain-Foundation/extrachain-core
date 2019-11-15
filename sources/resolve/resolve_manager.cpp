@@ -10,11 +10,6 @@ void ResolveManager::setChatManager(ChatManager *value)
     chatManager = value;
 }
 
-QMap<QByteArray, QTimer *> *ResolveManager::getLoadCheckers() const
-{
-    return loadCheckers;
-}
-
 QMap<QByteArray, std::vector<bool>> *ResolveManager::getDataCheckers() const
 {
     return dataCheckers;
@@ -25,12 +20,32 @@ QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
     return pckgCounter;
 }
 
-void ResolveManager::setCheckTask()
+void ResolveManager::checkStatus()
 {
-    QTimer *sender = qobject_cast<QTimer *>(QObject::sender());
-    QByteArray hash = loadCheckers->key(sender);
-    QList<QByteArray> list = { "int", "status", hash };
-    setTask(Serialization::universalSerialize(list), nullptr); // DANGEROUS!!!
+    if (!dataCheckers->isEmpty())
+    {
+        QMap<QByteArray, std::vector<bool>>::iterator it;
+        for (it = dataCheckers->begin(); it != dataCheckers->end(); ++it)
+        {
+            QList<QByteArray> emptyFrags;
+            for (unsigned long i = 0; i < it.value().size(); i++)
+            {
+                if (!it.value()[i])
+                {
+                    emptyFrags.append(QByteArray::number(static_cast<long long>(i)));
+                }
+            }
+            if (emptyFrags.isEmpty())
+            {
+                dataCheckers->remove(it.key());
+            }
+            else
+            {
+                DFSMessage::req_frags_message reqFrags(it.key(), emptyFrags);
+                dfs->dfsNetManager->send(reqFrags.serialize());
+            }
+        }
+    }
 }
 
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
@@ -38,7 +53,6 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
                                QObject *parent)
     : QObject(parent)
 {
-    loadCheckers = new QMap<QByteArray, QTimer *>();
     dataCheckers = new QMap<QByteArray, std::vector<bool>>();
 
     requestResponseMap = new QMap<QByteArray, int>();
@@ -48,10 +62,11 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
     this->txManager = txManager;
     this->accountControler = accountControler;
     this->dfs = dfs;
-
+    connect(&loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
     //    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
+    loadChecker.start(5000);
 }
 
 ResolveManager::~ResolveManager()

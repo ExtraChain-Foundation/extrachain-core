@@ -28,7 +28,7 @@ public:
      * @param userId
      */
     Sender(const QByteArray &userId, QObject *parent = nullptr);
-    void reloadFragments(QString path, QList<QByteArray> frags);
+    void resendFragments(QString path, QList<QByteArray> frags);
     void setNetManager(DFSNetManager *value);
     /**
      * @brief sendFile

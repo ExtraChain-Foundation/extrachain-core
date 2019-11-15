@@ -40,8 +40,11 @@ class ResolveManager : public QObject
     Q_OBJECT
 
 private:
-    QMap<QByteArray, QTimer *> *loadCheckers;
+    QTimer loadChecker;
+    QMap<QByteArray, QString> *downloadingFileList = new QMap<QByteArray, QString>();
     QMap<QByteArray, std::vector<bool>> *dataCheckers;
+private slots:
+    void checkStatus();
 
 private:
     std::queue<DataStruct> unprocessed;
@@ -89,8 +92,6 @@ public:
     bool setTask(QByteArray msg, const SocketPair &receiver);
     void setChatManager(ChatManager *value);
 
-    QMap<QByteArray, QTimer *> *getLoadCheckers() const;
-
     QMap<QByteArray, std::vector<bool>> *getDataCheckers() const;
 
     QMap<QByteArray, unsigned long> *getPckgCounter() const;
@@ -102,7 +103,6 @@ signals:
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
-    void setCheckTask();
     void registrateMsg(const QByteArray &data, const QByteArray &msgType);
     /**
      * @brief sendMessageResponse from resolver

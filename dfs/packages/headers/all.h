@@ -6,6 +6,7 @@
 #include "dfs_status.h"
 #include "message_struct.h"
 #include "dfs_universal.h"
+#include "req_frags_message.h"
 #include "dfs_message_interface.h"
 #include "status.h"
 #include "dclosing.h"

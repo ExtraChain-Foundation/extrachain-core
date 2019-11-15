@@ -37,36 +37,33 @@ void ResolverService::processInternalMessage(QList<QByteArray> list)
 {
     if (list.size() == 3)
     {
-        if (list[1] == "status")
-        {
-            QByteArray tHash = list[3];
-            std::vector<bool> pStatus = resolveManager->getDataCheckers()->find(tHash).value();
-            QList<QByteArray> requested;
-            unsigned long it = 0;
-            for (unsigned long i = 0; i < pStatus.size(); i++)
-            {
-                if (!pStatus[i])
-                {
-                    requested.append(QByteArray::number(static_cast<long long>(i)));
-                }
-                else
-                {
-                    it++;
-                }
-            }
-            if (it == pStatus.size())
-            {
-                disconnect(resolveManager->getLoadCheckers()->find(tHash).value(), &QTimer::timeout,
-                           resolveManager, &ResolveManager::setCheckTask);
-                resolveManager->getLoadCheckers()->remove(tHash);
-                resolveManager->getDataCheckers()->remove(tHash);
-                return;
-            }
-            QFile *file = listFile->find(tHash).value();
-            QString filename = file->fileName();
-            filename.chop(4);
-            dfs->reloadFragments(filename, requested);
-        }
+        //        if (list[1] == "status")
+        //        {
+        //            QByteArray tHash = list[2];
+        //            std::vector<bool> pStatus = resolveManager->getDataCheckers()->find(tHash).value();
+        //            QList<QByteArray> requested;
+        //            unsigned long it = 0;
+        //            for (unsigned long i = 0; i < pStatus.size(); i++)
+        //            {
+        //                if (!pStatus[i])
+        //                {
+        //                    requested.append(QByteArray::number(static_cast<long long>(i)));
+        //                }
+        //                else
+        //                {
+        //                    it++;
+        //                }
+        //            }
+        //            if (it == pStatus.size())
+        //            {
+        //                resolveManager->getDataCheckers()->remove(tHash);
+        //                return;
+        //            }
+        //            QFile *file = listFile->find(tHash).value();
+        //            QString filename = file->fileName();
+        //            filename.chop(4);
+        //            dfs->resendFragments(filename, requested);
+        //        }
     }
 }
 
@@ -86,7 +83,7 @@ ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *
 
 ResolverService::~ResolverService()
 {
-    emit finished();
+    //    emit finished();
 }
 
 bool ResolverService::isActive() const
@@ -480,7 +477,12 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     qDebug() << "[dfs resolve message]";
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     // resolve msg
-    if (msgType == DFSMessage::dfsMessageType::titleMessage)
+    if (msgType == DFSMessage::dfsMessageType::requestFragments)
+    {
+        DFSMessage::req_frags_message message(data);
+        dfs->resendFragments(message.getFilePath(), message.getListFrag());
+    }
+    else if (msgType == DFSMessage::dfsMessageType::titleMessage)
     {
         qDebug() << "[title message:]";
         DFSMessage::title_message message(data);
@@ -539,7 +541,6 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             handlerFileMutex.unlock();
             return;
         }
-        resolveManager->getLoadCheckers()->find(message.title_hash).value()->start(DFS_PWT);
         resolveManager->getDataCheckers()->find(message.title_hash).value()[message.pckgNumber] = true;
 
         listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
@@ -637,17 +638,10 @@ bool ResolverService::registerTitle(const QString &tmpPath, const unsigned long 
     {
         std::vector<bool> dataChecker;
         dataChecker.assign(pckgAmount, false);
-        QTimer *timer = new QTimer();
-
         handlerFileMutex.lock();
-        resolveManager->getLoadCheckers()->insert(tHash, timer);
         resolveManager->getDataCheckers()->insert(tHash, dataChecker);
-        //        dataCheckers->value(tHash).
         resolveManager->getPckgCounter()->insert(tHash, pckgAmount);
         fileMap->insert(tmpPath, titleSerialize);
-        connect(resolveManager->getLoadCheckers()->value(tHash), &QTimer::timeout, resolveManager,
-                &ResolveManager::setCheckTask);
-        resolveManager->getLoadCheckers()->value(tHash)->start(DFS_PWT);
         handlerFileMutex.unlock();
         qDebug() << "[ready for receive file]";
     }

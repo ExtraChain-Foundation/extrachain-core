@@ -12,6 +12,7 @@ SOURCES += \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/message_struct.cpp \
+    $$PWD/dfs/packages/sources/req_frags_message.cpp \
     $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
@@ -86,6 +87,7 @@ HEADERS += \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
     $$PWD/dfs/packages/headers/dumessage.h \
     $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/dfs/packages/headers/req_frags_message.h \
     $$PWD/dfs/packages/headers/status.h \
     $$PWD/dfs/packages/headers/title_message.h \
     $$PWD/headers/enc/algorithms/aes.h \

@@ -239,9 +239,9 @@ void Dfs::fileResponce(const QString path, const SocketPair &receiver)
     return;
 }
 
-void Dfs::reloadFragments(QString path, QList<QByteArray> frags)
+void Dfs::resendFragments(QString path, QList<QByteArray> frags)
 {
-    sender->reloadFragments(path, frags);
+    sender->resendFragments(path, frags);
 }
 
 void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver)

@@ -11,9 +11,21 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
     this->userId = userId;
 }
 
-void Sender::reloadFragments(QString path, QList<QByteArray> frags)
+void Sender::resendFragments(QString path, QList<QByteArray> frags)
 {
-    //    NetManager->send()
+    QFile file(path);
+    if (file.open(QIODevice::ReadOnly))
+    {
+        DFSMessage::title_message title(path);
+        QByteArray data = file.read(data_offset);
+        for (int i = 0; i < frags.size(); i++)
+        {
+            long long pckgN = frags[i].toLongLong();
+            // create package
+            DFSMessage::dfs_message pck(title.hash(), pckgN, data); // package for send
+            NetManager->send(pck.serialize(), Messages::DFS_MESSAGE);
+        }
+    }
 }
 void Sender::process()
 {
