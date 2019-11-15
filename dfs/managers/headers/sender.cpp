@@ -17,12 +17,16 @@ void Sender::resendFragments(QString path, QList<QByteArray> frags)
     if (file.open(QIODevice::ReadOnly))
     {
         DFSMessage::title_message title(path);
-        QByteArray data = file.read(data_offset);
-        for (int i = 0; i < frags.size(); i++)
+        std::vector<long long> fragsID;
+        foreach (QByteArray b, frags)
         {
-            long long pckgN = frags[i].toLongLong();
-            // create package
-            DFSMessage::dfs_message pck(title.hash(), pckgN, data); // package for send
+            fragsID.push_back(b.toLongLong());
+        }
+        for (unsigned int i = 0; i < fragsID.size(); i++)
+        {
+            file.seek(fragsID[i] * data_offset);
+            QByteArray data = file.read(data_offset);
+            DFSMessage::dfs_message pck(title.hash(), fragsID[i], data); // package for send
             NetManager->send(pck.serialize(), Messages::DFS_MESSAGE);
         }
     }

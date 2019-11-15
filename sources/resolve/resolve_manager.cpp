@@ -24,10 +24,16 @@ void ResolveManager::checkStatus()
 {
     if (!dataCheckers->isEmpty())
     {
+        QMap<QByteArray, std::vector<bool>>::iterator prev;
         QMap<QByteArray, std::vector<bool>>::iterator it;
-        for (it = dataCheckers->begin(); it != dataCheckers->end(); ++it)
+        mutex.lock();
+        it = dataCheckers->begin();
+        while (it != dataCheckers->end())
         {
+            //            prev = it;
+            //            it++;
             QList<QByteArray> emptyFrags;
+            emptyFrags.clear();
             for (unsigned long i = 0; i < it.value().size(); i++)
             {
                 if (!it.value()[i])
@@ -37,14 +43,17 @@ void ResolveManager::checkStatus()
             }
             if (emptyFrags.isEmpty())
             {
-                dataCheckers->remove(it.key());
+                it = dataCheckers->erase(it);
             }
             else
             {
                 DFSMessage::req_frags_message reqFrags(it.key(), emptyFrags);
                 dfs->dfsNetManager->send(reqFrags.serialize());
+                ++it;
             }
+            //            ++it;
         }
+        mutex.unlock();
     }
 }
 

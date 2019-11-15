@@ -5,6 +5,7 @@
 #include <QThread>
 #include "dfs/packages/headers/all.h"
 #include "managers/account_controller.h"
+#include <vector>
 
 #ifndef DFS_NETWORK_MANAGER_DEF
 #define DFS_NETWORK_MANAGER_DEF
