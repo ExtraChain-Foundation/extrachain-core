@@ -84,6 +84,7 @@ public slots:
     void requestChatList();                                   //+
     void requestChat(QByteArray chatId);                      //-
     void chatRemoved(QByteArray chatId);
+    void process();
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
@@ -98,6 +99,7 @@ signals:
 
     void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
     void chatCreated(UIChat);
+    void finished();
 };
 
 #endif // CHATMANAGER_H

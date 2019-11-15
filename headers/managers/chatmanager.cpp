@@ -316,6 +316,10 @@ void ChatManager::chatRemoved(QByteArray chatId)
     }
 }
 
+void ChatManager::process()
+{
+}
+
 ChatManager::~ChatManager()
 {
     _chatList.clear();

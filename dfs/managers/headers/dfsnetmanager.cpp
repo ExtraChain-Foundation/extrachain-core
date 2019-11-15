@@ -109,6 +109,11 @@ void DFSNetManager::process()
     connectToServer(serverPort, local);
 }
 
+void DFSNetManager::uiReconnect()
+{
+    connectToServer(serverPort, local);
+}
+
 void DFSNetManager::removeConnection()
 {
     QObject *sender = QObject::sender();

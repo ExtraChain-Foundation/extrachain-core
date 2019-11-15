@@ -459,6 +459,8 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 void NodeManager::connectUi()
 {
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
+    connect(uiController, &UiController::connectToServer, dfs->getDfsNetManager(),
+            &DFSNetManager::uiReconnect);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 
@@ -473,6 +475,7 @@ void NodeManager::connectUi()
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
+    connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
