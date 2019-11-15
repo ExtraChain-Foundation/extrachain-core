@@ -193,6 +193,7 @@ public slots:
     void process();
 
 signals:
+    void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me

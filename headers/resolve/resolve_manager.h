@@ -40,7 +40,7 @@ class ResolveManager : public QObject
     Q_OBJECT
 
 private:
-    QTimer loadChecker;
+    QTimer *loadChecker;
     QMap<QByteArray, QString> *downloadingFileList = new QMap<QByteArray, QString>();
     QMap<QByteArray, std::vector<bool>> *dataCheckers;
 private slots:
@@ -102,6 +102,7 @@ signals:
     //    void sendMsg(const QByteArray &msg);
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
+    void restartLoadChecker();
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void registrateMsg(const QByteArray &data, const QByteArray &msgType);
     /**

@@ -20,6 +20,11 @@ QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
     return pckgCounter;
 }
 
+void ResolveManager::restartLoadChecker()
+{
+    loadChecker->start(5000);
+}
+
 void ResolveManager::checkStatus()
 {
     if (!dataCheckers->isEmpty())
@@ -71,11 +76,12 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
     this->txManager = txManager;
     this->accountControler = accountControler;
     this->dfs = dfs;
-    connect(&loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
+    loadChecker = new QTimer();
+    connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
     //    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
-    loadChecker.start(5000);
+    loadChecker->start(5000);
 }
 
 ResolveManager::~ResolveManager()
@@ -92,6 +98,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     //    connect(resolver)
     qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
+    connect(resolver, &ResolverService::restartLoadChecker, this, &ResolveManager::restartLoadChecker);
     //    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
     // "New" signals
     //    connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);

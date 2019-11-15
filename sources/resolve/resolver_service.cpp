@@ -474,6 +474,7 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
 }
 void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType, const SocketPair &receiver)
 {
+    emit restartLoadChecker();
     qDebug() << "[dfs resolve message]";
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     // resolve msg
