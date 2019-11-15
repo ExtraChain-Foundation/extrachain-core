@@ -129,7 +129,7 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
             QStringList tempusersList;
 
             Chat temp(message.id, _actorIndex, _accController);
-            temp.sendMessage("Chat created");
+            temp.sendMessage("{ \"type\": \"first\" }");
 
             for (auto user : allUsers)
                 tempusersList.append(user);
@@ -275,7 +275,7 @@ void ChatManager::createDialogue(QByteArray actorId)
     QStringList tempusersList;
 
     Chat temp(chatId, _actorIndex, _accController);
-    temp.sendMessage("Chat created");
+    temp.sendMessage("{ \"type\": \"first\" }");
 
     for (auto &user : allUsers)
         tempusersList.append(user);
