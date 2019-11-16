@@ -43,10 +43,9 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
     accounts = accountList;
     this->actorIndex = actorIndex;
-    //    setupActorIndexConnections();
+    // setupActorIndexConnections();
     findLocal();
-    qDebug() << local->ip();
-    qDebug() << "NET MANAGER: init net fun start";
+    qDebug() << "NET MANAGER: init net fun start" << (local != nullptr);
     if (local != nullptr)
     {
         qDebug() << "LOCAL ::::::::::::::::" << local->ip();
@@ -74,6 +73,10 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
         {
             startDiscovery();
         }
+    }
+    else
+    {
+        qDebug() << "Local not found";
     }
 }
 
@@ -235,12 +238,16 @@ void NetManager::checkMyIdentificator()
 void NetManager::startNetwork()
 {
     qDebug() << "NetManager::startNetwork()";
-    //        netPort = serverPort;
+    // netPort = serverPort;
     qDebug() << "NetPort:" << serverPort;
-    serverService = new ServerService(serverPort, local);
-    //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections();
-    serverService->startListen();
+
+    if (local != nullptr)
+    {
+        serverService = new ServerService(serverPort, local);
+        // resolverService = new ResolverService(actorIndex, requestResponseMap);
+        setupServerServiceConnections();
+        serverService->startListen();
+    }
 }
 
 void NetManager::startDiscovery()
@@ -270,7 +277,7 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
 #endif
     qDebug() << "void NetManager::connectToServer()";
     QStringList servers = serverIp.split(";");
-    QString localIp = local->ip().toString();
+    QString localIp = local != nullptr ? local->ip().toString() : "";
 
     for (QString server : servers)
     {

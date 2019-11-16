@@ -40,10 +40,14 @@ void DFSNetManager::startNetwork()
     qDebug() << "DFSNetManager::startNetwork()";
     //        netPort = serverPort;
     qDebug() << "DFSNetManager:" << serverPort;
-    serverService = new ServerService(serverPort, local);
-    //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections();
-    serverService->startListen();
+
+    if (local != nullptr)
+    {
+        serverService = new ServerService(serverPort, local);
+        //    resolverService = new ResolverService(actorIndex, requestResponseMap);
+        setupServerServiceConnections();
+        serverService->startListen();
+    }
 }
 
 void DFSNetManager::setupServerServiceConnections()
@@ -172,7 +176,7 @@ void DFSNetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEn
 #endif
     qDebug() << "void NetManager::connectToServer()";
     QStringList servers = serverIp.split(";");
-    QString localIp = local->ip().toString();
+    QString localIp = local != nullptr ? local->ip().toString() : "";
 
     for (QString server : servers)
     {
