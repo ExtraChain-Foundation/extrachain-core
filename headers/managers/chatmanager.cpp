@@ -134,7 +134,7 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
             for (auto user : allUsers)
                 tempusersList.append(user);
             emit chatCreated(UIChat { tempusersList, message.id,
-                                      Chat(message.id, _actorIndex, _accController).getLastMessageTime() });
+                                      Chat(message.id, _actorIndex, _accController).getLastMessage() });
         }
         else
             netManager->sendMessage(msg.serialize());
@@ -153,18 +153,25 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
         }
         else
         {
-
             if (temp.decryptByChatKey(message.salt) == this->_salt)
             {
                 temp.receiveMessage(message.message);
-                emit sendLastMessage(
-                    message.id,
-                    UIMessage { QString(_currentActorId), temp.decryptMessage(message.message),
-                                QDateTime::fromMSecsSinceEpoch(QDateTime::currentMSecsSinceEpoch()) });
-                requestChat(message.id);
+                QString messageDecryped = temp.decryptMessage(message.message);
+
+                QByteArrayList messList = Serialization::universalDeserialize(messageDecryped.toUtf8());
+                if (messList.length() != 2)
+                {
+                    qDebug() << "Chat decrypt error";
+                    return;
+                }
+
+                QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(QDateTime::currentMSecsSinceEpoch());
+                emit sendLastMessage(message.id, UIMessage { messList[0], messList[1], currentDate });
             }
             else
+            {
                 netManager->sendMessage(msg.serialize());
+            }
         }
     }
 }
@@ -217,7 +224,7 @@ QByteArray ChatManager::CreateNewChat()
     for (auto &user : allUsers)
         tempusersList.append(user);
     emit chatCreated(
-        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessageTime() });
+        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
     return chatId;
     //    QDir().mkpath(getPathToMyChats() + chatId);
     //    QFile file(getPathToMyChats() + chatId + "/" + chatId + ".dat");
@@ -280,7 +287,7 @@ void ChatManager::createDialogue(QByteArray actorId)
     for (auto &user : allUsers)
         tempusersList.append(user);
     emit chatCreated(
-        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessageTime() });
+        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 }
 
 void ChatManager::requestChatList()
@@ -294,7 +301,8 @@ void ChatManager::requestChatList()
         tempUsers = currentChat->getAllUsers();
         for (auto user : tempUsers)
             tempusersList.append(user);
-        chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessageTime() });
+
+        chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
     }
     emit chatListSend(chats);
 }

@@ -7,18 +7,18 @@
 #include <QDirIterator>
 #include <QObject>
 
-struct UIChat
-{
-    QStringList users;
-    QString chatId;
-    QDateTime lastMessageDate;
-};
-
 struct UIMessage
 {
     QString userId;
     QString message;
     QDateTime date;
+};
+
+struct UIChat
+{
+    QStringList users;
+    QString chatId;
+    UIMessage lastMessage;
 };
 
 class Chat : public QObject
@@ -79,7 +79,7 @@ public:
     QByteArray getOwner();             //-
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
-    QDateTime getLastMessageTime();
+    UIMessage getLastMessage();
     void removeAllChatData();
     QByteArray encryptMessage(QByteArray message); //+
     QByteArray decryptMessage(QByteArray message);
