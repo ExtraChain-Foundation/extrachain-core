@@ -170,6 +170,7 @@ public:
     static const QStringList fieldsAgent;
     static const QStringList fieldsAgency;
     static const QStringList fieldsFashion;
+    static const QStringList fieldsToken;
     static const QMap<int, QString> unitMap;
     static const QMap<int, QString> categoryMap;
     static const QMap<int, QString> bodyMap;
