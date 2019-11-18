@@ -497,7 +497,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
                 qDebug() << "[&DFSResolver][tmp file size not enought]";
                 QString path = listFileIT.value()->fileName();
                 path.chop(based_dfs_struct::FILE_IDENTIFICATOR.size());
-                Message::dfs_request rqst(path, ac->getCurrentActor().getId().toActorId());
+                Message::dfs_request rqst(path, (*ac->getMainActor()).getId().toActorId());
                 dfs->dfsNetManager->send(rqst.serialize());
                 listFile->erase(listFileIT);
                 listFileIT.value()->remove();
