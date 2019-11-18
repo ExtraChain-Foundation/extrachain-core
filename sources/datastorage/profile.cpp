@@ -102,7 +102,7 @@ QByteArray Profile::at(int index) const
 int Profile::field(const QString &field) const
 {
     int type = at(0).toInt();
-    int index = -1;
+    int index = 0;
 
     switch (type)
     {
