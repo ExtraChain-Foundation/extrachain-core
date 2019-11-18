@@ -25,6 +25,11 @@ void ResolveManager::restartLoadChecker()
     loadChecker->start(5000);
 }
 
+QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
+{
+    return downloadingFileList;
+}
+
 void ResolveManager::checkStatus()
 {
     qDebug() << "====================FILE STATUS CHECK==================";
@@ -54,7 +59,8 @@ void ResolveManager::checkStatus()
             }
             else
             {
-                DFSMessage::req_frags_message reqFrags(it.key(), emptyFrags);
+                DFSMessage::req_frags_message reqFrags(downloadingFileList->find(it.key()).value().toUtf8(),
+                                                       emptyFrags);
                 dfs->dfsNetManager->send(reqFrags.serialize());
                 ++it;
             }

@@ -568,6 +568,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             //                return;
             //            }
             listFileIT.value()->close();
+            resolveManager->getDownloadingFileList()->remove(message.title_hash);
             dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
                         based_dfs_struct::convertToDFType(title.f_type));
             // finish save file
@@ -643,7 +644,9 @@ bool ResolverService::registerTitle(const QString &tmpPath, const unsigned long 
         std::vector<bool> dataChecker;
         dataChecker.assign(pckgAmount, false);
         handlerFileMutex.lock();
+        DFSMessage::title_message title(titleSerialize);
         resolveManager->getDataCheckers()->insert(tHash, dataChecker);
+        resolveManager->getDownloadingFileList()->insert(tHash, title.filePath);
         //        resolveManager->getPckgCounter()->insert(tHash, pckgAmount);
         fileMap->insert(tmpPath, titleSerialize);
         handlerFileMutex.unlock();

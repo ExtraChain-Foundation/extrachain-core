@@ -347,14 +347,16 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
         handler.insert(hashMsg, value);
     else
     {
-        if (handler.find(hashMsg).value() == list.size())
+        if (handler.find(hashMsg).value() == list.size() - 1)
         {
             handler.remove(hashMsg);
-            flag_result = false;
+            flag_result = false; // FALSE !!!
         }
         else
+        {
             flag_result = true;
-        handler.find(hashMsg).value()++;
+            handler.find(hashMsg).value()++;
+        }
     }
     return flag_result;
 }

@@ -96,6 +96,8 @@ public:
 
     //    QMap<QByteArray, unsigned long> *getPckgCounter() const;
 
+    QMap<QByteArray, QString> *getDownloadingFileList() const;
+
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);
