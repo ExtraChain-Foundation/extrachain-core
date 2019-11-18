@@ -65,7 +65,7 @@ private:
     // dfs Map
     QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
     QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
-    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
+    //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 public:
     /**
@@ -74,8 +74,8 @@ public:
      * @param parent
      */
     ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, QFile *> *listFile,
-                    QMap<QString, QByteArray> *fileMap, QMap<QByteArray, unsigned long> *pckgCounter,
-                    ResolveManager *resolveManager, QObject *parent = nullptr);
+                    QMap<QString, QByteArray> *fileMap, ResolveManager *resolveManager,
+                    QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
