@@ -52,7 +52,7 @@ private:
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
     QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
     QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
-    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
+    //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 private:
     ActorIndex *actorIndex;
@@ -94,7 +94,7 @@ public:
 
     QMap<QByteArray, std::vector<bool>> *getDataCheckers() const;
 
-    QMap<QByteArray, unsigned long> *getPckgCounter() const;
+    //    QMap<QByteArray, unsigned long> *getPckgCounter() const;
 
 signals:
     void finished();

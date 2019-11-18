@@ -15,10 +15,10 @@ QMap<QByteArray, std::vector<bool>> *ResolveManager::getDataCheckers() const
     return dataCheckers;
 }
 
-QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
-{
-    return pckgCounter;
-}
+// QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
+//{
+//    return pckgCounter;
+//}
 
 void ResolveManager::restartLoadChecker()
 {
@@ -151,8 +151,7 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
 
 void ResolveManager::createNewResolver(const DataStruct &task)
 {
-    resolvers.append(
-        new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter, this));
+    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, this));
     resolvers.last()->setNode(node);
     resolvers.last()->setBlockchain(blockchain);
     resolvers.last()->setDfs(dfs);
