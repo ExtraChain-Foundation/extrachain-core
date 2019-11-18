@@ -34,6 +34,8 @@ void ResolveManager::checkStatus()
 {
     qDebug() << "====================FILE STATUS CHECK==================";
     qDebug() << "Download map size:" << dataCheckers->size() << "entries";
+    qDebug() << "FileMap size:" << fileMap->size() << "entries";
+    qDebug() << "ListFile size:" << listFile->size() << "entries";
     if (!dataCheckers->isEmpty())
     {
         QMap<QByteArray, std::vector<bool>>::iterator prev;
@@ -68,6 +70,11 @@ void ResolveManager::checkStatus()
         }
         mutex.unlock();
     }
+}
+
+QMap<QByteArray, QFile *> *ResolveManager::getListFile() const
+{
+    return listFile;
 }
 
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,

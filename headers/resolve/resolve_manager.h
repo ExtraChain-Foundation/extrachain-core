@@ -98,6 +98,8 @@ public:
 
     QMap<QByteArray, QString> *getDownloadingFileList() const;
 
+    QMap<QByteArray, QFile *> *getListFile() const;
+
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);

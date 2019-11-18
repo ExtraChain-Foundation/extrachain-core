@@ -74,7 +74,7 @@ ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *
 {
     this->actorIndex = actorIndex;
     requestResponseMap = rrMap;
-    this->listFile = listFile;
+    //    this->listFile = listFile;
     this->fileMap = fileMap;
     //    this->pckgCounter = pckgCounter;
     this->resolveManager = resolveManager;
@@ -523,8 +523,9 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         QByteArray title_hash = message.title_hash;
         // setup iterator of Maps
         handlerFileMutex.lock();
-        QMap<QByteArray, QFile *>::iterator listFileIT = listFile->find(title_hash);
-        if (listFileIT == listFile->end())
+        QMap<QByteArray, QFile *>::iterator listFileIT =
+            resolveManager->getListFile()->find(title_hash); // Cannot find after request
+        if (listFileIT == resolveManager->getListFile()->end())
         {
             qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
             handlerFileMutex.unlock();
@@ -575,8 +576,8 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             // finish save file
             //            pckgCounter->erase(pckgCounterIT);
             resolveManager->getDataCheckers()->remove(message.title_hash);
-            fileMap->erase(fileMapIT);
-            listFile->erase(listFileIT);
+            fileMap->remove(fileMapIT.key());
+            resolveManager->getListFile()->remove(listFileIT.key());
             delete listFileIT.value();
         }
         handlerFileMutex.unlock();
@@ -599,7 +600,7 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
 {
     qDebug() << "[&DfsResolver] start create tmp file:" << path;
     handlerFileMutex.lock();
-    QFile *file = listFile->insert(tHash, new QFile(path)).value();
+    QFile *file = resolveManager->getListFile()->insert(tHash, new QFile(path)).value();
     if (!file->open(QIODevice::ReadWrite | QIODevice::Truncate))
     {
         // Take actorid of file owner

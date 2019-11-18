@@ -63,7 +63,7 @@ private:
 
 private:
     // dfs Map
-    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
+    //    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
     QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
     //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
