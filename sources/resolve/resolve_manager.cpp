@@ -127,7 +127,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
     {
         if (accountControler->getAccountCount() == 0)
             return;
-        msg.calcDigSig(accountControler->getCurrentActor());
+        msg.calcDigSig(*accountControler->getMainActor());
     }
     //    qDebug() << "msg signature:" << msg.getDigSig();
 
@@ -150,7 +150,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
     Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
     if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE
         /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
-        rmsg.calcDigSig(accountControler->getCurrentActor());
+        rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;
     networkManager->distMessage(rmsg.serialize(), receiver);

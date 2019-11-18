@@ -181,7 +181,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
         {
             QByteArrayList res =
                 Serialization::deserialize(el.toUtf8(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR);
-            Message::dfs_request rqst(res.at(0), accountControler->getCurrentActor().getId().toActorId());
+            Message::dfs_request rqst(res.at(0), (*accountControler->getMainActor()).getId().toActorId());
             dfsNetManager->send(rqst.serialize());
         }
         file.remove();
@@ -209,7 +209,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_str
             el.chop(based_dfs_struct::FILE_IDENTIFICATOR.size());
             QString path = pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId) + '/' + el;
 
-            Message::dfs_request rqst(path, accountControler->getCurrentActor().getId().toActorId());
+            Message::dfs_request rqst(path, (*accountControler->getMainActor()).getId().toActorId());
             //            dfsNetManager->send(rqst.serialize());
             //            QFile(path + based_dfs_struct::FILE_IDENTIFICATOR).remove();
         }
@@ -338,7 +338,7 @@ void Dfs::init()
         QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
         for (const QString &el : acList)
         {
-            if (el.toUtf8() != accountControler->getCurrentActor().getId().toActorId())
+            if (el.toUtf8() != (*accountControler->getMainActor()).getId().toActorId())
             {
                 QString cPath =
                     based_dfs_struct::ROOT_FOOLDER_NAME + '/' + el + '/' + based_dfs_struct::ACTOR_CARD_FILE;
