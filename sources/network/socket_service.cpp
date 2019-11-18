@@ -190,12 +190,25 @@ void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketDat
 void SocketService::sockReady()
 {
     long long s = 0;
+
     if (socket->bytesAvailable() > 0)
     {
         mutex.lock();
         s = socket->bytesAvailable();
         qDebug() << "Bytes read:" << s;
-        dpBuffer->append(socket->read(s));
+        QByteArray readed;
+        try
+        {
+            readed = socket->read(s);
+            dpBuffer->append(readed);
+        } catch (std::exception &e)
+        {
+            std::cout << "=================================================================================="
+                      << std::endl;
+            mutex.unlock();
+            sockReady();
+        }
+
         mutex.unlock();
     }
     if (socket->bytesAvailable())

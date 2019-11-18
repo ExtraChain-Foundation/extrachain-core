@@ -102,7 +102,7 @@ QByteArray Profile::at(int index) const
 int Profile::field(const QString &field) const
 {
     int type = at(0).toInt();
-    int index = 0;
+    int index = -1;
 
     switch (type)
     {
@@ -157,6 +157,9 @@ QString Profile::userId() const
 
 QString Profile::firstName() const
 {
+    if (at(0) == "6")
+        return "Token " + at(3);
+
     return value("firstName");
 }
 
