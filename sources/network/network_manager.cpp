@@ -445,7 +445,7 @@ void NetManager::removeConnection()
 
 void NetManager::signMessage(IMessage &message) const
 {
-    message.calcDigSig(accounts->getCurrentActor());
+    message.calcDigSig(*accounts->getMainActor());
 }
 
 QByteArray NetManager::calcHash(const Messages::IMessage &message) const
