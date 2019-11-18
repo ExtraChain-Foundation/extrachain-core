@@ -225,7 +225,8 @@ void ResolverService::recieveMsg(const QByteArray &msg, const SocketPair &receiv
     }
     if (msgType != GET_ALL_ACTORS && msgType != GET_ALL_ACTORS_RESPONSE_MESSAGE)
         qDebug() << "Resolver: receive " << msgType;
-    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE))
+    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE)
+        && (msgType != GET_ACTOR_MESSAGE))
     {
         if (RESPONSE.contains(msgType))
         {

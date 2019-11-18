@@ -171,7 +171,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     task.msg = msg;
     task.receiver = receiver;
     mutex.lock();
-    unprocessed.push(task);
+    this->unprocessed.push(task);
     bool lockRes = popUnprocces();
     mutex.unlock();
     return lockRes;

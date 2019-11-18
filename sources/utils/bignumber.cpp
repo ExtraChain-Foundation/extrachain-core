@@ -309,6 +309,18 @@ void BigNumber::setInfinity(bool value)
         m_data = 0;
 }
 
+bool BigNumber::isValid(const QByteArray &bigNumber, int base)
+{
+    try
+    {
+        mpz_class(bigNumber.toStdString(), base);
+        return true;
+    } catch (std::exception &)
+    {
+        return false;
+    }
+}
+
 BigNumber BigNumber::factorial(unsigned long number)
 {
     mpz_class res;

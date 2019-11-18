@@ -179,9 +179,9 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        resolveManager->registrateMsg(profile.serialize(), profileType);
-        //        emit sendMessage(profile.serialize(), profileType);
         emit sendProfileToUi(profile.id, key.profile().getListProfile());
+        resolveManager->registrateMsg(profile.serialize(), profileType);
+        // emit sendMessage(profile.serialize(), profileType)
     }
     else
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
@@ -209,48 +209,32 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 
 void ActorIndex::requestProfile(QString id)
 {
-    if (id == "0")
-    {
-        Profile profile;
-        profile.setUserId("0");
-        profile.setFirstName("Etalonium");
-        profile.setLastName("Fashion Group");
-        profile.setRegisterDate(1549290447779);
-        profile.setFacebook("https://www.facebook.com/etalonium/");
-        profile.setInstagram("etalonium");
-        profile.setAvatar({ "3" });
-        profile.setBio("ANOTHER WAY TO TOP:\n - Find a job\n - Create stars\n - Your ideal model");
-        profile.setUrl("https://etalonium.io/");
-        profile.setUrlName("Our site");
-        return emit sendProfileToUi("0", QByteArrayList(profile.list()));
-    }
-
-    QString path = buildFilePath(id.toUtf8());
-    Actor<KeyPublic> key = getActor(id.toUtf8());
-    if (key.getKey() == nullptr || key.getHash().isEmpty())
+    Actor<KeyPublic> actor = getActor(id.toUtf8());
+    if (actor.getKey() == nullptr || actor.getHash().isEmpty())
         return;
-    if (key.profile().getProfile() == "")
+    if (actor.profile().getProfile() == "")
         return;
-    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
-        emit sendProfileToUi(id, key.profile().getListProfile());
-    else
-        qDebug() << "requestProfile: incorrect profile" << id;
+    // if (actor.getKey()->verify(actor.profile().getProfile(), actor.profile().sign))
+    emit sendProfileToUi(id, actor.profile().getListProfile());
+    // else
+    //     qDebug() << "requestProfile: incorrect profile" << id;
 }
 
 QByteArrayList ActorIndex::getProfile(QString id)
 {
-    QString path = buildFilePath(id.toUtf8());
-    Actor<KeyPublic> key = getActor(id.toUtf8());
-    if (key.profile().sign == "")
+    Actor<KeyPublic> actor = getActor(id.toUtf8());
+    PublicProfile pProfile = actor.profile();
+    QByteArrayList pList = pProfile.getListProfile();
+    if (pProfile.sign == "" || pList.isEmpty())
         return QByteArrayList();
 
-    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
-        return key.profile().getListProfile();
-    else
-    {
-        qDebug() << "getProfile: incorrect profile" << id;
-        return QByteArrayList();
-    }
+    // if (actor.getKey()->verify(key.profile().getProfile(), pProfile.sign))
+    return pList;
+    // else
+    // {
+    //     qDebug() << "getProfile: incorrect profile" << id;
+    //     return QByteArrayList();
+    // }
 }
 
 bool ActorIndex::actorExist(BigNumber actorId)

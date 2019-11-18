@@ -46,6 +46,8 @@ public slots:
     void appendSocket(SocketService *socket);
     //    void newMsg(const QByteArray &message, const SocketPair &receiver);
     void process();
+    void uiReconnect();
+
 private slots:
     void removeConnection();
     void checkMyIdentificator();

@@ -245,6 +245,7 @@ signals:
     //    void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);
+    void qmlNetworkSockets(int socketsCount);
     void qmlServerError(bool serverError);
 };
 

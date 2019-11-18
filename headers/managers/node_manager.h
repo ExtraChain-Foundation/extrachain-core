@@ -42,7 +42,7 @@ private:
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
-    ChatManager *chatManger;
+    ChatManager *chatManager;
     ResolveManager *resolveManager;
 
     PrivateProfile *prProfile;
@@ -129,7 +129,6 @@ signals:
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
 
     void sendActorIdSeva(bool status, BigNumber actorId);
-    void requestProfile(QString actorId);
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
