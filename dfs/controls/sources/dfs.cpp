@@ -347,7 +347,7 @@ void Dfs::init()
             {
                 QString cPath =
                     based_dfs_struct::ROOT_FOOLDER_NAME + '/' + el + '/' + based_dfs_struct::ACTOR_CARD_FILE;
-                Message::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
+                DFSMessage::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
                 dfsNetManager->send(rqst.serialize());
             }
         }
@@ -361,6 +361,6 @@ void Dfs::initUser(BigNumber userId)
         + based_dfs_struct::ACTOR_CARD_FILE;
     if (accountControler->getMainActor() == nullptr)
         return;
-    Message::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
+    DFSMessage::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
     dfsNetManager->send(rqst.serialize());
 }
