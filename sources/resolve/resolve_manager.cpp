@@ -285,7 +285,7 @@ void ResolveManager::process()
     qDebug() << "==================== FILE STATUS CHECK ==================";
     if (udav)
         qDebug() << "======================== STARTED =====================";
-    loadChecker->start(5000);
+    //    loadChecker->start(5000);
 }
 
 QList<ResolverService *> ResolveManager::getActive()
