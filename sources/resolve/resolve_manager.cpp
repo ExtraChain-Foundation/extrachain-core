@@ -33,12 +33,44 @@ QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
 void ResolveManager::checkStatus()
 {
     qDebug() << "====================FILE STATUS CHECK==================";
-    qDebug() << "Download map size:" << dataCheckers->size() << "entries";
+    qDebug() << "dataCheckers size:" << dataCheckers->size() << "entries";
+    if (dataCheckers->size() > 0)
+    {
+        qDebug() << "Not finished fragments: ";
+        QMap<QByteArray, std::vector<bool>>::iterator it;
+        it = dataCheckers->begin();
+        while (it != dataCheckers->end())
+        {
+            qDebug() << "Key:" << it.key();
+            for (unsigned int i = 0; i < it.value().size(); i++)
+                if (it.value()[i] == false)
+                    qDebug() << "Fragment" << i;
+        }
+    }
     qDebug() << "FileMap size:" << fileMap->size() << "entries";
+    if (fileMap->size() > 0)
+    {
+        qDebug() << "FileMapEntries: ";
+        QMap<QString, QByteArray>::iterator it;
+        it = fileMap->begin();
+        while (it != fileMap->end())
+        {
+            qDebug() << "Key:" << it.key();
+        }
+    }
     qDebug() << "ListFile size:" << listFile->size() << "entries";
+    if (listFile->size() > 0)
+    {
+        qDebug() << "listFileEntries: ";
+        QMap<QByteArray, QFile *>::iterator it;
+        it = listFile->begin();
+        while (it != listFile->end())
+        {
+            qDebug() << "Key:" << it.key();
+        }
+    }
     if (!dataCheckers->isEmpty())
     {
-        QMap<QByteArray, std::vector<bool>>::iterator prev;
         QMap<QByteArray, std::vector<bool>>::iterator it;
         mutex.lock();
         it = dataCheckers->begin();
@@ -66,7 +98,6 @@ void ResolveManager::checkStatus()
                 dfs->dfsNetManager->send(reqFrags.serialize());
                 ++it;
             }
-            //            ++it;
         }
         mutex.unlock();
     }
