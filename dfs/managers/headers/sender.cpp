@@ -30,6 +30,7 @@ void Sender::resendFragments(QString path, based_dfs_struct::Type type, QList<QB
             QByteArray data = file.read(data_offset);
             DFSMessage::dfs_message pck(title.hash(), fragsID[i], data); // package for send
             NetManager->send(pck.serialize(), Messages::DFS_MESSAGE);
+            QThread::currentThread()->usleep(50);
         }
     }
 }
@@ -61,6 +62,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
         DFSMessage::dfs_message pck(title.hash(), pckgN, data); // package for send
         //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
         NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
+        QThread::currentThread()->usleep(50);
     }
     // create last package
     QByteArray data = file.read(file.size() - file.pos());

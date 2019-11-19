@@ -538,53 +538,48 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             return;
         }
         QMap<QString, QByteArray>::iterator fileMapIT = fileMap->find(listFileIT.value()->fileName());
-        //        if (pckgCounter->find(title_hash) == pckgCounter->end())
-        //        {
-        //            qDebug() << "[&DFSResolver][maybe already have finished]";
-        //            handlerFileMutex.unlock();
-        //            return;
-        //        }
-        //        if (fileMapIT == fileMap->end())
-        //        {
-        //            qDebug() << "[&DFSResolver][file not found]";
-        //            handlerFileMutex.unlock();
-        //            return;
-        //        }
 
         listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
+        QMap<QByteArray, std::vector<bool>>::iterator status =
+            resolveManager->getDataCheckers()->find(message.title_hash);
         if (listFileIT.value()->write(message.data))
-            resolveManager->getDataCheckers()->find(message.title_hash).value()[message.pckgNumber] = true;
-        //            pckgCounter->find(title_hash).value()--;
-        listFileIT.value()->flush();
-        //        QMap<QByteArray, unsigned long>::iterator pckgCounterIT = pckgCounter->find(title_hash);
-        std::vector<bool> nar;
-        nar.assign(resolveManager->getDataCheckers()->find(message.title_hash).value().size(), true);
-        if (resolveManager->getDataCheckers()->find(message.title_hash).value() == nar)
         {
-            DFSMessage::title_message title(fileMapIT.value());
-            qDebug() << "[&DFSResolver][file succed written to tmp]";
-            //            if (listFileIT.value()->size() != title.fileSize)
-            //            {
-            //                qDebug() << "[&DFSResolver][tmp file size not enought]";
-            //                QString path = listFileIT.value()->fileName();
-            //                path.chop(based_dfs_struct::FILE_IDENTIFICATOR.size());
-            //                DFSMessage::dfs_request rqst(path, ac->getCurrentActor().getId().toActorId());
-            //                dfs->dfsNetManager->send(rqst.serialize());
-            //                listFile->erase(listFileIT);
-            //                listFileIT.value()->remove();
-            //                delete listFileIT.value();
-            //                return;
-            //            }
-            listFileIT.value()->close();
-            resolveManager->getDownloadingFileList()->remove(message.title_hash);
-            dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
-                        based_dfs_struct::convertToDFType(title.f_type));
-            // finish save file
-            //            pckgCounter->erase(pckgCounterIT);
-            resolveManager->getDataCheckers()->remove(message.title_hash);
-            fileMap->remove(fileMapIT.key());
-            resolveManager->getListFile()->remove(listFileIT.key());
-            delete listFileIT.value();
+            status.value()[message.pckgNumber] = true;
+            listFileIT.value()->flush();
+        }
+
+        if (/*status.value().back()*/ true)
+        {
+            QList<QByteArray> emptyFrags;
+            emptyFrags.clear();
+            for (unsigned long i = 0; i < status.value().size(); i++)
+            {
+                if (!status.value()[i])
+                {
+                    emptyFrags.append(QByteArray::number(static_cast<long long>(i)));
+                }
+            }
+            if (emptyFrags.isEmpty())
+            {
+                resolveManager->getDataCheckers()->remove(message.title_hash);
+                DFSMessage::title_message title(fileMapIT.value());
+                qDebug() << "[&DFSResolver][file succed written to tmp]";
+                listFileIT.value()->close();
+                resolveManager->getDownloadingFileList()->remove(message.title_hash);
+                dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
+                            based_dfs_struct::convertToDFType(title.f_type));
+                fileMap->remove(fileMapIT.key());
+                resolveManager->getListFile()->remove(listFileIT.key());
+                delete listFileIT.value();
+            }
+            else
+            {
+                DFSMessage::req_frags_message reqFrags(
+                    resolveManager->getDownloadingFileList()->find(message.title_hash).value().toUtf8(),
+                    emptyFrags);
+                dfs->dfsNetManager->send(reqFrags.serialize());
+            }
+            //            mutex.unlock();
         }
         handlerFileMutex.unlock();
     }

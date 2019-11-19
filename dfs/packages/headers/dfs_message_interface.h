@@ -10,7 +10,7 @@
 
 namespace DFSMessage {
 
-const unsigned int dataSize = 1024; // bytes
+const unsigned int dataSize = 2048; // bytes
 const short fieldsSize = 4;         // bytes for size
 const QByteArray stateDelimetr = "|";
 

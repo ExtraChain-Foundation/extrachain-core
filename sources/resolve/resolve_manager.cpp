@@ -22,7 +22,7 @@ QMap<QByteArray, std::vector<bool>> *ResolveManager::getDataCheckers() const
 
 void ResolveManager::restartLoadChecker()
 {
-    loadChecker->start(5000);
+    //    loadChecker->start(5000);
 }
 
 QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
@@ -146,7 +146,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     //    connect(resolver)
     //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
-    connect(resolver, &ResolverService::restartLoadChecker, this, &ResolveManager::restartLoadChecker);
+    //    connect(resolver, &ResolverService::restartLoadChecker, this, &ResolveManager::restartLoadChecker);
     //    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
     // "New" signals
     //    connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
@@ -281,10 +281,10 @@ void ResolveManager::taskFinished()
 void ResolveManager::process()
 {
     loadChecker = new QTimer();
-    bool udav = connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
-    qDebug() << "==================== FILE STATUS CHECK ==================";
-    if (udav)
-        qDebug() << "======================== STARTED =====================";
+    //    bool udav = connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
+    //    qDebug() << "==================== FILE STATUS CHECK ==================";
+    //    if (udav)
+    //        qDebug() << "======================== STARTED =====================";
     //    loadChecker->start(5000);
 }
 
