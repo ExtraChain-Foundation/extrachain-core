@@ -11,12 +11,14 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
     this->userId = userId;
 }
 
-void Sender::resendFragments(QString path, QList<QByteArray> frags)
+void Sender::resendFragments(QString path, based_dfs_struct::Type type, QList<QByteArray> frags)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))
     {
         DFSMessage::title_message title(path);
+        title.f_type = based_dfs_struct::toByteArray(type);
+        qDebug() << "ReSeNd" << path << title.hash();
         std::vector<long long> fragsID;
         foreach (QByteArray b, frags)
         {

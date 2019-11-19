@@ -241,7 +241,8 @@ void Dfs::fileResponse(const QString path, const SocketPair &receiver)
 
 void Dfs::resendFragments(QString path, QList<QByteArray> frags)
 {
-    sender->resendFragments(path, frags);
+    sender->resendFragments(
+        path, CardManager::getTypeByName(path, Serialization::deserialize(path, '/').at(1).toUtf8()), frags);
 }
 
 void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver)

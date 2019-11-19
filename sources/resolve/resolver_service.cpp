@@ -498,6 +498,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             qDebug() << "Abort on register title";
             return;
         }
+        qDebug() << "ReCeiVe" << path << message.dataHash;
         qDebug() << "[file path:]" << path;
         // register title for receive
     }
@@ -528,6 +529,11 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         if (listFileIT == resolveManager->getListFile()->end())
         {
             qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
+            for (int i = 0; i < resolveManager->getListFile()->size(); i++)
+            {
+                QMap<QByteArray, QFile *>::iterator it = resolveManager->getListFile()->begin();
+                qDebug() << resolveManager->getListFile()->size() << it.key() << message.title_hash;
+            }
             handlerFileMutex.unlock();
             return;
         }

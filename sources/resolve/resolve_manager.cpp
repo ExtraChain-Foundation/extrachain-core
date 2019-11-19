@@ -45,6 +45,7 @@ void ResolveManager::checkStatus()
             for (unsigned int i = 0; i < it.value().size(); i++)
                 if (it.value()[i] == false)
                     qDebug() << "Fragment" << i;
+            ++it;
         }
     }
     qDebug() << "FileMap size:" << fileMap->size() << "entries";
@@ -56,6 +57,7 @@ void ResolveManager::checkStatus()
         while (it != fileMap->end())
         {
             qDebug() << "Key:" << it.key();
+            ++it;
         }
     }
     qDebug() << "ListFile size:" << listFile->size() << "entries";
@@ -67,6 +69,7 @@ void ResolveManager::checkStatus()
         while (it != listFile->end())
         {
             qDebug() << "Key:" << it.key();
+            ++it;
         }
     }
     if (!dataCheckers->isEmpty())
