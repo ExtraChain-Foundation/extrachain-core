@@ -32,6 +32,7 @@ QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
 
 void ResolveManager::checkStatus()
 {
+    return;
     qDebug() << "====================FILE STATUS CHECK==================";
     qDebug() << "dataCheckers size:" << dataCheckers->size() << "entries";
     if (dataCheckers->size() > 0)
@@ -207,7 +208,7 @@ void ResolveManager::createNewResolver(const DataStruct &task)
     // get task from queue
     resolvers.last()->setTask(task.msg, task.receiver);
     auto crutch = resolvers.last();
-    connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
+    // connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
     ThreadPool::addThread(resolvers.last());
 }
 

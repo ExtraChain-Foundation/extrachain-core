@@ -29,7 +29,6 @@ public:
      * @param userId
      */
     Sender(const QByteArray &userId, QObject *parent = nullptr);
-    void resendFragments(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
     void setNetManager(DFSNetManager *value);
     /**
      * @brief sendFile
@@ -50,10 +49,14 @@ signals:
      * @param receiver
      */
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
+    void resendFragments(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
+
 public slots:
     /**
      * @brief process
      */
+    void resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
+
     void process();
     /**
      * @brief checkClosing

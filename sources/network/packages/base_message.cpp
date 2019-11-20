@@ -47,9 +47,11 @@ void BaseMessage::initFields(QLinkedList<QByteArray> &list)
 
 void BaseMessage::initFields(QList<QByteArray> &list)
 {
+    auto list2 = list; // for debuuger
     protocol = list.takeFirst();
     msgType = list.takeFirst();
-    signer = BigNumber(list.takeFirst());
+    QByteArray signBytes = list.takeFirst();
+    signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
     digSig = list.takeFirst();
     msg_data = list.takeFirst();
 }

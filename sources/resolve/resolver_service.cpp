@@ -542,6 +542,13 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
         QMap<QByteArray, std::vector<bool>>::iterator status =
             resolveManager->getDataCheckers()->find(message.title_hash);
+
+        if (status == resolveManager->getDataCheckers()->end() || fileMapIT == fileMap->end())
+        {
+            handlerFileMutex.unlock();
+            return;
+        }
+
         if (listFileIT.value()->write(message.data))
         {
             status.value()[message.pckgNumber] = true;

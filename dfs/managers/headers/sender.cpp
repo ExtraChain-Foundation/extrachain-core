@@ -9,9 +9,10 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
     : QObject(parent)
 {
     this->userId = userId;
+    connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 
-void Sender::resendFragments(QString path, based_dfs_struct::Type type, QList<QByteArray> frags)
+void Sender::resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))
