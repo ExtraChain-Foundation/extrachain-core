@@ -210,20 +210,26 @@ QByteArray Chat::decryptByChatKey(QByteArray data)
     return decryptMessage(data);
 }
 
-QDateTime Chat::getLastMessageTime()
+UIMessage Chat::getLastMessage()
 {
     QList<QByteArray> messagesList = getAllMessagesByteArray();
+    UIMessage message;
+
     if (messagesList.isEmpty())
-        return QDateTime();
+        return message;
     QByteArray lastMessage = decryptMessage(messagesList.last());
     messagesList = Serialization::universalDeserialize(lastMessage);
     if (messagesList.size() != 3)
     {
         qDebug() << "[Error] In getLastMessageTime chat";
-        return QDateTime();
+        return message;
     }
 
-    return QDateTime::fromMSecsSinceEpoch(messagesList.at(2).toLongLong());
+    message.userId = messagesList[0];
+    message.message = messagesList[1];
+    message.date = QDateTime::fromMSecsSinceEpoch(messagesList.at(2).toLongLong());
+
+    return message;
 }
 
 void Chat::removeAllChatData()

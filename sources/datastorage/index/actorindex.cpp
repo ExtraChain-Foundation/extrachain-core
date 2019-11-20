@@ -179,9 +179,9 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        resolveManager->registrateMsg(profile.serialize(), profileType);
-        //        emit sendMessage(profile.serialize(), profileType);
         emit sendProfileToUi(profile.id, key.profile().getListProfile());
+        resolveManager->registrateMsg(profile.serialize(), profileType);
+        // emit sendMessage(profile.serialize(), profileType)
     }
     else
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;

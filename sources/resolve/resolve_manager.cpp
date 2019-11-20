@@ -10,11 +10,115 @@ void ResolveManager::setChatManager(ChatManager *value)
     chatManager = value;
 }
 
+QMap<QByteArray, std::vector<bool>> *ResolveManager::getDataCheckers() const
+{
+    return dataCheckers;
+}
+
+// QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
+//{
+//    return pckgCounter;
+//}
+
+void ResolveManager::restartLoadChecker()
+{
+    //    loadChecker->start(5000);
+}
+
+QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
+{
+    return downloadingFileList;
+}
+
+void ResolveManager::checkStatus()
+{
+    return;
+    qDebug() << "====================FILE STATUS CHECK==================";
+    qDebug() << "dataCheckers size:" << dataCheckers->size() << "entries";
+    if (dataCheckers->size() > 0)
+    {
+        qDebug() << "Not finished fragments: ";
+        QMap<QByteArray, std::vector<bool>>::iterator it;
+        it = dataCheckers->begin();
+        while (it != dataCheckers->end())
+        {
+            qDebug() << "Key:" << it.key();
+            for (unsigned int i = 0; i < it.value().size(); i++)
+                if (it.value()[i] == false)
+                    qDebug() << "Fragment" << i;
+            ++it;
+        }
+    }
+    qDebug() << "FileMap size:" << fileMap->size() << "entries";
+    if (fileMap->size() > 0)
+    {
+        qDebug() << "FileMapEntries: ";
+        QMap<QString, QByteArray>::iterator it;
+        it = fileMap->begin();
+        while (it != fileMap->end())
+        {
+            qDebug() << "Key:" << it.key();
+            ++it;
+        }
+    }
+    qDebug() << "ListFile size:" << listFile->size() << "entries";
+    if (listFile->size() > 0)
+    {
+        qDebug() << "listFileEntries: ";
+        QMap<QByteArray, QFile *>::iterator it;
+        it = listFile->begin();
+        while (it != listFile->end())
+        {
+            qDebug() << "Key:" << it.key();
+            ++it;
+        }
+    }
+    if (!dataCheckers->isEmpty())
+    {
+        QMap<QByteArray, std::vector<bool>>::iterator it;
+        mutex.lock();
+        it = dataCheckers->begin();
+        while (it != dataCheckers->end())
+        {
+            //            prev = it;
+            //            it++;
+            QList<QByteArray> emptyFrags;
+            emptyFrags.clear();
+            for (unsigned long i = 0; i < it.value().size(); i++)
+            {
+                if (!it.value()[i])
+                {
+                    emptyFrags.append(QByteArray::number(static_cast<long long>(i)));
+                }
+            }
+            if (emptyFrags.isEmpty())
+            {
+                it = dataCheckers->erase(it);
+            }
+            else
+            {
+                DFSMessage::req_frags_message reqFrags(downloadingFileList->find(it.key()).value().toUtf8(),
+                                                       emptyFrags);
+                dfs->dfsNetManager->send(reqFrags.serialize());
+                ++it;
+            }
+        }
+        mutex.unlock();
+    }
+}
+
+QMap<QByteArray, QFile *> *ResolveManager::getListFile() const
+{
+    return listFile;
+}
+
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
                                QObject *parent)
     : QObject(parent)
 {
+    dataCheckers = new QMap<QByteArray, std::vector<bool>>();
+
     requestResponseMap = new QMap<QByteArray, int>();
     this->actorIndex = actorIndex;
     this->blockchain = blockchain;
@@ -26,6 +130,7 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
     //    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
+    //    loadChecker->start(5000);
 }
 
 ResolveManager::~ResolveManager()
@@ -40,8 +145,9 @@ ResolveManager::~ResolveManager()
 void ResolveManager::connectSignals(ResolverService *resolver)
 {
     //    connect(resolver)
-    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
+    //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
+    //    connect(resolver, &ResolverService::restartLoadChecker, this, &ResolveManager::restartLoadChecker);
     //    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
     // "New" signals
     //    connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
@@ -65,7 +171,8 @@ void ResolveManager::connectSignals(ResolverService *resolver)
 void ResolveManager::disconnectSignals(ResolverService *resolver)
 {
     //    disconnect(resolver)
-    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections aborted";
+    //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections
+    //    aborted";
     disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
     // "New" signals
     //    disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
@@ -92,7 +199,7 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
 
 void ResolveManager::createNewResolver(const DataStruct &task)
 {
-    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, pckgCounter));
+    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, this));
     resolvers.last()->setNode(node);
     resolvers.last()->setBlockchain(blockchain);
     resolvers.last()->setDfs(dfs);
@@ -101,7 +208,7 @@ void ResolveManager::createNewResolver(const DataStruct &task)
     // get task from queue
     resolvers.last()->setTask(task.msg, task.receiver);
     auto crutch = resolvers.last();
-    connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
+    // connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
     ThreadPool::addThread(resolvers.last());
 }
 
@@ -111,7 +218,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     task.msg = msg;
     task.receiver = receiver;
     mutex.lock();
-    unprocessed.push(task);
+    this->unprocessed.push(task);
     bool lockRes = popUnprocces();
     mutex.unlock();
     return lockRes;
@@ -127,7 +234,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
     {
         if (accountControler->getAccountCount() == 0)
             return;
-        msg.calcDigSig(accountControler->getCurrentActor());
+        msg.calcDigSig(*accountControler->getMainActor());
     }
     //    qDebug() << "msg signature:" << msg.getDigSig();
 
@@ -150,7 +257,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
     Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
     if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE
         /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
-        rmsg.calcDigSig(accountControler->getCurrentActor());
+        rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;
     networkManager->distMessage(rmsg.serialize(), receiver);
@@ -174,7 +281,12 @@ void ResolveManager::taskFinished()
 
 void ResolveManager::process()
 {
-    //
+    loadChecker = new QTimer();
+    //    bool udav = connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
+    //    qDebug() << "==================== FILE STATUS CHECK ==================";
+    //    if (udav)
+    //        qDebug() << "======================== STARTED =====================";
+    //    loadChecker->start(5000);
 }
 
 QList<ResolverService *> ResolveManager::getActive()

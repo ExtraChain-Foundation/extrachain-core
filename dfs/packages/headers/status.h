@@ -3,7 +3,7 @@
 
 #include <QObject>
 #include "dumessage.h"
-namespace Message {
+namespace DFSMessage {
 
 struct Status : public DUMessage
 {

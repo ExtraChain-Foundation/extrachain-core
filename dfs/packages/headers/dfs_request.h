@@ -3,7 +3,7 @@
 
 #include "dumessage.h"
 
-namespace Message {
+namespace DFSMessage {
 
 struct dfs_request : public DUMessage
 {

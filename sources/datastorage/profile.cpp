@@ -157,6 +157,9 @@ QString Profile::userId() const
 
 QString Profile::firstName() const
 {
+    if (at(0) == "6")
+        return "Token " + at(3);
+
     return value("firstName");
 }
 

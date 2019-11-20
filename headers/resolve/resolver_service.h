@@ -1,54 +1,17 @@
 ﻿#ifndef RESOLVERSERVICE_H
 #define RESOLVERSERVICE_H
 
-#ifndef RESOLVE_MANAGER_DEF
-#define RESOLVE_MANAGER_DEF
-class ResolveManager;
-#include "headers/resolve/resolve_manager.h"
-#endif
-#ifndef NODE_MANAGER_DEF
-#define NODE_MANAGER_DEF
-class NodeManager;
-#include "headers/managers/node_manager.h"
-#endif
-
-#ifndef ACTOR_INDEX_DEF
-#define ACTOR_INDEX_DEF
-class ActorIndex;
-#include "headers/datastorage/index/actorindex.h"
-#endif
-
-#ifndef BLOCKCHAIN_DEF
-#define BLOCKCHAIN_DEF
-class Blockchain;
-#include "headers/datastorage/blockchain.h"
-#endif
-
-#ifndef TX_MANAGER_DEF
-#define TX_MANAGER_DEF
-class TransactionManager;
-#include "headers/managers/tx_manager.h"
-#endif
-
-#ifndef DFS_DEF
-#define DFS_DEF
-class Dfs;
-#include "dfs/controls/headers/dfs.h"
-#endif
-
-#include "managers/chatmanager.h"
-class ChatManager;
-
 #include <QHostAddress>
 #include <QJsonObject>
 #include <QObject>
 #include <QThread>
 #include <QMutex>
+#include <QTimer>
+#include <QMap>
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
-#include "managers/account_controller.h"
 #include "network/packages/service/all_messages.h"
 #include "network/packages/base_message.h"
 #include "network/packages/base_message_response.h"
@@ -65,7 +28,15 @@ static QMutex handlerFileMutex;
  * type and deserialize it. There are package definition methods, and signals to
  * ResolveManager.
  */
-
+class AccountController;
+class ResolveManager;
+class NodeManager;
+class ActorIndex;
+class Blockchain;
+class TransactionManager;
+class Dfs;
+class ChatManager;
+static const int DFS_PWT = 2000;
 class ResolverService : public QObject
 {
     Q_OBJECT
@@ -86,10 +57,15 @@ private:
     AccountController *ac;
 
     QMap<QByteArray, int> *requestResponseMap;
+
+private:
+    ResolveManager *resolveManager;
+
+private:
     // dfs Map
-    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
+    //    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
     QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
-    QMap<QByteArray, long long> *pckgCounter = new QMap<QByteArray, long long>();
+    //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 public:
     /**
@@ -98,7 +74,7 @@ public:
      * @param parent
      */
     ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, QFile *> *listFile,
-                    QMap<QString, QByteArray> *fileMap, QMap<QByteArray, long long> *pckgCounter,
+                    QMap<QString, QByteArray> *fileMap, ResolveManager *resolveManager,
                     QObject *parent = nullptr);
     /**
      * @brief ResolverService
@@ -124,7 +100,10 @@ public:
 
     void setChatManager(ChatManager *value);
 
+    void setResolveManager(ResolveManager *value);
+
 private:
+    void processInternalMessage(QList<QByteArray> list);
     /**
      * @brief validate
      * @param block
@@ -203,7 +182,7 @@ private:
      * @param tHash
      * @return
      */
-    bool registerTitle(const QString &tmpPath, const long long &pckgAmount, const long long &size,
+    bool registerTitle(const QString &tmpPath, const unsigned long &pckgAmount, const long long &size,
                        const QByteArray &titleSerialize, const QByteArray &tHash);
 public slots:
     /**
@@ -214,6 +193,7 @@ public slots:
     void process();
 
 signals:
+    void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me

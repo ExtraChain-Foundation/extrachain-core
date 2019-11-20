@@ -8,10 +8,10 @@
 #include <QObject>
 #include "utils/utils.h"
 
-namespace Message {
+namespace DFSMessage {
 
-const int dataSize = 1024;  // bytes
-const short fieldsSize = 4; // bytes for size
+const unsigned int dataSize = 2048; // bytes
+const short fieldsSize = 4;         // bytes for size
 const QByteArray stateDelimetr = "|";
 
 enum dfsMessageType
@@ -22,7 +22,8 @@ enum dfsMessageType
     statusMessage,
     storageMessage,
     responseMessage,
-    closingMessage
+    closingMessage,
+    requestFragments
 };
 
 const int type_title = dfsMessageType::titleMessage;
@@ -30,6 +31,8 @@ const int type_dfs_message = dfsMessageType::fileDataMessage;
 const int type_status = dfsMessageType::statusMessage;
 const int type_dfs_request = dfsMessageType::requestMessage;
 const int type_closing = dfsMessageType::closingMessage;
+
+const int type_req_frags = dfsMessageType::requestFragments;
 
 class IDfs_Message : public QObject
 {

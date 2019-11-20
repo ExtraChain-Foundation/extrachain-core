@@ -67,7 +67,7 @@ based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QBy
     for (const QByteArray &el : list)
 
         if (path.toUtf8()
-            == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2))
+            == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(0))
             return based_dfs_struct::convertToDFType(
                 Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
     return based_dfs_struct::servic;

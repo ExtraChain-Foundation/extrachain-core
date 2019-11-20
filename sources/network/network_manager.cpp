@@ -43,10 +43,9 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
     accounts = accountList;
     this->actorIndex = actorIndex;
-    //    setupActorIndexConnections();
+    // setupActorIndexConnections();
     findLocal();
-    qDebug() << local->ip();
-    qDebug() << "NET MANAGER: init net fun start";
+    qDebug() << "NET MANAGER: init net fun start" << (local != nullptr);
     if (local != nullptr)
     {
         qDebug() << "LOCAL ::::::::::::::::" << local->ip();
@@ -75,12 +74,19 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
             startDiscovery();
         }
     }
+    else
+    {
+        qDebug() << "Local not found";
+    }
 }
 
 void NetManager::process()
 {
     startNetwork();
     connectToServer(serverPort, local);
+    QTimer *timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &NetManager::checkConnectionsStatus);
+    timer->start(5000);
 }
 
 void NetManager::showMessage(const QHostAddress &from, const QString &message)
@@ -192,6 +198,7 @@ void NetManager::checkConnectionsStatus()
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit qmlNetworkStatus(flag);
+    emit qmlNetworkSockets(connections.length());
 }
 
 void NetManager::restoreConnections(const QList<SocketPair> &socketList)
@@ -231,12 +238,16 @@ void NetManager::checkMyIdentificator()
 void NetManager::startNetwork()
 {
     qDebug() << "NetManager::startNetwork()";
-    //        netPort = serverPort;
+    // netPort = serverPort;
     qDebug() << "NetPort:" << serverPort;
-    serverService = new ServerService(serverPort, local);
-    //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections();
-    serverService->startListen();
+
+    if (local != nullptr)
+    {
+        serverService = new ServerService(serverPort, local);
+        // resolverService = new ResolverService(actorIndex, requestResponseMap);
+        setupServerServiceConnections();
+        serverService->startListen();
+    }
 }
 
 void NetManager::startDiscovery()
@@ -266,7 +277,7 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
 #endif
     qDebug() << "void NetManager::connectToServer()";
     QStringList servers = serverIp.split(";");
-    QString localIp = local->ip().toString();
+    QString localIp = local != nullptr ? local->ip().toString() : "";
 
     for (QString server : servers)
     {
@@ -336,14 +347,16 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
         handler.insert(hashMsg, value);
     else
     {
-        if (handler.find(hashMsg).value() == list.size())
+        if (handler.find(hashMsg).value() == list.size() - 1)
         {
             handler.remove(hashMsg);
-            flag_result = false;
+            flag_result = false; // FALSE !!!
         }
         else
+        {
             flag_result = true;
-        handler.find(hashMsg).value()++;
+            handler.find(hashMsg).value()++;
+        }
     }
     return flag_result;
 }
@@ -408,7 +421,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
     ThreadPool::addThread(connections.last());
-    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
+    // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
 
@@ -418,7 +431,7 @@ void NetManager::addConnection(qint64 socketDescriptor)
     socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
-    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
+    // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(connections.last());
 }
 
@@ -434,7 +447,7 @@ void NetManager::removeConnection()
 
 void NetManager::signMessage(IMessage &message) const
 {
-    message.calcDigSig(accounts->getCurrentActor());
+    message.calcDigSig(*accounts->getMainActor());
 }
 
 QByteArray NetManager::calcHash(const Messages::IMessage &message) const

@@ -14,7 +14,7 @@ NodeManager::NodeManager()
     netManager = new NetManager(accController, actorIndex);
     actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
-    this->thread()->sleep(1);
+    //    this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
@@ -459,11 +459,12 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 void NodeManager::connectUi()
 {
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
+    connect(uiController, &UiController::connectToServer, dfs->getDfsNetManager(),
+            &DFSNetManager::uiReconnect);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 
-    connect(uiController, &UiController::requestProfile, this, &NodeManager::requestProfile);
-    connect(this, &NodeManager::requestProfile, actorIndex, &ActorIndex::requestProfile);
+    connect(uiController, &UiController::requestProfile, actorIndex, &ActorIndex::requestProfile);
     connect(actorIndex, &ActorIndex::sendProfileToUi, this,
             [this](QString userId, QByteArrayList profile) { emit profileToUi(userId, Profile(profile)); });
 
@@ -474,6 +475,7 @@ void NodeManager::connectUi()
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
+    connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,

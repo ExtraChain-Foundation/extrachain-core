@@ -40,10 +40,14 @@ void DFSNetManager::startNetwork()
     qDebug() << "DFSNetManager::startNetwork()";
     //        netPort = serverPort;
     qDebug() << "DFSNetManager:" << serverPort;
-    serverService = new ServerService(serverPort, local);
-    //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections();
-    serverService->startListen();
+
+    if (local != nullptr)
+    {
+        serverService = new ServerService(serverPort, local);
+        //    resolverService = new ResolverService(actorIndex, requestResponseMap);
+        setupServerServiceConnections();
+        serverService->startListen();
+    }
 }
 
 void DFSNetManager::setupServerServiceConnections()
@@ -63,11 +67,10 @@ NetManager *DFSNetManager::getNetManager()
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     //    mutex.lock();
-    if (checkMsgCount(msg, handler, socketsList))
-        resolveManager->setTask(msg, receiver);
-    else
-        qDebug()
-            << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
+    //    if (checkMsgCount(msg, handler, socketsList))
+    resolveManager->setTask(msg, receiver);
+    //    else qDebug()
+    //        << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
     //    mutex.unlock();
     return nullptr;
 }
@@ -106,6 +109,11 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
 void DFSNetManager::process()
 {
     startNetwork();
+    connectToServer(serverPort, local);
+}
+
+void DFSNetManager::uiReconnect()
+{
     connectToServer(serverPort, local);
 }
 
@@ -167,7 +175,7 @@ void DFSNetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEn
 #endif
     qDebug() << "void NetManager::connectToServer()";
     QStringList servers = serverIp.split(";");
-    QString localIp = local->ip().toString();
+    QString localIp = local != nullptr ? local->ip().toString() : "";
 
     for (QString server : servers)
     {

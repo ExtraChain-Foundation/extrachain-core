@@ -81,11 +81,12 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
 
     emit verifyActor(actor->convertToPublic());
     actorIndex->addActor(actor->convertToPublic());
-    //    emit addContractActorInActorIndex(actor->convertToPublic());
-    emit saveActorInPrivateProfile(actor->getId().toActorId());
+    // emit addContractActorInActorIndex(actor->convertToPublic());
+    // emit saveActorInPrivateProfile(actor->getId().toActorId()); // TODO: not to wallet
     savePrivateActor(*actor);
     return actor;
 }
+
 void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
@@ -120,6 +121,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
 
     qDebug() << "Can't save actor" << actor.getId();
 }
+
 void SmartContractManager::initializeTokenArray()
 {
     QDir directory(SmartContractStorage::CONTRACTPROFILE);

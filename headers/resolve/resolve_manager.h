@@ -22,8 +22,9 @@ class ChatManager;
 static const short ResolverServicePoolMaxSize = 30;
 
 #include <QObject>
-#include <QQueue>
+//#include <QQueue>
 #include <queue>
+#include <vector>
 #include "headers/datastorage/blockchain.h"
 #include "headers/datastorage/index/actorindex.h"
 #include "headers/managers/tx_manager.h"
@@ -39,12 +40,19 @@ class ResolveManager : public QObject
     Q_OBJECT
 
 private:
+    QTimer *loadChecker;
+    QMap<QByteArray, QString> *downloadingFileList = new QMap<QByteArray, QString>();
+    QMap<QByteArray, std::vector<bool>> *dataCheckers;
+private slots:
+    void checkStatus();
+
+private:
     std::queue<DataStruct> unprocessed;
     QList<ResolverService *> resolvers;
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
     QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
     QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
-    QMap<QByteArray, long long> *pckgCounter = new QMap<QByteArray, long long>();
+    //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 private:
     ActorIndex *actorIndex;
@@ -84,14 +92,22 @@ public:
     bool setTask(QByteArray msg, const SocketPair &receiver);
     void setChatManager(ChatManager *value);
 
+    QMap<QByteArray, std::vector<bool>> *getDataCheckers() const;
+
+    //    QMap<QByteArray, unsigned long> *getPckgCounter() const;
+
+    QMap<QByteArray, QString> *getDownloadingFileList() const;
+
+    QMap<QByteArray, QFile *> *getListFile() const;
+
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);
     //    void sendMsg(const QByteArray &msg);
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
+    void restartLoadChecker();
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
-
     void registrateMsg(const QByteArray &data, const QByteArray &msgType);
     /**
      * @brief sendMessageResponse from resolver

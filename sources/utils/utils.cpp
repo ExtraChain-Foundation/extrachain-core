@@ -362,6 +362,7 @@ void Utils::wipeDataFiles()
     clearDir("blockchain/index/actors/" + companySection, *TMP::companyActorId);
     clearDir("blockchain/index/blocks/0", "0");
     clearDir("keystore/personal", *TMP::companyActorId + ".key");
+    clearDir("keystore/profile", *TMP::companyActorId + ".private");
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
     QFile(".fileList").remove();

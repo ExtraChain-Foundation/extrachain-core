@@ -1,14 +1,14 @@
 
 #include "dfs/packages/headers/dfs_request.h"
 
-Message::dfs_request::dfs_request(const QString &filePath, const QByteArray &asker)
+DFSMessage::dfs_request::dfs_request(const QString &filePath, const QByteArray &asker)
     : DUMessage(type_dfs_request)
 {
     this->filePath = filePath;
     this->asker = asker;
 }
 
-Message::dfs_request::dfs_request(const QByteArray &serialized)
+DFSMessage::dfs_request::dfs_request(const QByteArray &serialized)
     : DUMessage(type_dfs_request)
 {
 
@@ -27,11 +27,11 @@ Message::dfs_request::dfs_request(const QByteArray &serialized)
     asker = list.takeFirst();
 }
 
-Message::dfs_request::~dfs_request()
+DFSMessage::dfs_request::~dfs_request()
 {
 }
 
-const QList<QByteArray> Message::dfs_request::serializedParams() const
+const QList<QByteArray> DFSMessage::dfs_request::serializedParams() const
 {
     QList<QByteArray> list;
     list << QByteArray::number(type) << filePath.toUtf8() << asker;

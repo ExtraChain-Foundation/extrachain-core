@@ -190,50 +190,29 @@ void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketDat
 void SocketService::sockReady()
 {
     long long s = 0;
+
     if (socket->bytesAvailable() > 0)
     {
         mutex.lock();
         s = socket->bytesAvailable();
         qDebug() << "Bytes read:" << s;
-        dpBuffer->append(socket->read(s));
+        QByteArray readed;
+        try
+        {
+            readed = socket->read(s);
+            dpBuffer->append(readed);
+        } catch (std::exception &e)
+        {
+            std::cout << "=================================================================================="
+                      << std::endl;
+            mutex.unlock();
+            sockReady();
+        }
+
         mutex.unlock();
     }
     if (socket->bytesAvailable())
         sockReady();
-    //    QTcpSocket *_sok = this->socket;
-    //    while (_sok->bytesAvailable() < 4)
-    //        _sok->waitForReadyRead(1000);
-    //    QByteArray _sok_data = _sok->read(4);
-    //    int _pck_size = Utils::qByteArrayToInt(_sok_data);
-    //    while (_sok->bytesAvailable() < _pck_size)
-    //        _sok->waitForReadyRead(1000);
-
-    //    QByteArray pckg = _sok->read(_pck_size);
-    //    if (!active)
-    //    {
-    //        //            active = true;
-    //        if (pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
-    //        {
-
-    //            identificator = BigNumber(pckg.mid(IDENTIFICATOR.size()));
-    //        }
-    //        emit checkMe();
-    //    }
-    //    else
-    //    {
-    //        SocketPair receiver(address.toStdString(), port);
-    //        receiver.setId(identificator.toByteArray());
-    //        //        emit MessageReceived(pckg, receiver);
-    //        if (socket->localPort() == 2223 || socket->localPort() == 2224)
-    //        {
-    //            reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(pckg, receiver);
-    //        }
-    //        else
-    //            netManager->MessageReceived(pckg, receiver);
-    //    }
-    //    if (socket->bytesAvailable())
-    //        sockReady();
-    //    //    QCoreApplication::processEvents();
 }
 
 void SocketService::closeSocket()
