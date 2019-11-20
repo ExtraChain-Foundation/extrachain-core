@@ -14,7 +14,7 @@ NodeManager::NodeManager()
     netManager = new NetManager(accController, actorIndex);
     actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
-    this->thread()->sleep(1);
+    //    this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
