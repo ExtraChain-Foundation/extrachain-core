@@ -189,30 +189,8 @@ void *SocketService::distMsg(const QByteArray &data, const SocketPair &socketDat
 
 void SocketService::sockReady()
 {
-    long long s = 0;
-
-    if (socket->bytesAvailable() > 0)
-    {
-        mutex.lock();
-        s = socket->bytesAvailable();
-        qDebug() << "Bytes read:" << s;
-        QByteArray readed;
-        try
-        {
-            readed = socket->read(s);
-            dpBuffer->append(readed);
-        } catch (std::exception &e)
-        {
-            std::cout << "=================================================================================="
-                      << std::endl;
-            mutex.unlock();
-            sockReady();
-        }
-
-        mutex.unlock();
-    }
-    if (socket->bytesAvailable())
-        sockReady();
+    dpBuffer->append(socket->readAll());
+    doRead();
 }
 
 void SocketService::closeSocket()
@@ -250,10 +228,7 @@ void SocketService::process()
     {
         this->socket->connectToHost(address, port);
     }
-    readWorker = new SocketWorker(net::Worker::Read, dpBuffer);
-    readWorker->setSocket(this);
-    ThreadPool::addThread(readWorker);
-    QCoreApplication::processEvents();
+    //    QCoreApplication::processEvents();
 }
 
 void SocketService::establishConnection()
@@ -273,6 +248,47 @@ void SocketService::establishConnection()
 void SocketService::setActive(bool active)
 {
     this->active = active;
+}
+
+void SocketService::doRead()
+{
+    if (pendMsgSize > 0)
+    {
+        continueDoRead();
+    }
+    else
+    {
+        if (dpBuffer->size() < 4)
+        {
+            return;
+        }
+        QByteArray msgLength = dpBuffer->mid(0, 4);
+        pendMsgSize = Utils::qByteArrayToInt(msgLength);
+        dpBuffer->remove(0, 4);
+        mutex.unlock();
+        if (dpBuffer->size() >= pendMsgSize)
+            continueDoRead();
+        else
+            return;
+    }
+}
+
+void SocketService::continueDoRead()
+{
+    QByteArray pckg = dpBuffer->mid(0, pendMsgSize);
+    dpBuffer->remove(0, pendMsgSize);
+    pendMsgSize = 0;
+    if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+    {
+        QByteArray b = pckg.mid(IDENTIFICATOR.size());
+        this->processID(b);
+    }
+    else
+    {
+        SocketPair receiver(this->getAddress().toStdString(), this->getPort());
+        receiver.setId(this->getID().toByteArray());
+        this->gotMessage(pckg, receiver);
+    }
 }
 
 void SocketService::gotMessage(QByteArray msg, SocketPair rec)

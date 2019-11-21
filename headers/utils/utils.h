@@ -10,9 +10,18 @@
 #include <QString>
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+#include "headers/network/socket_pair.h"
 #include <QStringList>
 #include <string>
 #include <sstream>
+namespace Network {
+
+struct DataStruct
+{
+    QByteArray msg;
+    SocketPair receiver;
+};
+}
 
 namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
@@ -87,6 +96,22 @@ QByteArray toByteArray(State state);
 QString toString(State state);
 State convertToDFSstate(QByteArray state);
 } // namespace storedSpace
+
+namespace Resolver {
+enum Lifetime
+{
+    SHORT = 0,
+    LONG = 1
+};
+enum Type
+{
+    BLOCKCHAIN = 0,
+    ACTORS = 1,
+    DFS = 2,
+    GENERAL = 3
+};
+}
+
 namespace Config {
 
 // Message pattern for qDebug (see

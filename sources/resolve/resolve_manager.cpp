@@ -30,86 +30,19 @@ QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
     return downloadingFileList;
 }
 
-void ResolveManager::checkStatus()
-{
-    return;
-    qDebug() << "====================FILE STATUS CHECK==================";
-    qDebug() << "dataCheckers size:" << dataCheckers->size() << "entries";
-    if (dataCheckers->size() > 0)
-    {
-        qDebug() << "Not finished fragments: ";
-        QMap<QByteArray, std::vector<bool>>::iterator it;
-        it = dataCheckers->begin();
-        while (it != dataCheckers->end())
-        {
-            qDebug() << "Key:" << it.key();
-            for (unsigned int i = 0; i < it.value().size(); i++)
-                if (it.value()[i] == false)
-                    qDebug() << "Fragment" << i;
-            ++it;
-        }
-    }
-    qDebug() << "FileMap size:" << fileMap->size() << "entries";
-    if (fileMap->size() > 0)
-    {
-        qDebug() << "FileMapEntries: ";
-        QMap<QString, QByteArray>::iterator it;
-        it = fileMap->begin();
-        while (it != fileMap->end())
-        {
-            qDebug() << "Key:" << it.key();
-            ++it;
-        }
-    }
-    qDebug() << "ListFile size:" << listFile->size() << "entries";
-    if (listFile->size() > 0)
-    {
-        qDebug() << "listFileEntries: ";
-        QMap<QByteArray, QFile *>::iterator it;
-        it = listFile->begin();
-        while (it != listFile->end())
-        {
-            qDebug() << "Key:" << it.key();
-            ++it;
-        }
-    }
-    if (!dataCheckers->isEmpty())
-    {
-        QMap<QByteArray, std::vector<bool>>::iterator it;
-        mutex.lock();
-        it = dataCheckers->begin();
-        while (it != dataCheckers->end())
-        {
-            //            prev = it;
-            //            it++;
-            QList<QByteArray> emptyFrags;
-            emptyFrags.clear();
-            for (unsigned long i = 0; i < it.value().size(); i++)
-            {
-                if (!it.value()[i])
-                {
-                    emptyFrags.append(QByteArray::number(static_cast<long long>(i)));
-                }
-            }
-            if (emptyFrags.isEmpty())
-            {
-                it = dataCheckers->erase(it);
-            }
-            else
-            {
-                DFSMessage::req_frags_message reqFrags(downloadingFileList->find(it.key()).value().toUtf8(),
-                                                       emptyFrags);
-                dfs->dfsNetManager->send(reqFrags.serialize());
-                ++it;
-            }
-        }
-        mutex.unlock();
-    }
-}
-
 QMap<QByteArray, QFile *> *ResolveManager::getListFile() const
 {
     return listFile;
+}
+
+QMap<QByteArray, int> *ResolveManager::getRequestResponseMap() const
+{
+    return requestResponseMap;
+}
+
+QMap<QString, QByteArray> *ResolveManager::getFileMap() const
+{
+    return fileMap;
 }
 
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
@@ -127,10 +60,8 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
     this->accountControler = accountControler;
     this->dfs = dfs;
 
-    //    connect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
-    //    loadChecker->start(5000);
 }
 
 ResolveManager::~ResolveManager()
@@ -197,24 +128,29 @@ const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
     return Utils::calcKeccak(msg);
 }
 
-void ResolveManager::createNewResolver(const DataStruct &task)
+void ResolveManager::createNewResolver(const Network::DataStruct &task)
 {
-    resolvers.append(new ResolverService(actorIndex, requestResponseMap, listFile, fileMap, this));
-    resolvers.last()->setNode(node);
-    resolvers.last()->setBlockchain(blockchain);
-    resolvers.last()->setDfs(dfs);
-    resolvers.last()->setChatManager(chatManager);
-    connectSignals(resolvers.last());
+    l1Res.append(new ResolverService(Resolver::Type::GENERAL, Resolver::Lifetime::SHORT, actorIndex, this));
+    l1Res.last()->setNode(node);
+    l1Res.last()->setBlockchain(blockchain);
+    l1Res.last()->setDfs(dfs);
+    l1Res.last()->setChatManager(chatManager);
+    connectSignals(l1Res.last());
     // get task from queue
-    resolvers.last()->setTask(task.msg, task.receiver);
-    auto crutch = resolvers.last();
+    l1Res.last()->setTask(task.msg, task.receiver);
+    auto crutch = l1Res.last();
     // connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
-    ThreadPool::addThread(resolvers.last());
+    ThreadPool::addThread(l1Res.last());
+}
+
+void ResolveManager::setL2Resolver(const Network::DataStruct &task)
+{
+    //
 }
 
 bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 {
-    DataStruct task;
+    Network::DataStruct task;
     task.msg = msg;
     task.receiver = receiver;
     mutex.lock();
@@ -268,7 +204,7 @@ void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
     disconnectSignals(resolver);
-    resolvers.removeOne(resolver);
+    l1Res.removeOne(resolver);
     if (resolver != nullptr)
         emit resolver->finished();
     if (unprocessed.size() != 0)
@@ -292,7 +228,7 @@ void ResolveManager::process()
 QList<ResolverService *> ResolveManager::getActive()
 {
     QList<ResolverService *> ret;
-    foreach (ResolverService *resolver, resolvers)
+    foreach (ResolverService *resolver, l1Res)
     {
         if (resolver->isActive())
             ret.append(resolver);
@@ -302,7 +238,7 @@ QList<ResolverService *> ResolveManager::getActive()
 QList<ResolverService *> ResolveManager::getFinished()
 {
     QList<ResolverService *> ret;
-    foreach (ResolverService *resolver, resolvers)
+    foreach (ResolverService *resolver, l1Res)
     {
         if (!resolver->isActive())
             ret.append(resolver);
@@ -313,7 +249,7 @@ QList<ResolverService *> ResolveManager::getFinished()
 bool ResolveManager::popUnprocces()
 {
     bool res = false;
-    while (resolvers.size() < ResolverServicePoolMaxSize && !unprocessed.empty())
+    while (l1Res.size() < ResolverServicePoolMaxSize && !unprocessed.empty())
     {
         createNewResolver(unprocessed.front());
         unprocessed.pop();

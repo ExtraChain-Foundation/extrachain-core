@@ -36,6 +36,7 @@ class Blockchain;
 class TransactionManager;
 class Dfs;
 class ChatManager;
+using namespace Resolver;
 static const int DFS_PWT = 2000;
 class ResolverService : public QObject
 {
@@ -48,6 +49,8 @@ private:
     ChatManager *chatManager;
 
 private:
+    Type type = Type::GENERAL;
+    Lifetime lifetime = Lifetime::SHORT;
     bool active = false;
 
     QByteArray msg;
@@ -55,17 +58,7 @@ private:
     SocketPair senderAddress;
 
     AccountController *ac;
-
-    QMap<QByteArray, int> *requestResponseMap;
-
-private:
     ResolveManager *resolveManager;
-
-private:
-    // dfs Map
-    //    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
-    QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
-    //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 public:
     /**
@@ -73,8 +66,7 @@ public:
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, QFile *> *listFile,
-                    QMap<QString, QByteArray> *fileMap, ResolveManager *resolveManager,
+    ResolverService(Type type, Lifetime lifetime, ActorIndex *actorIndex, ResolveManager *resolveManager,
                     QObject *parent = nullptr);
     /**
      * @brief ResolverService
@@ -101,6 +93,11 @@ public:
     void setChatManager(ChatManager *value);
 
     void setResolveManager(ResolveManager *value);
+
+    Resolver::Type getType() const;
+    void setType(const Resolver::Type &value);
+
+    Lifetime getLifetime() const;
 
 private:
     void processInternalMessage(QList<QByteArray> list);
@@ -191,7 +188,7 @@ public slots:
      * ready for work
      */
     void process();
-
+    void assignNewTask(Network::DataStruct task);
 signals:
     void restartLoadChecker();
     /**

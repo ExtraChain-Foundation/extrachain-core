@@ -67,15 +67,31 @@ void ResolverService::processInternalMessage(QList<QByteArray> list)
     }
 }
 
-ResolverService::ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap,
-                                 QMap<QByteArray, QFile *> *listFile, QMap<QString, QByteArray> *fileMap,
+Resolver::Type ResolverService::getType() const
+{
+    return type;
+}
+
+void ResolverService::setType(const Resolver::Type &value)
+{
+    type = value;
+}
+
+Resolver::Lifetime ResolverService::getLifetime() const
+{
+    return lifetime;
+}
+
+ResolverService::ResolverService(Resolver::Type type, Lifetime lifetime, ActorIndex *actorIndex,
                                  ResolveManager *resolveManager, QObject *parent)
     : QObject(parent)
 {
+    this->type = type;
+    this->lifetime = lifetime;
     this->actorIndex = actorIndex;
-    requestResponseMap = rrMap;
+    //    requestResponseMap = rrMap;
     //    this->listFile = listFile;
-    this->fileMap = fileMap;
+    //    this->fileMap = fileMap;
     //    this->pckgCounter = pckgCounter;
     this->resolveManager = resolveManager;
 }
@@ -92,6 +108,7 @@ bool ResolverService::isActive() const
 
 void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 {
+    active = true;
     this->msg = msg;
     this->hash = calcHash(msg);
     this->senderAddress = receiver;
@@ -156,9 +173,10 @@ bool ResolverService::addResponseHandler(const QByteArray &message, const QByteA
     QByteArray hash = Utils::calcKeccak(message);
     if (Messages::RESPONSE.contains(msgType))
     {
-        if (requestResponseMap->find(hash) == requestResponseMap->end())
+        if (resolveManager->getRequestResponseMap()->find(hash)
+            == resolveManager->getRequestResponseMap()->end())
         {
-            requestResponseMap->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
+            resolveManager->getRequestResponseMap()->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
             flag = true;
         }
     }
@@ -171,8 +189,8 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
     handlerFileMutex.lock();
     bool flag = true;
     int value = Config::Net::NECESSARY_RESPONSE_COUNT;
-    QMap<QByteArray, int>::iterator it = requestResponseMap->find(hash);
-    if (it != requestResponseMap->end())
+    QMap<QByteArray, int>::iterator it = resolveManager->getRequestResponseMap()->find(hash);
+    if (it != resolveManager->getRequestResponseMap()->end())
     {
         int t = it.value() - 1;
         if (t <= 0)
@@ -183,13 +201,13 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
         }
         else
         {
-            requestResponseMap->remove(hash);
-            requestResponseMap->insert(hash, t);
+            resolveManager->getRequestResponseMap()->remove(hash);
+            resolveManager->getRequestResponseMap()->insert(hash, t);
         }
     }
     else
     {
-        requestResponseMap->insert(hash, value);
+        resolveManager->getRequestResponseMap()->insert(hash, value);
     }
 
     handlerFileMutex.unlock();
@@ -199,6 +217,20 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
 void ResolverService::process()
 {
     recieveMsg(this->msg, this->senderAddress);
+}
+
+void ResolverService::assignNewTask(Network::DataStruct task)
+{
+    if (active == false)
+    {
+        this->msg = task.msg;
+        this->hash = calcHash(msg);
+        this->senderAddress = task.receiver;
+    }
+    else
+    {
+        //
+    }
 }
 // getAllActors
 // return all id actors that have current actor from actorIndex
@@ -537,13 +569,15 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             handlerFileMutex.unlock();
             return;
         }
-        QMap<QString, QByteArray>::iterator fileMapIT = fileMap->find(listFileIT.value()->fileName());
+        QMap<QString, QByteArray>::iterator fileMapIT =
+            resolveManager->getFileMap()->find(listFileIT.value()->fileName());
 
         listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
         QMap<QByteArray, std::vector<bool>>::iterator status =
             resolveManager->getDataCheckers()->find(message.title_hash);
 
-        if (status == resolveManager->getDataCheckers()->end() || fileMapIT == fileMap->end())
+        if (status == resolveManager->getDataCheckers()->end()
+            || fileMapIT == resolveManager->getFileMap()->end())
         {
             handlerFileMutex.unlock();
             return;
@@ -575,7 +609,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
                 resolveManager->getDownloadingFileList()->remove(message.title_hash);
                 dfs->saveFN(listFileIT.value()->fileName(), title.filePath,
                             based_dfs_struct::convertToDFType(title.f_type));
-                fileMap->remove(fileMapIT.key());
+                resolveManager->getFileMap()->remove(fileMapIT.key());
                 resolveManager->getListFile()->remove(listFileIT.key());
                 delete listFileIT.value();
             }
@@ -657,8 +691,7 @@ bool ResolverService::registerTitle(const QString &tmpPath, const unsigned long 
         DFSMessage::title_message title(titleSerialize);
         resolveManager->getDataCheckers()->insert(tHash, dataChecker);
         resolveManager->getDownloadingFileList()->insert(tHash, title.filePath);
-        //        resolveManager->getPckgCounter()->insert(tHash, pckgAmount);
-        fileMap->insert(tmpPath, titleSerialize);
+        resolveManager->getFileMap()->insert(tmpPath, titleSerialize);
         handlerFileMutex.unlock();
         qDebug() << "[ready for receive file]";
     }

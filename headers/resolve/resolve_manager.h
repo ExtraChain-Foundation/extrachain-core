@@ -29,11 +29,6 @@ static const short ResolverServicePoolMaxSize = 30;
 #include "headers/datastorage/index/actorindex.h"
 #include "headers/managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
-struct DataStruct
-{
-    QByteArray msg;
-    SocketPair receiver;
-};
 
 class ResolveManager : public QObject
 {
@@ -43,12 +38,11 @@ private:
     QTimer *loadChecker;
     QMap<QByteArray, QString> *downloadingFileList = new QMap<QByteArray, QString>();
     QMap<QByteArray, std::vector<bool>> *dataCheckers;
-private slots:
-    void checkStatus();
 
 private:
-    std::queue<DataStruct> unprocessed;
-    QList<ResolverService *> resolvers;
+    std::queue<Network::DataStruct> unprocessed;
+    QList<ResolverService *> l1Res;
+    QList<ResolverService *> l2Res;
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
     QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
     QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
@@ -81,7 +75,8 @@ private:
      * @brief createNewResolver
      * @param task
      */
-    void createNewResolver(const DataStruct &task);
+    void createNewResolver(const Network::DataStruct &task);
+    void setL2Resolver(const Network::DataStruct &task);
 
 private:
     QList<ResolverService *> getActive();
@@ -99,6 +94,10 @@ public:
     QMap<QByteArray, QString> *getDownloadingFileList() const;
 
     QMap<QByteArray, QFile *> *getListFile() const;
+
+    QMap<QByteArray, int> *getRequestResponseMap() const;
+
+    QMap<QString, QByteArray> *getFileMap() const;
 
 signals:
     void finished();
