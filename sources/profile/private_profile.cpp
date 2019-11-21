@@ -160,7 +160,7 @@ void PrivateProfile::profile(QByteArray hash)
             else
             {
 #ifdef ETALONIUM_CONSOLE
-                std::cout << "Incorrect password" << std::endl;
+                std::cout << "------------------> Incorrect password" << std::endl;
                 std::exit(0);
 #endif
                 continue;
