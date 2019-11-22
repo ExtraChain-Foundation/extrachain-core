@@ -50,7 +50,7 @@ private:
     QTcpSocket *socket = nullptr;
     BigNumber identificator;
     int _blockSize = 0;
-    QByteArray buffer;
+    //    QByteArray buffer;
     int reconnectTry = 0;
     int pendMsgSize = 0;
 
@@ -80,7 +80,7 @@ signals:
 private slots:
 
     void reconnect();
-    void readData();
+    //    void readData();
 public slots:
     /**
      * @brief Send message using QTcpSocket

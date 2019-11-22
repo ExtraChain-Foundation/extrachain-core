@@ -23,7 +23,8 @@ enum dfsMessageType
     storageMessage,
     responseMessage,
     closingMessage,
-    requestFragments
+    requestFragments,
+    none
 };
 
 const int type_title = dfsMessageType::titleMessage;
@@ -34,13 +35,13 @@ const int type_closing = dfsMessageType::closingMessage;
 
 const int type_req_frags = dfsMessageType::requestFragments;
 
-class IDfs_Message : public QObject
+class IDfs_Message /* : public QObject*/
 {
-    Q_OBJECT
+    //    Q_OBJECT
 
 protected:
     IDfs_Message(QObject *parent = nullptr)
-        : QObject(parent)
+    //        : QObject(parent)
     {
     }
     virtual ~IDfs_Message()

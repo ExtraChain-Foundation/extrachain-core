@@ -15,7 +15,7 @@ struct title_message : public DUMessage
     QByteArray f_type;
 
     QByteArray dataHash; // Keccak256
-
+    title_message();
     title_message(const QString &filePath);
     title_message(const QByteArray &serialized);
     title_message(const QString &filePath, const long long &pckgsAmount, const long long &fileSize,
@@ -24,6 +24,7 @@ struct title_message : public DUMessage
 
     bool empty() const;
     const QList<QByteArray> serializedParams() const override final;
+    title_message operator=(const title_message &msg);
 };
 }
 

@@ -8,6 +8,8 @@
 #include <QMutex>
 #include <QTimer>
 #include <QMap>
+#include <vector>
+#include <queue>
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
@@ -51,11 +53,21 @@ private:
 private:
     Type type = Type::GENERAL;
     Lifetime lifetime = Lifetime::SHORT;
-    bool active = false;
 
+private:
+    QTimer *reloadTimer;
+    //    QByteArray tag;
+    std::vector<bool> dataChecker;
+    //    QString path;
+    QFile file;
+    DFSMessage::title_message title;
+
+private:
+    bool active = false;
+    std::queue<Network::DataStruct> taskQueue;
     QByteArray msg;
     QByteArray hash;
-    SocketPair senderAddress;
+    SocketPair receiver;
 
     AccountController *ac;
     ResolveManager *resolveManager;
@@ -72,6 +84,13 @@ public:
      * @brief ResolverService
      */
     ~ResolverService() override;
+
+private:
+    void finishWork();
+private slots:
+    void checkStatus();
+
+public:
     /**
      * @brief isActive
      * @return
@@ -100,7 +119,6 @@ public:
     Lifetime getLifetime() const;
 
 private:
-    void processInternalMessage(QList<QByteArray> list);
     /**
      * @brief validate
      * @param block
@@ -154,7 +172,9 @@ private:
      * corresponding signals
      * @param msg - serialized packages
      */
-    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
+    void resolveTask();
+    void resolveGeneralTask();
+    void resolveDfsTask();
     /**
      * @brief resolveDfsMessage
      * @param data

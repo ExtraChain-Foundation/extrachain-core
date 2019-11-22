@@ -38,58 +38,58 @@ void SocketService::reconnect()
     connectionTry++;
 }
 
-void SocketService::readData()
-{
-    //    while()
-    while (buffer.size() > 0)
-    {
-        if (_blockSize == 0)
-        {
-            QByteArray size;
+// void SocketService::readData()
+//{
+//    //    while()
+//    while (buffer.size() > 0)
+//    {
+//        if (_blockSize == 0)
+//        {
+//            QByteArray size;
 
-            QByteArray el = buffer.mid(0, 1);
-            buffer.remove(0, 1);
-            while (el != " ")
-            {
+//            QByteArray el = buffer.mid(0, 1);
+//            buffer.remove(0, 1);
+//            while (el != " ")
+//            {
 
-                size.append(el);
-                // _sok->
-                el = buffer.mid(0, 1);
-                buffer.remove(0, 1);
-            }
-            // qDebug() << "<<<<<<<<" << size;
+//                size.append(el);
+//                // _sok->
+//                el = buffer.mid(0, 1);
+//                buffer.remove(0, 1);
+//            }
+//            // qDebug() << "<<<<<<<<" << size;
 
-            _blockSize = size.toInt() /*_sok->read((int)sizeof(quint16)).toInt()*/;
-            // qDebug() << "_blockSize now " << _blockSize;
-        }
-        //        qDebug() << buffer.size() << _blockSize;
-        if (buffer.size() < _blockSize)
-            return;
+//            _blockSize = size.toInt() /*_sok->read((int)sizeof(quint16)).toInt()*/;
+//            // qDebug() << "_blockSize now " << _blockSize;
+//        }
+//        //        qDebug() << buffer.size() << _blockSize;
+//        if (buffer.size() < _blockSize)
+//            return;
 
-        QByteArray command;
-        command = buffer.mid(0, _blockSize);
-        buffer.remove(0, _blockSize);
+//        QByteArray command;
+//        command = buffer.mid(0, _blockSize);
+//        buffer.remove(0, _blockSize);
 
-        if (!active)
-        {
-            //            active = true;
-            if (command.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
-            {
+//        if (!active)
+//        {
+//            //            active = true;
+//            if (command.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+//            {
 
-                identificator = BigNumber(command.mid(IDENTIFICATOR.size()));
-            }
-            emit checkMe();
-        }
-        else
-        {
-            SocketPair receiver(address.toStdString(), port);
-            receiver.setId(identificator.toByteArray());
-            //            emit MessageReceived(command, receiver);
-            netManager->MessageReceived(command, receiver);
-        }
-        _blockSize = 0;
-    }
-};
+//                identificator = BigNumber(command.mid(IDENTIFICATOR.size()));
+//            }
+//            emit checkMe();
+//        }
+//        else
+//        {
+//            SocketPair receiver(address.toStdString(), port);
+//            receiver.setId(identificator.toByteArray());
+//            //            emit MessageReceived(command, receiver);
+//            netManager->MessageReceived(command, receiver);
+//        }
+//        _blockSize = 0;
+//    }
+//};
 
 int SocketService::getReconnectTry() const
 {
@@ -136,7 +136,7 @@ SocketService::SocketService(const SocketService &value)
     socket = value.socket;
     identificator = value.identificator;
     _blockSize = value._blockSize;
-    buffer = value.buffer;
+    //    buffer = value.buffer;
     reconnectTry = value.reconnectTry;
     dpBuffer = new QByteArray();
 }

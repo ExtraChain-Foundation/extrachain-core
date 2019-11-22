@@ -1,5 +1,11 @@
 #include "dumessage.h"
 
+DFSMessage::DUMessage::DUMessage(QObject *parent)
+    : IDfs_Message(parent)
+{
+    this->type = dfsMessageType::none;
+}
+
 DFSMessage::DUMessage::DUMessage(const int &type, QObject *parent)
     : IDfs_Message(parent)
 {
