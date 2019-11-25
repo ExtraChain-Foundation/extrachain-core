@@ -16,7 +16,7 @@ QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_stru
         QByteArray dType =
             Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
         if (based_dfs_struct::toByteArray(type) == dType)
-            result << based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
+            result << based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/" + dType + "/"
                     + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
     }
     return result;
