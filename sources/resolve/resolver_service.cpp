@@ -48,6 +48,11 @@ Resolver::Lifetime ResolverService::getLifetime() const
     return lifetime;
 }
 
+DFSMessage::title_message ResolverService::getTitle() const
+{
+    return title;
+}
+
 ResolverService::ResolverService(Resolver::Type type, Lifetime lifetime, ActorIndex *actorIndex,
                                  ResolveManager *resolveManager, QObject *parent)
     : QObject(parent)
@@ -224,8 +229,12 @@ void ResolverService::process()
 {
     if (this->type == Resolver::Type::DFS)
     {
-        reloadTimer = new QTimer();
-        connect(reloadTimer, &QTimer::timeout, this, &ResolverService::checkStatus);
+        if (reloadTimer == nullptr)
+        {
+            reloadTimer = new QTimer();
+            connect(reloadTimer, &QTimer::timeout, this, &ResolverService::checkStatus);
+            connect(this, &ResolverService::activate, this, &ResolverService::process);
+        }
     }
     resolveTask();
 }
@@ -239,6 +248,7 @@ void ResolverService::assignNewTask(Network::DataStruct task)
             this->msg = task.msg;
             this->hash = calcHash(msg);
             this->receiver = task.receiver;
+            emit activate();
         }
         else
         {
@@ -255,6 +265,7 @@ void ResolverService::resolveTask()
         resolveGeneralTask();
         break;
     case Resolver::Type::DFS:
+        reloadTimer->start(DFS_PWT);
         resolveDfsTask();
         break;
     case Resolver::Type::ACTORS:
@@ -558,9 +569,9 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         qDebug() << "[title message:]";
         DFSMessage::title_message message(data);
         QByteArray mHash = message.hash();
+        if (QFile(message.filePath).exists())
+            return;
         resolveManager->dfsTitleArrived(message);
-        //        if (QFile(message.filePath).exists())
-        //            return;
         //        QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
         //        if (!registerTitle(path, message.pckgsAmount, message.fileSize, message.serialize(), mHash))
         //        {

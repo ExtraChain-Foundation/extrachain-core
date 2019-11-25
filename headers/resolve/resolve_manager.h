@@ -66,6 +66,10 @@ public:
 
     void setNode(NodeManager *value);
 
+public:
+    void dfsTitleArrived(QByteArray dataHash, Network::DataStruct task);
+    void dfsFragmentArrived(QByteArray titleHash, Network::DataStruct task);
+
 private:
     void connectSignals(ResolverService *resolver);
     void disconnectSignals(ResolverService *resolver);

@@ -5,6 +5,42 @@ void ResolveManager::setNode(NodeManager *value)
     node = value;
 }
 
+void ResolveManager::dfsTitleArrived(QByteArray dataHash, Network::DataStruct task)
+{
+
+    for (int i = 0; i < l2Res.size(); i++)
+    {
+        if (dataHash == l2Res[i]->getTitle().dataHash)
+        {
+            return;
+        }
+    }
+    l2Res.append(new ResolverService(Resolver::Type::DFS, Resolver::Lifetime::LONG, actorIndex, this));
+    l2Res.last()->setNode(node);
+    l2Res.last()->setBlockchain(blockchain);
+    l2Res.last()->setDfs(dfs);
+    l2Res.last()->setChatManager(chatManager);
+    connectSignals(l2Res.last());
+    // get task from queue
+    l2Res.last()->setTask(task.msg, task.receiver);
+    ThreadPool::addThread(l2Res.last());
+    // create new L2Res
+}
+
+void ResolveManager::dfsFragmentArrived(QByteArray titleHash, Network::DataStruct task)
+{
+    int i = 0;
+    while (i < l2Res.size())
+    {
+        if (l2Res[i]->getTitle().hash() == titleHash)
+        {
+            mutex.lock();
+            l2Res[i]->assignNewTask(task);
+            mutex.unlock();
+        }
+    }
+}
+
 void ResolveManager::setChatManager(ChatManager *value)
 {
     chatManager = value;

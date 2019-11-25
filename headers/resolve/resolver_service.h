@@ -55,7 +55,7 @@ private:
     Lifetime lifetime = Lifetime::SHORT;
 
 private:
-    QTimer *reloadTimer;
+    QTimer *reloadTimer = nullptr;
     //    QByteArray tag;
     std::vector<bool> dataChecker;
     //    QString path;
@@ -117,6 +117,8 @@ public:
     void setType(const Resolver::Type &value);
 
     Lifetime getLifetime() const;
+
+    DFSMessage::title_message getTitle() const;
 
 private:
     /**
@@ -210,6 +212,7 @@ public slots:
     void process();
     void assignNewTask(Network::DataStruct task);
 signals:
+    void activate();
     void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager
