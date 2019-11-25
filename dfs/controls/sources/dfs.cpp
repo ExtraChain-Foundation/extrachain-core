@@ -13,12 +13,24 @@ void Dfs::setDfsNetManager(DFSNetManager *value)
 
 void Dfs::initD(const QByteArray &userId)
 {
+    // QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME);
+    // QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId);
+    QList<QByteArray> subPathList;
+    subPathList.append("/images/");
+    subPathList.append("/video/");
+    subPathList.append("/events/");
+    subPathList.append("/system/");
+    subPathList.append("/chats/");
+    subPathList.append("/posts/");
+    subPathList.append("/services/");
+    subPathList.append("/cdoctp/");
+    subPathList.append("/cards/");
+    for (QByteArray currentPath : subPathList)
+        QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
 
     qDebug() << "[init dfs for user]" << userId;
     //    signalConnections();
 
-    QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME);
-    QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId);
     QFile(based_dfs_struct::ACTOR_CARD_FILE).open(QIODevice::WriteOnly | QIODevice::Truncate);
     qDebug() << "[init finished]";
 }
@@ -26,13 +38,32 @@ void Dfs::initD(const QByteArray &userId)
 void Dfs::saveD(const QString &path, const based_dfs_struct::Type &type,
                 const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status)
 {
+    QByteArray dfsSubPath;
+    if (type == based_dfs_struct::Type::images)
+        dfsSubPath = "/images/";
+    else if (type == based_dfs_struct::Type::ivideo)
+        dfsSubPath = "/video/";
+    else if (type == based_dfs_struct::Type::events)
+        dfsSubPath = "/events/";
+    else if (type == based_dfs_struct::Type::system)
+        dfsSubPath = "/system/";
+    else if (type == based_dfs_struct::Type::chates)
+        dfsSubPath = "/chats/";
+    else if (type == based_dfs_struct::Type::postes)
+        dfsSubPath = "/posts/";
+    else if (type == based_dfs_struct::Type::servic)
+        dfsSubPath = "/services/";
+    else if (type == based_dfs_struct::Type::cdoctp)
+        dfsSubPath = "/cdoctp/";
+    else if (type == based_dfs_struct::Type::card)
+        dfsSubPath = "/cards/";
     QFile file(path);
     file.open(QIODevice::ReadOnly);
     QByteArray data = file.readAll();
     file.close();
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray name = setName(userId);
-    QByteArray dfsPath = based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/' + name;
+    QByteArray dfsPath = based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + dfsSubPath + name;
     appendC(dfsPath, userId, name, based_dfs_struct::toByteArray(type));
     QFile dfsFile(dfsPath);
     dfsFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
