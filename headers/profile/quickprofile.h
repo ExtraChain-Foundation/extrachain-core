@@ -17,10 +17,11 @@ struct QuickProfile
     Q_PROPERTY(QString miniAvatar MEMBER miniAvatar)
 
 public:
-    QString firstName = "Loading";
+    QString firstName;
     QString lastName;
     QString avatar;
     QString miniAvatar;
+    QString userId;
 
     operator QString() const // for QDebug
     {
