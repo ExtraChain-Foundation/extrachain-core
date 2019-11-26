@@ -41,6 +41,7 @@ Q_DECLARE_METATYPE(UIChat)
 Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
+Q_DECLARE_METATYPE(Network::DataStruct)
 
 void registerMetaTypes()
 {
@@ -69,6 +70,7 @@ void registerMetaTypes()
     qRegisterMetaType<QList<UIChat>>();
     qRegisterMetaType<UIMessage>();
     qRegisterMetaType<QList<UIMessage>>();
+    qRegisterMetaType<Network::DataStruct>();
 }
 
 #endif
