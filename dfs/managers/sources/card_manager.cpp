@@ -1,5 +1,7 @@
 #include "dfs/managers/headers/card_manager.h"
 
+#include <QUrl>
+
 QStringList CardManager::getFilesByType(const QString &userId, based_dfs_struct::Type type)
 {
     QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
