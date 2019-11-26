@@ -79,6 +79,7 @@ based_dfs_struct::Type based_dfs_struct::convertToDFType(QByteArray type)
         return servic;
     else if (type == "cdoctp")
         return cdoctp;
+    return servic;
 }
 
 QByteArray based_dfs_struct::toByteArray(Type type)
@@ -101,6 +102,7 @@ QByteArray based_dfs_struct::toByteArray(Type type)
         return "services";
     else if (type == cdoctp)
         return "cdoctp";
+    return "services";
 }
 QString based_dfs_struct::toString(Type type)
 {
@@ -122,6 +124,7 @@ QString based_dfs_struct::toString(Type type)
         return "services";
     else if (type == cdoctp)
         return "cdoctp";
+    return "services";
 }
 //
 based_dfs_struct::SubType based_dfs_struct::convertToDFSSubType(QByteArray subType)

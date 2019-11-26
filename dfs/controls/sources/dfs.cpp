@@ -13,8 +13,8 @@ void Dfs::setDfsNetManager(DFSNetManager *value)
 
 void Dfs::initD(const QByteArray &userId)
 {
-    // QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME);
-    // QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId);
+    QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME);
+    QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId);
     QList<QByteArray> subPathList;
     subPathList.append("/images/");
     subPathList.append("/video/");
