@@ -70,6 +70,7 @@ ResolverService::~ResolverService()
 
 void ResolverService::finishWork()
 {
+    active = false;
     if (this->lifetime == Resolver::Lifetime::SHORT)
     {
         emit TaskFinished();
@@ -103,6 +104,8 @@ void ResolverService::checkStatus()
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
         file.close();
+        disconnect(reloadTimer, &QTimer::timeout, this, &ResolverService::checkStatus);
+        delete reloadTimer;
         emit TaskFinished();
     }
     else
@@ -314,6 +317,7 @@ void ResolverService::resolveGeneralTask()
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         DFSMessage::DUMessage dfsMsg(message.getMsg_data());
         resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
+        finishWork();
         //        emit TaskFinished();
     }
     else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
@@ -536,22 +540,13 @@ void ResolverService::resolveGeneralTask()
 
 void ResolverService::resolveDfsTask()
 {
-    QList<QByteArray> res = Serialization::universalDeserialize(msg);
     using namespace Messages;
-    BaseMessage message;
-    message.deserialize(msg);
-    QByteArray msgType = message.getMsgType();
     // dfs message
-    if (msgType == DFS_MESSAGE)
-    {
-        qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
-        DFSMessage::DUMessage dfsMsg(message.getMsg_data());
-        resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
-        //        emit TaskFinished();
-        finishWork();
-    }
-    else
-        return;
+    qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
+    DFSMessage::DUMessage dfsMsg(msg);
+    resolveDfsMessage(msg, dfsMsg.getType(), receiver);
+    //        emit TaskFinished();
+    finishWork();
 }
 void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType, const SocketPair &receiver)
 {
@@ -573,9 +568,12 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         {
             qDebug() << "[title message:]";
             DFSMessage::title_message message(data);
-            QByteArray mHash = message.hash();
+            QByteArray mHash = message.dataHash;
             if (QFile(message.filePath).exists())
+            {
+                //                finishWork();
                 return;
+            }
             resolveManager->dfsTitleArrived(mHash, ds);
         }
         else if (type == Resolver::Type::DFS)
@@ -585,6 +583,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             if (!registerTitle(path, message))
             {
                 qDebug() << "Title was not registered";
+                //                finishWork();
                 return;
             }
             // register title for receive
@@ -610,7 +609,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         if (type == Resolver::Type::GENERAL)
         {
             DFSMessage::dfs_message message(data);
-            resolveManager->dfsFragmentArrived(message.title_hash, ds);
+            resolveManager->dfsFragmentArrived(message.dataHash, ds);
         }
         else if (type == Resolver::Type::DFS)
         {
@@ -621,46 +620,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
             file.flush();
             dataChecker[message.pckgNumber] = true;
             reloadTimer->start(DFS_PWT);
-            //            message.pckgNumber
         }
-
-        //        QByteArray title_hash = message.title_hash;
-        //        // setup iterator of Maps
-        //        handlerFileMutex.lock();
-        //        QMap<QByteArray, QFile *>::iterator listFileIT =
-        //            resolveManager->getListFile()->find(title_hash); // Cannot find after request
-        //        if (listFileIT == resolveManager->getListFile()->end())
-        //        {
-        //            qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
-        //            for (int i = 0; i < resolveManager->getListFile()->size(); i++)
-        //            {
-        //                QMap<QByteArray, QFile *>::iterator it = resolveManager->getListFile()->begin();
-        //                qDebug() << resolveManager->getListFile()->size() << it.key() << message.title_hash;
-        //            }
-        //            handlerFileMutex.unlock();
-        //            return;
-        //        }
-        //        QMap<QString, QByteArray>::iterator fileMapIT =
-        //            resolveManager->getFileMap()->find(listFileIT.value()->fileName());
-
-        //        listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
-        //        QMap<QByteArray, std::vector<bool>>::iterator status =
-        //            resolveManager->getDataCheckers()->find(message.title_hash);
-
-        //        if (status == resolveManager->getDataCheckers()->end()
-        //            || fileMapIT == resolveManager->getFileMap()->end())
-        //        {
-        //            handlerFileMutex.unlock();
-        //            return;
-        //        }
-
-        //        if (listFileIT.value()->write(message.data))
-        //        {
-        //            status.value()[message.pckgNumber] = true;
-        //            listFileIT.value()->flush();
-        //        }
-
-        //        handlerFileMutex.unlock();
     }
     else if (msgType == DFSMessage::dfsMessageType::responseMessage)
     {
@@ -674,7 +634,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     }
     else
         qDebug() << "[&DFSResolver] undifine message type";
-    finishWork();
+    //    finishWork();
 }
 
 bool ResolverService::createTempFile(const QString &path, const long long &size, const QByteArray &tHash)
@@ -722,10 +682,10 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
 
 bool ResolverService::registerTitle(const QString &tmpPath, DFSMessage::title_message title)
 {
-    if (!this->title.empty())
+    if (this->title.empty())
     {
         this->title = title;
-        if (createTempFile(tmpPath, title.fileSize, title.hash()))
+        if (createTempFile(tmpPath, title.fileSize, title.dataHash))
         {
             dataChecker.assign(title.pckgsAmount, false);
             qDebug() << "[ready to receive file]";

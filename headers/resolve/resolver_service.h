@@ -39,7 +39,7 @@ class TransactionManager;
 class Dfs;
 class ChatManager;
 using namespace Resolver;
-static const int DFS_PWT = 2000;
+static const int DFS_PWT = 1000;
 class ResolverService : public QObject
 {
     Q_OBJECT

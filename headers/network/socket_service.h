@@ -109,7 +109,7 @@ public:
      * @brief Send message using QTcpSocket
      * @param message
      */
-    void *distMsg(const QByteArray &data, const SocketPair &socketData);
+    void *distMsg(const QByteArray data, const SocketPair socketData);
     bool *socketStatus() const;
     bool isActive() const;
     QString getAddress() const;

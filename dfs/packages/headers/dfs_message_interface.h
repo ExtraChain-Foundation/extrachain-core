@@ -44,9 +44,8 @@ protected:
     //        : QObject(parent)
     {
     }
-    virtual ~IDfs_Message()
-    {
-    }
+    virtual ~IDfs_Message() = default;
+
     virtual const QByteArray serialize() const = 0;
 
     virtual const QList<QByteArray> serializedParams() const = 0;

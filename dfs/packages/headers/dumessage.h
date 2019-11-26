@@ -15,7 +15,7 @@ public:
     DUMessage(QObject *parent = nullptr);
     DUMessage(const int &type, QObject *parent = nullptr);
     DUMessage(const QByteArray &serialized, QObject *parent = nullptr);
-    ~DUMessage() override;
+    ~DUMessage() = default;
 
     const QByteArray hash() override;
     const QByteArray serialize() const override;

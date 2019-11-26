@@ -57,10 +57,6 @@ DFSMessage::title_message::title_message(const QString &filePath, const long lon
     this->f_type = f_type;
 }
 
-DFSMessage::title_message::~title_message()
-{
-}
-
 bool DFSMessage::title_message::empty() const
 {
     if (filePath.isEmpty())

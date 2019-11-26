@@ -49,13 +49,14 @@ signals:
      * @param receiver
      */
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
-    void resendFragments(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
 
 public slots:
+    void resendFragments(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
+
     /**
      * @brief process
      */
-    void resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
+    //    void resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
 
     void process();
     /**

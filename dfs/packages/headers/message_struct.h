@@ -10,11 +10,11 @@ struct dfs_message : public DUMessage
 
     const short FIELDS_COUNT = 3;
 
-    QByteArray title_hash;
+    QByteArray dataHash;
     long long pckgNumber;
     QByteArray data;
 
-    dfs_message(const QByteArray &hash, const long long &pckgNumber, const QByteArray &data);
+    dfs_message(const QByteArray &hash, const unsigned long &pckgNumber, const QByteArray &data);
     dfs_message(const QByteArray &serialized);
     dfs_message(const dfs_message &temp);
     ~dfs_message() override final;

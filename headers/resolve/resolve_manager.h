@@ -68,7 +68,7 @@ public:
 
 public:
     void dfsTitleArrived(QByteArray dataHash, Network::DataStruct task);
-    void dfsFragmentArrived(QByteArray titleHash, Network::DataStruct task);
+    void dfsFragmentArrived(QByteArray dataHash, Network::DataStruct task);
 
 private:
     void connectSignals(ResolverService *resolver);

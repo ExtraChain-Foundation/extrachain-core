@@ -27,12 +27,14 @@ void ResolveManager::dfsTitleArrived(QByteArray dataHash, Network::DataStruct ta
     // create new L2Res
 }
 
-void ResolveManager::dfsFragmentArrived(QByteArray titleHash, Network::DataStruct task)
+void ResolveManager::dfsFragmentArrived(QByteArray dataHash, Network::DataStruct task)
 {
     int i = 0;
     while (i < l2Res.size())
     {
-        if (l2Res[i]->getTitle().hash() == titleHash)
+        DFSMessage::title_message dt = l2Res[i]->getTitle();
+        QByteArray b = dt.dataHash;
+        if (b == dataHash)
         {
             mutex.lock();
             l2Res[i]->assignNewTask(task);
@@ -178,6 +180,7 @@ void ResolveManager::createNewResolver(const Network::DataStruct &task)
     l1Res.last()->setTask(task.msg, task.receiver);
     auto crutch = l1Res.last();
     // connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
+    qDebug() << "[ResolveManager]created new general resolver, current amount is:" << l1Res.size();
     ThreadPool::addThread(l1Res.last());
 }
 
@@ -242,14 +245,26 @@ void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
     disconnectSignals(resolver);
-    l1Res.removeOne(resolver);
-    if (resolver != nullptr)
-        emit resolver->finished();
-    if (unprocessed.size() != 0)
+    if (resolver->getType() == Resolver::Type::DFS)
     {
-        mutex.lock();
-        popUnprocces();
-        mutex.unlock();
+        l2Res.removeOne(resolver);
+        if (resolver != nullptr)
+            emit resolver->finished();
+        return;
+    }
+    else if (resolver->getType() == Resolver::Type::GENERAL)
+    {
+        l1Res.removeOne(resolver);
+        if (resolver != nullptr)
+            emit resolver->finished();
+        qDebug() << "[ResolveManager]removed new general resolver, current amount is:" << l1Res.size();
+        if (unprocessed.size() != 0)
+        {
+            mutex.lock();
+            popUnprocces();
+            mutex.unlock();
+        }
+        return;
     }
 }
 

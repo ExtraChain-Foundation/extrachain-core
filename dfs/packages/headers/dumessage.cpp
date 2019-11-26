@@ -19,10 +19,6 @@ DFSMessage::DUMessage::DUMessage(const QByteArray &serialized, QObject *parent)
     type = static_cast<dfsMessageType>(list.takeFirst().toInt());
 }
 
-DFSMessage::DUMessage::~DUMessage()
-{
-}
-
 const QByteArray DFSMessage::DUMessage::serialize() const
 {
     return Serialization::universalSerialize(serializedParams());
