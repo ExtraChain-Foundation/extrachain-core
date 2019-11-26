@@ -37,7 +37,9 @@ void ResolveManager::dfsFragmentArrived(QByteArray titleHash, Network::DataStruc
             mutex.lock();
             l2Res[i]->assignNewTask(task);
             mutex.unlock();
+            return;
         }
+        i++;
     }
 }
 

@@ -11,7 +11,7 @@ struct dfs_message : public DUMessage
     const short FIELDS_COUNT = 3;
 
     QByteArray title_hash;
-    unsigned long pckgNumber;
+    long long pckgNumber;
     QByteArray data;
 
     dfs_message(const QByteArray &hash, const long long &pckgNumber, const QByteArray &data);

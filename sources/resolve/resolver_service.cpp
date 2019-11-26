@@ -557,6 +557,9 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
 {
     //    emit restartLoadChecker();
     qDebug() << "[dfs resolve message]";
+    Network::DataStruct ds;
+    ds.msg = data;
+    ds.receiver = receiver;
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     // resolve msg
     if (msgType == DFSMessage::dfsMessageType::requestFragments)
@@ -566,21 +569,26 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     }
     else if (msgType == DFSMessage::dfsMessageType::titleMessage)
     {
-        qDebug() << "[title message:]";
-        DFSMessage::title_message message(data);
-        QByteArray mHash = message.hash();
-        if (QFile(message.filePath).exists())
-            return;
-        resolveManager->dfsTitleArrived(message);
-        //        QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
-        //        if (!registerTitle(path, message.pckgsAmount, message.fileSize, message.serialize(), mHash))
-        //        {
-        //            qDebug() << "Abort on register title";
-        //            return;
-        //        }
-        //        qDebug() << "ReCeiVe" << path << message.dataHash;
-        //        qDebug() << "[file path:]" << path;
-        // register title for receive
+        if (type == Resolver::Type::GENERAL)
+        {
+            qDebug() << "[title message:]";
+            DFSMessage::title_message message(data);
+            QByteArray mHash = message.hash();
+            if (QFile(message.filePath).exists())
+                return;
+            resolveManager->dfsTitleArrived(mHash, ds);
+        }
+        else if (type == Resolver::Type::DFS)
+        {
+            DFSMessage::title_message message(data);
+            QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
+            if (!registerTitle(path, message))
+            {
+                qDebug() << "Title was not registered";
+                return;
+            }
+            // register title for receive
+        }
     }
     else if (msgType == DFSMessage::dfsMessageType::statusMessage)
     {
@@ -599,45 +607,60 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     }
     else if (msgType == DFSMessage::dfsMessageType::fileDataMessage)
     {
-        qDebug() << "[fileDataMessage:]";
-        DFSMessage::dfs_message message(data);
-        QByteArray title_hash = message.title_hash;
-        // setup iterator of Maps
-        handlerFileMutex.lock();
-        QMap<QByteArray, QFile *>::iterator listFileIT =
-            resolveManager->getListFile()->find(title_hash); // Cannot find after request
-        if (listFileIT == resolveManager->getListFile()->end())
+        if (type == Resolver::Type::GENERAL)
         {
-            qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
-            for (int i = 0; i < resolveManager->getListFile()->size(); i++)
-            {
-                QMap<QByteArray, QFile *>::iterator it = resolveManager->getListFile()->begin();
-                qDebug() << resolveManager->getListFile()->size() << it.key() << message.title_hash;
-            }
-            handlerFileMutex.unlock();
-            return;
+            DFSMessage::dfs_message message(data);
+            resolveManager->dfsFragmentArrived(message.title_hash, ds);
         }
-        QMap<QString, QByteArray>::iterator fileMapIT =
-            resolveManager->getFileMap()->find(listFileIT.value()->fileName());
-
-        listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
-        QMap<QByteArray, std::vector<bool>>::iterator status =
-            resolveManager->getDataCheckers()->find(message.title_hash);
-
-        if (status == resolveManager->getDataCheckers()->end()
-            || fileMapIT == resolveManager->getFileMap()->end())
+        else if (type == Resolver::Type::DFS)
         {
-            handlerFileMutex.unlock();
-            return;
+            qDebug() << "[fileDataMessage:]";
+            DFSMessage::dfs_message message(data);
+            file.seek(DFSMessage::dataSize * message.pckgNumber);
+            file.write(message.data);
+            file.flush();
+            dataChecker[message.pckgNumber] = true;
+            reloadTimer->start(DFS_PWT);
+            //            message.pckgNumber
         }
 
-        if (listFileIT.value()->write(message.data))
-        {
-            status.value()[message.pckgNumber] = true;
-            listFileIT.value()->flush();
-        }
+        //        QByteArray title_hash = message.title_hash;
+        //        // setup iterator of Maps
+        //        handlerFileMutex.lock();
+        //        QMap<QByteArray, QFile *>::iterator listFileIT =
+        //            resolveManager->getListFile()->find(title_hash); // Cannot find after request
+        //        if (listFileIT == resolveManager->getListFile()->end())
+        //        {
+        //            qDebug() << "[&DFSResolver][title not found]" << message.pckgNumber;
+        //            for (int i = 0; i < resolveManager->getListFile()->size(); i++)
+        //            {
+        //                QMap<QByteArray, QFile *>::iterator it = resolveManager->getListFile()->begin();
+        //                qDebug() << resolveManager->getListFile()->size() << it.key() << message.title_hash;
+        //            }
+        //            handlerFileMutex.unlock();
+        //            return;
+        //        }
+        //        QMap<QString, QByteArray>::iterator fileMapIT =
+        //            resolveManager->getFileMap()->find(listFileIT.value()->fileName());
 
-        handlerFileMutex.unlock();
+        //        listFileIT.value()->seek(static_cast<qint64>(message.pckgNumber * DFSMessage::dataSize));
+        //        QMap<QByteArray, std::vector<bool>>::iterator status =
+        //            resolveManager->getDataCheckers()->find(message.title_hash);
+
+        //        if (status == resolveManager->getDataCheckers()->end()
+        //            || fileMapIT == resolveManager->getFileMap()->end())
+        //        {
+        //            handlerFileMutex.unlock();
+        //            return;
+        //        }
+
+        //        if (listFileIT.value()->write(message.data))
+        //        {
+        //            status.value()[message.pckgNumber] = true;
+        //            listFileIT.value()->flush();
+        //        }
+
+        //        handlerFileMutex.unlock();
     }
     else if (msgType == DFSMessage::dfsMessageType::responseMessage)
     {
@@ -684,26 +707,33 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
             return createTempFile(path, size, tHash);
         }
     }
-    handlerFileMutex.unlock();
+    if (file.isOpen())
+    {
+        for (long long i = 0; i < size; i++)
+        {
+            file.seek(i);
+            file.write("0");
+        }
+    }
+    //    handlerFileMutex.unlock();
     qDebug() << "[&DfsResolver] succed finished";
     return true;
 }
 
-bool ResolverService::registerTitle(const QString &tmpPath, const unsigned long &pckgAmount,
-                                    const long long &size, const QByteArray &titleSerialize,
-                                    const QByteArray &tHash)
+bool ResolverService::registerTitle(const QString &tmpPath, DFSMessage::title_message title)
 {
-    if (!title.empty())
-        if (createTempFile(tmpPath, size, tHash))
+    if (!this->title.empty())
+    {
+        this->title = title;
+        if (createTempFile(tmpPath, title.fileSize, title.hash()))
         {
-
-            //        handlerFileMutex.lock();
-            DFSMessage::title_message nTitle(titleSerialize);
-            this->title = nTitle;
-            dataChecker.assign(pckgAmount, false);
+            dataChecker.assign(title.pckgsAmount, false);
             qDebug() << "[ready to receive file]";
         }
-    return true;
+        return true;
+    }
+    else
+        return false;
 }
 
 // validation methods //

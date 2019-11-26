@@ -10,8 +10,8 @@
 
 namespace DFSMessage {
 
-const unsigned int dataSize = 2048; // bytes
-const short fieldsSize = 4;         // bytes for size
+const long long dataSize = 2048; // bytes
+const short fieldsSize = 4;      // bytes for size
 const QByteArray stateDelimetr = "|";
 
 enum dfsMessageType

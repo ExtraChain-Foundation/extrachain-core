@@ -201,8 +201,7 @@ private:
      * @param tHash
      * @return
      */
-    bool registerTitle(const QString &tmpPath, const unsigned long &pckgAmount, const long long &size,
-                       const QByteArray &titleSerialize, const QByteArray &tHash);
+    bool registerTitle(const QString &tmpPath, DFSMessage::title_message title);
 public slots:
     /**
      * @brief process
