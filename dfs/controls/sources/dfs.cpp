@@ -26,7 +26,7 @@ void Dfs::initD(const QByteArray &userId)
     subPathList.append("/cdoctp/");
     subPathList.append("/cards/");
     for (QByteArray currentPath : subPathList)
-        QDir().mkdir(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
+        QDir().mkpath(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
 
     qDebug() << "[init dfs for user]" << userId;
     //    signalConnections();
@@ -63,7 +63,19 @@ void Dfs::saveD(const QString &path, const based_dfs_struct::Type &type,
     file.close();
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray name = setName(userId);
-    QByteArray dfsPath = based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + dfsSubPath + name;
+    BigNumber sectionIndex = getActualSection(type);
+    BigNumber elementIndex = getActualElementInSection(sectionIndex, type);
+    if (elementIndex >= BigNumber("99"))
+    {
+        sectionIndex++;
+        createNewSection(sectionIndex, type);
+        createNewElement(BigNumber("0"), sectionIndex, type);
+        elementIndex = BigNumber("0");
+    }
+    elementIndex = sectionIndex * 100 + elementIndex;
+
+    QByteArray dfsPath = based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + dfsSubPath
+        + sectionIndex.toByteArray() + '/' + elementIndex.toByteArray();
     appendC(dfsPath, userId, name, based_dfs_struct::toByteArray(type));
     QFile dfsFile(dfsPath);
     dfsFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -197,6 +209,35 @@ void Dfs::signalConnection()
     //    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
 }
 
+void Dfs::createNewSection(BigNumber sectionIndex, based_dfs_struct::Type sectionType)
+{
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
+    QDir().mkpath(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/'
+                  + based_dfs_struct::toByteArray(sectionType) + '/' + sectionIndex.toByteArray());
+    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/'
+               + based_dfs_struct::toByteArray(sectionType) + "/section");
+    if (file.open(QIODevice::WriteOnly))
+        file.write(sectionIndex.toByteArray());
+    else
+        qDebug() << "[Error] dfs.cpp. Can't create section in createNewSection method.";
+    file.close();
+    createNewElement(BigNumber("-1"), sectionIndex, sectionType);
+}
+
+void Dfs::createNewElement(BigNumber elementIndex, BigNumber sectionIndex, based_dfs_struct::Type sectionType)
+{
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
+    QDir().mkpath(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/'
+                  + based_dfs_struct::toByteArray(sectionType) + '/' + sectionIndex.toByteArray());
+    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/'
+               + based_dfs_struct::toByteArray(sectionType) + '/' + sectionIndex.toByteArray() + "/element");
+    if (file.open(QIODevice::WriteOnly))
+        file.write(elementIndex.toByteArray());
+    else
+        qDebug() << "[Error] dfs.cpp. Can't create element in createNewElement method.";
+    file.close();
+}
+
 void Dfs::saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type)
 {
     QFile file(tmpPath);
@@ -318,6 +359,39 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
 
 Dfs::~Dfs()
 {
+}
+BigNumber Dfs::getActualSection(based_dfs_struct::Type type)
+{
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
+    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/'
+               + based_dfs_struct::toByteArray(type) + "/section");
+    if (!file.exists())
+    {
+        createNewSection(BigNumber("0"), type);
+        return BigNumber("0");
+    }
+    QByteArray sectionIndex = "0";
+    if (file.open(QIODevice::ReadOnly))
+        sectionIndex = file.readLine();
+    file.close();
+    return BigNumber(sectionIndex);
+}
+
+BigNumber Dfs::getActualElementInSection(BigNumber sectiondIndex, based_dfs_struct::Type sectionType)
+{
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
+    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + '/'
+               + based_dfs_struct::toByteArray(sectionType) + '/' + sectiondIndex.toByteArray() + "/element");
+    if (file.exists())
+    {
+        QByteArray elementIndex = "0";
+        if (file.open(QIODevice::ReadOnly))
+            elementIndex = file.readLine();
+        file.close();
+        return BigNumber(elementIndex);
+    }
+    qDebug() << "[Error] Error in getActualElementInSection. File with element non exist, WHYYYYY??!?!?";
+    return BigNumber("NULL");
 }
 
 void Dfs::initDFSNetManager(ResolveManager *resolveManager)

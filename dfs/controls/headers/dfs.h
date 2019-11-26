@@ -39,7 +39,10 @@ private:
     QStringList returnDifs(const QString &adin, const QString &dva);
     void statusD();
     void signalConnection();
-
+    void createNewSection(BigNumber sectionIndex, based_dfs_struct::Type sectionType);
+    void createNewElement(BigNumber elementIndex, BigNumber sectionIndex, based_dfs_struct::Type sectionType);
+    BigNumber getActualSection(based_dfs_struct::Type type);
+    BigNumber getActualElementInSection(BigNumber sectiondIndex, based_dfs_struct::Type sectionType);
 public slots:
 
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
