@@ -212,6 +212,8 @@ public slots:
     void assignNewTask(Network::DataStruct task);
 signals:
     void activate();
+    void dfsTitle(QByteArray hash, Network::DataStruct ds);
+    void dfsFragment(QByteArray hash, Network::DataStruct ds);
     void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager

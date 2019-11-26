@@ -115,6 +115,8 @@ ResolveManager::~ResolveManager()
 
 void ResolveManager::connectSignals(ResolverService *resolver)
 {
+    connect(resolver, &ResolverService::dfsTitle, this, &ResolveManager::dfsTitleArrived);
+    connect(resolver, &ResolverService::dfsFragment, this, &ResolveManager::dfsFragmentArrived);
     //    connect(resolver)
     //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);

@@ -19,7 +19,7 @@ class NodeManager;
 
 #include "managers/chatmanager.h"
 class ChatManager;
-static const short ResolverServicePoolMaxSize = 30;
+static const short ResolverServicePoolMaxSize = 100;
 
 #include <QObject>
 //#include <QQueue>
@@ -66,7 +66,7 @@ public:
 
     void setNode(NodeManager *value);
 
-public:
+public slots:
     void dfsTitleArrived(QByteArray dataHash, Network::DataStruct task);
     void dfsFragmentArrived(QByteArray dataHash, Network::DataStruct task);
 

@@ -105,7 +105,7 @@ void ResolverService::checkStatus()
         qDebug() << "[&DFSResolver][file succed written to tmp]";
         file.close();
         disconnect(reloadTimer, &QTimer::timeout, this, &ResolverService::checkStatus);
-        delete reloadTimer;
+        //        delete reloadTimer;
         emit TaskFinished();
     }
     else
@@ -574,7 +574,8 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
                 //                finishWork();
                 return;
             }
-            resolveManager->dfsTitleArrived(mHash, ds);
+            emit dfsTitle(mHash, ds);
+            //            resolveManager->dfsTitleArrived(mHash, ds);
         }
         else if (type == Resolver::Type::DFS)
         {
@@ -609,7 +610,8 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         if (type == Resolver::Type::GENERAL)
         {
             DFSMessage::dfs_message message(data);
-            resolveManager->dfsFragmentArrived(message.dataHash, ds);
+            emit dfsFragment(message.dataHash, ds);
+            //            resolveManager->dfsFragmentArrived(message.dataHash, ds);
         }
         else if (type == Resolver::Type::DFS)
         {
