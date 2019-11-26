@@ -1,5 +1,4 @@
-#include "datastorage/profile.h"
-#include "datastorage/index/actorindex.h"
+#include "profile/profile.h"
 
 Profile::Profile()
 {
@@ -363,6 +362,9 @@ void Profile::setType(qint16 type)
     case 5:
         length = fieldsFashion.length();
         break;
+    case 6:
+        length = fieldsToken.length();
+        break;
     }
 
     int diff = length - m_list.size();
@@ -581,6 +583,7 @@ const QStringList Profile::fieldsAgent = fieldsCustomer + QStringList { "directi
 const QStringList Profile::fieldsAgency = fieldsCustomer + QStringList { "direction", "workStyle" };
 const QStringList Profile::fieldsFashion =
     fieldsCustomer + QStringList { "direction", "workStyle", "fashion", "portfolio" };
+const QStringList Profile::fieldsToken = QStringList { "type", "version", "userId" };
 
 //
 const QMap<int, QString> Profile::unitMap { { 0, "Imperial" }, { 1, "Metric" } };

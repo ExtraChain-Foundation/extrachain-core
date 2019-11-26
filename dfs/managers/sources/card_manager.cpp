@@ -1,6 +1,6 @@
 #include "dfs/managers/headers/card_manager.h"
 
-QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type)
+QStringList CardManager::getFilesByType(const QString &userId, based_dfs_struct::Type type)
 {
     QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
     if (!card.exists())
@@ -22,7 +22,7 @@ QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_stru
     return result;
 }
 
-QByteArray CardManager::getLastFileName(const QByteArray &userId)
+QByteArray CardManager::getLastFileName(const QString &userId)
 {
     QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
     if (!file.exists())
@@ -72,6 +72,7 @@ based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QBy
                 Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
     return based_dfs_struct::servic;
 }
+
 QStringList CardManager::getAll(based_dfs_struct::Type type)
 {
     QStringList all;
@@ -87,7 +88,23 @@ QStringList CardManager::getAll(based_dfs_struct::Type type)
     return all;
 }
 
-QStringList CardManager::getForUser(based_dfs_struct::Type type, QString userId)
+QString CardManager::buildPathForFile(const QString &userId, const QString &file, based_dfs_struct::Type type,
+                                      bool localFormat)
 {
-    return getFilesByType(userId.toLatin1(), type);
+    const QString currentPath = QUrl::fromLocalFile(QDir::currentPath()).toString() + "/";
+    return (localFormat ? currentPath : "") + based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
+        + based_dfs_struct::toString(type) + "/" + file;
+}
+
+QStringList CardManager::buildPathForFiles(const QString &userId, const QStringList &files,
+                                           based_dfs_struct::Type type, bool localFormat)
+{
+    QStringList result;
+
+    for (const QString &file : files)
+    {
+        result << buildPathForFile(userId, file, type, localFormat);
+    }
+
+    return result;
 }

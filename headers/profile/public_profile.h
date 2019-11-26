@@ -1,7 +1,9 @@
 #ifndef PUBLIC_PROFILE_H
 #define PUBLIC_PROFILE_H
-#include "datastorage/profile.h"
+
+#include "profile/profile.h"
 #include "utils/utils.h"
+
 struct indexList
 {
     indexList(long long curPos, int _size);
