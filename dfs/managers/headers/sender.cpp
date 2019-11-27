@@ -43,7 +43,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
     QFile file(filePath);
     file.open(QIODevice::ReadOnly);
     // create title_message
-    unsigned long pckgN = 0; // package number
+    //    unsigned long pckgN = 0; // package number
     DFSMessage::title_message title(filePath);
     title.f_type = based_dfs_struct::toByteArray(type);
     if (title.empty())
@@ -65,7 +65,7 @@ void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &typ
     //        DFSMessage::dfs_message pck(title.dataHash, pckgN, data); // package for send
     //        //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     //        NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
-    //        QThread::currentThread()->usleep(50);
+    //        //        QThread::currentThread()->usleep(50);
     //    }
     //    // create last package
     //    QByteArray data = file.read(file.size() - file.pos());
