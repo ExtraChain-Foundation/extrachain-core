@@ -61,22 +61,25 @@ QByteArray based_dfs_struct::toByteArray(Status _state)
 //
 based_dfs_struct::Type based_dfs_struct::convertToDFType(QByteArray type)
 {
-    if (QString(type) == "images")
+    if (type == "images")
         return Type::images;
-    else if (QString(type) == "ivideo")
+    else if (type == "video")
         return Type::ivideo;
-    else if (QString(type) == "events")
+    else if (type == "events")
         return Type::events;
-    else if (QString(type) == "system")
+    else if (type == "system")
         return Type::system;
-    else if (QString(type) == "chates")
+    else if (type == "chats")
         return Type::chates;
-    else if (type == "postes")
+    else if (type == "posts")
         return postes;
-    else if (type == "card")
+    else if (type == "cards")
         return card;
-    else
-        return Type::servic;
+    else if (type == "services")
+        return servic;
+    else if (type == "cdoctp")
+        return cdoctp;
+    return servic;
 }
 
 QByteArray based_dfs_struct::toByteArray(Type type)
@@ -84,38 +87,44 @@ QByteArray based_dfs_struct::toByteArray(Type type)
     if (type == Type::images)
         return "images";
     else if (type == Type::ivideo)
-        return "ivideo";
+        return "video";
     else if (type == Type::events)
         return "events";
     else if (type == Type::system)
         return "system";
     else if (type == Type::chates)
-        return "chates";
+        return "chats";
     else if (type == postes)
-        return "postes";
+        return "posts";
     else if (type == card)
-        return "card";
-    else
-        return "servic";
+        return "cards";
+    else if (type == servic)
+        return "services";
+    else if (type == cdoctp)
+        return "cdoctp";
+    return "services";
 }
 QString based_dfs_struct::toString(Type type)
 {
     if (type == Type::images)
         return "images";
     else if (type == Type::ivideo)
-        return "ivideo";
+        return "video";
     else if (type == Type::events)
         return "events";
     else if (type == Type::system)
         return "system";
     else if (type == Type::chates)
-        return "chates";
+        return "chats";
     else if (type == postes)
-        return "postes";
+        return "posts";
     else if (type == card)
-        return "card";
-    else
-        return "servic";
+        return "cards";
+    else if (type == servic)
+        return "services";
+    else if (type == cdoctp)
+        return "cdoctp";
+    return "services";
 }
 //
 based_dfs_struct::SubType based_dfs_struct::convertToDFSSubType(QByteArray subType)

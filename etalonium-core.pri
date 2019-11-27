@@ -35,7 +35,7 @@ SOURCES += \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/tx_pair.cpp \
-    $$PWD/sources/datastorage/profile.cpp \
+    $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/coin_service.cpp \
@@ -120,7 +120,8 @@ HEADERS += \
     $$PWD/headers/datastorage/genesis_block.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/tx_pair.h \
-    $$PWD/headers/datastorage/profile.h \
+    $$PWD/headers/profile/profile.h \
+    $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \
     $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/coin_service.h \

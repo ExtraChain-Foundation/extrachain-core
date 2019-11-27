@@ -16,7 +16,7 @@ namespace PathStruct {
 static const short rFolder = 0;
 static const short aId = 1;
 static const short section = 2;
-static const short name = 2;
+static const short name = 3;
 }
 
 namespace based_dfs_struct {

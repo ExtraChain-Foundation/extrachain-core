@@ -9,7 +9,8 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/contract.h"
 #include "network/socket_pair.h"
-#include "datastorage/profile.h"
+#include "profile/profile.h"
+#include "profile/quickprofile.h"
 #include "datastorage/searchfilters.h"
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
@@ -32,6 +33,7 @@ Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
 Q_DECLARE_METATYPE(Profile)
+Q_DECLARE_METATYPE(QuickProfile)
 Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
@@ -62,6 +64,7 @@ void registerMetaTypes()
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
     qRegisterMetaType<Profile>();
+    qRegisterMetaType<QuickProfile>();
     qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
