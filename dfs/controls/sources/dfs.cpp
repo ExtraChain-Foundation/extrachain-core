@@ -70,8 +70,10 @@ void Dfs::saveD(const QString &path, const based_dfs_struct::Type &type,
         sectionIndex++;
         createNewSection(sectionIndex, type);
         createNewElement(BigNumber("0"), sectionIndex, type);
-        elementIndex = BigNumber("0");
+        elementIndex = BigNumber("-1");
     }
+    elementIndex++;
+    createNewElement(elementIndex, sectionIndex, type);
     elementIndex = sectionIndex * 100 + elementIndex;
 
     QByteArray dfsPath = based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + dfsSubPath
