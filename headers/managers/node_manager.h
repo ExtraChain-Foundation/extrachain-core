@@ -145,7 +145,6 @@ private slots:
     void getAllActorsTimerCall();
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
-    void createNewActor(QByteArray hash, int accountStatus);
     void logOut();
 
     //    void makeContractFirstTransaction(Contract &contract);

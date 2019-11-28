@@ -498,6 +498,7 @@ void NodeManager::connectUi()
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), "wallet", id, false);
+        qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
     connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
@@ -521,6 +522,7 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
+        qDebug() << "222222222222";
     });
     connect(uiController, &UiController::getInfoFromPrProfile, [this](const QString &type) {
         emit loadInfoFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type);
@@ -600,7 +602,6 @@ void NodeManager::connectUi()
 void NodeManager::addNewWallet()
 {
     auto actor = accController->createActor(0);
-    accController->savePrivateActor(actor);
     auto wallets = uiWallet->getCurrentWallets();
     uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
     this->createWalletInUi();
@@ -675,21 +676,6 @@ int NodeManager::getClientList()
 AccountController *NodeManager::getAccController() const
 {
     return accController;
-}
-
-void NodeManager::createNewActor(QByteArray data, int accountStatus)
-{
-    if (data.isEmpty())
-    {
-        qDebug() << "slot NodeManagerLocal::createNewActor";
-        Actor<KeyPrivate> createdActor = accController->createActor(accountStatus);
-        qDebug() << "pk = " << createdActor.getKey()->getPrivateKey();
-        accController->savePrivateActor(createdActor);
-    }
-    if (!data.isEmpty())
-    {
-        this->dfs = new Dfs(actorIndex, accController);
-    }
 }
 
 void NodeManager::logOut()

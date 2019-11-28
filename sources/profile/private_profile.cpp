@@ -52,10 +52,11 @@ void PrivateProfile::editPrivateProfile(const QByteArray &hashLogin, const QByte
             set(map, type, _data);
         else
             add(map, type, _data);
-
+        data.clear();
         writeData(map, data);
         data = hashLogin + data;
-        data = crypt.DecryptBlowFish(data, hashLogin);
+        data = crypt.EncryptBlowFish(data, hashLogin);
+        file.resize(0);
         file.write(data);
     }
     else
@@ -132,7 +133,7 @@ void PrivateProfile::profile(const QByteArray &hash)
                 emit setHashProfile(secureLoginFile);
                 QMap<QString, QByteArray> map;
                 readData(map, data);
-                QList<QByteArray> idList = get(map, "wallet").split(' ');
+                QList<QByteArray> idList = get(map, "wallet").split('|');
                 emit setIdProfile(idList.first());
                 qDebug() << "Load private profile with id" << idList.first();
                 acContorller->loadActors(idList.first(), idList);
@@ -164,5 +165,30 @@ void PrivateProfile::set(QMap<QString, QByteArray> &map, const QString &value, c
 
 void PrivateProfile::add(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data)
 {
-    map[value] += " " + data;
+    if (!map[value].contains(data))
+        map[value] += "|" + data;
+}
+
+void PrivateProfile::writeData(QMap<QString, QByteArray> &map, QByteArray &out)
+{
+    QMap<QString, QByteArray>::iterator it = map.begin();
+    QByteArray res = "";
+    while (it != map.end())
+    {
+        res += Serialization::universalSerialize({ it.key().toUtf8(), it.value() });
+        it++;
+    }
+    out = res;
+}
+
+void PrivateProfile::readData(QMap<QString, QByteArray> &map, QByteArray &data)
+{
+    QByteArrayList res;
+    res = Serialization::universalDeserialize(data);
+    while (res.size() != 0)
+    {
+        map.insert(res.at(0), res.at(1));
+        res.removeFirst();
+        res.removeFirst();
+    }
 }

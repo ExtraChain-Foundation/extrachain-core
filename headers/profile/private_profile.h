@@ -43,20 +43,8 @@ private:
     void set(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data);
     void add(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data);
     void profile(const QByteArray &hash);
-
-    template <typename T>
-    void writeData(T &val, QByteArray &out)
-    {
-        QDataStream in(&out, QIODevice::WriteOnly);
-        in << val;
-    }
-
-    template <typename T>
-    void readData(T &val, QByteArray &data)
-    {
-        QDataStream out(&data, QIODevice::ReadOnly);
-        out >> val;
-    }
+    void writeData(QMap<QString, QByteArray> &map, QByteArray &out);
+    void readData(QMap<QString, QByteArray> &map, QByteArray &data);
 
     const QString PathProfile = "keystore/profile";
 };
