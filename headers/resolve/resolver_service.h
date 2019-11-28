@@ -39,7 +39,7 @@ class TransactionManager;
 class Dfs;
 class ChatManager;
 using namespace Resolver;
-static const int DFS_PWT = 1000;
+static const int DFS_PWT = 500;
 class ResolverService : public QObject
 {
     Q_OBJECT
@@ -202,6 +202,7 @@ private:
      * @return
      */
     bool registerTitle(const QString &tmpPath, DFSMessage::title_message title);
+    void cleanTask();
 public slots:
     /**
      * @brief process
@@ -214,7 +215,7 @@ signals:
     void activate();
     void dfsTitle(QByteArray hash, Network::DataStruct ds);
     void dfsFragment(QByteArray hash, Network::DataStruct ds);
-    void restartLoadChecker();
+    //    void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me

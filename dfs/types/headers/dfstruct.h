@@ -76,12 +76,12 @@ QString toString(SubType);
 enum Type
 {
     images = 0,
-    ivideo,
-    events,
+    video,
+    event,
     system,
-    chates,
-    postes,
-    servic,
+    chat,
+    post,
+    service,
     cdoctp,
     card
 };
@@ -98,13 +98,13 @@ Key convertToKey(QByteArray key);
 QByteArray toByteArray(Key);
 QString toString(Key);
 
-static const std::vector<Type> typesVec = { images, ivideo, events, system, chates, postes, servic };
+static const std::vector<Type> typesVec = { images, video, event, system, chat, post, service };
 static const std::vector<SubType> subTypesVec = { profil, avatar, ievent, ipost, portfolio };
 
 static std::unordered_map<Type, QString> typeCardFilesMap = {
-    { images, IMAGE_CARD_FILE_NAME },  { ivideo, VIDEO_CARD_FILE_NAME }, { events, EVENT_CARD_FILE_NAME },
-    { system, SYSTEM_CARD_FILE_NAME }, { chates, CHAT_CARD_FILE_NAME },  { postes, POST_CARD_FILE_NAME },
-    { servic, SERVICE_CARD_FILE_NAME }
+    { images, IMAGE_CARD_FILE_NAME },   { video, VIDEO_CARD_FILE_NAME }, { event, EVENT_CARD_FILE_NAME },
+    { system, SYSTEM_CARD_FILE_NAME },  { chat, CHAT_CARD_FILE_NAME },   { post, POST_CARD_FILE_NAME },
+    { service, SERVICE_CARD_FILE_NAME }
 };
 
 static std::unordered_map<Type, QString> cardFileConnections = {};

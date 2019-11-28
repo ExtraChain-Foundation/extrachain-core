@@ -46,13 +46,13 @@ SOURCES += \
     $$PWD/sources/network/packages/base_message_response.cpp \
     $$PWD/sources/network/packages/service/get_all_actor_message.cpp \
     $$PWD/sources/network/packages/service/list_connections.cpp \
-    $$PWD/sources/network/socket/socket_worker.cpp \
     $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
     $$PWD/sources/resolve/resolve_manager.cpp \
     $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
+    $$PWD/sources/utils/db_connector.cpp \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
@@ -132,7 +132,6 @@ HEADERS += \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/network/packages/base_message_response.h \
     $$PWD/headers/network/packages/service/get_all_actor_message.h \
-    $$PWD/headers/network/socket/socket_worker.h \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
@@ -140,6 +139,7 @@ HEADERS += \
     $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
+    $$PWD/headers/utils/db_connector.h \
     $$PWD/headers/utils/list_container.h \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \

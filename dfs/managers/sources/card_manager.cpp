@@ -65,14 +65,14 @@ based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QBy
     QList<QByteArray> list =
         Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
     if (list.isEmpty())
-        return based_dfs_struct::servic;
+        return based_dfs_struct::service;
     for (const QByteArray &el : list)
 
         if (path.toUtf8()
             == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(0))
             return based_dfs_struct::convertToDFType(
                 Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
-    return based_dfs_struct::servic;
+    return based_dfs_struct::service;
 }
 
 QStringList CardManager::getAll(based_dfs_struct::Type type)

@@ -64,67 +64,59 @@ based_dfs_struct::Type based_dfs_struct::convertToDFType(QByteArray type)
     if (type == "images")
         return Type::images;
     else if (type == "video")
-        return Type::ivideo;
+        return Type::video;
     else if (type == "events")
-        return Type::events;
+        return Type::event;
     else if (type == "system")
         return Type::system;
     else if (type == "chats")
-        return Type::chates;
+        return Type::chat;
     else if (type == "posts")
-        return postes;
+        return post;
     else if (type == "cards")
         return card;
     else if (type == "services")
-        return servic;
+        return service;
     else if (type == "cdoctp")
         return cdoctp;
-    return servic;
+    return service;
 }
 
 QByteArray based_dfs_struct::toByteArray(Type type)
 {
-    if (type == Type::images)
-        return "images";
-    else if (type == Type::ivideo)
-        return "video";
-    else if (type == Type::events)
-        return "events";
-    else if (type == Type::system)
-        return "system";
-    else if (type == Type::chates)
-        return "chats";
-    else if (type == postes)
-        return "posts";
-    else if (type == card)
-        return "cards";
-    else if (type == servic)
-        return "services";
-    else if (type == cdoctp)
-        return "cdoctp";
-    return "services";
+    QByteArray res;
+    switch (type)
+    {
+    case based_dfs_struct::Type::images:
+        res = "images";
+        break;
+    case based_dfs_struct::Type::video:
+        res = "video";
+        break;
+    case based_dfs_struct::Type::event:
+        res = "events";
+        break;
+    case based_dfs_struct::Type::system:
+        res = "system";
+        break;
+    case based_dfs_struct::Type::chat:
+        res = "chats";
+        break;
+    case based_dfs_struct::Type::post:
+        res = "posts";
+        break;
+    case based_dfs_struct::Type::service:
+        res = "services";
+        break;
+    default:
+        return "";
+    }
+    return res;
 }
 QString based_dfs_struct::toString(Type type)
 {
-    if (type == Type::images)
-        return "images";
-    else if (type == Type::ivideo)
-        return "video";
-    else if (type == Type::events)
-        return "events";
-    else if (type == Type::system)
-        return "system";
-    else if (type == Type::chates)
-        return "chats";
-    else if (type == postes)
-        return "posts";
-    else if (type == card)
-        return "cards";
-    else if (type == servic)
-        return "services";
-    else if (type == cdoctp)
-        return "cdoctp";
-    return "services";
+
+    return QString(based_dfs_struct::toByteArray(type));
 }
 //
 based_dfs_struct::SubType based_dfs_struct::convertToDFSSubType(QByteArray subType)

@@ -21,10 +21,10 @@ QString toString(page id);
 page convertToPage(const QByteArray &id);
 
 const QMap<page, based_dfs_struct::Type> pageConnections = {
-    { registation, based_dfs_struct::Type::servic },
-    { miniAva, based_dfs_struct::Type::servic },
-    { post, based_dfs_struct::Type::postes },
-    { event, based_dfs_struct::Type::events },
+    { registation, based_dfs_struct::Type::service },
+    { miniAva, based_dfs_struct::Type::service },
+    { post, based_dfs_struct::Type::post },
+    { event, based_dfs_struct::Type::event },
     { images, based_dfs_struct::Type::images }
 };
 }

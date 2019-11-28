@@ -76,6 +76,9 @@ public slots:
                       const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
                       const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW);
     void process();
+
+private:
+    void buildDfsPath(QByteArray userID, based_dfs_struct::Type type);
 };
 
 #endif // DFS_H
