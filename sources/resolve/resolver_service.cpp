@@ -71,7 +71,6 @@ ResolverService::~ResolverService()
 void ResolverService::finishWork()
 {
     active = false;
-    cleanTask();
     if (this->lifetime == Resolver::Lifetime::SHORT)
     {
         emit TaskFinished();
@@ -318,7 +317,7 @@ void ResolverService::resolveGeneralTask()
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         DFSMessage::DUMessage dfsMsg(message.getMsg_data());
         resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
-        emit TaskFinished();
+        finishWork();
         //        emit TaskFinished();
     }
     else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
@@ -544,21 +543,18 @@ void ResolverService::resolveDfsTask()
     using namespace Messages;
     // dfs message
     qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
-    if (msg != "")
-    {
-        DFSMessage::DUMessage dfsMsg(msg);
-        resolveDfsMessage(msg, dfsMsg.getType(), receiver);
-        //        emit TaskFinished();
-    }
+    DFSMessage::DUMessage dfsMsg(msg);
+    resolveDfsMessage(msg, dfsMsg.getType(), receiver);
+    //        emit TaskFinished();
     finishWork();
 }
 void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType, const SocketPair &receiver)
 {
     //    emit restartLoadChecker();
     qDebug() << "[dfs resolve message]";
-    //    Network::DataStruct ds;
-    //    ds.msg = data;
-    //    ds.receiver = receiver;
+    Network::DataStruct ds;
+    ds.msg = data;
+    ds.receiver = receiver;
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     // resolve msg
     if (msgType == DFSMessage::dfsMessageType::requestFragments)
@@ -568,7 +564,6 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     }
     else if (msgType == DFSMessage::dfsMessageType::titleMessage)
     {
-
         if (type == Resolver::Type::GENERAL)
         {
             qDebug() << "[title message:]";
@@ -579,9 +574,6 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
                 //                finishWork();
                 return;
             }
-            Network::DataStruct ds;
-            ds.msg = data;
-            ds.receiver = receiver;
             emit dfsTitle(mHash, ds);
             //            resolveManager->dfsTitleArrived(mHash, ds);
         }
@@ -615,13 +607,9 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     }
     else if (msgType == DFSMessage::dfsMessageType::fileDataMessage)
     {
-
         if (type == Resolver::Type::GENERAL)
         {
             DFSMessage::dfs_message message(data);
-            Network::DataStruct ds;
-            ds.msg = data;
-            ds.receiver = receiver;
             emit dfsFragment(message.dataHash, ds);
             //            resolveManager->dfsFragmentArrived(message.dataHash, ds);
         }
@@ -647,7 +635,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         //        emit closingMsg(message.title_hash, message.PckgAmoutR, receiver);
     }
     else
-        qDebug() << "[&DFSResolver] undifined message type";
+        qDebug() << "[&DFSResolver] undifine message type";
     //    finishWork();
 }
 
@@ -708,15 +696,6 @@ bool ResolverService::registerTitle(const QString &tmpPath, DFSMessage::title_me
     }
     else
         return false;
-}
-
-void ResolverService::cleanTask()
-{
-    msg = "";
-    hash = "";
-    receiver.id = "";
-    receiver.first = "";
-    receiver.second = 0;
 }
 
 // validation methods //

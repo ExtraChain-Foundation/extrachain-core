@@ -98,12 +98,12 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     //        msg.calcDigSig(accounts->getCurrentActor());
 
     QByteArray message = msg.serialize();
-    //    if (checkMsgCount(message, handler, socketsList))
-    //    {
-    std::for_each(socketsList.begin(), socketsList.end(),
-                  [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
-    //        qDebug() << "emit sendM from DFSNetManager";
-    //    }
+    if (checkMsgCount(message, handler, socketsList))
+    {
+        std::for_each(socketsList.begin(), socketsList.end(),
+                      [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
+        //        qDebug() << "emit sendM from DFSNetManager";
+    }
 }
 
 void DFSNetManager::process()
