@@ -22,7 +22,7 @@ void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray
     data = hash + data;
     blowFish_crypt crypt;
     data = crypt.EncryptBlowFish(data, hash);
-    QFile file(PathProfile + id + ".private");
+    QFile file(PathProfile + "/" + id + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
     file.flush();
@@ -33,7 +33,7 @@ void PrivateProfile::editPrivateProfile(const QByteArray &hashLogin, const QByte
                                         const QString &type, const QByteArray &_data, const bool &reWrite)
 {
     QDir().mkdir(PathProfile);
-    QFile file(PathProfile + idProfile + ".private");
+    QFile file(PathProfile + "/" + idProfile + ".private");
     if (!file.exists())
     {
         qDebug() << "Don`t have private profile";
@@ -67,7 +67,7 @@ void PrivateProfile::editPrivateProfile(const QByteArray &hashLogin, const QByte
 void PrivateProfile::loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile,
                                                 const QString &type)
 {
-    QFile file(PathProfile + idProfile + ".private");
+    QFile file(PathProfile + "/" + idProfile + ".private");
     file.open(QIODevice::ReadOnly);
     QByteArray data = file.readAll();
     file.flush();
@@ -118,7 +118,7 @@ void PrivateProfile::profile(const QByteArray &hash)
     {
         for (QString &fileName : users)
         {
-            QFile file(PathProfile + fileName);
+            QFile file(PathProfile + "/" + fileName);
             file.open(QIODevice::ReadOnly);
             QByteArray data = file.readAll();
             file.flush();
