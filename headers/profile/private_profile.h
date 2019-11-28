@@ -20,8 +20,8 @@ private:
 public slots:
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void loadPrivateProfile(const QByteArray &login, const QByteArray &password);
-    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile, const QByteArray &data,
-                            const QString &type, const bool &reWrite);
+    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile, const QString &type,
+                            const QByteArray &_data, const bool &reWrite);
     void loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void loadProfileForAutoLogin(const QByteArray &hash);
     void process();
@@ -34,7 +34,7 @@ signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
     void initActorChatM();
-    void infoToUi(QByteArray info, QString type);
+    void infoToUi(const QByteArray &info, const QString &type);
 
     void finished();
 

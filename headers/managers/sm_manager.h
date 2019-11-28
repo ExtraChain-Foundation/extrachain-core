@@ -41,7 +41,8 @@ signals:
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(const QByteArray &data, const QByteArray &type);
     //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
-    void saveActorInPrivateProfile(QByteArray id, QString type = "wallet", bool rewrite = false);
+    void saveActorInPrivateProfile(const QByteArray &id, const QString &type = "wallet",
+                                   const bool &rewrite = false);
     void finished();
 };
 

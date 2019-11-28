@@ -30,7 +30,7 @@ void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray
 }
 
 void PrivateProfile::editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile,
-                                        const QByteArray &_data, const QString &type, const bool &reWrite)
+                                        const QString &type, const QByteArray &_data, const bool &reWrite)
 {
     QDir().mkdir(PathProfile);
     QFile file(PathProfile + idProfile + ".private");

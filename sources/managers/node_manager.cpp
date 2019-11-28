@@ -119,7 +119,7 @@ void NodeManager::connectSmContractManager()
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
-            [this](QByteArray id, QString type, bool rewrite) {
+            [this](const QByteArray &id, const QString &type, const bool &rewrite) {
                 emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type, id,
                                         rewrite);
             });
