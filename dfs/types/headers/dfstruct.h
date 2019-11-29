@@ -27,18 +27,8 @@ static const QString USER_KEYS_DIR = "data/user/key";
 static const QString STORED_FILE_NAME = ".stored";
 static const QString CLON_SIGN = ".clone";
 static const QString MINI_IMAGES = "/mini";
-// cards file ;
-static const QString ROOT_CARD_FILE_NAME = "data/card_file.root";
-static const QString POST_CARD_FILE_NAME = "/card_file.post";
-static const QString EVENT_CARD_FILE_NAME = "/card_file.event";
-static const QString CHAT_CARD_FILE_NAME = "/card_file.chat";
-static const QString IMAGE_CARD_FILE_NAME = "/card_file.image";
-static const QString VIDEO_CARD_FILE_NAME = "/card_file.video";
-static const QString SERVICE_CARD_FILE_NAME = "/card_file.service";
-static const QString SYSTEM_CARD_FILE_NAME = "/card_file.system";
-// temp files
 static const QString FILE_IDENTIFICATOR = ".tmp";
-static const QString ACTOR_CARD_FILE = ".root";
+static const QString ACTOR_CARD_FILE = "root";
 
 enum State
 {
@@ -62,12 +52,13 @@ QString toString(Status);
 
 enum SubType
 {
-    profil = 0,
-    avatar,
-    ievent,
-    ipost,
-    mini,
-    portfolio
+    undef = 0,
+    profile = 1,
+    avatar = 2,
+    subevent = 3,
+    subpost = 4,
+    mini = 5,
+    portfolio = 6
 };
 SubType convertToDFSSubType(QByteArray);
 QByteArray toByteArray(SubType);
@@ -99,21 +90,11 @@ QByteArray toByteArray(Key);
 QString toString(Key);
 
 static const std::vector<Type> typesVec = { images, video, event, system, chat, post, service };
-static const std::vector<SubType> subTypesVec = { profil, avatar, ievent, ipost, portfolio };
-
-static std::unordered_map<Type, QString> typeCardFilesMap = {
-    { images, IMAGE_CARD_FILE_NAME },   { video, VIDEO_CARD_FILE_NAME }, { event, EVENT_CARD_FILE_NAME },
-    { system, SYSTEM_CARD_FILE_NAME },  { chat, CHAT_CARD_FILE_NAME },   { post, POST_CARD_FILE_NAME },
-    { service, SERVICE_CARD_FILE_NAME }
-};
 
 static std::unordered_map<Type, QString> cardFileConnections = {};
 
 static std::unordered_map<QFile *, bool> fileStatus = {};
 
-class DfStruct
-{
-};
 }
 namespace DFS_ERRORS {
 

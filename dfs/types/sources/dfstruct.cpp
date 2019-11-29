@@ -121,49 +121,49 @@ QString dfsStruct::toString(Type type)
 //
 dfsStruct::SubType dfsStruct::convertToDFSSubType(QByteArray subType)
 {
-    if (subType == "profil")
-        return profil;
+    if (subType == "profile")
+        return profile;
     else if (subType == "avatar")
         return avatar;
-    else if (subType == "ipost")
-        return ipost;
+    else if (subType == "subpost")
+        return subpost;
     else if (subType == "mini")
         return mini;
     else if (subType == "portfolio")
         return portfolio;
     else
-        return ievent;
+        return subevent;
 }
 
 QByteArray dfsStruct::toByteArray(SubType subType)
 {
-    if (subType == profil)
-        return "profil";
+    if (subType == profile)
+        return "profile";
     else if (subType == avatar)
         return "avatar";
-    else if (subType == ipost)
-        return "ipost";
+    else if (subType == subpost)
+        return "subpost";
     else if (subType == mini)
         return "mini";
     else if (subType == portfolio)
         return "portfolio";
     else
-        return "ievent";
+        return "subevent";
 }
 QString dfsStruct::toString(SubType subType)
 {
-    if (subType == profil)
-        return "profil";
+    if (subType == profile)
+        return "profile";
     else if (subType == avatar)
         return "avatar";
-    else if (subType == ipost)
-        return "ipost";
+    else if (subType == subpost)
+        return "subpost";
     else if (subType == mini)
         return "mini";
     else if (subType == portfolio)
         return "portfolio";
     else
-        return "ievent";
+        return "subevent";
 }
 dfsStruct::Key dfsStruct::convertToKey(QByteArray key)
 {

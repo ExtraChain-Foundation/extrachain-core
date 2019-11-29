@@ -39,7 +39,7 @@ void Dfs::initDFS(const QByteArray &userId)
     for (int i = 0; i <= dfsStruct::Type::card; i++)
     {
         DBRow row;
-        row.insert(std::to_string(i), std::to_string(0));
+        row.insert({ std::to_string(i), std::to_string(0) });
         dbc.insert(Config::DataStorage::lsTableName, row);
     }
     dbc.close();
@@ -57,7 +57,6 @@ void Dfs::saveToDFS(const QString &path, const dfsStruct::Type &type, const dfsS
     QFile file(path);
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray dfsPath = buildDfsPath(userId, type);
-    //
     appendToCard(dfsPath, userId, type, subType);
     if (!file.copy(dfsPath))
     {
@@ -66,7 +65,7 @@ void Dfs::saveToDFS(const QString &path, const dfsStruct::Type &type, const dfsS
     }
     sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
-    // emit usersChanges(dfsPath, type, userId); // TODO
+    emit usersChanges(dfsPath, type, userId); // TODO
 #endif
 }
 
@@ -76,11 +75,11 @@ void Dfs::appendToCard(const QString &path, const QByteArray &userId, const dfsS
     DBConnector dbc(
         (dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE).toStdString());
     DBRow row;
-    row.insert(std::string("path"), path.toStdString());
-    row.insert(std::string("date"), std::to_string(QDateTime::currentDateTime().toSecsSinceEpoch()));
-    row.insert(std::string("type"), std::to_string(type));
-    row.insert(std::string("subtype"), std::to_string(subType));
-    row.insert(std::string("hash"), std::string(""));
+    row.insert({ "path", path.toStdString() });
+    row.insert({ "date", std::to_string(QDateTime::currentDateTime().toSecsSinceEpoch()) });
+    row.insert({ "type", std::to_string(type) });
+    row.insert({ "subtype", std::to_string(subType) });
+    row.insert({ "hash", "" });
     dbc.insert(Config::DataStorage::cardTableName, row);
 }
 
@@ -225,8 +224,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
 
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
-    appendToCard(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),
-                 dfsStruct::toByteArray(type));
+    appendToCard(path, pathList.at(PathStruct::aId), type);
     QByteArray prevFile = pathList.at(PathStruct::name);
     BigNumber prFB = BigNumber(prevFile);
     prFB--;

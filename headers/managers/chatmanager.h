@@ -90,7 +90,7 @@ signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(
         const QString &path, const dfsStruct::Type &type,
-        const dfsStruct::SubType &subType = dfsStruct::SubType::ipost,
+        const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
         const dfsStruct::Status &status = dfsStruct::Status::NEW); //----- connet with dfs
 
     void chatListSend(QList<UIChat> chats);
