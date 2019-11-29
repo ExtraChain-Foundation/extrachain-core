@@ -4,75 +4,122 @@
 
 QStringList CardManager::getFilesByType(const QString &userId, dfsStruct::Type type)
 {
-    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
-    if (!card.exists())
-        return {};
-    card.open(QIODevice::ReadOnly);
-    QList<QByteArray> list =
-        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
-        return QStringList();
-    QStringList result;
-    for (const QByteArray &el : list)
+    QString path(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
+    DBConnector dbConnect;
+    QStringList listData;
+    if (!dbConnect.open(path.toStdString() + DBNAME))
     {
-        QByteArray dType =
-            Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
-        if (dfsStruct::toByteArray(type) == dType)
-            result << dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + dType + "/"
-                    + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+        qDebug() << "[Error][Card_Manager][getFilesByType] seva ne lomay bazy dannnuzx";
+        return QStringList();
     }
-    return result;
+    QByteArray query = "SELECT path FROM ITEMS WHERE type=" + QByteArray::number(type) + ';';
+
+    std::vector<DBRow> data = dbConnect.select(query.toStdString());
+    for (DBRow &temp : data)
+        listData.append(path + QString::fromStdString(temp["path"]).toLocal8Bit());
+
+    return listData;
+    //    card.open(QIODevice::ReadOnly);
+    //    QList<QByteArray> list =
+    //        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+
+    //    QStringList result;
+    //    for (const QByteArray &el : list)
+    //    {
+    //        QByteArray dType =
+    //            Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
+    //        if (dfsStruct::toByteArray(type) == dType)
+    //            result << dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + dType + "/"
+    //                    + Serialization::deserialize(el,
+    //                    Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    //    }
 }
 
 QByteArray CardManager::getLastFileName(const QString &userId)
 {
-    QFile file(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
-    if (!file.exists())
-        return "";
-    file.open(QIODevice::ReadOnly);
+    //    QFile file(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
+    //    if (!file.exists())
+    //        return "";
+    //    file.open(QIODevice::ReadOnly);
 
-    QList<QByteArray> list =
-        Serialization::deserialize(file.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
-        return "0";
-    return Serialization::deserialize(list.takeLast(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    //    QList<QByteArray> list =
+    //        Serialization::deserialize(file.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    //    if (list.isEmpty())
+    //        return "0";
+    //    return Serialization::deserialize(list.takeLast(),
+    //    Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    QByteArray path(dfsStruct::ROOT_FOOLDER_NAME.toLocal8Bit() + '/' + userId.toLocal8Bit() + '/');
+    DBConnector dbConnect;
+    if (!dbConnect.open(path.toStdString() + DBNAME))
+    {
+        qDebug() << "[Error][Card_Manager][getLastFileName] seva ne lomay bazy dannnuzx";
+        return QByteArray();
+    }
+    QByteArray query = "SELECT LAST(path) FROM ITEMS;";
+    return path + QString::fromStdString(dbConnect.select(query.toStdString())[0]["path"]).toLocal8Bit();
 }
 
 QStringList CardManager::getAllFiles(const QByteArray &userId)
 {
-    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
-    if (!card.exists())
-        return {};
-    card.open(QIODevice::ReadOnly);
-    QList<QByteArray> list =
-        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
+    //    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
+    //    if (!card.exists())
+    //        return {};
+    //    card.open(QIODevice::ReadOnly);
+    //    QList<QByteArray> list =
+    //        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    //    if (list.isEmpty())
+    //        return QStringList();
+
+    //    for (const QByteArray &el : list)
+
+    //        result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    QString path(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
+    DBConnector dbConnect;
+    QStringList listData;
+    if (!dbConnect.open(path.toStdString() + DBNAME))
+    {
+        qDebug() << "[Error][Card_Manager][getAllFiles] seva ne lomay bazy dannnuzx";
         return QStringList();
-    QStringList result;
-    for (const QByteArray &el : list)
+    }
+    QByteArray query = "SELECT path FROM ITEMS";
 
-        result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    std::vector<DBRow> data = dbConnect.select(query.toStdString());
+    for (DBRow &temp : data)
+        listData.append(QString::fromStdString(temp["path"]).toLocal8Bit());
 
-    return result;
+    return listData;
 }
 
 dfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
 {
-    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
-    if (!card.exists())
-        return {};
-    card.open(QIODevice::ReadOnly);
-    QList<QByteArray> list =
-        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
-        return dfsStruct::service;
-    for (const QByteArray &el : list)
+    //    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
+    //    if (!card.exists())
+    //        return {};
+    //    card.open(QIODevice::ReadOnly);
+    //    QList<QByteArray> list = женя подлива
+    //        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    //    if (list.isEmpty())
+    //        return dfsStruct::service;
+    //    for (const QByteArray &el : list)
 
-        if (path.toUtf8()
-            == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(0))
-            return dfsStruct::convertToDFType(
-                Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
-    return dfsStruct::service;
+    //        if (path.toUtf8()
+    //            == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(0))
+    //            return dfsStruct::convertToDFType(
+    //                Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
+    QString pathLocal(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
+    DBConnector dbConnect;
+    QStringList listData;
+    if (!dbConnect.open(pathLocal.toStdString() + DBNAME))
+    {
+        qDebug() << "[Error][Card_Manager][getTypeByName] dimka nividimka";
+        return dfsStruct::service;
+    }
+    QByteArray query = "SELECT type FROM ITEMS WHERE path=" + path.toUtf8() + ';';
+
+    std::vector<DBRow> data = dbConnect.select(query.toStdString());
+    QString x = QString::fromStdString(data[0]["type"]);
+
+    return dfsStruct::convertToDFType(x.toLocal8Bit());
 }
 
 QStringList CardManager::getAll(dfsStruct::Type type)
@@ -110,4 +157,8 @@ QStringList CardManager::buildPathForFiles(const QString &userId, const QStringL
     }
 
     return result;
+}
+
+CardManager::CardManager()
+{
 }

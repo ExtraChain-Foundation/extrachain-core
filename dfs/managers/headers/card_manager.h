@@ -3,9 +3,11 @@
 
 #include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
-
+#include "headers/utils/db_connector.h"
+#define DBNAME ".root"
 class CardManager
 {
+
 public:
     static QStringList getAll(dfsStruct::Type type);
     static QStringList getFilesByType(const QString &userId, dfsStruct::Type type);
@@ -19,7 +21,7 @@ public:
                                          dfsStruct::Type type, bool localFormat);
 
 private:
-    CardManager() = default;
+    CardManager();
 };
 
 #endif // CARD_MANAGER_H
