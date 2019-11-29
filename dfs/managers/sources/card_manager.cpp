@@ -7,7 +7,7 @@ QStringList CardManager::getFilesByType(const QString &userId, dfsStruct::Type t
     QString path(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
     DBConnector dbConnect;
     QStringList listData;
-    if (!dbConnect.open(path.toStdString() + DBNAME))
+    if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
         qDebug() << "[Error][Card_Manager][getFilesByType] seva ne lomay bazy dannnuzx";
         return QStringList();
@@ -50,7 +50,7 @@ QByteArray CardManager::getLastFileName(const QString &userId)
     //    Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
     QByteArray path(dfsStruct::ROOT_FOOLDER_NAME.toLocal8Bit() + '/' + userId.toLocal8Bit() + '/');
     DBConnector dbConnect;
-    if (!dbConnect.open(path.toStdString() + DBNAME))
+    if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
         qDebug() << "[Error][Card_Manager][getLastFileName] seva ne lomay bazy dannnuzx";
         return QByteArray();
@@ -76,7 +76,7 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     QString path(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
     DBConnector dbConnect;
     QStringList listData;
-    if (!dbConnect.open(path.toStdString() + DBNAME))
+    if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
         qDebug() << "[Error][Card_Manager][getAllFiles] seva ne lomay bazy dannnuzx";
         return QStringList();
@@ -96,7 +96,7 @@ dfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray
     //    if (!card.exists())
     //        return {};
     //    card.open(QIODevice::ReadOnly);
-    //    QList<QByteArray> list = женя подлива
+    //    QList<QByteArray> list =
     //        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
     //    if (list.isEmpty())
     //        return dfsStruct::service;
@@ -109,7 +109,7 @@ dfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray
     QString pathLocal(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
     DBConnector dbConnect;
     QStringList listData;
-    if (!dbConnect.open(pathLocal.toStdString() + DBNAME))
+    if (!dbConnect.open(pathLocal.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
         qDebug() << "[Error][Card_Manager][getTypeByName] dimka nividimka";
         return dfsStruct::service;

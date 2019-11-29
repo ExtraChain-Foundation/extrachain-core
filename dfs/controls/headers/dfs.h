@@ -41,10 +41,6 @@ private:
     QStringList returnDifs(const QString &adin, const QString &dva);
     void getDFSStatus();
     void signalConnection();
-    void createNewSection(BigNumber sectionIndex, dfsStruct::Type sectionType);
-    void createNewElement(BigNumber elementIndex, BigNumber sectionIndex, dfsStruct::Type sectionType);
-    BigNumber getActualSection(dfsStruct::Type type);
-    BigNumber getActualElementInSection(BigNumber sectiondIndex, dfsStruct::Type sectionType);
 public slots:
 
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
