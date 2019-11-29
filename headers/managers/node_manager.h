@@ -133,10 +133,10 @@ signals:
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
-                            typeDataPrProfile type);
-    void loadInterFromPrProfile(QByteArray hash, QByteArray idProfile);
-    void savePrivateProfile(QByteArray hash, QByteArray id);
+    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile, const QString &type,
+                            const QByteArray &data, const bool &rewrite);
+    void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
+    void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void getAllActorsNode(QByteArray id, bool acc);
     void loadProfileForConsoleLogin(QByteArray);
 
@@ -145,7 +145,6 @@ private slots:
     void getAllActorsTimerCall();
     void setIdPrivateProfile(QByteArray id);
     void setHashLoginPrivateProfile(QByteArray hash);
-    void createNewActor(QByteArray hash, int accountStatus);
     void logOut();
 
     //    void makeContractFirstTransaction(Contract &contract);

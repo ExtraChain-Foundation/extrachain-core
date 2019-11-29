@@ -18,12 +18,12 @@ private:
     AccountController *acContorller;
     Dfs *dfs;
 public slots:
-    void savePrivateProfile(QByteArray hash, QByteArray id);
-    void loadPrivateProfile(QByteArray login, QByteArray password);
-    void editPrivateProfile(QByteArray hashLogin, QByteArray idProfile, QByteArray data,
-                            typeDataPrProfile type);
-    void loadInterestsFromPrivateProfile(QByteArray hash, QByteArray idProfile);
-    void loadProfileForAutoLogin(QByteArray hash);
+    void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
+    void loadPrivateProfile(const QByteArray &login, const QByteArray &password);
+    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile, const QString &type,
+                            const QByteArray &_data, const bool &reWrite);
+    void loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
+    void loadProfileForAutoLogin(const QByteArray &hash);
     void process();
 
 public:
@@ -34,12 +34,19 @@ signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
     void initActorChatM();
-    void interestsToUi(QByteArray interes);
+    void infoToUi(const QByteArray &info, const QString &type);
 
     void finished();
 
 private:
-    void profile(QByteArray hash);
+    QByteArray get(QMap<QString, QByteArray> &map, const QString &value);
+    void set(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data);
+    void add(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data);
+    void profile(const QByteArray &hash);
+    void writeData(QMap<QString, QByteArray> &map, QByteArray &out);
+    void readData(QMap<QString, QByteArray> &map, QByteArray &data);
+
+    const QString PathProfile = "keystore/profile";
 };
 
 #endif // PRIVATE_PROFILE_H
