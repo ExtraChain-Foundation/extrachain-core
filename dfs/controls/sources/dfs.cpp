@@ -35,6 +35,13 @@ void Dfs::initDFS(const QByteArray &userId)
     DBConnector dbc(
         (dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + dfsStruct::ACTOR_CARD_FILE).toStdString());
     dbc.createTable(Config::DataStorage::cardTable);
+    dbc.createTable(Config::DataStorage::lastSectionTable);
+    for (int i = 0; i <= dfsStruct::Type::card; i++)
+    {
+        DBRow row;
+        row.insert(std::to_string(i), std::to_string(0));
+        dbc.insert(Config::DataStorage::lsTableName, row);
+    }
     dbc.close();
     for (QByteArray currentPath : subPathList)
         QDir().mkpath(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
@@ -47,69 +54,34 @@ void Dfs::initDFS(const QByteArray &userId)
 void Dfs::saveToDFS(const QString &path, const dfsStruct::Type &type, const dfsStruct::SubType &subType,
                     const dfsStruct::Status &status)
 {
-//    QFile file(path);
-//    //    file.open(QIODevice::ReadOnly);
-//    //    QByteArray data = file.readAll();
-//    //    file.close();
-//    //    file.copy();
-//    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
-//    //    QByteArray name = setName(userId);
-//    BigNumber sectionIndex = getActualSection(type);
-//    BigNumber elementIndex = getActualElementInSection(sectionIndex, type);
-//    if (elementIndex >= BigNumber("99"))
-//    {
-//        sectionIndex++;
-//        createNewSection(sectionIndex, type);
-//        createNewElement(BigNumber("0"), sectionIndex, type);
-//        elementIndex = BigNumber("-1");
-//    }
-//    elementIndex++;
-//    createNewElement(elementIndex, sectionIndex, type);
-//    elementIndex = sectionIndex * 100 + elementIndex;
-
-//    QByteArray dfsPath = based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + userId + dfsSubPath
-//        + sectionIndex.toByteArray() + '/' + elementIndex.toByteArray();
-//    appendC(dfsPath, userId, name, based_dfs_struct::toByteArray(type));
-//    QFile dfsFile(dfsPath);
-//    dfsFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
-//    dfsFile.write(data);
-//    dfsFile.flush();
-//    dfsFile.close();
-//    //    emit sendQ(dfsPath, type, SocketPair());
-//    sender->sendFile(dfsPath, type, SocketPair());
+    QFile file(path);
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
+    QByteArray dfsPath = buildDfsPath(userId, type);
+    //
+    appendToCard(dfsPath, userId, type, subType);
+    if (!file.copy(dfsPath))
+    {
+        QFile::remove(dfsPath);
+        file.copy(dfsPath);
+    }
+    sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     // emit usersChanges(dfsPath, type, userId); // TODO
 #endif
 }
 
-void Dfs::appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
-                  const QByteArray &type)
+void Dfs::appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
+                       const dfsStruct::SubType &subType)
 {
-    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
-    card.open(QIODevice::WriteOnly | QIODevice::Append);
-    QByteArray strToWrite = Serialization::serialize({ path.toUtf8(), userId, name, type },
-                                                     Serialization::DFS_CARD_FILE_SECTION_DELIMETR);
-    strToWrite.append(Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    card.write(strToWrite);
-    card.close();
-}
-
-QByteArray Dfs::setName(const QByteArray &userId)
-{
-    QFile file(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
-    if (file.open(QIODevice::ReadOnly))
-    {
-        QList<QByteArray> list =
-            Serialization::deserialize(file.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-        file.close();
-        if (list.isEmpty())
-            return "1";
-        BigNumber r(
-            Serialization::deserialize(list.takeLast(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2));
-        return r++.toByteArray();
-    }
-    else
-        return "1";
+    DBConnector dbc(
+        (dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE).toStdString());
+    DBRow row;
+    row.insert(std::string("path"), path.toStdString());
+    row.insert(std::string("date"), std::to_string(QDateTime::currentDateTime().toSecsSinceEpoch()));
+    row.insert(std::string("type"), std::to_string(type));
+    row.insert(std::string("subtype"), std::to_string(subType));
+    row.insert(std::string("hash"), std::string(""));
+    dbc.insert(Config::DataStorage::cardTableName, row);
 }
 
 QStringList Dfs::returnDifs(const QString &adin, const QString &dva)
@@ -253,7 +225,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
 
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
-    appendC(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name), dfsStruct::toByteArray(type));
+    appendToCard(path, pathList.at(PathStruct::aId), pathList.at(PathStruct::name),
+                 dfsStruct::toByteArray(type));
     QByteArray prevFile = pathList.at(PathStruct::name);
     BigNumber prFB = BigNumber(prevFile);
     prFB--;
@@ -418,14 +391,49 @@ void Dfs::process()
 {
 }
 
-void Dfs::buildDfsPath(QByteArray userID, dfsStruct::Type type)
+QByteArray Dfs::buildDfsPath(QByteArray userID, dfsStruct::Type type)
 {
-    QByteArray dfsPath = "data/" + userID + "/" + dfsStruct::toByteArray(type) + "/";
+    QByteArray sType = dfsStruct::toByteArray(type);
+    QByteArray dfsPath = "data/" + userID + "/" + sType + "/";
     BigNumber ss = BigNumber(Config::DataStorage::SECTION_SIZE);
-    dfsPath.append("0/");
+    DBConnector dfsCard(("data/" + userID + dfsStruct::ACTOR_CARD_FILE).toStdString());
+    std::vector<DBRow> res = dfsCard.select(
+        ("SELECT last_section FROM Section WHERE type='" + QByteArray::number(type) + "';").toStdString());
+    if (!res.empty())
+    {
+        BigNumber lsmax(QByteArray::fromStdString(res[0]["last_section"]));
+        if (ss - lsmax <= 0)
+        {
+            lsmax++;
+            bool updres = dfsCard.update(("UPDATE Section SET last_section='" + lsmax.toByteArray()
+                                          + "' WHERE type=" + QByteArray::number(type) + ";")
+                                             .toStdString());
+            if (!updres)
+            {
+                qDebug() << "path creation in UPDATE section failed";
+                return QByteArray();
+            }
+            else
+            {
+                dfsPath.append(lsmax.toByteArray());
+                QDir dir;
+                dir.mkpath(dfsPath);
+            }
+        }
+        else
+        {
+            dfsPath.append(lsmax.toByteArray());
+        }
+    }
+    else
+    {
+        qDebug() << "DB Section corrupted";
+        return QByteArray();
+    }
     QDir dir(dfsPath);
-    //    dir.entryList(QDir:: | QDir::NoDotAndDotDot).last();
-    //    (dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot).size());
+    //        dir.entryList(QDir:: | QDir::NoDotAndDotDot).last();
+    QByteArray n = QByteArray::number(dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot).size(), 16);
+    return dfsPath + "/" + n;
 }
 
 void Dfs::init()

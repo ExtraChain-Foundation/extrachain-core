@@ -76,14 +76,14 @@ QString toString(SubType);
 enum Type
 {
     images = 0,
-    video,
-    event,
-    system,
-    chat,
-    post,
-    service,
-    cdoctp,
-    card
+    video = 1,
+    event = 2,
+    system = 3,
+    chat = 4,
+    post = 5,
+    service = 6,
+    cdoctp = 7,
+    card = 8
 };
 Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);

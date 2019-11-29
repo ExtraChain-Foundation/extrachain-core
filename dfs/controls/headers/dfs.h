@@ -36,9 +36,8 @@ private:
     void saveToDFS(const QString &path, const dfsStruct::Type &type = dfsStruct::Type::images,
                    const dfsStruct::SubType &subType = dfsStruct::SubType::ipost,
                    const dfsStruct::Status &status = dfsStruct::Status::NEW);
-    void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
-                 const QByteArray &type);
-    QByteArray setName(const QByteArray &userId);
+    void appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
+                      const dfsStruct::SubType &subType);
     QStringList returnDifs(const QString &adin, const QString &dva);
     void getDFSStatus();
     void signalConnection();
@@ -81,7 +80,7 @@ public slots:
     void process();
 
 private:
-    void buildDfsPath(QByteArray userID, dfsStruct::Type type);
+    QByteArray buildDfsPath(QByteArray userID, dfsStruct::Type type);
 };
 
 #endif // DFS_H

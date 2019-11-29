@@ -124,12 +124,19 @@ namespace DataStorage {
     static const std::string userCardTable = "CREATE TABLE UserCards ("
                                              "uid  TEXT PRIMARY KEY NOT NULL, "
                                              "path TEXT             NOT NULL );";
-    static const std::string cardTable = "CREATE TABLE ITEMS ("
-                                         "path    TEXT PRIMARY KEY NOT NULL, "
-                                         "date    INT              NOT NULL, "
-                                         "type    INT              NOT NULL, "
-                                         "subtype INT                      , "
-                                         "hash    BLOB             NOT NULL);";
+    static const std::string cardTableName = "Items";
+    static const std::string cardTable = "CREATE TABLE" + cardTableName
+        + " ("
+          "path    TEXT PRIMARY KEY NOT NULL, "
+          "date    INT              NOT NULL, "
+          "type    INT              NOT NULL, "
+          "subtype INT                      , "
+          "hash    BLOB             NOT NULL);";
+    static const std::string lsTableName = "Section";
+    static const std::string lastSectionTable = "CREATE TABLE " + lsTableName
+        + " ("
+          "type         INT  PRIMARY KEY NOT NULL, "
+          "last_section TEXT             NOT NULL );";
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
