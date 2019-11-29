@@ -30,7 +30,7 @@ public:
     bool deleteRow(std::string query);
     bool deleteTable(std::string name);
 
-private:
+public:
     bool query(std::string query);
 
 public:

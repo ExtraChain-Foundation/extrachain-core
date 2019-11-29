@@ -101,7 +101,7 @@ void ResolverService::checkStatus()
     }
     if (emptyFrags.isEmpty())
     {
-        dfs->saveFN(file.fileName(), title.filePath, based_dfs_struct::convertToDFType(title.f_type));
+        dfs->saveFN(file.fileName(), title.filePath, dfsStruct::convertToDFType(title.f_type));
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
         file.close();
@@ -588,7 +588,7 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         else if (type == Resolver::Type::DFS)
         {
             DFSMessage::title_message message(data);
-            QString path = message.filePath + based_dfs_struct::FILE_IDENTIFICATOR;
+            QString path = message.filePath + dfsStruct::FILE_IDENTIFICATOR;
             if (!registerTitle(path, message))
             {
                 qDebug() << "Title was not registered";
@@ -665,7 +665,7 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
 
         if (!actor.isEmpty())
         {
-            if (QDir(based_dfs_struct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
+            if (QDir(dfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {

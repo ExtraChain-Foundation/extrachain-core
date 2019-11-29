@@ -121,7 +121,15 @@ const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{
 const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
-
+    static const std::string userCardTable = "CREATE TABLE UserCards ("
+                                             "uid  TEXT PRIMARY KEY NOT NULL, "
+                                             "path TEXT             NOT NULL );";
+    static const std::string cardTable = "CREATE TABLE ITEMS ("
+                                         "path    TEXT PRIMARY KEY NOT NULL, "
+                                         "date    INT              NOT NULL, "
+                                         "type    INT              NOT NULL, "
+                                         "subtype INT                      , "
+                                         "hash    BLOB             NOT NULL);";
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

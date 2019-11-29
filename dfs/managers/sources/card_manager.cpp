@@ -2,9 +2,9 @@
 
 #include <QUrl>
 
-QStringList CardManager::getFilesByType(const QString &userId, based_dfs_struct::Type type)
+QStringList CardManager::getFilesByType(const QString &userId, dfsStruct::Type type)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
     if (!card.exists())
         return {};
     card.open(QIODevice::ReadOnly);
@@ -17,8 +17,8 @@ QStringList CardManager::getFilesByType(const QString &userId, based_dfs_struct:
     {
         QByteArray dType =
             Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
-        if (based_dfs_struct::toByteArray(type) == dType)
-            result << based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/" + dType + "/"
+        if (dfsStruct::toByteArray(type) == dType)
+            result << dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + dType + "/"
                     + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
     }
     return result;
@@ -26,7 +26,7 @@ QStringList CardManager::getFilesByType(const QString &userId, based_dfs_struct:
 
 QByteArray CardManager::getLastFileName(const QString &userId)
 {
-    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    QFile file(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
     if (!file.exists())
         return "";
     file.open(QIODevice::ReadOnly);
@@ -40,7 +40,7 @@ QByteArray CardManager::getLastFileName(const QString &userId)
 
 QStringList CardManager::getAllFiles(const QByteArray &userId)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
     if (!card.exists())
         return {};
     card.open(QIODevice::ReadOnly);
@@ -56,31 +56,31 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     return result;
 }
 
-based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
+dfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
+    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
     if (!card.exists())
         return {};
     card.open(QIODevice::ReadOnly);
     QList<QByteArray> list =
         Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
     if (list.isEmpty())
-        return based_dfs_struct::service;
+        return dfsStruct::service;
     for (const QByteArray &el : list)
 
         if (path.toUtf8()
             == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(0))
-            return based_dfs_struct::convertToDFType(
+            return dfsStruct::convertToDFType(
                 Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
-    return based_dfs_struct::service;
+    return dfsStruct::service;
 }
 
-QStringList CardManager::getAll(based_dfs_struct::Type type)
+QStringList CardManager::getAll(dfsStruct::Type type)
 {
     QStringList all;
 
     const QStringList allUserIds =
-        QDir(based_dfs_struct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        QDir(dfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (auto &userId : allUserIds)
     {
         QStringList files = getFilesByType(userId.toLatin1(), type);
@@ -90,16 +90,16 @@ QStringList CardManager::getAll(based_dfs_struct::Type type)
     return all;
 }
 
-QString CardManager::buildPathForFile(const QString &userId, const QString &file, based_dfs_struct::Type type,
+QString CardManager::buildPathForFile(const QString &userId, const QString &file, dfsStruct::Type type,
                                       bool localFormat)
 {
     const QString currentPath = QUrl::fromLocalFile(QDir::currentPath()).toString() + "/";
-    return (localFormat ? currentPath : "") + based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
-        + based_dfs_struct::toString(type) + "/" + file;
+    return (localFormat ? currentPath : "") + dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/"
+        + dfsStruct::toString(type) + "/" + file;
 }
 
 QStringList CardManager::buildPathForFiles(const QString &userId, const QStringList &files,
-                                           based_dfs_struct::Type type, bool localFormat)
+                                           dfsStruct::Type type, bool localFormat)
 {
     QStringList result;
 

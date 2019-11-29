@@ -58,9 +58,9 @@ void registerMetaTypes()
     qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
     // qRegisterMetaType<Contract>();
-    qRegisterMetaType<based_dfs_struct::Type>();
-    qRegisterMetaType<based_dfs_struct::SubType>();
-    qRegisterMetaType<based_dfs_struct::Status>();
+    qRegisterMetaType<dfsStruct::Type>();
+    qRegisterMetaType<dfsStruct::SubType>();
+    qRegisterMetaType<dfsStruct::Status>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
     qRegisterMetaType<Profile>();

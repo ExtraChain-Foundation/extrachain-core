@@ -12,13 +12,13 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
     //    connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 
-void Sender::resendFragments /*Slot*/ (QString path, based_dfs_struct::Type type, QList<QByteArray> frags)
+void Sender::resendFragments /*Slot*/ (QString path, dfsStruct::Type type, QList<QByteArray> frags)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))
     {
         DFSMessage::title_message title(path);
-        title.f_type = based_dfs_struct::toByteArray(type);
+        title.f_type = dfsStruct::toByteArray(type);
         //        qDebug() << "ReSeNd" << path << title.hash();
         std::vector<long long> fragsID;
         foreach (QByteArray b, frags)
@@ -38,14 +38,14 @@ void Sender::resendFragments /*Slot*/ (QString path, based_dfs_struct::Type type
 void Sender::process()
 {
 }
-void Sender::sendFile(const QString &filePath, const based_dfs_struct::Type &type, const SocketPair &receiver)
+void Sender::sendFile(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver)
 {
     QFile file(filePath);
     file.open(QIODevice::ReadOnly);
     // create title_message
     //    unsigned long pckgN = 0; // package number
     DFSMessage::title_message title(filePath);
-    title.f_type = based_dfs_struct::toByteArray(type);
+    title.f_type = dfsStruct::toByteArray(type);
     if (title.empty())
     {
         qDebug() << "empty title";
@@ -89,7 +89,7 @@ void Sender::checkClosing(const QByteArray &titleHash, const long long &pckAF, c
     DFSMessage::title_message tmpTitle(serializedTitle[titleHashs[titleHash]]);
     serializedTitle.erase(serializedTitle.find(titleHashs[titleHash]));
     titleHashs.erase(titleHashs.find(titleHash));
-    sendFile(titleHashs[titleHash], based_dfs_struct::convertToDFType(tmpTitle.f_type), receiver);
+    sendFile(titleHashs[titleHash], dfsStruct::convertToDFType(tmpTitle.f_type), receiver);
 
     qDebug() << "repeat send for" << tmpTitle.filePath << "file because receiver have" << pckAF << "from"
              << tmpTitle.pckgsAmount;

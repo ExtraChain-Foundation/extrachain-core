@@ -28,7 +28,7 @@ class ResolveManager;
 #include "ui/ui_controller.h"
 #endif
 
-using namespace based_dfs_struct;
+using namespace dfsStruct;
 class NodeManager : public QObject
 {
     Q_OBJECT
