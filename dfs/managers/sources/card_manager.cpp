@@ -35,7 +35,7 @@ QStringList CardManager::getFilesByType(const QString &userId, dfsStruct::Type t
     //    }
 }
 
-QByteArray CardManager::getLastFileName(const QString &userId)
+QByteArray CardManager::getLastFileName(const QString &userId, dfsStruct::Type type)
 {
     //    QFile file(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
     //    if (!file.exists())
@@ -55,8 +55,14 @@ QByteArray CardManager::getLastFileName(const QString &userId)
         qDebug() << "[Error][Card_Manager][getLastFileName] seva ne lomay bazy dannnuzx";
         return QByteArray();
     }
-    QByteArray query = "SELECT LAST(path) FROM ITEMS;";
-    return path + QString::fromStdString(dbConnect.select(query.toStdString())[0]["path"]).toLocal8Bit();
+    QString query = QString("SELECT LAST(path) FROM ITEMS WHERE type = %1").arg(int(type)); // ORDER by DESC LIMIT 1
+
+    auto row = dbConnect.select(query.toStdString());
+    if (row.empty())
+        return "0";
+    QString pathFile = QString::fromStdString(row[0]["path"]);
+    pathFile = pathFile.remove(0, pathFile.lastIndexOf("/"));
+    return pathFile.isEmpty() ? "0" : pathFile.toLatin1();
 }
 
 QStringList CardManager::getAllFiles(const QByteArray &userId)

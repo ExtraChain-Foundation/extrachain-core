@@ -10,7 +10,7 @@ class CardManager
 public:
     static QStringList getAll(dfsStruct::Type type);
     static QStringList getFilesByType(const QString &userId, dfsStruct::Type type);
-    static QByteArray getLastFileName(const QString &userId);
+    static QByteArray getLastFileName(const QString &userId, dfsStruct::Type type);
     static QStringList getAllFiles(const QByteArray &userId);
     static dfsStruct::Type getTypeByName(const QString &path, const QByteArray &userId);
 

@@ -125,13 +125,13 @@ namespace DataStorage {
                                              "uid  TEXT PRIMARY KEY NOT NULL, "
                                              "path TEXT             NOT NULL );";
     static const std::string cardTableName = "Items";
-    static const std::string cardTable = "CREATE TABLE" + cardTableName
+    static const std::string cardTable = "CREATE TABLE " + cardTableName
         + " ("
           "path    TEXT PRIMARY KEY NOT NULL, "
           "date    INT              NOT NULL, "
           "type    INT              NOT NULL, "
           "subtype INT                      , "
-          "hash    BLOB             NOT NULL);";
+          "hash    TEXT             NOT NULL);";
     static const std::string lsTableName = "Section";
     static const std::string lastSectionTable = "CREATE TABLE " + lsTableName
         + " ("

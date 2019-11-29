@@ -39,7 +39,8 @@ void Dfs::initDFS(const QByteArray &userId)
     for (int i = 0; i <= dfsStruct::Type::card; i++)
     {
         DBRow row;
-        row.insert({ std::to_string(i), std::to_string(0) });
+        row.insert({ "last_section", "0" });
+        row.insert({ "type", std::to_string(i) });
         dbc.insert(Config::DataStorage::lsTableName, row);
     }
     dbc.close();

@@ -48,7 +48,7 @@ std::vector<DBRow> DBConnector::select(std::string query)
     while (sqlite3_step(stmt) != SQLITE_DONE)
     {
         if (stmt == nullptr)
-            return { {} };
+            return {};
         DBRow row;
         int colNum = sqlite3_column_count(stmt);
         for (int i = 0; i < colNum; i++)
@@ -128,12 +128,14 @@ bool DBConnector::deleteTable(std::string name)
     return this->query(query);
 }
 
+#include <iostream>
 bool DBConnector::query(std::string query)
-{
+{   
     sqlite3_stmt *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+        std::cout << "query " << query << ", res:" << (res == SQLITE_DONE ? "true" : "false") << std::endl;
     return res == SQLITE_DONE;
 }
 
