@@ -231,6 +231,9 @@ void Dfs::fileResponse(const QString path, const SocketPair &receiver)
 {
     QFile file(path);
     QByteArrayList pathList = Serialization::deserialize(path.toUtf8() + "/", "/");
+
+    return;
+
     if (file.exists())
     {
         dfsStruct::Type type = CardManager::getTypeByName(path, pathList.at(PathStruct::aId));

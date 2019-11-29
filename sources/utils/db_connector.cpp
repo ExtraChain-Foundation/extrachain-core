@@ -44,8 +44,11 @@ std::vector<DBRow> DBConnector::select(std::string query)
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+
     while (sqlite3_step(stmt) != SQLITE_DONE)
     {
+        if (stmt == nullptr)
+            return { {} };
         DBRow row;
         int colNum = sqlite3_column_count(stmt);
         for (int i = 0; i < colNum; i++)
@@ -70,6 +73,7 @@ std::vector<DBRow> DBConnector::select(std::string query)
         }
         res.push_back(row);
     }
+
     sqlite3_finalize(stmt);
     return res;
 }
