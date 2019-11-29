@@ -26,9 +26,9 @@ Q_DECLARE_METATYPE(SocketService)
 // Q_DECLARE_METATYPE(SocketService*)
 Q_DECLARE_METATYPE(Messages::DownloadDfsRequestData)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
-Q_DECLARE_METATYPE(based_dfs_struct::Type)
-Q_DECLARE_METATYPE(based_dfs_struct::SubType)
-Q_DECLARE_METATYPE(based_dfs_struct::Status)
+Q_DECLARE_METATYPE(dfsStruct::Type)
+Q_DECLARE_METATYPE(dfsStruct::SubType)
+Q_DECLARE_METATYPE(dfsStruct::Status)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
@@ -38,7 +38,6 @@ Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
-Q_DECLARE_METATYPE(typeDataPrProfile)
 Q_DECLARE_METATYPE(UIChat)
 Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
@@ -68,7 +67,6 @@ void registerMetaTypes()
     qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
-    qRegisterMetaType<typeDataPrProfile>();
     qRegisterMetaType<UIChat>();
     qRegisterMetaType<QList<UIChat>>();
     qRegisterMetaType<UIMessage>();

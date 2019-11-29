@@ -4,13 +4,10 @@
 #include <QByteArray>
 #include "enc/algorithms/blowfish_crypt.h"
 #include "utils/utils.h"
+
 class AccountController;
 class Dfs;
-enum typeDataPrProfile
-{
-    WALLETS = 0,
-    INTERESTS = 1
-};
+
 class PrivateProfile : public QObject
 {
     Q_OBJECT

@@ -94,9 +94,9 @@ QString CardManager::buildPathForFile(const QString &userId, const QString &file
                                       bool localFormat)
 {
     const QString currentPath = QUrl::fromLocalFile(QDir::currentPath()).toString() + "/";
-    return (localFormat ? currentPath : "") + based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
-        + dfsStruct::toString(type) + "/" + (BigNumber(file.toLatin1()) / BigNumber(100)).toByteArray()
-        + "/" + file;
+    return (localFormat ? currentPath : "") + dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/"
+        + dfsStruct::toString(type) + "/" + (BigNumber(file.toLatin1()) / BigNumber(100)).toByteArray() + "/"
+        + file;
 }
 
 QStringList CardManager::buildPathForFiles(const QString &userId, const QStringList &files,

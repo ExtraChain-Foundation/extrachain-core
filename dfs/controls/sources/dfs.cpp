@@ -78,7 +78,7 @@ void Dfs::saveToDFS(const QString &path, const dfsStruct::Type &type, const dfsS
 //    //    emit sendQ(dfsPath, type, SocketPair());
 //    sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(dfsPath, type, userId); // TODO
+    // emit usersChanges(dfsPath, type, userId); // TODO
 #endif
 }
 
@@ -399,12 +399,12 @@ void Dfs::savedNewData(const QString &path, const dfsStruct::Type &type, const d
                        const dfsStruct::Status &status)
 {
 #ifdef ETALONIUM_CLIENT
-    if (type == based_dfs_struct::Type::images && subType != based_dfs_struct::SubType::mini)
+    if (type == dfsStruct::Type::images && subType != dfsStruct::SubType::mini)
     {
         QImage im(path);
         if (im.save("temp", "jpeg", 80))
         {
-            saveD("temp", type, subType, status);
+            saveToDFS("temp", type, subType, status);
             //            QFile filed("temp");
             //            filed.remove();
             return;
