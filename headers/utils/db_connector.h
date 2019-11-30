@@ -4,6 +4,7 @@
 #include <QDebug>
 
 #include <vector>
+#include <unordered_map>
 #include <utility>
 
 #include "sqlite3.h"
@@ -29,6 +30,7 @@ public:
     bool createTable(std::string query);
     bool deleteRow(std::string query);
     bool deleteTable(std::string name);
+    bool tableExists(std::string table);
 
 public:
     bool query(std::string query);

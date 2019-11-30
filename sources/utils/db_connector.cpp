@@ -1,5 +1,7 @@
 #include "headers/utils/db_connector.h"
 
+#include <iostream>
+
 DBConnector::DBConnector()
 {
     db = nullptr;
@@ -128,7 +130,12 @@ bool DBConnector::deleteTable(std::string name)
     return this->query(query);
 }
 
-#include <iostream>
+bool DBConnector::tableExists(std::string table)
+{
+    std::string query = "SELECT name FROM sqlite_master WHERE type='table' AND name='" + table + "';";
+    return select(query).size() > 0;
+}
+
 bool DBConnector::query(std::string query)
 {
     sqlite3_stmt *stmt;
