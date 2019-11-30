@@ -8,7 +8,7 @@
 
 #include "sqlite3.h"
 
-typedef std::map<std::string, std::string> DBRow;
+typedef std::unordered_map<std::string, std::string> DBRow;
 
 class DBConnector
 {

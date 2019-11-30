@@ -121,11 +121,11 @@ const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{
 const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
-    static const std::string userCardTable = "CREATE TABLE UserCards ("
+    static const std::string userCardTable = "CREATE TABLE IF NOT EXISTS UserCards ("
                                              "uid  TEXT PRIMARY KEY NOT NULL, "
                                              "path TEXT             NOT NULL );";
     static const std::string cardTableName = "Items";
-    static const std::string cardTable = "CREATE TABLE " + cardTableName
+    static const std::string cardTable = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
           "path    TEXT PRIMARY KEY NOT NULL, "
           "date    INT              NOT NULL, "
@@ -133,7 +133,7 @@ namespace DataStorage {
           "subtype INT                      , "
           "hash    TEXT             NOT NULL);";
     static const std::string lsTableName = "Section";
-    static const std::string lastSectionTable = "CREATE TABLE " + lsTableName
+    static const std::string lastSectionTable = "CREATE TABLE IF NOT EXISTS " + lsTableName
         + " ("
           "type         INT  PRIMARY KEY NOT NULL, "
           "last_section TEXT             NOT NULL );";

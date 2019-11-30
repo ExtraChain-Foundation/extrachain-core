@@ -80,7 +80,7 @@ std::vector<DBRow> DBConnector::select(std::string query)
 
 bool DBConnector::insert(std::string tableName, DBRow data)
 {
-    std::string query = "INSERT INTO ";
+    std::string query = "INSERT OR IGNORE INTO ";
     query.append(tableName + " (");
     std::string f;
     std::string v;
@@ -130,12 +130,12 @@ bool DBConnector::deleteTable(std::string name)
 
 #include <iostream>
 bool DBConnector::query(std::string query)
-{   
+{
     sqlite3_stmt *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-        std::cout << "query " << query << ", res:" << (res == SQLITE_DONE ? "true" : "false") << std::endl;
+    std::cout << "Query(" << (res == SQLITE_DONE ? "true" : "false") << "): " << query << std::endl;
     return res == SQLITE_DONE;
 }
 
