@@ -51,7 +51,7 @@ private:
     ChatManager *chatManager;
 
 private:
-    Type type = Type::GENERAL;
+    Resolver::Type type = Resolver::Type::GENERAL;
     Lifetime lifetime = Lifetime::SHORT;
 
 private:
