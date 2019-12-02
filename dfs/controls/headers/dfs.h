@@ -36,7 +36,7 @@ private:
     void saveToDFS(const QString &path, const dfsStruct::Type &type = dfsStruct::Type::images,
                    const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                    const dfsStruct::Status &status = dfsStruct::Status::NEW);
-    void appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
+    bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::undef);
     QStringList returnDifs(const QString &adin, const QString &dva);
     void getDFSStatus();

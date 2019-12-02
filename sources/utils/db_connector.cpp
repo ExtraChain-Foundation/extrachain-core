@@ -15,11 +15,17 @@ DBConnector::DBConnector(std::string name)
 DBConnector::~DBConnector()
 {
     // TODO: check if sqlite pointer is active
+    if (db != nullptr)
+    {
+        close();
+        //        sqlite3_db_release_memory(db);
+    }
     // close();
 }
 
 bool DBConnector::open(std::string name)
 {
+    this->name = name;
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc)
     {
@@ -49,12 +55,10 @@ std::vector<DBRow> DBConnector::select(std::string query)
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int rs = sqlite3_step(stmt);
 
-    while (true)
+    while (rs != SQLITE_DONE)
     {
         if (stmt == nullptr)
         {
-            // std::cout << "Query(false): " << query << std::endl;
-            // std::cout << "Query error: " << sqlite3_errmsg(db) << std::endl;
             break;
         }
 
@@ -85,8 +89,6 @@ std::vector<DBRow> DBConnector::select(std::string query)
         res.push_back(row);
 
         rs = sqlite3_step(stmt);
-        if (rs == SQLITE_DONE)
-            break;
     }
 
     std::cout << "Query(" << (rs == SQLITE_DONE ? "true" : "false") << "): " << query << std::endl;

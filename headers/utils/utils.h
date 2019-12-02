@@ -132,11 +132,11 @@ namespace DataStorage {
           "type    INT              NOT NULL, "
           "subtype INT                      , "
           "hash    TEXT             NOT NULL);";
-    static const std::string lsTableName = "Section";
+    static const std::string lsTableName = "Counters";
     static const std::string lastSectionTable = "CREATE TABLE IF NOT EXISTS " + lsTableName
         + " ("
-          "type         INT  PRIMARY KEY NOT NULL, "
-          "last_section TEXT             NOT NULL );";
+          "type    INT  PRIMARY KEY NOT NULL, "
+          "counter TEXT             NOT NULL );";
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

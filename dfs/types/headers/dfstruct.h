@@ -74,7 +74,8 @@ enum Type
     post = 5,
     service = 6,
     cdoctp = 7,
-    card = 8
+    card = 8,
+    unknown = 9
 };
 Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);

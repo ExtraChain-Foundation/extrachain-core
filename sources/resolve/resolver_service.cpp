@@ -655,6 +655,9 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
 {
     qDebug() << "[&DfsResolver] start create tmp file:" << path;
     //    handlerFileMutex.lock();
+    QString dirPath = path.mid(0, path.lastIndexOf("/") + 1);
+    QDir dir;
+    dir.mkdir(dirPath);
     file.setFileName(path);
     if (!file.open(QIODevice::ReadWrite | QIODevice::Truncate))
     {

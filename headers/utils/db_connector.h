@@ -14,6 +14,7 @@ typedef std::unordered_map<std::string, std::string> DBRow;
 class DBConnector
 {
 private:
+    std::string name;
     sqlite3 *db;
 
 public:
