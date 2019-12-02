@@ -31,6 +31,7 @@ public:
     bool deleteRow(std::string query);
     bool deleteTable(std::string name);
     bool tableExists(std::string table);
+    bool dropTable(std::string table);
 
 public:
     bool query(std::string query);

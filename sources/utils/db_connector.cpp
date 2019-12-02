@@ -14,7 +14,8 @@ DBConnector::DBConnector(std::string name)
 
 DBConnector::~DBConnector()
 {
-    close();
+    // TODO: check if sqlite pointer is active
+    // close();
 }
 
 bool DBConnector::open(std::string name)
@@ -46,13 +47,20 @@ std::vector<DBRow> DBConnector::select(std::string query)
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    int rs = sqlite3_step(stmt);
 
-    while (sqlite3_step(stmt) != SQLITE_DONE)
+    while (true)
     {
         if (stmt == nullptr)
-            return {};
+        {
+            // std::cout << "Query(false): " << query << std::endl;
+            // std::cout << "Query error: " << sqlite3_errmsg(db) << std::endl;
+            break;
+        }
+
         DBRow row;
         int colNum = sqlite3_column_count(stmt);
+
         for (int i = 0; i < colNum; i++)
         {
             std::string n = sqlite3_column_name(stmt, i);
@@ -73,7 +81,19 @@ std::vector<DBRow> DBConnector::select(std::string query)
             }
             row.insert({ n, t });
         }
+
         res.push_back(row);
+
+        rs = sqlite3_step(stmt);
+        if (rs == SQLITE_DONE)
+            break;
+    }
+
+    std::cout << "Query(" << (rs == SQLITE_DONE ? "true" : "false") << "): " << query << std::endl;
+    if (rs != SQLITE_DONE)
+    {
+        std::cout << "Query error: " << sqlite3_errmsg(db) << std::endl;
+        return {};
     }
 
     sqlite3_finalize(stmt);
@@ -136,13 +156,22 @@ bool DBConnector::tableExists(std::string table)
     return select(query).size() > 0;
 }
 
+bool DBConnector::dropTable(std::string table)
+{
+    return query("DROP TABLE IF EXISTS " + table);
+}
+
 bool DBConnector::query(std::string query)
 {
     sqlite3_stmt *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+
     std::cout << "Query(" << (res == SQLITE_DONE ? "true" : "false") << "): " << query << std::endl;
+    if (res != SQLITE_DONE)
+        std::cout << "Query error: " << sqlite3_errmsg(db) << std::endl;
+
+    sqlite3_finalize(stmt);
     return res == SQLITE_DONE;
 }
 
