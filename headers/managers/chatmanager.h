@@ -89,9 +89,9 @@ public slots:
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(
-        const QString &path, const based_dfs_struct::Type &type,
-        const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
-        const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW); //----- connet with dfs
+        const QString &path, const dfsStruct::Type &type,
+        const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
+        const dfsStruct::Status &status = dfsStruct::Status::NEW); //----- connet with dfs
 
     void chatListSend(QList<UIChat> chats);
     void chatSend(QByteArray chatId, QList<UIMessage> messages);

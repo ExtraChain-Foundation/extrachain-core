@@ -9,7 +9,8 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/contract.h"
 #include "network/socket_pair.h"
-#include "datastorage/profile.h"
+#include "profile/profile.h"
+#include "profile/quickprofile.h"
 #include "datastorage/searchfilters.h"
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
@@ -25,22 +26,23 @@ Q_DECLARE_METATYPE(SocketService)
 // Q_DECLARE_METATYPE(SocketService*)
 Q_DECLARE_METATYPE(Messages::DownloadDfsRequestData)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
-Q_DECLARE_METATYPE(based_dfs_struct::Type)
-Q_DECLARE_METATYPE(based_dfs_struct::SubType)
-Q_DECLARE_METATYPE(based_dfs_struct::Status)
+Q_DECLARE_METATYPE(dfsStruct::Type)
+Q_DECLARE_METATYPE(dfsStruct::SubType)
+Q_DECLARE_METATYPE(dfsStruct::Status)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
 Q_DECLARE_METATYPE(Profile)
+Q_DECLARE_METATYPE(QuickProfile)
 Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
-Q_DECLARE_METATYPE(typeDataPrProfile)
 Q_DECLARE_METATYPE(UIChat)
 Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
+Q_DECLARE_METATYPE(Network::DataStruct)
 
 void registerMetaTypes()
 {
@@ -55,20 +57,21 @@ void registerMetaTypes()
     qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
     // qRegisterMetaType<Contract>();
-    qRegisterMetaType<based_dfs_struct::Type>();
-    qRegisterMetaType<based_dfs_struct::SubType>();
-    qRegisterMetaType<based_dfs_struct::Status>();
+    qRegisterMetaType<dfsStruct::Type>();
+    qRegisterMetaType<dfsStruct::SubType>();
+    qRegisterMetaType<dfsStruct::Status>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
     qRegisterMetaType<Profile>();
+    qRegisterMetaType<QuickProfile>();
     qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
-    qRegisterMetaType<typeDataPrProfile>();
     qRegisterMetaType<UIChat>();
     qRegisterMetaType<QList<UIChat>>();
     qRegisterMetaType<UIMessage>();
     qRegisterMetaType<QList<UIMessage>>();
+    qRegisterMetaType<Network::DataStruct>();
 }
 
 #endif

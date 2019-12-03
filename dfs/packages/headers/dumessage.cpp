@@ -1,5 +1,11 @@
 #include "dumessage.h"
 
+DFSMessage::DUMessage::DUMessage(QObject *parent)
+    : IDfs_Message(parent)
+{
+    this->type = dfsMessageType::none;
+}
+
 DFSMessage::DUMessage::DUMessage(const int &type, QObject *parent)
     : IDfs_Message(parent)
 {
@@ -11,10 +17,6 @@ DFSMessage::DUMessage::DUMessage(const QByteArray &serialized, QObject *parent)
 {
     QList<QByteArray> list = deserialize(serialized);
     type = static_cast<dfsMessageType>(list.takeFirst().toInt());
-}
-
-DFSMessage::DUMessage::~DUMessage()
-{
 }
 
 const QByteArray DFSMessage::DUMessage::serialize() const

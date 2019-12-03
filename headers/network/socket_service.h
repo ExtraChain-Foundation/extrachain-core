@@ -40,8 +40,7 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
-    SocketWorker *readWorker;
-    QByteArray *dpBuffer;
+    QByteArray dpBuffer;
     NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
@@ -51,8 +50,9 @@ private:
     QTcpSocket *socket = nullptr;
     BigNumber identificator;
     int _blockSize = 0;
-    QByteArray buffer;
+    //    QByteArray buffer;
     int reconnectTry = 0;
+    int pendMsgSize = 0;
 
 public:
     SocketService();
@@ -80,7 +80,7 @@ signals:
 private slots:
 
     void reconnect();
-    void readData();
+    //    void readData();
 public slots:
     /**
      * @brief Send message using QTcpSocket
@@ -97,6 +97,10 @@ public slots:
     void establishConnection();
     void setActive(bool active);
 
+private:
+    void doRead(QByteArray data);
+    void continueDoRead(QByteArray data);
+
 public:
     void gotMessage(QByteArray msg, SocketPair rec);
     BigNumber getID();
@@ -105,7 +109,7 @@ public:
      * @brief Send message using QTcpSocket
      * @param message
      */
-    void *distMsg(const QByteArray &data, const SocketPair &socketData);
+    void *distMsg(const QByteArray data, const SocketPair socketData);
     bool *socketStatus() const;
     bool isActive() const;
     QString getAddress() const;

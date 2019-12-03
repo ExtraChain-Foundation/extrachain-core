@@ -8,7 +8,7 @@
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
 #include "enc/key_private.h"
-#include "datastorage/profile.h"
+#include "profile/profile.h"
 #include "datastorage/transaction.h"
 
 class SmartContractManager : public QObject
@@ -41,7 +41,8 @@ signals:
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(const QByteArray &data, const QByteArray &type);
     //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
-    void saveActorInPrivateProfile(QByteArray id);
+    void saveActorInPrivateProfile(const QByteArray &id, const QString &type = "wallet",
+                                   const bool &rewrite = false);
     void finished();
 };
 

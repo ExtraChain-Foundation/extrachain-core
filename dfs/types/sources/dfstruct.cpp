@@ -1,6 +1,6 @@
 #include "dfs/types/headers/dfstruct.h"
 
-based_dfs_struct::State based_dfs_struct::convertToDFSstate(QByteArray _state)
+dfsStruct::State dfsStruct::convertToDFSstate(QByteArray _state)
 {
     if (QString(_state) == "NEWSTATE")
         return State::NEWSTATE;
@@ -10,7 +10,7 @@ based_dfs_struct::State based_dfs_struct::convertToDFSstate(QByteArray _state)
         return State::CHANGEDS;
 }
 
-QString based_dfs_struct::toString(State _state)
+QString dfsStruct::toString(State _state)
 {
     if (_state == CHANGEDS)
         return "CHANGEDS";
@@ -20,7 +20,7 @@ QString based_dfs_struct::toString(State _state)
         return "DELSTATE";
 }
 
-QByteArray based_dfs_struct::toByteArray(State _state)
+QByteArray dfsStruct::toByteArray(State _state)
 {
     if (_state == CHANGEDS)
         return "CHANGEDS";
@@ -30,7 +30,7 @@ QByteArray based_dfs_struct::toByteArray(State _state)
         return "DELSTATE";
 }
 //
-based_dfs_struct::Status based_dfs_struct::convertToDFSstatus(QByteArray state)
+dfsStruct::Status dfsStruct::convertToDFSstatus(QByteArray state)
 {
     if (QString(state) == "NEW")
         return Status::NEW;
@@ -40,7 +40,7 @@ based_dfs_struct::Status based_dfs_struct::convertToDFSstatus(QByteArray state)
         return Status::MERGE;
 }
 
-QString based_dfs_struct::toString(Status _state)
+QString dfsStruct::toString(Status _state)
 {
     if (_state == REPLACE)
         return "EMPTY";
@@ -49,7 +49,7 @@ QString based_dfs_struct::toString(Status _state)
     else
         return "NEW";
 }
-QByteArray based_dfs_struct::toByteArray(Status _state)
+QByteArray dfsStruct::toByteArray(Status _state)
 {
     if (_state == REPLACE)
         return "EMPTY";
@@ -59,112 +59,113 @@ QByteArray based_dfs_struct::toByteArray(Status _state)
         return "NEW";
 }
 //
-based_dfs_struct::Type based_dfs_struct::convertToDFType(QByteArray type)
+dfsStruct::Type dfsStruct::convertToDFType(QByteArray type)
 {
-    if (QString(type) == "images")
+    if (type == "images")
         return Type::images;
-    else if (QString(type) == "ivideo")
-        return Type::ivideo;
-    else if (QString(type) == "events")
-        return Type::events;
-    else if (QString(type) == "system")
+    else if (type == "video")
+        return Type::video;
+    else if (type == "events")
+        return Type::event;
+    else if (type == "system")
         return Type::system;
-    else if (QString(type) == "chates")
-        return Type::chates;
-    else if (type == "postes")
-        return postes;
-    else if (type == "card")
+    else if (type == "chats")
+        return Type::chat;
+    else if (type == "posts")
+        return post;
+    else if (type == "cards")
         return card;
-    else
-        return Type::servic;
+    else if (type == "services")
+        return service;
+    else if (type == "cdoctp")
+        return cdoctp;
+    return service;
 }
 
-QByteArray based_dfs_struct::toByteArray(Type type)
+QByteArray dfsStruct::toByteArray(Type type)
 {
-    if (type == Type::images)
-        return "images";
-    else if (type == Type::ivideo)
-        return "ivideo";
-    else if (type == Type::events)
-        return "events";
-    else if (type == Type::system)
-        return "system";
-    else if (type == Type::chates)
-        return "chates";
-    else if (type == postes)
-        return "postes";
-    else if (type == card)
-        return "card";
-    else
-        return "servic";
+    QByteArray res;
+    switch (type)
+    {
+    case dfsStruct::Type::images:
+        res = "images";
+        break;
+    case dfsStruct::Type::video:
+        res = "video";
+        break;
+    case dfsStruct::Type::event:
+        res = "events";
+        break;
+    case dfsStruct::Type::system:
+        res = "system";
+        break;
+    case dfsStruct::Type::chat:
+        res = "chats";
+        break;
+    case dfsStruct::Type::post:
+        res = "posts";
+        break;
+    case dfsStruct::Type::service:
+        res = "services";
+        break;
+    default:
+        return "";
+    }
+    return res;
 }
-QString based_dfs_struct::toString(Type type)
+QString dfsStruct::toString(Type type)
 {
-    if (type == Type::images)
-        return "images";
-    else if (type == Type::ivideo)
-        return "ivideo";
-    else if (type == Type::events)
-        return "events";
-    else if (type == Type::system)
-        return "system";
-    else if (type == Type::chates)
-        return "chates";
-    else if (type == postes)
-        return "postes";
-    else if (type == card)
-        return "card";
-    else
-        return "servic";
+
+    return QString(dfsStruct::toByteArray(type));
 }
 //
-based_dfs_struct::SubType based_dfs_struct::convertToDFSSubType(QByteArray subType)
+dfsStruct::SubType dfsStruct::convertToDFSSubType(QByteArray subType)
 {
-    if (subType == "profil")
-        return profil;
+    if (subType == "profile")
+        return profile;
     else if (subType == "avatar")
         return avatar;
-    else if (subType == "ipost")
-        return ipost;
+    else if (subType == "subpost")
+        return subpost;
     else if (subType == "mini")
         return mini;
     else if (subType == "portfolio")
         return portfolio;
     else
-        return ievent;
+        return subevent;
 }
 
-QByteArray based_dfs_struct::toByteArray(SubType subType)
+QByteArray dfsStruct::toByteArray(SubType subType)
 {
-    if (subType == profil)
-        return "profil";
+    if (subType == profile)
+        return "profile";
     else if (subType == avatar)
         return "avatar";
-    else if (subType == ipost)
-        return "ipost";
+    else if (subType == subpost)
+        return "subpost";
     else if (subType == mini)
         return "mini";
     else if (subType == portfolio)
         return "portfolio";
     else
-        return "ievent";
+        return "subevent";
 }
-QString based_dfs_struct::toString(SubType subType)
+QString dfsStruct::toString(SubType subType)
 {
-    if (subType == profil)
-        return "profil";
+    if (subType == profile)
+        return "profile";
     else if (subType == avatar)
         return "avatar";
-    else if (subType == ipost)
-        return "ipost";
+    else if (subType == subpost)
+        return "subpost";
     else if (subType == mini)
         return "mini";
     else if (subType == portfolio)
         return "portfolio";
     else
-        return "ievent";
+        return "subevent";
 }
-based_dfs_struct::Key based_dfs_struct::convertToKey(QByteArray key)
+dfsStruct::Key dfsStruct::convertToKey(QByteArray key)
 {
     if (key == "dfsIndex")
         return Key::dfsIndex;
@@ -172,7 +173,7 @@ based_dfs_struct::Key based_dfs_struct::convertToKey(QByteArray key)
         return Key::storedIndex;
 }
 
-QByteArray based_dfs_struct::toByteArray(Key key)
+QByteArray dfsStruct::toByteArray(Key key)
 {
     if (key == dfsIndex)
         return "dfsIndex";
@@ -180,7 +181,7 @@ QByteArray based_dfs_struct::toByteArray(Key key)
         return "storedIndex";
 }
 
-QString based_dfs_struct::toString(Key key)
+QString dfsStruct::toString(Key key)
 {
     if (key == dfsIndex)
         return "dfsIndex";

@@ -215,7 +215,16 @@ void ActorIndex::requestProfile(QString id)
     if (actor.profile().getProfile() == "")
         return;
     // if (actor.getKey()->verify(actor.profile().getProfile(), actor.profile().sign))
-    emit sendProfileToUi(id, actor.profile().getListProfile());
+
+    QByteArrayList list = actor.profile().getListProfile();
+
+    // for test data: start
+    if (id == "e29c3ac05137ccfc3cde" || id == "6a502ef66fc591980a25" || id == "5078dfb53efc693e1291"
+        || id == "91609376cc6ee0694255")
+        list.insert(15, "static/avatar");
+    // for test data: remove
+
+    emit sendProfileToUi(id, list);
     // else
     //     qDebug() << "requestProfile: incorrect profile" << id;
 }

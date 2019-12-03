@@ -35,7 +35,7 @@ SOURCES += \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/tx_pair.cpp \
-    $$PWD/sources/datastorage/profile.cpp \
+    $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/coin_service.cpp \
@@ -46,13 +46,13 @@ SOURCES += \
     $$PWD/sources/network/packages/base_message_response.cpp \
     $$PWD/sources/network/packages/service/get_all_actor_message.cpp \
     $$PWD/sources/network/packages/service/list_connections.cpp \
-    $$PWD/sources/network/socket/socket_worker.cpp \
     $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
     $$PWD/sources/resolve/resolve_manager.cpp \
     $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
+    $$PWD/sources/utils/db_connector.cpp \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
@@ -121,7 +121,8 @@ HEADERS += \
     $$PWD/headers/datastorage/genesis_block.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/tx_pair.h \
-    $$PWD/headers/datastorage/profile.h \
+    $$PWD/headers/profile/profile.h \
+    $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \
     $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/coin_service.h \
@@ -131,7 +132,6 @@ HEADERS += \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/network/packages/base_message_response.h \
     $$PWD/headers/network/packages/service/get_all_actor_message.h \
-    $$PWD/headers/network/socket/socket_worker.h \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
@@ -139,6 +139,7 @@ HEADERS += \
     $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
+    $$PWD/headers/utils/db_connector.h \
     $$PWD/headers/utils/list_container.h \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \

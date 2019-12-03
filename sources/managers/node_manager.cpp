@@ -118,10 +118,11 @@ void NodeManager::connectSmContractManager()
     //    &NetManager::NewActor); TODO!!!
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
-    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id,
-                                typeDataPrProfile::WALLETS);
-    });
+    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
+            [this](const QByteArray &id, const QString &type, const bool &rewrite) {
+                emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type, id,
+                                        rewrite);
+            });
     connect(this, &NodeManager::editPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
 
@@ -496,8 +497,8 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id,
-                                typeDataPrProfile::WALLETS);
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), "wallet", id, false);
+        qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
     connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
@@ -519,13 +520,16 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
-    connect(uiController, &UiController::editInterests, [this](QByteArray data) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), data,
-                                typeDataPrProfile::INTERESTS);
-    }); // FOR SEVA
-    connect(uiController, &UiController::getInterests,
-            [this]() { emit loadInterFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile()); });
-    connect(prProfile, &PrivateProfile::interestsToUi, uiController, &UiController::loadInterests);
+    connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
+        qDebug() << "222222222222";
+    });
+    connect(uiController, &UiController::getInfoFromPrProfile, [this](const QString &type) {
+        emit loadInfoFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type);
+    });
+    connect(this, &NodeManager::loadInfoFromPrProfile, prProfile,
+            &PrivateProfile::loadInfoFromPrivateProfile);
+    connect(prProfile, &PrivateProfile::infoToUi, uiController, &UiController::loadInfo);
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
@@ -598,7 +602,6 @@ void NodeManager::connectUi()
 void NodeManager::addNewWallet()
 {
     auto actor = accController->createActor(0);
-    accController->savePrivateActor(actor);
     auto wallets = uiWallet->getCurrentWallets();
     uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
     this->createWalletInUi();
@@ -673,21 +676,6 @@ int NodeManager::getClientList()
 AccountController *NodeManager::getAccController() const
 {
     return accController;
-}
-
-void NodeManager::createNewActor(QByteArray data, int accountStatus)
-{
-    if (data.isEmpty())
-    {
-        qDebug() << "slot NodeManagerLocal::createNewActor";
-        Actor<KeyPrivate> createdActor = accController->createActor(accountStatus);
-        qDebug() << "pk = " << createdActor.getKey()->getPrivateKey();
-        accController->savePrivateActor(createdActor);
-    }
-    if (!data.isEmpty())
-    {
-        this->dfs = new Dfs(actorIndex, accController);
-    }
 }
 
 void NodeManager::logOut()

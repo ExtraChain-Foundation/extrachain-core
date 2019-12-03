@@ -3,19 +3,24 @@
 
 #include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
-#include <iterator>
-
+#include "headers/utils/db_connector.h"
 class CardManager
 {
 
 public:
-    static QStringList getAll(based_dfs_struct::Type type);
-    static QStringList getForUser(based_dfs_struct::Type type, QString userId);
-    static QStringList getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type);
-    static QByteArray getLastFileName(const QByteArray &userId);
+    static QStringList getAll(dfsStruct::Type type);
+    static QStringList getFilesByType(const QString &userId, dfsStruct::Type type);
+    static QByteArray getLastFileName(const QString &userId, dfsStruct::Type type);
     static QStringList getAllFiles(const QByteArray &userId);
-    static based_dfs_struct::Type getTypeByName(const QString &path, const QByteArray &userId);
-    //    function to create
+    static dfsStruct::Type getTypeByName(const QString &path, const QByteArray &userId);
+
+    static QString buildPathForFile(const QString &userId, const QString &file, dfsStruct::Type type,
+                                    bool localFormat);
+    static QStringList buildPathForFiles(const QString &userId, const QStringList &files,
+                                         dfsStruct::Type type, bool localFormat);
+
+private:
+    CardManager();
 };
 
 #endif // CARD_MANAGER_H

@@ -1,5 +1,10 @@
 #include "dfs/packages/headers/title_message.h"
 
+DFSMessage::title_message::title_message()
+    : DUMessage()
+{
+}
+
 DFSMessage::title_message::title_message(const QString &filePath)
     : DUMessage(type_title)
 {
@@ -52,10 +57,6 @@ DFSMessage::title_message::title_message(const QString &filePath, const long lon
     this->f_type = f_type;
 }
 
-DFSMessage::title_message::~title_message()
-{
-}
-
 bool DFSMessage::title_message::empty() const
 {
     if (filePath.isEmpty())
@@ -76,4 +77,14 @@ const QList<QByteArray> DFSMessage::title_message::serializedParams() const
          << QByteArray::number(static_cast<long long>(pckgsAmount)) << QByteArray::number(fileSize)
          << dataHash << f_type;
     return list;
+}
+
+DFSMessage::title_message DFSMessage::title_message::operator=(const DFSMessage::title_message &msg)
+{
+    this->f_type = msg.f_type;
+    this->dataHash = msg.dataHash;
+    this->filePath = msg.filePath;
+    this->fileSize = msg.fileSize;
+    this->pckgsAmount = msg.pckgsAmount;
+    return *this;
 }

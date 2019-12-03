@@ -8,6 +8,8 @@
 #include <QMutex>
 #include <QTimer>
 #include <QMap>
+#include <vector>
+#include <queue>
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
@@ -36,7 +38,8 @@ class Blockchain;
 class TransactionManager;
 class Dfs;
 class ChatManager;
-static const int DFS_PWT = 2000;
+using namespace Resolver;
+static const int DFS_PWT = 500;
 class ResolverService : public QObject
 {
     Q_OBJECT
@@ -48,24 +51,26 @@ private:
     ChatManager *chatManager;
 
 private:
-    bool active = false;
+    Resolver::Type type = Resolver::Type::GENERAL;
+    Lifetime lifetime = Lifetime::SHORT;
 
+private:
+    QTimer *reloadTimer = nullptr;
+    //    QByteArray tag;
+    std::vector<bool> dataChecker;
+    //    QString path;
+    QFile file;
+    DFSMessage::title_message title;
+
+private:
+    bool active = false;
+    std::queue<Network::DataStruct> taskQueue;
     QByteArray msg;
     QByteArray hash;
-    SocketPair senderAddress;
+    SocketPair receiver;
 
     AccountController *ac;
-
-    QMap<QByteArray, int> *requestResponseMap;
-
-private:
     ResolveManager *resolveManager;
-
-private:
-    // dfs Map
-    //    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
-    QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
-    //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 public:
     /**
@@ -73,13 +78,19 @@ public:
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QMap<QByteArray, QFile *> *listFile,
-                    QMap<QString, QByteArray> *fileMap, ResolveManager *resolveManager,
+    ResolverService(Type type, Lifetime lifetime, ActorIndex *actorIndex, ResolveManager *resolveManager,
                     QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
     ~ResolverService() override;
+
+private:
+    void finishWork();
+private slots:
+    void checkStatus();
+
+public:
     /**
      * @brief isActive
      * @return
@@ -102,8 +113,14 @@ public:
 
     void setResolveManager(ResolveManager *value);
 
+    Resolver::Type getType() const;
+    void setType(const Resolver::Type &value);
+
+    Lifetime getLifetime() const;
+
+    DFSMessage::title_message getTitle() const;
+
 private:
-    void processInternalMessage(QList<QByteArray> list);
     /**
      * @brief validate
      * @param block
@@ -157,7 +174,9 @@ private:
      * corresponding signals
      * @param msg - serialized packages
      */
-    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
+    void resolveTask();
+    void resolveGeneralTask();
+    void resolveDfsTask();
     /**
      * @brief resolveDfsMessage
      * @param data
@@ -182,8 +201,8 @@ private:
      * @param tHash
      * @return
      */
-    bool registerTitle(const QString &tmpPath, const unsigned long &pckgAmount, const long long &size,
-                       const QByteArray &titleSerialize, const QByteArray &tHash);
+    bool registerTitle(const QString &tmpPath, DFSMessage::title_message title);
+    void cleanTask();
 public slots:
     /**
      * @brief process
@@ -191,9 +210,12 @@ public slots:
      * ready for work
      */
     void process();
-
+    void assignNewTask(Network::DataStruct task);
 signals:
-    void restartLoadChecker();
+    void activate();
+    void dfsTitle(QByteArray hash, Network::DataStruct ds);
+    void dfsFragment(QByteArray hash, Network::DataStruct ds);
+    //    void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me

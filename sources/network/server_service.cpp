@@ -18,8 +18,8 @@ void ServerService::startListen()
 #ifdef ETALONIUM_CONSOLE
         if (serverError() == QAbstractSocket::AddressInUseError)
         {
-            std::cout << "Address " << localAddress->ip().toString().toStdString() << ":" << port
-                      << " already in use" << std::endl;
+            std::cout << "------------------> Address " << localAddress->ip().toString().toStdString() << ":"
+                      << port << " already in use" << std::endl;
             std::exit(0);
         }
         else

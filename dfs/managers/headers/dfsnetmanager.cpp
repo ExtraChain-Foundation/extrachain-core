@@ -66,12 +66,12 @@ NetManager *DFSNetManager::getNetManager()
 
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
-    //    mutex.lock();
+    mutex.lock();
     //    if (checkMsgCount(msg, handler, socketsList))
     resolveManager->setTask(msg, receiver);
     //    else qDebug()
     //        << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
-    //    mutex.unlock();
+    mutex.unlock();
     return nullptr;
 }
 
@@ -98,12 +98,12 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     //        msg.calcDigSig(accounts->getCurrentActor());
 
     QByteArray message = msg.serialize();
-    if (checkMsgCount(message, handler, socketsList))
-    {
-        std::for_each(socketsList.begin(), socketsList.end(),
-                      [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
-        //        qDebug() << "emit sendM from DFSNetManager";
-    }
+    //    if (checkMsgCount(message, handler, socketsList))
+    //    {
+    std::for_each(socketsList.begin(), socketsList.end(),
+                  [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
+    //        qDebug() << "emit sendM from DFSNetManager";
+    //    }
 }
 
 void DFSNetManager::process()
