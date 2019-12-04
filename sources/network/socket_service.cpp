@@ -199,14 +199,17 @@ void SocketService::setActive(bool active)
 
 void SocketService::doRead(QByteArray data)
 {
+    long long sizeData = 4;
+    if (data.indexOf("ExtraCoin") != -1)
+        sizeData = data.indexOf("ExtraCoin") - 4;
     if (data.size() < 4)
     {
         dpBuffer.append(data);
         return;
     }
-    QByteArray msgLength = data.mid(0, 4);
+    QByteArray msgLength = data.mid(0, sizeData);
     pendMsgSize = Utils::qByteArrayToInt(msgLength);
-    data.remove(0, 4);
+    data.remove(0, sizeData);
     if (data.size() >= pendMsgSize)
         continueDoRead(data);
     else

@@ -96,7 +96,6 @@ void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, cons
     msg.init(data);
     //    if (msgType != Messages::ACTOR_MESSAGE)
     //        msg.calcDigSig(accounts->getCurrentActor());
-
     QByteArray message = msg.serialize();
     //    if (checkMsgCount(message, handler, socketsList))
     //    {

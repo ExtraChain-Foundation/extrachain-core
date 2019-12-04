@@ -19,7 +19,6 @@ void Sender::resendFragments /*Slot*/ (QString path, dfsStruct::Type type, QList
     {
         DFSMessage::title_message title(path);
         title.f_type = dfsStruct::toByteArray(type);
-        //        qDebug() << "ReSeNd" << path << title.hash();
         std::vector<long long> fragsID;
         foreach (QByteArray b, frags)
         {

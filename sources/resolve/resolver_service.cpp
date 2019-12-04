@@ -287,7 +287,12 @@ void ResolverService::resolveGeneralTask()
     using namespace Messages;
     BaseMessage message;
     message.deserialize(msg);
+
     QByteArray msgType = message.getMsgType();
+    if (msgType.isEmpty())
+    {
+        qDebug() << "msgType.isEmpty()";
+    }
     if (message.getMsg_data().isEmpty() && msgType != GET_ALL_ACTORS && msgType != GET_BLOCK_COUNT_MESSAGE)
     {
         emit TaskFinished();
@@ -684,16 +689,9 @@ bool ResolverService::createTempFile(const QString &path, const long long &size,
             return createTempFile(path, size, tHash);
         }
     }
-    if (file.isOpen())
-    {
-        for (long long i = 0; i < size; i++)
-        {
-            file.seek(i);
-            file.write("0");
-        }
-    }
+
     //    handlerFileMutex.unlock();
-    qDebug() << "[&DfsResolver] succed finished";
+    qDebug() << "[&DfsResolver] succed finished" << path;
     return true;
 }
 
@@ -705,12 +703,16 @@ bool ResolverService::registerTitle(const QString &tmpPath, DFSMessage::title_me
         if (createTempFile(tmpPath, title.fileSize, title.dataHash))
         {
             dataChecker.assign(title.pckgsAmount, false);
-            qDebug() << "[ready to receive file]";
+            qDebug() << "[ready to receive file]" << title.filePath;
         }
+        // qDebug() << "[NOT ready to receive file]" << title.filePath;
         return true;
     }
     else
+    {
+        qDebug() << "[NOT ready to receive file (title error)]" << title.filePath;
         return false;
+    }
 }
 
 void ResolverService::cleanTask()
