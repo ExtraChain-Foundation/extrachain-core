@@ -121,7 +121,8 @@ QString CardManager::buildPathForFile(const QString &userId, const QString &file
 {
     const QString currentPath = QUrl::fromLocalFile(QDir::currentPath()).toString() + "/";
     return (localFormat ? currentPath : "") + dfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/"
-        + dfsStruct::toString(type) + "/" + (BigNumber(file.toLatin1()) / BigNumber(100)).toByteArray() + "/"
+        + dfsStruct::toString(type) + "/"
+        + (BigNumber(file.toLatin1()) / BigNumber(Config::DataStorage::SECTION_SIZE)).toByteArray() + "/"
         + file;
 }
 

@@ -182,7 +182,7 @@ void ResolveManager::createNewResolver(const Network::DataStruct &task)
     l1Res.last()->setTask(task.msg, task.receiver);
     auto crutch = l1Res.last();
     // connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
-    qDebug() << "[ResolveManager]created new general resolver, current amount is:" << l1Res.size();
+    qDebug() << "[ResolveManager] created new general resolver, current amount is:" << l1Res.size();
     ThreadPool::addThread(l1Res.last());
 }
 
@@ -261,7 +261,7 @@ void ResolveManager::taskFinished()
         l1Res.removeOne(resolver);
         if (resolver != nullptr)
             emit resolver->finished();
-        qDebug() << "[ResolveManager]removed new general resolver, current amount is:" << l1Res.size();
+        qDebug() << "[ResolveManager] removed new general resolver, current amount is:" << l1Res.size();
         if (unprocessed.size() != 0)
         {
             mutex.lock();
