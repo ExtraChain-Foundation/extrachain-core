@@ -29,6 +29,7 @@ DFSMessage::req_frags_message::req_frags_message(const QByteArray &serialized)
     if (list.size() != FIELDS_COUNT)
     {
         qDebug() << "title_message_struct << incorrect input data";
+        filePath = "-1";
         return;
     }
     filePath = QString::fromUtf8(list.takeFirst());

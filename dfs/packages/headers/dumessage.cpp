@@ -21,7 +21,7 @@ DFSMessage::DUMessage::DUMessage(const QByteArray &serialized, QObject *parent)
 
 const QByteArray DFSMessage::DUMessage::serialize() const
 {
-    return Serialization::universalSerialize(serializedParams());
+    return Serialization::universalSerialize(serializedParams(), 8);
 }
 
 const QList<QByteArray> DFSMessage::DUMessage::serializedParams() const
@@ -31,7 +31,7 @@ const QList<QByteArray> DFSMessage::DUMessage::serializedParams() const
 
 const QList<QByteArray> DFSMessage::DUMessage::deserialize(const QByteArray &serialized)
 {
-    return Serialization::universalDeserialize(serialized);
+    return Serialization::universalDeserialize(serialized, 8);
 }
 
 const QByteArray DFSMessage::DUMessage::concatenate()

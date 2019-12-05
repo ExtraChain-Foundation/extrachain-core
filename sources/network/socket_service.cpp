@@ -121,7 +121,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        QByteArray _wtSok = Serialization::universalSerialize({ data });
+        QByteArray _wtSok = Serialization::universalSerialize({ data }, 8);
         socket->write(_wtSok, _wtSok.size());
     }
 }
@@ -199,17 +199,14 @@ void SocketService::setActive(bool active)
 
 void SocketService::doRead(QByteArray data)
 {
-    long long sizeData = 4;
-    if (data.indexOf("ExtraCoin") != -1)
-        sizeData = data.indexOf("ExtraCoin") - 4;
-    if (data.size() < 4)
+    if (data.size() < 8)
     {
         dpBuffer.append(data);
         return;
     }
-    QByteArray msgLength = data.mid(0, sizeData);
+    QByteArray msgLength = data.mid(0, 8);
     pendMsgSize = Utils::qByteArrayToInt(msgLength);
-    data.remove(0, sizeData);
+    data.remove(0, 8);
     if (data.size() >= pendMsgSize)
         continueDoRead(data);
     else

@@ -569,6 +569,8 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
     if (msgType == DFSMessage::dfsMessageType::requestFragments)
     {
         DFSMessage::req_frags_message message(data);
+        if (message.filePath == "-1")
+            return;
         dfs->resendFragments(message.getFilePath(), message.getListFrag());
     }
     else if (msgType == DFSMessage::dfsMessageType::titleMessage)
