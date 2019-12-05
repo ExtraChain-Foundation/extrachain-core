@@ -71,13 +71,14 @@ ResolverService::~ResolverService()
 void ResolverService::finishWork()
 {
     active = false;
-    cleanTask();
+
     if (this->lifetime == Resolver::Lifetime::SHORT)
     {
         emit TaskFinished();
     }
     else
     {
+        //        cleanTask();
         if (taskQueue.size() != 0)
         {
             Network::DataStruct ds = taskQueue.front();
@@ -289,6 +290,7 @@ void ResolverService::resolveGeneralTask()
     message.deserialize(msg);
 
     QByteArray msgType = message.getMsgType();
+    QByteArray data_test = message.serialize();
     if (msgType.isEmpty())
     {
         qDebug() << "msgType.isEmpty()";
@@ -323,7 +325,7 @@ void ResolverService::resolveGeneralTask()
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         DFSMessage::DUMessage dfsMsg(message.getMsg_data());
         resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
-        emit TaskFinished();
+        //        emit TaskFinished();
         //        emit TaskFinished();
     }
     else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))

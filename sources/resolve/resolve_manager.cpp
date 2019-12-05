@@ -30,19 +30,21 @@ void ResolveManager::dfsTitleArrived(QByteArray dataHash, Network::DataStruct ta
 void ResolveManager::dfsFragmentArrived(QByteArray dataHash, Network::DataStruct task)
 {
     int i = 0;
+    mutex.lock();
     while (i < l2Res.size())
     {
         DFSMessage::title_message dt = l2Res[i]->getTitle();
         QByteArray b = dt.dataHash;
         if (b == dataHash)
         {
-            mutex.lock();
+
             l2Res[i]->assignNewTask(task);
             mutex.unlock();
             return;
         }
         i++;
     }
+    mutex.unlock();
 }
 
 void ResolveManager::setChatManager(ChatManager *value)
