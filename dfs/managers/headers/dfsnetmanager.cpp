@@ -1,5 +1,5 @@
 #include "dfsnetmanager.h"
-#include "headers/resolve/resolve_manager.h"
+#include "resolve/resolve_manager.h"
 
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
     : NetManager(accountList, actInd)

@@ -339,7 +339,7 @@ BigNumber BigNumber::random(int n, bool zeroAllowed)
 
     for (int i = 1; i != n; ++i)
         str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-    std::cout << str.toStdString() << std::endl;
+    // std::cout << str.toStdString() << std::endl;
     BigNumber res(str);
     if (!zeroAllowed && res == 0)
         return random(n, zeroAllowed);

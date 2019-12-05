@@ -9,7 +9,7 @@ QStringList CardManager::getFilesByType(const QString &userId, dfsStruct::Type t
     QStringList listData;
     if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
-        qDebug() << "[Error][Card_Manager][getFilesByType] seva ne lomay bazy dannnuzx";
+        qDebug() << "[Error][Card_Manager][getFilesByType]";
         return QStringList();
     }
     QByteArray query = "SELECT path FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
@@ -26,7 +26,7 @@ QByteArray CardManager::getLastFileName(const QString &userId, dfsStruct::Type t
     DBConnector dbConnect;
     if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
-        qDebug() << "[Error][Card_Manager][getLastFileName] seva ne lomay bazy dannnuzx";
+        qDebug() << "[Error][Card_Manager][getLastFileName]";
         return QByteArray();
     }
     QByteArray t = QByteArray::number(type);
@@ -59,7 +59,7 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     QStringList listData;
     if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
-        qDebug() << "[Error][Card_Manager][getAllFiles] seva ne lomay bazy dannnuzx";
+        qDebug() << "[Error][Card_Manager][getAllFiles]";
         return QStringList();
     }
     QByteArray query = "SELECT path FROM ITEMS";

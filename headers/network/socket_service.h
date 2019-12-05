@@ -9,7 +9,7 @@
 #ifndef NETWORK_MANAGER_DEF
 #define NETWORK_MANAGER_DEF
 class NetManager;
-#include "headers/network/network_manager.h"
+#include "network/network_manager.h"
 #endif
 
 #include <QObject>

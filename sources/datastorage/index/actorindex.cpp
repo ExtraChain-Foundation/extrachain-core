@@ -1,5 +1,5 @@
 #include "datastorage/index/actorindex.h"
-#include "headers/resolve/resolve_manager.h"
+#include "resolve/resolve_manager.h"
 
 void ActorIndex::setAccController(AccountController *value)
 {

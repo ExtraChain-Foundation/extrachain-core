@@ -3,10 +3,10 @@
 #ifndef SOCKET_SERVICE_DEF
 #define SOCKET_SERVICE_DEF
 class SocketService;
-#include "headers/network/socket_service.h"
+#include "network/socket_service.h"
 #endif // SOCKET_SERVICE
 
-#include "headers/network/network_manager.h"
+#include "network/network_manager.h"
 #include "dfs/packages/headers/all.h"
 
 class DFSNetManager : public NetManager

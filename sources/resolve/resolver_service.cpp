@@ -1,9 +1,9 @@
-#include "headers/resolve/resolver_service.h"
-#include "headers/resolve/resolve_manager.h"
-#include "headers/managers/node_manager.h"
-#include "headers/datastorage/index/actorindex.h"
-#include "headers/datastorage/blockchain.h"
-#include "headers/managers/tx_manager.h"
+#include "resolve/resolver_service.h"
+#include "resolve/resolve_manager.h"
+#include "managers/node_manager.h"
+#include "datastorage/index/actorindex.h"
+#include "datastorage/blockchain.h"
+#include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
@@ -366,8 +366,13 @@ void ResolverService::resolveGeneralTask()
     }
     else if (msgType == COIN_REQUEST)
     {
-        BigNumber amount(message.getMsg_data());
-        node->coinResponse(message.getSigner(), amount);
+        QByteArray msg = message.getMsg_data();
+        auto list = msg.split(' ');
+        BigNumber amount(list[0]);
+        BigNumber plsr;
+        if (list.length() > 1)
+            plsr = BigNumber(list[1]);
+        node->coinResponse(message.getSigner(), amount, plsr);
         //        emit coinRequest(message.getSigner(), amount);
         emit TaskFinished();
     }

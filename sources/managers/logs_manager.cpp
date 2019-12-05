@@ -19,6 +19,7 @@ AbstractModel LogsManager::logs = AbstractModel(nullptr, { "text", "date", "file
 
 QStringList LogsManager::filesFilter;
 bool LogsManager::antiFilter = false;
+bool LogsManager::debugLogs = false;
 
 LogsManager::LogsManager()
 {
@@ -27,19 +28,27 @@ LogsManager::LogsManager()
 
 void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
-    Q_UNUSED(type)
-
-    static LogsManager logsManager;
-    emit logsManager.makeLogSignal(context.file, context.line, context.function, msg);
+    // static LogsManager logsManager;
+    // emit logsManager.makeLogSignal(context.file, context.line, context.function, msg);
+    switch (type)
+    {
+    case QtInfoMsg:
+        logPrint(msg.toStdString());
+        break;
+    default:
+        if (debugLogs)
+            makeLog(context.file, context.line, context.function, msg);
+        break;
+    }
 }
 
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
 {
-    static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
-                         + ".log");
+    // static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")  +
+    // ".log");
 
-    if (LogsManager::toFile && !logFile.isOpen())
-        logFile.open(QFile::Append | QFile::Text);
+    // if (LogsManager::toFile && !logFile.isOpen())
+    //     logFile.open(QFile::Append | QFile::Text);
 
     QString message = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
@@ -99,7 +108,11 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
     QString fileNameStd;
     if (fileName != "global")
-        fileNameStd = "file:/" + fileName;
+        fileNameStd =
+#ifdef ETALONIUM_CLIENT
+            "file:/" +
+#endif
+            fileName;
     else
         fileNameStd = "global";
 #endif
@@ -118,17 +131,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef QT_DEBUG
         if (isPrint)
 #endif
-#ifdef Q_OS_ANDROID
-            __android_log_print(ANDROID_LOG_DEBUG, "Etalonium", "%s", logStr.toStdString().c_str());
-#else
-        std::cout << logStr.toStdString() << std::endl;
-#endif
-    }
-
-    if (LogsManager::toFile && logFile.isWritable())
-    {
-        logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd "), logStr).toUtf8());
-        logFile.flush();
+            logPrint(logStr.toStdString());
     }
 
 #ifdef ETALONIUM_CLIENT
@@ -145,6 +148,12 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         });
     }
 #endif
+
+    // if (LogsManager::toFile && logFile.isWritable())
+    // {
+    //     logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd "), logStr).toUtf8());
+    //     logFile.flush();
+    // }
 }
 
 void LogsManager::on()
@@ -212,6 +221,15 @@ void LogsManager::emptyHandler()
         Q_UNUSED(context)
         Q_UNUSED(msg)
     });
+}
+
+void LogsManager::logPrint(const std::string& log)
+{
+#ifdef Q_OS_ANDROID
+    __android_log_print(ANDROID_LOG_DEBUG, "Etalonium", "%s", log.c_str());
+#else
+    std::cout << log << std::endl;
+#endif
 }
 
 void LogsManager::setAntiFilter(bool value)

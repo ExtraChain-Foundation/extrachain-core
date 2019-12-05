@@ -55,12 +55,12 @@ NodeManager::NodeManager()
     ThreadPool::addThread(chatManager);
 }
 
-void NodeManager::createCompanyActor(const QString &password)
+void NodeManager::createCompanyActor(const QString &email, const QString &password)
 {
 #ifdef ETALONIUM_CONSOLE
     // accController->loadActors("-1");
     Actor<KeyPrivate> company;
-    QByteArray consoleHash = Utils::calcKeccak(password.toUtf8());
+    QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
 
     if (QDir("keystore/profile").isEmpty())
     {
@@ -70,7 +70,7 @@ void NodeManager::createCompanyActor(const QString &password)
     else
     {
         // company = *accController->getAccounts()[0];
-        emit loadProfileForConsoleLogin(consoleHash);
+        emit loadProfileForConsoleLogin(email.toLatin1(), password.toLatin1());
     }
 
     if (blockchain->getRecords() <= 0)
@@ -413,7 +413,6 @@ void NodeManager::updateWalletList()
 
 void NodeManager::updateAvailableWalletList()
 {
-    qDebug() << "NODE MANAGER: updateAvailableWalletList";
     QByteArray currentId = uiWallet->getCurrentWalletId().toActorId();
     QStringList actors = uiWallet->getAllActor(currentId);
 
@@ -447,7 +446,7 @@ void NodeManager::updateRecentActivities()
 
 void NodeManager::changeWalletIdUi(BigNumber walletId)
 {
-    qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
+    // qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
     // accController->loadActors();
     accController->changeUserNum(walletId.toActorId());
     uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId, uiWallet->getCurrentToken()));
@@ -599,20 +598,25 @@ void NodeManager::connectUi()
     uiController->startThreads();
 }
 
+#include "asyncfuture.h" // temp
+#include <QtConcurrent>  // temp
+
 void NodeManager::addNewWallet()
 {
-    auto actor = accController->createActor(0);
-    auto wallets = uiWallet->getCurrentWallets();
-    uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
-    this->createWalletInUi();
-    //    uiWallet->createWalletToNode();
+    auto future = QtConcurrent::run(accController, &AccountController::createActor, 0);
+
+    AsyncFuture::observe(future).subscribe([this, future]() {
+        auto walletId = future.result().getId().toActorId();
+        auto wallets = uiWallet->getCurrentWallets();
+        uiWallet->setCurrentWallets(wallets << walletId);
+        createWalletInUi();
+    });
 }
 #elif ETALONIUM_CONSOLE
 void NodeManager::connectConsole()
 {
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
-    connect(this, &NodeManager::loadProfileForConsoleLogin, prProfile,
-            &PrivateProfile::loadProfileForAutoLogin);
+    connect(this, &NodeManager::loadProfileForConsoleLogin, prProfile, &PrivateProfile::loadPrivateProfile);
 }
 #endif
 
@@ -707,9 +711,46 @@ void NodeManager::tempareSlotForActors()
     emit sendActorToWallet(accController->getAccountID());
 }
 
-void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
+void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
 {
-    createTransactionFrom(BigNumber(*actorIndex->companyId), receiver, amount);
+    auto mainActor = accController->getMainActor();
+
+    if (mainActor == nullptr)
+    {
+        qDebug() << "Main actor not exists";
+        return;
+    }
+
+    BigNumber companyId = BigNumber(*actorIndex->companyId);
+    if (mainActor->getId() == companyId)
+    {
+        qInfo().noquote() << "Company send to" << receiver << "with amount" << amount;
+        createTransactionFrom(companyId, receiver, amount);
+    }
+#ifdef ETALONIUM_CONSOLE
+    else
+    {
+        qInfo().noquote() << "Coin request from" << receiver << "with amount" << amount;
+        if (plsr > 0 && mainActor->getId() != plsr)
+        {
+            qInfo() << "Not for you";
+            return;
+        }
+
+        if (blockchain->getUserBalance(mainActor->getId()) < amount)
+        {
+            qInfo().noquote() << "Not enough coins on wallet" << mainActor;
+        }
+
+        qInfo() << "Send? (y/n)";
+        QString answer = ConsoleManager::getSomething("answer");
+        if (answer == "y")
+        {
+            qInfo() << "Sending...";
+            createTransaction(receiver, amount, 0);
+        }
+    }
+#endif
 }
 
 QByteArray NodeManager::getIdPrivateProfile() const

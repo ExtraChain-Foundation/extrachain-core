@@ -10,7 +10,7 @@
 #include <QString>
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
-#include "headers/network/socket_pair.h"
+#include "network/socket_pair.h"
 #include <QStringList>
 #include <string>
 #include <sstream>

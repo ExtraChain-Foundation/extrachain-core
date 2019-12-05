@@ -3,7 +3,7 @@
 #ifndef RESOLVE_MANAGER_DEF
 #define RESOLVE_MANAGER_DEF
 class ResolveManager;
-#include "headers/resolve/resolve_manager.h"
+#include "resolve/resolve_manager.h"
 #endif
 #include <QObject>
 #include <QMap>
@@ -26,6 +26,10 @@ class ResolveManager;
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
+#endif
+
+#ifdef ETALONIUM_CONSOLE
+#include "managers/console_manager.h"
 #endif
 
 using namespace dfsStruct;
@@ -62,7 +66,7 @@ public:
     ~NodeManager();
 
 public:
-    void createCompanyActor(const QString &password);
+    void createCompanyActor(const QString &email, const QString &password);
     Blockchain *getBlockchain();
     NetManager *getNetManager();
     AccountController *getAccController() const;
@@ -84,7 +88,7 @@ public:
     int getClientList();
 
 public:
-    void coinResponse(BigNumber receiver, BigNumber amount);
+    void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
 #endif
@@ -138,7 +142,7 @@ signals:
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void getAllActorsNode(QByteArray id, bool acc);
-    void loadProfileForConsoleLogin(QByteArray);
+    void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
 
 private slots:
     void getAllActors();

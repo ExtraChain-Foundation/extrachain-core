@@ -4,17 +4,17 @@
 #ifndef NETWORK_MANAGER_DEF
 #define NETWORK_MANAGER_DEF
 class NetManager;
-#include "headers/network/network_manager.h"
+#include "network/network_manager.h"
 #endif
 #ifndef RESOLVER_SERVICE_DEF
 #define RESOLVER_SERVICE_DEF
 class ResolverService;
-#include "headers/resolve/resolver_service.h"
+#include "resolve/resolver_service.h"
 #endif
 #ifndef NODE_MANAGER_DEF
 #define NODE_MANAGER_DEF
 class NodeManager;
-#include "headers/managers/node_manager.h"
+#include "managers/node_manager.h"
 #endif
 
 #include "managers/chatmanager.h"
@@ -25,9 +25,9 @@ static const short ResolverServicePoolMaxSize = 100;
 //#include <QQueue>
 #include <queue>
 #include <vector>
-#include "headers/datastorage/blockchain.h"
-#include "headers/datastorage/index/actorindex.h"
-#include "headers/managers/tx_manager.h"
+#include "datastorage/blockchain.h"
+#include "datastorage/index/actorindex.h"
+#include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
 
 class ResolveManager : public QObject
