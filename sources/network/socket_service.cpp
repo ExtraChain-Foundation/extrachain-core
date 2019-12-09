@@ -211,7 +211,6 @@ void SocketService::doRead(QByteArray data)
     {
         data.remove(0, 8);
         continueDoRead(dpBuffer + data);
-        dpBuffer.clear();
     }
     else
     {
@@ -225,6 +224,7 @@ void SocketService::continueDoRead(QByteArray data)
     QByteArray pckg = data.mid(0, pendMsgSize);
     data.remove(0, pendMsgSize);
     pendMsgSize = 0;
+    dpBuffer = data;
     if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
     {
         QByteArray b = pckg.mid(IDENTIFICATOR.size());
