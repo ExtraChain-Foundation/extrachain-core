@@ -136,7 +136,7 @@ void *SocketService::distMsg(const QByteArray data, const SocketPair socketData)
 void SocketService::sockReady()
 {
     //    *dpBuffer = socket->readAll();
-    doRead(socket->readAll());
+    doRead(dpBuffer + socket->readAll());
     //    dpBuffer.clear();
 }
 
@@ -207,10 +207,10 @@ void SocketService::doRead(QByteArray data)
     QByteArray msgLength = data.mid(0, 8);
     pendMsgSize = Utils::qByteArrayToInt(msgLength);
 
-    if ((pendMsgSize != 0) && (data.size() + dpBuffer.size() >= pendMsgSize))
+    if ((pendMsgSize != 0) && (data.size() >= pendMsgSize))
     {
         data.remove(0, 8);
-        continueDoRead(dpBuffer + data);
+        continueDoRead(data);
     }
     else
     {
