@@ -136,7 +136,13 @@ void *SocketService::distMsg(const QByteArray data, const SocketPair socketData)
 void SocketService::sockReady()
 {
     //    *dpBuffer = socket->readAll();
-    doRead(dpBuffer + socket->readAll());
+    QByteArray data = socket->readAll();
+    if (data.size() + dpBuffer.size() < 8)
+    {
+        dpBuffer.append(data);
+        return;
+    }
+    doRead(dpBuffer + data);
     //    dpBuffer.clear();
 }
 
@@ -199,11 +205,7 @@ void SocketService::setActive(bool active)
 
 void SocketService::doRead(QByteArray data)
 {
-    if (data.size() < 8)
-    {
-        dpBuffer.append(data);
-        return;
-    }
+    qDebug() << data;
     QByteArray msgLength = data.mid(0, 8);
     pendMsgSize = Utils::qByteArrayToInt(msgLength);
 
@@ -235,6 +237,16 @@ void SocketService::continueDoRead(QByteArray data)
         SocketPair receiver(this->getAddress().toStdString(), this->getPort());
         receiver.setId(this->getID().toByteArray());
         this->gotMessage(pckg, receiver);
+        if (dpBuffer.size() != 0)
+        {
+            QByteArray d = socket->readAll();
+            if (d.size() + dpBuffer.size() < 8)
+            {
+                dpBuffer.append(d);
+                return;
+            }
+            doRead(dpBuffer + d);
+        }
         //        doRead(data);
     }
 }
