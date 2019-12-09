@@ -297,7 +297,7 @@ void ResolverService::resolveGeneralTask()
     }
     if (message.getMsg_data().isEmpty() && msgType != GET_ALL_ACTORS && msgType != GET_BLOCK_COUNT_MESSAGE)
     {
-        emit TaskFinished();
+        finishWork();
         return;
     }
     if (msgType != GET_ALL_ACTORS && msgType != GET_ALL_ACTORS_RESPONSE_MESSAGE)
@@ -310,13 +310,19 @@ void ResolverService::resolveGeneralTask()
         {
             BaseMessageResponse responseMessage(msg);
             if (MessageIsNotValid(responseMessage))
+            {
+                finishWork();
                 return;
+            }
         }
         else
         {
             //            qDebug() << "received msg signature:" << message.getDigSig();
             if (MessageIsNotValid(message))
+            {
+                finishWork();
                 return;
+            }
         }
     }
     // dfs message
@@ -325,27 +331,26 @@ void ResolverService::resolveGeneralTask()
         qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         DFSMessage::DUMessage dfsMsg(message.getMsg_data());
         resolveDfsMessage(message.getMsg_data(), dfsMsg.getType(), receiver);
-        //        emit TaskFinished();
-        //        emit TaskFinished();
+        finishWork();
     }
     else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
     {
         //
         chatManager->msgReceiver(message);
-        emit TaskFinished();
+        finishWork();
     }
     // spread messages
     else if (msgType == PROFILE_FILE)
     {
         emit newProfile(message.getMsg_data());
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == ACTOR_MESSAGE)
     {
         Actor<KeyPublic> actor(message.getMsg_data());
         actorIndex->handleNewActor(actor);
         //        emit newActor(actor);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == BLOCK_MESSAGE)
     {
@@ -353,18 +358,19 @@ void ResolverService::resolveGeneralTask()
         if (!validateBlock(block))
         {
             qDebug() << "Received block" << block.getIndex() << "is not valid";
+            finishWork();
             return;
         }
         blockchain->addBlockToBlockchain(block);
         //        emit newBlock(block);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GENESIS_BLOCK_MESSAGE)
     {
         GenesisBlock block = message.getMsg_data();
         blockchain->addGenBlockToBlockchain(block);
         //        emit newGenesisBlock(block);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == COIN_REQUEST)
     {
@@ -376,7 +382,7 @@ void ResolverService::resolveGeneralTask()
             plsr = BigNumber(list[1]);
         node->coinResponse(message.getSigner(), amount, plsr);
         //        emit coinRequest(message.getSigner(), amount);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == TX_MESSAGE)
     {
@@ -387,7 +393,7 @@ void ResolverService::resolveGeneralTask()
         //            return;
         //        }
         emit newTx(tx);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == CONTRACT_MESSAGE)
     {
@@ -401,21 +407,21 @@ void ResolverService::resolveGeneralTask()
             return;
         }
         emit newTx(tx);
-        emit TaskFinished();
+        finishWork();
     }
 
     else if (msgType == MERGED_BLOCK_MESSAGE)
     {
         //
         qDebug() << "[resolve message] MERGED_BLOCK_MESSAGE";
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == BLOCK_APPROVED_MESSAGE)
     {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << BLOCK_APPROVED_MESSAGE;
         BlockApprovedMessage r(message.getMsg_data());
-        emit TaskFinished();
+        finishWork();
 
         //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
     }
@@ -425,35 +431,35 @@ void ResolverService::resolveGeneralTask()
     {
         GetActorMessage response(message.getMsg_data());
         emit getActor(response.getActorId(), calcHash(msg), receiver);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_ALL_ACTORS)
     {
         //        GetAllActorMessage response(message.getMsg_data());
         emit handleGetAllActor(calcHash(msg), receiver);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage txMessage(message.getMsg_data());
         emit getTx(txMessage.getParam(), txMessage.getValue(), receiver, calcHash(msg));
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_BLOCK_MESSAGE)
     {
         GetBlockMessage blMessage(message.getMsg_data());
         emit getBlock(blMessage.getParam(), blMessage.getValue(), calcHash(msg), receiver);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_ACTOR_COUNT_MESSAGE)
     {
         emit getActorsCount(calcHash(msg), receiver);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_BLOCK_COUNT_MESSAGE)
     {
         emit getBlocksCount(calcHash(msg), receiver);
-        emit TaskFinished();
+        finishWork();
     }
 
     // response messages
@@ -466,7 +472,7 @@ void ResolverService::resolveGeneralTask()
             return;
         actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
     {
@@ -478,7 +484,7 @@ void ResolverService::resolveGeneralTask()
             return;
         actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.getMsg_data(), 4));
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
     {
@@ -494,7 +500,7 @@ void ResolverService::resolveGeneralTask()
             return;
         }
         emit newTx(tx);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_BLOCK_RESPONSE_MESSAGE)
     {
@@ -525,7 +531,7 @@ void ResolverService::resolveGeneralTask()
             blockchain->addBlockToBlockchain(block);
             //            emit newBlock(block);
         }
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
     {
@@ -536,7 +542,7 @@ void ResolverService::resolveGeneralTask()
                  << "recieveMsg(): type: " << GET_BLOCK_COUNT_RESPONSE_MESSAGE;
         BigNumber count(responseMessage.getMsg_data());
         emit blockCount(count);
-        emit TaskFinished();
+        finishWork();
     }
     else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
     {
@@ -545,10 +551,10 @@ void ResolverService::resolveGeneralTask()
             return;
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
-        emit TaskFinished();
+        finishWork();
     }
     else
-        emit TaskFinished();
+        finishWork();
 }
 
 void ResolverService::resolveDfsTask()
@@ -566,11 +572,7 @@ void ResolverService::resolveDfsTask()
 }
 void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType, const SocketPair &receiver)
 {
-    //    emit restartLoadChecker();
-    qDebug() << "[dfs resolve message]";
-    //    Network::DataStruct ds;
-    //    ds.msg = data;
-    //    ds.receiver = receiver;
+    qDebug() << "[dfs resolve message] msg type:" << mType;
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     // resolve msg
     if (msgType == DFSMessage::dfsMessageType::requestFragments)
