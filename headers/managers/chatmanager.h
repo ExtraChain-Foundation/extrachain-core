@@ -58,7 +58,6 @@ private:
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
     QByteArray getPathToMyChats();      //+ keystore/chats/
-    QMap<QByteArray, QByteArray> extractChatKey();
     // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
     // QByteArray convertChatIdToFullPath(QByteArray chatId); //
@@ -70,6 +69,7 @@ public:
     ~ChatManager(); //+
 
     void setNetManager(NetManager *value);
+    QMap<QByteArray, QByteArray> extractChatKey();
 
 public slots:
     void ActorInit(); //+

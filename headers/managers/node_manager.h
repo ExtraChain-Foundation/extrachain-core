@@ -96,6 +96,8 @@ public:
     QByteArray getIdPrivateProfile() const;
     QByteArray getHashLoginPrivateProfile() const;
 
+    ChatManager *getChatManager() const;
+
 private:
     Actor<KeyPrivate> CreateExtracoin();
     void showMessage(QString from, QString message);

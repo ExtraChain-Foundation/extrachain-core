@@ -239,6 +239,11 @@ public:
 
     void setResolveManager(ResolveManager *value);
 
+    quint16 getServerPort() const;
+    QString getServerIp() const;
+    bool getAllowLocalServer() const;
+    QNetworkAddressEntry *getLocal() const;
+
 signals:
     //    void newDfsSocket(SocketService *socket);
     //    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);

@@ -469,3 +469,23 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
         }
     }
 }
+
+quint16 NetManager::getServerPort() const
+{
+    return serverPort;
+}
+
+QString NetManager::getServerIp() const
+{
+    return serverIp;
+}
+
+bool NetManager::getAllowLocalServer() const
+{
+    return allowLocalServer;
+}
+
+QNetworkAddressEntry *NetManager::getLocal() const
+{
+    return local;
+}

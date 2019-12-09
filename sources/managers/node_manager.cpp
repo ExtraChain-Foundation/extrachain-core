@@ -772,3 +772,8 @@ void NodeManager::setHashLoginPrivateProfile(QByteArray hash)
 {
     hashLoginPrivateProfile = hash;
 }
+
+ChatManager *NodeManager::getChatManager() const
+{
+    return chatManager;
+}
