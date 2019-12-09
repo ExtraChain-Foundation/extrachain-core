@@ -144,7 +144,7 @@ void PrivateProfile::profile(const QByteArray &hash)
             else
             {
 #ifdef ETALONIUM_CONSOLE
-                qInfo() << "Incorrect password";
+                qInfo() << "---> Incorrect email or password";
                 std::exit(0);
 #endif
                 continue;
