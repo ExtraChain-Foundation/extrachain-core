@@ -58,10 +58,11 @@ private:
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
     QByteArray getPathToMyChats();      //+ keystore/chats/
-                                        //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
+    QMap<QByteArray, QByteArray> extractChatKey();
+    // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
-
     // QByteArray convertChatIdToFullPath(QByteArray chatId); //
+
 public:
     ChatManager(AccountController *accController, ActorIndex *actorIndex); //+
     void msgReceiver(const Messages::BaseMessage &msg);
