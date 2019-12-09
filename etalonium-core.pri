@@ -49,6 +49,7 @@ SOURCES += \
     $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
+    $$PWD/sources/resolve/dfs_resolver_service.cpp \
     $$PWD/sources/resolve/resolve_manager.cpp \
     $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
@@ -135,6 +136,7 @@ HEADERS += \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
+    $$PWD/headers/resolve/dfs_resovler_service.h \
     $$PWD/headers/resolve/resolve_manager.h \
     $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \

@@ -66,12 +66,12 @@ NetManager *DFSNetManager::getNetManager()
 
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
-    mutex.lock();
+    //    mutex.lock();
     //    if (checkMsgCount(msg, handler, socketsList))
     resolveManager->setTask(msg, receiver);
     //    else qDebug()
     //        << "[&DFSNetManager]::checkMsgCount have returned false ~ such message has been already added";
-    mutex.unlock();
+    //    mutex.unlock();
     return nullptr;
 }
 

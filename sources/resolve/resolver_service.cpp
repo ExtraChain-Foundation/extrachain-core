@@ -643,11 +643,17 @@ void ResolverService::resolveDfsMessage(const QByteArray &data, const int &mType
         }
         else if (type == Resolver::Type::DFS)
         {
+            //            reloadTimer->stop();
             qDebug() << "[fileDataMessage:]";
             DFSMessage::dfs_message message(data);
+            if (message.data.isEmpty())
+                return;
+            mutex.lock();
             file.seek(DFSMessage::dataSize * message.pckgNumber);
             file.write(message.data);
             file.flush();
+            mutex.unlock();
+            //            qDebug() << message.pckgNumber;
             dataChecker[message.pckgNumber] = true;
             reloadTimer->start(DFS_PWT);
         }

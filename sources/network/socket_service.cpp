@@ -69,7 +69,7 @@ void SocketService::setNetManager(NetManager *value)
 
 SocketService::SocketService()
 {
-    dpBuffer.clear();
+    dpBuffer->clear();
 }
 
 SocketService::SocketService(const SocketService &value)
@@ -84,7 +84,7 @@ SocketService::SocketService(const SocketService &value)
     _blockSize = value._blockSize;
     //    buffer = value.buffer;
     reconnectTry = value.reconnectTry;
-    dpBuffer.clear();
+    dpBuffer->clear();
 }
 
 SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
@@ -92,14 +92,14 @@ SocketService::SocketService(QString address, quint16 networkPort, QObject *pare
 {
     this->address = address;
     this->port = networkPort;
-    dpBuffer.clear();
+    dpBuffer->clear();
 }
 
 SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 //    : QObject(parent)
 {
     this->socketDescriptor = socketDescriptor;
-    dpBuffer.clear();
+    dpBuffer->clear();
     qDebug() << "Socket Descriptor" << socketDescriptor;
 }
 
@@ -137,12 +137,11 @@ void SocketService::sockReady()
 {
     //    *dpBuffer = socket->readAll();
     QByteArray data = socket->readAll();
-    if (data.size() + dpBuffer.size() < 8)
-    {
-        dpBuffer.append(data);
+    dpBuffer->append(data);
+    qDebug() << "dpBuffer sockReady size:" << dpBuffer->size();
+    if (dpBuffer->size() < 8)
         return;
-    }
-    doRead(dpBuffer + data);
+    doRead(dpBuffer);
     //    dpBuffer.clear();
 }
 
@@ -203,30 +202,26 @@ void SocketService::setActive(bool active)
     this->active = active;
 }
 
-void SocketService::doRead(QByteArray data)
+void SocketService::doRead(QByteArray *data)
 {
-    qDebug() << data;
-    QByteArray msgLength = data.mid(0, 8);
+    //    std::cout << data.toStdString() << std::endl;
+    QByteArray msgLength = data->mid(0, 8);
     pendMsgSize = Utils::qByteArrayToInt(msgLength);
 
-    if ((pendMsgSize != 0) && (data.size() >= pendMsgSize))
+    if ((pendMsgSize != 0) && (data->size() >= pendMsgSize))
     {
-        data.remove(0, 8);
+        data->remove(0, 8);
         continueDoRead(data);
-    }
-    else
-    {
-        dpBuffer.append(data);
-        return;
     }
 }
 
-void SocketService::continueDoRead(QByteArray data)
+void SocketService::continueDoRead(QByteArray *data)
 {
-    QByteArray pckg = data.mid(0, pendMsgSize);
-    data.remove(0, pendMsgSize);
+    QByteArray pckg = data->mid(0, pendMsgSize);
+    data->remove(0, pendMsgSize);
+    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
     pendMsgSize = 0;
-    dpBuffer = data;
+    //    dpBuffer = data;
     if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
     {
         QByteArray b = pckg.mid(IDENTIFICATOR.size());
@@ -237,15 +232,14 @@ void SocketService::continueDoRead(QByteArray data)
         SocketPair receiver(this->getAddress().toStdString(), this->getPort());
         receiver.setId(this->getID().toByteArray());
         this->gotMessage(pckg, receiver);
-        if (dpBuffer.size() != 0)
+        if (dpBuffer->size() != 0)
         {
             QByteArray d = socket->readAll();
-            if (d.size() + dpBuffer.size() < 8)
-            {
-                dpBuffer.append(d);
+            dpBuffer->append(d);
+            qDebug() << "dpBuffer continueDoRead append size:" << dpBuffer->size();
+            if (dpBuffer->size() < 8)
                 return;
-            }
-            doRead(dpBuffer + d);
+            doRead(dpBuffer);
         }
         //        doRead(data);
     }
