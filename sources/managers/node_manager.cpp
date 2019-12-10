@@ -405,7 +405,7 @@ void NodeManager::updateWalletList()
         walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        walletList.append(WalletController::toRealNumber(amount));
+        walletList.append(Transaction::amountToVisible(amount).toLatin1());
     }
 
     uiWallet->updateWalletListModel(&walletList);
@@ -713,6 +713,7 @@ void NodeManager::tempareSlotForActors()
 
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
 {
+#ifdef ETALONIUM_CONSOLE
     auto mainActor = accController->getMainActor();
 
     if (mainActor == nullptr)
@@ -727,28 +728,29 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber p
         qInfo().noquote() << "Company send to" << receiver << "with amount" << amount;
         createTransactionFrom(companyId, receiver, amount);
     }
-#ifdef ETALONIUM_CONSOLE
     else
     {
-        qInfo().noquote() << "Coin request from" << receiver << "with amount" << amount;
         if (plsr > 0 && mainActor->getId() != plsr)
         {
-            qInfo() << "Not for you";
             return;
         }
 
         if (blockchain->getUserBalance(mainActor->getId()) < amount)
         {
             qInfo().noquote() << "Not enough coins on wallet" << mainActor;
+            return;
         }
 
-        qInfo() << "Send? (y/n)";
-        QString answer = ConsoleManager::getSomething("answer");
-        if (answer == "y")
+        m_requestCoinQueue.append({ receiver, amount, plsr });
+        if (m_listenCoinRequest)
         {
-            qInfo() << "Sending...";
-            createTransaction(receiver, amount, 0);
+            return;
         }
+
+        qInfo().noquote() << "Coin request from" << receiver.toByteArray() << "with amount"
+                          << Transaction::amountToVisible(amount);
+        qInfo() << "Send? (y/n)";
+        m_listenCoinRequest = true;
     }
 #endif
 }

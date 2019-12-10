@@ -512,16 +512,14 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0:
-    {
+    case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
         emit sendMessage(block.serialize(), block_message);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS:
-    {
+    case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
@@ -1075,7 +1073,6 @@ void Blockchain::proveTx()
     if (senderBalanceIsValid && receiverBalanceIsValid)
     {
         tx->sign(accountController->getCurrentActor());
-        emit tx->Approved();
         return;
     }
     else

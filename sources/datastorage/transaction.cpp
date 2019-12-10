@@ -344,3 +344,32 @@ QByteArray Transaction::serialize() const
 
     return Serialization::universalSerialize(list, FIELS_SIZE);
 }
+
+BigNumber Transaction::visibleToAmount(QByteArray amount)
+{
+    amount += amount.indexOf(".") == -1 ? "." : "";
+    QByteArrayList amountList = amount.split('.');
+    int secondLength = amountList[1].length();
+
+    amount += QString("0").repeated(18 - secondLength).toLatin1();
+    amount.replace(".", "");
+
+    return BigNumber(amount, 10);
+}
+
+QString Transaction::amountToVisible(BigNumber number)
+{
+    if (number == 0)
+        return "0";
+
+    QByteArray numberArr = number.toByteArray(10);
+    QString second = numberArr.right(18); //
+    second = QString("0").repeated(18 - second.length()).toLatin1() + second;
+    second = second.remove(QRegExp("[0]*$"));
+    QByteArray first = numberArr.left(numberArr.length() - 18);
+
+    QString numberDec =
+        (first.isEmpty() ? "0" : first) + (second == "0" || second.isEmpty() ? "" : "." + second);
+
+    return numberDec.toLatin1();
+}

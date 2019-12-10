@@ -1,4 +1,4 @@
-#include "chat.h"
+#include "managers/chat.h"
 
 Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
            BigNumber sessionNumb)

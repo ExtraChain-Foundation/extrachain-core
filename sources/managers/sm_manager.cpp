@@ -58,9 +58,9 @@ void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QBy
                                                   QByteArray quantity)
 {
 #ifdef ETALONIUM_CLIENT
-    Transaction tx(sender->getId(), receiver, WalletController::toRealBigNumber(quantity));
+    Transaction tx(sender->getId(), receiver, Transaction::visibleToAmount(quantity));
     tx.setData("initcontract");
-    tx.setSenderBalance(WalletController::toRealBigNumber(quantity));
+    tx.setSenderBalance(Transaction::visibleToAmount(quantity));
 
     tx.setToken(sender->getId());
     tx.sign(*sender);

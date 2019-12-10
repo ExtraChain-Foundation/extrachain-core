@@ -85,6 +85,10 @@ public:
      * @param amount - coin count
      */
     Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
+
+    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                      BigNumber token = 0);
+
     int getClientList();
 
 public:
@@ -120,8 +124,6 @@ private:
      * @brief Creates folders for work, if they not exist
      */
     void prepareFolders();
-    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                      BigNumber token = 0);
 
 signals:
     void sendMsg(const QByteArray &data, const QByteArray &type);
@@ -176,6 +178,41 @@ private slots:
     void changeWalletIdUi(BigNumber walletId);
     void addNewWallet();
 
+#endif
+
+#ifdef ETALONIUM_CONSOLE
+public: // TODO
+    void setConsoleManager(ConsoleManager *consoleManager)
+    {
+        this->consoleManager = consoleManager;
+    }
+
+    auto &requestCoinQueue()
+    {
+        return m_requestCoinQueue;
+    }
+
+    void setListenCoinRequest(bool listenCoinRequest)
+    {
+        m_listenCoinRequest = listenCoinRequest;
+    }
+
+    bool listenCoinRequest()
+    {
+        return m_listenCoinRequest;
+    }
+
+    void sendCoinRequest(BigNumber receiver, BigNumber amount)
+    {
+        qInfo().noquote() << "Sending" << Transaction::amountToVisible(amount) << "coins to"
+                          << receiver.toByteArray();
+        createTransaction(receiver, amount, 0);
+    }
+
+private:
+    ConsoleManager *consoleManager;
+    QList<std::tuple<BigNumber, BigNumber, BigNumber>> m_requestCoinQueue;
+    bool m_listenCoinRequest = false;
 #endif
 };
 #endif // NODE_MANAGER_H
