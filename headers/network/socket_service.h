@@ -40,7 +40,7 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
-    QByteArray *dpBuffer = new QByteArray();
+    QByteArray *dpBuffer;
     NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
@@ -98,8 +98,8 @@ public slots:
     void setActive(bool active);
 
 private:
-    void doRead(QByteArray *data);
-    void continueDoRead(QByteArray *data);
+    void doRead();
+    void continueDoRead();
 
 public:
     void gotMessage(QByteArray msg, SocketPair rec);
