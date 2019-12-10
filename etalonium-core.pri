@@ -136,7 +136,7 @@ HEADERS += \
     $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
-    $$PWD/headers/resolve/dfs_resovler_service.h \
+    $$PWD/headers/resolve/dfs_resolver_service.h \
     $$PWD/headers/resolve/resolve_manager.h \
     $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \

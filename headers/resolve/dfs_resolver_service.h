@@ -30,8 +30,8 @@ private:
     Dfs *dfs;
 
 private:
-    Resolver::Type type = Resolver::Type::GENERAL;
-    Lifetime lifetime = Lifetime::SHORT;
+    Resolver::Type type = Resolver::Type::DFS;
+    Resolver::Lifetime lifetime = Resolver::Lifetime::SHORT;
 
 private:
     QTimer *reloadTimer = nullptr;
@@ -39,7 +39,7 @@ private:
     std::vector<bool> dataChecker;
     //    QString path;
     QFile file;
-    std::vector<DFSMessage::title_message> title;
+    DFSMessage::title_message title;
 
 private:
     bool active = false;
@@ -48,15 +48,13 @@ private:
     QByteArray hash;
     SocketPair receiver;
 
-    AccountController *ac;
-
 public:
     /**
      * @brief ResolverService
      * @param actorIndex
      * @param parent
      */
-    DFSResolverService(QObject *parent = nullptr);
+    DFSResolverService(Resolver::Lifetime lifetime, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
@@ -68,6 +66,12 @@ private slots:
     void checkStatus();
 
 private:
+    /**
+     * @brief validate
+     * @param message
+     * @return
+     */
+    bool validate(const Messages::IMessage &message);
     bool MessageIsNotValid(const Messages::IMessage &message);
     /**
      * @brief addResponseHandler
@@ -81,7 +85,7 @@ private:
      * @param msgType
      * @param receiver
      */
-    void resolveDfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
+    void resolveDfsMessage(const QByteArray &data, const int &msgType);
     /**
      * @brief createTempFile
      * @param path
@@ -122,7 +126,11 @@ public:
 
     Lifetime getLifetime() const;
 
-    //    DFSMessage::title_message getTitle() const;
+    DFSMessage::title_message getTitle() const;
+    void setLifetime(const Lifetime &value);
+
+    void setTitle(const DFSMessage::title_message &value);
+
 public slots:
     /**
      * @brief process
@@ -132,10 +140,7 @@ public slots:
     void process();
     void assignNewTask(Network::DataStruct task);
 signals:
-    void activate();
-    void dfsTitle(QByteArray hash, Network::DataStruct ds);
-    void dfsFragment(QByteArray hash, Network::DataStruct ds);
-    //    void restartLoadChecker();
+    void dfsTitle(Network::DataStruct ds);
     /**
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me

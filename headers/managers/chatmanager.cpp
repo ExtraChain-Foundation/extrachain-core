@@ -121,7 +121,7 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
     //
     if (msg.getMsgType() == Messages::INVITE_CHAT_MESSAGE)
     {
-        InviteChatMessages message(msg.getMsg_data());
+        InviteChatMessages message(msg.getData());
         QByteArray owner = _accController->getMainActor()->getKey()->decrypt(message.owner);
 
         if (owner.length() != 20 || !BigNumber::isValid(owner))
@@ -150,7 +150,7 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
     else if (msg.getMsgType() == Messages::CHAT_MESSAGE)
     {
 
-        ChatMessage message(msg.getMsg_data());
+        ChatMessage message(msg.getData());
         Chat temp = Chat(message.id, _actorIndex, _accController);
         if (temp.decryptByChatKey(message.senderMsg) == _currentActorId)
             return;

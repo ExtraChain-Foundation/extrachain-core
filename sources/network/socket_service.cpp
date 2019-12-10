@@ -138,7 +138,7 @@ void SocketService::sockReady()
     //    *dpBuffer = socket->readAll();
     QByteArray data = socket->readAll();
     dpBuffer->append(data);
-    qDebug() << "dpBuffer sockReady size:" << dpBuffer->size();
+    //    qDebug() << "dpBuffer sockReady size:" << dpBuffer->size();
     if (dpBuffer->size() < 8)
         return;
     doRead(dpBuffer);
@@ -219,7 +219,7 @@ void SocketService::continueDoRead(QByteArray *data)
 {
     QByteArray pckg = data->mid(0, pendMsgSize);
     data->remove(0, pendMsgSize);
-    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
+    //    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
     pendMsgSize = 0;
     //    dpBuffer = data;
     if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
@@ -236,7 +236,7 @@ void SocketService::continueDoRead(QByteArray *data)
         {
             QByteArray d = socket->readAll();
             dpBuffer->append(d);
-            qDebug() << "dpBuffer continueDoRead append size:" << dpBuffer->size();
+            //            qDebug() << "dpBuffer continueDoRead append size:" << dpBuffer->size();
             if (dpBuffer->size() < 8)
                 return;
             doRead(dpBuffer);

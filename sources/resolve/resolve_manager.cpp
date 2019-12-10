@@ -5,76 +5,9 @@ void ResolveManager::setNode(NodeManager *value)
     node = value;
 }
 
-void ResolveManager::dfsTitleArrived(QByteArray dataHash, Network::DataStruct task)
-{
-
-    for (int i = 0; i < l2Res.size(); i++)
-    {
-        if (dataHash == l2Res[i]->getTitle().dataHash)
-        {
-            return;
-        }
-    }
-    l2Res.append(new ResolverService(Resolver::Type::DFS, Resolver::Lifetime::LONG, actorIndex, this));
-    l2Res.last()->setNode(node);
-    l2Res.last()->setBlockchain(blockchain);
-    l2Res.last()->setDfs(dfs);
-    l2Res.last()->setChatManager(chatManager);
-    connectSignals(l2Res.last());
-    // get task from queue
-    l2Res.last()->setTask(task.msg, task.receiver);
-    ThreadPool::addThread(l2Res.last());
-    // create new L2Res
-}
-
-void ResolveManager::dfsFragmentArrived(QByteArray dataHash, Network::DataStruct task)
-{
-    int i = 0;
-    mutex.lock();
-    while (i < l2Res.size())
-    {
-        DFSMessage::title_message dt = l2Res[i]->getTitle();
-        QByteArray b = dt.dataHash;
-        if (b == dataHash)
-        {
-
-            l2Res[i]->assignNewTask(task);
-            mutex.unlock();
-            return;
-        }
-        i++;
-    }
-    mutex.unlock();
-}
-
 void ResolveManager::setChatManager(ChatManager *value)
 {
     chatManager = value;
-}
-
-QMap<QByteArray, std::vector<bool>> *ResolveManager::getDataCheckers() const
-{
-    return dataCheckers;
-}
-
-// QMap<QByteArray, unsigned long> *ResolveManager::getPckgCounter() const
-//{
-//    return pckgCounter;
-//}
-
-void ResolveManager::restartLoadChecker()
-{
-    //    loadChecker->start(5000);
-}
-
-QMap<QByteArray, QString> *ResolveManager::getDownloadingFileList() const
-{
-    return downloadingFileList;
-}
-
-QMap<QByteArray, QFile *> *ResolveManager::getListFile() const
-{
-    return listFile;
 }
 
 QMap<QByteArray, int> *ResolveManager::getRequestResponseMap() const
@@ -82,25 +15,17 @@ QMap<QByteArray, int> *ResolveManager::getRequestResponseMap() const
     return requestResponseMap;
 }
 
-QMap<QString, QByteArray> *ResolveManager::getFileMap() const
-{
-    return fileMap;
-}
-
 ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
-                               TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
+                               TransactionManager *txManager, AccountController *accountControler,
                                QObject *parent)
     : QObject(parent)
 {
-    dataCheckers = new QMap<QByteArray, std::vector<bool>>();
-
     requestResponseMap = new QMap<QByteArray, int>();
     this->actorIndex = actorIndex;
     this->blockchain = blockchain;
     this->networkManager = networkManager;
     this->txManager = txManager;
     this->accountControler = accountControler;
-    this->dfs = dfs;
 
     connect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     connect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
@@ -117,16 +42,7 @@ ResolveManager::~ResolveManager()
 
 void ResolveManager::connectSignals(ResolverService *resolver)
 {
-    connect(resolver, &ResolverService::dfsTitle, this, &ResolveManager::dfsTitleArrived);
-    connect(resolver, &ResolverService::dfsFragment, this, &ResolveManager::dfsFragmentArrived);
-    //    connect(resolver)
-    //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections setup";
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
-    //    connect(resolver, &ResolverService::restartLoadChecker, this, &ResolveManager::restartLoadChecker);
-    //    connect(resolver, &ResolverService::coinRequest, this, &ResolveManager::coinRequest);
-    // "New" signals
-    //    connect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
-    //    connect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     connect(resolver, &ResolverService::newGenesisBlock, blockchain, &Blockchain::addGenBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
@@ -145,13 +61,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
 
 void ResolveManager::disconnectSignals(ResolverService *resolver)
 {
-    //    disconnect(resolver)
-    //    qDebug() << "NET MANAGER: ResolverService " << resolvers.indexOf(resolver) << " connections
-    //    aborted";
     disconnect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
-    // "New" signals
-    //    disconnect(resolver, &ResolverService::newActor, actorIndex, &ActorIndex::handleNewActor);
-    //    disconnect(resolver, &ResolverService::newBlock, blockchain, &Blockchain::addBlockToBlockchain);
     disconnect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
 
     // request signals
@@ -163,8 +73,6 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
     disconnect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     // response signals
     disconnect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
-    // dfs signal
-    //    disconnect(resolver, &ResolverService::dfsMessage, dfs, &Dfs::resolveMsg);
 }
 
 const QByteArray ResolveManager::calcKeccak256(const QByteArray &msg) const
@@ -177,20 +85,12 @@ void ResolveManager::createNewResolver(const Network::DataStruct &task)
     l1Res.append(new ResolverService(Resolver::Type::GENERAL, Resolver::Lifetime::SHORT, actorIndex, this));
     l1Res.last()->setNode(node);
     l1Res.last()->setBlockchain(blockchain);
-    l1Res.last()->setDfs(dfs);
     l1Res.last()->setChatManager(chatManager);
     connectSignals(l1Res.last());
     // get task from queue
     l1Res.last()->setTask(task.msg, task.receiver);
-    auto crutch = l1Res.last();
-    // connect(resolvers.last(), &ResolverService::finished, [crutch]() { crutch->thread()->exit(); });
     qDebug() << "[ResolveManager] created new general resolver, current amount is:" << l1Res.size();
     ThreadPool::addThread(l1Res.last());
-}
-
-void ResolveManager::setL2Resolver(const Network::DataStruct &task)
-{
-    //
 }
 
 bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
@@ -253,7 +153,6 @@ void ResolveManager::taskFinished()
     disconnectSignals(resolver);
     if (resolver->getType() == Resolver::Type::DFS)
     {
-        l2Res.removeOne(resolver);
         if (resolver != nullptr)
             emit resolver->finished();
         return;
@@ -276,12 +175,6 @@ void ResolveManager::taskFinished()
 
 void ResolveManager::process()
 {
-    loadChecker = new QTimer();
-    //    bool udav = connect(loadChecker, &QTimer::timeout, this, &ResolveManager::checkStatus);
-    //    qDebug() << "==================== FILE STATUS CHECK ==================";
-    //    if (udav)
-    //        qDebug() << "======================== STARTED =====================";
-    //    loadChecker->start(5000);
 }
 
 QList<ResolverService *> ResolveManager::getActive()
@@ -316,9 +209,3 @@ bool ResolveManager::popUnprocces()
     }
     return res;
 }
-
-// void ResolveManager::resolveMessage(const QByteArray &msg, const SocketPair &receiver)
-//{
-
-//    setTask(msg, receiver);
-//}

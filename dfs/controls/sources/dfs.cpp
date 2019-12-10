@@ -319,25 +319,26 @@ void Dfs::initDFSNetManager(ResolveManager *resolveManager)
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
     dfsNetManager->setResolveManager(resolveManager);
+    dfsNetManager->setDfs(this);
     ThreadPool::addThread(dfsNetManager);
 }
 
 void Dfs::savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
                        const dfsStruct::SubType &subType, const dfsStruct::Status &status)
 {
-#ifdef ETALONIUM_CLIENT
-    if (type == dfsStruct::Type::images && subType != dfsStruct::SubType::mini)
-    {
-        QImage image(path);
+    //#ifdef ETALONIUM_CLIENT
+    //    if (type == dfsStruct::Type::images && subType != dfsStruct::SubType::mini)
+    //    {
+    //        QImage image(path);
 
-        if (image.save("temp_image", "jpeg", 80))
-        {
-            saveToDFS("temp_image", "", type, subType, status);
-            QFile::remove("temp_image");
-            return;
-        }
-    }
-#endif
+    //        if (image.save("temp_image", "jpeg", 80))
+    //        {
+    //            saveToDFS("temp_image", "", type, subType, status);
+    //            QFile::remove("temp_image");
+    //            return;
+    //        }
+    //    }
+    //#endif
 
     saveToDFS(path, data, type, subType, status);
 }
