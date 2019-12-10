@@ -1,10 +1,10 @@
 #include "status.h"
 
 DFSMessage::Status::Status(const QByteArray &serialize)
-    : DUMessage(type_status)
+    : DUMessage(dfsMessageType::statusMessage)
 {
     QByteArrayList list = deserialize(serialize);
-    if (type_status != list.takeFirst().toInt())
+    if (dfsMessageType::statusMessage != list.takeFirst().toInt())
     {
         qDebug() << "[status]"
                  << "incorrect message type";
@@ -20,7 +20,7 @@ DFSMessage::Status::Status(const QByteArray &serialize)
 }
 
 DFSMessage::Status::Status(const QByteArray &dirOwner, const QStringList &state)
-    : DUMessage(type_status)
+    : DUMessage(dfsMessageType::statusMessage)
 {
     this->dirOwner = dirOwner;
     currentState = state;

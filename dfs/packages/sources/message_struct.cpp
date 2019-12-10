@@ -2,7 +2,7 @@
 
 DFSMessage::dfs_message::dfs_message(const QByteArray &hash, const unsigned long &pckgNumber,
                                      const QByteArray &data)
-    : DUMessage(type_dfs_message)
+    : DUMessage(dfsMessageType::fileDataMessage)
 {
     this->dataHash = hash;
     this->pckgNumber = pckgNumber;
@@ -10,10 +10,10 @@ DFSMessage::dfs_message::dfs_message(const QByteArray &hash, const unsigned long
 }
 
 DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
-    : DUMessage(type_dfs_message)
+    : DUMessage(dfsMessageType::fileDataMessage)
 {
     QList<QByteArray> list = deserialize(serialized);
-    if (type_dfs_message != list.takeFirst().toInt())
+    if (dfsMessageType::fileDataMessage != list.takeFirst().toInt())
     {
         qDebug() << "[dfs_message]"
                  << "incorrect message type";
@@ -29,7 +29,7 @@ DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
 }
 
 DFSMessage::dfs_message::dfs_message(const DFSMessage::dfs_message &temp)
-    : DUMessage(type_dfs_message)
+    : DUMessage(dfsMessageType::fileDataMessage)
 {
     dataHash = temp.dataHash;
     pckgNumber = temp.pckgNumber;

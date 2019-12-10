@@ -96,10 +96,10 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const dfsS
     return dbc.insert(Config::DataStorage::cardTableName, row);
 }
 
-QStringList Dfs::returnDifs(const QString &adin, const QString &dva)
+QStringList Dfs::returnDiffs(const QString &odin, const QString &odinson) //
 {
-    QFile file1(adin);
-    QFile file2(dva);
+    QFile file1(odin);
+    QFile file2(odinson);
     if (!file1.exists())
     {
         qDebug() << "first file is not exist";
@@ -192,7 +192,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
     }
     if (type == dfsStruct::Type::card)
     {
-        QStringList difs = returnDifs(tmpPath, path);
+        QStringList diffs = returnDiffs(tmpPath, path);
         //        for (const QString &el : difs)
         //        {
         //            QByteArrayList res =

@@ -39,7 +39,7 @@ private:
                    const dfsStruct::Status &status = dfsStruct::Status::NEW);
     bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::undef);
-    QStringList returnDifs(const QString &adin, const QString &dva);
+    QStringList returnDiffs(const QString &odin, const QString &odinson);
     void getDFSStatus();
     void signalConnection();
 public slots:
