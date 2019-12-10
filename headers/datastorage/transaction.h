@@ -112,6 +112,19 @@ signals:
     void ProveMe();
     void Approved();
     void NotApproved();
+
+public:
+    /**
+     * @brief 1.1 -> 1.1 * 10e18 in BigNumber
+     * @param amount
+     */
+    static BigNumber visibleToAmount(QByteArray amount);
+
+    /**
+     * @brief 1 * 10e18 from BigNumber to number -> 1
+     * @param number
+     */
+    static QString amountToVisible(BigNumber number);
 };
 
 inline bool operator<(const Transaction &l, const Transaction &r)
