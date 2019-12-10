@@ -16,8 +16,8 @@ SOURCES += \
     $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile_interface.cpp \
-    $$PWD/headers/managers/chat.cpp \
-    $$PWD/headers/managers/chatmanager.cpp \
+    $$PWD/sources/managers/chat.cpp \
+    $$PWD/sources/managers/chatmanager.cpp \
     $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
     $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
     $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
