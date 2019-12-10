@@ -91,7 +91,7 @@ public:
     QByteArray getMsgType() const;
     BigNumber getSigner() const override;
     QByteArray getDigSig() const;
-    QByteArray getMsg_data() const;
+    QByteArray getData() const;
 };
 }
 #endif // BASEMESSAGE_H

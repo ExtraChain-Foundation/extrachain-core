@@ -36,10 +36,8 @@ class NodeManager;
 class ActorIndex;
 class Blockchain;
 class TransactionManager;
-class Dfs;
 class ChatManager;
 using namespace Resolver;
-static const int DFS_PWT = 500;
 class ResolverService : public QObject
 {
     Q_OBJECT
@@ -47,7 +45,6 @@ private:
     NodeManager *node;
     ActorIndex *actorIndex;
     Blockchain *blockchain;
-    Dfs *dfs;
     ChatManager *chatManager;
 
 private:
@@ -87,8 +84,6 @@ public:
 
 private:
     void finishWork();
-private slots:
-    void checkStatus();
 
 public:
     /**
@@ -106,8 +101,6 @@ public:
     void setNode(NodeManager *value);
 
     void setBlockchain(Blockchain *value);
-
-    void setDfs(Dfs *value);
 
     void setChatManager(ChatManager *value);
 
@@ -176,33 +169,6 @@ private:
      */
     void resolveTask();
     void resolveGeneralTask();
-    void resolveDfsTask();
-    /**
-     * @brief resolveDfsMessage
-     * @param data
-     * @param msgType
-     * @param receiver
-     */
-    void resolveDfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
-    /**
-     * @brief createTempFile
-     * @param path
-     * @param size
-     * @param tHash
-     * @return
-     */
-    bool createTempFile(const QString &path, const long long &size, const QByteArray &tHash);
-    /**
-     * @brief registerTitle
-     * @param tmpPath
-     * @param pckgAmount
-     * @param size
-     * @param titleSerialize
-     * @param tHash
-     * @return
-     */
-    bool registerTitle(const QString &tmpPath, DFSMessage::title_message title);
-    void cleanTask();
 public slots:
     /**
      * @brief process
@@ -212,10 +178,6 @@ public slots:
     void process();
     void assignNewTask(Network::DataStruct task);
 signals:
-    void activate();
-    void dfsTitle(QByteArray hash, Network::DataStruct ds);
-    void dfsFragment(QByteArray hash, Network::DataStruct ds);
-    //    void restartLoadChecker();
     /**
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me
