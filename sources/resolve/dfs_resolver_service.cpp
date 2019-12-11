@@ -31,15 +31,42 @@ void DFSResolverService::finishWork()
 
 void DFSResolverService::checkStatus()
 {
-    QList<QByteArray> emptyFrags;
+    QByteArray emptyFrags;
     emptyFrags.clear();
+    unsigned long s = ULONG_MAX;
+    unsigned long e = ULONG_MAX;
     for (unsigned long i = 0; i < dataChecker.size(); i++)
     {
         if (!dataChecker[i])
         {
-            emptyFrags.append(QByteArray::number(static_cast<long long>(i)));
+            if (s == ULONG_MAX)
+            {
+                s = i;
+            }
+            else
+            {
+                e = i;
+            }
         }
+
+        if (dataChecker[i] || i == dataChecker.size() - 1)
+        {
+            if (s != ULONG_MAX && e == ULONG_MAX)
+                emptyFrags +=
+                    (emptyFrags.isEmpty() ? "" : " ") + QByteArray::number(static_cast<long long>(s));
+
+            if (s != ULONG_MAX && e != ULONG_MAX)
+                emptyFrags += (emptyFrags.isEmpty() ? "" : " ")
+                    + QByteArray::number(static_cast<long long>(s)) + ":"
+                    + QByteArray::number(static_cast<long long>(e));
+
+            s = ULONG_MAX;
+            e = ULONG_MAX;
+        }
+
+        // 5:8 14 16:54 66
     }
+    qDebug() << "emptyFlags" << emptyFrags;
     if (emptyFrags.isEmpty())
     {
         dfs->saveFN(file.fileName(), title.filePath, dfsStruct::convertToDFType(title.f_type));
@@ -227,13 +254,18 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
                 active = false;
                 return;
             }
-            mutex.lock();
+            if (dataChecker[std::size_t(message.pckgNumber)])
+            {
+                active = false;
+                return;
+            }
+            //            mutex.lock();
             file.seek(DFSMessage::dataSize * message.pckgNumber);
             file.write(message.data);
             file.flush();
-            mutex.unlock();
+            //            mutex.unlock();
             //            qDebug() << message.pckgNumber;
-            dataChecker[message.pckgNumber] = true;
+            dataChecker[std::size_t(message.pckgNumber)] = true;
             reloadTimer->start(DFS_PWT);
             break;
         }

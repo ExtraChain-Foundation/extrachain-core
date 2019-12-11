@@ -57,7 +57,7 @@ public:
     void setDfsNetManager(DFSNetManager *value);
     void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
     void fileResponse(const QString path, const SocketPair &receiver);
-    void resendFragments(QString path, QList<QByteArray> frags);
+    void resendFragments(QString path, QByteArray frags);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);

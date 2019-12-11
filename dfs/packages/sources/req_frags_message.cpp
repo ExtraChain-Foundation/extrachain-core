@@ -5,12 +5,12 @@ QString DFSMessage::req_frags_message::getFilePath() const
     return filePath;
 }
 
-QList<QByteArray> DFSMessage::req_frags_message::getListFrag() const
+QByteArray DFSMessage::req_frags_message::getListFrag() const
 {
     return listFrag;
 }
 
-DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QList<QByteArray> listFrag)
+DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QByteArray listFrag)
     : DUMessage(type_req_frags)
 {
     this->filePath = filePath;
@@ -33,7 +33,7 @@ DFSMessage::req_frags_message::req_frags_message(const QByteArray &serialized)
         return;
     }
     filePath = QString::fromUtf8(list.takeFirst());
-    listFrag = Serialization::universalDeserialize(list.takeFirst());
+    listFrag = list.takeFirst();
 }
 
 DFSMessage::req_frags_message::~req_frags_message()
@@ -52,6 +52,6 @@ bool DFSMessage::req_frags_message::empty() const
 const QList<QByteArray> DFSMessage::req_frags_message::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << filePath.toUtf8() << Serialization::universalSerialize(listFrag);
+    list << QByteArray::number(type) << filePath.toUtf8() << listFrag;
     return list;
 }

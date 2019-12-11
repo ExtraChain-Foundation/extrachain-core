@@ -51,7 +51,7 @@ signals:
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
 
 public slots:
-    void resendFragments(QString path, dfsStruct::Type type, QList<QByteArray> frags);
+    void resendFragments(QString path, dfsStruct::Type type, QByteArray frag);
 
     /**
      * @brief process
