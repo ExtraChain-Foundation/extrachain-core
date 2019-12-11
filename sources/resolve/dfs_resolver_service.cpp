@@ -69,10 +69,11 @@ void DFSResolverService::checkStatus()
     qDebug() << "emptyFlags" << emptyFrags;
     if (emptyFrags.isEmpty())
     {
+        file.close();
         dfs->saveFN(file.fileName(), title.filePath, dfsStruct::convertToDFType(title.f_type));
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
-        file.close();
+
         disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
         //        delete reloadTimer;
         finishWork();

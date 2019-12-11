@@ -218,24 +218,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
         Serialization::serialize({ pathList.at(PathStruct::rFolder), pathList.at(PathStruct::aId) }, "/")
         + prFB.toByteArray();
     QDir dir(pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId));
-    QStringList list = dir.entryList({ "*.tmp" }, QDir::Files | QDir::NoDotAndDotDot);
-    if (!list.isEmpty())
-    {
-        for (QString el : list)
-        {
-            el.chop(dfsStruct::FILE_IDENTIFICATOR.size());
-            QString path = pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId) + '/' + el;
-
-            DFSMessage::dfs_request rqst(path, (*accountControler->getMainActor()).getId().toActorId());
-            dfsNetManager->send(rqst.serialize());
-            //            QFile(path + based_dfs_struct::FILE_IDENTIFICATOR).remove();
-        }
-    }
-    //    if (QFile(prevFilePath + based_dfs_struct::FILE_IDENTIFICATOR.toUtf8()).exists())
-    //    {
-    //        Message::dfs_request rqst(prevFilePath,
-    //        accountControler->getCurrentActor().getId().toActorId()); dfsNetManager->send(rqst.serialize());
-    //    }
     sender->sendFile(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
