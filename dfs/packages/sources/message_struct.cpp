@@ -23,7 +23,7 @@ DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
         return;
     }
     dataHash = list.takeFirst();
-    pckgNumber = list.takeFirst().toULong();
+    pckgNumber = list.takeFirst().toLongLong();
     data = list.takeFirst();
 }
 
