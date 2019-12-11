@@ -12,7 +12,7 @@ namespace Messages {
  * @brief The IMessage interface
  * Every new message should implement this interface
  */
-const int FIELD_SIZES = 4;
+const int FIELD_SIZES = 8;
 class IMessage : public QObject
 {
     Q_OBJECT

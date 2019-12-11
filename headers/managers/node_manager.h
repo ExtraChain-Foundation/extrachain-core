@@ -3,7 +3,7 @@
 #ifndef RESOLVE_MANAGER_DEF
 #define RESOLVE_MANAGER_DEF
 class ResolveManager;
-#include "headers/resolve/resolve_manager.h"
+#include "resolve/resolve_manager.h"
 #endif
 #include <QObject>
 #include <QMap>
@@ -26,6 +26,10 @@ class ResolveManager;
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
+#endif
+
+#ifdef ETALONIUM_CONSOLE
+#include "managers/console_manager.h"
 #endif
 
 using namespace dfsStruct;
@@ -62,7 +66,7 @@ public:
     ~NodeManager();
 
 public:
-    void createCompanyActor(const QString &password);
+    void createCompanyActor(const QString &email, const QString &password);
     Blockchain *getBlockchain();
     NetManager *getNetManager();
     AccountController *getAccController() const;
@@ -81,16 +85,22 @@ public:
      * @param amount - coin count
      */
     Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
+
+    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                      BigNumber token = 0);
+
     int getClientList();
 
 public:
-    void coinResponse(BigNumber receiver, BigNumber amount);
+    void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
 #endif
 
     QByteArray getIdPrivateProfile() const;
     QByteArray getHashLoginPrivateProfile() const;
+
+    ChatManager *getChatManager() const;
 
 private:
     Actor<KeyPrivate> CreateExtracoin();
@@ -114,8 +124,6 @@ private:
      * @brief Creates folders for work, if they not exist
      */
     void prepareFolders();
-    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                      BigNumber token = 0);
 
 signals:
     void sendMsg(const QByteArray &data, const QByteArray &type);
@@ -138,7 +146,7 @@ signals:
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void getAllActorsNode(QByteArray id, bool acc);
-    void loadProfileForConsoleLogin(QByteArray);
+    void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
 
 private slots:
     void getAllActors();
@@ -170,6 +178,41 @@ private slots:
     void changeWalletIdUi(BigNumber walletId);
     void addNewWallet();
 
+#endif
+
+#ifdef ETALONIUM_CONSOLE
+public: // TODO
+    void setConsoleManager(ConsoleManager *consoleManager)
+    {
+        this->consoleManager = consoleManager;
+    }
+
+    auto &requestCoinQueue()
+    {
+        return m_requestCoinQueue;
+    }
+
+    void setListenCoinRequest(bool listenCoinRequest)
+    {
+        m_listenCoinRequest = listenCoinRequest;
+    }
+
+    bool listenCoinRequest()
+    {
+        return m_listenCoinRequest;
+    }
+
+    void sendCoinRequest(BigNumber receiver, BigNumber amount)
+    {
+        qInfo().noquote() << "Sending" << Transaction::amountToVisible(amount) << "coins to"
+                          << receiver.toByteArray();
+        createTransaction(receiver, amount, 0);
+    }
+
+private:
+    ConsoleManager *consoleManager;
+    QList<std::tuple<BigNumber, BigNumber, BigNumber>> m_requestCoinQueue;
+    bool m_listenCoinRequest = false;
 #endif
 };
 #endif // NODE_MANAGER_H

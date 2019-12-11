@@ -14,7 +14,7 @@ struct dfs_message : public DUMessage
     long long pckgNumber;
     QByteArray data;
 
-    dfs_message(const QByteArray &hash, const unsigned long &pckgNumber, const QByteArray &data);
+    dfs_message(const QByteArray &hash, const std::size_t &pckgNumber, const QByteArray &data);
     dfs_message(const QByteArray &serialized);
     dfs_message(const dfs_message &temp);
     ~dfs_message() override final;

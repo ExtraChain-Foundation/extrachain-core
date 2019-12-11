@@ -1,4 +1,4 @@
-#include "headers/utils/db_connector.h"
+#include "utils/db_connector.h"
 
 #include <iostream>
 
@@ -91,10 +91,10 @@ std::vector<DBRow> DBConnector::select(std::string query)
         rs = sqlite3_step(stmt);
     }
 
-    std::cout << "Query(" << (rs == SQLITE_DONE ? "true" : "false") << "): " << query << std::endl;
+    qDebug().nospace() << "Query(" << (rs == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
     if (rs != SQLITE_DONE)
     {
-        std::cout << "Query error: " << sqlite3_errmsg(db) << std::endl;
+        qDebug() << "Query error: " << sqlite3_errmsg(db);
         return {};
     }
 
@@ -169,9 +169,9 @@ bool DBConnector::query(std::string query)
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
 
-    std::cout << "Query(" << (res == SQLITE_DONE ? "true" : "false") << "): " << query << std::endl;
+    qDebug().nospace() << "Query(" << (res == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
     if (res != SQLITE_DONE)
-        std::cout << "Query error: " << sqlite3_errmsg(db) << std::endl;
+        qDebug() << "Query error: " << sqlite3_errmsg(db);
 
     sqlite3_finalize(stmt);
     return res == SQLITE_DONE;

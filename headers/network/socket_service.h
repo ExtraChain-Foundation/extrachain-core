@@ -9,7 +9,7 @@
 #ifndef NETWORK_MANAGER_DEF
 #define NETWORK_MANAGER_DEF
 class NetManager;
-#include "headers/network/network_manager.h"
+#include "network/network_manager.h"
 #endif
 
 #include <QObject>
@@ -40,7 +40,7 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
-    QByteArray dpBuffer;
+    QByteArray *dpBuffer;
     NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
@@ -53,6 +53,8 @@ private:
     //    QByteArray buffer;
     int reconnectTry = 0;
     int pendMsgSize = 0;
+    QFile *logUsh;
+    QFile *logPri;
 
 public:
     SocketService();
@@ -87,19 +89,14 @@ public slots:
      * @param message
      */
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
-
-    /**
-     * @brief stops this thread
-     */
-    void sockReady();
     void closeSocket();
     void process();
     void establishConnection();
     void setActive(bool active);
 
-private:
-    void doRead(QByteArray data);
-    void continueDoRead(QByteArray data);
+private slots:
+    void doRead();
+    void continueDoRead();
 
 public:
     void gotMessage(QByteArray msg, SocketPair rec);

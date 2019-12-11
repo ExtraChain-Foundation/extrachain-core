@@ -13,9 +13,9 @@ struct req_frags_message : public DUMessage
     const short FIELDS_COUNT = 2;
 
     QString filePath;
-    QList<QByteArray> listFrag;
+    QByteArray listFrag;
 
-    req_frags_message(const QByteArray &filePath, QList<QByteArray> listFrag);
+    req_frags_message(const QByteArray &filePath, QByteArray listFrag);
     req_frags_message(const QByteArray &serialized);
     ~req_frags_message() override final;
 
@@ -24,7 +24,7 @@ struct req_frags_message : public DUMessage
 
 public:
     QString getFilePath() const;
-    QList<QByteArray> getListFrag() const;
+    QByteArray getListFrag() const;
 };
 }
 

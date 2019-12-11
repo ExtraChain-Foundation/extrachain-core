@@ -1,5 +1,5 @@
 #include "managers/account_controller.h"
-#include "headers/datastorage/blockchain.h"
+#include "datastorage/blockchain.h"
 
 QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
 {
@@ -261,9 +261,9 @@ void AccountController::clearAcc()
 void AccountController::changeUserNum(QByteArray wallId)
 {
     userNum = 0;
-    for (auto currAcc : accounts)
+    for (const auto &currAcc : accounts)
     {
-        qDebug() << "ACCOUNT CONTROLLER: change userNum" << currAcc->getId().toByteArray(10) << " " << wallId;
+        // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
         if (currAcc->getId().toActorId() == wallId)
         {
             emit updateTransactionListInModel();

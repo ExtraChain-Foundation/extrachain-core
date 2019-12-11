@@ -12,23 +12,39 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
     //    connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 
-void Sender::resendFragments /*Slot*/ (QString path, dfsStruct::Type type, QList<QByteArray> frags)
+void Sender::resendFragments /*Slot*/ (QString path, dfsStruct::Type type, QByteArray frag)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))
     {
         DFSMessage::title_message title(path);
         title.f_type = dfsStruct::toByteArray(type);
-        //        qDebug() << "ReSeNd" << path << title.hash();
         std::vector<long long> fragsID;
-        foreach (QByteArray b, frags)
+        QByteArrayList frags = frag.split(' ');
+
+        for (QByteArray b : frags)
         {
-            fragsID.push_back(b.toLongLong());
+            if (b.indexOf(":") == -1)
+            {
+                fragsID.push_back(b.toLongLong());
+            }
+            else
+            {
+                QByteArrayList bs = b.split(':');
+                unsigned long s = bs[0].toULong();
+                unsigned long e = bs[1].toULong();
+                for (unsigned long i = s; i <= e; i++)
+                {
+                    fragsID.push_back(static_cast<long long>(i));
+                }
+            }
+            //            fragsID.push_back(b.toLongLong());
         }
         for (unsigned int i = 0; i < fragsID.size(); i++)
         {
             file.seek(fragsID[i] * data_offset);
             QByteArray data = file.read(data_offset);
+            std::cout << fragsID[i] << " " << data.left(30).toStdString() << std::endl;
             DFSMessage::dfs_message pck(title.dataHash, fragsID[i], data); // package for send
             NetManager->send(pck.serialize(), Messages::DFS_MESSAGE);
             //            QThread::currentThread()->usleep(50);
@@ -53,24 +69,6 @@ void Sender::sendFile(const QString &filePath, const dfsStruct::Type &type, cons
     }
     qDebug() << "DataHash from title:" << title.dataHash;
     NetManager->send(title.serialize(), Messages::DFS_MESSAGE, receiver);
-    //    titleHashs.insert(title.dataHash, filePath);
-    //    serializedTitle.insert(filePath, title.serialize());
-    //    QThread::currentThread()->msleep(500);
-    //    // prepare and send data
-    //    for (pckgN = 0; pckgN < title.pckgsAmount; pckgN++)
-    //    {
-    //        // First step read offset data from file
-    //        QByteArray data = file.read(data_offset);
-    //        // create package
-    //        DFSMessage::dfs_message pck(title.dataHash, pckgN, data); // package for send
-    //        //        emit sendPckg(pck.serialize(), Messages::DFS_MESSAGE, receiver);
-    //        NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
-    //        //        QThread::currentThread()->usleep(50);
-    //    }
-    //    // create last package
-    //    QByteArray data = file.read(file.size() - file.pos());
-    //    DFSMessage::dfs_message pck(title.dataHash, pckgN, data); // package for send
-    //    NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
     file.close();
 }
 

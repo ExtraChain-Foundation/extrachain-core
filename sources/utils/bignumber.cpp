@@ -262,7 +262,15 @@ bool BigNumber::isEmpty() const // TODO
 
 QByteArray BigNumber::toByteArray(int base) const
 {
-    return QByteArray::fromStdString(m_data.get_str(base));
+    char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
+    QByteArray number(ch);
+    delete ch;
+    return number;
+}
+
+std::string BigNumber::toStdString(int base) const
+{
+    return m_data.get_str(base);
 }
 
 QByteArray BigNumber::toActorId() const
@@ -339,7 +347,7 @@ BigNumber BigNumber::random(int n, bool zeroAllowed)
 
     for (int i = 1; i != n; ++i)
         str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-    std::cout << str.toStdString() << std::endl;
+    // std::cout << str.toStdString() << std::endl;
     BigNumber res(str);
     if (!zeroAllowed && res == 0)
         return random(n, zeroAllowed);

@@ -1,4 +1,4 @@
-#include "chatmanager.h"
+#include "managers/chatmanager.h"
 /////////////////////////////////////////////////
 ///      D   E   S   C   R   I   B   E    ///////
 /////////////////////////////////////////////////
@@ -95,6 +95,14 @@ QByteArray ChatManager::getPathToMyChats()
     return ChatStorage::STORED_CHATS;
 }
 
+QMap<QByteArray, QByteArray> ChatManager::extractChatKey()
+{
+    QMap<QByteArray, QByteArray> chatKey;
+    foreach (Chat *currentChat, _chatList)
+        chatKey[currentChat->getChatId()] = currentChat->getEncryptionKey();
+    return chatKey;
+}
+
 QByteArray ChatManager::generateChatKey()
 {
     return Utils::calcKeccak(BigNumber::random(65).toByteArray());
@@ -113,7 +121,7 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
     //
     if (msg.getMsgType() == Messages::INVITE_CHAT_MESSAGE)
     {
-        InviteChatMessages message(msg.getMsg_data());
+        InviteChatMessages message(msg.getData());
         QByteArray owner = _accController->getMainActor()->getKey()->decrypt(message.owner);
 
         if (owner.length() != 20 || !BigNumber::isValid(owner))
@@ -142,7 +150,7 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
     else if (msg.getMsgType() == Messages::CHAT_MESSAGE)
     {
 
-        ChatMessage message(msg.getMsg_data());
+        ChatMessage message(msg.getData());
         Chat temp = Chat(message.id, _actorIndex, _accController);
         if (temp.decryptByChatKey(message.senderMsg) == _currentActorId)
             return;

@@ -1,5 +1,5 @@
 ﻿#include "network/network_manager.h"
-#include "headers/resolve/resolve_manager.h"
+#include "resolve/resolve_manager.h"
 
 using namespace Messages;
 
@@ -163,7 +163,6 @@ void NetManager::findLocal()
 
         for (const QNetworkAddressEntry &entry : entries)
         {
-            // hack for windows: TODO!
             const auto flags = interface.flags();
 
             bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
@@ -183,7 +182,7 @@ void NetManager::findLocal()
             if (localIpNotConnect.contains(entry.ip()))
             {
                 local = new QNetworkAddressEntry(entry);
-                qDebug() << "Discovered local: " << local->ip().toString();
+                qDebug() << "Discovered local:" << local->ip().toString();
                 if (interface.type() == QNetworkInterface::Wifi
                     || interface.type() == QNetworkInterface::Ethernet)
                     break;
@@ -469,4 +468,24 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
             connectSocket();
         }
     }
+}
+
+quint16 NetManager::getServerPort() const
+{
+    return serverPort;
+}
+
+QString NetManager::getServerIp() const
+{
+    return serverIp;
+}
+
+bool NetManager::getAllowLocalServer() const
+{
+    return allowLocalServer;
+}
+
+QNetworkAddressEntry *NetManager::getLocal() const
+{
+    return local;
 }

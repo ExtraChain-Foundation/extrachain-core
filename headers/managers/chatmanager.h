@@ -17,7 +17,7 @@
 #ifndef NETWORK_MANAGER_DEF
 #define NETWORK_MANAGER_DEF
 class NetManager;
-#include "headers/network/network_manager.h"
+#include "network/network_manager.h"
 #endif
 struct InviteChatMessages
 {
@@ -58,10 +58,10 @@ private:
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
     QByteArray getPathToMyChats();      //+ keystore/chats/
-                                        //  bool isUserVerify(QByteArray chatId, QByteArray actorId);
+    // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
-
     // QByteArray convertChatIdToFullPath(QByteArray chatId); //
+
 public:
     ChatManager(AccountController *accController, ActorIndex *actorIndex); //+
     void msgReceiver(const Messages::BaseMessage &msg);
@@ -69,6 +69,7 @@ public:
     ~ChatManager(); //+
 
     void setNetManager(NetManager *value);
+    QMap<QByteArray, QByteArray> extractChatKey();
 
 public slots:
     void ActorInit(); //+

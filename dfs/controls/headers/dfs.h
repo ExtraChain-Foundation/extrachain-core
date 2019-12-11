@@ -33,7 +33,8 @@ private:
 private:
     void initUserCards();
     void initDFS(const QByteArray &userId);
-    void saveToDFS(const QString &path, const dfsStruct::Type &type = dfsStruct::Type::images,
+    void saveToDFS(const QString &path, const QByteArray &data,
+                   const dfsStruct::Type &type = dfsStruct::Type::images,
                    const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                    const dfsStruct::Status &status = dfsStruct::Status::NEW);
     bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
@@ -56,7 +57,7 @@ public:
     void setDfsNetManager(DFSNetManager *value);
     void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
     void fileResponse(const QString path, const SocketPair &receiver);
-    void resendFragments(QString path, QList<QByteArray> frags);
+    void resendFragments(QString path, QByteArray frags);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
@@ -66,11 +67,10 @@ signals:
     void usersChanges(const QByteArray &path, const dfsStruct::Type &type, const QByteArray &actorId);
 
 public slots:
-
     void init();
     void initUser(BigNumber userId);
 
-    void savedNewData(const QString &path, const dfsStruct::Type &type,
+    void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                       const dfsStruct::Status &status = dfsStruct::Status::NEW);
     void process();

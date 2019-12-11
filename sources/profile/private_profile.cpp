@@ -1,5 +1,5 @@
 #include <profile/private_profile.h>
-#include "headers/managers/account_controller.h"
+#include "managers/account_controller.h"
 #include "dfs/controls/headers/dfs.h"
 
 void PrivateProfile::setAccountController(AccountController *value)
@@ -144,7 +144,7 @@ void PrivateProfile::profile(const QByteArray &hash)
             else
             {
 #ifdef ETALONIUM_CONSOLE
-                std::cout << "------------------> Incorrect password" << std::endl;
+                qInfo() << "---> Incorrect email or password";
                 std::exit(0);
 #endif
                 continue;

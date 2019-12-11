@@ -4,25 +4,25 @@
 #ifndef SERVER_SERVICE_DEF
 #define SERVER_SERVICE_DEF
 class ServerService;
-#include "headers/network/server_service.h"
+#include "network/server_service.h"
 #endif // SERVER_SERVICE
 
 #ifndef SOCKET_SERVICE_DEF
 #define SOCKET_SERVICE_DEF
 class SocketService;
-#include "headers/network/socket_service.h"
+#include "network/socket_service.h"
 #endif // SOCKET_SERVICE
 
 #ifndef UPNP_CONNECTION_DEF
 #define UPNP_CONNECTION_DEF
 class UPNPConnection;
-#include "headers/network/upnpconnection.h"
+#include "network/upnpconnection.h"
 #endif // UPNP_CONNECTION
 
 #ifndef DISCOVERY_SERVICE_DEF
 #define DISCOVERY_SERVICE_DEF
 class DiscoveryService;
-#include "headers/network/discovery_service.h"
+#include "network/discovery_service.h"
 #endif
 class ResolveManager;
 //-------------------END-----------------------
@@ -36,7 +36,7 @@ class ResolveManager;
 #include <QtNetwork/QNetworkAddressEntry>
 #include <algorithm>
 
-#include "headers/utils/utils.h"
+#include "utils/utils.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
@@ -238,6 +238,11 @@ public:
     //    void MoveToDfsN();
 
     void setResolveManager(ResolveManager *value);
+
+    quint16 getServerPort() const;
+    QString getServerIp() const;
+    bool getAllowLocalServer() const;
+    QNetworkAddressEntry *getLocal() const;
 
 signals:
     //    void newDfsSocket(SocketService *socket);

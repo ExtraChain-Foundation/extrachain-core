@@ -51,19 +51,31 @@ void Dfs::initDFS(const QByteArray &userId)
     qDebug() << "[init finished]";
 }
 
-void Dfs::saveToDFS(const QString &path, const dfsStruct::Type &type, const dfsStruct::SubType &subType,
-                    const dfsStruct::Status &status)
+void Dfs::saveToDFS(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
+                    const dfsStruct::SubType &subType, const dfsStruct::Status &status)
 {
-    QFile file(path);
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray dfsPath = buildDfsPath(userId, type);
     if (!appendToCard(dfsPath, userId, type, subType))
         return;
-    if (!file.copy(dfsPath))
+
+    if (path.isEmpty())
     {
-        QFile::remove(dfsPath);
-        file.copy(dfsPath);
+        QFile file(dfsPath);
+        file.open(QFile::WriteOnly);
+        file.write(data);
+        file.close();
     }
+    else
+    {
+        QFile file(path);
+        if (!file.copy(dfsPath))
+        {
+            QFile::remove(dfsPath);
+            file.copy(dfsPath);
+        }
+    }
+
     sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath, type, userId); // TODO
@@ -247,7 +259,7 @@ void Dfs::fileResponse(const QString path, const SocketPair &receiver)
     return;
 }
 
-void Dfs::resendFragments(QString path, QList<QByteArray> frags)
+void Dfs::resendFragments(QString path, QByteArray frags)
 {
     sender->resendFragments(
         path, CardManager::getTypeByName(path, Serialization::deserialize(path, '/').at(1).toUtf8()), frags);
@@ -307,26 +319,28 @@ void Dfs::initDFSNetManager(ResolveManager *resolveManager)
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
     dfsNetManager->setResolveManager(resolveManager);
+    dfsNetManager->setDfs(this);
     ThreadPool::addThread(dfsNetManager);
 }
 
-void Dfs::savedNewData(const QString &path, const dfsStruct::Type &type, const dfsStruct::SubType &subType,
-                       const dfsStruct::Status &status)
+void Dfs::savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
+                       const dfsStruct::SubType &subType, const dfsStruct::Status &status)
 {
-#ifdef ETALONIUM_CLIENT
-    if (type == dfsStruct::Type::images && subType != dfsStruct::SubType::mini)
-    {
-        QImage im(path);
-        if (im.save("temp", "jpeg", 80))
-        {
-            saveToDFS("temp", type, subType, status);
-            //            QFile filed("temp");
-            //            filed.remove();
-            return;
-        }
-    }
-#endif
-    saveToDFS(path, type, subType, status);
+    //#ifdef ETALONIUM_CLIENT
+    //    if (type == dfsStruct::Type::images && subType != dfsStruct::SubType::mini)
+    //    {
+    //        QImage image(path);
+
+    //        if (image.save("temp_image", "jpeg", 80))
+    //        {
+    //            saveToDFS("temp_image", "", type, subType, status);
+    //            QFile::remove("temp_image");
+    //            return;
+    //        }
+    //    }
+    //#endif
+
+    saveToDFS(path, data, type, subType, status);
 }
 
 void Dfs::process()

@@ -1,7 +1,6 @@
 #include "dfs/packages/headers/message_struct.h"
 
-DFSMessage::dfs_message::dfs_message(const QByteArray &hash, const unsigned long &pckgNumber,
-                                     const QByteArray &data)
+DFSMessage::dfs_message::dfs_message(const QByteArray &hash, const size_t &pckgNumber, const QByteArray &data)
     : DUMessage(type_dfs_message)
 {
     this->dataHash = hash;
@@ -24,7 +23,7 @@ DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
         return;
     }
     dataHash = list.takeFirst();
-    pckgNumber = list.takeFirst().toULong();
+    pckgNumber = list.takeFirst().toLongLong();
     data = list.takeFirst();
 }
 

@@ -81,7 +81,6 @@ private:
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
-    BigNumber getBalanceFromTx(BigNumber id, Transaction tx);
 
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);

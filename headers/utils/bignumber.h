@@ -84,7 +84,8 @@ public:
     mpz_class data() const;
     int isProbPrime() const;
     bool isEmpty() const;
-    QByteArray toByteArray(int base = 16) const; // todo: change to serialize
+    QByteArray toByteArray(int base = 16) const;
+    std::string toStdString(int base = 16) const;
     QByteArray toActorId() const;
     BigNumber pow(unsigned long number);
     BigNumber sqrt(unsigned long number = 2) const;

@@ -152,20 +152,17 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
         Block lastBlock = getBlockById(lastBlockId);
         switch (param)
         {
-        case SearchEnum::BlockParam::Approver:
-        {
+        case SearchEnum::BlockParam::Approver: {
             if (lastBlock.getApprover() == id)
                 return lastBlock;
             break;
         }
-        case SearchEnum::BlockParam::Data:
-        {
+        case SearchEnum::BlockParam::Data: {
             if (lastBlock.getData() == id)
                 return lastBlock;
             break;
         }
-        case SearchEnum::BlockParam::Hash:
-        {
+        case SearchEnum::BlockParam::Hash: {
             if (lastBlock.getHash() == id)
                 return lastBlock;
             break;
@@ -244,45 +241,38 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
                 continue;
             switch (param)
             {
-            case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
-            {
+            case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
 
                 if (tx.getSender() == id || tx.getReceiver() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserSender:
-            {
+            case SearchEnum::TxParam::UserSender: {
                 if (tx.getSender() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserReceiver:
-            {
+            case SearchEnum::TxParam::UserReceiver: {
                 if (tx.getReceiver() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserSenderOrReceiver:
-            {
+            case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if (tx.getSender() == id || tx.getReceiver() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserApprover:
-            {
+            case SearchEnum::TxParam::UserApprover: {
                 if (tx.getApprover() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::Hash:
-            {
+            case SearchEnum::TxParam::Hash: {
                 if (tx.getHash() == id.toActorId())
                     return tx;
                 break;
             }
-            default:
-            {
+            default: {
             }
             }
         }
@@ -322,8 +312,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 continue;
             switch (param)
             {
-            case SearchEnum::TxParam::UserSender:
-            {
+            case SearchEnum::TxParam::UserSender: {
                 if (tx.getSender() == id && tx.getToken() == token)
                 {
                     currentTxs << tx;
@@ -331,8 +320,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 }
                 break;
             }
-            case SearchEnum::TxParam::UserReceiver:
-            {
+            case SearchEnum::TxParam::UserReceiver: {
                 if (tx.getReceiver() == id && tx.getToken() == token)
                 {
                     currentTxs << tx;
@@ -340,8 +328,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 }
                 break;
             }
-            case SearchEnum::TxParam::UserSenderOrReceiver:
-            {
+            case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if ((tx.getSender() == id || tx.getReceiver() == id) && tx.getToken() == token)
                 {
                     currentTxs << tx;
@@ -349,8 +336,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 }
                 break;
             }
-            case SearchEnum::TxParam::UserApprover:
-            {
+            case SearchEnum::TxParam::UserApprover: {
                 if (tx.getApprover() == id && tx.getToken() == token)
                 {
                     currentTxs << tx;
@@ -358,8 +344,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 }
                 break;
             }
-            case SearchEnum::TxParam::Hash:
-            {
+            case SearchEnum::TxParam::Hash: {
                 if (tx.getHash() == id.toActorId() && tx.getToken() == token)
                 {
                     currentTxs << tx;
@@ -367,8 +352,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 }
                 break;
             }
-            default:
-            {
+            default: {
             }
             }
         }
@@ -376,7 +360,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
         --lastBlockId;
     }
 
-    qDebug() << "currentTxs" << currentTxs.length();
+    // qDebug() << "currentTxs" << currentTxs.length();
 
     return currentTxs;
 }

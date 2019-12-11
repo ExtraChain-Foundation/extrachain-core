@@ -4,17 +4,17 @@
 #ifndef NETWORK_MANAGER_DEF
 #define NETWORK_MANAGER_DEF
 class NetManager;
-#include "headers/network/network_manager.h"
+#include "network/network_manager.h"
 #endif
 #ifndef RESOLVER_SERVICE_DEF
 #define RESOLVER_SERVICE_DEF
 class ResolverService;
-#include "headers/resolve/resolver_service.h"
+#include "resolve/resolver_service.h"
 #endif
 #ifndef NODE_MANAGER_DEF
 #define NODE_MANAGER_DEF
 class NodeManager;
-#include "headers/managers/node_manager.h"
+#include "managers/node_manager.h"
 #endif
 
 #include "managers/chatmanager.h"
@@ -25,9 +25,9 @@ static const short ResolverServicePoolMaxSize = 100;
 //#include <QQueue>
 #include <queue>
 #include <vector>
-#include "headers/datastorage/blockchain.h"
-#include "headers/datastorage/index/actorindex.h"
-#include "headers/managers/tx_manager.h"
+#include "datastorage/blockchain.h"
+#include "datastorage/index/actorindex.h"
+#include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
 
 class ResolveManager : public QObject
@@ -35,17 +35,9 @@ class ResolveManager : public QObject
     Q_OBJECT
 
 private:
-    QTimer *loadChecker;
-    QMap<QByteArray, QString> *downloadingFileList = new QMap<QByteArray, QString>();
-    QMap<QByteArray, std::vector<bool>> *dataCheckers;
-
-private:
     std::queue<Network::DataStruct> unprocessed;
     QList<ResolverService *> l1Res;
-    QList<ResolverService *> l2Res;
     QMap<QByteArray, int> *requestResponseMap = new QMap<QByteArray, int>();
-    QMap<QByteArray, QFile *> *listFile = new QMap<QByteArray, QFile *>();
-    QMap<QString, QByteArray> *fileMap = new QMap<QString, QByteArray>();
     //    QMap<QByteArray, unsigned long> *pckgCounter = new QMap<QByteArray, unsigned long>();
 
 private:
@@ -54,21 +46,16 @@ private:
     NetManager *networkManager;
     TransactionManager *txManager;
     AccountController *accountControler;
-    Dfs *dfs;
     NodeManager *node;
     ChatManager *chatManager;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
-                   TransactionManager *txManager, AccountController *accountControler, Dfs *dfs,
+                   TransactionManager *txManager, AccountController *accountControler,
                    QObject *parent = nullptr);
     ~ResolveManager();
 
     void setNode(NodeManager *value);
-
-public slots:
-    void dfsTitleArrived(QByteArray dataHash, Network::DataStruct task);
-    void dfsFragmentArrived(QByteArray dataHash, Network::DataStruct task);
 
 private:
     void connectSignals(ResolverService *resolver);
@@ -80,7 +67,6 @@ private:
      * @param task
      */
     void createNewResolver(const Network::DataStruct &task);
-    void setL2Resolver(const Network::DataStruct &task);
 
 private:
     QList<ResolverService *> getActive();
@@ -109,7 +95,6 @@ signals:
     //    void sendMsg(const QByteArray &msg);
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
-    void restartLoadChecker();
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void registrateMsg(const QByteArray &data, const QByteArray &msgType);
     /**
