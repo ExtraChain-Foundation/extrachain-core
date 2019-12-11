@@ -1,5 +1,7 @@
 #include "managers/logs_manager.h"
 
+#include <QMutex>
+
 #ifdef Q_OS_ANDROID
 #include <android/log.h>
 #endif
@@ -137,6 +139,8 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef ETALONIUM_CLIENT
     if (LogsManager::toQml)
     {
+        static QMutex mutex;
+        mutex.lock();
         logs.append({ { "text", msg },
                       { "date", currentDateTime.toMSecsSinceEpoch() }
 #ifdef QT_DEBUG
@@ -146,6 +150,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
                       { "func", function }
 #endif
         });
+        mutex.unlock();
     }
 #endif
 
