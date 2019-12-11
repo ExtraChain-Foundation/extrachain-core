@@ -337,7 +337,14 @@ QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serializ
 
 void Utils::wipeDataFiles()
 {
-    QDir("").removeRecursively();
+    QDir("blockchain").removeRecursively();
+    QDir("data").removeRecursively();
+    QDir("keystore").removeRecursively();
+    QDir("tmp").removeRecursively();
+    QFile("user.private").remove();
+    QFile("user.private.login").remove();
+    QFile(".fileList").remove();
+    QFile(".settings").remove();
     /*
 #ifdef ETALONIUM_CONSOLE
     auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
