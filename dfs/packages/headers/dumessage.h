@@ -20,6 +20,7 @@ public:
     const QByteArray hash() override;
     const QByteArray serialize() const override;
     int getType() const;
+    bool isEmpty();
 
 protected:
     const QList<QByteArray> serializedParams() const override;

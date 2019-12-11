@@ -85,10 +85,18 @@ NetManager *DFSNetManager::getNetManager()
 
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
-    Network::DataStruct dStruct;
-    dStruct.msg = msg;
-    dStruct.receiver = receiver;
-    emit newMessage(dStruct);
+    if (msg == Config::Net::PROTOCOL_VERSION)
+    {
+        qDebug() << "Protocol msg Error read";
+        return nullptr;
+    }
+    if (!msg.isEmpty())
+    {
+        Network::DataStruct dStruct;
+        dStruct.msg = msg;
+        dStruct.receiver = receiver;
+        emit newMessage(dStruct);
+    }
     return nullptr;
 }
 

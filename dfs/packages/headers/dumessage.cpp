@@ -16,7 +16,8 @@ DFSMessage::DUMessage::DUMessage(const QByteArray &serialized, QObject *parent)
     : IDfs_Message(parent)
 {
     QList<QByteArray> list = deserialize(serialized);
-    type = static_cast<dfsMessageType>(list.takeFirst().toInt());
+    if (list.size() > 0)
+        type = static_cast<dfsMessageType>(list.takeFirst().toInt());
 }
 
 const QByteArray DFSMessage::DUMessage::serialize() const
@@ -47,4 +48,12 @@ const QByteArray DFSMessage::DUMessage::hash()
 int DFSMessage::DUMessage::getType() const
 {
     return type;
+}
+
+bool DFSMessage::DUMessage::isEmpty()
+{
+    if (this->type == dfsMessageType::none)
+        return true;
+    else
+        return false;
 }

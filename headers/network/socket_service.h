@@ -87,17 +87,12 @@ public slots:
      * @param message
      */
     void sendMsg(const QByteArray &data, const SocketPair &socketData);
-
-    /**
-     * @brief stops this thread
-     */
-    void sockReady();
     void closeSocket();
     void process();
     void establishConnection();
     void setActive(bool active);
 
-private:
+private slots:
     void doRead();
     void continueDoRead();
 

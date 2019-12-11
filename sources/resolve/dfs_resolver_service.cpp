@@ -101,6 +101,10 @@ void DFSResolverService::process()
 
 void DFSResolverService::assignNewTask(Network::DataStruct task)
 {
+    if (task.msg == "")
+    {
+        return;
+    }
     active = true;
     this->msg = task.msg;
     this->hash = Utils::calcKeccak(msg);
@@ -119,6 +123,8 @@ void DFSResolverService::resolveDfsTask()
         BaseMessage bmsg;
         bmsg.deserialize(msg);
         DFSMessage::DUMessage dfsMsg(bmsg.getData());
+        if (dfsMsg.isEmpty())
+            return;
         resolveDfsMessage(bmsg.getData(), dfsMsg.getType());
         //        emit TaskFinished();
     }
@@ -187,21 +193,24 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         {
         case dfsMessageType::titleMessage:
         {
-            DFSMessage::title_message message(data);
-            QString path = message.filePath + dfsStruct::FILE_IDENTIFICATOR;
-            if (QFile::exists(message.filePath))
+            if (title.empty())
             {
-                finishWork();
-                return;
+                DFSMessage::title_message message(data);
+                QString path = message.filePath + dfsStruct::FILE_IDENTIFICATOR;
+                if (QFile::exists(message.filePath))
+                {
+                    finishWork();
+                    return;
+                }
+                if (!registerTitle(path, message))
+                {
+                    qDebug() << "Title was not registered";
+                    //                finishWork();
+                    active = false;
+                    return;
+                }
+                reloadTimer->start(DFS_PWT);
             }
-            if (!registerTitle(path, message))
-            {
-                qDebug() << "Title was not registered";
-                //                finishWork();
-                active = false;
-                return;
-            }
-            reloadTimer->start(DFS_PWT);
             break;
         }
         case dfsMessageType::fileDataMessage:

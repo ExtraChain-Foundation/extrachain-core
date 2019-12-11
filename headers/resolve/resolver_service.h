@@ -61,7 +61,6 @@ private:
 
 private:
     bool active = false;
-    std::queue<Network::DataStruct> taskQueue;
     QByteArray msg;
     QByteArray hash;
     SocketPair receiver;
@@ -176,7 +175,6 @@ public slots:
      * ready for work
      */
     void process();
-    void assignNewTask(Network::DataStruct task);
 signals:
     /**
      * @brief TaskFinished signal to resolver manager

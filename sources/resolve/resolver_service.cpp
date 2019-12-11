@@ -71,17 +71,6 @@ void ResolverService::finishWork()
     {
         emit TaskFinished();
     }
-    else
-    {
-        //        cleanTask();
-        if (taskQueue.size() != 0)
-        {
-            Network::DataStruct ds = taskQueue.front();
-            setTask(ds.msg, ds.receiver);
-            taskQueue.pop();
-            resolveTask();
-        }
-    }
 }
 
 bool ResolverService::isActive() const
@@ -188,11 +177,6 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
 void ResolverService::process()
 {
     resolveTask();
-}
-
-void ResolverService::assignNewTask(Network::DataStruct task)
-{
-    this->taskQueue.push(task);
 }
 
 void ResolverService::resolveTask()
