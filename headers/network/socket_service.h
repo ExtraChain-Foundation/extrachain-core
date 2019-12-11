@@ -53,6 +53,8 @@ private:
     //    QByteArray buffer;
     int reconnectTry = 0;
     int pendMsgSize = 0;
+    QFile *logUsh;
+    QFile *logPri;
 
 public:
     SocketService();
