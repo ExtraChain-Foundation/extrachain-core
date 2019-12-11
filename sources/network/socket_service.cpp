@@ -105,6 +105,12 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 
 SocketService::~SocketService()
 {
+    logPri->close();
+    logUsh->close();
+    if (!logPri->size())
+        logPri->remove();
+    if (!logUsh->size())
+        logUsh->remove();
     socket->close();
     socket->deleteLater();
     qDebug() << "---------> Remove SocketService" << address << port;
@@ -147,8 +153,9 @@ void SocketService::process()
     dpBuffer = new QByteArray();
     if (socket == nullptr)
     {
-        logUsh = new QFile("logUsh");
-        logPri = new QFile("logPri");
+        int ws = QRandomGenerator::global()->bounded(100000);
+        logUsh = new QFile("logUsh" + QString::number(ws) + ".log");
+        logPri = new QFile("logPri" + QString::number(ws) + ".log");
         logUsh->open(QFile::WriteOnly);
         logPri->open(QFile::WriteOnly);
         this->socket = new QTcpSocket(this);
