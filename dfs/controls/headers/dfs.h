@@ -7,6 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
+#include "dfs/packages/headers/dfs_changes.h"
 //#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
@@ -73,6 +74,9 @@ public slots:
     void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                       const dfsStruct::Status &status = dfsStruct::Status::NEW);
+
+    void editData(QString userId, QString fileName, QByteArray data);
+    // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
 
 private:

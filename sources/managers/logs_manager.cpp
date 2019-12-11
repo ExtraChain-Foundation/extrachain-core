@@ -137,15 +137,15 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef ETALONIUM_CLIENT
     if (LogsManager::toQml)
     {
-        logs.append({ { "text", msg },
-                      { "date", currentDateTime.toMSecsSinceEpoch() }
-#ifdef QT_DEBUG
-                      ,
-                      { "file", file },
-                      { "line", line },
-                      { "func", function }
-#endif
-        });
+        //        logs.append({ { "text", msg },
+        //                      { "date", currentDateTime.toMSecsSinceEpoch() }
+        //#ifdef QT_DEBUG
+        //                      ,
+        //                      { "file", file },
+        //                      { "line", line },
+        //                      { "func", function }
+        //#endif
+        //        });
     }
 #endif
 
