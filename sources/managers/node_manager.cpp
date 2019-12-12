@@ -12,6 +12,7 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
+    subscribeContoller = new SubscribeController();
     actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
     //    this->thread()->sleep(1);
@@ -476,6 +477,8 @@ void NodeManager::connectUi()
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
+
+    connect(uiController, &UiController::subscribe, subscribeContoller, &SubscribeController::editSubscribe);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,

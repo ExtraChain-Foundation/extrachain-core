@@ -13,6 +13,7 @@
 #include "dfs/managers/headers/dfsnetmanager.h"
 #include "utils/utils.h"
 #include "utils/db_connector.h"
+#include "dfs/controls/headers/subscribe_controller.h"
 #include <QTimer>
 #ifdef ETALONIUM_CLIENT
 #include <QImage>
