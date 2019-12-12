@@ -44,7 +44,6 @@ void Sender::sendFragments(QString path, dfsStruct::Type type, QByteArray frag, 
         {
             file.seek(fragsID[i] * data_offset);
             QByteArray data = file.read(data_offset);
-            std::cout << fragsID[i] << " " << data.left(30).toStdString() << std::endl;
             DFSMessage::dfs_message pck(title.dataHash, fragsID[i], data); // package for send
             NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
         }
