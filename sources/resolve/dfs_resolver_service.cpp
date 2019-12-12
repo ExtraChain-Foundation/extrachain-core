@@ -176,10 +176,9 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::requestFragments:
         {
             DFSMessage::req_frags_message message(data);
-            std::cout << "Ы!!!" << message.filePath.toStdString() << std::endl;
             if (message.filePath == "-1")
                 return;
-            dfs->resendFragments(message.getFilePath(), message.getListFrag());
+            dfs->sendFragments(message.getFilePath(), message.getListFrag(), this->receiver);
             break;
         }
         case dfsMessageType::requestMessage:

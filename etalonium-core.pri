@@ -3,6 +3,7 @@ INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
+    $$PWD/dfs/controls/sources/subscribe_contoller.cpp \
     $$PWD/dfs/managers/headers/dfsnetmanager.cpp \
     $$PWD/dfs/managers/headers/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
@@ -81,6 +82,7 @@ SOURCES += \
     $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
+    $$PWD/dfs/controls/headers/subscribe_controller.h \
     $$PWD/dfs/managers/headers/dfsnetmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \

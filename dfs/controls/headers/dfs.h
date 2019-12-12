@@ -13,6 +13,7 @@
 #include "dfs/managers/headers/dfsnetmanager.h"
 #include "utils/utils.h"
 #include "utils/db_connector.h"
+#include "dfs/controls/headers/subscribe_controller.h"
 #include <QTimer>
 #ifdef ETALONIUM_CLIENT
 #include <QImage>
@@ -57,7 +58,7 @@ public:
     void setDfsNetManager(DFSNetManager *value);
     void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
     void fileResponse(const QString path, const SocketPair &receiver);
-    void resendFragments(QString path, QByteArray frags);
+    void sendFragments(QString path, QByteArray frags, SocketPair receiver);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
@@ -73,6 +74,8 @@ public slots:
     void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                       const dfsStruct::Status &status = dfsStruct::Status::NEW);
+    void saveStaticFile(QString userId, QString filePath, dfsStruct::Type type, dfsStruct::SubType subType,
+                        dfsStruct::Status status);
     void process();
 
 private:

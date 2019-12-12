@@ -12,7 +12,7 @@ Sender::Sender(const QByteArray &userId, QObject *parent)
     //    connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 
-void Sender::resendFragments /*Slot*/ (QString path, dfsStruct::Type type, QByteArray frag)
+void Sender::sendFragments(QString path, dfsStruct::Type type, QByteArray frag, SocketPair receiver)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))
@@ -44,10 +44,8 @@ void Sender::resendFragments /*Slot*/ (QString path, dfsStruct::Type type, QByte
         {
             file.seek(fragsID[i] * data_offset);
             QByteArray data = file.read(data_offset);
-            std::cout << fragsID[i] << " " << data.left(30).toStdString() << std::endl;
             DFSMessage::dfs_message pck(title.dataHash, fragsID[i], data); // package for send
-            NetManager->send(pck.serialize(), Messages::DFS_MESSAGE);
-            //            QThread::currentThread()->usleep(50);
+            NetManager->send(pck.serialize(), Messages::DFS_MESSAGE, receiver);
         }
     }
 }

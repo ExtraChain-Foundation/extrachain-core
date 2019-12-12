@@ -211,13 +211,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
     appendToCard(path, pathList.at(PathStruct::aId), type);
-    QByteArray prevFile = pathList.at(PathStruct::name);
-    BigNumber prFB = BigNumber(prevFile);
-    prFB--;
-    QByteArray prevFilePath =
-        Serialization::serialize({ pathList.at(PathStruct::rFolder), pathList.at(PathStruct::aId) }, "/")
-        + prFB.toByteArray();
-    QDir dir(pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId));
     sender->sendFile(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
@@ -241,10 +234,11 @@ void Dfs::fileResponse(const QString path, const SocketPair &receiver)
     return;
 }
 
-void Dfs::resendFragments(QString path, QByteArray frags)
+void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver)
 {
-    sender->resendFragments(
-        path, CardManager::getTypeByName(path, Serialization::deserialize(path, '/').at(1).toUtf8()), frags);
+    sender->sendFragments(
+        path, CardManager::getTypeByName(path, Serialization::deserialize(path, '/').at(1).toUtf8()), frags,
+        receiver);
 }
 
 void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver)
@@ -323,6 +317,27 @@ void Dfs::savedNewData(const QString &path, const QByteArray &data, const dfsStr
     //#endif
 
     saveToDFS(path, data, type, subType, status);
+}
+
+void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType,
+                         dfsStruct::Status status)
+{
+    QByteArray sType = dfsStruct::toByteArray(type);
+    QString dfsPath = "data/" + userId + "/" + sType + "/" + fileName;
+
+    if (!QFile::exists(dfsPath))
+    {
+        qDebug() << "Can't save static file";
+    }
+
+    if (!appendToCard(dfsPath, userId.toLatin1(), type, subType))
+        return;
+
+    sender->sendFile(dfsPath, type, SocketPair());
+
+#ifdef ETALONIUM_CLIENT
+    emit usersChanges(dfsPath.toLatin1(), type, userId.toLatin1());
+#endif
 }
 
 void Dfs::process()

@@ -23,6 +23,7 @@ class ResolveManager;
 #include "dfs/managers/headers/dfsnetmanager.h"
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
+#include "dfs/controls/headers/subscribe_controller.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
@@ -48,7 +49,7 @@ private:
     SmartContractManager *smContractController;
     ChatManager *chatManager;
     ResolveManager *resolveManager;
-
+    SubscribeController *subscribeContoller;
     PrivateProfile *prProfile;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;

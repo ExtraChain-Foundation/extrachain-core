@@ -12,6 +12,7 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
+    subscribeContoller = new SubscribeController();
     actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
     //    this->thread()->sleep(1);
@@ -42,7 +43,7 @@ NodeManager::NodeManager()
     static QTimer timer;
     connect(&timer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
-    //    timer.start(10000);
+    timer.start(10000);
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -477,6 +478,8 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
+    connect(uiController, &UiController::subscribe, subscribeContoller, &SubscribeController::editSubscribe);
+
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
             &ActorIndex::profileToSearch);
@@ -554,6 +557,8 @@ void NodeManager::connectUi()
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+
+    connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,

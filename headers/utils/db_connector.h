@@ -29,7 +29,7 @@ public:
     bool insert(std::string tableName, DBRow data);
     bool update(std::string query);
     bool createTable(std::string query);
-    bool deleteRow(std::string query);
+    bool deleteRow(std::string tableName, std::string nameColumn, std::string query);
     bool deleteTable(std::string name);
     bool tableExists(std::string table);
     bool dropTable(std::string table);

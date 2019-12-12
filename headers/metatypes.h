@@ -15,6 +15,7 @@
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
 #include "managers/chat.h"
+#include "dfs/controls/headers/subscribe_controller.h"
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
@@ -43,6 +44,7 @@ Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
 Q_DECLARE_METATYPE(Network::DataStruct)
+Q_DECLARE_METATYPE(SubscribeController)
 
 void registerMetaTypes()
 {
@@ -72,6 +74,7 @@ void registerMetaTypes()
     qRegisterMetaType<UIMessage>();
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
+    qRegisterMetaType<SubscribeController>();
 }
 
 #endif
