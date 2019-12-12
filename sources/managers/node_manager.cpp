@@ -42,7 +42,7 @@ NodeManager::NodeManager()
     static QTimer timer;
     connect(&timer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
-    //    timer.start(10000);
+    timer.start(10000);
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
