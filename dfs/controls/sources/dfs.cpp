@@ -211,13 +211,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
     appendToCard(path, pathList.at(PathStruct::aId), type);
-    QByteArray prevFile = pathList.at(PathStruct::name);
-    BigNumber prFB = BigNumber(prevFile);
-    prFB--;
-    QByteArray prevFilePath =
-        Serialization::serialize({ pathList.at(PathStruct::rFolder), pathList.at(PathStruct::aId) }, "/")
-        + prFB.toByteArray();
-    QDir dir(pathList.at(PathStruct::rFolder) + '/' + pathList.at(PathStruct::aId));
     sender->sendFile(path, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
