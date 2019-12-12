@@ -325,6 +325,27 @@ void Dfs::savedNewData(const QString &path, const QByteArray &data, const dfsStr
     saveToDFS(path, data, type, subType, status);
 }
 
+void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType,
+                         dfsStruct::Status status)
+{
+    QByteArray sType = dfsStruct::toByteArray(type);
+    QString dfsPath = "data/" + userId + "/" + sType + "/" + fileName;
+
+    if (!QFile::exists(dfsPath))
+    {
+        qDebug() << "Can't save static file";
+    }
+
+    if (!appendToCard(dfsPath, userId.toLatin1(), type, subType))
+        return;
+
+    sender->sendFile(dfsPath, type, SocketPair());
+
+#ifdef ETALONIUM_CLIENT
+    emit usersChanges(dfsPath.toLatin1(), type, userId.toLatin1());
+#endif
+}
+
 void Dfs::process()
 {
 }

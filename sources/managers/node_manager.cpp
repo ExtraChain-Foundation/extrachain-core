@@ -555,6 +555,8 @@ void NodeManager::connectUi()
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
 
+    connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
+
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
             [=](QByteArray hash, const bool account) {
