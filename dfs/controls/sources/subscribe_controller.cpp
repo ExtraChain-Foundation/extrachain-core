@@ -1,4 +1,5 @@
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "managers/node_manager.h"
 
 SubscribeController::SubscribeController(QObject *parent)
     : QObject(parent)
@@ -15,7 +16,7 @@ SubscribeController::~SubscribeController()
 
 void SubscribeController::editMySubscribe(QByteArray id, QByteArray currentId, bool isRemove)
 {
-    QByteArray path = "data/" + currentId + "/services/subscribers";
+    QByteArray path = "data/" + currentId + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribe);
 
@@ -52,12 +53,11 @@ void SubscribeController::editMyFollower(QByteArray id, QByteArray currentId, bo
 
 bool SubscribeController::checkSubscribe(QByteArray id)
 {
-    QByteArray path = "data/" + id + "/services/subscribe";
+    QByteArray path = "data/" + nodeManager->getIdPrivateProfile() + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribe);
-    std::vector<DBRow> res =
-        DB.select("SELECT * FROM " + Config::DataStorage::tableMySubscribe + " WHERE "
-                  + Config::DataStorage::subscribeColumn + " = " + "'" + id.toStdString() + "'");
+    std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumn
+                                       + " WHERE subscription = " + "'" + id.toStdString() + "';");
     return !res.empty();
 }
 
@@ -66,20 +66,26 @@ int SubscribeController::checkCountSubscribe(QByteArray id)
     QByteArray path = "data/" + id + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribe);
-    std::vector<DBRow> res = DB.select("SELECT COUNT (*) FROM " + Config::DataStorage::tableMySubscribe);
-    return int(res[0].count(Config::DataStorage::subscribeColumn));
+    std::vector<DBRow> res = DB.select("SELECT COUNT (*) FROM " + Config::DataStorage::subscribeColumn);
+    int count = std::stoi(res[0]["COUNT (*)"]);
+    return count;
 }
 
-QList<std::string> SubscribeController::getAllSubscribe(QByteArray id)
+std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
 {
-    QByteArray path = "data/" + id + "/services/subscribers";
+    QByteArray path = "data/" + id + "/services/subscriber";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribe);
-    std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::tableMySubscribe);
-    QList<std::string> sub;
-    for (auto &tmp : res)
-    {
-        sub.append(tmp[Config::DataStorage::subscribeColumn]);
-    }
-    return sub;
+    std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumn);
+    //    QList<std::string> sub;
+    //    for (auto &tmp : res)
+    //    {
+    //        sub.append(tmp["subscription"]);
+    //    }
+    return res;
+}
+
+void SubscribeController::setNodeManager(NodeManager *value)
+{
+    nodeManager = value;
 }

@@ -49,7 +49,7 @@ private:
     SmartContractManager *smContractController;
     ChatManager *chatManager;
     ResolveManager *resolveManager;
-    SubscribeController *subscribeContoller;
+    SubscribeController *subscribeController;
     PrivateProfile *prProfile;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
