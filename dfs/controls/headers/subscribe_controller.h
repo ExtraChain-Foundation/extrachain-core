@@ -24,6 +24,5 @@ public:
     QByteArray path;
 
     // get all (id, offset, count)
-    // get count (id)
 };
 #endif // SUBSCRIBE_CONTROLLER_H
