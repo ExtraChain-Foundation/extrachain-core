@@ -74,7 +74,7 @@ public slots:
     void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                       const dfsStruct::Status &status = dfsStruct::Status::NEW);
-    void saveStaticFile(QString userId, QString filePath, dfsStruct::Type type, dfsStruct::SubType subType,
+    void saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType,
                         dfsStruct::Status status);
     void process();
 

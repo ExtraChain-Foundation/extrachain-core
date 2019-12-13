@@ -478,7 +478,7 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
-    connect(uiController, &UiController::subscribe, subscribeContoller, &SubscribeController::editSubscribe);
+    connect(uiController, &UiController::subscribe, subscribeContoller, &SubscribeController::editSubscriptions);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,

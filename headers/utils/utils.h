@@ -141,12 +141,12 @@ namespace DataStorage {
     static const std::string mySubTableName = "Subscribers";
     static const std::string tableSubscribe = "CREATE TABLE IF NOT EXISTS " + mySubTableName
         + " ("
-          "subscriber    TEXT PRIMARY KEY NOT NULL);";
+          "subscriber    TEXT PRIMARY KEY NOT NULL,"
+          "sign TEXT             NOT NULL)";
     static const std::string subTableName = "Subscriptions";
     static const std::string tableSubscriptions = "CREATE TABLE IF NOT EXISTS " + subTableName
         + " ("
-          "subscription    TEXT PRIMARY KEY NOT NULL,"
-          "sign TEXT             NOT NULL);";
+          "subscription    TEXT PRIMARY KEY NOT NULL);";
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;

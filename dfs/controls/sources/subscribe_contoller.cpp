@@ -36,18 +36,17 @@ void SubscribeController::editSubscriptions(QByteArray id, QByteArray currentId,
 {
     QByteArray path = "data/" + currentId + "/services/subscribers";
     DBConnector DB(path.toStdString());
-    DB.createTable(Config::DataStorage::tableSubscribe);
+    DB.createTable(Config::DataStorage::tableSubscriptions);
 
     if (isRemove)
     {
-        DB.deleteRow(Config::DataStorage::tableSubscribe, Config::DataStorage::mySubTableName,
-                     id.toStdString());
+        DB.deleteRow(Config::DataStorage::subTableName, "subscription", id.toStdString());
     }
     else
     {
         DBRow row;
-        row.insert({ Config::DataStorage::mySubTableName, id.toStdString() });
-        DB.insert(Config::DataStorage::mySubTableName, row);
+        row.insert({ "subscription", id.toStdString() });
+        DB.insert(Config::DataStorage::subTableName, row);
     }
 }
 
