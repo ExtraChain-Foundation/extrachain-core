@@ -14,11 +14,13 @@ public:
     ~SubscribeController();
 
 public slots:
-    void editSubscribe(QByteArray id, QByteArray currentId, bool isRemove);
-    void editSubscriptions(QByteArray id, QByteArray currentId, bool isRemove);
+    void editMySubscribe(QByteArray id, QByteArray currentId, bool isRemove);
+    void editMyFollower(QByteArray id, QByteArray currentId, bool isRemove);
+    int checkCountSubscribe(QByteArray id);
+    QList<std::string> getAllSubscribe(QByteArray id);
 
 public:
-    void checkSubscribe(QByteArray id);
+    bool checkSubscribe(QByteArray id);
     QByteArray path;
 
     // get all (id, offset, count)
