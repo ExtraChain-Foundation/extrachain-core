@@ -138,13 +138,13 @@ namespace DataStorage {
           "type    INT  PRIMARY KEY NOT NULL, "
           "counter TEXT             NOT NULL );";
 
-    static const std::string mySubTableName = "Subscribers";
-    static const std::string tableSubscribe = "CREATE TABLE IF NOT EXISTS " + mySubTableName
+    static const std::string subscribeFollowerColumn = "Subscribers";
+    static const std::string tableFollower = "CREATE TABLE IF NOT EXISTS " + subscribeFollowerColumn
         + " ("
           "subscriber    TEXT PRIMARY KEY NOT NULL,"
           "sign TEXT             NOT NULL)";
-    static const std::string subTableName = "Subscriptions";
-    static const std::string tableSubscriptions = "CREATE TABLE IF NOT EXISTS " + subTableName
+    static const std::string subscribeColumn = "Subscriptions";
+    static const std::string tableMySubscribe = "CREATE TABLE IF NOT EXISTS " + subscribeColumn
         + " ("
           "subscription    TEXT PRIMARY KEY NOT NULL);";
 
