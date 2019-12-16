@@ -29,13 +29,12 @@ void DFSResolverService::finishWork()
     emit TaskFinished();
 }
 
-void DFSResolverService::checkStatus()
+QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long to)
 {
     QByteArray emptyFrags;
-    emptyFrags.clear();
     unsigned long s = ULONG_MAX;
     unsigned long e = ULONG_MAX;
-    for (unsigned long i = 0; i < dataChecker.size(); i++)
+    for (unsigned long i = from; i <= to; i++)
     {
         if (!dataChecker[i])
         {
@@ -49,7 +48,7 @@ void DFSResolverService::checkStatus()
             }
         }
 
-        if (dataChecker[i] || i == dataChecker.size() - 1)
+        if (dataChecker[i] || i == to)
         {
             if (s != ULONG_MAX && e == ULONG_MAX)
                 emptyFrags +=
@@ -66,8 +65,14 @@ void DFSResolverService::checkStatus()
 
         // 5:8 14 16:54 66
     }
-    qDebug() << "emptyFlags" << emptyFrags;
-    if (emptyFrags.isEmpty())
+    qDebug() << "emptyFrags:" << emptyFrags;
+    return emptyFrags;
+}
+
+void DFSResolverService::checkStatus()
+{
+    QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
+    if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
         file.close();
         dfs->saveFN(file.fileName(), title.filePath, dfsStruct::convertToDFType(title.f_type));
@@ -75,13 +80,22 @@ void DFSResolverService::checkStatus()
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
         disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
-        //        delete reloadTimer;
         finishWork();
     }
     else
     {
-        DFSMessage::req_frags_message reqFrags(title.filePath.toUtf8(), emptyFrags);
-        dfs->dfsNetManager->send(reqFrags.serialize());
+        if (emptyFrags.isEmpty())
+        {
+            reqStart = reqFin + 1;
+            reqFin = reqFin + Network::FRAGMENT_STACK_SIZE;
+            if (reqFin > dataChecker.size() - 1)
+                reqFin = dataChecker.size() - 1;
+        }
+        else
+        {
+            DFSMessage::req_frags_message reqFrags(title.filePath.toUtf8(), emptyFrags);
+            dfs->dfsNetManager->send(reqFrags.serialize());
+        }
     }
 }
 
@@ -133,6 +147,11 @@ void DFSResolverService::assignNewTask(Network::DataStruct task)
     {
         return;
     }
+    //    if (reloadTimer == nullptr)
+    //    {
+    //        reloadTimer = new QTimer();
+    //        connect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
+    //    }
     active = true;
     this->msg = task.msg;
     this->hash = Utils::calcKeccak(msg);
@@ -237,7 +256,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
                     active = false;
                     return;
                 }
-                reloadTimer->start(DFS_PWT);
+                reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
             }
             break;
         }
@@ -267,7 +286,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
             //            mutex.unlock();
             //            qDebug() << message.pckgNumber;
             dataChecker[std::size_t(message.pckgNumber)] = true;
-            reloadTimer->start(DFS_PWT);
+            reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
             break;
         }
         default:
@@ -328,6 +347,11 @@ bool DFSResolverService::registerTitle(const QString &tmpPath, DFSMessage::title
         {
             dataChecker.assign(title.pckgsAmount, false);
             qDebug() << "[ready to receive file]" << title.filePath;
+        }
+        else
+        {
+            qDebug() << "[temp file was not created]";
+            return false;
         }
         // qDebug() << "[NOT ready to receive file]" << title.filePath;
         return true;

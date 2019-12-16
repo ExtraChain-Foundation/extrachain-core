@@ -22,7 +22,7 @@ DFSMessage::DUMessage::DUMessage(const QByteArray &serialized, QObject *parent)
 
 const QByteArray DFSMessage::DUMessage::serialize() const
 {
-    return Serialization::universalSerialize(serializedParams(), 8);
+    return Serialization::universalSerialize(serializedParams(), Serialization::DFS_FIELD_SIZE);
 }
 
 const QList<QByteArray> DFSMessage::DUMessage::serializedParams() const
