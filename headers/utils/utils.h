@@ -152,7 +152,7 @@ namespace DataStorage {
     static const int SECTION_SIZE = 1000;
 
     // How often to construct block from pending transactions (in miliseconds)
-    static const int BLOCK_CREATION_PERIOD = 5000;
+    static const int BLOCK_CREATION_PERIOD = 1000;
 
     // How often to construct genesis block (in blocks)
     static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 1000;
@@ -164,7 +164,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QString PROTOCOL_VERSION = "ExtraCoin_v1";
+    static const QString PROTOCOL_VERSION = "ExtraCoin_v2";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
