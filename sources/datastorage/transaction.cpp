@@ -8,8 +8,6 @@ Transaction::Transaction(QObject *parent)
     this->date = QDateTime::currentDateTime().toTime_t();
     this->data = QByteArray();
     this->token = BigNumber(0);
-    this->senderBalance = BigNumber(0);
-    this->receiverBalance = BigNumber(0);
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
@@ -26,7 +24,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
     QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELS_SIZE);
-    if (list.size() == 14)
+    if (list.size() == 12)
     {
         this->sender = BigNumber(list.at(0));
         this->receiver = BigNumber(list.at(1));
@@ -34,15 +32,15 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
         this->date = list.at(3).toLongLong();
         this->data = list.at(4);
         this->token = BigNumber(list.at(5));
-        this->senderBalance = BigNumber(list.at(6));
-        this->receiverBalance = BigNumber(list.at(7));
-        this->prevBlock = BigNumber(list.at(8));
-        this->gas = list.at(9).toInt();
-        this->hop = list.at(10).toInt();
-        this->hash = QByteArray(list.at(11));
-        this->approver = BigNumber(list.at(12));
-        this->digSig = list.at(13);
+        this->prevBlock = BigNumber(list.at(6));
+        this->gas = list.at(7).toInt();
+        this->hop = list.at(8).toInt();
+        this->hash = QByteArray(list.at(9));
+        this->approver = BigNumber(list.at(10));
+        this->digSig = list.at(11);
     }
+    else
+        qDebug() << "Incorrect TX";
 
     calcHash();
 }
@@ -57,8 +55,6 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     this->date = QDateTime::currentDateTime().toTime_t();
     this->data = QByteArray();
     this->token = BigNumber(0);
-    this->senderBalance = BigNumber(0);
-    this->receiverBalance = BigNumber(0);
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
@@ -86,8 +82,6 @@ Transaction::Transaction(const Transaction &other, QObject *parent)
     this->date = other.date;
     this->data = other.data;
     this->token = other.token;
-    this->senderBalance = other.senderBalance;
-    this->receiverBalance = other.receiverBalance;
     this->prevBlock = other.prevBlock;
     this->gas = other.gas;
     this->hop = other.hop;
@@ -130,8 +124,7 @@ void Transaction::calcHash()
 QByteArray Transaction::getDataForHash() const
 {
     return (sender.toActorId() + receiver.toActorId() + amount.toByteArray() + QByteArray::number(date) + data
-            + token.toActorId() + senderBalance.toByteArray() + receiverBalance.toByteArray()
-            + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId());
+            + token.toActorId() + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId());
 }
 
 QByteArray Transaction::getDataForDigSig() const
@@ -154,20 +147,6 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const
 int Transaction::getHop() const
 {
     return hop;
-}
-
-void Transaction::setSenderBalance(BigNumber balance)
-{
-    this->senderBalance = balance;
-
-    calcHash();
-}
-
-void Transaction::setReceiverBalance(BigNumber balance)
-{
-    this->receiverBalance = balance;
-
-    calcHash();
 }
 
 void Transaction::setPrevBlock(const BigNumber &value)
@@ -223,16 +202,6 @@ BigNumber Transaction::getPrevBlock() const
     return this->prevBlock;
 }
 
-BigNumber Transaction::getSenderBalance() const
-{
-    return this->senderBalance;
-}
-
-BigNumber Transaction::getReceiverBalance() const
-{
-    return this->receiverBalance;
-}
-
 QByteArray Transaction::getHash() const
 {
     return this->hash;
@@ -278,10 +247,6 @@ bool Transaction::operator==(const Transaction &transaction) const
         return false;
     if (this->token != transaction.getToken())
         return false;
-    if (this->senderBalance != transaction.getSenderBalance())
-        return false;
-    if (this->receiverBalance != transaction.getReceiverBalance())
-        return false;
     if (this->gas != transaction.getGas())
         return false;
     if (this->hop != transaction.getHop())
@@ -311,8 +276,6 @@ void Transaction::operator=(const Transaction &other)
     this->date = other.date;
     this->data = other.data;
     this->token = other.token;
-    this->senderBalance = other.senderBalance;
-    this->receiverBalance = other.receiverBalance;
     this->prevBlock = other.prevBlock;
     this->gas = other.gas;
     this->hop = other.hop;
@@ -326,8 +289,7 @@ QString Transaction::toString() const
     QStringList list;
     list << "sender:" + sender.toActorId() << "receiver:" + receiver.toActorId()
          << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromTime_t(date).toString()
-         << "data:" + data << "token:" + token.toActorId() << "senderBalance:" + senderBalance.toByteArray()
-         << "receiverBalance:" + receiverBalance.toByteArray() << "prevBlock:" + prevBlock.toByteArray()
+         << "data:" + data << "token:" + token.toActorId() << "prevBlock:" + prevBlock.toByteArray()
          << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
          << "approver:" + approver.toActorId() << "digitalSignature:" + digSig;
     return Serialization::serializeString(list, Serialization::TX_FIELD_SPLITTER);
@@ -337,8 +299,7 @@ QByteArray Transaction::serialize() const
 {
     QList<QByteArray> list;
     list << sender.toActorId() << receiver.toActorId() << amount.toByteArray() << QByteArray::number(date)
-         << data << token.toActorId() << senderBalance.toByteArray() << receiverBalance.toByteArray()
-         << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
+         << data << token.toActorId() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
          << QString::number(hop).toLocal8Bit() << hash << approver.toActorId() << digSig;
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 

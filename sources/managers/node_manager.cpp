@@ -36,7 +36,7 @@ NodeManager::NodeManager()
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
     resolveManager->setNode(this);
     resolveManager->setChatManager(chatManager);
-
+    blockchain->setTxManager(txManager);
     netManager->setResolveManager(resolveManager);
     dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
@@ -213,7 +213,6 @@ Transaction NodeManager::createTransaction(Transaction tx)
         else
             emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
 
-        accController->sentTxList.add(tx.getHash(), Serialization::universalSerialize({ tx.serialize() }, 4));
         return tx;
     }
     else
@@ -237,29 +236,6 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
         qDebug() << actor.getId();
         Transaction tx(actor.getId(), receiver, amount);
         // add sent tx balances
-        BigNumber tempBalance = 0;
-
-        if (accController->sentTxList.getIndexSize() > 0)
-        {
-            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
-            {
-                Transaction tempTx(accController->sentTxList.at(i));
-                if (tempTx.getToken() != token)
-                    continue;
-                if (tempTx.getSender() == actor.getId())
-                    tempBalance -= tempTx.getAmount();
-                else
-                    tempBalance += tempTx.getAmount();
-            }
-        }
-
-        if (actor.getId() == tx.getSender())
-        {
-            BigNumber actorBalance = blockchain->getUserBalance(actor.getId(), token);
-            BigNumber receiverBalance = blockchain->getUserBalance(receiver, token);
-            tx.setSenderBalance(actorBalance + tempBalance);
-            tx.setReceiverBalance(receiverBalance - tempBalance);
-        }
 
         tx.setToken(token);
         //        if (actorIndex->companyId != nullptr)
@@ -290,35 +266,12 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
         qDebug() << actor.getId();
         Transaction tx(actor.getId(), receiver, amount);
         // add sent tx balances
-        BigNumber tempBalance = 0;
-
-        if (accController->sentTxList.getIndexSize() > 0)
-        {
-            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
-            {
-                Transaction tempTx(accController->sentTxList.at(i));
-                if (tempTx.getToken() != token)
-                    continue;
-                if (tempTx.getSender() == actor.getId())
-                    tempBalance -= tempTx.getAmount();
-                else
-                    tempBalance += tempTx.getAmount();
-            }
-        }
-
-        if (actor.getId() == tx.getSender())
-        {
-            BigNumber actorBalance = blockchain->getUserBalance(actor.getId(), token);
-            BigNumber receiverBalance = blockchain->getUserBalance(receiver, token);
-            tx.setSenderBalance(actorBalance + tempBalance);
-            tx.setReceiverBalance(receiverBalance - tempBalance);
-        }
 
         tx.setToken(token);
         // tx.setHop(2);
-        if (actorIndex->companyId != nullptr)
-            if (actor.getId() == BigNumber(*actorIndex->companyId))
-                tx.setSenderBalance(BigNumber(0));
+        //        if (actorIndex->companyId != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->companyId))
+        //                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
     else
@@ -368,7 +321,8 @@ void NodeManager::dfscreateNetManagerIdentificator()
 #ifdef ETALONIUM_CLIENT
 void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
-    Transaction tx = this->createTransaction(receiver, amount, token);
+    for (int i = 0; i != 2; ++i)
+        Transaction tx = this->createTransaction(receiver, amount, token);
 }
 void NodeManager::createWalletInUi()
 {

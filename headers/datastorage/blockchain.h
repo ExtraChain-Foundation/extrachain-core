@@ -18,7 +18,7 @@
 #include <QString>
 #include <QMutex>
 #include <QTemporaryFile>
-
+class TransactionManager;
 /*
  * Main database class
  *
@@ -46,6 +46,7 @@ private:
     MemIndex memIndex;      // blocks (if fileMode is false)
                             //    Actor<KeyPrivate>   approver;       // current user.
     AccountController *accountController;
+    TransactionManager *txManager;
     // service //
     QList<GenesisDataRow> genBlockData; // actorid -> token
     int blocksFromLastGenesis = 0;
@@ -308,6 +309,8 @@ signals:
 public:
     void addBlockToBlockchain(Block block);
     void addGenBlockToBlockchain(const GenesisBlock &block);
+    void setTxManager(TransactionManager *value);
+
 public slots:
 
     void process();

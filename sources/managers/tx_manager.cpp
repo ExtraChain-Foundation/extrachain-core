@@ -49,8 +49,6 @@ void TransactionManager::addProvedTransaction()
     Transaction *tx = qobject_cast<Transaction *>(s);
 
     qDebug() << "addProvedTransaction";
-    BigNumber receiverBalance = tx->getReceiverBalance();
-    BigNumber senderBalance = tx->getSenderBalance();
 
     if (!pendingTxs.contains(*tx))
     {
@@ -109,7 +107,7 @@ Block TransactionManager::makeBlock()
     }
 
     QByteArray data = convertTxs(pendingTxs);
-    qDebug() << data;
+    qDebug() << data << "SEVA";
     Block lastBlock = blockchain->getLastBlock();
 
     Block block(data, lastBlock);
@@ -132,6 +130,26 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
         l << tx.serialize();
     }
     return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
+}
+
+BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)
+{
+    BigNumber res = 0;
+    if (!pendingTxs.isEmpty())
+    {
+        for (const Transaction &tmp : pendingTxs)
+        {
+            if (tmp.getSender() == sender)
+            {
+                res -= tmp.getAmount();
+            }
+            else if (tmp.getReceiver() == sender)
+            {
+                res += tmp.getAmount();
+            }
+        }
+    }
+    return res;
 }
 
 void TransactionManager::process()
