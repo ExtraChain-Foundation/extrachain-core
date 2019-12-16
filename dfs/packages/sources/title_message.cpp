@@ -6,7 +6,7 @@ DFSMessage::title_message::title_message()
 }
 
 DFSMessage::title_message::title_message(const QString &filePath)
-    : DUMessage(type_title)
+    : DUMessage(dfsMessageType::titleMessage)
 {
     QFile file(filePath);
     file.open(QIODevice::ReadOnly);
@@ -25,10 +25,10 @@ DFSMessage::title_message::title_message(const QString &filePath)
 }
 
 DFSMessage::title_message::title_message(const QByteArray &serialized)
-    : DUMessage(type_title)
+    : DUMessage(dfsMessageType::titleMessage)
 {
     QList<QByteArray> list = deserialize(serialized);
-    if (type_title != list.takeFirst().toInt())
+    if (dfsMessageType::titleMessage != list.takeFirst().toInt())
     {
         qDebug() << "[type_title]"
                  << "incorrect message type";
@@ -48,7 +48,7 @@ DFSMessage::title_message::title_message(const QByteArray &serialized)
 DFSMessage::title_message::title_message(const QString &filePath, const long long &pckgsAmount,
                                          const long long &fileSize, const QByteArray &hash,
                                          const QByteArray &f_type)
-    : DUMessage(type_title)
+    : DUMessage(dfsMessageType::titleMessage)
 {
     this->filePath = filePath;
     this->pckgsAmount = pckgsAmount;

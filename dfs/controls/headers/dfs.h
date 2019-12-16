@@ -7,6 +7,7 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
+#include "dfs/packages/headers/dfs_changes.h"
 //#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
@@ -40,7 +41,7 @@ private:
                    const dfsStruct::Status &status = dfsStruct::Status::NEW);
     bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::undef);
-    QStringList returnDifs(const QString &adin, const QString &dva);
+    QStringList returnDiffs(const QString &odin, const QString &odinson);
     void getDFSStatus();
     void signalConnection();
 public slots:
@@ -74,8 +75,11 @@ public slots:
     void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
                       const dfsStruct::Status &status = dfsStruct::Status::NEW);
+
     void saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType,
                         dfsStruct::Status status);
+    void editData(QString userId, QString fileName, QByteArray data);
+    // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
 
 private:

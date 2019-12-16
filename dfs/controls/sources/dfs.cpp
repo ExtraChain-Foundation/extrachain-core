@@ -96,10 +96,10 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const dfsS
     return dbc.insert(Config::DataStorage::cardTableName, row);
 }
 
-QStringList Dfs::returnDifs(const QString &adin, const QString &dva)
+QStringList Dfs::returnDiffs(const QString &odin, const QString &odinson) //
 {
-    QFile file1(adin);
-    QFile file2(dva);
+    QFile file1(odin);
+    QFile file2(odinson);
     if (!file1.exists())
     {
         qDebug() << "first file is not exist";
@@ -192,7 +192,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
     }
     if (type == dfsStruct::Type::card)
     {
-        QStringList difs = returnDifs(tmpPath, path);
+        QStringList diffs = returnDiffs(tmpPath, path);
         //        for (const QString &el : difs)
         //        {
         //            QByteArrayList res =
@@ -338,6 +338,77 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath.toLatin1(), type, userId.toLatin1());
 #endif
+}
+
+void Dfs::editData(QString userId, QString fileName, QByteArray data)
+{
+    DFSMessage::DfsChanges changesPackage;
+    int pckg = 0;
+
+    QString filePath = "data/" + userId + "/" + fileName;
+    QFile file("data/" + userId + "/" + fileName);
+    file.open(QFile::ReadOnly);
+
+    while (file.bytesAvailable() > 0)
+    {
+        auto readed = file.read(DFSMessage::dataSize);
+
+        QByteArray newDataPart = data.mid(DFSMessage::dataSize * pckg, DFSMessage::dataSize);
+        qDebug() << "rea" << readed;
+        qDebug() << "new" << newDataPart;
+        qDebug() << "";
+        if (readed != newDataPart)
+        {
+            changesPackage.pckgNums << QByteArray::number(pckg);
+            changesPackage.data << newDataPart;
+        }
+
+        pckg++;
+    }
+
+    if (data.size() > DFSMessage::dataSize * pckg)
+    {
+        int totalPckg = (data.size() - DFSMessage::dataSize * pckg) / DFSMessage::dataSize + pckg;
+
+        for (int i = pckg; i <= totalPckg; ++i)
+        {
+            changesPackage.pckgNums << QByteArray::number(i);
+            changesPackage.data << data.mid(DFSMessage::dataSize * i, DFSMessage::dataSize);
+        }
+    }
+
+    qDebug() << changesPackage.pckgNums;
+    qDebug() << changesPackage.data;
+
+    // after package receive
+    QString filePathCtmp = filePath + ".ctmp";
+    QFile file3(filePathCtmp);
+
+    file3.open(QFile::WriteOnly);
+    file.reset();
+
+    int max = changesPackage.pckgNums.length() ? changesPackage.pckgNums.last().toInt() : -1;
+
+    for (int i = 0; i < max + 1; ++i)
+    {
+        int pos = DFSMessage::dataSize * i;
+
+        int indexOf = changesPackage.pckgNums.indexOf(QByteArray::number(i));
+        if (indexOf != -1)
+        {
+            file3.write(changesPackage.data[indexOf]);
+        }
+        else
+        {
+            file.seek(pos);
+            file3.write(file.read(DFSMessage::dataSize));
+        }
+    }
+
+    file.close();
+    file3.close();
+    file.remove();
+    file3.rename(filePath);
 }
 
 void Dfs::process()

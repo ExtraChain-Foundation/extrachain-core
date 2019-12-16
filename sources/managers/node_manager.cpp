@@ -525,6 +525,7 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+    connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
         qDebug() << "222222222222";

@@ -2,18 +2,18 @@
 #include "dfs/packages/headers/dfs_request.h"
 
 DFSMessage::dfs_request::dfs_request(const QString &filePath, const QByteArray &asker)
-    : DUMessage(type_dfs_request)
+    : DUMessage(dfsMessageType::requestMessage)
 {
     this->filePath = filePath;
     this->asker = asker;
 }
 
 DFSMessage::dfs_request::dfs_request(const QByteArray &serialized)
-    : DUMessage(type_dfs_request)
+    : DUMessage(dfsMessageType::requestMessage)
 {
 
     QList<QByteArray> list = deserialize(serialized);
-    if (type_dfs_request != list.takeFirst().toInt())
+    if (dfsMessageType::requestMessage != list.takeFirst().toInt())
     {
         qDebug() << "[dfs_request]"
                  << "incorrect message type";

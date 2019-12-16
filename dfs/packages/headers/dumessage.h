@@ -5,7 +5,6 @@ namespace DFSMessage {
 
 class DUMessage : public IDfs_Message
 {
-
     const short FIELDS_COUNT = 1;
 
 protected:
