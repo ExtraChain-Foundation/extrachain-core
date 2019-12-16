@@ -15,9 +15,9 @@ QThread *ThreadPool::addThread(QList<QObject *> workers)
     QThread *thread = new QThread();
     for (const auto &worker : workers)
     {
-#ifdef ETALONIUM_CLIENT
+        //#ifdef ETALONIUM_CLIENT
         worker->moveToThread(thread);
-#endif
+        //#endif
         QObject::connect(thread, SIGNAL(started()), worker, SLOT(process()));
         QObject::connect(worker, SIGNAL(finished()), thread, SLOT(quit()));
         QObject::connect(thread, SIGNAL(finished()), worker, SLOT(deleteLater()));

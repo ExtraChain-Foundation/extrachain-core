@@ -320,8 +320,7 @@ void NodeManager::dfscreateNetManagerIdentificator()
 #ifdef ETALONIUM_CLIENT
 void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
-    for (int i = 0; i != 2; ++i)
-        Transaction tx = this->createTransaction(receiver, amount, token);
+    Transaction tx = this->createTransaction(receiver, amount, token);
 }
 void NodeManager::createWalletInUi()
 {

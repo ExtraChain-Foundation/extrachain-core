@@ -71,6 +71,7 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 
 void DFSResolverService::checkStatus()
 {
+    qDebug() << QObject::sender();
     QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
@@ -80,6 +81,7 @@ void DFSResolverService::checkStatus()
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
         disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
+        //        reloadTimer->deleteLater();
         finishWork();
     }
     else
@@ -133,10 +135,15 @@ bool DFSResolverService::validate(const Messages::IMessage &message)
 
 void DFSResolverService::process()
 {
-    if (reloadTimer == nullptr)
+    if (this->lifetime == Resolver::Lifetime::LONG)
     {
-        reloadTimer = new QTimer();
-        connect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
+        if (reloadTimer == nullptr)
+        {
+            reloadTimer = new QTimer(this);
+            qDebug() << reloadTimer;
+            connect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus,
+                    Qt::QueuedConnection);
+        }
     }
     resolveDfsTask();
 }
@@ -286,6 +293,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
             //            mutex.unlock();
             //            qDebug() << message.pckgNumber;
             dataChecker[std::size_t(message.pckgNumber)] = true;
+            reloadTimer->stop();
             reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
             break;
         }
