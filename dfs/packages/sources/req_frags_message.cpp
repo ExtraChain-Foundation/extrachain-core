@@ -11,7 +11,7 @@ QByteArray DFSMessage::req_frags_message::getListFrag() const
 }
 
 DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QByteArray listFrag)
-    : DUMessage(fsMessageType::requestFragments)
+    : DUMessage(dfsMessageType::requestFragments)
 {
     this->filePath = filePath;
     this->listFrag = listFrag;
