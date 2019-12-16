@@ -131,14 +131,18 @@ std::vector<std::string> CardManager::getAll(dfsStruct::Type type)
 std::string CardManager::buildPathForFile(const std::string &userId, const std::string &file,
                                           dfsStruct::Type type, bool localFormat)
 {
+    if (file.empty())
+        return "";
+
     const std::string currentPath =
         (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
         + dfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
     const std::string section =
         (BigNumber(file.c_str()) / BigNumber(Config::DataStorage::SECTION_SIZE)).toStdString();
     std::string typeName = dfsStruct::toString(type).toStdString();
+    std::string path = currentPath + "/" + typeName + "/" + section + "/" + file;
 
-    return currentPath + "/" + typeName + "/" + section + "/" + file;
+    return path;
 }
 
 std::vector<std::string> CardManager::buildPathForFiles(const std::string &userId,
