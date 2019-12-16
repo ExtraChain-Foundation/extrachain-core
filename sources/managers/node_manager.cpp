@@ -1,7 +1,5 @@
 #include "managers/node_manager.h"
 
-#include "network/network_manager.h"
-
 NodeManager::NodeManager()
 {
     prepareFolders();
@@ -14,46 +12,40 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
-
+    subscribeController = new SubscribeController();
+    subscribeController->setNodeManager(this);
+    actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
-    this->thread()->sleep(1);
+    //    this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
+    accController->setBlockchain(blockchain);
     txManager = new TransactionManager(accController, blockchain);
+    prProfile->setAccountController(accController);
+    chatManager = new ChatManager(accController, actorIndex);
+    chatManager->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
-    uiController = new UiController();
+    uiController = new UiController(this);
+    uiController->setSubscribeController(subscribeController);
     uiWallet = uiController->getWallet();
     qDebug() << "========" << uiController;
 #endif
     dfs = new Dfs(actorIndex, accController);
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
+    resolveManager->setNode(this);
+    resolveManager->setChatManager(chatManager);
+
+    netManager->setResolveManager(resolveManager);
+    dfs->initDFSNetManager(resolveManager);
+    prProfile->setDfs(dfs);
+    actorIndex->setResolveManager(resolveManager);
     connectSignals();
-
-#ifdef ETALONIUM_CONSOLE
-    accController->loadActors();
-    Actor<KeyPrivate> company;
-    if (accController->getAccountCount() == 0)
-    {
-        company = CreateExtracoin();
-    }
-    else
-    {
-        company = *accController->getAccounts()[0];
-    }
-    QByteArray td = company.getKey()->sign("test");
-    std::cout << company.getKey()->verify("test", td) << std::endl;
-    TMP::companyActorId = new QByteArray(company.getId().toByteArray());
-    actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
-    if (blockchain->getRecords() <= 0)
-    {
-        QMap<BigNumber, BigNumber> tm;
-        tm.insert(0, 0);
-        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
-    }
-#endif
-
+    static QTimer timer;
+    connect(&timer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+    timer.start(10000);
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -63,9 +55,38 @@ NodeManager::NodeManager()
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
+    ThreadPool::addThread(chatManager);
+}
 
+void NodeManager::createCompanyActor(const QString &email, const QString &password)
+{
 #ifdef ETALONIUM_CONSOLE
-    emit accController->initDfs();
+    // accController->loadActors("-1");
+    Actor<KeyPrivate> company;
+    QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
+
+    if (QDir("keystore/profile").isEmpty())
+    {
+        company = CreateExtracoin();
+        emit savePrivateProfile(consoleHash, company.getId().toActorId());
+    }
+    else
+    {
+        // company = *accController->getAccounts()[0];
+        emit loadProfileForConsoleLogin(email.toLatin1(), password.toLatin1());
+    }
+
+    if (blockchain->getRecords() <= 0)
+    {
+        QByteArray td = company.getKey()->sign("test");
+        std::cout << company.getKey()->verify("test", td) << std::endl;
+        TMP::companyActorId = new QByteArray(company.getId().toByteArray());
+        actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
+
+        QMap<BigNumber, BigNumber> tm;
+        tm.insert(0, 0);
+        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+    }
 #endif
 }
 
@@ -83,12 +104,12 @@ void NodeManager::showMessage(QString from, QString message)
 
 void NodeManager::connectResolveManager()
 {
-    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
-    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
-    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
-            &ResolveManager::resolveMessage);
+    //    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
+    //    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
+    //    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
+    //            &ResolveManager::resolveMessage);
     // TODO: move
-    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
+    //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
@@ -98,11 +119,13 @@ void NodeManager::connectSmContractManager()
 {
     //    connect(smContractController, &SmartContractManager::verifyActor, netManager,
     //    &NetManager::NewActor); TODO!!!
-    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
-            &NodeManager::addActorInActorIndex);
-    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
-    });
+    //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
+    //            &NodeManager::addActorInActorIndex);
+    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
+            [this](const QByteArray &id, const QString &type, const bool &rewrite) {
+                emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type, id,
+                                        rewrite);
+            });
     connect(this, &NodeManager::editPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
 
@@ -185,7 +208,10 @@ Transaction NodeManager::createTransaction(Transaction tx)
         // 2) sign transaction
         tx.sign(actor);
         qDebug() << tx.toString();
-        emit NewTx(tx);
+        if (tx.getSender().toActorId() == *actorIndex->companyId)
+            emit NewTx(tx);
+        else
+            emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
 
         accController->sentTxList.add(tx.getHash(), Serialization::universalSerialize({ tx.serialize() }, 4));
         return tx;
@@ -303,6 +329,26 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
     return Transaction();
 }
 
+void NodeManager::getAllActors()
+{
+    QByteArray res = getIdPrivateProfile();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+}
+void NodeManager::getAllActorsTimerCall()
+{
+#ifdef ETALONIUM_CLIENT
+    QByteArray res = getIdPrivateProfile();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+#endif
+#ifdef ETALONIUM_CONSOLE
+    QByteArray res = accController->getMainActor()->getId().toActorId();
+    if (!res.isEmpty())
+        emit getAllActorsNode(res, true);
+#endif
+}
+
 void NodeManager::createNetManagerIdentificator()
 {
     QFile file(".settings");
@@ -322,62 +368,31 @@ void NodeManager::dfscreateNetManagerIdentificator()
 #ifdef ETALONIUM_CLIENT
 void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
-
-    //    Actor<KeyPrivate> actor = accController->getCurrentActor();
-    //    if (!actor.isEmpty())
-    //    {
-    //        qDebug() << actor.getId();
-    //        Transaction tx(actor.getId(), receiver, amount);
-    //        // add sent tx balances
-    //        BigNumber tempBalance = 0;
-
-    //        if (accController->sentTxList.getIndexSize() > 0)
-    //        {
-    //            for (int i = accController->sentTxList.getIndexSize() - 1; i >= 0; i--)
-    //            {
-    //                Transaction tempTx(accController->sentTxList.at(i));
-    //                if (tempTx.getToken() != token)
-    //                    continue;
-    //                if (tempTx.getSender() == actor.getId())
-    //                    tempBalance -= tempTx.getAmount();
-    //                else
-    //                    tempBalance += tempTx.getAmount();
-    //            }
-    //        }
-
-    //        BigNumber actorBalance = blockchain->getUserBalance(actor.getId(), token);
-    //        BigNumber receiverBalance = blockchain->getUserBalance(receiver, token);
-    //        tx.setSenderBalance(actorBalance + tempBalance);
-    //        tx.setReceiverBalance(receiverBalance - tempBalance);
-
-    //        tx.setToken(token);
     Transaction tx = this->createTransaction(receiver, amount, token);
-    if (!tx.isEmpty())
-        emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
-    //}
 }
 void NodeManager::createWalletInUi()
 {
     // accController->loadActors();
-    uiWallet->setCurrentWalletId(accController->getCurrentActor().getId());
+    uiWallet->setCurrentWalletId(accController->getCurrentActor().getId().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
 
     updateWalletList();
     updateAvailableWalletList();
     updateRecentActivities();
+    uiWallet->walletsUpdated();
 }
 
 void NodeManager::updateWalletInUi()
 {
-    //    uiController->getWallet()->setCurrentWalletId(
-    //            accController->getCurrentActor().getId());
+    uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().getId().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
 
     updateWalletList();
     updateAvailableWalletList();
     updateRecentActivities();
+    uiWallet->walletsUpdated();
 }
 
 void NodeManager::updateWalletList()
@@ -393,7 +408,7 @@ void NodeManager::updateWalletList()
         walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        walletList.append(WalletController::toRealNumber(amount));
+        walletList.append(Transaction::amountToVisible(amount).toLatin1());
     }
 
     uiWallet->updateWalletListModel(&walletList);
@@ -401,7 +416,6 @@ void NodeManager::updateWalletList()
 
 void NodeManager::updateAvailableWalletList()
 {
-    qDebug() << "NODE MANAGER: updateAvailableWalletList";
     QByteArray currentId = uiWallet->getCurrentWalletId().toActorId();
     QStringList actors = uiWallet->getAllActor(currentId);
 
@@ -435,7 +449,7 @@ void NodeManager::updateRecentActivities()
 
 void NodeManager::changeWalletIdUi(BigNumber walletId)
 {
-    qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
+    // qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
     // accController->loadActors();
     accController->changeUserNum(walletId.toActorId());
     uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId, uiWallet->getCurrentToken()));
@@ -448,11 +462,12 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 void NodeManager::connectUi()
 {
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
+    connect(uiController, &UiController::connectToServer, dfs->getDfsNetManager(),
+            &DFSNetManager::uiReconnect);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 
-    connect(uiController, &UiController::requestProfile, this, &NodeManager::requestProfile);
-    connect(this, &NodeManager::requestProfile, actorIndex, &ActorIndex::requestProfile);
+    connect(uiController, &UiController::requestProfile, actorIndex, &ActorIndex::requestProfile);
     connect(actorIndex, &ActorIndex::sendProfileToUi, this,
             [this](QString userId, QByteArrayList profile) { emit profileToUi(userId, Profile(profile)); });
 
@@ -463,6 +478,10 @@ void NodeManager::connectUi()
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
+    connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
+
+    connect(uiController, &UiController::subscribe, subscribeController,
+            &SubscribeController::editMySubscribe);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
@@ -473,23 +492,18 @@ void NodeManager::connectUi()
     //=======================================WALLET=========================================
     connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
     connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
-    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
+    //    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
     connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
             accController, &AccountController::changeUserNum);
 
     connect(uiWallet, &WalletController::sendCoinRequestFromUi, resolveManager,
             &ResolveManager::registrateMsg);
-    connect(uiWallet, &WalletController::addNewWallet, [=]() { // TODO: to thread!
-        auto actor = accController->createActor(0);
-        accController->savePrivateActor(actor);
-        auto wallets = uiWallet->getCurrentWallets();
-        uiWallet->setCurrentWallets(wallets << actor.getId().toActorId());
-        uiWallet->createWalletToNode();
-    });
+    connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), id);
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), "wallet", id, false);
+        qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
     connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
@@ -511,27 +525,50 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+    connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
+        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
+        qDebug() << "222222222222";
+    });
+    connect(uiController, &UiController::getInfoFromPrProfile, [this](const QString &type) {
+        emit loadInfoFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type);
+    });
+    connect(this, &NodeManager::loadInfoFromPrProfile, prProfile,
+            &PrivateProfile::loadInfoFromPrivateProfile);
+    connect(prProfile, &PrivateProfile::infoToUi, uiController, &UiController::loadInfo);
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(prProfile, &PrivateProfile::initPrivateProfile, accController, &AccountController::loadActors);
+    connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
+    //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
+    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
+
     connect(accController, &AccountController::loadWallets, blockchain,
             &Blockchain::updateBlockchainForSignIn);
-    connect(uiController, &UiController::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
+        setIdPrivateProfile(id);
+        emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
+    });
+    connect(accController, &AccountController::savePrivateProfile, chatManager, &ChatManager::ActorInit);
+    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
     connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
     connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
-    connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
+    // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+
+    connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=]() { accController->createActor(1); });
+            [=](QByteArray hash, const bool account) {
+                setHashLoginPrivateProfile(hash);
+                accController->createActor(1);
+            });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -541,21 +578,58 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
+    connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
+    //=============================================CHAT=======================================
+    connect(uiController, &UiController::createChat, chatManager, &ChatManager::CreateNewChat);
+    connect(uiController, &UiController::inviteToChat, chatManager, &ChatManager::InviteToChat);
+    connect(uiController, &UiController::createDialogue, chatManager, &ChatManager::createDialogue);
+
+    connect(uiController, &UiController::sendMessage, chatManager, &ChatManager::SendMessage);
+    connect(chatManager, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+
+    connect(uiController, &UiController::requestChatList, chatManager, &ChatManager::requestChatList);
+    connect(uiController, &UiController::requestChat, chatManager, &ChatManager::requestChat);
+
+    connect(chatManager, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
+    connect(chatManager, &ChatManager::chatSend, uiController, &UiController::chatReceived);
+    connect(chatManager, &ChatManager::chatCreated, uiController->getChatListModel(),
+            &ChatListModel::chatAdded);
+    connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatModel(),
+            &ChatModel::messageReceived);
+    connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatListModel(),
+            &ChatListModel::messageReceived);
+
+    connect(uiController, &UiController::removeChat, chatManager, &ChatManager::chatRemoved);
+
+    //
     uiController->startThreads();
+}
+
+#include "asyncfuture.h" // temp
+#include <QtConcurrent>  // temp
+
+void NodeManager::addNewWallet()
+{
+    auto future = QtConcurrent::run(accController, &AccountController::createActor, 0);
+
+    AsyncFuture::observe(future).subscribe([this, future]() {
+        auto walletId = future.result().getId().toActorId();
+        auto wallets = uiWallet->getCurrentWallets();
+        uiWallet->setCurrentWallets(wallets << walletId);
+        createWalletInUi();
+    });
+}
+#elif ETALONIUM_CONSOLE
+void NodeManager::connectConsole()
+{
+    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(this, &NodeManager::loadProfileForConsoleLogin, prProfile, &PrivateProfile::loadPrivateProfile);
 }
 #endif
 
 void NodeManager::connectContractManager()
 {
-}
-
-void NodeManager::connectAccountController()
-{
-    // connect(accController, &AccountController::verifyActor, netManager, &NetManager::NewActor);
-    connect(accController, &AccountController::addActorInActorIndex, this,
-            &NodeManager::addActorInActorIndex);
-    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
 }
 
 void NodeManager::connectActorIndex()
@@ -572,6 +646,7 @@ void NodeManager::dfsConnection()
     // init dfs for user
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
+    //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
 }
 
@@ -580,13 +655,16 @@ void NodeManager::connectSignals()
     connectTxManager();
 #ifdef ETALONIUM_CLIENT
     connectUi();
+#elif ETALONIUM_CONSOLE
+    connectConsole();
 #endif
     connectResolveManager();
     connectContractManager();
-    connectAccountController();
+    //    connectAccountController();
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
+    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
 void NodeManager::prepareFolders()
@@ -610,21 +688,6 @@ int NodeManager::getClientList()
 AccountController *NodeManager::getAccController() const
 {
     return accController;
-}
-
-void NodeManager::createNewActor(QByteArray data, int accountStatus)
-{
-    if (data.isEmpty())
-    {
-        qDebug() << "slot NodeManagerLocal::createNewActor";
-        Actor<KeyPrivate> createdActor = accController->createActor(accountStatus);
-        qDebug() << "pk = " << createdActor.getKey()->getPrivateKey();
-        accController->savePrivateActor(createdActor);
-    }
-    if (!data.isEmpty())
-    {
-        this->dfs = new Dfs(actorIndex, accController);
-    }
 }
 
 void NodeManager::logOut()
@@ -656,10 +719,50 @@ void NodeManager::tempareSlotForActors()
     emit sendActorToWallet(accController->getAccountID());
 }
 
-void NodeManager::coinResponse(BigNumber receiver, BigNumber amount)
+void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
 {
-    createTransactionFrom(BigNumber(*actorIndex->companyId), receiver, amount);
+#ifdef ETALONIUM_CONSOLE
+    auto mainActor = accController->getMainActor();
+
+    if (mainActor == nullptr)
+    {
+        qDebug() << "Main actor not exists";
+        return;
+    }
+
+    BigNumber companyId = BigNumber(*actorIndex->companyId);
+    if (mainActor->getId() == companyId)
+    {
+        qInfo().noquote() << "Company send to" << receiver << "with amount" << amount;
+        createTransactionFrom(companyId, receiver, amount);
+    }
+    else
+    {
+        if (plsr > 0 && mainActor->getId() != plsr)
+        {
+            return;
+        }
+
+        if (blockchain->getUserBalance(mainActor->getId()) < amount)
+        {
+            qInfo().noquote() << "Not enough coins on wallet" << mainActor;
+            return;
+        }
+
+        m_requestCoinQueue.append({ receiver, amount, plsr });
+        if (m_listenCoinRequest)
+        {
+            return;
+        }
+
+        qInfo().noquote() << "Coin request from" << receiver.toByteArray() << "with amount"
+                          << Transaction::amountToVisible(amount);
+        qInfo() << "Send? (y/n)";
+        m_listenCoinRequest = true;
+    }
+#endif
 }
+
 QByteArray NodeManager::getIdPrivateProfile() const
 {
     return idPrivateProfile;
@@ -678,4 +781,9 @@ QByteArray NodeManager::getHashLoginPrivateProfile() const
 void NodeManager::setHashLoginPrivateProfile(QByteArray hash)
 {
     hashLoginPrivateProfile = hash;
+}
+
+ChatManager *NodeManager::getChatManager() const
+{
+    return chatManager;
 }

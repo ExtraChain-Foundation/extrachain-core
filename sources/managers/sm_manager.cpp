@@ -58,9 +58,9 @@ void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QBy
                                                   QByteArray quantity)
 {
 #ifdef ETALONIUM_CLIENT
-    Transaction tx(sender->getId(), receiver, WalletController::toRealBigNumber(quantity));
+    Transaction tx(sender->getId(), receiver, Transaction::visibleToAmount(quantity));
     tx.setData("initcontract");
-    tx.setSenderBalance(WalletController::toRealBigNumber(quantity));
+    tx.setSenderBalance(Transaction::visibleToAmount(quantity));
 
     tx.setToken(sender->getId());
     tx.sign(*sender);
@@ -80,31 +80,13 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
     actor->init(false);
 
     emit verifyActor(actor->convertToPublic());
-    // QFile *file = new QFile(SmartContractStorage::CONTRACTSTORE);
-    // BigNumber index("-1");
-    // do
-    // {
-    //    index++;
-    // file->setFileName(SmartContractStorage::CONTRACTSTORE + actor->getId().toActorId());
-    // } while (file->exists());
-    // file->open(QIODevice::WriteOnly);
-    // QByteArray str = "";
-    // str += Serialization::universalSerialize(
-    //    { actor->getId().toActorId(), actor->getKey()->getPublicKey() }, 4);
-    // file->write(str);
-    // file->flush();
-    // file->close();
-    // qDebug() << "tokenName" << tokenName << "actor->getId()" << actor->getId();
-    // qDebug() << "tokenId[actor->getId().toString()]" << tokenId[actor->getId().toString()];
-    emit addContractActorInActorIndex(actor->convertToPublic());
-    emit saveActorInPrivateProfile(actor->getId().toActorId());
-    //    actorIndex->addActor(actor->convertToPublic());
-
+    actorIndex->addActor(actor->convertToPublic());
+    // emit addContractActorInActorIndex(actor->convertToPublic());
+    // emit saveActorInPrivateProfile(actor->getId().toActorId()); // TODO: not to wallet
     savePrivateActor(*actor);
-    // return actor->getId().toActorId();
-
     return actor;
 }
+
 void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
@@ -139,6 +121,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
 
     qDebug() << "Can't save actor" << actor.getId();
 }
+
 void SmartContractManager::initializeTokenArray()
 {
     QDir directory(SmartContractStorage::CONTRACTPROFILE);

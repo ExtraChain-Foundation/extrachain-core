@@ -1,4 +1,5 @@
 #include "managers/account_controller.h"
+#include "datastorage/blockchain.h"
 
 QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
 {
@@ -28,6 +29,11 @@ ActorIndex *AccountController::getActorIndex() const
 void AccountController::setActorIndex(ActorIndex *value)
 {
     actorIndex = value;
+}
+
+void AccountController::setBlockchain(Blockchain *value)
+{
+    blockchain = value;
 }
 
 AccountController::AccountController(ActorIndex *actorIndex)
@@ -70,11 +76,14 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     file.write(str);
     file.flush();
     file.close();
-    emit addActorInActorIndex(actor->convertToPublic());
+    actorIndex->addActor(actor->convertToPublic());
+    //    emit addActorInActorIndex(actor->convertToPublic());
     //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
-
     accounts.append(actor);
+    if (accounts.size() - 1 == 0)
+        emit savePrivateProfile(actor->getId().toActorId());
+
     userNum = accounts.size() - 1;
 
     qDebug() << "create actor finished" << account;
@@ -85,6 +94,8 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     }
     emit newActorIsCreated(this->getMainActor()->getId(), account);
 
+    if (!accounts.isEmpty())
+        blockchain->getBlockZero();
     return *actor;
 }
 
@@ -141,6 +152,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 {
     if (id.isEmpty())
         return;
+
     accounts.clear();
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
@@ -170,7 +182,8 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
 
     if (loaded > 0)
     {
-        qDebug() << loaded << " accounts have been loaded" << id;
+        qDebug() << loaded << "accounts have been loaded" << id;
+        blockchain->getBlockZero();
         emit loadWallets(id, idList);
     }
     else
@@ -248,9 +261,9 @@ void AccountController::clearAcc()
 void AccountController::changeUserNum(QByteArray wallId)
 {
     userNum = 0;
-    for (auto currAcc : accounts)
+    for (const auto &currAcc : accounts)
     {
-        qDebug() << "ACCOUNT CONTROLLER: change userNum" << currAcc->getId().toByteArray(10) << " " << wallId;
+        // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
         if (currAcc->getId().toActorId() == wallId)
         {
             emit updateTransactionListInModel();

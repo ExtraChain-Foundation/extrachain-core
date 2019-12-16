@@ -1,4 +1,5 @@
 ﻿#include "network/network_manager.h"
+#include "resolve/resolve_manager.h"
 
 using namespace Messages;
 
@@ -12,6 +13,11 @@ NetManager *NetManager::getMe()
     return this;
 }
 
+void NetManager::setResolveManager(ResolveManager *value)
+{
+    resolveManager = value;
+}
+
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 {
     requestResponseMap = new QMap<QByteArray, int>();
@@ -19,7 +25,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
     QSettings settings;
 
     if (!settings.value("network/serverIp").isValid())
-        settings.setValue("network/serverIp", "51.68.181.52");
+        settings.setValue("network/serverIp", "51.68.181.53");
     if (!settings.value("network/allowLocalServer").isValid())
         settings.setValue("network/allowLocalServer", "false");
 
@@ -37,10 +43,9 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 
     accounts = accountList;
     this->actorIndex = actorIndex;
-    //    setupActorIndexConnections();
+    // setupActorIndexConnections();
     findLocal();
-    qDebug() << local->ip();
-    qDebug() << "NET MANAGER: init net fun start";
+    qDebug() << "NET MANAGER: init net fun start" << (local != nullptr);
     if (local != nullptr)
     {
         qDebug() << "LOCAL ::::::::::::::::" << local->ip();
@@ -69,12 +74,19 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
             startDiscovery();
         }
     }
+    else
+    {
+        qDebug() << "Local not found";
+    }
 }
 
 void NetManager::process()
 {
     startNetwork();
     connectToServer(serverPort, local);
+    QTimer *timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &NetManager::checkConnectionsStatus);
+    timer->start(5000);
 }
 
 void NetManager::showMessage(const QHostAddress &from, const QString &message)
@@ -89,9 +101,9 @@ void NetManager::resolverMessage(const QHostAddress &from, const QString &messag
 
 void NetManager::connectSocket()
 {
-    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
+    //    connect(this, &NetManager::sendMsg, connections.last(), &SocketService::sendMsg);
     connect(connections.last(), &SocketService::clientDisconnected, this, &NetManager::removeConnection);
-    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    //    connect(connections.last(), &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     connect(connections.last(), &SocketService::removeMe, this, &NetManager::removeConnection);
     connect(connections.last(), &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
     //    connect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
@@ -100,9 +112,9 @@ void NetManager::connectSocket()
 void NetManager::disconnectSocket(SocketService *connection)
 {
     disconnect(connection, &SocketService::clientRemove, this, &NetManager::removeConnection);
-    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
+    //    disconnect(this, &NetManager::sendMsg, connection, &SocketService::sendMsg);
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
-    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
+    //    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
@@ -151,8 +163,6 @@ void NetManager::findLocal()
 
         for (const QNetworkAddressEntry &entry : entries)
         {
-#ifdef Q_OS_WIN
-            // hack for windows: TODO!
             const auto flags = interface.flags();
 
             bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
@@ -168,12 +178,11 @@ void NetManager::findLocal()
             socket->deleteLater();
             if (!isConnected)
                 continue;
-#endif
 
             if (localIpNotConnect.contains(entry.ip()))
             {
                 local = new QNetworkAddressEntry(entry);
-                qDebug() << "Discovered local: " << local->ip().toString();
+                qDebug() << "Discovered local:" << local->ip().toString();
                 if (interface.type() == QNetworkInterface::Wifi
                     || interface.type() == QNetworkInterface::Ethernet)
                     break;
@@ -188,6 +197,7 @@ void NetManager::checkConnectionsStatus()
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit qmlNetworkStatus(flag);
+    emit qmlNetworkSockets(connections.length());
 }
 
 void NetManager::restoreConnections(const QList<SocketPair> &socketList)
@@ -227,12 +237,16 @@ void NetManager::checkMyIdentificator()
 void NetManager::startNetwork()
 {
     qDebug() << "NetManager::startNetwork()";
-    //        netPort = serverPort;
+    // netPort = serverPort;
     qDebug() << "NetPort:" << serverPort;
-    serverService = new ServerService(serverPort, local);
-    //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-    setupServerServiceConnections();
-    serverService->startListen();
+
+    if (local != nullptr)
+    {
+        serverService = new ServerService(serverPort, local);
+        // resolverService = new ResolverService(actorIndex, requestResponseMap);
+        setupServerServiceConnections();
+        serverService->startListen();
+    }
 }
 
 void NetManager::startDiscovery()
@@ -262,7 +276,7 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
 #endif
     qDebug() << "void NetManager::connectToServer()";
     QStringList servers = serverIp.split(";");
-    QString localIp = local->ip().toString();
+    QString localIp = local != nullptr ? local->ip().toString() : "";
 
     for (QString server : servers)
     {
@@ -310,17 +324,19 @@ void NetManager::setupDiscoveryServiceConnections()
 // Basic methods
 void NetManager::broadcastMsg(const QByteArray &msg)
 {
-    SocketPair socketPair("0.0.0.0", 0, this);
-    emit sendMsg(msg, socketPair);
+    SocketPair socketPair("0.0.0.0", 0);
+    //    emit sendMsg(msg, socketPair);
+    distMessage(msg, socketPair);
 }
 
 void NetManager::sendMessage(const QByteArray &message)
 {
 
-    if (checkMsgCount(message, handler))
+    if (checkMsgCount(message, handler, connections))
         broadcastMsg(message);
 }
-bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler)
+bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
+                               const QList<SocketService *> list)
 {
     bool flag_result = true;
     bool value = 0;
@@ -330,13 +346,16 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
         handler.insert(hashMsg, value);
     else
     {
-
-        if (handler.find(hashMsg).value()++ == connections.size())
+        if (handler.find(hashMsg).value() == list.size() - 1)
+        {
             handler.remove(hashMsg);
-        //        int t = it.value() + 1;
-        //        handler->remove(calcHash(msg));
-        //        handler->insert(calcHash(msg), t);
-        flag_result = false;
+            flag_result = false; // FALSE !!!
+        }
+        else
+        {
+            flag_result = true;
+            handler.find(hashMsg).value()++;
+        }
     }
     return flag_result;
 }
@@ -346,36 +365,40 @@ void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType,
     BaseMessage msg(msgType);
     msg.init(data);
 
-    emit sendMsg(msg.serialize(), receiver);
+    //    emit sendMsg(msg.serialize(), receiver);
+    distMessage(msg.serialize(), receiver);
 }
 
-void NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
-    if (checkMsgCount(msg, handler))
-        emit MsgReceived(msg, receiver);
+    for (int i = 0; i < connections.size(); i++)
+        connections[i]->distMsg(data, socketData);
+}
+
+void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+{
+    mutex.lock();
+    if (checkMsgCount(msg, handler, connections))
+        resolveManager->setTask(msg, receiver);
+    //        emit MsgReceived(msg, receiver);
     else
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
+    mutex.unlock();
+    return nullptr;
 }
-
-// void NetManager::MoveToDfsN()
-//{
-//    QObject *sender = QObject::sender();
-//    SocketService *connection = qobject_cast<SocketService *>(sender);
-//    disconnectSocket(connection);
-//    connections.removeAt(connections.indexOf(connection));
-//    emit newDfsSocket(connection);
-//}
 
 void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
 {
-    SocketPair socketPair(peerAddress.toString().toStdString(), 0, this);
-    emit sendMsg(msg.serialize(), socketPair);
+    SocketPair socketPair(peerAddress.toString().toStdString(), 0);
+    //    emit sendMsg(msg.serialize(), socketPair);
+    distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int port)
 {
-    SocketPair socketPair(peerAddress.toString().toStdString(), port, this);
-    emit sendMsg(msg.serialize(), socketPair);
+    SocketPair socketPair(peerAddress.toString().toStdString(), port);
+    //    emit sendMsg(msg.serialize(), socketPair);
+    distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::upnpErrDis(QString msg)
@@ -391,21 +414,23 @@ void NetManager::upnpErrNet(QString msg)
 SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 port)
 {
     SocketService *socket = new SocketService(address.toString(), port);
+    socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
     ThreadPool::addThread(connections.last());
-    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
+    // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
 
 void NetManager::addConnection(qint64 socketDescriptor)
 {
     SocketService *socket = new SocketService(socketDescriptor);
+    socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
-    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
+    // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(connections.last());
 }
 
@@ -421,7 +446,7 @@ void NetManager::removeConnection()
 
 void NetManager::signMessage(IMessage &message) const
 {
-    message.calcDigSig(accounts->getCurrentActor());
+    message.calcDigSig(*accounts->getMainActor());
 }
 
 QByteArray NetManager::calcHash(const Messages::IMessage &message) const
@@ -443,4 +468,24 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
             connectSocket();
         }
     }
+}
+
+quint16 NetManager::getServerPort() const
+{
+    return serverPort;
+}
+
+QString NetManager::getServerIp() const
+{
+    return serverIp;
+}
+
+bool NetManager::getAllowLocalServer() const
+{
+    return allowLocalServer;
+}
+
+QNetworkAddressEntry *NetManager::getLocal() const
+{
+    return local;
 }

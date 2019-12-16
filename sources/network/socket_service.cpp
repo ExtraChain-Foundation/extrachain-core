@@ -1,5 +1,10 @@
 #include "network/socket_service.h"
 #include "dfs/packages/headers/dfs_universal.h"
+#ifndef DFS_NETWORK_MANAGER_DEF
+#define DFS_NETWORK_MANAGER_DEF
+class DFSNetManager;
+#include "dfs/managers/headers/dfsnetmanager.h"
+#endif
 
 QTcpSocket *SocketService::getSocket() const
 {
@@ -32,58 +37,6 @@ void SocketService::reconnect()
     connectionTry++;
 }
 
-void SocketService::readData()
-{
-    //    while()
-    while (buffer.size() > 0)
-    {
-        if (_blockSize == 0)
-        {
-            QByteArray size;
-
-            QByteArray el = buffer.mid(0, 1);
-            buffer.remove(0, 1);
-            while (el != " ")
-            {
-
-                size.append(el);
-                // _sok->
-                el = buffer.mid(0, 1);
-                buffer.remove(0, 1);
-            }
-            // qDebug() << "<<<<<<<<" << size;
-
-            _blockSize = size.toInt() /*_sok->read((int)sizeof(quint16)).toInt()*/;
-            // qDebug() << "_blockSize now " << _blockSize;
-        }
-        //        qDebug() << buffer.size() << _blockSize;
-        if (buffer.size() < _blockSize)
-            return;
-
-        QByteArray command;
-        command = buffer.mid(0, _blockSize);
-        buffer.remove(0, _blockSize);
-
-        if (!active)
-        {
-            //            active = true;
-            if (command.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
-            {
-
-                identificator = BigNumber(command.mid(IDENTIFICATOR.size()));
-            }
-            emit checkMe();
-        }
-        else
-        {
-            SocketPair receiver(address.toStdString(), port);
-            receiver.setId(identificator.toByteArray());
-            emit MessageReceived(command, receiver);
-        }
-        _blockSize = 0;
-    }
-};
-
 int SocketService::getReconnectTry() const
 {
     return reconnectTry;
@@ -109,8 +62,14 @@ bool SocketService::getActive() const
     return active;
 }
 
+void SocketService::setNetManager(NetManager *value)
+{
+    netManager = value;
+}
+
 SocketService::SocketService()
 {
+    //    dpBuffer->clear();
 }
 
 SocketService::SocketService(const SocketService &value)
@@ -123,26 +82,35 @@ SocketService::SocketService(const SocketService &value)
     socket = value.socket;
     identificator = value.identificator;
     _blockSize = value._blockSize;
-    buffer = value.buffer;
+    //    buffer = value.buffer;
     reconnectTry = value.reconnectTry;
+    //    dpBuffer->clear();
 }
 
 SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
-    : QObject(parent)
+//    : QObject(parent)
 {
     this->address = address;
     this->port = networkPort;
+    //    dpBuffer->clear();
 }
 
 SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
-    : QObject(parent)
+//    : QObject(parent)
 {
     this->socketDescriptor = socketDescriptor;
+    //    dpBuffer->clear();
     qDebug() << "Socket Descriptor" << socketDescriptor;
 }
 
 SocketService::~SocketService()
 {
+    logPri->close();
+    logUsh->close();
+    if (!logPri->size())
+        logPri->remove();
+    if (!logUsh->size())
+        logUsh->remove();
     socket->close();
     socket->deleteLater();
     qDebug() << "---------> Remove SocketService" << address << port;
@@ -159,40 +127,20 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        QByteArray _wtSok = Serialization::universalSerialize({ data });
+        QByteArray _wtSok = Serialization::universalSerialize({ data }, 8);
+
+        logUsh->write(_wtSok + '\n');
+        logUsh->flush();
+
         socket->write(_wtSok, _wtSok.size());
     }
 }
 
-void SocketService::sockReady()
+void *SocketService::distMsg(const QByteArray data, const SocketPair socketData)
 {
-    QTcpSocket *_sok = this->socket;
-    while (_sok->bytesAvailable() < 4)
-        _sok->waitForReadyRead(1000);
-    QByteArray _sok_data = _sok->read(4);
-    int _pck_size = Utils::qByteArrayToInt(_sok_data);
-    while (_sok->bytesAvailable() < _pck_size)
-        _sok->waitForReadyRead(1000);
-
-    QByteArray pckg = _sok->read(_pck_size);
-    if (!active)
-    {
-        //            active = true;
-        if (pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
-        {
-
-            identificator = BigNumber(pckg.mid(IDENTIFICATOR.size()));
-        }
-        emit checkMe();
-    }
-    else
-    {
-        SocketPair receiver(address.toStdString(), port);
-        receiver.setId(identificator.toByteArray());
-        emit MessageReceived(pckg, receiver);
-    }
-    if (socket->bytesAvailable())
-        sockReady();
+    emit msgReady(data, socketData);
+    QCoreApplication::processEvents();
+    return nullptr;
 }
 
 void SocketService::closeSocket()
@@ -202,13 +150,20 @@ void SocketService::closeSocket()
 
 void SocketService::process()
 {
+    dpBuffer = new QByteArray();
     if (socket == nullptr)
     {
+        int ws = QRandomGenerator::global()->bounded(100000);
+        logUsh = new QFile("logUsh" + QString::number(ws) + ".log");
+        logPri = new QFile("logPri" + QString::number(ws) + ".log");
+        logUsh->open(QFile::WriteOnly);
+        logPri->open(QFile::WriteOnly);
         this->socket = new QTcpSocket(this);
         connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
-        connect(socket, &QTcpSocket::readyRead, this, &SocketService::sockReady, Qt::QueuedConnection);
+        connect(socket, &QTcpSocket::readyRead, this, &SocketService::doRead, Qt::QueuedConnection);
         connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
+        connect(this, &SocketService::msgReady, this, &SocketService::sendMsg);
         connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
                 [this](QAbstractSocket::SocketError socketError) {
                     Q_UNUSED(socketError)
@@ -229,6 +184,7 @@ void SocketService::process()
     {
         this->socket->connectToHost(address, port);
     }
+    //    QCoreApplication::processEvents();
 }
 
 void SocketService::establishConnection()
@@ -237,7 +193,7 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
 
-    this->sendMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
+    this->distMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
                   SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
@@ -248,6 +204,70 @@ void SocketService::establishConnection()
 void SocketService::setActive(bool active)
 {
     this->active = active;
+}
+
+void SocketService::doRead()
+{
+    if (pendMsgSize > 0)
+    {
+        continueDoRead();
+    }
+    if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 16)
+    {
+        QByteArray data = socket->read(8);
+        pendMsgSize = Utils::qByteArrayToInt(data);
+        if ((pendMsgSize != 0))
+        {
+            continueDoRead();
+        }
+    }
+}
+void SocketService::continueDoRead()
+{
+    if (socket->bytesAvailable() >= pendMsgSize)
+    {
+        QByteArray pckg = socket->read(pendMsgSize);
+        logPri->write(Utils::intToByteArray(pendMsgSize, 8) + pckg + '\n');
+        logPri->flush();
+        //    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
+        pendMsgSize = 0;
+        if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+        {
+            QByteArray b = pckg.mid(IDENTIFICATOR.size());
+            this->processID(b);
+        }
+        else
+        {
+            SocketPair receiver(this->getAddress().toStdString(), this->getPort());
+            receiver.setId(this->getID().toByteArray());
+            this->gotMessage(pckg, receiver);
+        }
+        if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 16)
+        {
+            doRead();
+        }
+    }
+}
+
+void SocketService::gotMessage(QByteArray msg, SocketPair rec)
+{
+    if (socket->localPort() == 2223 || socket->localPort() == 2224)
+    {
+        reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(msg, rec);
+    }
+    else
+        netManager->MessageReceived(msg, rec);
+}
+
+BigNumber SocketService::getID()
+{
+    return identificator;
+}
+
+void SocketService::processID(QByteArray id)
+{
+    identificator = BigNumber(id);
+    emit checkMe();
 }
 
 bool *SocketService::socketStatus() const

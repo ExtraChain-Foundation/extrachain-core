@@ -255,8 +255,11 @@ int FileIndex::add(const BigNumber &id, const QByteArray &data)
 
     if (recordLimitIsReached())
     {
-        this->removeById(this->getFirstSavedId());
-        this->firstSavedId++; // todo: check!
+        if (this->firstSavedId != 0)
+        {
+            this->removeById(this->getFirstSavedId());
+            this->firstSavedId++; // todo: check!
+        }
     }
 
     if (file.open(QIODevice::WriteOnly))

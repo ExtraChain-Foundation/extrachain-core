@@ -4,17 +4,17 @@
 #include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
 #include "dumessage.h"
-namespace Message {
+namespace DFSMessage {
 struct dfs_message : public DUMessage
 {
 
     const short FIELDS_COUNT = 3;
 
-    QByteArray title_hash;
+    QByteArray dataHash;
     long long pckgNumber;
     QByteArray data;
 
-    dfs_message(const QByteArray &hash, const long long &pckgNumber, const QByteArray &data);
+    dfs_message(const QByteArray &hash, const std::size_t &pckgNumber, const QByteArray &data);
     dfs_message(const QByteArray &serialized);
     dfs_message(const dfs_message &temp);
     ~dfs_message() override final;

@@ -5,12 +5,19 @@
 #include <QThread>
 #include "dfs/packages/headers/all.h"
 #include "managers/account_controller.h"
+#include <vector>
+
+#ifndef DFS_NETWORK_MANAGER_DEF
+#define DFS_NETWORK_MANAGER_DEF
+class DFSNetManager;
+#include "dfs/managers/headers/dfsnetmanager.h"
+#endif
 
 class Sender : public QObject
 {
     Q_OBJECT
-    const int data_offset = Message::dataSize;
-
+    const int data_offset = DFSMessage::dataSize;
+    DFSNetManager *NetManager;
     QByteArray userId;
 
     QMap<QByteArray, QString> titleHashs;
@@ -22,6 +29,13 @@ public:
      * @param userId
      */
     Sender(const QByteArray &userId, QObject *parent = nullptr);
+    void setNetManager(DFSNetManager *value);
+    /**
+     * @brief sendFile
+     * @param filePath
+     * @param receiver
+     */
+    void sendFile(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
 
 signals:
     /**
@@ -35,17 +49,16 @@ signals:
      * @param receiver
      */
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
+
 public slots:
+    void sendFragments(QString path, dfsStruct::Type type, QByteArray frag, SocketPair receiver);
+
     /**
      * @brief process
      */
+    //    void resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
+
     void process();
-    /**
-     * @brief sendFile
-     * @param filePath
-     * @param receiver
-     */
-    void sendFile(const QString &filePath, const based_dfs_struct::Type &type, const SocketPair &receiver);
     /**
      * @brief checkClosing
      * @param titleHash

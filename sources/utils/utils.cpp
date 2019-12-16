@@ -337,6 +337,15 @@ QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serializ
 
 void Utils::wipeDataFiles()
 {
+    QDir("blockchain").removeRecursively();
+    QDir("data").removeRecursively();
+    QDir("keystore").removeRecursively();
+    QDir("tmp").removeRecursively();
+    QFile("user.private").remove();
+    QFile("user.private.login").remove();
+    QFile(".fileList").remove();
+    QFile(".settings").remove();
+    /*
 #ifdef ETALONIUM_CONSOLE
     auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
         QDir dirToClear(dir);
@@ -362,6 +371,7 @@ void Utils::wipeDataFiles()
     clearDir("blockchain/index/actors/" + companySection, *TMP::companyActorId);
     clearDir("blockchain/index/blocks/0", "0");
     clearDir("keystore/personal", *TMP::companyActorId + ".key");
+    clearDir("keystore/profile", *TMP::companyActorId + ".private");
     QDir("tmp").removeRecursively();
     QDir("data").removeRecursively();
     QFile(".fileList").remove();
@@ -380,6 +390,7 @@ void Utils::wipeDataFiles()
 #endif
     QFile(".etalonium.lock").remove();
     QFile(".settings").remove();
+    */
 }
 
 FileList::FileList()

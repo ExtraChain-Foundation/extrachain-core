@@ -1,6 +1,6 @@
 #include "status.h"
 
-Message::Status::Status(const QByteArray &serialize)
+DFSMessage::Status::Status(const QByteArray &serialize)
     : DUMessage(type_status)
 {
     QByteArrayList list = deserialize(serialize);
@@ -19,7 +19,7 @@ Message::Status::Status(const QByteArray &serialize)
     currentState = deserializeState(list.takeFirst());
 }
 
-Message::Status::Status(const QByteArray &dirOwner, const QStringList &state)
+DFSMessage::Status::Status(const QByteArray &dirOwner, const QStringList &state)
     : DUMessage(type_status)
 {
     this->dirOwner = dirOwner;
@@ -27,11 +27,11 @@ Message::Status::Status(const QByteArray &dirOwner, const QStringList &state)
     hash = Utils::calcKeccak(serializeState());
 }
 
-Message::Status::~Status()
+DFSMessage::Status::~Status()
 {
 }
 
-const QStringList Message::Status::deserializeState(const QByteArray &serialized)
+const QStringList DFSMessage::Status::deserializeState(const QByteArray &serialized)
 {
     QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
     QStringList result;
@@ -41,7 +41,7 @@ const QStringList Message::Status::deserializeState(const QByteArray &serialized
     return result;
 }
 
-const QByteArray Message::Status::serializeState() const
+const QByteArray DFSMessage::Status::serializeState() const
 {
     QList<QByteArray> list;
     for (const QString &el : currentState)
@@ -49,7 +49,7 @@ const QByteArray Message::Status::serializeState() const
     return Serialization::serialize(list, stateDelimetr);
 }
 
-const QList<QByteArray> Message::Status::serializedParams() const
+const QList<QByteArray> DFSMessage::Status::serializedParams() const
 {
     QList<QByteArray> list;
     list << QByteArray::number(type) << hash << dirOwner << serializeState();

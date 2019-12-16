@@ -1,4 +1,4 @@
-#ifndef LOGSMANAGER_H
+﻿#ifndef LOGSMANAGER_H
 #define LOGSMANAGER_H
 
 #include <QString>
@@ -30,11 +30,13 @@ public:
     static void etHandler();
     static void qtHandler();
     static void emptyHandler();
+    static void logPrint(const std::string& log);
 
     static bool toConsole;
     static bool toFile;
     static bool toQml;
     static bool antiFilter;
+    static bool debugLogs;
 #ifdef ETALONIUM_CLIENT
     static AbstractModel logs;
 #endif
@@ -46,8 +48,8 @@ public:
 signals:
     void makeLogSignal(const QString& file, int line, const QString& function, const QString& msg);
 
-public slots:
-    void makeLog(const QString& file, int line, const QString& function, const QString& msg);
+public: // slots:
+    static void makeLog(const QString& file, int line, const QString& function, const QString& msg);
 };
 
 #endif // LOGSMANAGER_H

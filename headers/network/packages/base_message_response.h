@@ -1,8 +1,8 @@
 #ifndef BASE_MESSAGE_RESPONSE_H
 #define BASE_MESSAGE_RESPONSE_H
 
-#include "headers/network/packages/base_message.h"
-#include "headers/network/packages/service/response_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/service/response_messages.h"
 
 namespace Messages {
 class BaseMessageResponse : public BaseMessage

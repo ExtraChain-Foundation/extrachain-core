@@ -6,12 +6,14 @@
 #include <QObject>
 #include <QThread>
 #include <QMutex>
+#include <QTimer>
+#include <QMap>
+#include <vector>
+#include <queue>
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
-#include "managers/account_controller.h"
 #include "network/packages/service/all_messages.h"
 #include "network/packages/base_message.h"
 #include "network/packages/base_message_response.h"
@@ -28,38 +30,61 @@ static QMutex handlerFileMutex;
  * type and deserialize it. There are package definition methods, and signals to
  * ResolveManager.
  */
-
+class AccountController;
+class ResolveManager;
+class NodeManager;
+class ActorIndex;
+class Blockchain;
+class TransactionManager;
+class ChatManager;
+using namespace Resolver;
 class ResolverService : public QObject
 {
     Q_OBJECT
+private:
+    NodeManager *node;
+    ActorIndex *actorIndex;
+    Blockchain *blockchain;
+    ChatManager *chatManager;
+
+private:
+    Resolver::Type type = Resolver::Type::GENERAL;
+    Lifetime lifetime = Lifetime::SHORT;
+
+private:
+    QTimer *reloadTimer = nullptr;
+    //    QByteArray tag;
+    std::vector<bool> dataChecker;
+    //    QString path;
+    QFile file;
+    DFSMessage::title_message title;
 
 private:
     bool active = false;
-
     QByteArray msg;
     QByteArray hash;
-    SocketPair senderAddress;
-    ActorIndex *actorIndex;
-    AccountController *ac;
+    SocketPair receiver;
 
-    QMap<QByteArray, int> *requestResponseMap;
+    AccountController *ac;
+    ResolveManager *resolveManager;
 
 public:
-    /**
-     * @brief ResolverService
-     * @param parent
-     */
-    ResolverService(QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      * @param actorIndex
      * @param parent
      */
-    ResolverService(ActorIndex *actorIndex, QMap<QByteArray, int> *rrMap, QObject *parent = nullptr);
+    ResolverService(Type type, Lifetime lifetime, ActorIndex *actorIndex, ResolveManager *resolveManager,
+                    QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
     ~ResolverService() override;
+
+private:
+    void finishWork();
+
+public:
     /**
      * @brief isActive
      * @return
@@ -71,6 +96,21 @@ public:
      * @param receiver
      */
     void setTask(QByteArray msg, SocketPair receiver);
+
+    void setNode(NodeManager *value);
+
+    void setBlockchain(Blockchain *value);
+
+    void setChatManager(ChatManager *value);
+
+    void setResolveManager(ResolveManager *value);
+
+    Resolver::Type getType() const;
+    void setType(const Resolver::Type &value);
+
+    Lifetime getLifetime() const;
+
+    DFSMessage::title_message getTitle() const;
 
 private:
     /**
@@ -96,7 +136,7 @@ private:
      * @param msg
      * @return
      */
-    QByteArray checkMsgType(const QByteArray &msg) const;
+    //    QByteArray checkMsgType(const QByteArray &msg) const;
     /**
      * @brief calcHash
      * @param request
@@ -126,8 +166,8 @@ private:
      * corresponding signals
      * @param msg - serialized packages
      */
-    void recieveMsg(const QByteArray &msgS, const SocketPair &receiver);
-
+    void resolveTask();
+    void resolveGeneralTask();
 public slots:
     /**
      * @brief process
@@ -135,7 +175,6 @@ public slots:
      * ready for work
      */
     void process();
-
 signals:
     /**
      * @brief TaskFinished signal to resolver manager
@@ -153,19 +192,19 @@ signals:
     //                       const SocketPair &receiver);
     // retranslate package to their owners class
     // new data signals
-    void newDfsPack(const Messages::DfsMessage &msg);
-
     void newProfile(const QByteArray &msg);
 
-    void newActor(const Actor<KeyPublic> &actor);
+    //    void newActor(const Actor<KeyPublic> &actor);
 
-    void newBlock(const Block &block);
+    //    void newBlock(const Block &block);
     void newGenesisBlock(const GenesisBlock &block);
 
     void newTx(const Transaction &tx);
 
     // request
     void getActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+
+    void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
 
     void getTx(const SearchEnum::TxParam &param, const QByteArray &value, const SocketPair &receiver,
                const QByteArray &request);
@@ -179,7 +218,7 @@ signals:
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
 
-    void dfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
+    //    void dfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
     // response
     void blockCount(const BigNumber &count);
 

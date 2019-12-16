@@ -16,7 +16,7 @@
 #include <QHostAddress>
 #include <QObject>
 #include <QString>
-
+#include <QMutex>
 #include <QTemporaryFile>
 
 /*
@@ -28,6 +28,7 @@
  * - merging blocks
  *
  */
+static QMutex mutex;
 class Blockchain : public QObject
 {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -80,7 +81,6 @@ private:
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
-    BigNumber getBalanceFromTx(BigNumber id, Transaction tx);
 
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
@@ -91,6 +91,7 @@ public:
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
+    void getBlockZero();
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -304,6 +305,9 @@ signals:
     void sendMessage(const QByteArray &data, const QByteArray &type);
     void finished();
 
+public:
+    void addBlockToBlockchain(Block block);
+    void addGenBlockToBlockchain(const GenesisBlock &block);
 public slots:
 
     void process();
@@ -328,9 +332,6 @@ public slots:
                                 const QByteArray &requestHash, const SocketPair &receiver);
     void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
 
-    void addBlockToBlockchain(Block block);
-
-    void addGenBlockToBlockchain(const GenesisBlock &block);
     /**
      * @brief If there no such tx in a previous block
      * adds this tx to the list and emits VerifiedTx signal

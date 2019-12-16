@@ -10,9 +10,18 @@
 #include <QString>
 #include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+#include "network/socket_pair.h"
 #include <QStringList>
 #include <string>
 #include <sstream>
+namespace Network {
+
+struct DataStruct
+{
+    QByteArray msg;
+    SocketPair receiver;
+};
+}
 
 namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
@@ -87,6 +96,22 @@ QByteArray toByteArray(State state);
 QString toString(State state);
 State convertToDFSstate(QByteArray state);
 } // namespace storedSpace
+
+namespace Resolver {
+enum Lifetime
+{
+    SHORT = 0,
+    LONG = 1
+};
+enum Type
+{
+    BLOCKCHAIN = 0,
+    ACTORS = 1,
+    DFS = 2,
+    GENERAL = 3
+};
+}
+
 namespace Config {
 
 // Message pattern for qDebug (see
@@ -96,6 +121,32 @@ const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{
 const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
+    static const std::string userCardTable = "CREATE TABLE IF NOT EXISTS UserCards ("
+                                             "uid  TEXT PRIMARY KEY NOT NULL, "
+                                             "path TEXT             NOT NULL );";
+    static const std::string cardTableName = "Items";
+    static const std::string cardTable = "CREATE TABLE IF NOT EXISTS " + cardTableName
+        + " ("
+          "path    TEXT PRIMARY KEY NOT NULL, "
+          "date    INT              NOT NULL, "
+          "type    INT              NOT NULL, "
+          "subtype INT                      , "
+          "hash    TEXT             NOT NULL);";
+    static const std::string lsTableName = "Counters";
+    static const std::string lastSectionTable = "CREATE TABLE IF NOT EXISTS " + lsTableName
+        + " ("
+          "type    INT  PRIMARY KEY NOT NULL, "
+          "counter TEXT             NOT NULL );";
+
+    static const std::string subscribeFollowerColumn = "Subscribers";
+    static const std::string tableFollower = "CREATE TABLE IF NOT EXISTS " + subscribeFollowerColumn
+        + " ("
+          "subscriber    TEXT PRIMARY KEY NOT NULL,"
+          "sign TEXT             NOT NULL)";
+    static const std::string subscribeColumn = "Subscriptions";
+    static const std::string tableMySubscribe = "CREATE TABLE IF NOT EXISTS " + subscribeColumn
+        + " ("
+          "subscription    TEXT PRIMARY KEY NOT NULL);";
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
@@ -218,7 +269,11 @@ int compare(const QByteArray &one, const QByteArray &two);
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 } // namespace Utils
-
+namespace ChatStorage {
+// keystore/chats/[chat ID]/[sessionID]/ users,key etc.
+static const QByteArray STORED_CHATS = "keystore/chats/";
+// static const QByteArray SESSIONS = "/sessions/";
+}
 namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";

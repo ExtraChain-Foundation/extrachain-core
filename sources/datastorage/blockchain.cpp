@@ -123,21 +123,23 @@ QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id
     // : memIndex.getLastTxBySenderOrReceiver(id);
 }
 
+void Blockchain::getBlockZero()
+{
+    Block zero = getBlockByIndex(0);
+    if (zero.isEmpty())
+    {
+        Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, QByteArray::number(0));
+        emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
+    }
+    else
+        actorIndex->setCompanyId(new QByteArray(zero.getApprover().toActorId()));
+}
+
 // Genesis block //
 
 bool Blockchain::shouldStartGenesisCreation()
 {
     return Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == this->blocksFromLastGenesis;
-}
-
-BigNumber Blockchain::getBalanceFromTx(BigNumber id, Transaction tx)
-{
-    if (tx.getReceiver() == id)
-        return tx.getReceiverBalance() + tx.getAmount();
-    else if (tx.getSender() == id)
-        return tx.getSenderBalance() - tx.getAmount();
-    else
-        return 0;
 }
 
 void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2)
@@ -492,6 +494,10 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
             }
         }
     }
+    if (block.getIndex() == 0)
+    {
+        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+    }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -707,10 +713,23 @@ BigNumber Blockchain::getRecords() const
 
 BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
 {
+    BigNumber balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
     {
         Block currentBlock = blockIndex.getBlockById(i);
+
+        if (currentBlock.getData() == "genesis") {
+            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
+            const auto rows = genesis.extractDataRows();
+
+            for(const auto &row : rows) {
+                if (userId == row.actorId)
+                    return balance + row.state;
+            }
+
+            return balance;
+        }
 
         if (currentBlock.isEmpty())
             break;
@@ -721,16 +740,16 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
         {
             if (tx.getSender() == userId && tx.getToken() == tokenId)
             {
-                return tx.getSenderBalance() - tx.getAmount();
+                balance -= tx.getAmount();
             }
             else if (tx.getReceiver() == userId && tx.getToken() == tokenId)
             {
-                return tx.getReceiverBalance() + tx.getAmount();
+                balance += tx.getAmount();
             }
         }
     }
 
-    return BigNumber(0);
+    return balance;
 }
 
 void Blockchain::showBlockchain() const
@@ -781,6 +800,7 @@ void Blockchain::getSmContractMembers(const Block &block) const
 
 void Blockchain::process()
 {
+    //
 }
 
 void Blockchain::updateBlockchain(BigNumber id, bool isUser)
@@ -871,6 +891,12 @@ void Blockchain::addBlockToBlockchain(Block block)
 
 void Blockchain::addGenBlockToBlockchain(const GenesisBlock &block)
 {
+    if (block.getIndex() == 0)
+    {
+        mutex.lock();
+        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+        mutex.unlock();
+    }
     if (blockIndex.addBlock(block) == 0)
         sendMessage(block.serialize(), Messages::GENESIS_BLOCK_MESSAGE);
 }
@@ -962,7 +988,7 @@ void Blockchain::proveTx()
     //            return;
     //        }
     //    }
-    if (tx->getData() == "genesis")
+    if (tx->getData() == "initcontract")
     {
         // type = 6, token = correct
         //        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
@@ -1018,25 +1044,10 @@ void Blockchain::proveTx()
         }
     }
     BigNumber senderCurBal = 0;
-    bool senderBalanceIsValid = false;
     if (targetSender.toActorId() != *actorIndex->companyId)
     {
-        Transaction senderLastTx = getTxBySenderOrReceiver(targetSender, tx->getToken().toActorId());
-        senderCurBal = getBalanceFromTx(targetSender, senderLastTx);
-
-        if (tx->getSenderBalance() == senderCurBal)
-            senderBalanceIsValid = true;
+        senderCurBal = getUserBalance(targetSender, tx->getToken());
     }
-    else
-        senderBalanceIsValid = true;
-
-    // verify receiver state
-    BigNumber targetReceiver = tx->getReceiver();
-    Transaction receiverLastTx = getTxBySenderOrReceiver(targetReceiver, tx->getToken().toActorId());
-    BigNumber receiverCurBal = getBalanceFromTx(targetReceiver, receiverLastTx);
-    bool receiverBalanceIsValid = false;
-    if (tx->getReceiverBalance() == receiverCurBal)
-        receiverBalanceIsValid = true;
 
     // qDebug() << "ASDASDASD" << senderCurBal - tx->getAmount();
     if (senderCurBal - tx->getAmount() < 0
@@ -1049,17 +1060,8 @@ void Blockchain::proveTx()
         return;
     }
 
-    if (senderBalanceIsValid && receiverBalanceIsValid)
-    {
         tx->sign(accountController->getCurrentActor());
         emit tx->Approved();
-        return;
-    }
-    else
-    {
-        emit tx->NotApproved();
-        qDebug() << "Transaction not approved: balance not valid";
-    }
 }
 
 // Other //

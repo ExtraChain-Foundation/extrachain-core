@@ -5,6 +5,7 @@
 #include "utils/utils.h"
 
 namespace Messages {
+static const QByteArray INVITE_CHAT_MESSAGE = "chatInvateMessage";
 static const QByteArray CHAT_MESSAGE = "chatMessage";
 
 class ChatMessage : public BaseMessage

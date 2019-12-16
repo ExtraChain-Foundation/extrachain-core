@@ -1,85 +1,160 @@
 #include "dfs/managers/headers/card_manager.h"
+#include <QMutex>
+#include <QUrl>
 
-QStringList CardManager::getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type)
+std::vector<std::string> CardManager::getFilesByType(const std::string &userId, dfsStruct::Type type)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
-    card.open(QIODevice::ReadOnly);
-    QList<QByteArray> list =
-        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
-        return QStringList();
-    QStringList result;
-    for (const QByteArray &el : list)
+    DBConnector dbConnect;
+
+    if (!dbConnect.open(pathToRoot(userId)))
     {
-        QByteArray dType =
-            Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3);
-        if (based_dfs_struct::toByteArray(type) == dType)
-            result << based_dfs_struct::ROOT_FOOLDER_NAME + "/" + userId + "/"
-                    + Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+        qDebug() << "[Error][Card_Manager][getFilesByType]";
+        return {};
     }
-    return result;
+
+    std::string query = "SELECT path FROM " + Config::DataStorage::cardTableName
+        + " WHERE type=" + std::to_string(type) + ';';
+    std::vector<DBRow> data = dbConnect.select(query);
+
+    std::vector<std::string> listData;
+
+    for (DBRow &temp : data)
+        listData.push_back(temp["path"]);
+
+    return listData;
 }
 
-QByteArray CardManager::getLastFileName(const QByteArray &userId)
+std::string CardManager::getLastFileName(const std::string &userId, dfsStruct::Type type)
 {
-    QFile file(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
-    file.open(QIODevice::ReadOnly);
+    DBConnector dbConnect;
 
-    QList<QByteArray> list =
-        Serialization::deserialize(file.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
-        return "0";
-    return Serialization::deserialize(list.takeLast(), Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    if (!dbConnect.open(pathToRoot(userId)))
+    {
+        qDebug() << "[Error][Card_Manager][getLastFileName]";
+        return "";
+    }
+
+    std::string query = "SELECT counter FROM " + Config::DataStorage::lsTableName + " WHERE type='"
+        + std::to_string(type) + "';";
+    std::vector<DBRow> res = dbConnect.select(query);
+
+    if (res.empty())
+        return "-1";
+
+    std::string counter = res[0]["counter"];
+    return counter.empty() ? "-1" : counter;
 }
 
 QStringList CardManager::getAllFiles(const QByteArray &userId)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + userId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
-    card.open(QIODevice::ReadOnly);
-    QList<QByteArray> list =
-        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
+    //    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
+    //    if (!card.exists())
+    //        return {};
+    //    card.open(QIODevice::ReadOnly);
+    //    QList<QByteArray> list =
+    //        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
+    //    if (list.isEmpty())
+    //        return QStringList();
+
+    //    for (const QByteArray &el : list)
+
+    //        result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    QString path(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
+    DBConnector dbConnect;
+    QStringList listData;
+    if (!dbConnect.open(path.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
+    {
+        qDebug() << "[Error][Card_Manager][getAllFiles]";
         return QStringList();
-    QStringList result;
-    for (const QByteArray &el : list)
+    }
+    QByteArray query = "SELECT path FROM " + QByteArray(Config::DataStorage::cardTableName.c_str());
 
-        result << Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2);
+    std::vector<DBRow> data = dbConnect.select(query.toStdString());
+    for (DBRow &temp : data)
+        listData.append(QString::fromStdString(temp["path"]).toLocal8Bit());
 
-    return result;
+    return listData;
 }
 
-based_dfs_struct::Type CardManager::getTypeByName(const QString &path, const QByteArray &uxerId)
+dfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
 {
-    QFile card(based_dfs_struct::ROOT_FOOLDER_NAME + '/' + uxerId + '/' + based_dfs_struct::ACTOR_CARD_FILE);
-    card.open(QIODevice::ReadOnly);
-    QList<QByteArray> list =
-        Serialization::deserialize(card.readAll(), Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-    if (list.isEmpty())
-        return based_dfs_struct::servic;
-    for (const QByteArray &el : list)
+    QString pathLocal(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
+    if (path == pathLocal + dfsStruct::ACTOR_CARD_FILE)
+    {
+        return dfsStruct::Type::card;
+    }
+    DBConnector dbConnect;
+    QStringList listData;
+    static QMutex mutex;
+    mutex.lock();
+    if (!dbConnect.open(pathLocal.toStdString() + dfsStruct::ACTOR_CARD_FILE.toStdString()))
+    {
+        //        qDebug() << "[Error][Card_Manager][getTypeByName] dimka nividimka";
+        return dfsStruct::service;
+    }
+    QByteArray query = "SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
+        + " WHERE path=" + "'" + path.toUtf8() + "'" + ';';
 
-        if (path.toUtf8()
-            == Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(2))
-            return based_dfs_struct::convertToDFType(
-                Serialization::deserialize(el, Serialization::DFS_CARD_FILE_SECTION_DELIMETR).at(3));
-    return based_dfs_struct::servic;
+    std::vector<DBRow> data = dbConnect.select(query.toStdString());
+    mutex.unlock();
+    if (data.empty())
+    {
+        return dfsStruct::Type::unknown;
+    }
+    QString x = QString::fromStdString(data[0]["type"]);
+
+    return dfsStruct::convertToDFType(x.toLocal8Bit());
 }
-QStringList CardManager::getAll(based_dfs_struct::Type type)
+
+std::string CardManager::pathToRoot(std::string userId)
 {
-    QStringList all;
+    return dfsStruct::ROOT_FOOLDER_NAME.toStdString() + '/' + userId + '/'
+        + dfsStruct::ACTOR_CARD_FILE.toStdString();
+}
+
+std::vector<std::string> CardManager::getAll(dfsStruct::Type type)
+{
+    std::vector<std::string> all;
 
     const QStringList allUserIds =
-        QDir(based_dfs_struct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        QDir(dfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (auto &userId : allUserIds)
     {
-        QStringList files = getFilesByType(userId.toLatin1(), type);
-        all << files;
+        std::vector<std::string> files = getFilesByType(userId.toStdString(), type);
+        for (const std::string &file : files)
+            all.push_back(file);
     }
 
     return all;
 }
 
-QStringList CardManager::getForUser(based_dfs_struct::Type type, QString userId)
+std::string CardManager::buildPathForFile(const std::string &userId, const std::string &file,
+                                          dfsStruct::Type type, bool localFormat)
 {
-    return getFilesByType(userId.toLatin1(), type);
+    const std::string currentPath =
+        (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
+        + dfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
+    const std::string section =
+        (BigNumber(file.c_str()) / BigNumber(Config::DataStorage::SECTION_SIZE)).toStdString();
+    std::string typeName = dfsStruct::toString(type).toStdString();
+
+    return currentPath + "/" + typeName + "/" + section + "/" + file;
+}
+
+std::vector<std::string> CardManager::buildPathForFiles(const std::string &userId,
+                                                        const std::vector<std::string> &files,
+                                                        dfsStruct::Type type, bool localFormat)
+{
+    std::vector<std::string> result;
+
+    for (const std::string &file : files)
+    {
+        result.push_back(buildPathForFile(userId, file, type, localFormat));
+    }
+
+    return result;
+}
+
+CardManager::CardManager()
+{
 }

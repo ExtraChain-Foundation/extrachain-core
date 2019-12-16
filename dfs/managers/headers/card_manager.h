@@ -3,19 +3,27 @@
 
 #include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
-#include <iterator>
+#include "utils/db_connector.h"
 
 class CardManager
 {
 
 public:
-    static QStringList getAll(based_dfs_struct::Type type);
-    static QStringList getForUser(based_dfs_struct::Type type, QString userId);
-    static QStringList getFilesByType(const QByteArray &userId, based_dfs_struct::Type &type);
-    static QByteArray getLastFileName(const QByteArray &userId);
+    static std::vector<std::string> getAll(dfsStruct::Type type);
+    static std::vector<std::string> getFilesByType(const std::string &userId, dfsStruct::Type type);
+    static std::string getLastFileName(const std::string &userId, dfsStruct::Type type);
     static QStringList getAllFiles(const QByteArray &userId);
-    static based_dfs_struct::Type getTypeByName(const QString &path, const QByteArray &uxerId);
-    //    function to create
+    static dfsStruct::Type getTypeByName(const QString &path, const QByteArray &userId);
+
+    static std::string pathToRoot(std::string userId);
+    static std::string buildPathForFile(const std::string &userId, const std::string &file,
+                                        dfsStruct::Type type, bool localFormat);
+    static std::vector<std::string> buildPathForFiles(const std::string &userId,
+                                                      const std::vector<std::string> &files,
+                                                      dfsStruct::Type type, bool localFormat);
+
+private:
+    CardManager();
 };
 
 #endif // CARD_MANAGER_H

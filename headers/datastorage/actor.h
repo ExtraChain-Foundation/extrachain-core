@@ -8,7 +8,7 @@
 
 #include <utility>
 #include <type_traits>
-#include <datastorage/profile.h>
+#include "profile/profile.h"
 #include "profile/public_profile.h"
 /**
  * Acting entity.

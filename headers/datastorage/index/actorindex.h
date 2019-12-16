@@ -10,37 +10,34 @@
 #include "profile/public_profile.h"
 #include "network/packages/entities/entity_message.h"
 #include "network/socket_pair.h"
-#include "headers/network/packages/base_message_response.h"
-#include "headers/network/packages/service/response_messages.h"
-#include "headers/network/packages/service/all_messages.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/response_messages.h"
+#include "network/packages/service/all_messages.h"
 /**
  * @brief Actors that stored in blockchain
  */
-
+class ResolveManager;
+class AccountController;
 class ActorIndex : public QObject
 {
     Q_OBJECT
     const QByteArray classType = Messages::ACTOR_MESSAGE;
     const QByteArray profileType = Messages::PROFILE_FILE;
     const QByteArray getActorMessage = Messages::GET_ACTOR_MESSAGE;
+    const QByteArray getAllActorMessage = Messages::GET_ALL_ACTORS;
 
 private:
+    AccountController *accController;
+    ResolveManager *resolveManager;
     BigNumber records = 0;
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
-    /**
-     * @brief buildFilePath
-     * @param id
-     * @return
-     */
-    QString buildFilePath(const QByteArray &id) const;
 
 public:
-    /**
-     * @brief companyId
-     */
     QByteArray *companyId = nullptr;
+
+public:
     /**
      * @brief ActorIndex
      */
@@ -49,6 +46,16 @@ public:
      * @brief ~ActorIndex
      */
     ~ActorIndex();
+
+private:
+    /**
+     * @brief buildFilePath
+     * @param id
+     * @return
+     */
+    QString buildFilePath(const QByteArray &id) const;
+
+public:
     /**
      * @brief Check actor with actorId exist
      * @param actorId
@@ -96,14 +103,29 @@ public:
 
     QString getFolderPath() const;
 
-public slots:
-    void process();
-    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
     /**
      * @brief Attempts to save actor to local storage
      * @param actor
      */
     void handleNewActor(Actor<KeyPublic> actor);
+    /**
+     * @brief Serializes an actor and make a file in fs.
+     * @param actor
+     * @return resultCode, 0 - actor is saved
+     */
+    int addActor(const Actor<KeyPublic> &actor);
+    void handleNewAllActors(const QByteArrayList actors);
+
+public:
+    void setResolveManager(ResolveManager *value);
+
+    void setAccController(AccountController *value);
+
+public slots:
+    void process();
+    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+    void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
+    void getAllActors(BigNumber id, bool isUser);
     /**
      * @brief The same as handleNewActor, but emit's ActorIsMissing signal
      * if there no such actor in storage
@@ -117,13 +139,6 @@ public slots:
     void requestProfile(QString id);
     QByteArrayList getProfile(QString id);
     void profileToSearch(SearchFilters filters);
-
-    /**
-     * @brief Serializes an actor and make a file in fs.
-     * @param actor
-     * @return resultCode, 0 - actor is saved
-     */
-    int addActor(const Actor<KeyPublic> &actor);
 
     /**
      * @brief

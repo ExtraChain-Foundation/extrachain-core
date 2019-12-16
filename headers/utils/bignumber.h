@@ -84,7 +84,8 @@ public:
     mpz_class data() const;
     int isProbPrime() const;
     bool isEmpty() const;
-    QByteArray toByteArray(int base = 16) const; // todo: change to serialize
+    QByteArray toByteArray(int base = 16) const;
+    std::string toStdString(int base = 16) const;
     QByteArray toActorId() const;
     BigNumber pow(unsigned long number);
     BigNumber sqrt(unsigned long number = 2) const;
@@ -92,6 +93,7 @@ public:
     bool getInfinity() const;
     void setInfinity(bool value);
 
+    static bool isValid(const QByteArray &bigNumber, int base = 16);
     static BigNumber factorial(unsigned long number);
     static char binaryCompareAnd(char, char);
     static BigNumber random(int n, bool zeroAllowed = true);

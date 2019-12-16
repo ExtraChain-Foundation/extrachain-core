@@ -1,5 +1,31 @@
 ﻿#ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
+// FORWARD DECLARATION FOR CALLBACK INTEGRATION
+#ifndef SERVER_SERVICE_DEF
+#define SERVER_SERVICE_DEF
+class ServerService;
+#include "network/server_service.h"
+#endif // SERVER_SERVICE
+
+#ifndef SOCKET_SERVICE_DEF
+#define SOCKET_SERVICE_DEF
+class SocketService;
+#include "network/socket_service.h"
+#endif // SOCKET_SERVICE
+
+#ifndef UPNP_CONNECTION_DEF
+#define UPNP_CONNECTION_DEF
+class UPNPConnection;
+#include "network/upnpconnection.h"
+#endif // UPNP_CONNECTION
+
+#ifndef DISCOVERY_SERVICE_DEF
+#define DISCOVERY_SERVICE_DEF
+class DiscoveryService;
+#include "network/discovery_service.h"
+#endif
+class ResolveManager;
+//-------------------END-----------------------
 
 #include "dfs/packages/headers/dfs_universal.h"
 #include "network/packages/service/list_connections.h"
@@ -10,7 +36,7 @@
 #include <QtNetwork/QNetworkAddressEntry>
 #include <algorithm>
 
-#include "headers/utils/utils.h"
+#include "utils/utils.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
@@ -28,6 +54,7 @@
 #include <QNetworkConfigurationManager>
 #include <QRandomGenerator>
 #include <QSettings>
+#include <QMutex>
 #include "network/packages/service/all_messages.h"
 #include "network/packages/service/downloaddfsrequest.h"
 
@@ -35,7 +62,7 @@
  * @brief The NetManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
-
+// static QMutex mutex;
 class NetManager : public QObject
 {
     Q_OBJECT
@@ -58,7 +85,8 @@ protected:
 #endif
     ActorIndex *actorIndex;
     AccountController *accounts;
-    QString serverIp = "51.68.181.52";
+    ResolveManager *resolveManager;
+    QString serverIp = "51.68.181.53";
     bool allowLocalServer = false;
 
     QNetworkAddressEntry *local = nullptr;
@@ -147,7 +175,8 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler);
+    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
+                       const QList<SocketService *> list);
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -202,16 +231,26 @@ public slots:
     void removeConnection();
     void dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
-    void MessageReceived(const QByteArray &msg, const SocketPair &receiver);
+public:
+    void distMessage(const QByteArray &data, const SocketPair &socketData);
+    virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
     //    void MoveToDfsN();
 
+    void setResolveManager(ResolveManager *value);
+
+    quint16 getServerPort() const;
+    QString getServerIp() const;
+    bool getAllowLocalServer() const;
+    QNetworkAddressEntry *getLocal() const;
+
 signals:
     //    void newDfsSocket(SocketService *socket);
-    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
-    void sendMsg(const QByteArray &data, const SocketPair &socketData);
+    //    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
+    //    void sendMsg(const QByteArray &data, const SocketPair &socketData);
 
     void qmlNetworkStatus(bool status);
+    void qmlNetworkSockets(int socketsCount);
     void qmlServerError(bool serverError);
 };
 

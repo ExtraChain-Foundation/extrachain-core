@@ -7,7 +7,7 @@ QByteArray BaseMessage::getDigSig() const
     return digSig;
 }
 
-QByteArray BaseMessage::getMsg_data() const
+QByteArray BaseMessage::getData() const
 {
     return msg_data;
 }
@@ -47,9 +47,11 @@ void BaseMessage::initFields(QLinkedList<QByteArray> &list)
 
 void BaseMessage::initFields(QList<QByteArray> &list)
 {
+    auto list2 = list; // for debuuger
     protocol = list.takeFirst();
     msgType = list.takeFirst();
-    signer = BigNumber(list.takeFirst());
+    QByteArray signBytes = list.takeFirst();
+    signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
     digSig = list.takeFirst();
     msg_data = list.takeFirst();
 }
@@ -62,7 +64,8 @@ short BaseMessage::getFieldsCount() const
 QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
-    l << protocol << msgType << signer.toActorId() << digSig << msg_data;
+    QByteArray signeR = signer == 0 ? signer.toByteArray() : signer.toActorId();
+    l << protocol << msgType << signeR << digSig << msg_data;
     return l;
 }
 

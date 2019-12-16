@@ -7,11 +7,18 @@
 #include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_status.h"
-#include "dfs/managers/headers/package_resolver.h"
+//#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
+#include "utils/utils.h"
+#include "utils/db_connector.h"
+#include "dfs/controls/headers/subscribe_controller.h"
 #include <QTimer>
+#ifdef ETALONIUM_CLIENT
+#include <QImage>
+#endif
+
 class Dfs : public QObject
 {
 
@@ -21,48 +28,58 @@ private:
     // send from nodeManger
     AccountController *accountControler;
     ActorIndex *actorIndex;
-
-    DFSNetManager *dfsNetManager;
+    DBConnector uCards;
     Sender *sender;
-    DFSResolver *resolver;
-
-    void initD(const QByteArray &userId);
-    void saveD(const QString &path, const based_dfs_struct::Type &type = based_dfs_struct::Type::images,
-               const based_dfs_struct::SubType &subType = based_dfs_struct::SubType::ipost,
-               const based_dfs_struct::Status &status = based_dfs_struct::Status::NEW);
-    void appendC(const QString &path, const QByteArray &userId, const QByteArray &name,
-                 const QByteArray &type);
-    QByteArray setName(const QByteArray &userId);
-    void statusD();
+    //    DFSResolver *resolver;
+private:
+    void initUserCards();
+    void initDFS(const QByteArray &userId);
+    void saveToDFS(const QString &path, const QByteArray &data,
+                   const dfsStruct::Type &type = dfsStruct::Type::images,
+                   const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
+                   const dfsStruct::Status &status = dfsStruct::Status::NEW);
+    bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
+                      const dfsStruct::SubType &subType = dfsStruct::SubType::undef);
+    QStringList returnDifs(const QString &adin, const QString &dva);
+    void getDFSStatus();
     void signalConnection();
-
 public slots:
-    void saveFN(const QString tmpPath, const QString &path, const based_dfs_struct::Type &type);
+
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
+    DFSNetManager *dfsNetManager;
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
     ~Dfs();
 
+public:
+    void initDFSNetManager(ResolveManager *resolveManager);
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
-
+    void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
+    void fileResponse(const QString path, const SocketPair &receiver);
+    void sendFragments(QString path, QByteArray frags, SocketPair receiver);
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
-    void sendQ(const QString &filePath, const based_dfs_struct::Type &type, const SocketPair &receiver);
-    void usersChanges(const QByteArray &path, const based_dfs_struct::Type &type, const BigNumber &actorId);
+    void sendQ(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
+    void usersChanges(const QByteArray &path, const dfsStruct::Type &type, const QByteArray &actorId);
 
 public slots:
-
     void init();
     void initUser(BigNumber userId);
 
-    void savedNewData(const QString &path, const based_dfs_struct::Type &type,
-                      const based_dfs_struct::SubType &subType, const based_dfs_struct::Status &status);
+    void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
+                      const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
+                      const dfsStruct::Status &status = dfsStruct::Status::NEW);
+    void saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType,
+                        dfsStruct::Status status);
     void process();
+
+private:
+    QByteArray buildDfsPath(QByteArray userID, dfsStruct::Type type);
 };
 
 #endif // DFS_H
