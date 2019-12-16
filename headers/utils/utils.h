@@ -165,7 +165,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QString PROTOCOL_VERSION = "ExtraCoin_v1";
+    static const QString PROTOCOL_VERSION = "ExtraCoin_v2";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;

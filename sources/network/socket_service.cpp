@@ -251,6 +251,13 @@ void SocketService::continueDoRead()
 
 void SocketService::gotMessage(QByteArray msg, SocketPair rec)
 {
+    // msg->get protocol -> end socket
+    // netManager list connections
+    QByteArray checkProtocol = Serialization::universalDeserialize(msg, 8).at(0);
+    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
+    {
+        this->removeMe();
+    }
     if (socket->localPort() == 2223 || socket->localPort() == 2224)
     {
         reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(msg, rec);
