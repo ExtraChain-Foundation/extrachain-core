@@ -144,8 +144,8 @@ bool DBConnector::createTable(std::string query)
 bool DBConnector::deleteRow(std::string tableName, std::string nameColumn, std::string query)
 {
     std::string _query = "DELETE FROM " + tableName;
-    _query.append(" WHERE " + nameColumn + " = " + query);
-    return this->query(query);
+    _query.append(" WHERE " + nameColumn + " = '" + query + "'");
+    return this->query(_query);
 }
 
 bool DBConnector::deleteTable(std::string name)

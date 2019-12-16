@@ -3,7 +3,7 @@ INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
-    $$PWD/dfs/controls/sources/subscribe_contoller.cpp \
+    $$PWD/dfs/controls/sources/subscribe_controller.cpp \
     $$PWD/dfs/managers/headers/dfsnetmanager.cpp \
     $$PWD/dfs/managers/headers/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \

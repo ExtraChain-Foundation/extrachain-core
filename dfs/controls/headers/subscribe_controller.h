@@ -5,6 +5,8 @@
 #include <QByteArray>
 #include <QObject>
 
+class NodeManager;
+
 class SubscribeController : public QObject
 {
     Q_OBJECT
@@ -14,11 +16,19 @@ public:
     ~SubscribeController();
 
 public slots:
-    void editSubscribe(QByteArray id, QByteArray currentId, bool isRemove);
-    void editSubscriptions(QByteArray id, QByteArray currentId, bool isRemove);
+    void editMySubscribe(QByteArray id, QByteArray currentId, bool isRemove);
+    void editMyFollower(QByteArray id, QByteArray currentId, bool isRemove);
+    int checkCountSubscribe(QByteArray id);
+    std::vector<DBRow> getAllSubscribe(QByteArray id);
 
 public:
-    void checkSubscribe(QByteArray id);
-    QByteArray path;
+    bool checkSubscribe(QByteArray id);
+
+    void setNodeManager(NodeManager *value);
+
+private:
+    NodeManager *nodeManager;
+
+    // get all (offset, count)
 };
 #endif // SUBSCRIBE_CONTROLLER_H

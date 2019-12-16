@@ -12,7 +12,8 @@ NodeManager::NodeManager()
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
-    subscribeContoller = new SubscribeController();
+    subscribeController = new SubscribeController();
+    subscribeController->setNodeManager(this);
     actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
     //    this->thread()->sleep(1);
@@ -25,7 +26,8 @@ NodeManager::NodeManager()
     //    contractManager = new ContractManager(accController, blockchain);
 
 #ifdef ETALONIUM_CLIENT
-    uiController = new UiController();
+    uiController = new UiController(this);
+    uiController->setSubscribeController(subscribeController);
     uiWallet = uiController->getWallet();
     qDebug() << "========" << uiController;
 #endif
@@ -478,7 +480,8 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
-    connect(uiController, &UiController::subscribe, subscribeContoller, &SubscribeController::editSubscribe);
+    connect(uiController, &UiController::subscribe, subscribeController,
+            &SubscribeController::editMySubscribe);
 
     // Search (temp)
     connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
