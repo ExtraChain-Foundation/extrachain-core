@@ -144,7 +144,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         // logs.append({ { "text", msg },
         //               { "date", currentDateTime.toMSecsSinceEpoch() }
 #ifdef QT_DEBUG
-                      ,
+        //              ,
         //              { "file", file },
         //              { "line", line },
         //              { "func", function }
