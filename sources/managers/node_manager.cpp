@@ -33,7 +33,7 @@ NodeManager::NodeManager()
 #endif
     dfs = new Dfs(actorIndex, accController);
     cryptManager = new CryptManager(accController);
-    resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController, dfs);
+    resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
     resolveManager->setNode(this);
     resolveManager->setChatManager(chatManager);
     blockchain->setTxManager(txManager);
