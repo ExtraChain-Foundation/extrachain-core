@@ -139,6 +139,18 @@ namespace DataStorage {
           "type    INT  PRIMARY KEY NOT NULL, "
           "counter TEXT             NOT NULL );";
 
+    static const std::string storedTableName = "Stored";
+    static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
+        + " ("
+          "key INTEGER PRIMARY KEY AUTOINCREMENT, "
+          "hash  TEXT             NOT NULL, "
+          "data  BLOB             NOT NULL, "
+          "range TEXT             NOT NULL, "
+          "type  INT              NOT NULL, "
+          "uid   TEXT             NOT NULL, "
+          "sign  BLOB             NOT NULL, "
+          "prevHash TEXT          NOT NULL);";
+
     static const std::string subscribeFollowerColumn = "Subscribers";
     static const std::string tableFollower = "CREATE TABLE IF NOT EXISTS " + subscribeFollowerColumn
         + " ("

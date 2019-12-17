@@ -104,6 +104,13 @@ std::vector<DBRow> DBConnector::select(std::string query)
 
 bool DBConnector::insert(std::string tableName, DBRow data)
 {
+    std::string query = prepareInsert(tableName, data);
+    // qDebug() << query.c_str();
+    return this->query(query);
+}
+
+std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool noEnd)
+{
     std::string query = "INSERT OR IGNORE INTO ";
     query.append(tableName + " (");
     std::string f;
@@ -126,9 +133,9 @@ bool DBConnector::insert(std::string tableName, DBRow data)
     query.append(f);
     query.append(" ) VALUES (");
     query.append(v);
-    query.append(" );");
-    // qDebug() << query.c_str();
-    return this->query(query);
+    if (!noEnd)
+        query.append(" );");
+    return query;
 }
 
 bool DBConnector::update(std::string query)

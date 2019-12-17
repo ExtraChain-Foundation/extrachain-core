@@ -86,7 +86,7 @@ protected:
     ActorIndex *actorIndex;
     AccountController *accounts;
     ResolveManager *resolveManager;
-    QString serverIp = "51.68.181.53";
+    QString serverIp = SERVER_IP;
     bool allowLocalServer = false;
 
     QNetworkAddressEntry *local = nullptr;

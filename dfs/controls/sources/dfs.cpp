@@ -56,17 +56,33 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const dfsStruct
 {
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray dfsPath = buildDfsPath(userId, type);
+    bool stored = false;
+
     if (!appendToCard(dfsPath, userId, type, subType))
         return;
 
-    if (path.isEmpty())
+    if (type == dfsStruct::post || type == dfsStruct::event || type == dfsStruct::service
+        || type == dfsStruct::contract || type == dfsStruct::chat)
+    {
+        if (!createStored(dfsPath, userId, type))
+        {
+            return;
+        }
+        else
+        {
+            stored = true;
+            appendToStored(dfsPath, data, QString("0:%1").arg(data.size()), 3, userId, userId);
+        }
+    }
+
+    if (path.isEmpty()) // if !path AND data
     {
         QFile file(dfsPath);
         file.open(QFile::WriteOnly);
         file.write(data);
         file.close();
     }
-    else
+    else // if path
     {
         QFile file(path);
         if (!file.copy(dfsPath))
@@ -76,6 +92,8 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const dfsStruct
         }
     }
 
+    if (stored)
+        sender->sendFile(dfsPath + dfsStruct::STORED_FILE_NAME, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath, type, userId); // TODO
@@ -327,7 +345,21 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
 
     if (!appendToCard(dfsPath, userId.toLatin1(), type, subType))
         return;
+    if (!createStored(dfsPath, userId.toLatin1(), type))
+    {
+        return;
+    }
+    else
+    {
+        QFile file(fileName);
+        file.open(QFile::ReadOnly);
+        QByteArray data = file.readAll();
+        file.close();
+        if (!appendToStored(dfsPath, data, QString("0:%1").arg(data.size()), 3, userId, userId.toLatin1()))
+            return;
+    }
 
+    sender->sendFile(dfsPath + dfsStruct::STORED_FILE_NAME, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 
 #ifdef ETALONIUM_CLIENT
@@ -344,6 +376,8 @@ void Dfs::editData(QString userId, QString fileName, QByteArray data)
     QFile file("data/" + userId + "/" + fileName);
     file.open(QFile::ReadOnly);
 
+    QByteArrayList pckgNums;
+
     while (file.bytesAvailable() > 0)
     {
         auto readed = file.read(DFSMessage::dataSize);
@@ -354,7 +388,7 @@ void Dfs::editData(QString userId, QString fileName, QByteArray data)
         qDebug() << "";
         if (readed != newDataPart)
         {
-            changesPackage.pckgNums << QByteArray::number(pckg);
+            changesPackage.range += " " + QByteArray::number(pckg);
             changesPackage.data << newDataPart;
         }
 
@@ -367,12 +401,15 @@ void Dfs::editData(QString userId, QString fileName, QByteArray data)
 
         for (int i = pckg; i <= totalPckg; ++i)
         {
-            changesPackage.pckgNums << QByteArray::number(i);
+            pckgNums << QByteArray::number(i);
             changesPackage.data << data.mid(DFSMessage::dataSize * i, DFSMessage::dataSize);
         }
     }
 
-    qDebug() << changesPackage.pckgNums;
+    changesPackage.range = pckgNums.join(" ");
+    pckgNums.clear();
+
+    qDebug() << changesPackage.range;
     qDebug() << changesPackage.data;
 
     // after package receive
@@ -382,13 +419,15 @@ void Dfs::editData(QString userId, QString fileName, QByteArray data)
     file3.open(QFile::WriteOnly);
     file.reset();
 
-    int max = changesPackage.pckgNums.length() ? changesPackage.pckgNums.last().toInt() : -1;
+    pckgNums = changesPackage.range.split(' ');
+
+    int max = pckgNums.length() ? pckgNums.last().toInt() : -1;
 
     for (int i = 0; i < max + 1; ++i)
     {
         int pos = DFSMessage::dataSize * i;
 
-        int indexOf = changesPackage.pckgNums.indexOf(QByteArray::number(i));
+        int indexOf = pckgNums.indexOf(QByteArray::number(i));
         if (indexOf != -1)
         {
             file3.write(changesPackage.data[indexOf]);
@@ -450,6 +489,36 @@ QByteArray Dfs::buildDfsPath(QByteArray userID, dfsStruct::Type type)
         qDebug() << "DB Section corrupted";
         return QByteArray();
     }
+}
+
+bool Dfs::createStored(QString filePath, const QByteArray &userId, const dfsStruct::Type &type)
+{
+    QString dfsPath = filePath + dfsStruct::STORED_FILE_NAME;
+    DBConnector dbc;
+
+    if (!dbc.open((filePath + dfsStruct::STORED_FILE_NAME).toStdString()))
+        return false;
+    if (!dbc.createTable(Config::DataStorage::storedTableCreation))
+        return false;
+
+    return appendToCard(dfsPath, userId, type, dfsStruct::SubType::stored);
+}
+
+bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
+                         QByteArray sign, QByteArray hash)
+{
+    DBConnector dbc((filePath + dfsStruct::STORED_FILE_NAME).toStdString());
+
+    DBRow row = { { "data", data.toStdString() },    { "range", range.toStdString() },
+                  { "type", std::to_string(type) },  { "uid", userId.toStdString() },
+                  { "sign", sign.toStdString() },    { "hash", hash.toStdString() },
+                  { "prevHash", hash.toStdString() } };
+
+    return dbc.insert(Config::DataStorage::storedTableName, row);
+}
+
+void Dfs::updateCard(const QString &path, const QByteArray &userId, QByteArray date, int lastKey)
+{
 }
 
 void Dfs::init()

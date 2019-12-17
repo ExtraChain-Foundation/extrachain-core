@@ -6,17 +6,19 @@
 namespace DFSMessage {
 struct DfsChanges : public DUMessage
 {
-    const short FIELDS_COUNT = 5;
+    const short FIELDS_COUNT = 6;
 
     QString filePath;
-    QByteArrayList pckgNums;
-    QByteArray actorId;
-    QByteArray signature;
+
     QByteArrayList data;
+    QByteArray range;
+    int type = -1;
+    QByteArray userId;
+    QByteArray signature;
 
     DfsChanges() = default;
     DfsChanges(const QByteArray &serialized);
-    DfsChanges(const QString &filePath, const QByteArrayList &pckgNums, const QByteArray &actorId,
+    DfsChanges(const QString &filePath, const QByteArray &range, int type, const QByteArray &actorId,
                const QByteArray &signature, const QByteArrayList &data);
     ~DfsChanges() = default;
 

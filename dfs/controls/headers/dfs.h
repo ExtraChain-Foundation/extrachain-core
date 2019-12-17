@@ -60,6 +60,7 @@ public:
     void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
     void fileResponse(const QString path, const SocketPair &receiver);
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
+
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
@@ -84,6 +85,11 @@ public slots:
 
 private:
     QByteArray buildDfsPath(QByteArray userID, dfsStruct::Type type);
+
+    bool createStored(QString filePath, const QByteArray &userId, const dfsStruct::Type &type);
+    bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
+                        QByteArray sign, QByteArray hash = "-");
+    void updateCard(const QString &path, const QByteArray &userId, QByteArray date, int lastKey);
 };
 
 #endif // DFS_H

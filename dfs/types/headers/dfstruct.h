@@ -58,7 +58,8 @@ enum SubType
     subevent = 3,
     subpost = 4,
     mini = 5,
-    portfolio = 6
+    portfolio = 6,
+    stored = 7
 };
 SubType convertToDFSSubType(QByteArray);
 QByteArray toByteArray(SubType);
@@ -75,7 +76,8 @@ enum Type
     service = 6,
     cdoctp = 7,
     card = 8,
-    unknown = 9
+    unknown = 9,
+    contract = 10
 };
 Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);

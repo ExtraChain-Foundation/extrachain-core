@@ -17,36 +17,38 @@ DFSMessage::DfsChanges::DfsChanges(const QByteArray &serialized)
     }
 
     filePath = QString::fromUtf8(list.takeFirst());
-    pckgNums = list.takeFirst().split(' ');
-    actorId = list.takeFirst();
-    signature = list.takeFirst();
     data = Serialization::universalDeserialize(list.takeFirst(), DFSMessage::fieldsSize);
+    range = list.takeFirst();
+    type = list.takeFirst().toInt();
+    userId = list.takeFirst();
+    signature = list.takeFirst();
 }
 
-DFSMessage::DfsChanges::DfsChanges(const QString &filePath, const QByteArrayList &pckgNums,
+DFSMessage::DfsChanges::DfsChanges(const QString &filePath, const QByteArray &range, int type,
                                    const QByteArray &actorId, const QByteArray &signature,
                                    const QByteArrayList &data)
     : DUMessage(dfsMessageType::changesMessage)
 {
     this->filePath = filePath;
-    this->pckgNums = pckgNums;
-    this->actorId = actorId;
-    this->signature = signature;
     this->data = data;
+    this->range = range;
+    this->type = type;
+    this->userId = actorId;
+    this->signature = signature;
 }
 
 bool DFSMessage::DfsChanges::empty() const
 {
-    return filePath.isEmpty() || pckgNums.isEmpty() || actorId.isEmpty() || signature.isEmpty()
-        || data.isEmpty();
+    return filePath.isEmpty() || data.isEmpty() || range.isEmpty() || type == -1 || userId.isEmpty()
+        || signature.isEmpty();
 }
 
 const QList<QByteArray> DFSMessage::DfsChanges::serializedParams() const
 {
     QList<QByteArray> list;
 
-    list << QByteArray::number(type) << filePath.toUtf8() << pckgNums.join(' ') << actorId << signature
-         << Serialization::universalSerialize(data, DFSMessage::fieldsSize);
+    list << filePath.toUtf8() << Serialization::universalSerialize(data, DFSMessage::fieldsSize) << range
+         << QByteArray::number(type) << userId << signature;
 
     return list;
 }
@@ -55,8 +57,8 @@ DFSMessage::DfsChanges DFSMessage::DfsChanges::operator=(const DFSMessage::DfsCh
 {
     this->filePath = msg.filePath;
     this->filePath = msg.filePath;
-    this->pckgNums = msg.pckgNums;
-    this->actorId = msg.actorId;
+    this->range = msg.range;
+    this->userId = msg.userId;
     this->signature = msg.signature;
     this->data = msg.data;
     return *this;
