@@ -1,4 +1,5 @@
 #include "datastorage/blockchain.h"
+#include "managers/tx_manager.h"
 
 Blockchain::Blockchain(AccountController *accountController, bool fileMode)
     : fileMode(fileMode)
@@ -41,6 +42,11 @@ BigNumber Blockchain::checkIntegrity()
         }
     }
     return BigNumber();
+}
+
+void Blockchain::setTxManager(TransactionManager *value)
+{
+    txManager = value;
 }
 
 // Blocks //
@@ -188,9 +194,9 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
             if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                 break;
             GenesisDataRow recSender =
-                GenesisDataRow(tx.getSender(), tx.getSenderBalance() - tx.getAmount(), tx.getToken());
+                GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()), tx.getToken());
             GenesisDataRow recReceiver =
-                GenesisDataRow(tx.getReceiver(), tx.getReceiver() - tx.getAmount(), tx.getToken());
+                GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()), tx.getToken());
             addRecordsIfNew(recReceiver, recSender);
         }
     }
@@ -719,11 +725,13 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
     {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (currentBlock.getData() == "genesis") {
+        if (currentBlock.getData() == "genesis")
+        {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
 
-            for(const auto &row : rows) {
+            for (const auto &row : rows)
+            {
                 if (userId == row.actorId)
                     return balance + row.state;
             }
@@ -827,15 +835,6 @@ void Blockchain::checkBlockExistence(const Block &block)
     if (last.getIndex() < block.getIndex() || last.isEmpty())
     {
         addBlock(block);
-        QList<Transaction> tempTxList = block.extractTransactions();
-        foreach (Transaction tx, tempTxList)
-        {
-            if (accountController->sentTxList.at(tx.getHash()) != "")
-            {
-                accountController->sentTxList.remove(tx.getHash());
-                break;
-            }
-        }
         emit BlockIsMissing(block);
     }
     else if (last.getIndex() < block.getIndex())
@@ -1047,11 +1046,11 @@ void Blockchain::proveTx()
     if (targetSender.toActorId() != *actorIndex->companyId)
     {
         senderCurBal = getUserBalance(targetSender, tx->getToken());
+        BigNumber check = txManager->checkPendingTxsList(targetSender);
+        senderCurBal += check;
     }
 
-    // qDebug() << "ASDASDASD" << senderCurBal - tx->getAmount();
-    if (senderCurBal - tx->getAmount() < 0
-        && targetSender.toActorId() != *actorIndex->companyId /*|| receiverCurBal + tx->getAmount() < 0*/)
+    if (senderCurBal - tx->getAmount() < 0 && targetSender.toActorId() != *actorIndex->companyId)
     {
         qDebug() << senderCurBal << tx->getAmount();
         qDebug() << "Transaction "
@@ -1060,8 +1059,8 @@ void Blockchain::proveTx()
         return;
     }
 
-        tx->sign(accountController->getCurrentActor());
-        emit tx->Approved();
+    tx->sign(accountController->getCurrentActor());
+    emit tx->Approved();
 }
 
 // Other //

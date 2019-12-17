@@ -51,7 +51,7 @@ private:
 
 public:
     static QByteArray convertTxs(const QList<Transaction> &txs);
-
+    BigNumber checkPendingTxsList(const BigNumber &sender);
 public slots:
     /**
      * Serialize all transactions to a serialized data.

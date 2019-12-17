@@ -325,11 +325,6 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
     QByteArray sType = dfsStruct::toByteArray(type);
     QString dfsPath = "data/" + userId + "/" + sType + "/" + fileName;
 
-    if (!QFile::exists(dfsPath))
-    {
-        qDebug() << "Can't save static file";
-    }
-
     if (!appendToCard(dfsPath, userId.toLatin1(), type, subType))
         return;
 

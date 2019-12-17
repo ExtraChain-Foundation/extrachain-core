@@ -1,4 +1,4 @@
-﻿#ifndef SEARCHFILTERS_H
+#ifndef SEARCHFILTERS_H
 #define SEARCHFILTERS_H
 
 #include <QObject>
@@ -18,8 +18,6 @@ struct SearchFilters
     Q_PROPERTY(int heightMin MEMBER heightMin)
     Q_PROPERTY(int heightMax MEMBER heightMax)
     Q_PROPERTY(int bustMin MEMBER bustMin)
-    Q_PROPERTY(int bustMax MEMBER bustMax)
-    Q_PROPERTY(int waistMin MEMBER waistMin)
     Q_PROPERTY(int bustMax MEMBER bustMax)
     Q_PROPERTY(int waistMin MEMBER waistMin)
     Q_PROPERTY(int waistMax MEMBER waistMax)

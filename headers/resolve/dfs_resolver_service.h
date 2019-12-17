@@ -21,7 +21,7 @@ class AccountController;
 class ActorIndex;
 class Dfs;
 using namespace Resolver;
-static const int DFS_PWT = 1000;
+
 class DFSResolverService : public QObject
 {
     Q_OBJECT
@@ -34,6 +34,8 @@ private:
     Resolver::Lifetime lifetime = Resolver::Lifetime::SHORT;
 
 private:
+    unsigned long reqStart = 0;
+    unsigned long reqFin = 0;
     QTimer *reloadTimer = nullptr;
     //    QByteArray tag;
     std::vector<bool> dataChecker;
@@ -62,6 +64,7 @@ public:
 
 private:
     void finishWork();
+    QByteArray checkFragStatus(unsigned long from, unsigned long to);
 private slots:
     void checkStatus();
 
