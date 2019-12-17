@@ -105,12 +105,6 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 
 SocketService::~SocketService()
 {
-    logPri->close();
-    logUsh->close();
-    if (!logPri->size())
-        logPri->remove();
-    if (!logUsh->size())
-        logUsh->remove();
     socket->close();
     socket->deleteLater();
     qDebug() << "---------> Remove SocketService" << address << port;
@@ -128,9 +122,6 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
         QByteArray _wtSok = Serialization::universalSerialize({ data }, 8);
-
-        logUsh->write(_wtSok + '\n');
-        logUsh->flush();
 
         socket->write(_wtSok, _wtSok.size());
     }
@@ -153,11 +144,6 @@ void SocketService::process()
     dpBuffer = new QByteArray();
     if (socket == nullptr)
     {
-        int ws = QRandomGenerator::global()->bounded(100000);
-        logUsh = new QFile("logUsh" + QString::number(ws) + ".log");
-        logPri = new QFile("logPri" + QString::number(ws) + ".log");
-        logUsh->open(QFile::WriteOnly);
-        logPri->open(QFile::WriteOnly);
         this->socket = new QTcpSocket(this);
         connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
@@ -227,8 +213,6 @@ void SocketService::continueDoRead()
     if (socket->bytesAvailable() >= pendMsgSize)
     {
         QByteArray pckg = socket->read(pendMsgSize);
-        logPri->write(Utils::intToByteArray(pendMsgSize, 8) + pckg + '\n');
-        logPri->flush();
         //    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
         pendMsgSize = 0;
         if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
