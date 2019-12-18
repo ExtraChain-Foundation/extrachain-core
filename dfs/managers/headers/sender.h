@@ -6,6 +6,7 @@
 #include "dfs/packages/headers/all.h"
 #include "managers/account_controller.h"
 #include <vector>
+#include <type_traits>
 
 #ifndef DFS_NETWORK_MANAGER_DEF
 #define DFS_NETWORK_MANAGER_DEF
@@ -31,11 +32,28 @@ public:
     Sender(const QByteArray &userId, QObject *parent = nullptr);
     void setNetManager(DFSNetManager *value);
     /**
-     * @brief sendFile
+     * @brief Send file
      * @param filePath
      * @param receiver
      */
     void sendFile(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
+
+    /**
+     * @brief Send any dfs message (template function)
+     */
+    template <typename T>
+    void sendDfsMessage(const T &dfsMessage, const SocketPair &receiver = {})
+    {
+        static_assert(std::is_base_of<DFSMessage::DUMessage, T>::value, "Derived not derived from DUMessage");
+
+        if (dfsMessage.isEmpty())
+        {
+            qDebug() << "Empty dfs message" << typeid(T).name();
+            return;
+        }
+
+        NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
+    }
 
 signals:
     /**

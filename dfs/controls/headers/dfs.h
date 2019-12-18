@@ -31,9 +31,9 @@ private:
     ActorIndex *actorIndex;
     DBConnector uCards;
     Sender *sender;
-    //    DFSResolver *resolver;
+    // DFSResolver *resolver;
+    
 private:
-    void initUserCards();
     void initDFS(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
                    const dfsStruct::Type &type = dfsStruct::Type::images,
@@ -44,8 +44,8 @@ private:
     QStringList returnDiffs(const QString &odin, const QString &odinson);
     void getDFSStatus();
     void signalConnection();
-public slots:
 
+public slots:
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
@@ -79,7 +79,10 @@ public slots:
 
     void saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType,
                         dfsStruct::Status status);
-    void editData(QString userId, QString fileName, QByteArray data);
+    void editData(QString userId, QString fileName, dfsStruct::Type type, QByteArray data);
+    void editSqlDatabase(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
+                         QByteArray sqlChanges);
+    void applyChanges(const DFSMessage::DfsChanges &dfsChanges);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
 
@@ -88,8 +91,10 @@ private:
 
     bool createStored(QString filePath, const QByteArray &userId, const dfsStruct::Type &type);
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
-                        QByteArray sign, QByteArray hash = "-");
-    void updateCard(const QString &path, const QByteArray &userId, QByteArray date, int lastKey);
+                        QByteArray sign, QByteArray hash, QByteArray prevHash = "new");
+    bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, int lastKey);
+    void applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
+    void applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
 };
 
 #endif // DFS_H

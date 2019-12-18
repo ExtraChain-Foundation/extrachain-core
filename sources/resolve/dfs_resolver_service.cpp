@@ -233,6 +233,12 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         {
             break;
         }
+        case dfsMessageType::changesMessage:
+        {
+            DFSMessage::DfsChanges message(data);
+            dfs->applyChanges(message);
+            break;
+        }
         default:
         {
             qDebug() << "[&DFSResolver] undifined message type from LIFETIME::SHORT";

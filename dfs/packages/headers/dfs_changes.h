@@ -12,20 +12,29 @@ struct DfsChanges : public DUMessage
 
     QByteArrayList data;
     QByteArray range;
-    int type = -1;
+    int changeType = -1;
     QByteArray userId;
     QByteArray signature;
 
-    DfsChanges() = default;
+    DfsChanges();
     DfsChanges(const QByteArray &serialized);
-    DfsChanges(const QString &filePath, const QByteArray &range, int type, const QByteArray &actorId,
-               const QByteArray &signature, const QByteArrayList &data);
+    DfsChanges(const QString &filePath, const QByteArrayList &data, const QString &range, int changeType,
+               const QByteArray &actorId, const QByteArray &signature);
+
     ~DfsChanges() = default;
 
-    bool empty() const;
+    bool isEmpty() const;
     const QList<QByteArray> serializedParams() const override final;
 
-    DfsChanges operator=(const DfsChanges &msg); ///
+    DfsChanges operator=(const DfsChanges &msg);
+
+    enum ChangeType
+    {
+        Delete,
+        Insert,
+        Edit,
+        Bytes
+    };
 };
 }
 

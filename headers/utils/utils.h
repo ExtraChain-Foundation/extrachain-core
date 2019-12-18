@@ -122,11 +122,8 @@ const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{
 const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
-    static const std::string userCardTable = "CREATE TABLE IF NOT EXISTS UserCards ("
-                                             "uid  TEXT PRIMARY KEY NOT NULL, "
-                                             "path TEXT             NOT NULL );";
     static const std::string cardTableName = "Items";
-    static const std::string cardTable = "CREATE TABLE IF NOT EXISTS " + cardTableName
+    static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
           "path    TEXT PRIMARY KEY NOT NULL, "
           "date    INT              NOT NULL, "
@@ -134,7 +131,7 @@ namespace DataStorage {
           "subtype INT                      , "
           "hash    TEXT             NOT NULL);";
     static const std::string lsTableName = "Counters";
-    static const std::string lastSectionTable = "CREATE TABLE IF NOT EXISTS " + lsTableName
+    static const std::string lastSectionTableCreation = "CREATE TABLE IF NOT EXISTS " + lsTableName
         + " ("
           "type    INT  PRIMARY KEY NOT NULL, "
           "counter TEXT             NOT NULL );";
@@ -151,13 +148,15 @@ namespace DataStorage {
           "sign  BLOB             NOT NULL, "
           "prevHash TEXT          NOT NULL);";
 
-    static const std::string subscribeFollowerColumn = "Subscribers";
-    static const std::string tableFollower = "CREATE TABLE IF NOT EXISTS " + subscribeFollowerColumn
+    static const std::string subscribeFollowerTableName = "Subscribers";
+    static const std::string tableFollowerCreation = "CREATE TABLE IF NOT EXISTS "
+        + subscribeFollowerTableName
         + " ("
           "subscriber    TEXT PRIMARY KEY NOT NULL,"
           "sign TEXT             NOT NULL)";
-    static const std::string subscribeColumn = "Subscriptions";
-    static const std::string tableMySubscribe = "CREATE TABLE IF NOT EXISTS " + subscribeColumn
+    static const std::string subscribeColumnTableName = "Subscriptions";
+    static const std::string tableMySubscribeCreation = "CREATE TABLE IF NOT EXISTS "
+        + subscribeColumnTableName
         + " ("
           "subscription    TEXT PRIMARY KEY NOT NULL);";
 

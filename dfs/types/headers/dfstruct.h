@@ -61,6 +61,7 @@ enum SubType
     portfolio = 6,
     stored = 7
 };
+
 SubType convertToDFSSubType(QByteArray);
 QByteArray toByteArray(SubType);
 QString toString(SubType);

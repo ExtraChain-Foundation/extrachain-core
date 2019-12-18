@@ -43,8 +43,8 @@ protected:
     virtual const QList<QByteArray> serializedParams() const = 0;
 
     virtual const QList<QByteArray> deserialize(const QByteArray &serialized) = 0;
-    virtual const QByteArray concatenate() = 0;
-    virtual const QByteArray hash() = 0;
+    virtual const QByteArray concatenate() const = 0;
+    virtual const QByteArray hash() const = 0;
 };
 }
 
