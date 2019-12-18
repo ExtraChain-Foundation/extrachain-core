@@ -354,7 +354,7 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
         {
             stored = true;
 
-            QFile file(fileName);
+            QFile file(dfsPath);
             file.open(QFile::ReadOnly);
             QByteArray data = file.readAll();
             file.close();
@@ -364,8 +364,9 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
             DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId.toLatin1(),
                                               userId.toLatin1());
             QByteArray hash = dfsChanges.hash();
+            QByteArray sign = accountControler->getMainActor()->getKey()->encrypt(userId.toLatin1());
 
-            appendToStored(dfsPath, data, range, 3, userId, userId.toLatin1(), hash);
+            appendToStored(dfsPath, data, range, 3, userId, sign, hash);
         }
     }
 
@@ -437,6 +438,14 @@ void Dfs::editData(QString userId, QString fileName, dfsStruct::Type type, QByte
 void Dfs::editSqlDatabase(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
                           QByteArray sqlChanges)
 {
+    DFSMessage::DfsChanges dfsChanges;
+    dfsChanges.data << sqlChanges;
+    dfsChanges.range = "sql";
+    dfsChanges.userId = userId.toLatin1();
+    QByteArray sType = dfsStruct::toByteArray(type);
+    dfsChanges.filePath = "data/" + dfsChanges.userId + "/" + sType + "/" + fileName;
+    dfsChanges.signature = accountControler->getMainActor()->getKey()->encrypt(dfsChanges.userId);
+    dfsChanges.changeType = sqlType;
 }
 
 void Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
@@ -454,7 +463,7 @@ void Dfs::applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges)
 {
     QString filePathCtmp = dfsChanges.filePath + ".ctmp";
     QFile file(dfsChanges.filePath);
-    if (file.open(QFile::ReadOnly))
+    if (!file.open(QFile::ReadOnly))
     {
         qDebug() << "You cannot change what is not";
         return;
