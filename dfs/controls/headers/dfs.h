@@ -38,6 +38,8 @@ private:
     void saveToDFS(const QString &path, const QByteArray &data,
                    const dfsStruct::Type &type = dfsStruct::Type::images,
                    const dfsStruct::SubType &subType = dfsStruct::SubType::subpost);
+    void saveStaticFile(QString fileName, dfsStruct::Type type, dfsStruct::SubType subType);
+    void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
     bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
                       const dfsStruct::SubType &subType = dfsStruct::SubType::undef);
     QStringList returnDiffs(const QString &odin, const QString &odinson);
@@ -56,7 +58,7 @@ public:
     void initDFSNetManager(ResolveManager *resolveManager);
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
-    void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
+
     void fileResponse(const QString path, const SocketPair &receiver);
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
 
@@ -67,15 +69,15 @@ signals:
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
     void usersChanges(const QByteArray &path, const dfsStruct::Type &type, const QByteArray &actorId);
+    void sendFromNetwork(int saveType, QString file, QByteArray data, const dfsStruct::Type type,
+                         const dfsStruct::SubType subType = dfsStruct::SubType::subpost);
 
 public slots:
     void init();
     void initUser(BigNumber userId);
 
-    void savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
-                      const dfsStruct::SubType &subType = dfsStruct::SubType::subpost);
-
-    void saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType);
+    void save(int saveType, QString file, QByteArray data, const dfsStruct::Type type,
+              const dfsStruct::SubType subType = dfsStruct::SubType::subpost);
     void editData(QString userId, QString fileName, dfsStruct::Type type, QByteArray data);
     void editSqlDatabase(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);

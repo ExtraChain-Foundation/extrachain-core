@@ -71,8 +71,8 @@ void SubscribeController::initSubscribe()
     dbFollower.createTable(Config::DataStorage::tableFollowerCreation);
     dbFollower.close();
 
-    sendStatic(currentId, "subscribe", dfsStruct::service, dfsStruct::SubType::undef);
-    sendStatic(currentId, "follower", dfsStruct::service, dfsStruct::SubType::undef);
+    send(dfsStruct::DfsSave::Static, "subscribe", "", dfsStruct::service, dfsStruct::SubType::undef);
+    send(dfsStruct::DfsSave::Static, "follower", "", dfsStruct::service, dfsStruct::SubType::undef);
 }
 
 void SubscribeController::setNodeManager(NodeManager *value)

@@ -301,6 +301,7 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
     , accountControler(accControler)
     , actorIndex(actorIndex)
 {
+    connect(this, &Dfs::sendFromNetwork, this, &Dfs::save);
 }
 
 Dfs::~Dfs()
@@ -315,28 +316,9 @@ void Dfs::initDFSNetManager(ResolveManager *resolveManager)
     ThreadPool::addThread(dfsNetManager);
 }
 
-void Dfs::savedNewData(const QString &path, const QByteArray &data, const dfsStruct::Type &type,
-                       const dfsStruct::SubType &subType)
+void Dfs::saveStaticFile(QString fileName, dfsStruct::Type type, dfsStruct::SubType subType)
 {
-    //#ifdef ETALONIUM_CLIENT
-    //    if (type == dfsStruct::Type::images && subType != dfsStruct::SubType::mini)
-    //    {
-    //        QImage image(path);
-
-    //        if (image.save("temp_image", "jpeg", 80))
-    //        {
-    //            saveToDFS("temp_image", "", type, subType, status);
-    //            QFile::remove("temp_image");
-    //            return;
-    //        }
-    //    }
-    //#endif
-
-    saveToDFS(path, data, type, subType);
-}
-
-void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType)
-{
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray sType = dfsStruct::toByteArray(type);
     QString dfsPath = "data/" + userId + "/" + sType + "/" + fileName;
 
@@ -347,7 +329,7 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
     if (type == dfsStruct::post || type == dfsStruct::event || type == dfsStruct::service
         || type == dfsStruct::contract || type == dfsStruct::chat)
     {
-        if (!createStored(dfsPath, userId.toLatin1(), type))
+        if (!createStored(dfsPath, userId, type))
         {
             return;
         }
@@ -362,9 +344,8 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
 
             // temp
             QString range = QString("0:%1").arg(data.size());
-            DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId.toLatin1(),
-                                              userId.toLatin1());
-            bool card = appendToCard(dfsPath, userId.toLatin1(), type, subType);
+            DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId, userId);
+            bool card = appendToCard(dfsPath, userId, type, subType);
             bool stored = appendToStored(dfsPath, data, range, 3, userId, true);
 
             if (!card)
@@ -378,7 +359,7 @@ void Dfs::saveStaticFile(QString userId, QString fileName, dfsStruct::Type type,
     sender->sendFile(dfsPath, type, SocketPair());
 
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(dfsPath.toLatin1(), type, userId.toLatin1());
+    emit usersChanges(dfsPath.toLatin1(), type, userId);
 #endif
 }
 
@@ -698,4 +679,20 @@ void Dfs::initUser(BigNumber userId)
         return;
     //    DFSMessage::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
     //    dfsNetManager->send(rqst.serialize());
+}
+
+void Dfs::save(int saveType, QString file, QByteArray data, const dfsStruct::Type type,
+               const dfsStruct::SubType subType)
+{
+    switch (saveType)
+    {
+    case dfsStruct::DfsSave::File:
+        saveToDFS(file, data, type, subType);
+        break;
+    case dfsStruct::DfsSave::Static:
+        saveStaticFile(file, type, subType);
+        break;
+    case dfsStruct::DfsSave::Network:
+        saveFN(file + dfsStruct::FILE_IDENTIFICATOR, file, type);
+    }
 }

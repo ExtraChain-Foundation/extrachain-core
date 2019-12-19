@@ -74,6 +74,14 @@ Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);
 QString toString(Type);
 
+enum DfsSave
+{
+    File,
+    Static,
+    Network,
+    Db
+};
+
 enum ChangeType
 {
     Delete,

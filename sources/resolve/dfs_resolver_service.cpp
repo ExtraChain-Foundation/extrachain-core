@@ -75,7 +75,8 @@ void DFSResolverService::checkStatus()
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
         file.close();
-        dfs->saveFN(file.fileName(), title.filePath, dfsStruct::convertToDFType(title.f_type));
+        dfs->sendFromNetwork(dfsStruct::DfsSave::Network, title.filePath, "",
+                             dfsStruct::convertToDFType(title.f_type));
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
