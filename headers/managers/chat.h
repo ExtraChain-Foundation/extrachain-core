@@ -3,6 +3,7 @@
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "enc/algorithms/blowfish_crypt.h"
+#include "utils/db_connector.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QObject>

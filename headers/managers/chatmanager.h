@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QList>
 #include "dfs/types/headers/dfstruct.h"
+#include "utils/db_connector.h"
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
 // path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current
 // session for this chat blockhain/index/actor/[myId]/myChats/[chatId]   /keystore/key[SessionNumb]   //
@@ -100,6 +101,8 @@ signals:
     void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
     void chatCreated(UIChat);
     void finished();
+    void sendEditSql(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
+                     QByteArrayList sqlChanges);
 };
 
 #endif // CHATMANAGER_H

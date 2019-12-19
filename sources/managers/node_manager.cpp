@@ -520,6 +520,7 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
     connect(subscribeController, &SubscribeController::sendStatic, dfs, &Dfs::saveStaticFile);
     connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
+    connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,

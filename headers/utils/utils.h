@@ -135,7 +135,25 @@ namespace DataStorage {
         + " ("
           "type    INT  PRIMARY KEY NOT NULL, "
           "counter TEXT             NOT NULL );";
+    static const std::string chatIdTableName = "ChatId";
+    static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
+        + " ("
+          "chatId  TEXT  PRIMARY KEY NOT NULL, "
+          "key     TEXT              NOT NULL );";
 
+    static const std::string chatUserTableName = "Users";
+    static const std::string chatUserStorage = "CREATE TABLE IF NOT EXISTS " + chatUserTableName
+        + " ("
+          "userId  TEXT  PRIMARY KEY NOT NULL);";
+
+    static const std::string chatMessageTableName = "Chat";
+    static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
+        + " ("
+          "userId   TEXT  PRIMARY KEY NOT NULL, "
+          "message  TEXT              NOT NULL, "
+          "type     TEXT              NOT NULL, "
+          "session  TEXT              NOT NULL, "
+          "date     TEXT              NOT NULL );";
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
         + " ("
@@ -284,7 +302,8 @@ void wipeDataFiles();
 } // namespace Utils
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
-static const QByteArray STORED_CHATS = "keystore/chats/";
+static const QByteArray STORED_CHATS = "data/";
+static const std::string KEYSTORE_CHATS = "keystore/chats/chatId";
 // static const QByteArray SESSIONS = "/sessions/";
 }
 namespace DataStorage {
