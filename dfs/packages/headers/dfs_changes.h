@@ -27,14 +27,6 @@ struct DfsChanges : public DUMessage
     const QList<QByteArray> serializedParams() const override final;
 
     DfsChanges operator=(const DfsChanges &msg);
-
-    enum ChangeType
-    {
-        Delete,
-        Insert,
-        Edit,
-        Bytes
-    };
 };
 }
 

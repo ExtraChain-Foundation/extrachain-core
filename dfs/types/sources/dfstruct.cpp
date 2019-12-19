@@ -29,36 +29,7 @@ QByteArray dfsStruct::toByteArray(State _state)
     else
         return "DELSTATE";
 }
-//
-dfsStruct::Status dfsStruct::convertToDFSstatus(QByteArray state)
-{
-    if (QString(state) == "NEW")
-        return Status::NEW;
-    else if (QString(state) == "REPLACE")
-        return Status::REPLACE;
-    else
-        return Status::MERGE;
-}
 
-QString dfsStruct::toString(Status _state)
-{
-    if (_state == REPLACE)
-        return "EMPTY";
-    else if (_state == MERGE)
-        return "STATIC";
-    else
-        return "NEW";
-}
-QByteArray dfsStruct::toByteArray(Status _state)
-{
-    if (_state == REPLACE)
-        return "EMPTY";
-    else if (_state == MERGE)
-        return "STATIC";
-    else
-        return "NEW";
-}
-//
 dfsStruct::Type dfsStruct::convertToDFType(QByteArray type)
 {
     if (type == "images")

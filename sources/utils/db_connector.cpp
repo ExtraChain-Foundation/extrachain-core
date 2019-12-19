@@ -123,7 +123,7 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool n
         s.append("', ");
         f.append(s);
 
-        s = it->second;
+        s = QString::fromStdString(it->second).replace("'", "''").toStdString(); // TODO!
         s.insert(0, "'");
         s.append("', ");
         v.append(s);
@@ -133,8 +133,8 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool n
     query.append(f);
     query.append(" ) VALUES (");
     query.append(v);
-    if (!noEnd)
-        query.append(" );");
+    // if (!noEnd)
+    query.append(" );");
     return query;
 }
 

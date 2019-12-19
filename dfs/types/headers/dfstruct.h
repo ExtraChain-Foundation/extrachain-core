@@ -40,16 +40,6 @@ State convertToDFSstate(QByteArray);
 QByteArray toByteArray(State);
 QString toString(State);
 
-enum Status
-{
-    NEW = 0,
-    MERGE,
-    REPLACE
-};
-Status convertToDFSstatus(QByteArray);
-QByteArray toByteArray(Status);
-QString toString(Status);
-
 enum SubType
 {
     undef = 0,
@@ -83,6 +73,14 @@ enum Type
 Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);
 QString toString(Type);
+
+enum ChangeType
+{
+    Delete,
+    Insert,
+    Update,
+    Bytes
+};
 
 enum Key
 {

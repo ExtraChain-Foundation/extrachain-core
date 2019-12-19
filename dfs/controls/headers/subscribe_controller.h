@@ -1,29 +1,37 @@
 #ifndef SUBSCRIBE_CONTROLLER_H
 #define SUBSCRIBE_CONTROLLER_H
+
+#include <QObject>
+#include <QByteArray>
+
 #include "utils/db_connector.h"
 #include "utils/utils.h"
-#include <QByteArray>
-#include <QObject>
+#include "dfs/types/headers/dfstruct.h"
 
 class NodeManager;
 
 class SubscribeController : public QObject
 {
     Q_OBJECT
+
 public:
     SubscribeController(QObject *parent = nullptr);
     SubscribeController(const SubscribeController &);
     ~SubscribeController();
 
+signals:
+    void sendStatic(QString userId, QString fileName, dfsStruct::Type type, dfsStruct::SubType subType);
+    void sendEditSql(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
+                     QByteArrayList sqlChanges);
+
 public slots:
-    void editMySubscribe(QByteArray id, QByteArray currentId, bool isRemove);
-    void editMyFollower(QByteArray id, QByteArray currentId, bool isRemove);
+    void editMySubscribe(QByteArray id, bool isRemove);
     int checkCountSubscribe(QByteArray id);
     std::vector<DBRow> getAllSubscribe(QByteArray id);
+    void initSubscribe();
 
 public:
     bool checkSubscribe(QByteArray id);
-
     void setNodeManager(NodeManager *value);
 
 private:

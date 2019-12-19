@@ -14,41 +14,13 @@ SubscribeController::~SubscribeController()
 {
 }
 
-void SubscribeController::editMySubscribe(QByteArray id, QByteArray currentId, bool isRemove)
+void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 {
-    QByteArray path = "data/" + currentId + "/services/subscribe";
-    DBConnector DB(path.toStdString());
-    DB.createTable(Config::DataStorage::tableMySubscribeCreation);
-
-    if (isRemove)
-    {
-        DB.deleteRow(Config::DataStorage::subscribeColumnTableName, "subscription", id.toStdString());
-    }
-    else
-    {
-        DBRow row;
-        row.insert({ "subscription", id.toStdString() });
-        DB.insert(Config::DataStorage::subscribeColumnTableName, row);
-    }
-}
-
-void SubscribeController::editMyFollower(QByteArray id, QByteArray currentId, bool isRemove)
-{
-    QByteArray path = "data/" + currentId + "/services/subscribe";
-    DBConnector DB(path.toStdString());
-    DB.createTable(Config::DataStorage::tableFollowerCreation);
-
-    if (isRemove)
-    {
-        DB.deleteRow(Config::DataStorage::subscribeFollowerTableName,
-                     Config::DataStorage::subscribeFollowerTableName, id.toStdString());
-    }
-    else
-    {
-        DBRow row;
-        row.insert({ Config::DataStorage::subscribeFollowerTableName, id.toStdString() });
-        DB.insert(Config::DataStorage::subscribeFollowerTableName, row);
-    }
+    QByteArray currentId = nodeManager->getIdPrivateProfile();
+    sendEditSql(currentId, "subscribe", dfsStruct::Type::service,
+                isRemove ? dfsStruct::Delete : dfsStruct::Insert,
+                { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
+    // sendEditSql for followers
 }
 
 bool SubscribeController::checkSubscribe(QByteArray id)
@@ -66,7 +38,8 @@ int SubscribeController::checkCountSubscribe(QByteArray id)
     QByteArray path = "data/" + id + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
-    std::vector<DBRow> res = DB.select("SELECT COUNT (*) FROM " + Config::DataStorage::subscribeColumnTableName);
+    std::vector<DBRow> res =
+        DB.select("SELECT COUNT (*) FROM " + Config::DataStorage::subscribeColumnTableName);
     int count = std::stoi(res[0]["COUNT (*)"]);
     return count;
 }
@@ -83,6 +56,23 @@ std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
     //        sub.append(tmp["subscription"]);
     //    }
     return res;
+}
+
+void SubscribeController::initSubscribe()
+{
+    QByteArray currentId = nodeManager->getIdPrivateProfile();
+    QDir().mkpath("data/" + currentId + "/services");
+
+    DBConnector dbSubscribe("data/" + currentId.toStdString() + "/services/subscribe");
+    dbSubscribe.createTable(Config::DataStorage::tableMySubscribeCreation);
+    dbSubscribe.close();
+
+    DBConnector dbFollower("data/" + currentId.toStdString() + "/services/follower");
+    dbFollower.createTable(Config::DataStorage::tableFollowerCreation);
+    dbFollower.close();
+
+    sendStatic(currentId, "subscribe", dfsStruct::service, dfsStruct::SubType::undef);
+    sendStatic(currentId, "follower", dfsStruct::service, dfsStruct::SubType::undef);
 }
 
 void SubscribeController::setNodeManager(NodeManager *value)

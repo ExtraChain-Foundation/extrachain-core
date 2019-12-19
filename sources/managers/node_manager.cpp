@@ -432,6 +432,8 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
+    connect(uiController, &UiController::initSubscribe, subscribeController,
+            &SubscribeController::initSubscribe);
     connect(uiController, &UiController::subscribe, subscribeController,
             &SubscribeController::editMySubscribe);
 
@@ -516,6 +518,8 @@ void NodeManager::connectUi()
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
 
     connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
+    connect(subscribeController, &SubscribeController::sendStatic, dfs, &Dfs::saveStaticFile);
+    connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
