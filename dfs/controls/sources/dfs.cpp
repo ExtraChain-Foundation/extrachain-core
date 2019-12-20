@@ -664,11 +664,13 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
         //                      { "hash", hash.toStdString() },
         //                      { "prevHash", "" } };
 
-        QString q("INSERT OR IGNORE INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', 'data' "
-                  ") VALUES ('%1', '%2', '%3', '%4', '%5', '%6', ?);");
-        dbc.insertWithData(q.toStdString(), data);
-        return true;
-        //        return dbc.insert(Config::DataStorage::storedTableName, row);
+        QByteArray q(
+            "INSERT OR IGNORE INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', 'data' "
+            ") VALUES ('"
+            + hash + "', '" + "sign" + "', '" + QByteArray::number(type) + "', '" + userId.toLatin1() + "', '"
+            + range.toLatin1() + "', '', ?);");
+        return dbc.insertWithData(q.toStdString(), data);
+        // return dbc.insert(Config::DataStorage::storedTableName, row);
     }
 
     QByteArray sep = "', '";
@@ -700,16 +702,17 @@ void Dfs::updateFromNewStored(QString filePath)
     DBConnector dbNew;
     if (dbNew.open(newStoredPath.toStdString()))
         return;
-    auto newS = dbOld.select("SELECT * FROM Stored");
+    auto newS = dbNew.select("SELECT * FROM Stored");
     dbNew.close();
 
+    QFile::remove(filePath + DfsStruct::STORED_FILE_NAME + ".new");
     if (oldS != newS)
     {
+        QString notStored = filePath.left(filePath.length() - 7);
+        QFile::remove(notStored);
         QFile::remove(filePath);
-        QFile::remove(filePath + DfsStruct::STORED_FILE_NAME);
-        QFile::remove(filePath + DfsStruct::STORED_FILE_NAME + ".new");
+        requestFile(notStored);
         requestFile(filePath);
-        requestFile(filePath + DfsStruct::STORED_FILE_NAME);
     }
     /*
             return;
