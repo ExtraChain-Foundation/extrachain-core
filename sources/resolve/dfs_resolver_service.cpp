@@ -250,7 +250,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undifined message type from LIFETIME::SHORT";
+            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
             break;
         }
         }
@@ -313,7 +313,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undifined message type from LIFETIME::LONG";
+            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
             break;
         }
         }

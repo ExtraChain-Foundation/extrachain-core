@@ -244,7 +244,9 @@ void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
     DfsStruct::Type type = getFileType(filePath);
     sender->sendFile(filePath, type, receiver);
 
-    CardManager::getTypeByName;
+    QString storedPath = filePath + DfsStruct::STORED_FILE_NAME;
+    if (QFile::exists(storedPath))
+        sender->sendFile(storedPath, DfsStruct::Type::stored, receiver);
 
     /*
     QFile file(path);
@@ -541,10 +543,10 @@ bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
 
 DfsStruct::Type Dfs::getFileType(const QString &filePath)
 {
-    QString userId = filePath.mid(5, 25); //
+    QString userId = filePath.mid(5, 20); //
     DBConnector dfsCard(("data/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
     std::vector<DBRow> res =
-        dfsCard.select(("SELECT type FROM " + QByteArray(Config::DataStorage::lsTableName.c_str())
+        dfsCard.select(("SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
                         + " WHERE path='" + filePath + "';")
                            .toStdString());
 
@@ -563,6 +565,7 @@ void Dfs::process()
 void Dfs::requestFile(const QString &filePath)
 {
     DFSMessage::DfsRequest dfsRequest(filePath);
+
     sender->sendDfsMessage(dfsRequest);
 }
 
@@ -618,7 +621,7 @@ bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStru
     if (!dbc.createTable(Config::DataStorage::storedTableCreation))
         return false;
 
-    return appendToCard(dfsPath, userId, type, DfsStruct::SubType::stored);
+    return appendToCard(dfsPath, userId, DfsStruct::Type::stored, DfsStruct::SubType::undef);
 }
 
 // TODO: update card file
