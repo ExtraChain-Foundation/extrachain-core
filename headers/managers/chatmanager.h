@@ -101,8 +101,10 @@ signals:
     void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
     void chatCreated(UIChat);
     void finished();
-    void sendEditSql(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
+    void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
+    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
+              const DfsStruct::SubType subType);
 };
 
 #endif // CHATMANAGER_H

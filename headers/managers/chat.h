@@ -75,9 +75,8 @@ public:
     QByteArray getCurrentActorId() const; //+
     QList<QByteArray> getAllUsers();      //+
     QList<UIMessage> getAllMessages();    //-
-    QList<QByteArray> getAllMessagesByteArray();
-    ActorIndex* getActorIndex() const; //+
-    QByteArray getOwner();             //-
+    ActorIndex* getActorIndex() const;    //+
+    QByteArray getOwner();                //-
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
     UIMessage getLastMessage();

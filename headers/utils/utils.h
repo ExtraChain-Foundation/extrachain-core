@@ -138,7 +138,7 @@ namespace DataStorage {
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
-          "chatId  TEXT  PRIMARY KEY NOT NULL, "
+          "chatId  TEXT              NOT NULL, "
           "key     TEXT              NOT NULL );";
 
     static const std::string chatUserTableName = "Users";
@@ -149,8 +149,8 @@ namespace DataStorage {
     static const std::string chatMessageTableName = "Chat";
     static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
         + " ("
-          "userId   TEXT  PRIMARY KEY NOT NULL, "
-          "message  TEXT              NOT NULL, "
+          "userId   TEXT              NOT NULL, "
+          "message  BLOB              NOT NULL, "
           "type     TEXT              NOT NULL, "
           "session  TEXT              NOT NULL, "
           "date     TEXT              NOT NULL );";
@@ -302,7 +302,7 @@ void wipeDataFiles();
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
 static const QByteArray STORED_CHATS = "data/";
-static const std::string KEYSTORE_CHATS = "keystore/chats/chatId";
+static const std::string KEYSTORE_CHATS = "keystore/chats/";
 // static const QByteArray SESSIONS = "/sessions/";
 }
 namespace DataStorage {

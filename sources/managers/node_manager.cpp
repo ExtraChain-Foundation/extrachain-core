@@ -479,6 +479,7 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::save);
+    connect(chatManager, &ChatManager::send, dfs, &Dfs::save);
     connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {

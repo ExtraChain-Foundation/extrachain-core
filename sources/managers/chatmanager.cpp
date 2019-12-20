@@ -48,6 +48,10 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(
         new Chat(chatId, key, 0, _actorIndex, _accController, QList<QByteArray>{ owner, _currentActorId }));
+    QString pathUser = chatId + "/users";
+    QString pathMsg = chatId + "/0/msg";
+    emit send(DfsStruct::DfsSave::Static, pathUser, "", DfsStruct::chat, DfsStruct::SubType::undef);
+    emit send(DfsStruct::DfsSave::Static, pathMsg, "", DfsStruct::chat, DfsStruct::SubType::undef);
 }
 
 void ChatManager::InitializeChatList()
@@ -148,7 +152,6 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
     }
     else if (msg.getMsgType() == Messages::CHAT_MESSAGE)
     {
-
         ChatMessage message(msg.getData());
         Chat temp = Chat(message.id, _actorIndex, _accController);
         if (temp.decryptByChatKey(message.senderMsg) == _currentActorId)
@@ -162,18 +165,18 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
         {
             if (temp.decryptByChatKey(message.salt) == this->_salt)
             {
-                temp.receiveMessage(message.message);
-                QString messageDecryped = temp.decryptMessage(message.message);
-
-                QByteArrayList messList = Serialization::universalDeserialize(messageDecryped.toUtf8());
-                if (messList.length() != 2)
-                {
-                    qDebug() << "Chat decrypt error";
-                    return;
-                }
+                sendEditSql(
+                    _currentActorId, temp.getChatId() + "/" + temp.getSession().toByteArray() + "/msg",
+                    DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
+                    { Config::DataStorage::chatMessageTableName.c_str(), "userId", message.senderMsg,
+                      "message", message.message, "type", "blob", "session", temp.getSession().toByteArray(),
+                      "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
+                //                temp.receiveMessage(message.message);
 
                 QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(QDateTime::currentMSecsSinceEpoch());
-                emit sendLastMessage(message.id, UIMessage{ messList[0], messList[1], currentDate });
+                emit sendLastMessage(
+                    message.id,
+                    UIMessage{ message.senderMsg, temp.decryptMessage(message.message), currentDate });
             }
             else
             {
@@ -230,8 +233,7 @@ QByteArray ChatManager::CreateNewChat()
 
     for (auto &user : allUsers)
         tempusersList.append(user);
-    emit chatCreated(
-        UIChat{ tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+
     return chatId;
     //    QDir().mkpath(getPathToMyChats() + chatId);
     //    QFile file(getPathToMyChats() + chatId + "/" + chatId + ".dat");
@@ -267,8 +269,8 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
     Chat temp(chatId, _actorIndex, _accController);
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + "/" + _currentActorId.toStdString() + "/chats/"
-                   + chatId.toStdString() + "/" + chatId.toStdString() + ".msg");
+    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _currentActorId.toStdString() + "/chats/"
+                   + chatId.toStdString() + "/" + temp.getSession().toStdString() + "/msg");
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
     {
 
@@ -282,12 +284,11 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
         //        encryptedMessage = temp.sendMessage(message); ChatMessage msg; msg.id = chatId; msg.salt =
         //        temp.encryptByChatKey(_salt); msg.senderMsg = temp.encryptByChatKey(_currentActorId); //
         //        encrypt msg.message = encryptedMessage;                         // encrypt
-        sendEditSql(_currentActorId,
-                    ChatStorage::STORED_CHATS + "/" + _currentActorId + "/chats/" + chatId + "/" + chatId
-                        + ".msg",
-                    dfsStruct::Type::chat, dfsStruct::ChangeType::Insert,
+        sendEditSql(_currentActorId, chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
+                    DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
                     { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId, "message",
-                      message, "type", "blob", "session", temp.getSession().toByteArray(), "date",
+                      temp.encryptMessage(message), "type", "blob", "session",
+                      temp.getSession().toByteArray(), "date",
                       QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
         //        emit sendMessage(msg.serialize(), Messages::CHAT_MESSAGE);
         emit sendLastMessage(
@@ -307,6 +308,13 @@ void ChatManager::createDialogue(QByteArray actorId)
 
     Chat temp(chatId, _actorIndex, _accController);
     temp.sendMessage("{ \"type\": \"first\" }");
+
+    // SAVE TO DFS
+    QString pathUser = temp.getChatId() + "/users";
+    QString pathMsg = temp.getChatId() + "/" + temp.getSession().toByteArray() + "/msg";
+
+    emit send(DfsStruct::DfsSave::Static, pathUser, "", DfsStruct::chat, DfsStruct::SubType::undef);
+    emit send(DfsStruct::DfsSave::Static, pathMsg, "", DfsStruct::chat, DfsStruct::SubType::undef);
 
     for (auto &user : allUsers)
         tempusersList.append(user);
