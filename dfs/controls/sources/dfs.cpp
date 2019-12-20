@@ -670,7 +670,7 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
         QByteArray q(
             "INSERT OR IGNORE INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', 'data' "
             ") VALUES ('"
-            + hash + "', '" + "sign" + "', '" + QByteArray::number(type) + "', '" + userId.toLatin1() + "', '"
+            + hash + "', '" + sign + "', '" + QByteArray::number(type) + "', '" + userId.toLatin1() + "', '"
             + range.toLatin1() + "', '', ?);");
         return dbc.insertWithData(q.toStdString(), data);
         // return dbc.insert(Config::DataStorage::storedTableName, row);
