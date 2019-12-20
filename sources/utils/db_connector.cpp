@@ -196,7 +196,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
     if (rc != SQLITE_OK)
     {
         qDebug().nospace() << "Query(false):" << query.c_str();
-        qDebug() << "prepare failed: " << sqlite3_errmsg(db);
+        qDebug() << "prepare failed:" << sqlite3_errmsg(db);
     }
     else
     {
@@ -205,8 +205,8 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
         rc = sqlite3_bind_blob(stmt, 1, data.data(), data.size(), SQLITE_STATIC);
         if (rc != SQLITE_OK)
         {
-            qDebug() << "bind failed: " << sqlite3_errmsg(db);
-            qDebug().nospace() << "Query(false):" << query.c_str();
+            qDebug() << "bind failed:" << sqlite3_errmsg(db);
+            qDebug() << "Query(false):" << query.c_str();
             return false;
         }
         else
@@ -215,13 +215,13 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
             if (rc != SQLITE_DONE)
             {
                 qDebug() << "execution failed: " << sqlite3_errmsg(db);
-                qDebug().nospace() << "Query(false):" << query.c_str();
+                qDebug() << "Query(false):" << query.c_str();
                 return false;
             }
         }
     }
 
-    qDebug().nospace() << "Query(true):" << query.c_str();
+    qDebug() << "Query(true):" << query.c_str();
     sqlite3_finalize(stmt);
     return true;
 }
