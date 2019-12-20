@@ -189,6 +189,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
     //    qDebug() << "[dfs resolve message] msg type:" << mType;
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     using namespace DFSMessage;
+
     if (this->lifetime == Resolver::Lifetime::SHORT)
     {
         switch (msgType)
@@ -210,8 +211,15 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::requestMessage:
         {
             qDebug() << "[requestMessage:]";
-            DFSMessage::dfs_request message(data);
+            DFSMessage::DfsRequest message(data);
+
+            if (!QFile::exists(message.filePath))
+            {
+                dfs->getSender()->sendDfsMessage(message); // TODO
+            }
+
             dfs->fileResponse(message.filePath, receiver);
+
             break;
         }
         case dfsMessageType::responseMessage:
@@ -221,7 +229,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         case dfsMessageType::statusMessage:
         {
-            qDebug() << "[statusMessagee:]";
+            qDebug() << "[statusMessage:]";
             DFSMessage::Status message(data);
             break;
         }

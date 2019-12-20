@@ -11,6 +11,11 @@ void Dfs::setDfsNetManager(DFSNetManager *value)
     dfsNetManager = value;
 }
 
+Sender *Dfs::getSender() const
+{
+    return sender;
+}
+
 void Dfs::initDFS(const QByteArray &userId)
 {
     QDir().mkdir(dfsStruct::ROOT_FOOLDER_NAME);
@@ -233,8 +238,15 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const dfsStruct::Ty
 #endif
 }
 
-void Dfs::fileResponse(const QString path, const SocketPair &receiver)
+void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
 {
+    DFSMessage::title_message titleMessage(filePath);
+    dfsStruct::Type type = getFileType(filePath);
+    sender->sendFile(filePath, type, receiver);
+
+    CardManager::getTypeByName;
+
+    /*
     QFile file(path);
     QByteArrayList pathList = Serialization::deserialize(path.toUtf8() + "/", "/");
 
@@ -248,6 +260,7 @@ void Dfs::fileResponse(const QString path, const SocketPair &receiver)
         sender->sendFile(path, type, receiver);
     }
     return;
+    */
 }
 
 void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver)
@@ -489,13 +502,7 @@ bool Dfs::applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges)
     file3.close();
     file.remove();
 
-    if (file3.rename(dfsChanges.filePath))
-    {
-        return updateCard(dfsChanges.filePath, dfsChanges.userId,
-                          QByteArray::number(QDateTime::currentDateTime().toSecsSinceEpoch()), 1);
-    }
-
-    return false;
+    return file3.rename(dfsChanges.filePath);
 }
 
 bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
@@ -532,8 +539,31 @@ bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
     return false;
 }
 
+dfsStruct::Type Dfs::getFileType(const QString &filePath)
+{
+    QString userId = filePath.mid(5, 25); //
+    DBConnector dfsCard(("data/" + userId + "/" + dfsStruct::ACTOR_CARD_FILE).toStdString());
+    std::vector<DBRow> res =
+        dfsCard.select(("SELECT type FROM " + QByteArray(Config::DataStorage::lsTableName.c_str())
+                        + " WHERE path='" + filePath + "';")
+                           .toStdString());
+
+    if (!res.empty())
+    {
+        return dfsStruct::Type(std::stoi(res[0]["type"]));
+    }
+
+    return dfsStruct::Type::unknown;
+}
+
 void Dfs::process()
 {
+}
+
+void Dfs::requestFile(const QString &filePath)
+{
+    DFSMessage::DfsRequest dfsRequest(filePath);
+    sender->sendDfsMessage(dfsRequest);
 }
 
 QByteArray Dfs::buildDfsPath(QByteArray userID, dfsStruct::Type type)
@@ -591,6 +621,7 @@ bool Dfs::createStored(QString filePath, const QByteArray &userId, const dfsStru
     return appendToCard(dfsPath, userId, type, dfsStruct::SubType::stored);
 }
 
+// TODO: update card file
 bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
                          bool init)
 {
@@ -601,7 +632,7 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
 
     if (init)
     {
-        DBRow row = { { "data", "" /*data.toStdString()*/ },
+        DBRow row = { { "data", /*data.toStdString()*/ "" },
                       { "range", range.toStdString() },
                       { "type", std::to_string(type) },
                       { "uid", userId.toStdString() },
@@ -619,10 +650,14 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
         + range.toLatin1() + "', hash, '" + data.replace("'", "''")
         + "' FROM Stored ORDER BY key DESC LIMIT 1";
 
-    return dbc.query(query.toStdString());
+    if (dbc.query(query.toStdString()))
+        return updateCard(filePath, userId.toLatin1(),
+                          QByteArray::number(QDateTime::currentDateTime().toMSecsSinceEpoch()), hash);
+    else
+        return false;
 }
 
-bool Dfs::updateCard(const QString &path, const QByteArray &userId, QByteArray date, int lastKey)
+bool Dfs::updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash)
 {
     DBConnector dbc;
     std::string rootPath =
@@ -631,9 +666,10 @@ bool Dfs::updateCard(const QString &path, const QByteArray &userId, QByteArray d
     if (!dbc.open(rootPath))
         return false;
 
-    std::string query = QString("UPDATE %1 SET date = '%2' WHERE path = '%3';")
+    std::string query = QString("UPDATE %1 SET date = '%2', hash = '%3' WHERE path = '%4';")
                             .arg(QString::fromStdString(Config::DataStorage::cardTableName))
-                            .arg(QString::number(QDateTime::currentDateTime().toSecsSinceEpoch()))
+                            .arg(QString(date))
+                            .arg(QString(newHash))
                             .arg(path)
                             .toStdString();
 

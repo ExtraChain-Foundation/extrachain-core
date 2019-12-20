@@ -59,8 +59,9 @@ public:
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
 
-    void fileResponse(const QString path, const SocketPair &receiver);
+    void fileResponse(const QString filePath, const SocketPair &receiver);
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
+    Sender *getSender() const;
 
 signals:
     void finished();
@@ -84,6 +85,7 @@ public slots:
     bool applyChanges(const DFSMessage::DfsChanges &dfsChanges);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
+    void requestFile(const QString &filePath);
 
 private:
     QByteArray buildDfsPath(QByteArray userID, dfsStruct::Type type);
@@ -91,9 +93,10 @@ private:
     bool createStored(QString filePath, const QByteArray &userId, const dfsStruct::Type &type);
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
                         bool init = false);
-    bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, int lastKey);
+    bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
     bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
     bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
+    dfsStruct::Type getFileType(const QString &filePath);
 };
 
 #endif // DFS_H

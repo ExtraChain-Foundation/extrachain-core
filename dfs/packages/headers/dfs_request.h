@@ -4,19 +4,17 @@
 #include "dumessage.h"
 
 namespace DFSMessage {
-
-struct dfs_request : public DUMessage
+struct DfsRequest : public DUMessage
 {
-    const short FIELDS_COUNT = 2;
-
+    const short FIELDS_COUNT = 1;
     QString filePath;
-    QByteArray asker;
 
-    dfs_request(const QString &filePath, const QByteArray &asker);
-    dfs_request(const QByteArray &serialized);
-    ~dfs_request() override final;
+    DfsRequest(const QString &filePath);
+    DfsRequest(const QByteArray &serialized);
+    ~DfsRequest() override final = default;
+    bool isEmpty() const;
 
-    const QList<QByteArray> serializedParams() const override;
+    const QList<QByteArray> serializedParams() const override final;
 };
 }
 #endif // DFS_REUEST_H

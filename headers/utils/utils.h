@@ -139,8 +139,7 @@ namespace DataStorage {
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
         + " ("
-          "key INTEGER PRIMARY KEY AUTOINCREMENT, "
-          "hash  TEXT             NOT NULL, "
+          "hash  TEXT PRIMARY KEY NOT NULL, "
           "data  BLOB             NOT NULL, "
           "range TEXT             NOT NULL, "
           "type  INT              NOT NULL, "
