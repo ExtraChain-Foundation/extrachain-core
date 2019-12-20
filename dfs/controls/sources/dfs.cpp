@@ -475,7 +475,10 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
     {
         if (appendToStored(dfsChanges.filePath, Serialization::universalSerialize(dfsChanges.data, 8),
                            dfsChanges.range, dfsChanges.changeType, dfsChanges.userId))
+        {
             emit fileChanged(dfsChanges.filePath);
+            return true;
+        }
     }
 
     return false;
