@@ -20,9 +20,9 @@ public:
     ~SubscribeController();
 
 signals:
-    void send(int saveType, QString file, QByteArray data, const dfsStruct::Type type,
-              const dfsStruct::SubType subType);
-    void sendEditSql(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
+    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
+              const DfsStruct::SubType subType);
+    void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
 
 public slots:

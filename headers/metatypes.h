@@ -27,8 +27,8 @@ Q_DECLARE_METATYPE(SocketService)
 // Q_DECLARE_METATYPE(SocketService*)
 Q_DECLARE_METATYPE(Messages::DownloadDfsRequestData)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
-Q_DECLARE_METATYPE(dfsStruct::Type)
-Q_DECLARE_METATYPE(dfsStruct::SubType)
+Q_DECLARE_METATYPE(DfsStruct::Type)
+Q_DECLARE_METATYPE(DfsStruct::SubType)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
@@ -58,8 +58,8 @@ void registerMetaTypes()
     qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
     // qRegisterMetaType<Contract>();
-    qRegisterMetaType<dfsStruct::Type>();
-    qRegisterMetaType<dfsStruct::SubType>();
+    qRegisterMetaType<DfsStruct::Type>();
+    qRegisterMetaType<DfsStruct::SubType>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
     qRegisterMetaType<Profile>();

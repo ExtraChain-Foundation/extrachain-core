@@ -75,8 +75,8 @@ void DFSResolverService::checkStatus()
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
         file.close();
-        dfs->sendFromNetwork(dfsStruct::DfsSave::Network, title.filePath, "",
-                             dfsStruct::convertToDFType(title.f_type));
+        dfs->sendFromNetwork(DfsStruct::DfsSave::Network, title.filePath, "",
+                             DfsStruct::convertToDFType(title.f_type));
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
@@ -264,7 +264,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
             if (title.empty())
             {
                 DFSMessage::title_message message(data);
-                QString path = message.filePath + dfsStruct::FILE_IDENTIFICATOR;
+                QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
                 if (QFile::exists(message.filePath))
                 {
                     finishWork();
@@ -338,7 +338,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
 
         if (!actor.isEmpty())
         {
-            if (QDir(dfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
+            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {

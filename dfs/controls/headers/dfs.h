@@ -36,12 +36,12 @@ private:
 private:
     void initDFS(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
-                   const dfsStruct::Type &type = dfsStruct::Type::images,
-                   const dfsStruct::SubType &subType = dfsStruct::SubType::subpost);
-    void saveStaticFile(QString fileName, dfsStruct::Type type, dfsStruct::SubType subType);
-    void saveFN(const QString tmpPath, const QString &path, const dfsStruct::Type &type);
-    bool appendToCard(const QString &path, const QByteArray &userId, const dfsStruct::Type &type,
-                      const dfsStruct::SubType &subType = dfsStruct::SubType::undef);
+                   const DfsStruct::Type &type = DfsStruct::Type::images,
+                   const DfsStruct::SubType &subType = DfsStruct::SubType::subpost);
+    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType);
+    void saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type);
+    bool appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
+                      const DfsStruct::SubType &subType = DfsStruct::SubType::undef);
     QStringList returnDiffs(const QString &odin, const QString &odinson);
     void getDFSStatus();
     void signalConnection();
@@ -68,19 +68,19 @@ signals:
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
 
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
-    void sendQ(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
-    void usersChanges(const QByteArray &path, const dfsStruct::Type &type, const QByteArray &actorId);
-    void sendFromNetwork(int saveType, QString file, QByteArray data, const dfsStruct::Type type,
-                         const dfsStruct::SubType subType = dfsStruct::SubType::subpost);
+    void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
+    void usersChanges(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
+    void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
+                         const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
 
 public slots:
     void init();
     void initUser(BigNumber userId);
 
-    void save(int saveType, QString file, QByteArray data, const dfsStruct::Type type,
-              const dfsStruct::SubType subType = dfsStruct::SubType::subpost);
-    void editData(QString userId, QString fileName, dfsStruct::Type type, QByteArray data);
-    void editSqlDatabase(QString userId, QString fileName, dfsStruct::Type type, int sqlType,
+    void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
+              const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data);
+    void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);
     bool applyChanges(const DFSMessage::DfsChanges &dfsChanges);
     // void appendData(QString userId, QString fileName, QByteArray data);
@@ -88,15 +88,15 @@ public slots:
     void requestFile(const QString &filePath);
 
 private:
-    QByteArray buildDfsPath(QByteArray userID, dfsStruct::Type type);
+    QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
 
-    bool createStored(QString filePath, const QByteArray &userId, const dfsStruct::Type &type);
+    bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
                         bool init = false);
     bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
     bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
     bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
-    dfsStruct::Type getFileType(const QString &filePath);
+    DfsStruct::Type getFileType(const QString &filePath);
 };
 
 #endif // DFS_H

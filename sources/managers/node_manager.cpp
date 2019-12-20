@@ -516,6 +516,7 @@ void NodeManager::connectUi()
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+    connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFile);
 
     connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);
     connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);

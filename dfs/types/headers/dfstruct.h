@@ -19,7 +19,7 @@ static const short section = 2;
 static const short name = 3;
 }
 
-namespace dfsStruct {
+namespace DfsStruct {
 
 static const QString ROOT_FOOLDER_NAME = "data";
 static const QString USER_DATA_FOLDER = "data/user";
@@ -132,7 +132,7 @@ static const int SYSTEM_CARD_FILE_MISSING = 514;
 // static const int CONTRACT_CARD_FILE_NOT_COMPLETE = 515;
 static const int CONTRACT_CARD_FILE_MISSING = 516;
 
-static QMap<QString, QMap<dfsStruct::Type, QString>> allDfsCardFileConnections = {};
+static QMap<QString, QMap<DfsStruct::Type, QString>> allDfsCardFileConnections = {};
 }
 namespace DFS_REQUESTS {
 static const int DFS_ALL = 600;
