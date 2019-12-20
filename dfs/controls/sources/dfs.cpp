@@ -211,6 +211,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
         qDebug() << "SaveFN not succeded: file not opened";
         return;
     }
+    file.close();
     if (type == DfsStruct::Type::card)
     {
         QStringList diffs = returnDiffs(tmpPath, path);
@@ -226,7 +227,15 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
         //        file.remove();
         return;
     }
-    file.close();
+    if (path.right(7) == ".stored") // (type == DfsStruct::Type::stored)
+    {
+        if (QFile::exists(path))
+        {
+            if (file.rename(path + ".new"))
+                updateFromNewStored(path);
+        }
+        return;
+    }
     file.rename(path);
 
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
@@ -463,8 +472,11 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
         apply = applyChangesSql(dfsChanges);
 
     if (apply)
-        return appendToStored(dfsChanges.filePath, Serialization::universalSerialize(dfsChanges.data, 8),
-                              dfsChanges.range, dfsChanges.changeType, dfsChanges.userId);
+    {
+        if (appendToStored(dfsChanges.filePath, Serialization::universalSerialize(dfsChanges.data, 8),
+                           dfsChanges.range, dfsChanges.changeType, dfsChanges.userId))
+            emit fileChanged(dfsChanges.filePath);
+    }
 
     return false;
 }
@@ -529,8 +541,12 @@ bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
         {
             row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
         }
+        std::string query = db.prepareInsert(data[0].toStdString(), row);
 
-        return db.insert(data[0].toStdString(), row);
+        if (data.indexOf("message") != -1)
+            return db.insertWithData(query, data[data.indexOf("message") + 1]);
+        else
+            return db.insert(data[0].toStdString(), row);
     }
     else if (dfsChanges.changeType == DfsStruct::Update)
     {
@@ -564,8 +580,13 @@ void Dfs::process()
 
 void Dfs::requestFile(const QString &filePath)
 {
-    DFSMessage::DfsRequest dfsRequest(filePath);
+    if (!QFile::exists(filePath))
+    {
+        qDebug() << "File is exists";
+        return;
+    }
 
+    DFSMessage::DfsRequest dfsRequest(filePath); //
     sender->sendDfsMessage(dfsRequest);
 }
 
@@ -635,29 +656,102 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
 
     if (init)
     {
-        DBRow row = { { "data", /*data.toStdString()*/ "" },
-                      { "range", range.toStdString() },
-                      { "type", std::to_string(type) },
-                      { "uid", userId.toStdString() },
-                      { "sign", sign.toStdString() },
-                      { "hash", hash.toStdString() },
-                      { "prevHash", "" } };
+        //        DBRow row = { { "data", data.toStdString() },
+        //                      { "range", range.toStdString() },
+        //                      { "type", std::to_string(type) },
+        //                      { "uid", userId.toStdString() },
+        //                      { "sign", sign.toStdString() },
+        //                      { "hash", hash.toStdString() },
+        //                      { "prevHash", "" } };
 
-        return dbc.insert(Config::DataStorage::storedTableName, row);
+        QString q("INSERT OR IGNORE INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', 'data' "
+                  ") VALUES ('%1', '%2', '%3', '%4', '%5', '%6', ?);");
+        dbc.insertWithData(q.toStdString(), data);
+        return true;
+        //        return dbc.insert(Config::DataStorage::storedTableName, row);
     }
 
     QByteArray sep = "', '";
     QByteArray query = "INSERT INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', "
                        "'data') SELECT '"
         + hash + sep + sign + sep + QByteArray::number(type) + sep + userId.toLatin1() + sep
-        + range.toLatin1() + "', hash, '" + data.replace("'", "''")
-        + "' FROM Stored ORDER BY key DESC LIMIT 1";
+        + range.toLatin1() + "', hash, ? FROM Stored LIMIT 1";
 
-    if (dbc.query(query.toStdString()))
+    if (dbc.insertWithData(query.toStdString(), data))
         return updateCard(filePath, userId.toLatin1(),
                           QByteArray::number(QDateTime::currentDateTime().toMSecsSinceEpoch()), hash);
     else
         return false;
+}
+
+void Dfs::updateFromNewStored(QString filePath)
+{
+    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
+    QString oldStoredPath = filePath + DfsStruct::STORED_FILE_NAME;
+    QString newStoredPath = filePath + DfsStruct::STORED_FILE_NAME + ".new";
+    std::string rootPath =
+        (DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + DfsStruct::ACTOR_CARD_FILE).toStdString();
+
+    DBConnector dbOld;
+    if (dbOld.open(oldStoredPath.toStdString()))
+        return;
+    auto oldS = dbOld.select("SELECT * FROM Stored");
+    dbOld.close();
+    DBConnector dbNew;
+    if (dbNew.open(newStoredPath.toStdString()))
+        return;
+    auto newS = dbOld.select("SELECT * FROM Stored");
+    dbNew.close();
+
+    if (oldS != newS)
+    {
+        QFile::remove(filePath);
+        QFile::remove(filePath + DfsStruct::STORED_FILE_NAME);
+        QFile::remove(filePath + DfsStruct::STORED_FILE_NAME + ".new");
+        requestFile(filePath);
+        requestFile(filePath + DfsStruct::STORED_FILE_NAME);
+    }
+    /*
+            return;
+            DBConnector dbCardfile;
+            if (!dbCardfile.open(rootPath))
+                return;
+
+            std::string lastHash = dbCardfile.select("SELECT hash FROM Items")[0]["hash"];
+
+            if (oldS.size() == newS.size())
+            {
+                if (newS.back().at("hash") == lastHash)
+                {
+                    return;
+                }
+                else
+                    qDebug() << "WAT";
+            }
+
+            if (oldS.size() < newS.size())
+            {
+                qDebug() << "Houston, something wrong";
+                return;
+            }
+
+            // diffs
+
+            for (std::size_t i = oldS.size() - 1; i < newS.size(); i++)
+            {
+                const auto &el = oldS[i];
+
+                DFSMessage::DfsChanges dfsChanges;
+                dfsChanges.changeType = std::stoi(el.at("type"));
+                dfsChanges.data =
+       Serialization::universalDeserialize(QByteArray::fromStdString(el.at("type"))); dfsChanges.range =
+       QByteArray::fromStdString(el.at("type"));
+
+                applyChanges(dfsChanges);
+            }
+    */
+
+    //    QFile::rename(old, new);
 }
 
 bool Dfs::updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash)

@@ -134,9 +134,14 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool n
         s.append("', ");
         f.append(s);
 
-        s = it->second; // ReplaceAll(it->second, "'", "''");
-        s.insert(0, "'");
-        s.append("', ");
+        if (it->first == "message")
+            s = "?, ";
+        else
+        {
+            s = it->second; // ReplaceAll(it->second, "'", "''");
+            s.insert(0, "'");
+            s.append("', ");
+        }
         v.append(s);
     }
     f.erase(f.size() - 2, 2);
@@ -181,6 +186,36 @@ bool DBConnector::tableExists(std::string table)
 bool DBConnector::dropTable(std::string table)
 {
     return query("DROP TABLE IF EXISTS " + table);
+}
+
+bool DBConnector::insertWithData(std::string query, QByteArray data)
+{
+    int rc;
+    sqlite3_stmt *stmt = NULL;
+    rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+    {
+        qDebug() << "prepare failed: " << sqlite3_errmsg(db);
+    }
+    else
+    {
+        // SQLITE_STATIC because the statement is finalized
+        // before the buffer is freed:
+        rc = sqlite3_bind_blob(stmt, 1, data.data(), data.size(), SQLITE_STATIC);
+        if (rc != SQLITE_OK)
+        {
+            qDebug() << "bind failed: " << sqlite3_errmsg(db);
+        }
+        else
+        {
+            rc = sqlite3_step(stmt);
+            if (rc != SQLITE_DONE)
+                qDebug() << "execution failed: " << sqlite3_errmsg(db);
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return true;
 }
 
 bool DBConnector::query(std::string query)
