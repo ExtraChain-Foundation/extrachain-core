@@ -36,7 +36,7 @@ public:
      * @param filePath
      * @param receiver
      */
-    void sendFile(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
+    void sendFile(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
 
     /**
      * @brief Send any dfs message (template function)
@@ -69,7 +69,7 @@ signals:
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
 
 public slots:
-    void sendFragments(QString path, dfsStruct::Type type, QByteArray frag, SocketPair receiver);
+    void sendFragments(QString path, DfsStruct::Type type, QByteArray frag, SocketPair receiver);
 
     /**
      * @brief process

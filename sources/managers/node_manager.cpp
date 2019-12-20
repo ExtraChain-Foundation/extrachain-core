@@ -478,7 +478,7 @@ void NodeManager::connectUi()
     */
 
     //==========================================DFS=========================================
-    connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+    connect(uiController, &UiController::send, dfs, &Dfs::save);
     connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
@@ -516,9 +516,9 @@ void NodeManager::connectUi()
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+    connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFile);
 
-    connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
-    connect(subscribeController, &SubscribeController::sendStatic, dfs, &Dfs::saveStaticFile);
+    connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);
     connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
 

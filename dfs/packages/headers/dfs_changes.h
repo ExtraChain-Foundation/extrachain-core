@@ -3,6 +3,7 @@
 
 #include "dumessage.h"
 #include <QFile>
+
 namespace DFSMessage {
 struct DfsChanges : public DUMessage
 {

@@ -142,6 +142,7 @@ public slots:
      */
     void process();
     void assignNewTask(Network::DataStruct task);
+
 signals:
     void dfsTitle(Network::DataStruct ds);
     /**

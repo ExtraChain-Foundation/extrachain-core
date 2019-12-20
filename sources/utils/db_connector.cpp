@@ -109,6 +109,17 @@ bool DBConnector::insert(std::string tableName, DBRow data)
     return this->query(query);
 }
 
+std::string ReplaceAll(std::string str, const std::string &from, const std::string &to)
+{
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos)
+    {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    }
+    return str;
+}
+
 std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool noEnd)
 {
     std::string query = "INSERT OR IGNORE INTO ";
@@ -123,7 +134,7 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool n
         s.append("', ");
         f.append(s);
 
-        s = QString::fromStdString(it->second).replace("'", "''").toStdString(); // TODO!
+        s = it->second; // ReplaceAll(it->second, "'", "''");
         s.insert(0, "'");
         s.append("', ");
         v.append(s);

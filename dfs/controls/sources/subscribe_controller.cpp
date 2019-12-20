@@ -17,8 +17,8 @@ SubscribeController::~SubscribeController()
 void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 {
     QByteArray currentId = nodeManager->getIdPrivateProfile();
-    sendEditSql(currentId, "subscribe", dfsStruct::Type::service,
-                isRemove ? dfsStruct::Delete : dfsStruct::Insert,
+    sendEditSql(currentId, "subscribe", DfsStruct::Type::service,
+                isRemove ? DfsStruct::Delete : DfsStruct::Insert,
                 { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
     // sendEditSql for followers
 }
@@ -71,8 +71,8 @@ void SubscribeController::initSubscribe()
     dbFollower.createTable(Config::DataStorage::tableFollowerCreation);
     dbFollower.close();
 
-    sendStatic(currentId, "subscribe", dfsStruct::service, dfsStruct::SubType::undef);
-    sendStatic(currentId, "follower", dfsStruct::service, dfsStruct::SubType::undef);
+    send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service, DfsStruct::SubType::undef);
+    send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service, DfsStruct::SubType::undef);
 }
 
 void SubscribeController::setNodeManager(NodeManager *value)
