@@ -192,8 +192,8 @@ QList<UIMessage> Chat::getAllMessages()
         {
             UIMessage ui;
             ui.userId = row[0]["userId"].c_str();
-            ui.message = decryptMessage(row[1]["message"].c_str());
-            QByteArray date = row[4]["date"].c_str();
+            ui.message = decryptMessage(row[0]["message"].c_str());
+            QByteArray date = row[0]["date"].c_str();
             ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
             result.append(ui);
         }
@@ -278,8 +278,11 @@ UIMessage Chat::getLastMessage()
             return {};
         }
         message.userId = row[0]["userId"].c_str();
-        message.message = decryptMessage(row[1]["message"].c_str());
-        QByteArray date = row[4]["date"].c_str();
+        if (row[0]["message"].size() == 0)
+            message.message = "";
+        else
+            message.message = decryptMessage(row[0]["message"].c_str());
+        QByteArray date = row[0]["date"].c_str();
         message.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
         return message;
     }
