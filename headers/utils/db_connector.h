@@ -35,6 +35,7 @@ public:
     bool deleteTable(std::string name);
     bool tableExists(std::string table);
     bool dropTable(std::string table);
+    bool insertWithData(std::string query, QByteArray data);
 
 public:
     bool query(std::string query);

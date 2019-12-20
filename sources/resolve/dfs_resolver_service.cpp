@@ -265,7 +265,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
             {
                 DFSMessage::title_message message(data);
                 QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
-                if (QFile::exists(message.filePath))
+                if (QFile::exists(message.filePath) && message.filePath.right(7) != ".stored")
                 {
                     finishWork();
                     return;

@@ -58,7 +58,6 @@ public:
     void initDFSNetManager(ResolveManager *resolveManager);
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
-
     void fileResponse(const QString filePath, const SocketPair &receiver);
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;
@@ -70,6 +69,7 @@ signals:
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
     void usersChanges(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
+    void fileChanged(QString path);
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
                          const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
 
@@ -89,10 +89,10 @@ public slots:
 
 private:
     QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
-
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
                         bool init = false);
+    void updateFromNewStored(QString filePath);
     bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
     bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
     bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
