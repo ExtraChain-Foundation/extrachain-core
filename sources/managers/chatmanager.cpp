@@ -105,6 +105,45 @@ QByteArray ChatManager::getPathToMyChats()
     return ChatStorage::STORED_CHATS + _currentActorId + "/chats/";
 }
 
+void ChatManager::parseInvite()
+{
+    QByteArray path = "data/" + _currentActorId + "/services/chatinvite";
+    if (!QFile::exists(path))
+        return;
+
+    DBConnector db;
+    db.open(path.toStdString());
+    std::vector<DBRow> invites = db.select("SELECT * from Invite");
+
+    for (const auto &invite : invites)
+    {
+        QByteArray owner =
+            _accController->getMainActor()->getKey()->decrypt(QByteArray::fromStdString(invite.at("owner")));
+        QByteArray chatId = QByteArray::fromStdString(invite.at("chatId"));
+        QByteArray key = QByteArray::fromStdString(invite.at("message"));
+
+        if (owner.length() != 20 || !BigNumber::isValid(owner))
+        {
+            continue;
+        }
+
+        AddChat(chatId, _accController->getMainActor()->getKey()->decrypt(key), owner);
+        QList<QByteArray> allUsers = Chat(chatId, _actorIndex, _accController).getAllUsers();
+        QStringList tempusersList;
+
+        Chat temp(key, _actorIndex, _accController);
+        temp.sendMessage("{ \"type\": \"first\" }");
+
+        for (auto user : allUsers)
+            tempusersList.append(user);
+        emit chatCreated(
+            UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+
+        sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
+                    { "Invite", "chatId", chatId });
+    }
+}
+
 QMap<QByteArray, QByteArray> ChatManager::extractChatKey()
 {
     QMap<QByteArray, QByteArray> chatKey;
@@ -122,12 +161,14 @@ ChatManager::ChatManager(AccountController *accController, ActorIndex *actorInde
 {
     this->_actorIndex = actorIndex;
     this->_accController = accController;
-
+    // QDir().mkpath(getPathToMyChats());
+    // QDir().mkpath(ChatStorage::KEYSTORE_CHATS.c_str());
     //  InitializeChatList();
 }
 
 void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
 {
+    return;
     //
     if (msg.getMsgType() == Messages::INVITE_CHAT_MESSAGE)
     {
@@ -214,7 +255,10 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     msg.id = chatId;
     msg.key = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(temp.unloadChatKey());
     msg.owner = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(_currentActorId); // encrypt
-    sendMessage(msg.serialize(), Messages::INVITE_CHAT_MESSAGE);
+
+    QByteArrayList query = { "Invite", "chatId", msg.id, "message", msg.key, "owner", msg.owner };
+    sendEditSql(actorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Insert, query);
+    // sendMessage(msg.serialize(), Messages::INVITE_CHAT_MESSAGE);
     //    if (!temp.isUserVerify(_currentActorId)
     //        || !temp.isUserActual(_currentActorId, temp.getActualCurrentSession()))
     //    {
@@ -328,12 +372,19 @@ void ChatManager::fileLoaded(const QString &path)
     else if (path.right(3) == "msg")
     {
     }
+    if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
+        parseInvite();
 }
 
 void ChatManager::initChat(bool status, int type)
 {
+    parseInvite();
+    QByteArray pathToChatInvite = ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite.stored";
+    emit requestFile(pathToChatInvite);
+
     DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
     std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
+
     for (DBRow &tmp : chats)
     {
         QByteArray owner = tmp["owner"].c_str();
@@ -344,6 +395,7 @@ void ChatManager::initChat(bool status, int type)
             ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
         QByteArray pathToMsgFileStored =
             ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+
         emit requestFile(pathToUsersFile);
         emit requestFile(pathToMsgFile);
         emit requestFile(pathToUsersFileStored);

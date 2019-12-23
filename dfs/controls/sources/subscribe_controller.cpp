@@ -71,6 +71,11 @@ void SubscribeController::initSubscribe()
     dbFollower.createTable(Config::DataStorage::tableFollowerCreation);
     dbFollower.close();
 
+    DBConnector dbChatInvite("data/" + currentId.toStdString() + "/services/chatinvite");
+    dbChatInvite.createTable(Config::DataStorage::chatInviteCreation);
+    dbChatInvite.close();
+
+    send(DfsStruct::DfsSave::Static, "chatinvite", "", DfsStruct::service, DfsStruct::SubType::undef);
     send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service, DfsStruct::SubType::undef);
     send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service, DfsStruct::SubType::undef);
 }

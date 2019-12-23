@@ -178,6 +178,13 @@ namespace DataStorage {
         + " ("
           "subscription    TEXT PRIMARY KEY NOT NULL);";
 
+    static const std::string chatInviteTableName = "Invite";
+    static const std::string chatInviteCreation = "CREATE TABLE IF NOT EXISTS " + chatInviteTableName
+        + " ("
+          "chatId  TEXT PRIMARY KEY NOT NULL, "
+          "message BLOB             NOT NULL, "
+          "owner   TEXT             NOT NULL  );";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

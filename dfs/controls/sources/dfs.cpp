@@ -557,7 +557,7 @@ void Dfs::process()
 
 void Dfs::requestFile(const QString &filePath)
 {
-    if (QFile::exists(filePath))
+    if (filePath.right(7) == ".stored" && QFile::exists(filePath))
     {
         qDebug() << "File is exists";
         return;

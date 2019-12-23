@@ -59,6 +59,7 @@ private:
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
     QByteArray getPathToMyChats();      //+ keystore/chats/
+    void parseInvite();
     // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
     // QByteArray convertChatIdToFullPath(QByteArray chatId); //
