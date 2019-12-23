@@ -693,6 +693,8 @@ void Dfs::updateFromNewStored(QString filePath)
     dbNew.close();
 
     QFile::remove(newStoredPath);
+    if (oldS.size() > newS.size())
+        return;
     if (oldS != newS)
     {
         QString notStored = filePath.left(filePath.length() - 7);
