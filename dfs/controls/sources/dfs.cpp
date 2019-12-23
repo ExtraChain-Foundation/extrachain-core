@@ -413,8 +413,8 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
 
     if (applyChanges(dfsChanges))
     {
-        sender->sendDfsMessage(dfsChanges);
     }
+    sender->sendDfsMessage(dfsChanges);
 }
 
 bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
@@ -423,9 +423,15 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
     bool apply = false;
 
     if (!QFile::exists(dfsChanges.filePath))
+    {
+        sender->sendDfsMessage(dfsChanges);
         return false;
+    }
     if (!QFile::exists(dfsChanges.filePath + ".stored"))
+    {
+        sender->sendDfsMessage(dfsChanges);
         return false;
+    }
 
     DBConnector db;
     if (!db.open(dfsChanges.filePath.toStdString() + ".stored"))
@@ -557,11 +563,11 @@ void Dfs::process()
 
 void Dfs::requestFile(const QString &filePath)
 {
-    if (filePath.right(7) == ".stored" && QFile::exists(filePath))
-    {
-        qDebug() << "File is exists";
-        return;
-    }
+    // if (QFile::exists(filePath))
+    // {
+    //    qDebug() << "File is exists";
+    //     return;
+    // }
 
     DFSMessage::DfsRequest dfsRequest(filePath); //
     sender->sendDfsMessage(dfsRequest);
