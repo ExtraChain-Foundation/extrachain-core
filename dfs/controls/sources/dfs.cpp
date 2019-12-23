@@ -69,12 +69,10 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         else
         {
             stored = true;
-
-            // temp
             QString range = QString("0:%1").arg(data.size());
-            DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId, userId);
-
-            appendToStored(dfsPath, data, range, 3, userId, true);
+            QByteArray hash = Utils::calcKeccak(QByteArray::number(QRandomGenerator::global()->bounded(50000)
+                                                                   + QDateTime::currentMSecsSinceEpoch()));
+            appendToStored(dfsPath, data, range, 3, userId, true, hash);
         }
     }
 
@@ -119,55 +117,7 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
 
 QStringList Dfs::returnDiffs(const QString &odin, const QString &odinson) //
 {
-    QFile file1(odin);
-    QFile file2(odinson);
-    if (!file1.exists())
-    {
-        qDebug() << "first file is not exist";
-        return {};
-    }
-    file1.open(QIODevice::ReadOnly);
-    QByteArray data1 = file1.readAll();
-    file1.flush();
-    file1.close();
-    QStringList result;
-    if (!file2.exists())
-    {
-        QByteArrayList d1 = Serialization::deserialize(data1, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-        qDebug() << "second file is not exist";
-        for (const QByteArray &el : d1)
-        {
-            result.append(el);
-        }
-        return result;
-    }
-
-    file2.open(QIODevice::ReadOnly);
-    QByteArray data2 = file2.readAll();
-    file2.flush();
-    file2.close();
-    if (data1 != data2)
-    {
-        QByteArrayList d1 = Serialization::deserialize(data1, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-        QByteArrayList d2 = Serialization::deserialize(data2, Serialization::DFS_ROOT_CARD_FILE_DELIMITER);
-
-        for (const QByteArray &el : d1)
-        {
-            if (!d2.contains(el))
-            {
-                result.append(el);
-            }
-        }
-        for (const QByteArray &el : d2)
-        {
-            if (!d1.contains(el))
-            {
-
-                result.append(el);
-            }
-        }
-    }
-    return result;
+    return {};
 }
 
 void Dfs::getDFSStatus()
@@ -233,8 +183,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
         {
             if (file.rename(path + ".new"))
                 updateFromNewStored(path);
+            return;
         }
-        return;
     }
     file.rename(path);
 
@@ -368,9 +318,11 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
 
             // temp
             QString range = QString("0:%1").arg(data.size());
-            DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId, userId);
+            // DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId, userId);
             bool card = appendToCard(dfsPath, userId, type, subType);
-            bool stored = appendToStored(dfsPath, data, range, 3, userId, true);
+            QByteArray hash = Utils::calcKeccak(QByteArray::number(QRandomGenerator::global()->bounded(50000)
+                                                                   + QDateTime::currentMSecsSinceEpoch()));
+            bool stored = appendToStored(dfsPath, data, range, 3, userId, true, hash);
 
             if (!card)
                 return;
@@ -434,6 +386,8 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
     }
 
     dfsChanges.range = pckgNums.join(" ");
+    dfsChanges.messHash = Utils::calcKeccak(
+        QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
     pckgNums.clear();
 
     qDebug() << dfsChanges.range;
@@ -454,6 +408,8 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     dfsChanges.filePath = "data/" + dfsChanges.userId + "/" + sType + "/" + fileName;
     dfsChanges.signature = accountControler->getMainActor()->getKey()->encrypt(dfsChanges.userId);
     dfsChanges.changeType = sqlType;
+    dfsChanges.messHash = Utils::calcKeccak(
+        QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
 
     if (applyChanges(dfsChanges))
     {
@@ -466,6 +422,17 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
     int type = dfsChanges.changeType;
     bool apply = false;
 
+    DBConnector db;
+    if (!db.open(dfsChanges.filePath.toStdString() + ".stored"))
+        return false;
+    QByteArray check = "SELECT * FROM Stored WHERE hash = '" + dfsChanges.messHash + "'";
+    std::vector<DBRow> checkHash = db.select(check.toStdString());
+    if (checkHash.size() != 0)
+    {
+        qDebug() << "Already have hash" << dfsChanges.messHash;
+        return false;
+    }
+
     if (type == DfsStruct::Bytes)
         apply = applyChangesBytes(dfsChanges);
     else if (type >= DfsStruct::Delete && type <= DfsStruct::Update)
@@ -474,7 +441,8 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
     if (apply)
     {
         if (appendToStored(dfsChanges.filePath, Serialization::universalSerialize(dfsChanges.data, 8),
-                           dfsChanges.range, dfsChanges.changeType, dfsChanges.userId))
+                           dfsChanges.range, dfsChanges.changeType, dfsChanges.userId, false,
+                           dfsChanges.messHash))
         {
             emit fileChanged(dfsChanges.filePath);
             return true;
@@ -544,10 +512,7 @@ bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
         {
             row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
         }
-        QByteArray check = "SELECT * FROM " + data[0] + " WHERE date" + " = '" + data[10] + "'";
-        std::vector<DBRow> checkDate = db.select(check.toStdString());
-        if (checkDate.size() != 0)
-            return false;
+
         std::string query = db.prepareInsert(data[0].toStdString(), row);
 
         if (data.indexOf("message") != -1)
@@ -654,11 +619,9 @@ bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStru
 
 // TODO: update card file
 bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
-                         bool init)
+                         bool init, QByteArray hash)
 {
     DBConnector dbc((filePath + DfsStruct::STORED_FILE_NAME).toStdString());
-    QByteArray hash = Utils::calcKeccak(
-        QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
     QByteArray sign = accountControler->getMainActor()->getKey()->sign(userId.toLatin1());
 
     if (init)
@@ -695,24 +658,30 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
 
 void Dfs::updateFromNewStored(QString filePath)
 {
-    QByteArray userId = accountControler->getMainActor()->getId().toActorId();
-    QString oldStoredPath = filePath + DfsStruct::STORED_FILE_NAME;
-    QString newStoredPath = filePath + DfsStruct::STORED_FILE_NAME + ".new";
+    QString oldStoredPath = filePath;
+    QString newStoredPath = filePath + ".new";
+    QString userId = filePath.mid(5, 20);
     std::string rootPath =
         (DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + DfsStruct::ACTOR_CARD_FILE).toStdString();
 
     DBConnector dbOld;
     if (dbOld.open(oldStoredPath.toStdString()))
+    {
+        QFile::remove(newStoredPath);
         return;
+    }
     auto oldS = dbOld.select("SELECT * FROM Stored");
     dbOld.close();
     DBConnector dbNew;
     if (dbNew.open(newStoredPath.toStdString()))
+    {
+        QFile::remove(newStoredPath);
         return;
+    }
     auto newS = dbNew.select("SELECT * FROM Stored");
     dbNew.close();
 
-    QFile::remove(filePath + DfsStruct::STORED_FILE_NAME + ".new");
+    QFile::remove(newStoredPath);
     if (oldS != newS)
     {
         QString notStored = filePath.left(filePath.length() - 7);

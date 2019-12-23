@@ -90,8 +90,8 @@ public slots:
 private:
     QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
-    bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
-                        bool init = false);
+    bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId, bool init,
+                        QByteArray hash);
     void updateFromNewStored(QString filePath);
     bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
     bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);

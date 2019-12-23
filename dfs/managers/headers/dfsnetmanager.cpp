@@ -145,6 +145,11 @@ void DFSNetManager::titleArrived(Network::DataStruct ds)
 void DFSNetManager::removeResolver()
 {
     DFSResolverService *resolver = qobject_cast<DFSResolverService *>(QObject::sender());
+    if (resolver == nullptr)
+    {
+        qDebug() << "WAT";
+        return;
+    }
     disconnectResolver(resolver);
     if (resolver->getType() == Resolver::Type::DFS)
     {
