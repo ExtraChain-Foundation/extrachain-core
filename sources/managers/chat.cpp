@@ -251,7 +251,8 @@ UIMessage Chat::getLastMessage()
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
     {
         std::vector<DBRow> row;
-        row = DB.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " LIMIT 1");
+        row = DB.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
+                        + " ORDER BY date DESCLIMIT 1");
         if (row.size() == 0)
         {
             qDebug() << "[Error] File with session doesn't open. Chat";

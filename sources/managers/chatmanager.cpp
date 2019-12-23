@@ -324,8 +324,8 @@ void ChatManager::changes(QString path)
 {
     DBConnector db(path.toStdString());
     qDebug() << "changes " << path;
-    std::vector<DBRow> res =
-        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " LIMIT 1");
+    std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
+                                       + " ORDER BY date DESC LIMIT 1");
     if (res.size() != 1)
         return;
 

@@ -422,6 +422,11 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
     int type = dfsChanges.changeType;
     bool apply = false;
 
+    if (!QFile::exists(dfsChanges.filePath))
+        return false;
+    if (!QFile::exists(dfsChanges.filePath + ".stored"))
+        return false;
+
     DBConnector db;
     if (!db.open(dfsChanges.filePath.toStdString() + ".stored"))
         return false;
