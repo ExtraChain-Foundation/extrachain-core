@@ -353,7 +353,7 @@ bool Chat::createNewSession(QByteArray key, QList<QByteArray> users, QByteArray 
     //    data.flush();
     //    data.close();
 
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _currentActorId.toStdString() + "/chats/"
+    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
     DB.createTable(Config::DataStorage::sessionChatMessageStorage);
     return true;
