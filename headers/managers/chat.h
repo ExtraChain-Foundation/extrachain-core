@@ -42,7 +42,7 @@ private:
     // paths end
     BigNumber findCurrentSession();                                              //+
     void InitializeAllPaths();                                                   //+
-    void saveChatKey(QByteArray key, BigNumber sessionNumb);                     //+
+    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray ownerId); //+
                                                                                  //+
     void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
     bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+

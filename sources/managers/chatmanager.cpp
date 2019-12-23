@@ -46,8 +46,8 @@ void ChatManager::setNetManager(NetManager *value)
 void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
 {
     QDir().mkpath(getPathToMyChats() + chatId + "/");
-    _chatList.push_front(
-        new Chat(chatId, key, 0, _actorIndex, _accController, QList<QByteArray>{ owner, _currentActorId }));
+    _chatList.push_front(new Chat(chatId, key, 0, _actorIndex, _accController,
+                                  QList<QByteArray>{ owner, _currentActorId }, owner));
     QString pathUser = chatId + "/users";
     QString pathMsg = chatId + "/0/msg";
     emit send(DfsStruct::DfsSave::Static, pathUser, "", DfsStruct::chat, DfsStruct::SubType::undef);
@@ -150,40 +150,6 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
         else
             netManager->sendMessage(msg.serialize());
     }
-    else if (msg.getMsgType() == Messages::CHAT_MESSAGE)
-    {
-        ChatMessage message(msg.getData());
-        Chat temp = Chat(message.id, _actorIndex, _accController);
-        if (temp.decryptByChatKey(message.senderMsg) == _currentActorId)
-            return;
-        if (!isChatExist(message.id))
-        {
-            netManager->sendMessage(msg.serialize());
-            return;
-        }
-        else
-        {
-            if (temp.decryptByChatKey(message.salt) == this->_salt)
-            {
-                sendEditSql(
-                    _currentActorId, temp.getChatId() + "/" + temp.getSession().toByteArray() + "/msg",
-                    DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
-                    { Config::DataStorage::chatMessageTableName.c_str(), "userId", message.senderMsg,
-                      "message", message.message, "type", "blob", "session", temp.getSession().toByteArray(),
-                      "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
-                //                temp.receiveMessage(message.message);
-
-                QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(QDateTime::currentMSecsSinceEpoch());
-                emit sendLastMessage(
-                    message.id,
-                    UIMessage{ message.senderMsg, temp.decryptMessage(message.message), currentDate });
-            }
-            else
-            {
-                netManager->sendMessage(msg.serialize());
-            }
-        }
-    }
 }
 
 bool ChatManager::isChatExist(QByteArray chatId)
@@ -273,8 +239,7 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
                    + chatId.toStdString() + "/" + temp.getSession().toStdString() + "/msg");
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
     {
-
-        sendEditSql(_currentActorId, chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
+        sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
                     DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
                     { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId, "message",
                       temp.encryptMessage(message), "type", "blob", "session",
@@ -344,6 +309,7 @@ void ChatManager::chatRemoved(QByteArray chatId)
 void ChatManager::changes(QString path)
 {
     DBConnector db(path.toStdString());
+    qDebug() << "changes " << path;
     std::vector<DBRow> res =
         db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " LIMIT 1");
     if (res.size() != 1)
