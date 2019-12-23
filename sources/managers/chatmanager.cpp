@@ -118,7 +118,8 @@ void ChatManager::parseInvite()
     for (const auto &invite : invites)
     {
         QByteArray owner =
-            _accController->getMainActor()->getKey()->decrypt(QByteArray::fromStdString(invite.at("owner")));
+            /*_accController->getMainActor()->getKey()->decrypt(*/ QByteArray::fromStdString(
+                invite.at("owner")) /*)*/;
         QByteArray chatId = QByteArray::fromStdString(invite.at("chatId"));
         QByteArray key = QByteArray::fromStdString(invite.at("message"));
 
@@ -134,10 +135,12 @@ void ChatManager::parseInvite()
         Chat temp(key, _actorIndex, _accController);
         temp.sendMessage("{ \"type\": \"first\" }");
 
-        for (auto user : allUsers)
-            tempusersList.append(user);
+        // for (auto user : allUsers)
+        //      tempusersList.append(user);
+        tempusersList.append(_currentActorId);
+        tempusersList.append(owner);
         emit chatCreated(
-            UIChat{ tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+            UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
@@ -254,7 +257,9 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     InviteChatMessages msg;
     msg.id = chatId;
     msg.key = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(temp.unloadChatKey());
-    msg.owner = _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(_currentActorId); // encrypt
+    msg.owner =
+        _currentActorId; // _actorIndex->getActor(BigNumber(actorId)).getKey()->encrypt(_currentActorId);
+                         // // encrypt
 
     QByteArrayList query = { "Invite", "chatId", msg.id, "message", msg.key, "owner", msg.owner };
     sendEditSql(actorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Insert, query);
@@ -344,6 +349,12 @@ void ChatManager::chatRemoved(QByteArray chatId)
 
 void ChatManager::changes(QString path)
 {
+    //if (!QFile::exists(path))
+    //    return;
+
+    if (path.indexOf("chatinvite"))
+        parseInvite();
+
     DBConnector db(path.toStdString());
     qDebug() << "changes " << path;
     //    std::vector<DBRow> res =
@@ -363,6 +374,7 @@ void ChatManager::process()
 
 void ChatManager::fileLoaded(const QString &path)
 {
+    qDebug() << path;
     if (path.right(5) == "users")
     {
     }
@@ -378,8 +390,8 @@ void ChatManager::fileLoaded(const QString &path)
         Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
         QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
         emit sendLastMessage(chatID.toUtf8(),
-                             UIMessage{ res[0]["userId"].c_str(),
-                                        tmp.decryptMessage(res[0]["message"].c_str()), currentDate });
+                             UIMessage { res[0]["userId"].c_str(),
+                                         tmp.decryptMessage(res[0]["message"].c_str()), currentDate });
     }
     if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
         parseInvite();
