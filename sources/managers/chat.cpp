@@ -173,8 +173,13 @@ QList<UIMessage> Chat::getAllMessages()
 {
     QList<UIMessage> result;
 
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
-                   + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
+    if (!QFile::exists(ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
+                       + _currentSession.toByteArray() + "/msg"))
+        return {};
+
+    DBConnector DB((ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
+                    + _currentSession.toByteArray() + "/msg")
+                       .toStdString());
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
     {
         std::vector<DBRow> row;
@@ -246,6 +251,9 @@ QByteArray Chat::decryptByChatKey(QByteArray data)
 UIMessage Chat::getLastMessage()
 {
     UIMessage message;
+    if (!QFile::exists(ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
+                       + _currentSession.toByteArray() + "/msg"))
+        return {};
     DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
@@ -401,7 +409,7 @@ QByteArray Chat::decryptMessage(QByteArray message)
 
 void Chat::loadUsers(QList<QByteArray> userList, QList<QByteArray> userData)
 {
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _currentActorId.toStdString() + "/chats/"
+    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/users");
     DB.createTable(Config::DataStorage::chatUserStorage);
 

@@ -89,6 +89,7 @@ public slots:
     void changes(QString path);
     void process();
     void fileLoaded(const QString &path);
+    void initChat(bool status, int type);
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
