@@ -517,6 +517,7 @@ void NodeManager::connectUi()
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+    connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
     connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFile);
 
     connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);

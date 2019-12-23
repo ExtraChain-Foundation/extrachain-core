@@ -544,6 +544,10 @@ bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
         {
             row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
         }
+        QByteArray check = "SELECT * FROM " + data[0] + " WHERE date" + " = '" + data[10] + "'";
+        std::vector<DBRow> checkDate = db.select(check.toStdString());
+        if (checkDate.size() != 0)
+            return false;
         std::string query = db.prepareInsert(data[0].toStdString(), row);
 
         if (data.indexOf("message") != -1)

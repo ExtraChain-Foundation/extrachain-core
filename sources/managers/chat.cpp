@@ -191,9 +191,9 @@ QList<UIMessage> Chat::getAllMessages()
         for (DBRow tmp : row)
         {
             UIMessage ui;
-            ui.userId = row[0]["userId"].c_str();
-            ui.message = decryptMessage(row[0]["message"].c_str());
-            QByteArray date = row[0]["date"].c_str();
+            ui.userId = tmp["userId"].c_str();
+            ui.message = decryptMessage(tmp["message"].c_str());
+            QByteArray date = tmp["date"].c_str();
             ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
             result.append(ui);
         }

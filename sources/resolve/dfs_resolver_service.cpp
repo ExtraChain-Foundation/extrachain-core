@@ -245,7 +245,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::changesMessage:
         {
             DFSMessage::DfsChanges message(data);
-            dfs->applyChanges(message);
+            if (dfs->applyChanges(message))
+                dfs->getSender()->sendDfsMessage(message);
             break;
         }
         default:

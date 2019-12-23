@@ -356,6 +356,18 @@ void ChatManager::chatRemoved(QByteArray chatId)
     }
 }
 
+void ChatManager::changes(QString path)
+{
+    DBConnector db(path.toStdString());
+    std::vector<DBRow> res =
+        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " LIMIT 1");
+    if (res.size() != 1)
+        return;
+
+    emit sendLastMessage(message.id,
+                         UIMessage{ message.senderMsg, temp.decryptMessage(message.message), currentDate });
+}
+
 void ChatManager::process()
 {
 }

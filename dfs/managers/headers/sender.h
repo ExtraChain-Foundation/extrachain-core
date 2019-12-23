@@ -18,7 +18,7 @@ class Sender : public QObject
 {
     Q_OBJECT
     const int data_offset = DFSMessage::dataSize;
-    DFSNetManager *NetManager;
+    DFSNetManager *NetManager = nullptr;
     QByteArray userId;
 
     QMap<QByteArray, QString> titleHashs;
@@ -51,8 +51,8 @@ public:
             qDebug() << "Empty dfs message" << typeid(T).name();
             return;
         }
-
-        NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
+        if (NetManager != nullptr)
+            NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
     }
 
 signals:

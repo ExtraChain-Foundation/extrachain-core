@@ -86,6 +86,7 @@ public slots:
     void requestChatList();                                   //+
     void requestChat(QByteArray chatId);                      //-
     void chatRemoved(QByteArray chatId);
+    void changes(QString path);
     void process();
 
 signals:
