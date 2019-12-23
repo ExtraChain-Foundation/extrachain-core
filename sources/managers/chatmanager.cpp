@@ -137,7 +137,7 @@ void ChatManager::parseInvite()
         for (auto user : allUsers)
             tempusersList.append(user);
         emit chatCreated(
-            UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+            UIChat{ tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
@@ -275,7 +275,6 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
     Chat temp(chatId, _actorIndex, _accController);
-    qDebug() << "SEVA" << message;
 
     sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
                 DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
@@ -371,6 +370,18 @@ void ChatManager::fileLoaded(const QString &path)
     }
     else if (path.right(3) == "msg")
     {
+        DBConnector db(path.toStdString());
+        std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
+                                           + " ORDER BY date DESC LIMIT 1");
+        if (res.size() != 1)
+            return;
+
+        QString chatID = path.mid(32, 64);
+        Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
+        QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
+        emit sendLastMessage(chatID.toUtf8(),
+                             UIMessage{ res[0]["userId"].c_str(),
+                                        tmp.decryptMessage(res[0]["message"].c_str()), currentDate });
     }
     if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
         parseInvite();
