@@ -361,6 +361,10 @@ void ChatManager::process()
 {
 }
 
+void ChatManager::fileLoaded(const QString &path)
+{
+}
+
 ChatManager::~ChatManager()
 {
     _chatList.clear();

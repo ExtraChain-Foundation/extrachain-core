@@ -88,6 +88,7 @@ public slots:
     void chatRemoved(QByteArray chatId);
     void changes(QString path);
     void process();
+    void fileLoaded(const QString &path);
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
@@ -106,6 +107,7 @@ signals:
                      QByteArrayList sqlChanges);
     void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
               const DfsStruct::SubType subType);
+    void requestFile(const QString &filePath);
 };
 
 #endif // CHATMANAGER_H
