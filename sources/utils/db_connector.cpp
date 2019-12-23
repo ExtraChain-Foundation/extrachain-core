@@ -71,6 +71,9 @@ std::vector<DBRow> DBConnector::select(std::string query)
             std::string t;
             switch (sqlite3_column_type(stmt, i))
             {
+            case (SQLITE_BLOB):
+                t = (reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)));
+                break;
             case (SQLITE3_TEXT):
                 t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
                 break;

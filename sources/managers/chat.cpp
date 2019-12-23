@@ -3,7 +3,6 @@
 Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
            BigNumber sessionNumb)
 {
-
     this->_chatId = chatId;
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_actorIndex = actorIndex;
@@ -13,7 +12,7 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
     else
         this->_currentSession = getActualCurrentSession();
     this->_encryptionKey = unloadChatKey();
-
+    this->ownerID = getAllUsers()[0];
     InitializeAllPaths();
 }
 
@@ -102,7 +101,7 @@ QByteArray Chat::unloadChatKey()
         qDebug() << "[Error] Chat manager can't open file to load the key";
         return "0";
     }
-    QByteArray key = res[0]["chatId"].c_str();
+    QByteArray key = res[0]["key"].c_str();
     return key;
     //    if (!file.exists())
     //        return "0";
@@ -178,7 +177,8 @@ QList<QByteArray> Chat::getAllUsers()
 QList<UIMessage> Chat::getAllMessages()
 {
     QList<UIMessage> result;
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _currentActorId.toStdString() + "/chats/"
+
+    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
     {
@@ -235,7 +235,7 @@ ActorIndex* Chat::getActorIndex() const
 
 QByteArray Chat::getOwner()
 {
-    return "-1";
+    return ownerID;
 }
 
 QByteArray Chat::encryptByChatKey(QByteArray data)
@@ -448,23 +448,10 @@ bool Chat::isUserExist(QByteArray actorId, QList<QByteArray> userList)
 
 QByteArray Chat::sendMessage(QByteArray message)
 {
-    //    QByteArray dateList = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
-    //    QList<QByteArray> currentMessage;
-
-    //    currentMessage.append(_currentActorId);
-    //    currentMessage.append(message);
-    //    QByteArray currentMessageByteArray =
-    //    encryptMessage(Serialization::universalSerialize(currentMessage));
-    //    currentMessage.append(dateList); QByteArray currentMessageWithDate =
-    //    encryptMessage(Serialization::universalSerialize(currentMessage));
-
     //    DataBase
     DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _currentActorId.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
 
-    //  allmessageList.append(currentMessageByteArray);
-
-    //    QFile file(pathToSession(_currentSession) + "/session");
     if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
     {
         DBRow row;
