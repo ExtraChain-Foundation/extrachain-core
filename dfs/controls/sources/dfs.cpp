@@ -665,7 +665,7 @@ void Dfs::updateFromNewStored(QString filePath)
         (DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + DfsStruct::ACTOR_CARD_FILE).toStdString();
 
     DBConnector dbOld;
-    if (dbOld.open(oldStoredPath.toStdString()))
+    if (!dbOld.open(oldStoredPath.toStdString()))
     {
         QFile::remove(newStoredPath);
         return;
@@ -673,7 +673,7 @@ void Dfs::updateFromNewStored(QString filePath)
     auto oldS = dbOld.select("SELECT * FROM Stored");
     dbOld.close();
     DBConnector dbNew;
-    if (dbNew.open(newStoredPath.toStdString()))
+    if (!dbNew.open(newStoredPath.toStdString()))
     {
         QFile::remove(newStoredPath);
         return;
