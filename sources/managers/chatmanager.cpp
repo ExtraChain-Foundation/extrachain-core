@@ -116,6 +116,24 @@ ChatManager::ChatManager(AccountController *accController, ActorIndex *actorInde
     this->_actorIndex = actorIndex;
     this->_accController = accController;
     QDir().mkpath(getPathToMyChats());
+    QDir().mkpath(ChatStorage::KEYSTORE_CHATS.c_str());
+    DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+    std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
+    for (DBRow &tmp : chats)
+    {
+        QByteArray owner = tmp["owner"].c_str();
+        QByteArray chatId = tmp["chatId"].c_str();
+        QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
+        QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
+        QByteArray pathToUsersFileStored =
+            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
+        QByteArray pathToMsgFileStored =
+            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+        emit requestFile(pathToUsersFile);
+        emit requestFile(pathToMsgFile);
+        emit requestFile(pathToUsersFileStored);
+        emit requestFile(pathToMsgFileStored);
+    }
     //  InitializeChatList();
 }
 
@@ -235,17 +253,13 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
     Chat temp(chatId, _actorIndex, _accController);
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + temp.getOwner().toStdString() + "/chats/"
-                   + chatId.toStdString() + "/" + temp.getSession().toStdString() + "/msg");
-    if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
-    {
-        sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
-                    DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
-                    { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId, "message",
-                      temp.encryptMessage(message), "type", "blob", "session",
-                      temp.getSession().toByteArray(), "date",
-                      QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
-    }
+    qDebug() << "SEVA" << message;
+
+    sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
+                DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
+                { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId, "message",
+                  temp.encryptMessage(message), "type", "blob", "session", temp.getSession().toByteArray(),
+                  "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
 }
 void ChatManager::createDialogue(QByteArray actorId)
 {
