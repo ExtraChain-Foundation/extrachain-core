@@ -40,12 +40,12 @@ private:
     QByteArray getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
     QByteArray pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
     // paths end
-    BigNumber findCurrentSession();                                              //+
-    void InitializeAllPaths();                                                   //+
-    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray ownerId); //+
-                                                                                 //+
-    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
-    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
+    BigNumber findCurrentSession();                                                //+
+    void InitializeAllPaths();                                                     //+
+    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
+                                                                                   //+
+    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {});   //+
+    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);              //+
 
 public:
     Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
@@ -61,8 +61,8 @@ public:
     BigNumber getActualCurrentSession(); //+
     // BigNumber getMyCurrentSession();                              //
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
-                          QByteArray ownerId = "-1"); //+
-    QByteArray sendMessage(QByteArray message);       //+
+                          QByteArray _ownerId = "-1"); //+
+    QByteArray sendMessage(QByteArray message);        //+
     void receiveMessage(QByteArray message);
     // getters setters
     QByteArray getChatId() const;                    //+
