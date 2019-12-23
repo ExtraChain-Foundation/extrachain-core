@@ -346,17 +346,15 @@ void ChatManager::changes(QString path)
 {
     DBConnector db(path.toStdString());
     qDebug() << "changes " << path;
-    std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
-                                       + " ORDER BY date DESC LIMIT 1");
-    if (res.size() != 1)
-        return;
+    //    std::vector<DBRow> res =
+    //        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " DESC LIMIT 1");
+    //    if (res.size() != 1)
+    //        return;
 
     QString chatID = path.mid(32, 64);
     Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
-    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
-    emit sendLastMessage(
-        chatID.toUtf8(),
-        UIMessage{ res[0]["userId"].c_str(), tmp.decryptMessage(res[0]["message"].c_str()), currentDate });
+    //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
+    emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
 }
 
 void ChatManager::process()
