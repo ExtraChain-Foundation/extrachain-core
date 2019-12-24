@@ -50,6 +50,7 @@ public:
             qDebug() << "Empty dfs message" << typeid(T).name();
             return;
         }
+
         if (NetManager != nullptr)
             NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
     }

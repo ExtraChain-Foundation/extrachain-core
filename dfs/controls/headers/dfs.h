@@ -32,7 +32,7 @@ private:
     AccountController *accountControler;
     ActorIndex *actorIndex;
     DBConnector uCards;
-    Sender *sender;
+    Sender *sender = nullptr;
     // DFSResolver *resolver;
 
 private:
@@ -90,7 +90,7 @@ public slots:
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void requestFile(const QString &filePath);
-    void searchTmp();
+    void searchTmp(bool reqFile = false);
 
 private:
     QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);

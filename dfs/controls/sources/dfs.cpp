@@ -567,14 +567,17 @@ QStringList Dfs::tmpFiles() const
 
 void Dfs::process()
 {
-    timerTmpFiles = new QTimer(this);
-    connect(timerTmpFiles, &QTimer::timeout, this, &Dfs::searchTmp);
-    searchTmp();
-    timerTmpFiles->start(10000);
+    if (sender == nullptr)
+    {
+        sender = new Sender();
+        sender->setNetManager(dfsNetManager);
+        ThreadPool::addThread(sender);
+    }
 
-    sender = new Sender();
-    sender->setNetManager(dfsNetManager);
-    ThreadPool::addThread(sender);
+    timerTmpFiles = new QTimer(this);
+    connect(timerTmpFiles, &QTimer::timeout, [this]() { searchTmp(true); });
+    searchTmp(false);
+    timerTmpFiles->start(10000);
 }
 
 void Dfs::requestFile(const QString &filePath)
@@ -584,7 +587,6 @@ void Dfs::requestFile(const QString &filePath)
     //    qDebug() << "File is exists";
     //     return;
     // }
-
     DFSMessage::DfsRequest dfsRequest(filePath); //
     sender->sendDfsMessage(dfsRequest);
 }
@@ -928,7 +930,7 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
     }
 }
 
-void Dfs::searchTmp()
+void Dfs::searchTmp(bool reqFile)
 {
     QDir::setCurrent("etalonium-data");
     QDirIterator dirIt("data", QDirIterator::Subdirectories);
@@ -940,7 +942,12 @@ void Dfs::searchTmp()
         // qDebug() << dirIt.filePath();
         QFileInfo file = QFileInfo(dirIt.filePath());
         if (file.isFile() && QFileInfo(dirIt.filePath()).suffix() == "tmp")
-            tmpFiles << dirIt.filePath().chopped(4);
+        {
+            QString fileName = dirIt.filePath().chopped(4);
+            tmpFiles << fileName;
+            if (reqFile)
+                requestFile(fileName);
+        }
     }
 
     if (tmpFiles.size() > 0)

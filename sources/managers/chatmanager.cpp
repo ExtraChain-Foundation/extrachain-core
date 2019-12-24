@@ -139,8 +139,8 @@ void ChatManager::parseInvite()
         //      tempusersList.append(user);
         tempusersList.append(_currentActorId);
         tempusersList.append(owner);
-        emit chatCreated(
-            UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+        // emit chatCreated(
+        //    UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 
         QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
         QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
@@ -389,9 +389,11 @@ void ChatManager::fileLoaded(const QString &path)
     qDebug() << path;
     if (path.right(5) == "users")
     {
+        requestChatList();
     }
     else if (path.right(3) == "msg")
     {
+        /*
         DBConnector db(path.toStdString());
         std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
                                            + " ORDER BY date DESC LIMIT 1");
@@ -405,6 +407,8 @@ void ChatManager::fileLoaded(const QString &path)
                              UIMessage { res[0]["userId"].c_str(),
                                          tmp.decryptMessage(QByteArray::fromStdString(res[0]["message"])),
                                          currentDate });
+        */
+        requestChatList();
     }
     if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
         parseInvite();

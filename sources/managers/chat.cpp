@@ -72,9 +72,9 @@ bool Chat::isUserActual(QByteArray actorId, BigNumber sessionNumb)
 void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId)
 {
 
-    if (_ownerId == "-1")
+    if (this->ownerID == "-1")
     {
-        _ownerId = _currentActorId;
+        // _ownerId = _currentActorId;
         this->ownerID = _ownerId;
     }
     QDir().mkpath(ChatStorage::KEYSTORE_CHATS.c_str());
