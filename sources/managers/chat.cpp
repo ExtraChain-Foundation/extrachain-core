@@ -195,40 +195,13 @@ QList<UIMessage> Chat::getAllMessages()
         {
             UIMessage ui;
             ui.userId = tmp["userId"].c_str();
-            ui.message = decryptMessage(tmp["message"].c_str());
+            ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
             QByteArray date = tmp["date"].c_str();
             ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
             result.append(ui);
         }
     }
     return result;
-    //        message.userId = decryptMessage(row[0]["userId"].c_str());
-    //        message.message = decryptMessage(row[1]["message"].c_str());
-    //        QByteArray date = decryptMessage(row[4]["date"].c_str());
-    //        message.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
-    //        return message;
-    //    QList<QByteArray> allMessages;
-    //    if (allMessages.empty())
-    //        return {};
-
-    //    QList<QByteArray> currentData;
-
-    //    QByteArray decryptedCurrentMessage;
-    //    for (QByteArray msginList : allMessages)
-    //    {
-    //        decryptedCurrentMessage = decryptMessage(msginList);
-    //        currentData = Serialization::universalDeserialize(decryptedCurrentMessage);
-    //        if (currentData.size() == 3)
-    //        {
-    //            result.append(UIMessage{ currentData.at(0), currentData.at(1),
-    //                                     QDateTime::fromMSecsSinceEpoch(currentData.at(2).toLongLong()) });
-    //        }
-    //        else
-    //        {
-    //            qDebug() << "[Error] Size !=3 in getAllMessages Chat";
-    //        }
-    //    }
-    //    return result;
 }
 
 ActorIndex* Chat::getActorIndex() const
@@ -273,7 +246,7 @@ UIMessage Chat::getLastMessage()
         if (row[0]["message"].size() == 0)
             message.message = "";
         else
-            message.message = decryptMessage(row[0]["message"].c_str());
+            message.message = decryptMessage(QByteArray::fromStdString(row[0]["message"]));
         QByteArray date = row[0]["date"].c_str();
         message.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
         return message;

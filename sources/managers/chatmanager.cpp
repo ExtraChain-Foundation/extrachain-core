@@ -140,7 +140,7 @@ void ChatManager::parseInvite()
         tempusersList.append(_currentActorId);
         tempusersList.append(owner);
         emit chatCreated(
-            UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+            UIChat{ tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
@@ -349,7 +349,7 @@ void ChatManager::chatRemoved(QByteArray chatId)
 
 void ChatManager::changes(QString path)
 {
-    //if (!QFile::exists(path))
+    // if (!QFile::exists(path))
     //    return;
 
     if (path.indexOf("chatinvite"))
@@ -390,8 +390,9 @@ void ChatManager::fileLoaded(const QString &path)
         Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
         QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
         emit sendLastMessage(chatID.toUtf8(),
-                             UIMessage { res[0]["userId"].c_str(),
-                                         tmp.decryptMessage(res[0]["message"].c_str()), currentDate });
+                             UIMessage{ res[0]["userId"].c_str(),
+                                        tmp.decryptMessage(QByteArray::fromStdString(res[0]["message"])),
+                                        currentDate });
     }
     if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
         parseInvite();
