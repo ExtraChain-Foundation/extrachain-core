@@ -19,7 +19,6 @@ class Sender : public QObject
     Q_OBJECT
     const int data_offset = DFSMessage::dataSize;
     DFSNetManager *NetManager = nullptr;
-    QByteArray userId;
 
     QMap<QByteArray, QString> titleHashs;
     QMap<QString, QByteArray> serializedTitle;
@@ -29,7 +28,7 @@ public:
      * @brief Sender
      * @param userId
      */
-    Sender(const QByteArray &userId, QObject *parent = nullptr);
+    Sender(QObject *parent = nullptr);
     void setNetManager(DFSNetManager *value);
     /**
      * @brief Send file

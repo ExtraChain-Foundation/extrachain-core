@@ -16,6 +16,8 @@
 #include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #include <QTimer>
+#include <QDirIterator>
+#include <iterator>
 #ifdef ETALONIUM_CLIENT
 #include <QImage>
 #endif
@@ -62,6 +64,8 @@ public:
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;
 
+    QStringList tmpFiles() const;
+
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
@@ -86,6 +90,7 @@ public slots:
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void requestFile(const QString &filePath);
+    void searchTmp();
 
 private:
     QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
@@ -97,6 +102,9 @@ private:
     bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
     bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
     DfsStruct::Type getFileType(const QString &filePath);
+
+    QTimer *timerTmpFiles;
+    QStringList m_tmpFiles;
 };
 
 #endif // DFS_H

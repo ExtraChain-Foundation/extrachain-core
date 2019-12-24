@@ -69,6 +69,7 @@ public:
      * @return Found actor, or empty actor (if not found)
      */
     Actor<KeyPublic> getActor(const BigNumber &id);
+    void removeActor(const BigNumber &id, bool resend = false);
 
     /**
      * @brief Validates block digital signature

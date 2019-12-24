@@ -246,6 +246,10 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::changesMessage:
         {
             DFSMessage::DfsChanges message(data);
+
+            // if resolver with message.filePath exists
+            // not apply && remove resolver && resend request
+
             if (dfs->applyChanges(message))
                 dfs->getSender()->sendDfsMessage(message);
             break;

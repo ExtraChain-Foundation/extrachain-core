@@ -4,6 +4,7 @@
 #include "chat.h"
 #include <QObject>
 #include <QList>
+#include <QTimer>
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as

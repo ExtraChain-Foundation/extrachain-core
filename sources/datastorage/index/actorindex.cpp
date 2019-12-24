@@ -33,6 +33,19 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     }
 }
 
+void ActorIndex::removeActor(const BigNumber &id, bool resend)
+{
+    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
+    QFile::remove(filePath);
+    QFile::remove(filePath + "/profile/" + id.toActorId() + ".profile");
+
+    if (resend)
+    {
+        Messages::GetActorMessage msg(id);
+        resolveManager->registrateMsg(msg.serialize(), getActorMessage);
+    }
+}
+
 bool ActorIndex::validateBlock(const Block &block)
 {
     Actor<KeyPublic> actor = this->getActor(block.getApprover());
@@ -235,7 +248,14 @@ QByteArrayList ActorIndex::getProfile(QString id)
     PublicProfile pProfile = actor.profile();
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
+    {
+        if (actor.getAccount() != 0)
+        {
+            removeActor(id.toLatin1());
+        }
+
         return QByteArrayList();
+    }
 
     // if (actor.getKey()->verify(key.profile().getProfile(), pProfile.sign))
     return pList;

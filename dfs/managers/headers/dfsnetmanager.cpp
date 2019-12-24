@@ -208,6 +208,13 @@ void DFSNetManager::checkConnectionsStatus()
     std::for_each(socketsList.begin(), socketsList.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit qmlNetworkStatus(flag);
+
+    if (flag == true)
+    {
+        const auto files = dfs->tmpFiles();
+        for (const QString &file : files)
+            dfs->requestFile(file);
+    }
 }
 
 void DFSNetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)

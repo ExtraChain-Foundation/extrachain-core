@@ -110,6 +110,11 @@ std::vector<DBRow> DBConnector::select(std::string query)
 
 bool DBConnector::insert(std::string tableName, DBRow data)
 {
+    if (data.size() == 0)
+    {
+        qDebug() << "Insert: DBRow is empty";
+        return false;
+    }
     std::string query = prepareInsert(tableName, data);
     // qDebug() << query.c_str();
     return this->query(query);

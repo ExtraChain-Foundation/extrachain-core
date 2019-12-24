@@ -48,7 +48,7 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
 
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(new Chat(chatId, key, 0, _actorIndex, _accController,
-                                  QList<QByteArray>{ owner, _currentActorId }, owner));
+                                  QList<QByteArray> { owner, _currentActorId }, owner));
     return;
     QString path(ChatStorage::STORED_CHATS + owner + "/chats/" + chatId);
     emit requestFile(path + "/0/msg");
@@ -140,7 +140,19 @@ void ChatManager::parseInvite()
         tempusersList.append(_currentActorId);
         tempusersList.append(owner);
         emit chatCreated(
-            UIChat{ tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+            UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+
+        QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
+        QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
+        QByteArray pathToUsersFileStored =
+            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
+        QByteArray pathToMsgFileStored =
+            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+
+        emit requestFile(pathToUsersFile);
+        emit requestFile(pathToMsgFile);
+        emit requestFile(pathToUsersFileStored);
+        emit requestFile(pathToMsgFileStored);
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
@@ -195,8 +207,8 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
 
             for (auto user : allUsers)
                 tempusersList.append(user);
-            emit chatCreated(UIChat{ tempusersList, message.id,
-                                     Chat(message.id, _actorIndex, _accController).getLastMessage() });
+            emit chatCreated(UIChat { tempusersList, message.id,
+                                      Chat(message.id, _actorIndex, _accController).getLastMessage() });
         }
         else
             netManager->sendMessage(msg.serialize());
@@ -243,7 +255,7 @@ QByteArray ChatManager::CreateNewChat()
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(new Chat(chatId, generateChatKey(), 0, _actorIndex, _accController,
-                                  QList<QByteArray>{ _currentActorId }, _currentActorId));
+                                  QList<QByteArray> { _currentActorId }, _currentActorId));
     // Chat initialize
     QList<QByteArray> allUsers = Chat(chatId, _actorIndex, _accController).getAllUsers();
 
@@ -310,7 +322,7 @@ void ChatManager::createDialogue(QByteArray actorId)
     for (auto &user : allUsers)
         tempusersList.append(user);
     emit chatCreated(
-        UIChat{ tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 }
 
 void ChatManager::requestChatList()
@@ -325,7 +337,7 @@ void ChatManager::requestChatList()
         for (auto user : tempUsers)
             tempusersList.append(user);
 
-        chats.append(UIChat{ tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
+        chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
     }
     emit chatListSend(chats);
 }
@@ -390,9 +402,9 @@ void ChatManager::fileLoaded(const QString &path)
         Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
         QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
         emit sendLastMessage(chatID.toUtf8(),
-                             UIMessage{ res[0]["userId"].c_str(),
-                                        tmp.decryptMessage(QByteArray::fromStdString(res[0]["message"])),
-                                        currentDate });
+                             UIMessage { res[0]["userId"].c_str(),
+                                         tmp.decryptMessage(QByteArray::fromStdString(res[0]["message"])),
+                                         currentDate });
     }
     if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
         parseInvite();
