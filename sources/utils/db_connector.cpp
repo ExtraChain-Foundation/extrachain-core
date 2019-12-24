@@ -41,7 +41,7 @@ bool DBConnector::close()
     int rc = sqlite3_close_v2(db);
     if (rc)
     {
-        qDebug() << sqlite3_errmsg(db);
+        // qDebug() << sqlite3_errmsg(db);
         return false;
     }
     else
@@ -72,8 +72,11 @@ std::vector<DBRow> DBConnector::select(std::string query)
             switch (sqlite3_column_type(stmt, i))
             {
             case (SQLITE_BLOB):
-                t = (reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)));
+            {
+                int size = sqlite3_column_bytes(stmt, i);
+                t = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
                 break;
+            }
             case (SQLITE3_TEXT):
                 t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
                 break;
