@@ -321,8 +321,8 @@ void ChatManager::createDialogue(QByteArray actorId)
 
     for (auto &user : allUsers)
         tempusersList.append(user);
-    emit chatCreated(
-        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
+    //    emit chatCreated(
+    //        UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 }
 
 void ChatManager::requestChatList()
