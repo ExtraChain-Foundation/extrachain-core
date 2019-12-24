@@ -779,6 +779,7 @@ void Dfs::updateFromNewStored(QString filePath)
                         break;
                     }
                 }
+                break;
             }
             case DfsStruct::ChangeType::Update:
                 break;
