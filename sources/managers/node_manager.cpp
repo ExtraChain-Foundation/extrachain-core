@@ -38,7 +38,7 @@ NodeManager::NodeManager()
     resolveManager->setChatManager(chatManager);
     blockchain->setTxManager(txManager);
     netManager->setResolveManager(resolveManager);
-    dfs->initDFSNetManager(resolveManager);
+    //    dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
     connectSignals();

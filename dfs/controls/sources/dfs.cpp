@@ -285,10 +285,9 @@ Dfs::~Dfs()
     sender->deleteLater();
 }
 
-void Dfs::initDFSNetManager(ResolveManager *resolveManager)
+void Dfs::initDFSNetManager()
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
-    dfsNetManager->setResolveManager(resolveManager);
     dfsNetManager->setDfs(this);
     ThreadPool::addThread(dfsNetManager);
 }
@@ -567,6 +566,11 @@ QStringList Dfs::tmpFiles() const
 
 void Dfs::process()
 {
+}
+
+void Dfs::startDFS()
+{
+    initDFSNetManager();
     if (sender == nullptr)
     {
         sender = new Sender();
