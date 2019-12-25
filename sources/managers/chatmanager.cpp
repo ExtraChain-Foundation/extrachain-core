@@ -416,29 +416,37 @@ void ChatManager::fileLoaded(const QString &path)
 
 void ChatManager::initChat(bool status, int type)
 {
-    parseInvite();
-    QByteArray pathToChatInvite = ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite.stored";
-    emit requestFile(pathToChatInvite);
+    Q_UNUSED(status)
 
-    DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
-    std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
+    if (type == 1)
+        return;
 
-    for (DBRow &tmp : chats)
-    {
-        QByteArray owner = tmp["owner"].c_str();
-        QByteArray chatId = tmp["chatId"].c_str();
-        QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
-        QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
-        QByteArray pathToUsersFileStored =
-            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
-        QByteArray pathToMsgFileStored =
-            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+    QTimer::singleShot(5000, [&]() {
+        parseInvite();
+        QByteArray pathToChatInvite =
+            ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite.stored";
+        emit requestFile(pathToChatInvite);
 
-        emit requestFile(pathToUsersFile);
-        emit requestFile(pathToMsgFile);
-        emit requestFile(pathToUsersFileStored);
-        emit requestFile(pathToMsgFileStored);
-    }
+        DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+        std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
+
+        for (DBRow &tmp : chats)
+        {
+            QByteArray owner = tmp["owner"].c_str();
+            QByteArray chatId = tmp["chatId"].c_str();
+            QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
+            QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
+            QByteArray pathToUsersFileStored =
+                ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
+            QByteArray pathToMsgFileStored =
+                ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+
+            emit requestFile(pathToUsersFile);
+            emit requestFile(pathToMsgFile);
+            emit requestFile(pathToUsersFileStored);
+            emit requestFile(pathToMsgFileStored);
+        }
+    });
 }
 
 ChatManager::~ChatManager()
