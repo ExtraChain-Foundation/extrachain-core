@@ -174,7 +174,7 @@ void DFSResolverService::resolveDfsTask()
 
     if (msg != "")
     {
-        qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
+        // qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         BaseMessage bmsg;
         bmsg.deserialize(msg);
         DFSMessage::DUMessage dfsMsg(bmsg.getData());
@@ -257,7 +257,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
+            // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
             break;
         }
         }
@@ -286,7 +286,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
                 {
                     qDebug() << "Title was not registered";
                     active = false;
-                    finishWork();
+                    // finishWork();
                     return;
                 }
 
@@ -329,7 +329,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
+            // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
             break;
         }
         }
