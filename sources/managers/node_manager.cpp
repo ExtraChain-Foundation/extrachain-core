@@ -38,7 +38,7 @@ NodeManager::NodeManager()
     resolveManager->setChatManager(chatManager);
     blockchain->setTxManager(txManager);
     netManager->setResolveManager(resolveManager);
-    dfs->initDFSNetManager(resolveManager);
+    //    dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
     connectSignals();
@@ -413,6 +413,7 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 
 void NodeManager::connectUi()
 {
+    connect(uiController, &UiController::authEnded, [this]() { emit this->ready(); });
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
     connect(uiController, &UiController::connectToServer, dfs->getDfsNetManager(),
             &DFSNetManager::uiReconnect);
@@ -608,6 +609,7 @@ void NodeManager::connectActorIndex()
 void NodeManager::dfsConnection()
 {
     // init dfs for user
+    connect(this, &NodeManager::ready, dfs, &Dfs::startDFS);
     connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
@@ -616,6 +618,7 @@ void NodeManager::dfsConnection()
 
 void NodeManager::connectSignals()
 {
+    connect(this, &NodeManager::ready, []() { qInfo() << "Ready"; });
     connectTxManager();
 #ifdef ETALONIUM_CLIENT
     connectUi();

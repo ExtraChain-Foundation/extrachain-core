@@ -123,6 +123,11 @@ void DFSNetManager::process()
     connectResolver(uResolver);
 
     ThreadPool::addThread(uResolver);
+    startDFSNetwork();
+}
+
+void DFSNetManager::startDFSNetwork()
+{
     startNetwork();
     connectToServer(serverPort, local);
 }
