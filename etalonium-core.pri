@@ -1,4 +1,4 @@
-DEFINES += SERVER_IP="\\\"51.68.181.52\\\""
+DEFINES += SERVER_IP="\\\"51.68.181.53\\\""
 
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
