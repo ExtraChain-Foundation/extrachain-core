@@ -20,7 +20,7 @@ DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QBy
 DFSMessage::req_frags_message::req_frags_message(const QByteArray &serialized)
     : DUMessage(dfsMessageType::requestFragments)
 {
-    QList<QByteArray> list = deserialize(serialized)
+    QList<QByteArray> list = deserialize(serialized);
 
     if (list.size() != FIELDS_COUNT + 1)
     {
