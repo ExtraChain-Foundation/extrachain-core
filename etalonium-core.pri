@@ -1,5 +1,3 @@
-DEFINES += SERVER_IP="\\\"51.68.181.53\\\""
-
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers

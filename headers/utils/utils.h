@@ -15,6 +15,7 @@
 #include <string>
 #include <sstream>
 namespace Network {
+static QString serverIp = "192.168.1.48";
 static const unsigned long FRAGMENT_STACK_SIZE = 1024;
 static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
 struct DataStruct
