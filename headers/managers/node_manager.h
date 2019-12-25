@@ -127,6 +127,7 @@ private:
     void prepareFolders();
 
 signals:
+    void ready();
     void sendMsg(const QByteArray &data, const QByteArray &type);
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);

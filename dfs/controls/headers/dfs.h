@@ -57,7 +57,7 @@ public:
     ~Dfs();
 
 public:
-    void initDFSNetManager(ResolveManager *resolveManager);
+    void initDFSNetManager();
     DFSNetManager *getDfsNetManager() const;
     void setDfsNetManager(DFSNetManager *value);
     void fileResponse(const QString filePath, const SocketPair &receiver);
@@ -76,6 +76,7 @@ signals:
     void fileChanged(QString path);
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
                          const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void connectToServer();
 
 public slots:
     void init();
@@ -89,6 +90,7 @@ public slots:
     bool applyChanges(const DFSMessage::DfsChanges &dfsChanges);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
+    void startDFS();
     void requestFile(const QString &filePath);
     void searchTmp(bool reqFile = false);
 

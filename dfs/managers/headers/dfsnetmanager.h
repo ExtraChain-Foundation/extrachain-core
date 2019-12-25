@@ -47,6 +47,7 @@ public:
               const SocketPair &receiver = SocketPair());
 
     void setDfs(Dfs *value);
+    bool isLoading(const QString &fileName);
 
 signals:
     void newMessage(Network::DataStruct data);
@@ -57,6 +58,7 @@ public slots:
     void appendSocket(SocketService *socket);
     //    void newMsg(const QByteArray &message, const SocketPair &receiver);
     void process();
+    void startDFSNetwork();
     void uiReconnect();
     void titleArrived(Network::DataStruct ds);
     void removeResolver();

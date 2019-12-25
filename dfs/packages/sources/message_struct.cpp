@@ -1,5 +1,12 @@
 #include "dfs/packages/headers/message_struct.h"
 
+DFSMessage::dfs_message::dfs_message()
+{
+    this->data = "";
+    this->dataHash = "";
+    this->pckgNumber = ULONG_MAX;
+}
+
 DFSMessage::dfs_message::dfs_message(const QByteArray &hash, const size_t &pckgNumber, const QByteArray &data)
     : DUMessage(dfsMessageType::fileDataMessage)
 {
@@ -12,16 +19,18 @@ DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
     : DUMessage(dfsMessageType::fileDataMessage)
 {
     QList<QByteArray> list = deserialize(serialized);
+    if (list.size() != FIELDS_COUNT + 1)
+    {
+        qDebug() << "[&Message::dfs_message_struct] incorrect list size";
+        return;
+    }
+
     if (dfsMessageType::fileDataMessage != list.takeFirst().toInt())
     {
         qDebug() << "[dfs_message]"
                  << "incorrect message type";
     }
-    if (list.size() != FIELDS_COUNT)
-    {
-        qDebug() << "[&Message::dfs_message_struct] incorrect list size";
-        return;
-    }
+
     dataHash = list.takeFirst();
     pckgNumber = list.takeFirst().toLongLong();
     data = list.takeFirst();

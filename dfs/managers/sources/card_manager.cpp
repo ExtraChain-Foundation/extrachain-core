@@ -92,7 +92,7 @@ DfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray
         //        qDebug() << "[Error][Card_Manager][getTypeByName] dimka nividimka";
         return DfsStruct::service;
     }
-    QByteArray query = "SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
+    QByteArray query = "SELECT  type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
         + " WHERE path=" + "'" + path.toUtf8() + "'" + ';';
 
     std::vector<DBRow> data = dbConnect.select(query.toStdString());
