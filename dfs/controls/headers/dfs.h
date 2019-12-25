@@ -76,6 +76,7 @@ signals:
     void fileChanged(QString path);
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
                          const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void connectToServer();
 
 public slots:
     void init();

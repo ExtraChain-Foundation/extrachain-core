@@ -201,6 +201,7 @@ void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
 {
     DFSMessage::title_message titleMessage(filePath);
     DfsStruct::Type type = getFileType(filePath);
+    // qDebug() << "fileResponse";
     sender->sendFile(filePath, type, receiver);
 
     QString storedPath = filePath + DfsStruct::STORED_FILE_NAME;
@@ -289,6 +290,7 @@ void Dfs::initDFSNetManager()
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
     dfsNetManager->setDfs(this);
+    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::uiReconnect);
     ThreadPool::addThread(dfsNetManager);
 }
 
@@ -591,7 +593,9 @@ void Dfs::requestFile(const QString &filePath)
     //    qDebug() << "File is exists";
     //     return;
     // }
-    DFSMessage::DfsRequest dfsRequest(filePath); //
+    if (dfsNetManager->isLoading(filePath))
+        return;
+    DFSMessage::DfsRequest dfsRequest(filePath);
     sender->sendDfsMessage(dfsRequest);
 }
 
@@ -951,7 +955,9 @@ void Dfs::searchTmp(bool reqFile)
             QString fileName = dirIt.filePath().chopped(4);
             tmpFiles << fileName;
             if (reqFile)
+            {
                 requestFile(fileName);
+            }
         }
     }
 

@@ -149,10 +149,10 @@ void ChatManager::parseInvite()
         QByteArray pathToMsgFileStored =
             ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
 
-        emit requestFile(pathToUsersFile);
-        emit requestFile(pathToMsgFile);
-        emit requestFile(pathToUsersFileStored);
-        emit requestFile(pathToMsgFileStored);
+        //        emit requestFile(pathToUsersFile);
+        //        emit requestFile(pathToMsgFile);
+        //        emit requestFile(pathToUsersFileStored);
+        //        emit requestFile(pathToMsgFileStored);
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });

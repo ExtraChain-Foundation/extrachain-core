@@ -19,23 +19,18 @@ DFSMessage::dfs_message::dfs_message(const QByteArray &serialized)
     : DUMessage(dfsMessageType::fileDataMessage)
 {
     QList<QByteArray> list = deserialize(serialized);
-    if (list.isEmpty())
+    if (list.size() != FIELDS_COUNT + 1)
     {
-        this->data = "";
-        this->dataHash = "";
-        this->pckgNumber = ULONG_MAX;
+        qDebug() << "[&Message::dfs_message_struct] incorrect list size";
         return;
     }
+
     if (dfsMessageType::fileDataMessage != list.takeFirst().toInt())
     {
         qDebug() << "[dfs_message]"
                  << "incorrect message type";
     }
-    if (list.size() != FIELDS_COUNT)
-    {
-        qDebug() << "[&Message::dfs_message_struct] incorrect list size";
-        return;
-    }
+
     dataHash = list.takeFirst();
     pckgNumber = list.takeFirst().toLongLong();
     data = list.takeFirst();

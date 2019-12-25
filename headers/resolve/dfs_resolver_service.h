@@ -134,6 +134,8 @@ public:
 
     void setTitle(const DFSMessage::title_message &value);
 
+    QFile getFile() const;
+
 public slots:
     /**
      * @brief process

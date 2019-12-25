@@ -6,10 +6,25 @@ void DFSNetManager::setDfs(Dfs *value)
     dfs = value;
 }
 
+bool DFSNetManager::isLoading(const QString &fileName)
+{
+    qDebug() << "isLoading";
+    for (const auto &resolver : dfsResolvers)
+    {
+        qDebug() << fileName << resolver->getTitle().filePath;
+
+        if (fileName == resolver->getTitle().filePath)
+            return true;
+    }
+
+    qDebug() << "isLoading false";
+    return false;
+}
+
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
     : NetManager(accountList, actInd)
 {
-    serverPort = isDebug ? 2224 : 2225;
+    serverPort = isDebug ? 2225 : 2225;
 }
 
 DFSNetManager::~DFSNetManager()

@@ -28,16 +28,19 @@ DFSMessage::title_message::title_message(const QByteArray &serialized)
     : DUMessage(dfsMessageType::titleMessage)
 {
     QList<QByteArray> list = deserialize(serialized);
+
+    if (list.size() != FIELDS_COUNT + 1)
+    {
+        qDebug() << "title_message_struct << incorrect input data";
+        return;
+    }
+
     if (dfsMessageType::titleMessage != list.takeFirst().toInt())
     {
         qDebug() << "[type_title]"
                  << "incorrect message type";
     }
-    if (list.size() != FIELDS_COUNT)
-    {
-        qDebug() << "title_message_struct << incorrect input data";
-        return;
-    }
+    
     filePath = QString::fromUtf8(list.takeFirst());
     pckgsAmount = list.takeFirst().toLongLong();
     fileSize = list.takeFirst().toLongLong();

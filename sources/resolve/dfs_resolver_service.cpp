@@ -31,6 +31,7 @@ void DFSResolverService::finishWork()
 
 QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long to)
 {
+    qDebug() << "checkFragStatus" << dataChecker.size();
     QByteArray emptyFrags;
     unsigned long s = ULONG_MAX;
     unsigned long e = ULONG_MAX;
@@ -154,11 +155,11 @@ void DFSResolverService::assignNewTask(Network::DataStruct task)
     {
         return;
     }
-    //    if (reloadTimer == nullptr)
-    //    {
-    //        reloadTimer = new QTimer();
-    //        connect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
-    //    }
+    if (reloadTimer == nullptr)
+    {
+        reloadTimer = new QTimer();
+        connect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
+    }
     active = true;
     this->msg = task.msg;
     this->hash = Utils::calcKeccak(msg);
@@ -173,7 +174,7 @@ void DFSResolverService::resolveDfsTask()
 
     if (msg != "")
     {
-        qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
+        // qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         BaseMessage bmsg;
         bmsg.deserialize(msg);
         DFSMessage::DUMessage dfsMsg(bmsg.getData());
@@ -256,7 +257,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
+            // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
             break;
         }
         }
@@ -270,6 +271,11 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
             if (title.empty())
             {
                 DFSMessage::title_message message(data);
+                if (message.filePath.isEmpty())
+                {
+                    return;
+                }
+
                 QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
                 if (QFile::exists(message.filePath) && message.filePath.right(7) != ".stored")
                 {
@@ -279,11 +285,15 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
                 if (!registerTitle(path, message))
                 {
                     qDebug() << "Title was not registered";
-                    //                finishWork();
                     active = false;
+                    // finishWork();
                     return;
                 }
-                reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
+
+                if (reloadTimer != NULL)
+                    reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
+                else
+                    qDebug() << "timer error in title LONG";
             }
             break;
         }
@@ -319,7 +329,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
+            // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
             break;
         }
         }

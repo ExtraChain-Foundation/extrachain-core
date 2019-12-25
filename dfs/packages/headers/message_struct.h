@@ -11,7 +11,7 @@ struct dfs_message : public DUMessage
     const short FIELDS_COUNT = 3;
 
     QByteArray dataHash;
-    long long pckgNumber;
+    long long pckgNumber = ULONG_MAX;
     QByteArray data;
     dfs_message();
     dfs_message(const QByteArray &hash, const std::size_t &pckgNumber, const QByteArray &data);

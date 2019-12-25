@@ -415,8 +415,7 @@ void NodeManager::connectUi()
 {
     connect(uiController, &UiController::authEnded, [this]() { emit this->ready(); });
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
-    connect(uiController, &UiController::connectToServer, dfs->getDfsNetManager(),
-            &DFSNetManager::uiReconnect);
+    connect(uiController, &UiController::connectToServer, dfs, &Dfs::connectToServer);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 
