@@ -289,6 +289,7 @@ void Dfs::initDFSNetManager()
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
     dfsNetManager->setDfs(this);
+    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::uiReconnect);
     ThreadPool::addThread(dfsNetManager);
 }
 
