@@ -215,7 +215,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
 
             if (!QFile::exists(message.filePath))
             {
-                dfs->getSender()->sendDfsMessage(message); // TODO
+                // dfs->getSender()->sendDfsMessage(message); // TODO
+                return;
             }
 
             dfs->fileResponse(message.filePath, receiver);
@@ -245,7 +246,12 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::changesMessage:
         {
             DFSMessage::DfsChanges message(data);
-            dfs->applyChanges(message);
+
+            // if resolver with message.filePath exists
+            // not apply && remove resolver && resend request
+
+            if (dfs->applyChanges(message))
+                dfs->getSender()->sendDfsMessage(message);
             break;
         }
         default:

@@ -16,6 +16,8 @@
 #include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #include <QTimer>
+#include <QDirIterator>
+#include <iterator>
 #ifdef ETALONIUM_CLIENT
 #include <QImage>
 #endif
@@ -30,7 +32,7 @@ private:
     AccountController *accountControler;
     ActorIndex *actorIndex;
     DBConnector uCards;
-    Sender *sender;
+    Sender *sender = nullptr;
     // DFSResolver *resolver;
 
 private:
@@ -62,6 +64,8 @@ public:
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;
 
+    QStringList tmpFiles() const;
+
 signals:
     void finished();
     void sendMsg(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
@@ -86,17 +90,21 @@ public slots:
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void requestFile(const QString &filePath);
+    void searchTmp(bool reqFile = false);
 
 private:
     QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
-    bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
-                        bool init = false);
+    bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId, bool init,
+                        QByteArray hash);
     void updateFromNewStored(QString filePath);
     bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
     bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
     bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
     DfsStruct::Type getFileType(const QString &filePath);
+
+    QTimer *timerTmpFiles;
+    QStringList m_tmpFiles;
 };
 
 #endif // DFS_H

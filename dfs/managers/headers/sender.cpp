@@ -1,9 +1,8 @@
 #include "sender.h"
 
-Sender::Sender(const QByteArray &userId, QObject *parent)
+Sender::Sender(QObject *parent)
     : QObject(parent)
 {
-    this->userId = userId;
     // connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 

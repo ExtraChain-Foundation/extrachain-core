@@ -135,7 +135,26 @@ namespace DataStorage {
         + " ("
           "type    INT  PRIMARY KEY NOT NULL, "
           "counter TEXT             NOT NULL );";
+    static const std::string chatIdTableName = "ChatId";
+    static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
+        + " ("
+          "chatId  TEXT              NOT NULL, "
+          "key     TEXT              NOT NULL, "
+          "owner   TEXT              NOT NULL );";
 
+    static const std::string chatUserTableName = "Users";
+    static const std::string chatUserStorage = "CREATE TABLE IF NOT EXISTS " + chatUserTableName
+        + " ("
+          "userId  TEXT  PRIMARY KEY NOT NULL);";
+
+    static const std::string chatMessageTableName = "Chat";
+    static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
+        + " ("
+          "userId   TEXT              NOT NULL, "
+          "message  BLOB              NOT NULL, "
+          "type     TEXT              NOT NULL, "
+          "session  TEXT              NOT NULL, "
+          "date     TEXT              NOT NULL );";
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
         + " ("
@@ -158,6 +177,13 @@ namespace DataStorage {
         + subscribeColumnTableName
         + " ("
           "subscription    TEXT PRIMARY KEY NOT NULL);";
+
+    static const std::string chatInviteTableName = "Invite";
+    static const std::string chatInviteCreation = "CREATE TABLE IF NOT EXISTS " + chatInviteTableName
+        + " ("
+          "chatId  TEXT PRIMARY KEY NOT NULL, "
+          "message BLOB             NOT NULL, "
+          "owner   TEXT             NOT NULL  );";
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
@@ -283,7 +309,8 @@ void wipeDataFiles();
 } // namespace Utils
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
-static const QByteArray STORED_CHATS = "keystore/chats/";
+static const QByteArray STORED_CHATS = "data/";
+static const std::string KEYSTORE_CHATS = "keystore/chats/";
 // static const QByteArray SESSIONS = "/sessions/";
 }
 namespace DataStorage {

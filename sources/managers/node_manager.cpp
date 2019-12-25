@@ -479,6 +479,7 @@ void NodeManager::connectUi()
 
     //==========================================DFS=========================================
     connect(uiController, &UiController::send, dfs, &Dfs::save);
+    connect(chatManager, &ChatManager::send, dfs, &Dfs::save);
     connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
@@ -516,10 +517,15 @@ void NodeManager::connectUi()
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+    connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
+    connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);
+    connect(uiController->getUiResolver(), &UIResolver::loadChat, chatManager, &ChatManager::fileLoaded);
     connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFile);
+    connect(uiController, &UiController::authEnded, chatManager, &ChatManager::initChat);
 
     connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);
     connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
+    connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,

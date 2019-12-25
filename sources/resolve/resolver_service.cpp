@@ -234,7 +234,25 @@ void ResolverService::resolveGeneralTask()
             }
         }
     }
-    if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
+    if (msgType == GET_ALL_ACTORS)
+    {
+        //        GetAllActorMessage response(message.getMsg_data());
+        emit handleGetAllActor(calcHash(msg), receiver);
+        finishWork();
+    }
+    else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
+    {
+        //        qDebug() << "RESOLVER SERVICE: "
+        //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
+        //                 msg;
+        BaseMessageResponse responseMessage(msg);
+        if (checkResponseHandler(responseMessage.getDataHash()))
+            return;
+        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.getData(), 4));
+        //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
+        finishWork();
+    }
+    else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
     {
         //
         chatManager->msgReceiver(message);
@@ -326,7 +344,6 @@ void ResolverService::resolveGeneralTask()
 
         //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
     }
-
     // request messages
     else if (msgType == GET_ACTOR_MESSAGE)
     {
@@ -334,12 +351,7 @@ void ResolverService::resolveGeneralTask()
         emit getActor(response.getActorId(), calcHash(msg), receiver);
         finishWork();
     }
-    else if (msgType == GET_ALL_ACTORS)
-    {
-        //        GetAllActorMessage response(message.getMsg_data());
-        emit handleGetAllActor(calcHash(msg), receiver);
-        finishWork();
-    }
+
     else if (msgType == GET_TX_MESSAGE)
     {
         GetTxMessage txMessage(message.getData());
@@ -375,18 +387,7 @@ void ResolverService::resolveGeneralTask()
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         finishWork();
     }
-    else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
-    {
-        //        qDebug() << "RESOLVER SERVICE: "
-        //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
-        //                 msg;
-        BaseMessageResponse responseMessage(msg);
-        if (checkResponseHandler(responseMessage.getDataHash()))
-            return;
-        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.getData(), 4));
-        //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
-        finishWork();
-    }
+
     else if (msgType == GET_TX_RESPONSE_MESSAGE)
     {
         qDebug() << "RESOLVER SERVICE: "
