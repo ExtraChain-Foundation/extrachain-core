@@ -13,7 +13,7 @@ struct dfs_message : public DUMessage
     QByteArray dataHash;
     long long pckgNumber;
     QByteArray data;
-
+    dfs_message();
     dfs_message(const QByteArray &hash, const std::size_t &pckgNumber, const QByteArray &data);
     dfs_message(const QByteArray &serialized);
     dfs_message(const dfs_message &temp);
