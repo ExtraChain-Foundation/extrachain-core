@@ -33,7 +33,7 @@ class ResolveManager;
 #include "managers/console_manager.h"
 #endif
 
-using namespace dfsStruct;
+using namespace DfsStruct;
 class NodeManager : public QObject
 {
     Q_OBJECT

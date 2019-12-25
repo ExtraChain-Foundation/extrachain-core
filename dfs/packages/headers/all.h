@@ -8,8 +8,10 @@
 #include "dfs_universal.h"
 #include "req_frags_message.h"
 #include "dfs_message_interface.h"
+#include "dfs_changes.h"
 #include "status.h"
 #include "dclosing.h"
+
 namespace Messages {
 static const QByteArray DFS_MESSAGE = "dfsMessages";
 }

@@ -122,11 +122,8 @@ const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{
 const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
-    static const std::string userCardTable = "CREATE TABLE IF NOT EXISTS UserCards ("
-                                             "uid  TEXT PRIMARY KEY NOT NULL, "
-                                             "path TEXT             NOT NULL );";
     static const std::string cardTableName = "Items";
-    static const std::string cardTable = "CREATE TABLE IF NOT EXISTS " + cardTableName
+    static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
           "path    TEXT PRIMARY KEY NOT NULL, "
           "date    INT              NOT NULL, "
@@ -134,20 +131,59 @@ namespace DataStorage {
           "subtype INT                      , "
           "hash    TEXT             NOT NULL);";
     static const std::string lsTableName = "Counters";
-    static const std::string lastSectionTable = "CREATE TABLE IF NOT EXISTS " + lsTableName
+    static const std::string lastSectionTableCreation = "CREATE TABLE IF NOT EXISTS " + lsTableName
         + " ("
           "type    INT  PRIMARY KEY NOT NULL, "
           "counter TEXT             NOT NULL );";
+    static const std::string chatIdTableName = "ChatId";
+    static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
+        + " ("
+          "chatId  TEXT              NOT NULL, "
+          "key     TEXT              NOT NULL, "
+          "owner   TEXT              NOT NULL );";
 
-    static const std::string subscribeFollowerColumn = "Subscribers";
-    static const std::string tableFollower = "CREATE TABLE IF NOT EXISTS " + subscribeFollowerColumn
+    static const std::string chatUserTableName = "Users";
+    static const std::string chatUserStorage = "CREATE TABLE IF NOT EXISTS " + chatUserTableName
+        + " ("
+          "userId  TEXT  PRIMARY KEY NOT NULL);";
+
+    static const std::string chatMessageTableName = "Chat";
+    static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
+        + " ("
+          "userId   TEXT              NOT NULL, "
+          "message  BLOB              NOT NULL, "
+          "type     TEXT              NOT NULL, "
+          "session  TEXT              NOT NULL, "
+          "date     TEXT              NOT NULL );";
+    static const std::string storedTableName = "Stored";
+    static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
+        + " ("
+          "hash  TEXT PRIMARY KEY NOT NULL, "
+          "data  BLOB             NOT NULL, "
+          "range TEXT             NOT NULL, "
+          "type  INT              NOT NULL, "
+          "uid   TEXT             NOT NULL, "
+          "sign  BLOB             NOT NULL, "
+          "prevHash TEXT          NOT NULL);";
+
+    static const std::string subscribeFollowerTableName = "Subscribers";
+    static const std::string tableFollowerCreation = "CREATE TABLE IF NOT EXISTS "
+        + subscribeFollowerTableName
         + " ("
           "subscriber    TEXT PRIMARY KEY NOT NULL,"
           "sign TEXT             NOT NULL)";
-    static const std::string subscribeColumn = "Subscriptions";
-    static const std::string tableMySubscribe = "CREATE TABLE IF NOT EXISTS " + subscribeColumn
+    static const std::string subscribeColumnTableName = "Subscriptions";
+    static const std::string tableMySubscribeCreation = "CREATE TABLE IF NOT EXISTS "
+        + subscribeColumnTableName
         + " ("
           "subscription    TEXT PRIMARY KEY NOT NULL);";
+
+    static const std::string chatInviteTableName = "Invite";
+    static const std::string chatInviteCreation = "CREATE TABLE IF NOT EXISTS " + chatInviteTableName
+        + " ("
+          "chatId  TEXT PRIMARY KEY NOT NULL, "
+          "message BLOB             NOT NULL, "
+          "owner   TEXT             NOT NULL  );";
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
@@ -273,7 +309,8 @@ void wipeDataFiles();
 } // namespace Utils
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
-static const QByteArray STORED_CHATS = "keystore/chats/";
+static const QByteArray STORED_CHATS = "data/";
+static const std::string KEYSTORE_CHATS = "keystore/chats/";
 // static const QByteArray SESSIONS = "/sessions/";
 }
 namespace DataStorage {

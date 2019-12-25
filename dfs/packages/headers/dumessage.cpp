@@ -35,12 +35,12 @@ const QList<QByteArray> DFSMessage::DUMessage::deserialize(const QByteArray &ser
     return Serialization::universalDeserialize(serialized, 8);
 }
 
-const QByteArray DFSMessage::DUMessage::concatenate()
+const QByteArray DFSMessage::DUMessage::concatenate() const
 {
     return serializedParams().join();
 }
 
-const QByteArray DFSMessage::DUMessage::hash()
+const QByteArray DFSMessage::DUMessage::hash() const
 {
     return Utils::calcKeccak(concatenate());
 }
@@ -50,7 +50,7 @@ int DFSMessage::DUMessage::getType() const
     return type;
 }
 
-bool DFSMessage::DUMessage::isEmpty()
+bool DFSMessage::DUMessage::isEmpty() const
 {
     if (this->type == dfsMessageType::none)
         return true;

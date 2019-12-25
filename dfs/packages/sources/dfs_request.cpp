@@ -1,39 +1,38 @@
 
 #include "dfs/packages/headers/dfs_request.h"
 
-DFSMessage::dfs_request::dfs_request(const QString &filePath, const QByteArray &asker)
-    : DUMessage(type_dfs_request)
+DFSMessage::DfsRequest::DfsRequest(const QString &filePath)
+    : DUMessage(dfsMessageType::requestMessage)
 {
     this->filePath = filePath;
-    this->asker = asker;
 }
 
-DFSMessage::dfs_request::dfs_request(const QByteArray &serialized)
-    : DUMessage(type_dfs_request)
+DFSMessage::DfsRequest::DfsRequest(const QByteArray &serialized)
+    : DUMessage(dfsMessageType::requestMessage)
 {
-
     QList<QByteArray> list = deserialize(serialized);
-    if (type_dfs_request != list.takeFirst().toInt())
+
+    if (dfsMessageType::requestMessage != list.takeFirst().toInt())
     {
-        qDebug() << "[dfs_request]"
-                 << "incorrect message type";
+        qDebug() << "[DfsRequest] incorrect message type";
     }
     if (list.size() != FIELDS_COUNT)
     {
-        qDebug() << "request_message_struct << incorrect input data";
+        qDebug() << "Request message struct: incorrect input data";
         return;
     }
+
     filePath = QString::fromUtf8(list.takeFirst());
-    asker = list.takeFirst();
 }
 
-DFSMessage::dfs_request::~dfs_request()
+bool DFSMessage::DfsRequest::isEmpty() const
 {
+    return type == dfsMessageType::none || filePath.isEmpty();
 }
 
-const QList<QByteArray> DFSMessage::dfs_request::serializedParams() const
+const QList<QByteArray> DFSMessage::DfsRequest::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << filePath.toUtf8() << asker;
+    list << QByteArray::number(type) << filePath.toUtf8();
     return list;
 }

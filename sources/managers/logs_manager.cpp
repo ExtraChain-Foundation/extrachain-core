@@ -139,18 +139,18 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef ETALONIUM_CLIENT
     if (LogsManager::toQml)
     {
-        static QMutex mutex;
-        mutex.lock();
-        logs.append({ { "text", msg },
-                      { "date", currentDateTime.toMSecsSinceEpoch() }
+        // static QMutex mutex;
+        // mutex.lock();
+        // logs.append({ { "text", msg },
+        //               { "date", currentDateTime.toMSecsSinceEpoch() }
 #ifdef QT_DEBUG
-                      ,
-                      { "file", file },
-                      { "line", line },
-                      { "func", function }
+        //              ,
+        //              { "file", file },
+        //              { "line", line },
+        //              { "func", function }
 #endif
-        });
-        mutex.unlock();
+        // });
+        // mutex.unlock();
     }
 #endif
 

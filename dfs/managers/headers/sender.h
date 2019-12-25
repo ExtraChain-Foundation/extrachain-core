@@ -6,6 +6,7 @@
 #include "dfs/packages/headers/all.h"
 #include "managers/account_controller.h"
 #include <vector>
+#include <type_traits>
 
 #ifndef DFS_NETWORK_MANAGER_DEF
 #define DFS_NETWORK_MANAGER_DEF
@@ -17,8 +18,7 @@ class Sender : public QObject
 {
     Q_OBJECT
     const int data_offset = DFSMessage::dataSize;
-    DFSNetManager *NetManager;
-    QByteArray userId;
+    DFSNetManager *NetManager = nullptr;
 
     QMap<QByteArray, QString> titleHashs;
     QMap<QString, QByteArray> serializedTitle;
@@ -28,14 +28,32 @@ public:
      * @brief Sender
      * @param userId
      */
-    Sender(const QByteArray &userId, QObject *parent = nullptr);
+    Sender(QObject *parent = nullptr);
     void setNetManager(DFSNetManager *value);
     /**
-     * @brief sendFile
+     * @brief Send file
      * @param filePath
      * @param receiver
      */
-    void sendFile(const QString &filePath, const dfsStruct::Type &type, const SocketPair &receiver);
+    void sendFile(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
+
+    /**
+     * @brief Send any dfs message (template function)
+     */
+    template <typename T>
+    void sendDfsMessage(const T &dfsMessage, const SocketPair &receiver = {})
+    {
+        static_assert(std::is_base_of<DFSMessage::DUMessage, T>::value, "Derived not derived from DUMessage");
+
+        if (dfsMessage.isEmpty())
+        {
+            qDebug() << "Empty dfs message" << typeid(T).name();
+            return;
+        }
+
+        if (NetManager != nullptr)
+            NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
+    }
 
 signals:
     /**
@@ -51,7 +69,7 @@ signals:
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
 
 public slots:
-    void sendFragments(QString path, dfsStruct::Type type, QByteArray frag, SocketPair receiver);
+    void sendFragments(QString path, DfsStruct::Type type, QByteArray frag, SocketPair receiver);
 
     /**
      * @brief process

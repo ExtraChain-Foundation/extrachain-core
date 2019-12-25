@@ -1,6 +1,6 @@
 #include "dfs/types/headers/dfstruct.h"
 
-dfsStruct::State dfsStruct::convertToDFSstate(QByteArray _state)
+DfsStruct::State DfsStruct::convertToDFSstate(QByteArray _state)
 {
     if (QString(_state) == "NEWSTATE")
         return State::NEWSTATE;
@@ -10,7 +10,7 @@ dfsStruct::State dfsStruct::convertToDFSstate(QByteArray _state)
         return State::CHANGEDS;
 }
 
-QString dfsStruct::toString(State _state)
+QString DfsStruct::toString(State _state)
 {
     if (_state == CHANGEDS)
         return "CHANGEDS";
@@ -20,7 +20,7 @@ QString dfsStruct::toString(State _state)
         return "DELSTATE";
 }
 
-QByteArray dfsStruct::toByteArray(State _state)
+QByteArray DfsStruct::toByteArray(State _state)
 {
     if (_state == CHANGEDS)
         return "CHANGEDS";
@@ -29,37 +29,8 @@ QByteArray dfsStruct::toByteArray(State _state)
     else
         return "DELSTATE";
 }
-//
-dfsStruct::Status dfsStruct::convertToDFSstatus(QByteArray state)
-{
-    if (QString(state) == "NEW")
-        return Status::NEW;
-    else if (QString(state) == "REPLACE")
-        return Status::REPLACE;
-    else
-        return Status::MERGE;
-}
 
-QString dfsStruct::toString(Status _state)
-{
-    if (_state == REPLACE)
-        return "EMPTY";
-    else if (_state == MERGE)
-        return "STATIC";
-    else
-        return "NEW";
-}
-QByteArray dfsStruct::toByteArray(Status _state)
-{
-    if (_state == REPLACE)
-        return "EMPTY";
-    else if (_state == MERGE)
-        return "STATIC";
-    else
-        return "NEW";
-}
-//
-dfsStruct::Type dfsStruct::convertToDFType(QByteArray type)
+DfsStruct::Type DfsStruct::convertToDFType(QByteArray type)
 {
     if (type == "images")
         return Type::images;
@@ -82,30 +53,30 @@ dfsStruct::Type dfsStruct::convertToDFType(QByteArray type)
     return service;
 }
 
-QByteArray dfsStruct::toByteArray(Type type)
+QByteArray DfsStruct::toByteArray(Type type)
 {
     QByteArray res;
     switch (type)
     {
-    case dfsStruct::Type::images:
+    case DfsStruct::Type::images:
         res = "images";
         break;
-    case dfsStruct::Type::video:
+    case DfsStruct::Type::video:
         res = "video";
         break;
-    case dfsStruct::Type::event:
+    case DfsStruct::Type::event:
         res = "events";
         break;
-    case dfsStruct::Type::system:
+    case DfsStruct::Type::system:
         res = "system";
         break;
-    case dfsStruct::Type::chat:
+    case DfsStruct::Type::chat:
         res = "chats";
         break;
-    case dfsStruct::Type::post:
+    case DfsStruct::Type::post:
         res = "posts";
         break;
-    case dfsStruct::Type::service:
+    case DfsStruct::Type::service:
         res = "services";
         break;
     default:
@@ -113,13 +84,13 @@ QByteArray dfsStruct::toByteArray(Type type)
     }
     return res;
 }
-QString dfsStruct::toString(Type type)
+QString DfsStruct::toString(Type type)
 {
 
-    return QString(dfsStruct::toByteArray(type));
+    return QString(DfsStruct::toByteArray(type));
 }
 //
-dfsStruct::SubType dfsStruct::convertToDFSSubType(QByteArray subType)
+DfsStruct::SubType DfsStruct::convertToDFSSubType(QByteArray subType)
 {
     if (subType == "profile")
         return profile;
@@ -135,7 +106,7 @@ dfsStruct::SubType dfsStruct::convertToDFSSubType(QByteArray subType)
         return subevent;
 }
 
-QByteArray dfsStruct::toByteArray(SubType subType)
+QByteArray DfsStruct::toByteArray(SubType subType)
 {
     if (subType == profile)
         return "profile";
@@ -150,7 +121,7 @@ QByteArray dfsStruct::toByteArray(SubType subType)
     else
         return "subevent";
 }
-QString dfsStruct::toString(SubType subType)
+QString DfsStruct::toString(SubType subType)
 {
     if (subType == profile)
         return "profile";
@@ -165,7 +136,7 @@ QString dfsStruct::toString(SubType subType)
     else
         return "subevent";
 }
-dfsStruct::Key dfsStruct::convertToKey(QByteArray key)
+DfsStruct::Key DfsStruct::convertToKey(QByteArray key)
 {
     if (key == "dfsIndex")
         return Key::dfsIndex;
@@ -173,7 +144,7 @@ dfsStruct::Key dfsStruct::convertToKey(QByteArray key)
         return Key::storedIndex;
 }
 
-QByteArray dfsStruct::toByteArray(Key key)
+QByteArray DfsStruct::toByteArray(Key key)
 {
     if (key == dfsIndex)
         return "dfsIndex";
@@ -181,7 +152,7 @@ QByteArray dfsStruct::toByteArray(Key key)
         return "storedIndex";
 }
 
-QString dfsStruct::toString(Key key)
+QString DfsStruct::toString(Key key)
 {
     if (key == dfsIndex)
         return "dfsIndex";

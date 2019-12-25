@@ -24,16 +24,9 @@ enum dfsMessageType
     responseMessage,
     closingMessage,
     requestFragments,
+    changesMessage,
     none
 };
-
-const int type_title = dfsMessageType::titleMessage;
-const int type_dfs_message = dfsMessageType::fileDataMessage;
-const int type_status = dfsMessageType::statusMessage;
-const int type_dfs_request = dfsMessageType::requestMessage;
-const int type_closing = dfsMessageType::closingMessage;
-
-const int type_req_frags = dfsMessageType::requestFragments;
 
 class IDfs_Message /* : public QObject*/
 {
@@ -41,7 +34,6 @@ class IDfs_Message /* : public QObject*/
 
 protected:
     IDfs_Message(QObject *parent = nullptr)
-    //        : QObject(parent)
     {
     }
     virtual ~IDfs_Message() = default;
@@ -51,8 +43,8 @@ protected:
     virtual const QList<QByteArray> serializedParams() const = 0;
 
     virtual const QList<QByteArray> deserialize(const QByteArray &serialized) = 0;
-    virtual const QByteArray concatenate() = 0;
-    virtual const QByteArray hash() = 0;
+    virtual const QByteArray concatenate() const = 0;
+    virtual const QByteArray hash() const = 0;
 };
 }
 

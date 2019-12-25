@@ -19,8 +19,7 @@ static const short section = 2;
 static const short name = 3;
 }
 
-namespace dfsStruct {
-
+namespace DfsStruct {
 static const QString ROOT_FOOLDER_NAME = "data";
 static const QString USER_DATA_FOLDER = "data/user";
 static const QString USER_KEYS_DIR = "data/user/key";
@@ -36,19 +35,10 @@ enum State
     DELSTATE,
     CHANGEDS
 };
+
 State convertToDFSstate(QByteArray);
 QByteArray toByteArray(State);
 QString toString(State);
-
-enum Status
-{
-    NEW = 0,
-    MERGE,
-    REPLACE
-};
-Status convertToDFSstatus(QByteArray);
-QByteArray toByteArray(Status);
-QString toString(Status);
 
 enum SubType
 {
@@ -60,6 +50,7 @@ enum SubType
     mini = 5,
     portfolio = 6
 };
+
 SubType convertToDFSSubType(QByteArray);
 QByteArray toByteArray(SubType);
 QString toString(SubType);
@@ -75,17 +66,37 @@ enum Type
     service = 6,
     cdoctp = 7,
     card = 8,
-    unknown = 9
+    unknown = 9,
+    contract = 10,
+    stored = 11
 };
+
 Type convertToDFType(QByteArray);
 QByteArray toByteArray(Type);
 QString toString(Type);
+
+enum DfsSave
+{
+    File,
+    Static,
+    Network,
+    Db
+};
+
+enum ChangeType
+{
+    Delete,
+    Insert,
+    Update,
+    Bytes
+};
 
 enum Key
 {
     storedIndex,
     dfsIndex
 };
+
 Key convertToKey(QByteArray key);
 QByteArray toByteArray(Key);
 QString toString(Key);
@@ -123,7 +134,7 @@ static const int SYSTEM_CARD_FILE_MISSING = 514;
 // static const int CONTRACT_CARD_FILE_NOT_COMPLETE = 515;
 static const int CONTRACT_CARD_FILE_MISSING = 516;
 
-static QMap<QString, QMap<dfsStruct::Type, QString>> allDfsCardFileConnections = {};
+static QMap<QString, QMap<DfsStruct::Type, QString>> allDfsCardFileConnections = {};
 }
 namespace DFS_REQUESTS {
 static const int DFS_ALL = 600;

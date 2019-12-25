@@ -432,6 +432,8 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
 
+    connect(uiController, &UiController::initSubscribe, subscribeController,
+            &SubscribeController::initSubscribe);
     connect(uiController, &UiController::subscribe, subscribeController,
             &SubscribeController::editMySubscribe);
 
@@ -476,7 +478,10 @@ void NodeManager::connectUi()
     */
 
     //==========================================DFS=========================================
-    connect(uiController, &UiController::send, dfs, &Dfs::savedNewData);
+    connect(uiController, &UiController::send, dfs, &Dfs::save);
+    connect(chatManager, &ChatManager::send, dfs, &Dfs::save);
+    connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
+    connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
         emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
         qDebug() << "222222222222";
@@ -512,8 +517,15 @@ void NodeManager::connectUi()
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+    connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
+    connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);
+    connect(uiController->getUiResolver(), &UIResolver::loadChat, chatManager, &ChatManager::fileLoaded);
+    connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFile);
+    connect(uiController, &UiController::authEnded, chatManager, &ChatManager::initChat);
 
-    connect(uiController, &UiController::sendStatic, dfs, &Dfs::saveStaticFile);
+    connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);
+    connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
+    connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
 
     //=============================================LOGIN & REG================================
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,

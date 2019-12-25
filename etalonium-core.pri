@@ -1,3 +1,5 @@
+DEFINES += SERVER_IP="\\\"51.68.181.52\\\""
+
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers
@@ -12,6 +14,7 @@ SOURCES += \
     $$PWD/dfs/packages/headers/status.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_status.cpp \
+    $$PWD/dfs/packages/sources/dfs_changes.cpp \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/req_frags_message.cpp \
     $$PWD/dfs/packages/sources/title_message.cpp \
@@ -106,6 +109,7 @@ HEADERS += \
     $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_status.h \
+    $$PWD/dfs/packages/headers/dfs_changes.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
     $$PWD/headers/managers/chat.h \
     $$PWD/headers/managers/chatmanager.h \

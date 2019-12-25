@@ -5,7 +5,6 @@ namespace DFSMessage {
 
 class DUMessage : public IDfs_Message
 {
-
     const short FIELDS_COUNT = 1;
 
 protected:
@@ -17,15 +16,15 @@ public:
     DUMessage(const QByteArray &serialized, QObject *parent = nullptr);
     ~DUMessage() = default;
 
-    const QByteArray hash() override;
+    const QByteArray hash() const override;
     const QByteArray serialize() const override;
     int getType() const;
-    bool isEmpty();
+    bool isEmpty() const;
 
 protected:
     const QList<QByteArray> serializedParams() const override;
     const QList<QByteArray> deserialize(const QByteArray &serialized) override;
-    const QByteArray concatenate() override;
+    const QByteArray concatenate() const override;
 };
 }
 #endif // DUMESSAGE_H

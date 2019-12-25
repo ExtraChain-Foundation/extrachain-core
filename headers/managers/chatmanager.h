@@ -4,7 +4,9 @@
 #include "chat.h"
 #include <QObject>
 #include <QList>
+#include <QTimer>
 #include "dfs/types/headers/dfstruct.h"
+#include "utils/db_connector.h"
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
 // path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current
 // session for this chat blockhain/index/actor/[myId]/myChats/[chatId]   /keystore/key[SessionNumb]   //
@@ -58,6 +60,7 @@ private:
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
     QByteArray getPathToMyChats();      //+ keystore/chats/
+    void parseInvite();
     // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
     // QByteArray convertChatIdToFullPath(QByteArray chatId); //
@@ -85,14 +88,16 @@ public slots:
     void requestChatList();                                   //+
     void requestChat(QByteArray chatId);                      //-
     void chatRemoved(QByteArray chatId);
+    void changes(QString path);
     void process();
+    void fileLoaded(const QString &path);
+    void initChat(bool status, int type);
 
 signals:
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(
-        const QString &path, const dfsStruct::Type &type,
-        const dfsStruct::SubType &subType = dfsStruct::SubType::subpost,
-        const dfsStruct::Status &status = dfsStruct::Status::NEW); //----- connet with dfs
+        const QString &path, const DfsStruct::Type &type,
+        const DfsStruct::SubType &subType = DfsStruct::SubType::subpost); //----- connet with dfs
 
     void chatListSend(QList<UIChat> chats);
     void chatSend(QByteArray chatId, QList<UIMessage> messages);
@@ -101,6 +106,11 @@ signals:
     void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
     void chatCreated(UIChat);
     void finished();
+    void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
+                     QByteArrayList sqlChanges);
+    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
+              const DfsStruct::SubType subType);
+    void requestFile(const QString &filePath);
 };
 
 #endif // CHATMANAGER_H

@@ -1,19 +1,17 @@
 #include "dclosing.h"
 
-
 DFSMessage::DClosing::DClosing(const QByteArray &title_hash, const long long &pckAF)
-    : DUMessage(type_closing)
+    : DUMessage(dfsMessageType::closingMessage)
 {
     this->title_hash = title_hash;
     PckgAmoutR = pckAF;
-
 }
 
 DFSMessage::DClosing::DClosing(const QByteArray &serialized)
-    : DUMessage(type_closing)
+    : DUMessage(dfsMessageType::closingMessage)
 {
     QList<QByteArray> list = deserialize(serialized);
-    if (type_closing != list.takeFirst().toInt())
+    if (dfsMessageType::closingMessage != list.takeFirst().toInt())
     {
         qDebug() << "[type_closing]"
                  << "incorrect message type";
@@ -25,17 +23,16 @@ DFSMessage::DClosing::DClosing(const QByteArray &serialized)
     }
     title_hash = list.takeFirst();
     PckgAmoutR = list.takeFirst().toLongLong();
-//    pckgUpset = pckgUpsetDeserialize(list.takeFirst());
+    //    pckgUpset = pckgUpsetDeserialize(list.takeFirst());
 }
 
 DFSMessage::DClosing::~DClosing()
 {
-
 }
 
 const QList<QByteArray> DFSMessage::DClosing::serializedParams() const
 {
     QList<QByteArray> list;
-    list << title_hash << QByteArray::number(PckgAmoutR);// << pckgUpsetSerialize();
+    list << title_hash << QByteArray::number(PckgAmoutR); // << pckgUpsetSerialize();
     return list;
 }

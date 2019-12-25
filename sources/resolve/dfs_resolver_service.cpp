@@ -75,7 +75,8 @@ void DFSResolverService::checkStatus()
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
         file.close();
-        dfs->saveFN(file.fileName(), title.filePath, dfsStruct::convertToDFType(title.f_type));
+        dfs->sendFromNetwork(DfsStruct::DfsSave::Network, title.filePath, "",
+                             DfsStruct::convertToDFType(title.f_type));
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
@@ -188,6 +189,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
     //    qDebug() << "[dfs resolve message] msg type:" << mType;
     DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
     using namespace DFSMessage;
+
     if (this->lifetime == Resolver::Lifetime::SHORT)
     {
         switch (msgType)
@@ -209,8 +211,16 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::requestMessage:
         {
             qDebug() << "[requestMessage:]";
-            DFSMessage::dfs_request message(data);
+            DFSMessage::DfsRequest message(data);
+
+            if (!QFile::exists(message.filePath))
+            {
+                // dfs->getSender()->sendDfsMessage(message); // TODO
+                return;
+            }
+
             dfs->fileResponse(message.filePath, receiver);
+
             break;
         }
         case dfsMessageType::responseMessage:
@@ -220,7 +230,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         case dfsMessageType::statusMessage:
         {
-            qDebug() << "[statusMessagee:]";
+            qDebug() << "[statusMessage:]";
             DFSMessage::Status message(data);
             break;
         }
@@ -233,9 +243,20 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         {
             break;
         }
+        case dfsMessageType::changesMessage:
+        {
+            DFSMessage::DfsChanges message(data);
+
+            // if resolver with message.filePath exists
+            // not apply && remove resolver && resend request
+
+            if (dfs->applyChanges(message))
+                dfs->getSender()->sendDfsMessage(message);
+            break;
+        }
         default:
         {
-            qDebug() << "[&DFSResolver] undifined message type from LIFETIME::SHORT";
+            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
             break;
         }
         }
@@ -249,8 +270,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
             if (title.empty())
             {
                 DFSMessage::title_message message(data);
-                QString path = message.filePath + dfsStruct::FILE_IDENTIFICATOR;
-                if (QFile::exists(message.filePath))
+                QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
+                if (QFile::exists(message.filePath) && message.filePath.right(7) != ".stored")
                 {
                     finishWork();
                     return;
@@ -298,7 +319,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         default:
         {
-            qDebug() << "[&DFSResolver] undifined message type from LIFETIME::LONG";
+            qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
             break;
         }
         }
@@ -323,7 +344,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
 
         if (!actor.isEmpty())
         {
-            if (QDir(dfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
+            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {

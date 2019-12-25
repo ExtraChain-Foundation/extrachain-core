@@ -11,17 +11,17 @@ QByteArray DFSMessage::req_frags_message::getListFrag() const
 }
 
 DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QByteArray listFrag)
-    : DUMessage(type_req_frags)
+    : DUMessage(dfsMessageType::requestFragments)
 {
     this->filePath = filePath;
     this->listFrag = listFrag;
 }
 
 DFSMessage::req_frags_message::req_frags_message(const QByteArray &serialized)
-    : DUMessage(type_req_frags)
+    : DUMessage(dfsMessageType::requestFragments)
 {
     QList<QByteArray> list = deserialize(serialized);
-    if (type_req_frags != list.takeFirst().toInt())
+    if (dfsMessageType::requestFragments != list.takeFirst().toInt())
     {
         qDebug() << "[type_title]"
                  << "incorrect message type";

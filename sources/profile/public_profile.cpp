@@ -152,7 +152,7 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
 
 QByteArrayList PublicProfile::getListProfile()
 {
-    QDir().mkdir(idPath);
+    // QDir().mkdir(idPath);
     QString pathProfile = idPath;
     QFile profile(pathProfile);
     if (!profile.exists())

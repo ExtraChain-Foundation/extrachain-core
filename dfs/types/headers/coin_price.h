@@ -7,7 +7,7 @@
 class CoinPrice
 {
     const QString coint_price_data =
-        dfsStruct::ROOT_FOOLDER_NAME + "/coint_price_data.etalonium";
+        DfsStruct::ROOT_FOOLDER_NAME + "/coint_price_data.etalonium";
 
 private:
     BigNumber ammout;

@@ -3,6 +3,7 @@
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "enc/algorithms/blowfish_crypt.h"
+#include "utils/db_connector.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QObject>
@@ -39,12 +40,12 @@ private:
     QByteArray getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
     QByteArray pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
     // paths end
-    BigNumber findCurrentSession();                                              //+
-    void InitializeAllPaths();                                                   //+
-    void saveChatKey(QByteArray key, BigNumber sessionNumb);                     //+
-                                                                                 //+
-    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
-    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
+    BigNumber findCurrentSession();                                                //+
+    void InitializeAllPaths();                                                     //+
+    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
+                                                                                   //+
+    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {});   //+
+    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);              //+
 
 public:
     Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
@@ -60,8 +61,8 @@ public:
     BigNumber getActualCurrentSession(); //+
     // BigNumber getMyCurrentSession();                              //
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
-                          QByteArray ownerId = "-1"); //+
-    QByteArray sendMessage(QByteArray message);       //+
+                          QByteArray _ownerId = "-1"); //+
+    QByteArray sendMessage(QByteArray message);        //+
     void receiveMessage(QByteArray message);
     // getters setters
     QByteArray getChatId() const;                    //+
@@ -74,9 +75,8 @@ public:
     QByteArray getCurrentActorId() const; //+
     QList<QByteArray> getAllUsers();      //+
     QList<UIMessage> getAllMessages();    //-
-    QList<QByteArray> getAllMessagesByteArray();
-    ActorIndex* getActorIndex() const; //+
-    QByteArray getOwner();             //-
+    ActorIndex* getActorIndex() const;    //+
+    QByteArray getOwner();                //-
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
     UIMessage getLastMessage();
