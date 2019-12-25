@@ -6,6 +6,7 @@
 #include "network/packages/message_interface.h"
 #include "utils/bignumber.h"
 #include "utils/utils.h"
+#include "network/packages/service/response_messages.h"
 
 namespace Messages {
 /**
@@ -24,11 +25,13 @@ private:
     //    QByteArray protocol; // protocol version
     QByteArray msgType; // message type
     BigNumber signer;   // message signer actor's id
+
 protected:
+    QByteArray msg_data = "";
     QByteArray digSig; // for security
 
 public:
-    static const short FIELDS_COUNT = 3; // 4;
+    static const short FIELDS_COUNT = 4;
 
 public:
     BaseMessage();
@@ -81,12 +84,14 @@ public:
     static BaseMessage deserializeMsg(const QByteArray serialized);
 
     const QByteArray hash() const override;
+    void init(const QByteArray &data);
 
 public:
     QByteArray getProtocol() const;
     QByteArray getMsgType() const;
     BigNumber getSigner() const override;
     QByteArray getDigSig() const;
+    QByteArray getData() const;
 };
 }
 #endif // BASEMESSAGE_H

@@ -92,7 +92,6 @@ BigNumber FileIndex::loadLastId()
     {
         qDebug() << "Last saved id is not loaded";
     }
-
     return lastSavedId;
 }
 
@@ -132,7 +131,7 @@ BigNumber FileIndex::getLastSection() const
 
 int FileIndex::removeById(const BigNumber &id)
 {
-    qDebug() << "Removing record with id" << id.toString();
+    qDebug() << "Removing record with id" << id.toActorId();
     if (id < firstSavedId)
     {
         removeAll();
@@ -182,7 +181,7 @@ int FileIndex::removeFromEnd(const BigNumber &count)
 QString FileIndex::buildFilePath(const BigNumber &id) const
 {
     BigNumber section = this->calcSection(id);
-    QString pathToFolder = getFolderPath() + "/" + section.toString();
+    QString pathToFolder = getFolderPath() + "/" + section.toByteArray();
 
     QDir dir(pathToFolder);
     if (!dir.exists())
@@ -192,7 +191,7 @@ QString FileIndex::buildFilePath(const BigNumber &id) const
         dir.mkpath(pathToFolder);
     }
 
-    return pathToFolder + "/" + id.toString();
+    return pathToFolder + "/" + id.toByteArray();
 }
 
 QString FileIndex::getFolderName() const
@@ -229,9 +228,11 @@ QByteArray FileIndex::getById(const BigNumber &id) const
     if (file.open(QIODevice::ReadOnly))
     {
         QByteArray data;
-        QDataStream stream(&file);
-        stream >> data;
+        data = file.readAll();
         file.close();
+        // very strange code
+        if (data.mid(data.size() - 1, 1) == "\n")
+            return data.mid(0, data.size() - 1);
         return data;
     }
 
@@ -254,14 +255,16 @@ int FileIndex::add(const BigNumber &id, const QByteArray &data)
 
     if (recordLimitIsReached())
     {
-        this->removeById(this->getFirstSavedId());
-        this->firstSavedId++; // todo: check!
+        if (this->firstSavedId != 0)
+        {
+            this->removeById(this->getFirstSavedId());
+            this->firstSavedId++; // todo: check!
+        }
     }
 
     if (file.open(QIODevice::WriteOnly))
     {
-        QDataStream stream(&file);
-        stream << data;
+        file.write(data);
         file.flush();
         file.close();
 

@@ -37,17 +37,19 @@ public:
     Block getByData(const QByteArray &data) const;
     Block getByHash(const QByteArray &hash) const;
 
-    Transaction getLastTxByHash(const QByteArray &hash) const;
-    Transaction getLastTxBySender(const BigNumber &id) const;
-    Transaction getLastTxByReceiver(const BigNumber &id) const;
-    Transaction getLastTxBySenderOrReceiver(const BigNumber &id) const;
-    Transaction getLastTxByApprover(const BigNumber &id) const;
+    Transaction getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
+    Transaction getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxByApprover(const BigNumber &id, const QByteArray &token) const;
     TxPair searchPair(const BigNumber &senderId, const BigNumber &receiverId) const;
 
     void removeAll();
 
 private:
-    Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param) const;
+    Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
+                                 const QByteArray &token) const;
 };
 
 #endif // MEMINDEX_H

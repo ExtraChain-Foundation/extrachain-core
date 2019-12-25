@@ -3,30 +3,27 @@
 
 #include "network/packages/base_message.h"
 
-namespace Messages
+namespace Messages {
+
+class GetBlockMessage
 {
-    static const QByteArray GET_BLOCK_MESSAGE = "getBlock";
+    const short FIELDS_SIZE = 4;
 
-    class GetBlockMessage : public BaseMessage
-    {
-    private:
-        SearchEnum::BlockParam param;
-        QByteArray value;
+private:
+    SearchEnum::BlockParam param;
+    QByteArray value;
 
-    public:
-        GetBlockMessage(const SearchEnum::BlockParam param, const QByteArray &value);
-        GetBlockMessage(const QByteArray &serialized);
+public:
+    GetBlockMessage(const SearchEnum::BlockParam param, const QByteArray &value);
+    GetBlockMessage(const QByteArray &serialized);
+    ~GetBlockMessage();
 
-        // BaseMessage interface
-    protected:
-        short getFieldsCount() const override;
-        void initFields(QList<QByteArray> &list) override;
-        QList<QByteArray> serializedParams() const override;
+    const QByteArray serialize() const;
+    void deserialize(const QByteArray &serilaized);
 
-    public:
-        SearchEnum::BlockParam getParam() const;
-        QByteArray getValue() const;
-    };
+    SearchEnum::BlockParam getParam() const;
+    QByteArray getValue() const;
+};
 }
 
 #endif // GET_BLOCK_MESSAGE_H

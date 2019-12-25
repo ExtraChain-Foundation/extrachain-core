@@ -3,20 +3,45 @@
 
 #include "network/packages/base_message.h"
 
-namespace Messages
+namespace Messages {
+
+struct BlockCount
 {
-    static const QByteArray GET_BLOCK_COUNT_MESSAGE = "getBlockCount";
-    static const QByteArray GET_ACTOR_COUNT_MESSAGE = "getActorCount";
+    QByteArray request;
 
-    static BaseMessage createGetBlockCountMessage()
+    BlockCount()
     {
-        return BaseMessage(GET_BLOCK_COUNT_MESSAGE);
+        request = GET_BLOCK_COUNT_MESSAGE;
+    }
+    BlockCount(const QByteArray &serialized)
+    {
+        request = serialized;
     }
 
-    static BaseMessage createGetActorCountMessage()
+    const QByteArray serialize() const
     {
-        return BaseMessage(GET_ACTOR_COUNT_MESSAGE);
+        return request;
     }
+};
+
+struct ActorCount
+{
+    QByteArray request;
+
+    ActorCount()
+    {
+        request = GET_ACTOR_COUNT_MESSAGE;
+    }
+    ActorCount(const QByteArray &serialized)
+    {
+        request = serialized;
+    }
+
+    const QByteArray serialize() const
+    {
+        return request;
+    }
+};
 }
 
 #endif // SIMPLE_MESSAGE_H

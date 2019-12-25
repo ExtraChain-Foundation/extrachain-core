@@ -16,9 +16,9 @@
 #include <QHostAddress>
 #include <QObject>
 #include <QString>
-
+#include <QMutex>
 #include <QTemporaryFile>
-
+class TransactionManager;
 /*
  * Main database class
  *
@@ -28,9 +28,15 @@
  * - merging blocks
  *
  */
+static QMutex mutex;
 class Blockchain : public QObject
 {
+    //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
+    //                  "Your type is not supported."
+    //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     const int FIELS_SIZE = 4;
+    const QByteArray block_message = Messages::BLOCK_MESSAGE;
+    const QByteArray get_block_message = Messages::GET_BLOCK_MESSAGE;
     Q_OBJECT
 private:
     // storage //
@@ -40,40 +46,53 @@ private:
     MemIndex memIndex;      // blocks (if fileMode is false)
                             //    Actor<KeyPrivate>   approver;       // current user.
     AccountController *accountController;
+    TransactionManager *txManager;
     // service //
+    QList<GenesisDataRow> genBlockData; // actorid -> token
     int blocksFromLastGenesis = 0;
 
     bool launched;
-    QTemporaryFile tempTransactionFile; // up new, down old
 
 public:
     Blockchain(AccountController *accountController, bool fileMode = true);
     ~Blockchain();
 
 private:
-    void createTempTransactionFileByActor();
-
-    Block getBlockByIndex(const BigNumber &index);
+    //    template <typename T>
+    Block getBlockByIndex(const BigNumber &index)
+    {
+        Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
+        Block block2 = validateAndReturnBlock(block);
+        return block2;
+    }
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
     Block getBlockByHash(const QByteArray &hash);
 
-    Transaction getTxByHash(const QByteArray &hash);
-    Transaction getTxBySender(const BigNumber &id);
-    Transaction getTxByReceiver(const BigNumber &id);
-    Transaction getTxBySenderOrReceiver(const BigNumber &id);
-    Transaction getTxByApprover(const BigNumber &id);
-    Transaction getTxByUser(const BigNumber &id);
+    QByteArray getBlockDataByIndex(const BigNumber &index);
+
+    Transaction getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+    Transaction getTxBySender(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
+    Transaction getTxByUser(const BigNumber &id, const QByteArray &token = "0");
     TxPair getTxPair(const BigNumber &first, const BigNumber second);
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
 
-public:
-    void createGenesisBlock();
+    void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
+    QByteArray findRecordsInBlock(const Block &block);
 
-    QList<Transaction> getRecentTransaction(const BigNumber &last, const BigNumber &first);
-    void updateLastTransactionListByActor();
+public:
+    GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
+                                    QMap<BigNumber, BigNumber> states = QMap<BigNumber, BigNumber>());
+
+    QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
+                                                     BigNumber token = 0);
+    void getBlockZero();
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -94,19 +113,8 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block);
-    bool verifyTxBalance(const BigNumber &actorId, const BigNumber &balanceToVerify,
-                         const Transaction &prevTx);
 
 public:
-    /**
-     * @brief Handy method to read genesis block from temporary file.
-     * Delete pointer after using GenesisBlock.
-     * @param prevBlock
-     * @param prevGenesisHash
-     * @return genesis block (unsigned)
-     */
-    static GenesisBlock *readGenesisBlock(const Block &prevBlock, const QByteArray &prevGenesisHash);
-
     /**
      * Compares prevHash field of every block
      * with the hash of the prev block
@@ -127,6 +135,13 @@ public:
      * @return last blockchain block
      */
     Block getBlock(SearchEnum::BlockParam type, const QByteArray &value);
+    /**
+     * Gets the block from blockchain by *value* of a certain *type*
+     * @param value
+     * @param type of param
+     * @return last blockchain block
+     */
+    QByteArray getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
      * @param value
@@ -238,14 +253,18 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumber getMyBalance() const;
-    BigNumber getUserBalance(BigNumber userId) const;
+    BigNumber getUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
     /**
      * @brief Show blockchain
      */
     void showBlockchain() const;
 
+    bool isSmContractTx(const Block &block) const;
+
+    void getSmContractMembers(const Block &block) const;
 signals:
+
+    void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);
     /**
      * @brief Sends new verified block to the network. Should be emited when
@@ -267,20 +286,9 @@ signals:
      */
     void NewBlock(Block block);
 
-    /**
-     * @brief New genesis block is created in temp file TMP_GENESIS_BLOCK
-     */
-    void GenesisBlockCreated(Block prevBlock, QByteArray prevGenHash);
-
     // responses
-    void TxFound(Transaction tx, SearchEnum::TxParam param, QString value, QHostAddress peerAddress,
-                 QByteArray requestHash);
-
-    void TxPairFound(TxPair pair, QHostAddress peerAddress, QByteArray requestHash);
-    void BlockFound(Block block, SearchEnum::BlockParam param, QString value, QHostAddress peerAddress,
-                    QByteArray requestHash);
-    void BlockCount(BigNumber blockCount, QHostAddress peerAddress, QByteArray requestHash);
-    void ActorCount(BigNumber actorCount, QHostAddress peerAddress, QByteArray requestHash);
+    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+                       const SocketPair &receiver);
 
     /**
      * @brief There no such block in a local blockchain
@@ -295,31 +303,37 @@ signals:
     void VerifiedTx(Transaction tx);
 
     void updateLastTransactionList();
+    void sendMessage(const QByteArray &data, const QByteArray &type);
+    void finished();
+
+public:
+    void addBlockToBlockchain(Block block);
+    void addGenBlockToBlockchain(const GenesisBlock &block);
+    void setTxManager(TransactionManager *value);
 
 public slots:
 
+    void process();
+    void updateBlockchain(BigNumber id, bool isUser);
+    void updateBlockchainForSignIn(QByteArray id, QByteArrayList idList);
     /**
      * @brief Checks if there is a such block in a local blockchain.
      * Emits BlockExistence or SendMergedBlock signals.
      * @param block
      */
     void checkBlockExistence(const Block &block);
-
+    /**
+     * @brief blockCountResponse
+     * @param count
+     */
+    void blockCountResponse(const BigNumber &count);
     // from node manager
-    void getTxFromBlockchain(SearchEnum::TxParam param, QByteArray value, QHostAddress peerAddress,
-                             QByteArray requestHash);
+    void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
+                             const SocketPair &receiver, const QByteArray &request);
 
-    void getTxPairFromBlockChain(BigNumber sender, BigNumber receiver, QHostAddress peerAddress,
-                                 QByteArray requestHash);
-
-    void getBlockFromBlockchain(SearchEnum::BlockParam param, QByteArray value, QHostAddress peerAddress,
-                                QByteArray requestHash);
-    void getBlockCount(QHostAddress peerAddress, QByteArray requestHash);
-    void getActorCount(QHostAddress peerAddress, QByteArray requestHash);
-
-    void addBlockToBlockchain(Block block);
-
-    void newActor(Actor<KeyPublic> actor);
+    void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
+                                const QByteArray &requestHash, const SocketPair &receiver);
+    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     /**
      * @brief If there no such tx in a previous block

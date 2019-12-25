@@ -10,15 +10,17 @@ class GenesisDataRow
 {
 public:
     BigNumber actorId;
-    Transaction tx;
+    BigNumber state;
+    BigNumber token;
 
 public:
     GenesisDataRow()
     {
     }
-    GenesisDataRow(const BigNumber &actorId, const Transaction &tx)
+    GenesisDataRow(const BigNumber &actorId, const BigNumber &state, const BigNumber &token)
         : actorId(actorId)
-        , tx(tx)
+        , state(state)
+        , token(token)
     {
     }
     GenesisDataRow(const QByteArray &serialized)
@@ -29,46 +31,30 @@ public:
     QByteArray serialize() const
     {
         QList<QByteArray> l;
-        l << actorId.serialize() << tx.serialize();
-        return Serialization::serialize(l, Serialization::GENESIS_ROW_FIELD_SPLITTER);
+        l << actorId.toActorId() << state.toByteArray() << token.toActorId();
+        return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
     void deserialize(const QByteArray &serialized)
     {
         QList<QByteArray> l =
-            Serialization::deserialize(serialized, Serialization::GENESIS_ROW_FIELD_SPLITTER);
-        if (l.size() == 2)
+            Serialization::universalDeserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
+        if (l.size() == 3)
         {
             actorId = BigNumber(l.at(0));
-            tx = l.at(1);
+            state = BigNumber(l.at(1));
+            token = BigNumber(l.at(2));
         }
     }
 
     bool operator==(const GenesisDataRow &other)
     {
-        return this->actorId == other.actorId && this->tx == other.tx;
+        return this->actorId == other.actorId && this->state == other.state && this->token == other.token;
     }
 };
 
-static QDataStream &operator<<(QDataStream &in, GenesisDataRow &row)
-{
-    in << row.actorId.getHexValue() << row.tx.serialize();
-    return in;
-}
-static QDataStream &operator>>(QDataStream &out, GenesisDataRow &row)
-{
-    QByteArray txSerialized;
-    QByteArray actorIdSerialized;
-
-    out >> actorIdSerialized >> txSerialized;
-
-    row.actorId = BigNumber(actorIdSerialized);
-    row.tx = Transaction(txSerialized);
-
-    return out;
-}
-
 namespace Config {
 static const QByteArray GENESIS_BLOCK_TYPE = "genesis";
+static const QByteArray GENESIS_BLOCK_MERGE = "genesisMerge";
 }
 
 /**
@@ -88,8 +74,7 @@ public:
     GenesisBlock(const QByteArray &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    GenesisBlock(const QByteArray &data, const Block *prevBlock,
-                 const QByteArray &prevGenHash);
+    GenesisBlock(const QByteArray &data, const Block &prevBlock, const QByteArray &prevGenHash);
 
     // Block interface
 public:
@@ -108,6 +93,7 @@ public:
 
 public:
     QByteArray getPrevGenHash() const;
+    void setPrevGenHash(const QByteArray &value);
 };
 
 #endif // GENESIS_BLOCK_H

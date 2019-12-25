@@ -1,18 +1,36 @@
 #include "network/server_service.h"
 
-ServerService::ServerService(quint16 networkPort, QNetworkAddressEntry *local, QObject *parent)
+ServerService::ServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent)
+    : QTcpServer(parent)
+    , localAddress(local)
+    , port(networkPort)
 {
-    this->port = networkPort;
+}
 
-    bool servStatus = this->listen(local->ip(), networkPort);
-    qDebug() << "SERVER SERVICE listening:" << servStatus;
-    if (!servStatus)
+void ServerService::startListen()
+{
+    bool status = this->listen(localAddress->ip(), port);
+    qDebug() << "Server listening status:" << status;
+    emit serverStatus(status);
+
+    if (!status)
     {
-        qDebug() << this->serverError();
+#ifdef ETALONIUM_CONSOLE
+        if (serverError() == QAbstractSocket::AddressInUseError)
+        {
+            qInfo().nospace().noquote() << "---> [Error] Address " << localAddress->ip().toString() << ":"
+                                        << port << " already in use";
+            std::exit(0);
+        }
+        else
+#endif
+            qDebug() << "Server error:" << serverError();
+        qDebug() << "emit startError";
     }
     else
-        qDebug() << "SERVER SERVICE: server address" << this->serverAddress()
-                 << ", server port:" << this->serverPort();
+    {
+        qDebug() << "Server address:" << this->serverAddress() << "| server port:" << this->serverPort();
+    }
 }
 
 ServerService::~ServerService()

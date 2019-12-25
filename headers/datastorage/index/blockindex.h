@@ -44,6 +44,8 @@ public:
      */
     Block getBlockById(const BigNumber &id) const;
 
+    QByteArray getBlockDataById(const BigNumber &id) const;
+
     // todo: if genesis block is found -> return empty block, or skip in search logic
     Block getBlockByPosition(const BigNumber &position) const;
     Block getBlockByApprover(const BigNumber &approver) const;
@@ -52,17 +54,24 @@ public:
 
     Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
 
-    Transaction getLastTxByHash(const QByteArray &hash) const;
-    Transaction getLastTxBySender(const BigNumber &id) const;
-    Transaction getLastTxByReceiver(const BigNumber &id) const;
-    Transaction getLastTxBySenderOrReceiver(const BigNumber &id) const;
-    Transaction getLastTxByApprover(const BigNumber &id) const;
+    Transaction getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
+    Transaction getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const;
+    Transaction getLastTxByApprover(const BigNumber &id, const QByteArray &token) const;
     QList<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
+
+    QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
+                                                     BigNumber token = 0) const;
 
     TxPair searchPair(const BigNumber &first, const BigNumber &second) const;
 
 private:
-    Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param) const;
+    Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
+                                 const QByteArray &token) const;
+    QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
+                                          int count = 10, BigNumber token = 0) const;
 };
 
 #endif // BLOCKINDEX_H

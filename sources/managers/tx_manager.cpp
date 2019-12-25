@@ -17,84 +17,52 @@ void TransactionManager::removeTransaction(int i)
     this->pendingTxs.removeAt(i);
 }
 
-int TransactionManager::addTransaction(Transaction tx)
+void TransactionManager::addTransaction(Transaction tx)
 {
     qDebug() << "TRANSACTION MANAGER: addTransaction " << tx.toString();
-    if (tx.isEmpty())
-    {
-        return Errors::TRANSACTION_IS_EMPTY;
-    }
 
-    receivedTxList.append(tx);
-    connect(&tx, &Transaction::ProveMe, blockchain, &Blockchain::proveTx);
+    if (tx.isEmpty())
+        return;
+
+    Transaction *trx = new Transaction(tx);
+    receivedTxList.append(trx);
+    connect(trx, &Transaction::ProveMe, blockchain, &Blockchain::proveTx);
+    connect(trx, &Transaction::Approved, this, &TransactionManager::addProvedTransaction);
+    connect(trx, &Transaction::NotApproved, this, &TransactionManager::removeUnApprovedTransaction);
     //    connect(&tx, &Transaction::Approved, this,
     //    &TransactionManager::makeBlock);
-    emit tx.ProveMe();
-    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
-                "function)\n after emit tx.ProveMe() signal to Blockshain";
-
-    BigNumber receiverBalance = tx.getReceiverBalance();
-    BigNumber senderBalance = tx.getSenderBalance();
-    if (!pendingTxs.contains(tx))
-    {
-        pendingTxs.push_back(tx);
-    }
-    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());
-    return 0;
+    emit trx->ProveMe();
+    //    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
+    //                "function)\n after emit tx.ProveMe() signal to Blockshain";
+    //    BigNumber receiverBalance = tx.getReceiverBalance();
+    //    BigNumber senderBalance = tx.getSenderBalance();
+    //    if (!pendingTxs.contains(tx))
+    //    {
+    //        pendingTxs.append(tx);
+    //    }
+    //    //    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());`
 }
 
-int TransactionManager::proveTransaction(BigNumber senderId, BigNumber receiverId, Transaction sender,
-                                         Transaction receiver, QByteArray txHash)
+void TransactionManager::addProvedTransaction()
 {
-    qDebug() << "tx_manger ProveTransaction() << function begin {";
-    Transaction transaction;
-    for (const Transaction &tx : pendingTxs)
+    QObject *s = QObject::sender();
+    Transaction *tx = qobject_cast<Transaction *>(s);
+
+    qDebug() << "addProvedTransaction";
+
+    if (!pendingTxs.contains(*tx))
     {
-        if (tx.getHash() == txHash)
-        {
-            transaction = tx;
-            break;
-        }
+        pendingTxs.append(*tx);
     }
 
-    // DELETEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-    if (accountController->getCurrentActor().getId() == senderId)
-    {
-        this->pendingTxs.push_back(transaction);
-        return 0;
-    }
-    // DELETEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+    receivedTxList.removeOne(tx);
+}
 
-    if (senderId == BigNumber("0"))
-    {
-        this->pendingTxs.push_back(transaction);
-        return 0;
-    }
-    BigNumber receiverBalance = transaction.getReceiverBalance();
-    BigNumber senderBalance = transaction.getSenderBalance();
-
-    BigNumber lastReceiverBalance = sender.getReceiverBalance();
-    BigNumber lastSenderBalance = receiver.getSenderBalance();
-
-    if (receiverBalance != lastReceiverBalance)
-    {
-        qDebug() << " Can't add transaction" << transaction.toString() << ": receiver balance "
-                 << receiverBalance << "is not equal to last saved value" << lastReceiverBalance;
-        return Errors::TRANSACTION_WRONG_RECEIVER_BALANCE;
-    }
-    if (senderBalance != lastSenderBalance)
-    {
-        qDebug() << " Can't add transaction" << transaction.toString() << ": sender balance " << senderBalance
-                 << "is not equal to last saved value" << lastSenderBalance;
-        return Errors::TRANSACTION_WRONG_SENDER_BALANCE;
-    }
-
-    this->pendingTxs.push_back(transaction);
-    qDebug() << "tx_manger ProveTransaction() << the transaction have been added "
-                "to the "
-                "lis << function end }";
-
-    return 0;
+void TransactionManager::removeUnApprovedTransaction()
+{
+    QObject *s = QObject::sender();
+    Transaction *tx = qobject_cast<Transaction *>(s);
+    receivedTxList.removeOne(tx);
 }
 
 // Tx hashes (for network)
@@ -127,7 +95,7 @@ void TransactionManager::addVerifiedTx(Transaction tx)
 
 // Block making
 
-void TransactionManager::makeBlock()
+Block TransactionManager::makeBlock()
 {
     int txs = pendingTxs.size();
     //    qDebug() << QString("Attempting to make a block from [%1]
@@ -135,22 +103,23 @@ void TransactionManager::makeBlock()
 
     if (txs == 0)
     {
-        return;
+        return Block();
     }
 
     QByteArray data = convertTxs(pendingTxs);
-    qDebug() << data;
+    qDebug() << data << "SEVA";
     Block lastBlock = blockchain->getLastBlock();
 
-    Block block(data, &lastBlock);
-    blockchain->signBlock(block); // Non-approved code
+    Block block(data, lastBlock);
+    // blockchain->signBlock(block); // Non-approved code
+    block.sign(accountController->getCurrentActor());
 
-    qDebug() << QString("Created block: [%1]").arg(block.toString());
-    QByteArray qw = block.serialize();
-    qDebug() << qw;
-    emit SendBlock(qw);
-
+    qDebug() << "Created block:" << block.getIndex();
+    QByteArray blockSerialize = block.serialize();
+    emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
+    blockchain->addBlock(block);
     this->pendingTxs.clear();
+    return block;
 }
 
 QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
@@ -163,29 +132,26 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
     return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
 }
 
-// Thread management //
-
-void TransactionManager::run()
+BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)
 {
-    active = true;
-    exec();
-}
-
-int TransactionManager::exec()
-{
-    while (isActive())
+    BigNumber res = 0;
+    if (!pendingTxs.isEmpty())
     {
-        //
+        for (const Transaction &tmp : pendingTxs)
+        {
+            if (tmp.getSender() == sender)
+            {
+                res -= tmp.getAmount();
+            }
+            else if (tmp.getReceiver() == sender)
+            {
+                res += tmp.getAmount();
+            }
+        }
     }
-    return 0;
+    return res;
 }
 
-void TransactionManager::quit()
+void TransactionManager::process()
 {
-    active = false;
-}
-
-bool TransactionManager::isActive() const
-{
-    return this->active;
 }

@@ -1,44 +1,29 @@
 #ifndef CARD_MANAGER_H
 #define CARD_MANAGER_H
 
+#include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
-#include <iterator>
+#include "utils/db_connector.h"
 
 class CardManager
 {
 
 public:
-    static QList<QByteArray> sorting(QList<QByteArray> data);
-    static BigNumber getLastSavedFile(const BigNumber &actorId,
-                                      const based_dfs_struct::Type type);
-    static QList<QByteArray> getMyNew();
-    static QList<QByteArray> getPosts(const BigNumber &userId);
-    static QList<QByteArray> getAll(based_dfs_struct::Type type, QString cardFileName);
-    static QList<QByteArray> getForUser(based_dfs_struct::Type type, QString cardFileName,
-                                        QString userId);
-    static QList<QByteArray> getMyEvents();
-    static QList<QByteArray> getEvents(const BigNumber &userId);
-    static QList<QByteArray> getAllMyChat();
-    static QByteArray getProfileById(const BigNumber &userId);
-    static BigNumber getNameForNewFile(based_dfs_struct::Type type);
-    static QString getFileByName(const based_dfs_struct::Type type, const QByteArray &name);
-    static void appendToCard(based_dfs_struct::Type type, const QByteArray &serialize,
-                             const BigNumber &userId);
-    static void createdAllCards(const BigNumber &userId);
-    static int checkDfsState(const BigNumber &userId);
-    static void createdAllConnections();
-    static QMap<based_dfs_struct::Type, QByteArray>
-    getCardHashFromRoot(const BigNumber &userId);
-    static int createdCardFilesConnection(const BigNumber &userId);
+    static std::vector<std::string> getAll(DfsStruct::Type type);
+    static std::vector<std::string> getFilesByType(const std::string &userId, DfsStruct::Type type);
+    static std::string getLastFileName(const std::string &userId, DfsStruct::Type type);
+    static QStringList getAllFiles(const QByteArray &userId);
+    static DfsStruct::Type getTypeByName(const QString &path, const QByteArray &userId);
 
-    static QList<QString> getAllFiles(const BigNumber &userId);
+    static std::string pathToRoot(std::string userId);
+    static std::string buildPathForFile(const std::string &userId, const std::string &file,
+                                        DfsStruct::Type type, bool localFormat);
+    static std::vector<std::string> buildPathForFiles(const std::string &userId,
+                                                      const std::vector<std::string> &files,
+                                                      DfsStruct::Type type, bool localFormat);
 
-    //
-    static QList<QByteArray> getUserPosts(BigNumber userdId);
-    static QList<QByteArray> getEventsTemp(BigNumber userId);
-    // temp for search
-    static QStringList existsProfileFiles();
-    static QStringList getImagesFromJson(const QByteArray &json);
+private:
+    CardManager();
 };
 
 #endif // CARD_MANAGER_H

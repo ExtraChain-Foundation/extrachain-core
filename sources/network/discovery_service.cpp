@@ -1,8 +1,4 @@
 #include "network/discovery_service.h"
-#include <QNetworkInterface>
-#include <QRandomGenerator>
-#include <chrono>
-#include <thread>
 
 DiscoveryService::DiscoveryService(quint16 discoveryPort, quint16 networkPort, QNetworkAddressEntry *local)
     : local(local)
@@ -57,7 +53,7 @@ void DiscoveryService::process()
             // qDebug() << "DISCOVERY SERVICE: finder";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            socket->writeDatagram(Messages::createPingMessage(), QHostAddress(i /*"51.68.181.52"*/), port);
+            socket->writeDatagram(Messages::createPingMessage(), QHostAddress(i /*"51.68.181.53"*/), port);
             // qDebug() << "udp send message";
         }
     }

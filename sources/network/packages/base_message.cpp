@@ -7,6 +7,11 @@ QByteArray BaseMessage::getDigSig() const
     return digSig;
 }
 
+QByteArray BaseMessage::getData() const
+{
+    return msg_data;
+}
+
 BaseMessage::BaseMessage()
     : IMessage()
 
@@ -36,16 +41,19 @@ void BaseMessage::initFields(QLinkedList<QByteArray> &list)
 {
     protocol = list.takeFirst();
     msgType = list.takeFirst();
-    signer = BigNumber::fromByteArray(list.takeLast());
+    signer = BigNumber(list.takeLast());
     digSig = list.takeFirst();
 }
 
 void BaseMessage::initFields(QList<QByteArray> &list)
 {
+    auto list2 = list; // for debuuger
     protocol = list.takeFirst();
     msgType = list.takeFirst();
-    signer = BigNumber(list.takeFirst());
+    QByteArray signBytes = list.takeFirst();
+    signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
     digSig = list.takeFirst();
+    msg_data = list.takeFirst();
 }
 
 short BaseMessage::getFieldsCount() const
@@ -56,7 +64,8 @@ short BaseMessage::getFieldsCount() const
 QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
-    l << protocol << msgType << signer.serialize() << digSig;
+    QByteArray signeR = signer == 0 ? signer.toByteArray() : signer.toActorId();
+    l << protocol << msgType << signeR << digSig << msg_data;
     return l;
 }
 
@@ -106,9 +115,8 @@ QByteArray BaseMessage::concatenateAllData() const
     for (QByteArray d : serializedParams())
     {
         // in entry data for digSig calculation we don't need digSig field
-        if (d == digSig)
-            continue;
-        concatenatedData += d;
+        if (d != digSig)
+            concatenatedData += d;
     }
     return concatenatedData;
 }
@@ -121,6 +129,7 @@ QByteArray BaseMessage::serialize() const
 
     for (const QByteArray &param : serializedParams())
     {
+
         serialized += Utils::intToByteArray(param.size(), Messages::FIELD_SIZES);
         serialized += param;
     }
@@ -142,15 +151,12 @@ QByteArray BaseMessage::serialize(const QList<QByteArray> &list) const
 void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor)
 {
     signer = actor.getId();
-    digSig = actor.getKey()->sign(concatenateAllData()).toBase64();
-    //    Actor<KeyPublic> pubActor();
-    qDebug() << "pubk: " << actor.convertToPublic().getKey()->extractPublicKey();
+    digSig = actor.getKey()->sign(concatenateAllData());
 }
 
 bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const
 {
-    qDebug() << actor.getKey()->getPublicKey();
-    return actor.getKey()->verify(concatenateAllData(), QByteArray::fromBase64(digSig));
+    return actor.getKey()->verify(concatenateAllData(), digSig);
 }
 
 BaseMessage BaseMessage::deserializeMsg(const QByteArray serialized)
@@ -162,7 +168,12 @@ BaseMessage BaseMessage::deserializeMsg(const QByteArray serialized)
 
 const QByteArray BaseMessage::hash() const
 {
-    return Utils::calcKeccak(msgType);
+    return Utils::calcKeccak(msg_data);
+}
+
+void BaseMessage::init(const QByteArray &data)
+{
+    this->msg_data = data;
 }
 
 // Getters

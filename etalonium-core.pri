@@ -1,14 +1,34 @@
+DEFINES += SERVER_IP="\\\"51.68.181.52\\\""
+
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
+    $$PWD/dfs/controls/sources/subscribe_controller.cpp \
+    $$PWD/dfs/managers/headers/dfsnetmanager.cpp \
+    $$PWD/dfs/managers/headers/sender.cpp \
+    $$PWD/dfs/managers/sources/card_manager.cpp \
+    $$PWD/dfs/packages/headers/dclosing.cpp \
+    $$PWD/dfs/packages/headers/dumessage.cpp \
+    $$PWD/dfs/packages/headers/status.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
+    $$PWD/dfs/packages/sources/dfs_status.cpp \
+    $$PWD/dfs/packages/sources/dfs_changes.cpp \
+    $$PWD/dfs/packages/sources/message_struct.cpp \
+    $$PWD/dfs/packages/sources/req_frags_message.cpp \
+    $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
-    $$PWD/sources/crypt/crypt_manager.cpp \
-    $$PWD/sources/crypt/ecc/ecc.cpp \
-    $$PWD/sources/crypt/ecc/key_private.cpp \
-    $$PWD/sources/crypt/ecc/key_public.cpp \
+    $$PWD/dfs/types/sources/cardfile_interface.cpp \
+    $$PWD/sources/managers/chat.cpp \
+    $$PWD/sources/managers/chatmanager.cpp \
+    $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
+    $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
+    $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
+    $$PWD/sources/enc/crypt_manager.cpp \
+    $$PWD/sources/enc/key_private.cpp \
+    $$PWD/sources/enc/key_public.cpp \
+    $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/fileindex.cpp \
@@ -19,24 +39,32 @@ SOURCES += \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/tx_pair.cpp \
+    $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
+    $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/coin_service.cpp \
     $$PWD/sources/managers/contract_manager.cpp \
     $$PWD/sources/managers/tx_manager.cpp \
     $$PWD/sources/managers/thread_pool.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
+    $$PWD/sources/network/packages/base_message_response.cpp \
+    $$PWD/sources/network/packages/service/get_all_actor_message.cpp \
     $$PWD/sources/network/packages/service/list_connections.cpp \
     $$PWD/sources/network/socket_pair.cpp \
+    $$PWD/sources/profile/private_profile.cpp \
+    $$PWD/sources/profile/public_profile.cpp \
+    $$PWD/sources/resolve/dfs_resolver_service.cpp \
+    $$PWD/sources/resolve/resolve_manager.cpp \
+    $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
+    $$PWD/sources/utils/db_connector.cpp \
     $$PWD/sources/utils/utils.cpp \
-    $$PWD/sources/EllipticPoints.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
-    $$PWD/dfs/managers/headers/card_manager.cpp \
     $$PWD/dfs/managers/sources/dfsindex.cpp \
     $$PWD/dfs/managers/sources/storedindex.cpp \
     $$PWD/dfs/packages/sources/dfs_universal.cpp \
-    $$PWD/dfs/types/headers/coin_price.cpp \
+    $$PWD/dfs/types/sources/coin_price.cpp \
     $$PWD/dfs/types/sources/dfsitem.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
     $$PWD/dfs/types/sources/stored.cpp \
@@ -52,22 +80,43 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
     $$PWD/sources/network/packages/service/merged_block_message.cpp \
-    $$PWD/sources/network/resolver_service.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp
 
 HEADERS += \
+    $$PWD/dfs/controls/headers/subscribe_controller.h \
+    $$PWD/dfs/managers/headers/dfsnetmanager.h \
+    $$PWD/dfs/managers/headers/sender.h \
+    $$PWD/dfs/packages/headers/all.h \
+    $$PWD/dfs/packages/headers/dclosing.h \
+    $$PWD/dfs/packages/headers/dfs_message_interface.h \
+    $$PWD/dfs/packages/headers/dumessage.h \
+    $$PWD/dfs/packages/headers/message_struct.h \
+    $$PWD/dfs/packages/headers/req_frags_message.h \
+    $$PWD/dfs/packages/headers/status.h \
+    $$PWD/dfs/packages/headers/title_message.h \
+    $$PWD/headers/enc/algorithms/aes.h \
+    $$PWD/headers/enc/algorithms/blowfish_crypt.h \
+    $$PWD/headers/enc/algorithms/ecc/curves.h \
+    $$PWD/headers/enc/algorithms/ecc/eccmath.h \
+    $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
+    $$PWD/headers/enc/algorithms/xor_encrypt.h \
+    $$PWD/headers/enc/crypt_manager.h \
+    $$PWD/headers/enc/key_private.h \
+    $$PWD/headers/enc/key_public.h \
+    $$PWD/headers/enc/crypt_interface.h \
+    $$PWD/headers/enc/sign_interface.h \
+    $$PWD/headers/datastorage/searchfilters.h \
+    $$PWD/dfs/packages/headers/dfs_status.h \
+    $$PWD/dfs/packages/headers/dfs_changes.h \
+    $$PWD/dfs/types/headers/cardfile_interface.h \
+    $$PWD/headers/managers/chat.h \
+    $$PWD/headers/managers/chatmanager.h \
     $$PWD/headers/metatypes.h \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/dfs/packages/headers/ui_messages.h \
-    $$PWD/headers/crypt/crypt_manager.h \
-    $$PWD/headers/crypt/ecc/ecc.h \
-    $$PWD/headers/crypt/ecc/key_private.h \
-    $$PWD/headers/crypt/ecc/key_public.h \
-    $$PWD/headers/crypt/crypt_interface.h \
-    $$PWD/headers/crypt/sign_interface.h \
     $$PWD/headers/datastorage/index/actorindex.h \
     $$PWD/headers/datastorage/index/blockindex.h \
     $$PWD/headers/datastorage/index/fileindex.h \
@@ -79,15 +128,26 @@ HEADERS += \
     $$PWD/headers/datastorage/genesis_block.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/tx_pair.h \
+    $$PWD/headers/profile/profile.h \
+    $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \
+    $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/coin_service.h \
     $$PWD/headers/managers/contract_manager.h \
     $$PWD/headers/managers/tx_manager.h \
     $$PWD/headers/managers/thread_pool.h \
     $$PWD/headers/managers/logs_manager.h \
+    $$PWD/headers/network/packages/base_message_response.h \
+    $$PWD/headers/network/packages/service/get_all_actor_message.h \
     $$PWD/headers/network/socket_pair.h \
+    $$PWD/headers/profile/private_profile.h \
+    $$PWD/headers/profile/public_profile.h \
+    $$PWD/headers/resolve/dfs_resolver_service.h \
+    $$PWD/headers/resolve/resolve_manager.h \
+    $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
+    $$PWD/headers/utils/db_connector.h \
     $$PWD/headers/utils/list_container.h \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \
@@ -118,13 +178,13 @@ HEADERS += \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/response_messages.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/resolver_service.h \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/utils/utils.h
+    $$PWD/headers/utils/utils.h \
+    $$PWD/test.h
 
-linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
+linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android!ios: DESTDIR = Etalonium
 android: DESTDIR = android-build
@@ -143,6 +203,8 @@ contains(QMAKE_SPEC_T,.*win32.*) {
 GIT_COMMIT_CORE = $$system(git --git-dir .git --work-tree $$PWD describe --always --tags)
 GIT_BRANCH_CORE = $$system(git --git-dir .git --work-tree $$PWD symbolic-ref --short HEAD)
 QMAKE_SUBSTITUTES += preconfig.h.in
+
+include(../etalonium-libs/etalonium-libs.pri)
 
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.12+")
 lessThan(QT_MINOR_VERSION, 12): error("requires Qt 5.12+")

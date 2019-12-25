@@ -1,14 +1,14 @@
 #include "network/socket_pair.h"
 
-SocketPair::SocketPair(QObject *parent)
-    : QObject(parent)
+SocketPair::SocketPair()
 {
 
     id = "0";
+    first = "0.0.0.0";
+    second = 0;
 }
 
-SocketPair::SocketPair(const std::string &f, const quint16 &s, QObject *parent)
-    : QObject(parent)
+SocketPair::SocketPair(const std::string &f, const quint16 &s)
 {
     first = f;
     second = s;
@@ -16,8 +16,7 @@ SocketPair::SocketPair(const std::string &f, const quint16 &s, QObject *parent)
     id = "0";
 }
 
-SocketPair::SocketPair(const SocketPair &v, QObject *parent)
-    : QObject(parent)
+SocketPair::SocketPair(const SocketPair &v)
 {
     first = v.first;
     second = v.second;
@@ -39,7 +38,7 @@ const SocketPair SocketPair::operator=(const SocketPair &v)
     first = v.first;
     second = v.second;
     id = v.id;
-    return this;
+    return *this;
 }
 
 bool SocketPair::operator==(const SocketPair &v) const
@@ -55,4 +54,12 @@ BigNumber SocketPair::getId() const
 void SocketPair::setId(const QByteArray &value)
 {
     id = value;
+}
+
+bool SocketPair::isEmpty() const
+{
+    if ((first == "0.0.0.0") && (second == 0) && (id == "0"))
+        return true;
+    else
+        return false;
 }

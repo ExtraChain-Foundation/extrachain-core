@@ -3,8 +3,9 @@
 
 #include <QString>
 #include <QByteArray>
+#include <QDateTime>
 #include "datastorage/actor.h"
-#include "crypt/sign_interface.h"
+#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/utils.h"
 
@@ -36,16 +37,14 @@ private:
     BigNumber receiver;
     BigNumber amount; // coin amount
     long long date;
-    QByteArray data;           // additional payload field
-    BigNumber token;           // token contract address
-    BigNumber senderBalance;   // sender balance at the time the transaction was created
-    BigNumber receiverBalance; // receiver balance at the time the transaction was created
-    BigNumber prevBlock;       // last block id at the moment of tx creation
-    int gas;                   // security and reward param
-    int hop;            // number of the nodes, through which the transaction will pass before
-                        // aprovement
-    QByteArray hash;    // hash from all fields
-    BigNumber approver; // address of the transaction approver.
+    QByteArray data;     // additional payload field
+    BigNumber token;     // token contract address
+    BigNumber prevBlock; // last block id at the moment of tx creation
+    int gas;             // security and reward param
+    int hop;             // number of the nodes, through which the transaction will pass before
+                         // aprovement
+    QByteArray hash;     // hash from all fields
+    BigNumber approver;  // address of the transaction approver.
     QByteArray digSig;
 
 private:
@@ -55,7 +54,7 @@ private:
      */
     void calcHash();
 
-protected:
+public:
     /**
      * @brief Concatenates all fields that are used for digSig calculation
      * Override in subclasses
@@ -103,10 +102,27 @@ public:
     long long getDate() const;
     void setDate(long long value);
 
+    void setToken(const BigNumber &value);
+
+    void setData(const QByteArray &value);
+
 signals:
     void ProveMe();
     void Approved();
     void NotApproved();
+
+public:
+    /**
+     * @brief 1.1 -> 1.1 * 10e18 in BigNumber
+     * @param amount
+     */
+    static BigNumber visibleToAmount(QByteArray amount);
+
+    /**
+     * @brief 1 * 10e18 from BigNumber to number -> 1
+     * @param number
+     */
+    static QString amountToVisible(BigNumber number);
 };
 
 inline bool operator<(const Transaction &l, const Transaction &r)

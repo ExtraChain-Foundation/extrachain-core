@@ -8,13 +8,74 @@
 #include <QJsonObject>
 #include <QList>
 #include <QString>
-//#include <hex.h>
+#include "utils/bignumber.h"
 #include "utils/Keccak256.h"
+#include "network/socket_pair.h"
+#include <QStringList>
+#include <string>
+#include <sstream>
+namespace Network {
+static const unsigned long FRAGMENT_STACK_SIZE = 1024;
+static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
+struct DataStruct
+{
+    QByteArray msg;
+    SocketPair receiver;
+};
+}
+
+namespace TMP {
+static QByteArray *companyActorId = new QByteArray("0");
+};
+
+struct indexRow
+{
+    indexRow(std::string _hash, long long pos, short use);
+    std::string hash = "";
+    long long currentPosition;
+    bool used;
+};
+class FileList
+{
+
+public:
+    FileList();
+    ~FileList();
+    void add(QByteArray hash, QByteArray data);
+    void remove(QByteArray element);
+    QByteArray operator[](int value);
+    QByteArray at(QByteArray hash);
+    QByteArray at(int value);
+    int getIndexSize();
+    QByteArray getHash(int value);
+
+    void setFileList(const QFile &value);
+
+private:
+    QList<indexRow>::iterator find(QByteArray key);
+    QList<indexRow> indexList;
+    QFile fileList;
+
+    void init();
+    void checkForDelete();
+    bool check(QByteArray hash); // IF HASH HAVE -> END
+    const QByteArray DATA_EMPTY = "null";
+    const int FIELD_SIZE = 4;
+};
+
 namespace net {
 
-static QByteArray readNetManagerIndetificator()
+static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
+    file.open(QIODevice::ReadOnly);
+    QByteArray id = file.readAll();
+    file.close();
+    return id;
+}
+static QByteArray dfsreadNetManagerIdentificator()
+{
+    QFile file(".dsettings");
     file.open(QIODevice::ReadOnly);
     QByteArray id = file.readAll();
     file.close();
@@ -36,13 +97,93 @@ QByteArray toByteArray(State state);
 QString toString(State state);
 State convertToDFSstate(QByteArray state);
 } // namespace storedSpace
+
+namespace Resolver {
+enum Lifetime
+{
+    SHORT = 0,
+    LONG = 1
+};
+enum Type
+{
+    BLOCKCHAIN = 0,
+    ACTORS = 1,
+    DFS = 2,
+    GENERAL = 3
+};
+}
+
 namespace Config {
 
 // Message pattern for qDebug (see
 // http://doc.qt.io/qt-5/qtglobal.html#qSetMessagePattern)
 const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{message}";
 
+const int NECESSARY_SAME_TX = 1;
+
 namespace DataStorage {
+    static const std::string cardTableName = "Items";
+    static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
+        + " ("
+          "path    TEXT PRIMARY KEY NOT NULL, "
+          "date    INT              NOT NULL, "
+          "type    INT              NOT NULL, "
+          "subtype INT                      , "
+          "hash    TEXT             NOT NULL);";
+    static const std::string lsTableName = "Counters";
+    static const std::string lastSectionTableCreation = "CREATE TABLE IF NOT EXISTS " + lsTableName
+        + " ("
+          "type    INT  PRIMARY KEY NOT NULL, "
+          "counter TEXT             NOT NULL );";
+    static const std::string chatIdTableName = "ChatId";
+    static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
+        + " ("
+          "chatId  TEXT              NOT NULL, "
+          "key     TEXT              NOT NULL, "
+          "owner   TEXT              NOT NULL );";
+
+    static const std::string chatUserTableName = "Users";
+    static const std::string chatUserStorage = "CREATE TABLE IF NOT EXISTS " + chatUserTableName
+        + " ("
+          "userId  TEXT  PRIMARY KEY NOT NULL);";
+
+    static const std::string chatMessageTableName = "Chat";
+    static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
+        + " ("
+          "userId   TEXT              NOT NULL, "
+          "message  BLOB              NOT NULL, "
+          "type     TEXT              NOT NULL, "
+          "session  TEXT              NOT NULL, "
+          "date     TEXT              NOT NULL );";
+    static const std::string storedTableName = "Stored";
+    static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
+        + " ("
+          "hash  TEXT PRIMARY KEY NOT NULL, "
+          "data  BLOB             NOT NULL, "
+          "range TEXT             NOT NULL, "
+          "type  INT              NOT NULL, "
+          "uid   TEXT             NOT NULL, "
+          "sign  BLOB             NOT NULL, "
+          "prevHash TEXT          NOT NULL);";
+
+    static const std::string subscribeFollowerTableName = "Subscribers";
+    static const std::string tableFollowerCreation = "CREATE TABLE IF NOT EXISTS "
+        + subscribeFollowerTableName
+        + " ("
+          "subscriber    TEXT PRIMARY KEY NOT NULL,"
+          "sign TEXT             NOT NULL)";
+    static const std::string subscribeColumnTableName = "Subscriptions";
+    static const std::string tableMySubscribeCreation = "CREATE TABLE IF NOT EXISTS "
+        + subscribeColumnTableName
+        + " ("
+          "subscription    TEXT PRIMARY KEY NOT NULL);";
+
+    static const std::string chatInviteTableName = "Invite";
+    static const std::string chatInviteCreation = "CREATE TABLE IF NOT EXISTS " + chatInviteTableName
+        + " ("
+          "chatId  TEXT PRIMARY KEY NOT NULL, "
+          "message BLOB             NOT NULL, "
+          "owner   TEXT             NOT NULL  );";
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
@@ -60,7 +201,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QString PROTOCOL_VERSION = "ExtraCoin_v1";
+    static const QString PROTOCOL_VERSION = "ExtraCoin_v2";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
@@ -84,11 +225,6 @@ static const int BLOCK_IS_NOT_VALID = 201;
 static const int BLOCKS_CANT_MERGE = 202;
 static const int BLOCKS_ARE_EQUAL = 203;
 
-// TX
-static const int TRANSACTION_IS_EMPTY = 301;
-static const int TRANSACTION_WRONG_SENDER_BALANCE = 302;
-static const int TRANSACTION_WRONG_RECEIVER_BALANCE = 303;
-
 // Mem and Block index
 static const int NO_BLOCKS = 401;
 } // namespace Errors
@@ -96,6 +232,7 @@ static const int NO_BLOCKS = 401;
 namespace Serialization {
 
 // Delimiters //
+static const int DFS_FIELD_SIZE = 8;
 static const int DEFAULT_FIELD_SIZE = 4;
 
 static const QByteArray DEFAULT_FIELD_SPLITTER = ":";
@@ -140,17 +277,15 @@ QStringList deserializeString(const QString &serialized);
 QList<QString> deserialize(const QString &serialized, char delimiter);
 QByteArray serializeStored(const QList<QByteArray> list);
 QList<QByteArray> desirializeStored(const QByteArray &serialize);
-QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size);
-QList<QByteArray> universalDesirialize(const QByteArray &serialized, const int &fiels_size);
+QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
+QList<QByteArray> universalDeserialize(const QByteArray &serialized,
+                                       const int &fiels_size = DEFAULT_FIELD_SIZE);
 } // namespace Serialization
 
 namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
-
-// user data
-static const QString USER_DATA_FILE_NAME = "user.private";
 
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
@@ -172,7 +307,12 @@ int compare(const QByteArray &one, const QByteArray &two);
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 } // namespace Utils
-
+namespace ChatStorage {
+// keystore/chats/[chat ID]/[sessionID]/ users,key etc.
+static const QByteArray STORED_CHATS = "data/";
+static const std::string KEYSTORE_CHATS = "keystore/chats/";
+// static const QByteArray SESSIONS = "/sessions/";
+}
 namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";
@@ -200,7 +340,10 @@ static const QString KEY_FILTER = "*.key";
 
 QString makeKeyFileName(QString name);
 } // namespace KeyStore
-
+namespace SmartContractStorage {
+static const QString CONTRACTSTORE = "keystore/contracts/";
+static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
+}
 namespace FileSystem {
 void createFolderIfNotExist(QString path);
 /**
@@ -228,6 +371,7 @@ enum class TxParam
     UserReceiver,
     UserApprover,
     UserSenderOrReceiver,
+    UserSenderOrReceiverOrToken,
     User, // sender or receiver or approver
     Hash,
     Null

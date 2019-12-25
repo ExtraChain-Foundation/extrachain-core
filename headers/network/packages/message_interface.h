@@ -4,15 +4,15 @@
 #include <QByteArray>
 
 #include "datastorage/actor.h"
-#include "crypt/ecc/key_private.h"
-#include "crypt/ecc/key_public.h"
+#include "enc/key_private.h"
+#include "enc/key_public.h"
 
 namespace Messages {
 /**
  * @brief The IMessage interface
  * Every new message should implement this interface
  */
-const int FIELD_SIZES = 4;
+const int FIELD_SIZES = 8;
 class IMessage : public QObject
 {
     Q_OBJECT
