@@ -592,6 +592,9 @@ void Dfs::requestFile(const QString &filePath)
     //    qDebug() << "File is exists";
     //     return;
     // }
+    if (dfsNetManager->isLoading(filePath))
+        return;
+
     DFSMessage::DfsRequest dfsRequest(filePath); //
     sender->sendDfsMessage(dfsRequest);
 }
@@ -952,7 +955,9 @@ void Dfs::searchTmp(bool reqFile)
             QString fileName = dirIt.filePath().chopped(4);
             tmpFiles << fileName;
             if (reqFile)
+            {
                 requestFile(fileName);
+            }
         }
     }
 

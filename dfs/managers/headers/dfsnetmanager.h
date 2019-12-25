@@ -47,6 +47,7 @@ public:
               const SocketPair &receiver = SocketPair());
 
     void setDfs(Dfs *value);
+    bool isLoading(const QString &fileName);
 
 signals:
     void newMessage(Network::DataStruct data);

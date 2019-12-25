@@ -20,18 +20,21 @@ DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QBy
 DFSMessage::req_frags_message::req_frags_message(const QByteArray &serialized)
     : DUMessage(dfsMessageType::requestFragments)
 {
-    QList<QByteArray> list = deserialize(serialized);
-    if (dfsMessageType::requestFragments != list.takeFirst().toInt())
-    {
-        qDebug() << "[type_title]"
-                 << "incorrect message type";
-    }
-    if (list.size() != FIELDS_COUNT)
+    QList<QByteArray> list = deserialize(serialized)
+
+    if (list.size() != FIELDS_COUNT + 1)
     {
         qDebug() << "title_message_struct << incorrect input data";
         filePath = "-1";
         return;
     }
+
+    if (dfsMessageType::requestFragments != list.takeFirst().toInt())
+    {
+        qDebug() << "[type_title]"
+                 << "incorrect message type";
+    }
+
     filePath = QString::fromUtf8(list.takeFirst());
     listFrag = list.takeFirst();
 }
