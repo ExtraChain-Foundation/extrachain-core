@@ -83,10 +83,11 @@ public slots:
     QByteArray CreateNewChat();                                       //+
 
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
-    void SendMessage(QByteArray chatId, QByteArray message);  //+
-    void createDialogue(QByteArray actorId);                  //+
-    void requestChatList();                                   //+
-    void requestChat(QByteArray chatId);                      //-
+    void sendChatFile(QByteArray chatId, QString filePath);
+    void SendMessage(QByteArray chatId, QByteArray message); //+
+    void createDialogue(QByteArray actorId);                 //+
+    void requestChatList();                                  //+
+    void requestChat(QByteArray chatId);                     //-
     void chatRemoved(QByteArray chatId);
     void changes(QString path);
     void process();
