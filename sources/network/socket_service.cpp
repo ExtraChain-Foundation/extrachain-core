@@ -237,7 +237,10 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
 {
     // msg->get protocol -> end socket
     // netManager list connections
-    QByteArray checkProtocol = Serialization::universalDeserialize(msg, 8).at(0);
+    QByteArrayList msgList = Serialization::universalDeserialize(msg, 8);
+    QByteArray checkProtocol;
+    if (msgList.length() > 0)
+     checkProtocol = msgList.at(0);
     //    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
     //    {
     //        this->removeMe();

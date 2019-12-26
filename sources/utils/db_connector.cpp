@@ -30,7 +30,7 @@ bool DBConnector::open(std::string name)
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc)
     {
-        qDebug() << "Failed to open DB:" << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
         return false;
     }
     else
@@ -111,7 +111,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
                        << "): " << query.c_str();
     if (rs != SQLITE_DONE)
     {
-        qDebug() << "Query error: " << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "error: " << sqlite3_errmsg(db);
         return {};
     }
 
