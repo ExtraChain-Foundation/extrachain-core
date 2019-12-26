@@ -34,15 +34,19 @@ std::string CardManager::getLastFileName(const std::string &userId, DfsStruct::T
         return "";
     }
 
-    std::string query = "SELECT counter FROM " + Config::DataStorage::lsTableName + " WHERE type='"
-        + std::to_string(type) + "';";
+    std::string query = "SELECT path FROM " + Config::DataStorage::cardTableName + " WHERE type='"
+        + std::to_string(type) + "' ORDER by path DESC LIMIT 1;";
     std::vector<DBRow> res = dbConnect.select(query);
 
     if (res.empty())
         return "-1";
 
-    std::string counter = res[0]["counter"];
-    return counter.empty() ? "-1" : counter;
+    std::string path = res[0]["path"];
+    QString tempPath = QString::fromStdString(path);
+    tempPath = tempPath.mid(tempPath.lastIndexOf("/") + 1);
+    path = tempPath.toStdString();
+    qDebug() << "LAST FILE NAME:" << path.c_str();
+    return path.empty() ? "-1" : path;
 }
 
 QStringList CardManager::getAllFiles(const QByteArray &userId)

@@ -289,6 +289,41 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     //                       actorId);
 }
 
+void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
+{
+    Chat temp(chatId, _actorIndex, _accController);
+
+    QString fileName = QUrl(filePath).toLocalFile();
+
+    QFile file(fileName);
+    if (!file.exists())
+    {
+        qDebug() << "Cant send file";
+        return;
+    }
+
+    QString newFileName =
+        chatId + "/" + temp.getSession().toByteArray() + "/" + QFileInfo(fileName).fileName();
+    QString newFileNameData = "data/" + temp.getOwner() + "/chats/" + newFileName;
+    if (!file.copy(newFileNameData))
+    {
+        qDebug() << "Cant copy file";
+        return;
+    }
+
+    emit send(DfsStruct::DfsSave::StaticNonStored, newFileName, "", DfsStruct::chat,
+              DfsStruct::SubType::undef);
+
+    QByteArray message = "{ \"type\":\"file\",\"message\":\"" + newFileNameData.toLatin1() + "\"}";
+    qDebug() << message;
+    emit sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
+                     DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
+                     { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId,
+                       "message", temp.encryptMessage(message), "type", "blob", "session",
+                       temp.getSession().toByteArray(), "date",
+                       QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
+}
+
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
     Chat temp(chatId, _actorIndex, _accController);

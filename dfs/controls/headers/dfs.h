@@ -40,11 +40,12 @@ private:
     void saveToDFS(const QString &path, const QByteArray &data,
                    const DfsStruct::Type &type = DfsStruct::Type::images,
                    const DfsStruct::SubType &subType = DfsStruct::SubType::subpost);
-    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType);
+    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType, bool needStored);
     void saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type);
     bool appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                       const DfsStruct::SubType &subType = DfsStruct::SubType::undef);
-    QStringList returnDiffs(const QString &odin, const QString &odinson);
+    void cardDiffRequest(const QString &oldCard, const QString &newCard);
+    void loadFilesFromCard(const QString &card);
     void getDFSStatus();
     void signalConnection();
 
@@ -52,7 +53,7 @@ public slots:
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
-    DFSNetManager *dfsNetManager;
+    DFSNetManager *dfsNetManager = nullptr;
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
     ~Dfs();
 
@@ -77,6 +78,7 @@ signals:
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
                          const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
     void connectToServer();
+    void networkCreated();
 
 public slots:
     void init();
@@ -93,6 +95,8 @@ public slots:
     void startDFS();
     void requestFile(const QString &filePath);
     void searchTmp(bool reqFile = false);
+    void requestCardById(QByteArray userId);
+    void requestAllCards();
 
 private:
     QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);

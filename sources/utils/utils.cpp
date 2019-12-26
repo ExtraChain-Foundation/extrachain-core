@@ -321,11 +321,20 @@ QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, cons
 
 QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serialized, const int &fiels_size)
 {
+    if (serialized.isEmpty() || serialized.length() <= fiels_size)
+    {
+        return {};
+    }
+
     QList<QByteArray> list = {};
     int pos = 0;
     while (pos < serialized.size())
     {
-        int count = Utils::qByteArrayToInt(serialized.mid(pos, fiels_size));
+        bool ok = true;
+        int count = serialized.mid(pos, fiels_size)
+                        .toInt(&ok); // Utils::qByteArrayToInt(serialized.mid(pos, fiels_size));
+        if (!ok)
+            return list;
         pos += fiels_size;
         QByteArray el = serialized.mid(pos, count);
         pos += count;

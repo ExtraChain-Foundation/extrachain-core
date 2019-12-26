@@ -1,5 +1,6 @@
 #include "utils/db_connector.h"
 
+#include <QDir>
 #include <iostream>
 
 DBConnector::DBConnector()
@@ -25,30 +26,39 @@ DBConnector::~DBConnector()
 
 bool DBConnector::open(std::string name)
 {
-    this->name = name;
+    this->m_file = name;
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc)
     {
-        qDebug() << "Failed to open DB:" << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
         return false;
     }
     else
+    {
+        m_open = true;
         return true;
+    }
 }
 
 bool DBConnector::close()
 {
+    if (!m_open)
+        return true;
+
     int rc = sqlite3_close_v2(db);
     if (rc)
     {
-        // qDebug() << sqlite3_errmsg(db);
+        qDebug() << sqlite3_errmsg(db);
         return false;
     }
     else
+    {
+        m_open = false;
         return true;
+    }
 }
 
-std::vector<DBRow> DBConnector::select(std::string query)
+std::vector<DBRow> DBConnector::select(std::string query) // std::pair with status
 {
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
@@ -97,10 +107,11 @@ std::vector<DBRow> DBConnector::select(std::string query)
         rs = sqlite3_step(stmt);
     }
 
-    qDebug().nospace() << "Query(" << (rs == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
+    qDebug().nospace() << file().c_str() << "(" << (rs == SQLITE_DONE ? "true" : "false")
+                       << "): " << query.c_str();
     if (rs != SQLITE_DONE)
     {
-        qDebug() << "Query error: " << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "error: " << sqlite3_errmsg(db);
         return {};
     }
 
@@ -206,7 +217,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
     rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
     if (rc != SQLITE_OK)
     {
-        qDebug().nospace() << "Query(false):" << query.c_str();
+        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
         qDebug() << "prepare failed:" << sqlite3_errmsg(db);
     }
     else
@@ -217,7 +228,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
         if (rc != SQLITE_OK)
         {
             qDebug() << "bind failed:" << sqlite3_errmsg(db);
-            qDebug() << "Query(false):" << query.c_str();
+            qDebug() << file().c_str() << "(false):" << query.c_str();
             return false;
         }
         else
@@ -226,15 +237,27 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
             if (rc != SQLITE_DONE)
             {
                 qDebug() << "execution failed: " << sqlite3_errmsg(db);
-                qDebug() << "Query(false):" << query.c_str();
+                qDebug() << file().c_str() << "(false):" << query.c_str();
                 return false;
             }
         }
     }
 
-    qDebug() << "Query(true):" << query.c_str();
+    qDebug() << file().c_str() << "(true):" << query.c_str();
     sqlite3_finalize(stmt);
     return true;
+}
+
+std::string DBConnector::file() const
+{
+    // QString dbFile = sqlite3_db_filename(db, nullptr);
+    // dbFile = dbFile.remove(0, QDir::currentPath().length());
+    return m_file;
+}
+
+bool DBConnector::isOpen() const
+{
+    return m_open;
 }
 
 bool DBConnector::query(std::string query)
@@ -243,7 +266,8 @@ bool DBConnector::query(std::string query)
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
 
-    qDebug().nospace() << "Query(" << (res == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
+    qDebug().nospace() << file().c_str() << "(" << (res == SQLITE_DONE ? "true" : "false")
+                       << "): " << query.c_str();
     if (res != SQLITE_DONE)
         qDebug() << "Query error: " << sqlite3_errmsg(db);
 

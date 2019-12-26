@@ -15,7 +15,8 @@ typedef std::unordered_map<std::string, std::string> DBRow;
 class DBConnector
 {
 private:
-    std::string name;
+    std::string m_file;
+    bool m_open = false;
     sqlite3 *db;
 
 public:
@@ -36,6 +37,8 @@ public:
     bool tableExists(std::string table);
     bool dropTable(std::string table);
     bool insertWithData(std::string query, QByteArray data);
+    std::string file() const;
+    bool isOpen() const;
 
 public:
     bool query(std::string query);

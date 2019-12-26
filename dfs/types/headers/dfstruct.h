@@ -68,7 +68,8 @@ enum Type
     card = 8,
     unknown = 9,
     contract = 10,
-    stored = 11
+    stored = 11,
+    error = 100
 };
 
 Type convertToDFType(QByteArray);
@@ -79,6 +80,7 @@ enum DfsSave
 {
     File,
     Static,
+    StaticNonStored,
     Network,
     Db
 };
