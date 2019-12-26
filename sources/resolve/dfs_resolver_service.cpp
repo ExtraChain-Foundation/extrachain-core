@@ -31,7 +31,7 @@ void DFSResolverService::finishWork()
 
 QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long to)
 {
-    qDebug() << "checkFragStatus" << dataChecker.size();
+    // qDebug() << "checkFragStatus" << dataChecker.size();
     QByteArray emptyFrags;
     unsigned long s = ULONG_MAX;
     unsigned long e = ULONG_MAX;
@@ -66,7 +66,7 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 
         // 5:8 14 16:54 66
     }
-    qDebug() << "emptyFrags:" << emptyFrags;
+    // qDebug() << "emptyFrags:" << emptyFrags;
     return emptyFrags;
 }
 
@@ -277,7 +277,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
                 }
 
                 QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
-                if (QFile::exists(message.filePath) && message.filePath.right(7) != ".stored")
+                if (QFile::exists(message.filePath)
+                    && (message.filePath.right(7) != ".stored" && message.filePath.right(5) != "/root"))
                 {
                     finishWork();
                     return;
@@ -299,7 +300,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         case dfsMessageType::fileDataMessage:
         {
-            qDebug() << "[fileDataMessage:]";
+            // qDebug() << "[fileDataMessage:]";
             DFSMessage::dfs_message message(data);
             if (message.data.isEmpty())
             {
@@ -384,7 +385,7 @@ bool DFSResolverService::registerTitle(const QString &tmpPath, DFSMessage::title
         if (createTempFile(tmpPath, title.fileSize, title.dataHash))
         {
             dataChecker.assign(title.pckgsAmount, false);
-            qDebug() << "[ready to receive file]" << title.filePath;
+            qDebug() << "Ready to receive file:" << title.filePath;
         }
         else
         {

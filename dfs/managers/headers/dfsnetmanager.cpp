@@ -11,7 +11,7 @@ bool DFSNetManager::isLoading(const QString &fileName)
     qDebug() << "isLoading";
     for (const auto &resolver : dfsResolvers)
     {
-        qDebug() << fileName << resolver->getTitle().filePath;
+        // qDebug() << fileName << resolver->getTitle().filePath;
 
         if (fileName == resolver->getTitle().filePath)
             return true;
@@ -24,7 +24,7 @@ bool DFSNetManager::isLoading(const QString &fileName)
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
     : NetManager(accountList, actInd)
 {
-    serverPort = isDebug ? 2225 : 2225;
+    serverPort = isDebug ? 2224 : 2225;
 }
 
 DFSNetManager::~DFSNetManager()

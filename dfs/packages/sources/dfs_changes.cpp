@@ -10,15 +10,15 @@ DFSMessage::DfsChanges::DfsChanges(const QByteArray &serialized)
 {
     QList<QByteArray> list = deserialize(serialized);
 
-    if (dfsMessageType::changesMessage != list.takeFirst().toInt())
-    {
-        qDebug() << "[DfsChanges] Incorrect message type";
-    }
-
-    if (list.size() != FIELDS_COUNT)
+    if (list.size() != FIELDS_COUNT + 1)
     {
         qDebug() << "[DfsChanges] Incorrect input data";
         return;
+    }
+
+    if (dfsMessageType::changesMessage != list.takeFirst().toInt())
+    {
+        qDebug() << "[DfsChanges] Incorrect message type";
     }
 
     filePath = QString::fromUtf8(list.takeFirst());
