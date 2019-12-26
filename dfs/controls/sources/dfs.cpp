@@ -679,6 +679,11 @@ void Dfs::requestFile(const QString &filePath)
     //    qDebug() << "File is exists";
     //     return;
     // }
+    if (dfsNetManager == nullptr)
+    {
+        qDebug() << "Dog, dfsNetManager == nullptr";
+        return;
+    }
     if (dfsNetManager->isLoading(filePath))
         return;
     qDebug() << "Request file:" << filePath;

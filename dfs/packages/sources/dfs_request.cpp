@@ -12,14 +12,14 @@ DFSMessage::DfsRequest::DfsRequest(const QByteArray &serialized)
 {
     QList<QByteArray> list = deserialize(serialized);
 
-    if (dfsMessageType::requestMessage != list.takeFirst().toInt())
-    {
-        qDebug() << "[DfsRequest] incorrect message type";
-    }
-    if (list.size() != FIELDS_COUNT)
+    if (list.size() != FIELDS_COUNT + 1)
     {
         qDebug() << "Request message struct: incorrect input data";
         return;
+    }
+    if (dfsMessageType::requestMessage != list.takeFirst().toInt())
+    {
+        qDebug() << "[DfsRequest] incorrect message type";
     }
 
     filePath = QString::fromUtf8(list.takeFirst());

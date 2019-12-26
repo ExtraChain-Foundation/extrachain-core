@@ -11,7 +11,7 @@ bool DFSNetManager::isLoading(const QString &fileName)
     qDebug() << "isLoading";
     for (const auto &resolver : dfsResolvers)
     {
-        qDebug() << fileName << resolver->getTitle().filePath;
+        // qDebug() << fileName << resolver->getTitle().filePath;
 
         if (fileName == resolver->getTitle().filePath)
             return true;
