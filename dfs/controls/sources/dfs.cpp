@@ -375,7 +375,7 @@ void Dfs::initDFSNetManager()
     ThreadPool::addThread(dfsNetManager);
 }
 
-void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType)
+void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType, bool needStored)
 {
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray sType = DfsStruct::toByteArray(type);
@@ -385,8 +385,9 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
         return;
 
     bool stored = false;
-    if (type == DfsStruct::post || type == DfsStruct::event || type == DfsStruct::service
-        || type == DfsStruct::contract || type == DfsStruct::chat)
+    if (needStored
+        && (type == DfsStruct::post || type == DfsStruct::event || type == DfsStruct::service
+            || type == DfsStruct::contract || type == DfsStruct::chat))
     {
         if (!createStored(dfsPath, userId, type))
         {
@@ -416,7 +417,8 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
         }
     }
 
-    sender->sendFile(dfsPath + DfsStruct::STORED_FILE_NAME, type, SocketPair());
+    if (stored)
+        sender->sendFile(dfsPath + DfsStruct::STORED_FILE_NAME, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 
 #ifdef ETALONIUM_CLIENT
@@ -1024,7 +1026,10 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
         saveToDFS(file, data, type, subType);
         break;
     case DfsStruct::DfsSave::Static:
-        saveStaticFile(file, type, subType);
+        saveStaticFile(file, type, subType, true);
+        break;
+    case DfsStruct::DfsSave::StaticNonStored:
+        saveStaticFile(file, type, subType, false);
         break;
     case DfsStruct::DfsSave::Network:
         saveFN(file + DfsStruct::FILE_IDENTIFICATOR, file, type);

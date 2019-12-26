@@ -40,7 +40,7 @@ private:
     void saveToDFS(const QString &path, const QByteArray &data,
                    const DfsStruct::Type &type = DfsStruct::Type::images,
                    const DfsStruct::SubType &subType = DfsStruct::SubType::subpost);
-    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType);
+    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType, bool needStored);
     void saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type);
     bool appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                       const DfsStruct::SubType &subType = DfsStruct::SubType::undef);

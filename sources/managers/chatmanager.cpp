@@ -311,7 +311,8 @@ void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
         return;
     }
 
-    emit send(DfsStruct::DfsSave::Static, newFileName, "", DfsStruct::chat, DfsStruct::SubType::undef);
+    emit send(DfsStruct::DfsSave::StaticNonStored, newFileName, "", DfsStruct::chat,
+              DfsStruct::SubType::undef);
 
     QByteArray message = "{ \"type\":\"file\",\"message\":\"" + newFileNameData.toLatin1() + "\"}";
     qDebug() << message;

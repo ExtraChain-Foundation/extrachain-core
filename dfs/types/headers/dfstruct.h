@@ -80,6 +80,7 @@ enum DfsSave
 {
     File,
     Static,
+    StaticNonStored,
     Network,
     Db
 };
