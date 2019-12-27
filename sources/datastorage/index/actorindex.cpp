@@ -88,7 +88,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
 
         if (!actor.profile().getProfile().isEmpty())
             resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
-        else if (actor.getAccount() != 0)
+        else if (actor.getAccount() != 0 && actor.getAccount() != 2)
         {
             Messages::GetActorMessage msg(actorId);
             resolveManager->registrateMsg(msg.serialize(), getActorMessage);
@@ -260,7 +260,7 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != 0 && resolveManager != nullptr)
+        if (actor.getAccount() != 0 && actor.getAccount() != 2 && resolveManager != nullptr)
         {
             Messages::GetActorMessage msg(BigNumber(id.toLatin1()));
             resolveManager->registrateMsg(msg.serialize(), getActorMessage);
@@ -332,7 +332,8 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
 
-        if (getActor(id).getAccount() != 0 && QFile::exists(profilePath))
+        auto actor = getActor(id);
+        if (actor.getAccount() != 0 && actor.getAccount() != 2 && QFile::exists(profilePath))
             return 0;
 
         return Errors::FILE_ALREADY_EXISTS;
