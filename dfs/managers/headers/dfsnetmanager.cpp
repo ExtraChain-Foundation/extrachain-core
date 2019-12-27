@@ -229,6 +229,7 @@ void DFSNetManager::checkMyIdentificator()
                 emit el->removeMe();
         }
     });
+    dfs->requestAllCards();
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }

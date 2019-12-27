@@ -130,7 +130,7 @@ void ChatManager::parseInvite()
             continue;
         }
 
-        Chat temp(key, _actorIndex, _accController);
+        Chat temp(chatId, _actorIndex, _accController);
         temp.saveChatKey(_accController->getMainActor()->getKey()->decrypt(key), BigNumber(0), owner);
         // temp.sendMessage("{ \"type\": \"first\" }");
 
