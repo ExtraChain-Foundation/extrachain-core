@@ -130,7 +130,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
 void *SocketService::distMsg(const QByteArray data, const SocketPair socketData)
 {
     emit msgReady(data, socketData);
-    QCoreApplication::processEvents();
+    //QCoreApplication::processEvents();
     return nullptr;
 }
 
