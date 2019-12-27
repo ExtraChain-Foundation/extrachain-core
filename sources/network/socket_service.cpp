@@ -227,13 +227,21 @@ void SocketService::continueDoRead()
         {
             pendMsg += Utils::intToByteArray(pendMsgSize, 8) + pckg;
             counter++;
-            if (counter == 5)
+            if (counter == 2)
+            {
+                if (Messages::RESPONSE.indexOf(pendMsg) != -1)
+                {
+                    p = 1;
+                }
+            }
+            if (counter == 5 + p)
             {
                 SocketPair receiver(this->getAddress().toStdString(), this->getPort());
                 receiver.setId(this->getID().toByteArray());
                 this->gotMessage(pendMsg, receiver);
                 pendMsg = "";
                 counter = 0;
+                p = 0;
             }
         }
         pendMsgSize = -1;
