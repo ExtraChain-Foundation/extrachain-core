@@ -205,7 +205,7 @@ void SocketService::doRead()
     {
         QByteArray data = socket->read(8);
         pendMsgSize = Utils::qByteArrayToInt(data);
-        if ((pendMsgSize != 0))
+        if ((pendMsgSize != -1))
         {
             continueDoRead();
         }
@@ -227,7 +227,7 @@ void SocketService::continueDoRead()
         {
             pendMsg += Utils::intToByteArray(pendMsgSize, 8) + pckg;
             counter++;
-            if (counter == 4)
+            if (counter == 5)
             {
                 SocketPair receiver(this->getAddress().toStdString(), this->getPort());
                 receiver.setId(this->getID().toByteArray());
