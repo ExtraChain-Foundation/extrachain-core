@@ -197,7 +197,7 @@ void SocketService::setActive(bool active)
 
 void SocketService::doRead()
 {
-    if (pendMsgSize > 0)
+    if (pendMsgSize >= 0)
     {
         continueDoRead();
     }
@@ -225,8 +225,7 @@ void SocketService::continueDoRead()
         }
         else
         {
-            QByteArray ax = socket->read(pendMsgSize);
-            pendMsg += Utils::intToByteArray(pendMsgSize, 8) + ax;
+            pendMsg += Utils::intToByteArray(pendMsgSize, 8) + pckg;
             counter++;
             if (counter == 4)
             {
@@ -237,7 +236,7 @@ void SocketService::continueDoRead()
                 counter = 0;
             }
         }
-        pendMsgSize = 0;
+        pendMsgSize = -1;
         if (socket->bytesAvailable() >= 8)
         {
             doRead();

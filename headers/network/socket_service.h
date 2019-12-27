@@ -54,7 +54,7 @@ private:
     int reconnectTry = 0;
     QByteArray pendMsg;
     int counter = 0;
-    int pendMsgSize = 0;
+    int pendMsgSize = -1;
 
 public:
     SocketService();
