@@ -136,6 +136,8 @@ public:
 
     QFile getFile() const;
 
+    void setActorIndex(ActorIndex *value);
+
 public slots:
     /**
      * @brief process

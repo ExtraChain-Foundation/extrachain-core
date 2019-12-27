@@ -12,6 +12,11 @@ void DFSResolverService::setTitle(const DFSMessage::title_message &value)
     title = value;
 }
 
+void DFSResolverService::setActorIndex(ActorIndex *value)
+{
+    actorIndex = value;
+}
+
 DFSResolverService::DFSResolverService(Lifetime lifetime, QObject *parent)
     : QObject(parent)
 {
@@ -344,7 +349,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     //    handlerFileMutex.lock();
     QString dirPath = path.mid(0, path.lastIndexOf("/") + 1);
     QDir dir;
-    dir.mkdir(dirPath);
+    dir.mkpath(dirPath);
     file.setFileName(path);
     if (!file.open(QIODevice::ReadWrite | QIODevice::Truncate))
     {

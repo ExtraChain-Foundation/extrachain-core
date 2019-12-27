@@ -115,6 +115,7 @@ public:
      * @return resultCode, 0 - actor is saved
      */
     int addActor(const Actor<KeyPublic> &actor);
+    QByteArrayList allActors();
     void handleNewAllActors(const QByteArrayList actors);
 
 public:

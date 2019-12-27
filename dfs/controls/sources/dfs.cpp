@@ -658,6 +658,10 @@ void Dfs::process()
 
 void Dfs::startDFS()
 {
+    QByteArrayList actors = actorIndex->allActors();
+    for (const QByteArray &actor : actors)
+        initDFS(actor);
+
     initDFSNetManager();
     if (sender == nullptr)
     {

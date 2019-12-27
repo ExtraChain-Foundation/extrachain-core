@@ -106,20 +106,8 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
 {
     if (accController->getAccountCount() == 0)
         return;
-    QByteArrayList result;
-    QDir folder(folderPath);
-    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString &folderName : listFolder)
-    {
-        QDir folderActor(folderPath + "/" + folderName);
-        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
-        for (const QString &nameActor : listActor)
-        {
-            QFile file(folderPath + "/" + folderName + "/" + nameActor);
-            if (file.exists())
-                result.append(nameActor.toUtf8());
-        }
-    }
+
+    QByteArrayList result = allActors();
     if (!result.isEmpty())
     {
         resolveManager->sendMessageResponse(Serialization::universalSerialize(result, 4),
@@ -390,6 +378,28 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     }
     return result;
 }
+
+QByteArrayList ActorIndex::allActors()
+{
+    QByteArrayList result;
+    QDir folder(folderPath);
+    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (const QString &folderName : listFolder)
+    {
+        QDir folderActor(folderPath + "/" + folderName);
+        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
+        for (const QString &nameActor : listActor)
+        {
+            QFile file(folderPath + "/" + folderName + "/" + nameActor);
+            if (file.exists())
+                result.append(nameActor.toUtf8());
+        }
+    }
+
+    return result;
+}
+
 void ActorIndex::removeAll()
 {
     qDebug() << "Clearing file index: " << folderPath;

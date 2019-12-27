@@ -97,6 +97,7 @@ void DFSNetManager::createDFSResolver(Network::DataStruct ds)
 {
     DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
     resolver->setDfs(dfs);
+    resolver->setActorIndex(actorIndex);
     resolver->setTask(ds.msg, ds.receiver);
     dfsResolvers.append(resolver);
     connectResolver(dfsResolvers.last());
@@ -144,6 +145,7 @@ void DFSNetManager::process()
 {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
     uResolver->setDfs(dfs);
+    uResolver->setActorIndex(actorIndex);
 
     connectResolver(uResolver);
 
