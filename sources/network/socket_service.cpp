@@ -121,7 +121,9 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        QByteArray _wtSok = Serialization::universalSerialize({ data }, 8);
+        QList<QByteArray> d;
+        d.append(data);
+        QByteArray _wtSok = Serialization::universalSerialize(d, 8);
 
         socket->write(_wtSok, _wtSok.size());
     }
