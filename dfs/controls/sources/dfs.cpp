@@ -641,6 +641,8 @@ DfsStruct::Type Dfs::getFileType(const QString &filePath)
 
     if (!res.empty())
     {
+        if (res[0]["type"].empty())
+            return DfsStruct::Type::error;
         return DfsStruct::Type(std::stoi(res[0]["type"]));
     }
 
