@@ -56,7 +56,7 @@ public:
     BigNumber operator+(long long);
     BigNumber operator-(const BigNumber &);
     BigNumber operator-(long long);
-    BigNumber operator*(const BigNumber &);
+    BigNumber operator*(const BigNumber &) const;
     BigNumber operator*(long long);
     BigNumber operator/(const BigNumber &);
     BigNumber operator/(long long);

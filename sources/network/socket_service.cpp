@@ -154,7 +154,7 @@ void SocketService::process()
                 [this](QAbstractSocket::SocketError socketError) {
                     Q_UNUSED(socketError)
                     qDebug().nospace().noquote()
-                        << "Socker error " << socketError << " for " << address << ":" << port;
+                        << "Socket error " << socketError << " for " << address << ":" << port;
                     if (this->socket->state() != QTcpSocket::ConnectedState)
                         this->reconnect();
                 });

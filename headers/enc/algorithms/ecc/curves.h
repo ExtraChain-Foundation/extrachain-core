@@ -17,12 +17,12 @@ namespace secp256k1 {
 }
 struct curve
 {
-    BigNumber p = secp256k1::p;
-    BigNumber a = secp256k1::a;
-    BigNumber b = secp256k1::b;
-    EllipticPoint g = secp256k1::g;
-    BigNumber n = secp256k1::n;
-    BigNumber h = secp256k1::h;
+    const BigNumber p = secp256k1::p;
+    const BigNumber a = secp256k1::a;
+    const BigNumber b = secp256k1::b;
+    const EllipticPoint g = secp256k1::g;
+    const BigNumber n = secp256k1::n;
+    const BigNumber h = secp256k1::h;
 };
 }
 #endif // CURVES_H
