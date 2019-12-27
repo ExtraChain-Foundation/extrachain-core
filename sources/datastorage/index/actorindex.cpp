@@ -90,7 +90,6 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
             resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
         else if (actor.getAccount() != 0)
         {
-            removeActor(actorId);
             Messages::GetActorMessage msg(actorId);
             resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         }
@@ -263,7 +262,6 @@ QByteArrayList ActorIndex::getProfile(QString id)
     {
         if (actor.getAccount() != 0 && resolveManager != nullptr)
         {
-            removeActor(id.toLatin1());
             Messages::GetActorMessage msg(BigNumber(id.toLatin1()));
             resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         }
@@ -329,19 +327,18 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
     qDebug() << "Saving the file:" << path;
 
-    if (file.exists())
-    {
-        qDebug() << "Can't save the file" << path << "(File already exits)";
-        return Errors::FILE_ALREADY_EXISTS;
-    }
-
+    //    if (file.exists())
+    //    {
+    //        qDebug() << "Can't save the file" << path << "(File already exits)";
+    //        return Errors::FILE_ALREADY_EXISTS;
+    //    }
+    if (!file.exists())
+        this->records++;
     if (file.open(QIODevice::WriteOnly))
     {
         file.write(data);
         file.flush();
         file.close();
-
-        this->records++;
 
         return 0;
     }
