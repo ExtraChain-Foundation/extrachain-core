@@ -511,12 +511,12 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
 
     if (!QFile::exists(dfsChanges.filePath))
     {
-        sender->sendDfsMessage(dfsChanges);
+        // sender->sendDfsMessage(dfsChanges);
         return false;
     }
     if (!QFile::exists(dfsChanges.filePath + ".stored"))
     {
-        sender->sendDfsMessage(dfsChanges);
+        // sender->sendDfsMessage(dfsChanges);
         return false;
     }
 

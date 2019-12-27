@@ -40,12 +40,11 @@ private:
     QByteArray getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
     QByteArray pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
     // paths end
-    BigNumber findCurrentSession();                                                //+
-    void InitializeAllPaths();                                                     //+
-    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
-                                                                                   //+
-    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {});   //+
-    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);              //+
+    BigNumber findCurrentSession();                                              //+
+    void InitializeAllPaths();                                                   //+
+                                                                                 //+
+    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
+    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
 
 public:
     Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
@@ -82,6 +81,7 @@ public:
     void removeAllChatData();
     QByteArray encryptMessage(QByteArray message); //+
     QByteArray decryptMessage(QByteArray message);
+    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
 
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager
