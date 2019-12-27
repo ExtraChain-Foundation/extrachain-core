@@ -190,7 +190,7 @@ void DFSNetManager::removeResolver()
     }
     if (resolver != nullptr)
         emit resolver->finished();
-    if (dfsResolvers.size() > 0)
+    if (titleVector.size() > 0)
     {
         Network::DataStruct ds = titleVector.front();
         titleVector.pop();
