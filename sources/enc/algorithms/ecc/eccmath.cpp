@@ -55,7 +55,8 @@ EllipticPoint ECC::negatePoint(ECC::curve curve, EllipticPoint point)
 EllipticPoint ECC::add(ECC::curve curve, EllipticPoint a, EllipticPoint b)
 {
     BigNumber m(0);
-    assert(isOnCurve(curve, a));
+    bool aioc = isOnCurve(curve,a);
+//    assert(isOnCurve(curve, a));
     assert(isOnCurve(curve, b));
     if (a.isZero())
         return b;

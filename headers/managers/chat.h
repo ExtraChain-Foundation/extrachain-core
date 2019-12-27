@@ -51,8 +51,8 @@ public:
     Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
          BigNumber sessionNumb = -1); //+
     Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
-         AccountController* accountController, QList<QByteArray> users, QByteArray ownerId = "-1"); //+
-    Chat(const Chat& tempChat);                                                                     //+
+         AccountController* accountController, QList<QByteArray> users, QByteArray _ownerId = "-1"); //+
+    Chat(const Chat& tempChat);                                                                      //+
     ~Chat();
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-
@@ -63,7 +63,6 @@ public:
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
                           QByteArray _ownerId = "-1"); //+
     QByteArray sendMessage(QByteArray message);        //+
-    void receiveMessage(QByteArray message);
     // getters setters
     QByteArray getChatId() const;                    //+
     QByteArray getEncryptionKey() const;             //+

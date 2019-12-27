@@ -7,16 +7,17 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_actorIndex = actorIndex;
     this->_accountController = accountController;
+    this->_encryptionKey = unloadChatKey();
     if (sessionNumb != -1)
         this->_currentSession = sessionNumb;
     else
         this->_currentSession = getActualCurrentSession();
-    this->_encryptionKey = unloadChatKey();
+
     InitializeAllPaths();
 }
 
 Chat::Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
-           AccountController* accountController, QList<QByteArray> users, QByteArray ownerId)
+           AccountController* accountController, QList<QByteArray> users, QByteArray _ownerId)
 {
 
     this->_chatId = chatId;
@@ -28,8 +29,9 @@ Chat::Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorInd
     //    else
     this->_currentSession = currentSession;
     this->_actorIndex = actorIndex;
+    this->ownerID = _ownerId;
     InitializeAllPaths();
-    createNewSession(key, users, ownerId);
+    createNewSession(key, users, _ownerId);
 }
 
 Chat::Chat(const Chat& tempChat)
@@ -272,7 +274,7 @@ void Chat::removeAllChatData()
 
 QByteArray Chat::getPathCurrentChat()
 {
-    return ChatStorage::STORED_CHATS + _currentActorId + "/chats/" + _chatId + "/";
+    return ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/";
 }
 
 // QByteArray Chat::getPathMyChatsKeyStore()
@@ -282,8 +284,8 @@ QByteArray Chat::getPathCurrentChat()
 
 QByteArray Chat::getPathToUsers()
 {
-    return ChatStorage::STORED_CHATS + _currentActorId + "/chats/" + _chatId + "/"
-        + _currentSession.toByteArray() + "/";
+    return ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/" + _currentSession.toByteArray()
+        + "/";
 }
 
 BigNumber Chat::findCurrentSession()
@@ -329,8 +331,8 @@ bool Chat::createNewSession(QByteArray key, QList<QByteArray> users, QByteArray 
         return false;
     }
     saveChatKey(key, this->_currentSession, _ownerId);
-    if (!isUserExist(_currentActorId, users))
-        users.append(_currentActorId);
+    if (!isUserExist(ownerID, users))
+        users.append(ownerID);
     loadUsers(users);
     //    QFile data(pathToSession(this->_currentSession) + "/session");
     //    data.open(QIODevice::WriteOnly);
@@ -423,49 +425,6 @@ QByteArray Chat::sendMessage(QByteArray message)
     //        return currentMessageByteArray;
 
     return "";
-}
-
-void Chat::receiveMessage(QByteArray message)
-{
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _currentActorId.toStdString() + "/chats/"
-                   + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
-    if (DB.createTable(Config::DataStorage::sessionChatMessageStorage))
-    {
-        DBRow row;
-        row.insert({ "userId", _currentActorId.toStdString() });
-        row.insert({ "message", encryptMessage(message).toStdString() });
-        row.insert({ "type", "blob" });
-        row.insert({ "session", _currentSession.toByteArray().toStdString() });
-        row.insert({ "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()).toStdString() });
-        DB.insert(Config::DataStorage::chatMessageTableName, row);
-    }
-    //    QFile file(pathToSession(_currentSession));
-    //    if (file.open(QIODevice::Append))
-    //    {
-
-    //        file.write(Serialization::universalSerialize({ message }));
-
-    //        file.close();
-
-    //        //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
-    //    }
-    //    else
-
-    //        qDebug()
-    //        << "[Warning] Cannot open file with session to send message. receiveMessage, Chat";
-    //    QFile file(pathToSession(_currentSession) + "/session");
-    //    if (file.open(QIODevice::Append))
-    //    {
-
-    //        message = encryptMessage(message) + "\n";
-    //        file.write(message);
-
-    //        file.close();
-    //        //   emit sendDataToBlockchain(getPathToSessions() + getMyCurrentSession());
-    //    }
-    //    else
-
-    //        qDebug() << "[Warning] Cannot open file with session to send message. SendMessage, Chat";
 }
 
 QByteArray Chat::getChatId() const
@@ -583,8 +542,7 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
 
 QByteArray Chat::pathToSession(BigNumber sessionNumber)
 {
-    return ChatStorage::STORED_CHATS + _currentActorId + "/" + _chatId + "/" + sessionNumber.toByteArray()
-        + "/";
+    return ChatStorage::STORED_CHATS + ownerID + "/" + _chatId + "/" + sessionNumber.toByteArray() + "/";
 }
 
 Chat::~Chat()

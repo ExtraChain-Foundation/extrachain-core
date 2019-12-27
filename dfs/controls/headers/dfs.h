@@ -30,7 +30,7 @@ class Dfs : public QObject
 private:
     // send from nodeManger
     AccountController *accountControler;
-    ActorIndex *actorIndex;
+    ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
     // DFSResolver *resolver;

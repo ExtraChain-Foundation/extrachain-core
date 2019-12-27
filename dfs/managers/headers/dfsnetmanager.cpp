@@ -93,6 +93,17 @@ void DFSNetManager::disconnectResolver(DFSResolverService *resolver)
     disconnect(resolver, &DFSResolverService::TaskFinished, this, &DFSNetManager::removeResolver);
 }
 
+void DFSNetManager::createDFSResolver(Network::DataStruct ds)
+{
+    DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
+    resolver->setDfs(dfs);
+    resolver->setActorIndex(actorIndex);
+    resolver->setTask(ds.msg, ds.receiver);
+    dfsResolvers.append(resolver);
+    connectResolver(dfsResolvers.last());
+    ThreadPool::addThread(dfsResolvers.last());
+}
+
 NetManager *DFSNetManager::getNetManager()
 {
     return this->getMe();
@@ -134,6 +145,7 @@ void DFSNetManager::process()
 {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
     uResolver->setDfs(dfs);
+    uResolver->setActorIndex(actorIndex);
 
     connectResolver(uResolver);
 
@@ -154,12 +166,15 @@ void DFSNetManager::uiReconnect()
 
 void DFSNetManager::titleArrived(Network::DataStruct ds)
 {
-    DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
-    resolver->setDfs(dfs);
-    resolver->setTask(ds.msg, ds.receiver);
-    dfsResolvers.append(resolver);
-    connectResolver(dfsResolvers.last());
-    ThreadPool::addThread(dfsResolvers.last());
+    if (dfsResolvers.size() >= DFS_RESOLVERS_POOL_SIZE)
+    {
+        titleVector.push(ds);
+        return;
+    }
+    else
+    {
+        createDFSResolver(ds);
+    }
 }
 
 void DFSNetManager::removeResolver()
@@ -177,6 +192,12 @@ void DFSNetManager::removeResolver()
     }
     if (resolver != nullptr)
         emit resolver->finished();
+    if (titleVector.size() > 0)
+    {
+        Network::DataStruct ds = titleVector.front();
+        titleVector.pop();
+        createDFSResolver(ds);
+    }
 }
 
 void DFSNetManager::removeConnection()

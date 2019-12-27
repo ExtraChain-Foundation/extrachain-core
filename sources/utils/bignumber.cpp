@@ -91,7 +91,7 @@ BigNumber BigNumber::operator-(long long number)
     return ret;
 }
 
-BigNumber BigNumber::operator*(const BigNumber &bigNumber)
+BigNumber BigNumber::operator*(const BigNumber &bigNumber) const
 {
     BigNumber ret(m_data * bigNumber.data());
     return ret;

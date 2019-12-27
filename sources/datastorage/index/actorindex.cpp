@@ -85,9 +85,20 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
                                             receiver);
         //        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
         //        receiver);
+
         if (!actor.profile().getProfile().isEmpty())
             resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
+        else if (actor.getAccount() != 0 && actor.getAccount() != 2)
+        {
+            Messages::GetActorMessage msg(actorId);
+            resolveManager->registrateMsg(msg.serialize(), getActorMessage);
+        }
         //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    }
+    else
+    {
+        Messages::GetActorMessage msg(actorId);
+        resolveManager->registrateMsg(msg.serialize(), getActorMessage);
     }
 }
 
@@ -95,20 +106,8 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
 {
     if (accController->getAccountCount() == 0)
         return;
-    QByteArrayList result;
-    QDir folder(folderPath);
-    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString &folderName : listFolder)
-    {
-        QDir folderActor(folderPath + "/" + folderName);
-        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
-        for (const QString &nameActor : listActor)
-        {
-            QFile file(folderPath + "/" + folderName + "/" + nameActor);
-            if (file.exists())
-                result.append(nameActor.toUtf8());
-        }
-    }
+
+    QByteArrayList result = allActors();
     if (!result.isEmpty())
     {
         resolveManager->sendMessageResponse(Serialization::universalSerialize(result, 4),
@@ -249,9 +248,10 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != 0)
+        if (actor.getAccount() != 0 && actor.getAccount() != 2 && resolveManager != nullptr)
         {
-            removeActor(id.toLatin1());
+            Messages::GetActorMessage msg(BigNumber(id.toLatin1()));
+            resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         }
 
         return QByteArrayList();
@@ -315,19 +315,24 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
     qDebug() << "Saving the file:" << path;
 
+    QString profilePath = path + "/profile/" + id.toActorId() + ".profile";
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
+
+        auto actor = getActor(id);
+        if (actor.getAccount() != 0 && actor.getAccount() != 2 && QFile::exists(profilePath))
+            return 0;
+
         return Errors::FILE_ALREADY_EXISTS;
     }
-
+    if (!file.exists())
+        this->records++;
     if (file.open(QIODevice::WriteOnly))
     {
         file.write(data);
         file.flush();
         file.close();
-
-        this->records++;
 
         return 0;
     }
@@ -373,6 +378,28 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     }
     return result;
 }
+
+QByteArrayList ActorIndex::allActors()
+{
+    QByteArrayList result;
+    QDir folder(folderPath);
+    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (const QString &folderName : listFolder)
+    {
+        QDir folderActor(folderPath + "/" + folderName);
+        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
+        for (const QString &nameActor : listActor)
+        {
+            QFile file(folderPath + "/" + folderName + "/" + nameActor);
+            if (file.exists())
+                result.append(nameActor.toUtf8());
+        }
+    }
+
+    return result;
+}
+
 void ActorIndex::removeAll()
 {
     qDebug() << "Clearing file index: " << folderPath;

@@ -28,7 +28,7 @@ class ActorIndex : public QObject
 
 private:
     AccountController *accController;
-    ResolveManager *resolveManager;
+    ResolveManager *resolveManager = nullptr;
     BigNumber records = 0;
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
@@ -115,6 +115,7 @@ public:
      * @return resultCode, 0 - actor is saved
      */
     int addActor(const Actor<KeyPublic> &actor);
+    QByteArrayList allActors();
     void handleNewAllActors(const QByteArrayList actors);
 
 public:

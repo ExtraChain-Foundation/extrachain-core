@@ -63,12 +63,14 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
 
 void ChatManager::InitializeChatList()
 {
-    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    //    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     _chatList.clear();
-    for (QString chat : chatList)
+    DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+    std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
+    for (DBRow temp : chats)
     {
-        Chat *temp = new Chat(chat.toLocal8Bit(), _actorIndex, _accController);
-        _chatList.push_front(temp);
+        Chat *temp_ = new Chat(QByteArray::fromStdString(temp["chatId"]), _actorIndex, _accController);
+        _chatList.push_front(temp_);
     }
 }
 
@@ -178,7 +180,7 @@ ChatManager::ChatManager(AccountController *accController, ActorIndex *actorInde
     this->_accController = accController;
     // QDir().mkpath(getPathToMyChats());
     // QDir().mkpath(ChatStorage::KEYSTORE_CHATS.c_str());
-    //  InitializeChatList();
+    // InitializeChatList();
 }
 
 void ChatManager::msgReceiver(const Messages::BaseMessage &msg)

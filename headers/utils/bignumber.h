@@ -15,11 +15,11 @@
 
 #include "gmpxx.h"
 
-#ifdef QT_DEBUG
-#define UPDATE_DEBUG() qdata = m_data.get_str(16).c_str();
-#else
+//#ifdef QT_DEBUG
+//#define UPDATE_DEBUG() qdata = m_data.get_str(16).c_str();
+//#else
 #define UPDATE_DEBUG()
-#endif
+//#endif
 
 /**
  * Data type for big hex numbers for addresses
@@ -56,7 +56,7 @@ public:
     BigNumber operator+(long long);
     BigNumber operator-(const BigNumber &);
     BigNumber operator-(long long);
-    BigNumber operator*(const BigNumber &);
+    BigNumber operator*(const BigNumber &) const;
     BigNumber operator*(long long);
     BigNumber operator/(const BigNumber &);
     BigNumber operator/(long long);

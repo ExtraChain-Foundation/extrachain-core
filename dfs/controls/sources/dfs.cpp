@@ -658,6 +658,10 @@ void Dfs::process()
 
 void Dfs::startDFS()
 {
+    QByteArrayList actors = actorIndex->allActors();
+    for (const QByteArray &actor : actors)
+        initDFS(actor);
+
     initDFSNetManager();
     if (sender == nullptr)
     {
@@ -1039,6 +1043,7 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
 
 void Dfs::searchTmp(bool reqFile)
 {
+    requestAllCards();
     QDir::setCurrent("etalonium-data");
     QDirIterator dirIt("data", QDirIterator::Subdirectories);
     QSet<QString> tmpFiles;
@@ -1073,8 +1078,10 @@ void Dfs::requestCardById(QByteArray userId)
 
 void Dfs::requestAllCards()
 {
-    const QStringList allUserIds =
-        QDir(DfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    if (actorIndex == nullptr)
+        return;
+
+    const QByteArrayList allUserIds = actorIndex->allActors();
 
     for (const QString &id : allUserIds)
         requestFile("data/" + id + "/root");

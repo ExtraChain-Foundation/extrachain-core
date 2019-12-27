@@ -29,5 +29,7 @@ const QByteArray GetActorMessage::serialize() const
 void GetActorMessage::deserialize(const QByteArray &serilaized)
 {
     QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
+    if (list.isEmpty())
+        qDebug() << "get actor message error";
     this->actorId = BigNumber(list.at(0));
 }
