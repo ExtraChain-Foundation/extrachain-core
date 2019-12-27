@@ -75,9 +75,11 @@ void SubscribeController::initSubscribe()
     dbChatInvite.createTable(Config::DataStorage::chatInviteCreation);
     dbChatInvite.close();
 
-    send(DfsStruct::DfsSave::Static, "chatinvite", "", DfsStruct::service, DfsStruct::SubType::undef);
-    send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service, DfsStruct::SubType::undef);
-    send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service, DfsStruct::SubType::undef);
+    QTimer::singleShot(6000, [this]() {
+        send(DfsStruct::DfsSave::Static, "chatinvite", "", DfsStruct::service, DfsStruct::SubType::undef);
+        send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service, DfsStruct::SubType::undef);
+        send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service, DfsStruct::SubType::undef);
+    });
 }
 
 void SubscribeController::setNodeManager(NodeManager *value)

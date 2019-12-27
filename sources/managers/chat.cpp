@@ -157,7 +157,17 @@ QByteArray Chat::getCurrentActorId() const
 
 QList<QByteArray> Chat::getAllUsers()
 {
+    QList<QByteArray> result;
     QByteArray pathToUsers = ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/users";
+
+    if (!QFile::exists(pathToUsers))
+    {
+        if (ownerID == _currentActorId)
+            return {};
+        result << _currentActorId << ownerID;
+        return result;
+    }
+
     DBConnector DB(pathToUsers.toStdString());
     DB.createTable(Config::DataStorage::chatUserStorage);
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::chatUserTableName);
@@ -166,7 +176,6 @@ QList<QByteArray> Chat::getAllUsers()
         qDebug() << "UsersChatIsEmpty";
         return QByteArrayList();
     }
-    QList<QByteArray> result;
     for (DBRow tmp : res)
     {
         result.append(tmp["userId"].c_str());
