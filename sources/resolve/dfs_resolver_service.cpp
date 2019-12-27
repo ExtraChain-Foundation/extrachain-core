@@ -350,6 +350,8 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     {
         // Take actorid of file owner
         QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
+        if (pathList.length() < 2)
+            return false;
         qDebug() << "Create temp file: actor - " << BigNumber(pathList.at(PathStruct::aId));
         Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(pathList.at(PathStruct::aId)));
 
