@@ -327,11 +327,16 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
     qDebug() << "Saving the file:" << path;
 
-    //    if (file.exists())
-    //    {
-    //        qDebug() << "Can't save the file" << path << "(File already exits)";
-    //        return Errors::FILE_ALREADY_EXISTS;
-    //    }
+    QString profilePath = path + "/profile/" + id.toActorId() + ".profile";
+    if (file.exists())
+    {
+        qDebug() << "Can't save the file" << path << "(File already exits)";
+
+        if (getActor(id).getAccount() != 0 && QFile::exists(profilePath))
+            return 0;
+
+        return Errors::FILE_ALREADY_EXISTS;
+    }
     if (!file.exists())
         this->records++;
     if (file.open(QIODevice::WriteOnly))
