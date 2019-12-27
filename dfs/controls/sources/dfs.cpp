@@ -1043,7 +1043,6 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
 
 void Dfs::searchTmp(bool reqFile)
 {
-    requestAllCards();
     QDir::setCurrent("etalonium-data");
     QDirIterator dirIt("data", QDirIterator::Subdirectories);
     QSet<QString> tmpFiles;
