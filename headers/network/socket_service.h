@@ -52,6 +52,8 @@ private:
     int _blockSize = 0;
     //    QByteArray buffer;
     int reconnectTry = 0;
+    QByteArray pendMsg;
+    int counter = 0;
     int pendMsgSize = 0;
 
 public:

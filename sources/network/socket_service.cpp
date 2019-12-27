@@ -121,9 +121,9 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        QList<QByteArray> d;
-        d.append(data);
-        QByteArray _wtSok = Serialization::universalSerialize(d, 8);
+        //        QList<QByteArray> d;
+        //        d.append(data);
+        QByteArray _wtSok = data /*Serialization::universalSerialize(d, 8)*/;
 
         socket->write(_wtSok, _wtSok.size());
     }
@@ -180,8 +180,9 @@ void SocketService::establishConnection()
     qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
+    QByteArray idb = IDENTIFICATOR + net::readNetManagerIdentificator();
 
-    this->distMsg(IDENTIFICATOR + net::readNetManagerIdentificator(),
+    this->distMsg(Utils::intToByteArray(idb.size(), 8) + idb,
                   SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
@@ -200,7 +201,7 @@ void SocketService::doRead()
     {
         continueDoRead();
     }
-    if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 16)
+    if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
     {
         QByteArray data = socket->read(8);
         pendMsgSize = Utils::qByteArrayToInt(data);
@@ -216,7 +217,7 @@ void SocketService::continueDoRead()
     {
         QByteArray pckg = socket->read(pendMsgSize);
         //    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
-        pendMsgSize = 0;
+
         if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
         {
             QByteArray b = pckg.mid(IDENTIFICATOR.size());
@@ -224,11 +225,20 @@ void SocketService::continueDoRead()
         }
         else
         {
-            SocketPair receiver(this->getAddress().toStdString(), this->getPort());
-            receiver.setId(this->getID().toByteArray());
-            this->gotMessage(pckg, receiver);
+            QByteArray ax = socket->read(pendMsgSize);
+            pendMsg += Utils::intToByteArray(pendMsgSize, 8) + ax;
+            counter++;
+            if (counter == 4)
+            {
+                SocketPair receiver(this->getAddress().toStdString(), this->getPort());
+                receiver.setId(this->getID().toByteArray());
+                this->gotMessage(pendMsg, receiver);
+                pendMsg = "";
+                counter = 0;
+            }
         }
-        if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 16)
+        pendMsgSize = 0;
+        if (socket->bytesAvailable() >= 8)
         {
             doRead();
         }
