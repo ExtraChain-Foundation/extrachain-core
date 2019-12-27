@@ -85,9 +85,21 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
                                             receiver);
         //        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
         //        receiver);
+
         if (!actor.profile().getProfile().isEmpty())
             resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
+        else if (actor.getAccount() != 0)
+        {
+            removeActor(actorId);
+            Messages::GetActorMessage msg(actorId);
+            resolveManager->registrateMsg(msg.serialize(), getActorMessage);
+        }
         //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    }
+    else
+    {
+        Messages::GetActorMessage msg(actorId);
+        resolveManager->registrateMsg(msg.serialize(), getActorMessage);
     }
 }
 
@@ -249,9 +261,11 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != 0)
+        if (actor.getAccount() != 0 && resolveManager != nullptr)
         {
             removeActor(id.toLatin1());
+            Messages::GetActorMessage msg(BigNumber(id.toLatin1()));
+            resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         }
 
         return QByteArrayList();
