@@ -10,11 +10,13 @@ class SocketService;
 #include "dfs/packages/headers/all.h"
 #include "resolve/dfs_resolver_service.h"
 #include "utils/utils.h"
+static const int DFS_RESOLVERS_POOL_SIZE = 5;
 class Dfs;
 class DFSNetManager : public NetManager
 {
     Q_OBJECT
 private:
+    std::queue<Network::DataStruct> titleVector;
     Dfs *dfs;
     DFSResolverService *uResolver;
     QList<DFSResolverService *> dfsResolvers;
@@ -39,6 +41,7 @@ private:
     //    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler) override;
     void connectResolver(DFSResolverService *resolver);
     void disconnectResolver(DFSResolverService *resolver);
+    void createDFSResolver(Network::DataStruct ds);
 
 public:
     NetManager *getNetManager();
