@@ -121,7 +121,9 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        QByteArray _wtSok = Serialization::universalSerialize({ data }, 8);
+        QList<QByteArray> d;
+        d.append(data);
+        QByteArray _wtSok = Serialization::universalSerialize(d, 8);
 
         socket->write(_wtSok, _wtSok.size());
     }
@@ -130,7 +132,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
 void *SocketService::distMsg(const QByteArray data, const SocketPair socketData)
 {
     emit msgReady(data, socketData);
-    //QCoreApplication::processEvents();
+    // QCoreApplication::processEvents();
     return nullptr;
 }
 
@@ -149,7 +151,7 @@ void SocketService::process()
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
         connect(socket, &QTcpSocket::readyRead, this, &SocketService::doRead, Qt::QueuedConnection);
         connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
-        connect(this, &SocketService::msgReady, this, &SocketService::sendMsg);
+        connect(this, &SocketService::msgReady, this, &SocketService::sendMsg, Qt::QueuedConnection);
         connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
                 [this](QAbstractSocket::SocketError socketError) {
                     Q_UNUSED(socketError)
@@ -240,7 +242,7 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
     QByteArrayList msgList = Serialization::universalDeserialize(msg, 8);
     QByteArray checkProtocol;
     if (msgList.length() > 0)
-     checkProtocol = msgList.at(0);
+        checkProtocol = msgList.at(0);
     //    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
     //    {
     //        this->removeMe();
