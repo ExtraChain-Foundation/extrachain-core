@@ -363,7 +363,7 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
 void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
 {
     BaseMessage msg(msgType);
-    msg.init(data);
+    msg.setMsgData(data);
 
     //    emit sendMsg(msg.serialize(), receiver);
     distMessage(msg.serialize(), receiver);
@@ -444,7 +444,7 @@ void NetManager::removeConnection()
     checkConnectionsStatus();
 }
 
-void NetManager::signMessage(IMessage &message) const
+void NetManager::signMessage(BaseMessage &message) const
 {
     message.calcDigSig(*accounts->getMainActor());
 }

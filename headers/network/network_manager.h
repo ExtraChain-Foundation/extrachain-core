@@ -161,7 +161,7 @@ protected:
      * @brief signMessage
      * @param message
      */
-    void signMessage(Messages::IMessage &message) const;
+    void signMessage(Messages::BaseMessage &message) const;
     /**
      * @brief calcHash
      * @param message

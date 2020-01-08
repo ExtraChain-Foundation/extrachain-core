@@ -107,8 +107,9 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msgType)
 {
 
-    Messages::BaseMessage msg(msgType);
-    msg.init(data);
+    Messages::BaseMessage msg;
+    msg.type = msgType;
+    msg.data = data;
 
     if (msgType != Messages::ACTOR_MESSAGE)
     {
@@ -134,14 +135,15 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
                                          const QByteArray &requestHash, const SocketPair &receiver)
 
 {
-    Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
-    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE
-        /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
+    Messages::BaseMessageResponse rmsg;
+    rmsg.data = data;
+    rmsg.type = msgType;
+    rmsg.dataHash = requestHash;
+    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;
     networkManager->distMessage(rmsg.serialize(), receiver);
-    //    emit socketSendMsg(rmsg.serialize(), receiver);
 }
 
 void ResolveManager::taskFinished()

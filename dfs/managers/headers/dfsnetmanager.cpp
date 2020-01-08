@@ -135,7 +135,7 @@ void DFSNetManager::appendSocket(SocketService *socket)
 void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
 {
     Messages::BaseMessage msg(msgType);
-    msg.init(data);
+    msg.setMsgData(data);
     QByteArray message = msg.serialize();
     std::for_each(socketsList.begin(), socketsList.end(),
                   [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });

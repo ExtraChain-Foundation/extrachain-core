@@ -70,9 +70,6 @@ SOURCES += \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
     $$PWD/sources/network/packages/base_message.cpp \
-    $$PWD/deprecated/sources/network/packages/service/block_approved_message.cpp \
-    $$PWD/deprecated/sources/network/packages/service/chat_message.cpp \
-    $$PWD/deprecated/sources/network/packages/service/downloaddfsrequest.cpp \
     $$PWD/sources/network/packages/service/get_actor_message.cpp \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
@@ -163,9 +160,6 @@ HEADERS += \
     $$PWD/headers/network/packages/entities/entity_message.h \
     $$PWD/headers/network/packages/message_interface.h \
     $$PWD/headers/network/packages/service/all_messages.h \
-    $$PWD/deprecated/headers/network/packages/service/block_approved_message.h \
-    $$PWD/deprecated/headers/network/packages/service/chat_message.h \
-    $$PWD/deprecated/headers/network/packages/service/downloaddfsrequest.h \
     $$PWD/headers/network/packages/service/get_actor_message.h \
     $$PWD/headers/network/packages/service/get_block_message.h \
     $$PWD/headers/network/packages/service/get_count_messages.h \

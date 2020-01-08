@@ -80,7 +80,7 @@ Messages::EnableConnections::~EnableConnections()
 QByteArray Messages::EnableConnections::serialize() const
 {
     QList<QByteArray> list = serializedParams();
-    return Serialization::universalSerialize(list, FIELD_SIZES);
+    return Serialization::universalSerialize(list, FIELD_SIZE);
 }
 
 void Messages::EnableConnections::deserialize(const QByteArray &serialized)

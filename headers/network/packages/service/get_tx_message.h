@@ -5,22 +5,20 @@
 
 namespace Messages {
 
-class GetTxMessage
+struct GetTxMessage : IMessage
 {
-    short FIELDS_SIZE = 4;
+    short FIELD_SIZE = 4;
+    short FIELDS_COUNT = 2;
 
-private:
     SearchEnum::TxParam param;
     QByteArray value;
 
+    // IMessage interface
 public:
-    GetTxMessage(const SearchEnum::TxParam param, const QByteArray &value);
-    GetTxMessage(const QByteArray &serialized);
-    ~GetTxMessage();
-    const QByteArray serialize() const;
-    void deserialize(const QByteArray &serilaized);
-    SearchEnum::TxParam getParam() const;
-    QByteArray getValue() const;
+    void operator=(QByteArray &serialized) override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serilaized) override;
 };
 }
 

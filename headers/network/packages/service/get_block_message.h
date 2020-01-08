@@ -5,24 +5,20 @@
 
 namespace Messages {
 
-class GetBlockMessage
+struct GetBlockMessage : IMessage
 {
-    const short FIELDS_SIZE = 4;
+    const short FIELD_SIZE = 4;
+    const short FIELDS_COUNT = 2;
 
-private:
     SearchEnum::BlockParam param;
     QByteArray value;
 
+    // IMessage interface
 public:
-    GetBlockMessage(const SearchEnum::BlockParam param, const QByteArray &value);
-    GetBlockMessage(const QByteArray &serialized);
-    ~GetBlockMessage();
-
-    const QByteArray serialize() const;
-    void deserialize(const QByteArray &serilaized);
-
-    SearchEnum::BlockParam getParam() const;
-    QByteArray getValue() const;
+    void operator=(QByteArray &serialized) override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serilaized) override;
 };
 }
 
