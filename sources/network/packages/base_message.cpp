@@ -3,7 +3,7 @@
 using namespace Messages;
 void BaseMessage::setMsgData(const QByteArray &data)
 {
-    this->msgData = data;
+    this->data = data;
 }
 
 void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor)
@@ -20,10 +20,10 @@ bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const
 void BaseMessage::operator=(BaseMessage b)
 {
     protocol = b.protocol;
-    msgType = b.msgType;
+    type = b.type;
     signer = b.signer;
     digSig = b.digSig;
-    msgData = b.msgData;
+    data = b.data;
 }
 
 // IMessage interface
@@ -35,16 +35,16 @@ void BaseMessage::operator=(QByteArray &serialized)
 void BaseMessage::operator=(QList<QByteArray> &list)
 {
     protocol = list.takeFirst();
-    msgType = list.takeFirst();
+    type = list.takeFirst();
     QByteArray signBytes = list.takeFirst();
     signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
     digSig = list.takeFirst();
-    msgData = list.takeFirst();
+    data = list.takeFirst();
 }
 
 bool BaseMessage::isEmpty()
 {
-    if (protocol.isEmpty() || msgType.isEmpty() || msgData.isEmpty())
+    if (protocol.isEmpty() || type.isEmpty() || data.isEmpty())
         return true;
     else
         return false;
@@ -66,7 +66,7 @@ QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
     QByteArray signeR = signer == 0 ? signer.toByteArray() : signer.toActorId();
-    l << protocol << msgType << signeR << digSig << msgData;
+    l << protocol << type << signeR << digSig << data;
     return l;
 }
 
@@ -110,5 +110,5 @@ void BaseMessage::deserialize(const QByteArray &serialized)
 
 const QByteArray BaseMessage::hash() const
 {
-    return Utils::calcKeccak(msgData);
+    return Utils::calcKeccak(data);
 }
