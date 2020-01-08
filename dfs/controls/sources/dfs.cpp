@@ -263,8 +263,9 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
     appendToCard(path, pathList.at(PathStruct::aId), type);
+#ifndef ETALONIUM_CLIENT
     sender->sendFile(path, type, SocketPair());
-
+#endif
     qDebug() << "File received:" << path;
 
 #ifdef ETALONIUM_CLIENT
@@ -641,6 +642,8 @@ DfsStruct::Type Dfs::getFileType(const QString &filePath)
 
     if (!res.empty())
     {
+        if (res[0]["type"].empty())
+            return DfsStruct::Type::error;
         return DfsStruct::Type(std::stoi(res[0]["type"]));
     }
 

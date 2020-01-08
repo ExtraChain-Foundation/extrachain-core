@@ -159,6 +159,7 @@ void ChatManager::parseInvite()
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
+        requestChatList();
     }
 }
 
@@ -365,6 +366,7 @@ void ChatManager::createDialogue(QByteArray actorId)
 
 void ChatManager::requestChatList()
 {
+    InitializeChatList();
     QList<UIChat> chats;
     QList<QByteArray> tempUsers;
     QStringList tempusersList;
