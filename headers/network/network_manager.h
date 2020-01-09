@@ -27,8 +27,7 @@ class DiscoveryService;
 class ResolveManager;
 //-------------------END-----------------------
 
-#include "dfs/packages/headers/dfs_universal.h"
-#include "network/packages/service/list_connections.h"
+#include "network/packages/service/connections_message.h"
 #include <QMap>
 #include <QNetworkInterface>
 #include <QObject>
@@ -49,14 +48,13 @@ class ResolveManager;
 #include "network/upnpconnection.h"
 #include "network/socket_pair.h"
 
-#include "network/packages/service/list_connections.h"
+#include "network/packages/service/connections_message.h"
 
 #include <QNetworkConfigurationManager>
 #include <QRandomGenerator>
 #include <QSettings>
 #include <QMutex>
 #include "network/packages/service/all_messages.h"
-#include "network/packages/service/downloaddfsrequest.h"
 
 /**
  * @brief The NetManager class

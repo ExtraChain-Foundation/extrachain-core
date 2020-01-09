@@ -42,7 +42,7 @@ void BaseMessage::operator=(QList<QByteArray> &list)
     data = list.takeFirst();
 }
 
-bool BaseMessage::isEmpty()
+bool BaseMessage::isEmpty() const
 {
     if (protocol.isEmpty() || type.isEmpty() || data.isEmpty())
         return true;

@@ -1,38 +1,33 @@
-
 #include "dfs/packages/headers/dfs_request.h"
 
-DFSMessage::DfsRequest::DfsRequest(const QString &filePath)
-    : DUMessage(dfsMessageType::requestMessage)
+bool DistFileSystem::DfsRequest::isEmpty() const
 {
-    this->filePath = filePath;
+    return filePath.isEmpty();
 }
 
-DFSMessage::DfsRequest::DfsRequest(const QByteArray &serialized)
-    : DUMessage(dfsMessageType::requestMessage)
-{
-    QList<QByteArray> list = deserialize(serialized);
-
-    if (list.size() != FIELDS_COUNT + 1)
-    {
-        qDebug() << "Request message struct: incorrect input data";
-        return;
-    }
-    if (dfsMessageType::requestMessage != list.takeFirst().toInt())
-    {
-        qDebug() << "[DfsRequest] incorrect message type";
-    }
-
-    filePath = QString::fromUtf8(list.takeFirst());
-}
-
-bool DFSMessage::DfsRequest::isEmpty() const
-{
-    return type == dfsMessageType::none || filePath.isEmpty();
-}
-
-const QList<QByteArray> DFSMessage::DfsRequest::serializedParams() const
+const QList<QByteArray> DistFileSystem::DfsRequest::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << filePath.toUtf8();
+    list << filePath.toUtf8();
     return list;
+}
+
+void DistFileSystem::DfsRequest::operator=(QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
+short DistFileSystem::DfsRequest::getFieldsCount() const
+{
+    return DfsRequest::FIELDS_COUNT;
+}
+
+QByteArray DistFileSystem::DfsRequest::serialize() const
+{
+    return Serialization::universalSerialize({ filePath.toLocal8Bit() }, DistFileSystem::fieldsSize);
+}
+
+void DistFileSystem::DfsRequest::deserialize(const QByteArray &serialized)
+{
+    filePath = Serialization::universalDeserialize(serialized, DistFileSystem::fieldsSize).takeFirst();
 }

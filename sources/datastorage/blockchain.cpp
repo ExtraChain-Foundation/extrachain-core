@@ -134,7 +134,9 @@ void Blockchain::getBlockZero()
     Block zero = getBlockByIndex(0);
     if (zero.isEmpty())
     {
-        Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, QByteArray::number(0));
+        Messages::GetBlockMessage request;
+        request.param = SearchEnum::BlockParam::Id;
+        request.value = QByteArray::number(0);
         emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
     }
     else
@@ -495,7 +497,9 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
             BigNumber id = block.getIndex() - 1;
             if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty())
             {
-                Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, id.toByteArray());
+                Messages::GetBlockMessage request;
+                request.param = SearchEnum::BlockParam::Id;
+                request.value = id.toByteArray();
                 emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
             }
         }
@@ -861,7 +865,9 @@ void Blockchain::blockCountResponse(const BigNumber &count)
     if (blockIndex.getLastSavedId() < count
         || getBlock(SearchEnum::BlockParam::Id, count.toByteArray()).isEmpty())
     {
-        Messages::GetBlockMessage request(SearchEnum::BlockParam::Id, count.toByteArray());
+        Messages::GetBlockMessage request;
+        request.param = SearchEnum::BlockParam::Id;
+        request.value = count.toByteArray();
         emit sendMessage(request.serialize(), get_block_message);
     }
 }

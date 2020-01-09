@@ -1,30 +1,31 @@
 #ifndef REQ_FRAGS_MESSAGE_H
 #define REQ_FRAGS_MESSAGE_H
 
-#include "dumessage.h"
+#include "dfs/packages/headers/dfs_message_interface.h"
+#include "headers/network/packages/message_interface.h"
+
 #include <QFile>
 #include <QList>
 #include <QByteArray>
 
-namespace DFSMessage {
+namespace DistFileSystem {
 
-struct req_frags_message : public DUMessage
+struct ReqFragsMessage : Messages::ISmallMessage
 {
     const short FIELDS_COUNT = 2;
 
     QString filePath;
     QByteArray listFrag;
 
-    req_frags_message(const QByteArray &filePath, QByteArray listFrag);
-    req_frags_message(const QByteArray &serialized);
-    ~req_frags_message() override final;
+    const QList<QByteArray> serializedParams() const;
 
-    bool empty() const;
-    const QList<QByteArray> serializedParams() const override final;
-
+    // ISmallMessage interface
 public:
-    QString getFilePath() const;
-    QByteArray getListFrag() const;
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
 };
 }
 

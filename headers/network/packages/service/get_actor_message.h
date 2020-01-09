@@ -5,7 +5,7 @@
 
 namespace Messages {
 
-struct GetActorMessage : IMessage
+struct GetActorMessage : ISmallMessage
 {
     static const short FIELDS_COUNT = 1;
     static const short FIELD_SIZE = 2;
@@ -13,15 +13,11 @@ struct GetActorMessage : IMessage
 public:
     BigNumber actorId;
 
-public:
-    //    const QByteArray serialize() const;
-    //    void deserialize(const QByteArray &serilaized);
-
-    // IMessage interface
+    // ISmallMessage interface
 public:
     void operator=(QByteArray &serialized) override;
     //    virtual void operator=(QList<QByteArray> &list) override;
-    //    virtual bool isEmpty() override;
+    virtual bool isEmpty() const override;
     //    virtual QByteArray concatenateAllData() const override;
     //    virtual QList<QByteArray> serializedParams() const override;
     short getFieldsCount() const override;

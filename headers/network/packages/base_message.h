@@ -38,7 +38,7 @@ struct BaseMessage : IMessage
 public:
     virtual void operator=(QByteArray &serialized) override;
     virtual void operator=(QList<QByteArray> &list) override;
-    virtual bool isEmpty() override;
+    virtual bool isEmpty() const override;
     virtual QByteArray concatenateAllData() const override;
     virtual QList<QByteArray> serializedParams() const override;
     virtual short getFieldsCount() const override;

@@ -6,10 +6,9 @@
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
-#include "dfs/packages/headers/dfs_universal.h"
 #include "dfs/packages/headers/dfs_request.h"
 
-#include "network/packages/service/list_connections.h"
+#include "network/packages/service/connections_message.h"
 
 #include "datastorage/contract.h"
 

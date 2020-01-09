@@ -1,4 +1,4 @@
-#include "dfsnetmanager.h"
+#include "dfs/managers/headers/dfsnetmanager.h"
 #include "resolve/resolve_manager.h"
 
 void DFSNetManager::setDfs(Dfs *value)
@@ -134,8 +134,10 @@ void DFSNetManager::appendSocket(SocketService *socket)
 
 void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
 {
-    Messages::BaseMessage msg(msgType);
-    msg.setMsgData(data);
+    Messages::BaseMessage msg;
+    //    msg.setMsgData(data);
+    msg.type = msgType;
+    msg.data = data;
     QByteArray message = msg.serialize();
     std::for_each(socketsList.begin(), socketsList.end(),
                   [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });

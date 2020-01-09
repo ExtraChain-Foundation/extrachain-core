@@ -1,66 +1,6 @@
 #include "dfs/packages/headers/title_message.h"
 
-DFSMessage::title_message::title_message()
-    : DUMessage()
-{
-}
-
-DFSMessage::title_message::title_message(const QString &filePath)
-    : DUMessage(dfsMessageType::titleMessage)
-{
-    QFile file(filePath);
-    file.open(QIODevice::ReadOnly);
-    fileSize = file.size();
-    this->filePath = filePath;
-    while (file.pos() + dataSize < file.size())
-    {
-        pckgsAmount++;
-        QByteArray sgmHash = Utils::calcKeccak(file.read(dataSize));
-        dataHash = Utils::calcKeccak(dataHash + sgmHash);
-    }
-    pckgsAmount++;
-    QByteArray sgmHash = Utils::calcKeccak(file.read(file.size() - file.pos()));
-    dataHash = Utils::calcKeccak(dataHash + sgmHash);
-    file.close();
-}
-
-DFSMessage::title_message::title_message(const QByteArray &serialized)
-    : DUMessage(dfsMessageType::titleMessage)
-{
-    QList<QByteArray> list = deserialize(serialized);
-
-    if (list.size() != FIELDS_COUNT + 1)
-    {
-        qDebug() << "title_message_struct << incorrect input data";
-        return;
-    }
-
-    if (dfsMessageType::titleMessage != list.takeFirst().toInt())
-    {
-        qDebug() << "[type_title]"
-                 << "incorrect message type";
-    }
-    
-    filePath = QString::fromUtf8(list.takeFirst());
-    pckgsAmount = list.takeFirst().toLongLong();
-    fileSize = list.takeFirst().toLongLong();
-    dataHash = list.takeFirst();
-    f_type = list.takeFirst();
-}
-
-DFSMessage::title_message::title_message(const QString &filePath, const long long &pckgsAmount,
-                                         const long long &fileSize, const QByteArray &hash,
-                                         const QByteArray &f_type)
-    : DUMessage(dfsMessageType::titleMessage)
-{
-    this->filePath = filePath;
-    this->pckgsAmount = pckgsAmount;
-    this->fileSize = fileSize;
-    this->dataHash = hash;
-    this->f_type = f_type;
-}
-
-bool DFSMessage::title_message::empty() const
+bool DistFileSystem::titleMessage::isEmpty() const
 {
     if (filePath.isEmpty())
         return true;
@@ -73,21 +13,69 @@ bool DFSMessage::title_message::empty() const
     return false;
 }
 
-const QList<QByteArray> DFSMessage::title_message::serializedParams() const
+void DistFileSystem::titleMessage::calcHash()
+{
+    QFile file(filePath);
+    if (file.exists())
+    {
+        file.open(QIODevice::ReadOnly);
+        fileSize = file.size();
+        while (file.pos() + dataSize < file.size())
+        {
+            pckgsAmount++;
+            QByteArray sgmHash = Utils::calcKeccak(file.read(dataSize));
+            dataHash = Utils::calcKeccak(dataHash + sgmHash);
+        }
+        pckgsAmount++;
+        QByteArray sgmHash = Utils::calcKeccak(file.read(file.size() - file.pos()));
+        dataHash = Utils::calcKeccak(dataHash + sgmHash);
+        file.close();
+    }
+}
+
+const QList<QByteArray> DistFileSystem::titleMessage::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << filePath.toUtf8()
-         << QByteArray::number(static_cast<long long>(pckgsAmount)) << QByteArray::number(fileSize)
-         << dataHash << f_type;
+    list << filePath.toUtf8() << QByteArray::number(static_cast<long long>(pckgsAmount))
+         << QByteArray::number(fileSize) << dataHash << f_type;
     return list;
 }
 
-DFSMessage::title_message DFSMessage::title_message::operator=(const DFSMessage::title_message &msg)
+void DistFileSystem::titleMessage::operator=(DistFileSystem::TitleMessage title)
 {
-    this->f_type = msg.f_type;
-    this->dataHash = msg.dataHash;
-    this->filePath = msg.filePath;
-    this->fileSize = msg.fileSize;
-    this->pckgsAmount = msg.pckgsAmount;
-    return *this;
+    filePath = title.filePath;
+    pckgsAmount = title.pckgsAmount;
+    fileSize = title.fileSize;
+    f_type = title.f_type;
+    dataHash = title.dataHash;
+}
+
+void DistFileSystem::titleMessage::operator=(const QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
+void DistFileSystem::titleMessage::operator=(QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
+short DistFileSystem::titleMessage::getFieldsCount() const
+{
+    return titleMessage::FIELDS_COUNT;
+}
+
+QByteArray DistFileSystem::titleMessage::serialize() const
+{
+    return Serialization::universalSerialize(serializedParams(), DistFileSystem::fieldsSize);
+}
+
+void DistFileSystem::titleMessage::deserialize(const QByteArray &serialized)
+{
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    filePath = l.takeFirst();
+    pckgsAmount = l.takeFirst().toULong();
+    fileSize = l.takeFirst().toLongLong();
+    dataHash = l.takeFirst();
+    f_type = l.takeFirst();
 }

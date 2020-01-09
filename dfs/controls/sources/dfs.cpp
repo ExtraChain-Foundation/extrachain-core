@@ -199,14 +199,14 @@ void Dfs::getDFSStatus()
         {
             if (el != DfsStruct::ACTOR_CARD_FILE)
             {
-                DFSMessage::Status status(el.toUtf8(), CardManager::getAllFiles(el.toUtf8()));
+                DistFileSystem::Status status(el.toUtf8(), CardManager::getAllFiles(el.toUtf8()));
                 emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
             }
         }
     }
     else
     {
-        DFSMessage::Status status("1", QStringList());
+        DistFileSystem::Status status("1", QStringList());
         emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
     }
 }
@@ -276,7 +276,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
 {
     qDebug() << "File request response:" << filePath;
-    DFSMessage::title_message titleMessage(filePath);
+    DistFileSystem::titleMessage titleMessage(filePath);
     DfsStruct::Type type = getFileType(filePath);
     if (type == DfsStruct::Type::error)
     {
@@ -429,7 +429,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
 
 void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data)
 {
-    DFSMessage::DfsChanges dfsChanges;
+    DistFileSystem::DfsChanges dfsChanges;
     dfsChanges.userId = userId.toLatin1();
     dfsChanges.changeType = 3;
     dfsChanges.signature = accountControler->getMainActor()->getKey()->encrypt(dfsChanges.userId);
@@ -444,9 +444,9 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
 
     while (file.bytesAvailable() > 0)
     {
-        auto readed = file.read(DFSMessage::dataSize);
+        auto readed = file.read(DistFileSystem::dataSize);
 
-        QByteArray newDataPart = data.mid(DFSMessage::dataSize * pckg, DFSMessage::dataSize);
+        QByteArray newDataPart = data.mid(DistFileSystem::dataSize * pckg, DistFileSystem::dataSize);
         qDebug() << "rea" << readed;
         qDebug() << "new" << newDataPart;
         qDebug() << "";
@@ -462,14 +462,14 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
 
     file.close();
 
-    if (data.size() > DFSMessage::dataSize * pckg)
+    if (data.size() > DistFileSystem::dataSize * pckg)
     {
-        int totalPckg = (data.size() - DFSMessage::dataSize * pckg) / DFSMessage::dataSize + pckg;
+        int totalPckg = (data.size() - DistFileSystem::dataSize * pckg) / DistFileSystem::dataSize + pckg;
 
         for (int i = pckg; i <= totalPckg; ++i)
         {
             pckgNums << QByteArray::number(i);
-            dfsChanges.data << data.mid(DFSMessage::dataSize * i, DFSMessage::dataSize);
+            dfsChanges.data << data.mid(DistFileSystem::dataSize * i, DistFileSystem::dataSize);
         }
     }
 
@@ -488,7 +488,7 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
 void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                           QByteArrayList sqlChanges)
 {
-    DFSMessage::DfsChanges dfsChanges;
+    DistFileSystem::DfsChanges dfsChanges;
     dfsChanges.data << sqlChanges;
     dfsChanges.range = "sql";
     dfsChanges.userId = userId.toLatin1();
@@ -505,7 +505,7 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     sender->sendDfsMessage(dfsChanges);
 }
 
-bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
+bool Dfs::applyChanges(const DistFileSystem::DfsChanges &dfsChanges)
 {
     int type = dfsChanges.changeType;
     bool apply = false;
@@ -551,7 +551,7 @@ bool Dfs::applyChanges(const DFSMessage::DfsChanges &dfsChanges)
     return false;
 }
 
-bool Dfs::applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges)
+bool Dfs::applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges)
 {
     QString filePathCtmp = dfsChanges.filePath + ".ctmp";
     QFile file(dfsChanges.filePath);
@@ -568,7 +568,7 @@ bool Dfs::applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges)
 
     for (int i = 0; i < max + 1; ++i)
     {
-        int pos = DFSMessage::dataSize * i;
+        int pos = DistFileSystem::dataSize * i;
 
         int indexOf = pckgNums.indexOf(QByteArray::number(i));
         if (indexOf != -1)
@@ -578,7 +578,7 @@ bool Dfs::applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges)
         else
         {
             file.seek(pos);
-            file3.write(file.read(DFSMessage::dataSize));
+            file3.write(file.read(DistFileSystem::dataSize));
         }
     }
 
@@ -589,7 +589,7 @@ bool Dfs::applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges)
     return file3.rename(dfsChanges.filePath);
 }
 
-bool Dfs::applyChangesSql(const DFSMessage::DfsChanges &dfsChanges)
+bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
 {
     // TODO: escape sql & list size checks
     DBConnector db;
@@ -696,7 +696,7 @@ void Dfs::requestFile(const QString &filePath)
     if (dfsNetManager->isLoading(filePath))
         return;
     qDebug() << "Request file:" << filePath;
-    DFSMessage::DfsRequest dfsRequest(filePath);
+    DistFileSystem::DfsRequest dfsRequest(filePath);
     sender->sendDfsMessage(dfsRequest);
 }
 

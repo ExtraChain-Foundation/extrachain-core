@@ -5,26 +5,20 @@
 
 namespace Messages {
 
-class GetTxPairMessage
+struct GetTxPairMessage : IMessage
 {
-    const short FIELDS_SIZE = 4;
+    static const short FIELD_SIZE = 2;
+    static const short FIELDS_COUNT = 2;
 
-private:
     BigNumber senderId;
     BigNumber receiverId;
 
+    // IMessage interface
 public:
-    GetTxPairMessage(const BigNumber &senderId, const BigNumber &receiverId);
-    GetTxPairMessage(const QByteArray &serialized);
-
-    // BaseMessage interface
-    ~GetTxPairMessage();
-
-    const QByteArray serialize() const;
-    void deserialize(const QByteArray &serilaized);
-
-    BigNumber getSenderId() const;
-    BigNumber getReceiverId() const;
+    void operator=(QByteArray &serialized) override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serilaized) override;
 };
 }
 

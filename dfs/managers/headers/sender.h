@@ -17,7 +17,7 @@ class DFSNetManager;
 class Sender : public QObject
 {
     Q_OBJECT
-    const int data_offset = DFSMessage::dataSize;
+    const int data_offset = DistFileSystem::dataSize;
     DFSNetManager *NetManager = nullptr;
 
     QMap<QByteArray, QString> titleHashs;
@@ -43,7 +43,8 @@ public:
     template <typename T>
     void sendDfsMessage(const T &dfsMessage, const SocketPair &receiver = {})
     {
-        static_assert(std::is_base_of<DFSMessage::DUMessage, T>::value, "Derived not derived from DUMessage");
+        //        static_assert(std::is_base_of<DFS::DUMessage, T>::value, "Derived not derived from
+        //        DUMessage");
 
         if (dfsMessage.isEmpty())
         {
@@ -77,12 +78,6 @@ public slots:
     //    void resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
 
     void process();
-    /**
-     * @brief checkClosing
-     * @param titleHash
-     * @param pckAF
-     */
-    void checkClosing(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver);
 };
 
 #endif // SENDER_H

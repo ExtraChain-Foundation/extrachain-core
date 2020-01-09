@@ -19,7 +19,7 @@ void BaseMessageResponse::operator=(QList<QByteArray> &list)
     dataHash = list.takeFirst();
 }
 
-bool BaseMessageResponse::isEmpty()
+bool BaseMessageResponse::isEmpty() const
 {
     if (BaseMessage::isEmpty() || dataHash.isEmpty())
         return true;

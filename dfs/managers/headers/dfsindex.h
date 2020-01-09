@@ -19,7 +19,6 @@
 #include <QMap>
 #include <QDir>
 #include "dfs/packages/headers/dfs_request.h"
-#include "dfs/packages/headers/dfs_universal.h"
 #include "managers/thread_pool.h"
 
 class DfsIndex : public QObject

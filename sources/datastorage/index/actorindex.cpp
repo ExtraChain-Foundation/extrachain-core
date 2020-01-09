@@ -25,7 +25,8 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     }
     else
     {
-        Messages::GetActorMessage msg(id);
+        Messages::GetActorMessage msg;
+        msg.actorId = id;
         resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         //        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
@@ -41,7 +42,8 @@ void ActorIndex::removeActor(const BigNumber &id, bool resend)
 
     if (resend)
     {
-        Messages::GetActorMessage msg(id);
+        Messages::GetActorMessage msg;
+        msg.actorId = id;
         resolveManager->registrateMsg(msg.serialize(), getActorMessage);
     }
 }
@@ -90,14 +92,16 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
             resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
         else if (actor.getAccount() != 0 && actor.getAccount() != 2)
         {
-            Messages::GetActorMessage msg(actorId);
+            Messages::GetActorMessage msg;
+            msg.actorId = actorId;
             resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         }
         //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
     }
     else
     {
-        Messages::GetActorMessage msg(actorId);
+        Messages::GetActorMessage msg;
+        msg.actorId = actorId;
         resolveManager->registrateMsg(msg.serialize(), getActorMessage);
     }
 }
@@ -122,7 +126,7 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
 {
     if (accController->getAccountCount() > 0)
     {
-        Messages::GetAllActorMessage msg(id);
+        Messages::GetAllActorMessage msg;
         resolveManager->registrateMsg(msg.serialize(), getAllActorMessage);
         //    emit sendMessage(msg.serialize(), getAllActorMessage);
     }
@@ -250,7 +254,8 @@ QByteArrayList ActorIndex::getProfile(QString id)
     {
         if (actor.getAccount() != 0 && actor.getAccount() != 2 && resolveManager != nullptr)
         {
-            Messages::GetActorMessage msg(BigNumber(id.toLatin1()));
+            Messages::GetActorMessage msg;
+            msg.actorId = BigNumber(id.toLocal8Bit());
             resolveManager->registrateMsg(msg.serialize(), getActorMessage);
         }
 

@@ -7,6 +7,14 @@ void GetActorMessage::operator=(QByteArray &serialized)
     deserialize(serialized);
 }
 
+bool GetActorMessage::isEmpty() const
+{
+    if (actorId.isEmpty())
+        return true;
+    else
+        return false;
+}
+
 short GetActorMessage::getFieldsCount() const
 {
     return FIELDS_COUNT;

@@ -13,14 +13,32 @@ namespace Messages {
  * Every new message should implement this interface
  */
 const int FIELD_SIZE = 8;
+struct ISmallMessage
+{
+    virtual void operator=(QByteArray &serialized) = 0;
 
-struct IMessage
+    virtual bool isEmpty() const = 0;
+
+    virtual short getFieldsCount() const = 0;
+    /**
+     * @brief Message serialization
+     * @return serialized message form
+     */
+    virtual QByteArray serialize() const = 0;
+
+    /**
+     * @brief Message deserialization (Should be used in constructor)
+     * @param serialized message from
+     */
+    virtual void deserialize(const QByteArray &serialized) = 0;
+};
+struct IMessage : ISmallMessage
 {
     virtual void operator=(QByteArray &serialized) = 0;
 
     virtual void operator=(QList<QByteArray> &list) = 0;
 
-    virtual bool isEmpty() = 0;
+    virtual bool isEmpty() const = 0;
 
     virtual QByteArray concatenateAllData() const = 0;
 

@@ -7,7 +7,7 @@
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
 
-void DFSResolverService::setTitle(const DFSMessage::title_message &value)
+void DFSResolverService::setTitle(const DistFileSystem::TitleMessage &value)
 {
     title = value;
 }
@@ -101,7 +101,9 @@ void DFSResolverService::checkStatus()
         }
         else
         {
-            DFSMessage::req_frags_message reqFrags(title.filePath.toUtf8(), emptyFrags);
+            DistFileSystem::ReqFragsMessage reqFrags;
+            reqFrags.filePath = title.filePath.toUtf8();
+            reqFrags.listFrag = emptyFrags;
             dfs->dfsNetManager->send(reqFrags.serialize());
         }
     }
@@ -120,9 +122,9 @@ void DFSResolverService::setTask(QByteArray msg, SocketPair receiver)
     this->receiver = receiver;
 }
 
-bool DFSResolverService::validate(const Messages::IMessage &message)
+bool DFSResolverService::validate(const Messages::BaseMessage &message)
 {
-    BigNumber signer = message.getSigner();
+    BigNumber signer = message.signer;
     if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
@@ -182,19 +184,18 @@ void DFSResolverService::resolveDfsTask()
         // qDebug() << "[&Resolver:]" << DFS_MESSAGE << "is detected";
         BaseMessage bmsg;
         bmsg.deserialize(msg);
-        DFSMessage::DUMessage dfsMsg(bmsg.getData());
-        if (dfsMsg.isEmpty())
+        if (bmsg.isEmpty())
             return;
-        resolveDfsMessage(bmsg.getData(), dfsMsg.getType());
+        resolveDfsMessage(bmsg.data, bmsg.type);
         //        emit TaskFinished();
     }
     //    finishWork();
 }
-void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mType)
+void DFSResolverService::resolveDfsMessage(QByteArray &data, const int &mType)
 {
     //    qDebug() << "[dfs resolve message] msg type:" << mType;
-    DFSMessage::dfsMessageType msgType = static_cast<DFSMessage::dfsMessageType>(mType);
-    using namespace DFSMessage;
+    DistFileSystem::dfsMessageType msgType = static_cast<DistFileSystem::dfsMessageType>(mType);
+    using namespace DistFileSystem;
 
     if (this->lifetime == Resolver::Lifetime::SHORT)
     {
@@ -208,16 +209,18 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         case dfsMessageType::requestFragments:
         {
-            DFSMessage::req_frags_message message(data);
+            DistFileSystem::ReqFragsMessage message;
+            message = data;
             if (message.filePath == "-1")
                 return;
-            dfs->sendFragments(message.getFilePath(), message.getListFrag(), this->receiver);
+            dfs->sendFragments(message.filePath, message.listFrag, this->receiver);
             break;
         }
         case dfsMessageType::requestMessage:
         {
             qDebug() << "[requestMessage:]";
-            DFSMessage::DfsRequest message(data);
+            DistFileSystem::DfsRequest message;
+            message = data;
 
             if (!QFile::exists(message.filePath))
             {
@@ -237,7 +240,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::statusMessage:
         {
             qDebug() << "[statusMessage:]";
-            DFSMessage::Status message(data);
+            DistFileSystem::Status message;
+            message = data;
             break;
         }
         case dfsMessageType::storageMessage:
@@ -251,7 +255,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         }
         case dfsMessageType::changesMessage:
         {
-            DFSMessage::DfsChanges message(data);
+            DistFileSystem::DfsChanges message;
+            message = data;
 
             // if resolver with message.filePath exists
             // not apply && remove resolver && resend request
@@ -273,9 +278,10 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         {
         case dfsMessageType::titleMessage:
         {
-            if (title.empty())
+            if (title.isEmpty())
             {
-                DFSMessage::title_message message(data);
+                DistFileSystem::TitleMessage message;
+                title = data;
                 if (message.filePath.isEmpty())
                 {
                     return;
@@ -306,7 +312,8 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
         case dfsMessageType::fileDataMessage:
         {
             // qDebug() << "[fileDataMessage:]";
-            DFSMessage::dfs_message message(data);
+            DistFileSystem::DfsMessage message;
+            message = data;
             if (message.data.isEmpty())
             {
                 active = false;
@@ -323,7 +330,7 @@ void DFSResolverService::resolveDfsMessage(const QByteArray &data, const int &mT
                 return;
             }
             //            mutex.lock();
-            file.seek(DFSMessage::dataSize * message.pckgNumber);
+            file.seek(DistFileSystem::dataSize * message.pckgNumber);
             file.write(message.data);
             file.flush();
             //            mutex.unlock();
@@ -384,9 +391,9 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     return true;
 }
 
-bool DFSResolverService::registerTitle(const QString &tmpPath, DFSMessage::title_message title)
+bool DFSResolverService::registerTitle(const QString &tmpPath, DistFileSystem::TitleMessage title)
 {
-    if (this->title.empty())
+    if (this->title.isEmpty())
     {
         this->title = title;
         if (createTempFile(tmpPath, title.fileSize, title.dataHash))
@@ -434,7 +441,7 @@ Resolver::Lifetime DFSResolverService::getLifetime() const
     return lifetime;
 }
 
-DFSMessage::title_message DFSResolverService::getTitle() const
+DistFileSystem::TitleMessage DFSResolverService::getTitle() const
 {
     return title;
 }

@@ -456,7 +456,7 @@ QByteArray NetManager::calcHash(const Messages::IMessage &message) const
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)
 {
-    EnableConnections msg(message);
+    ConnectionsMessage msg(message);
     QList<std::pair<int, std::string>> list = msg.getEnableConnections();
     for (auto &el : list)
     {

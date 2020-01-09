@@ -25,7 +25,6 @@ Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
 Q_DECLARE_METATYPE(SocketService)
 // Q_DECLARE_METATYPE(SocketService*)
-Q_DECLARE_METATYPE(Messages::DownloadDfsRequestData)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
 Q_DECLARE_METATYPE(DfsStruct::Type)
 Q_DECLARE_METATYPE(DfsStruct::SubType)
@@ -55,7 +54,6 @@ void registerMetaTypes()
     qRegisterMetaType<Transaction>();
     qRegisterMetaType<SocketService>();
     // qRegisterMetaType<SocketService*>();
-    qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
     // qRegisterMetaType<Contract>();
     qRegisterMetaType<DfsStruct::Type>();
