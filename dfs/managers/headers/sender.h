@@ -41,7 +41,7 @@ public:
      * @brief Send any dfs message (template function)
      */
     template <typename T>
-    void sendDfsMessage(const T &dfsMessage, const SocketPair &receiver = {})
+    void sendDfsMessage(const T &dfsMessage, const unsigned int &type, const SocketPair &receiver = {})
     {
         //        static_assert(std::is_base_of<DFS::DUMessage, T>::value, "Derived not derived from
         //        DUMessage");
@@ -53,7 +53,7 @@ public:
         }
 
         if (NetManager != nullptr)
-            NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
+            NetManager->send(dfsMessage.serialize(), type, receiver);
     }
 
 signals:

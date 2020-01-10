@@ -104,14 +104,14 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     return lockRes;
 }
 
-void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msgType)
+void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType)
 {
 
     Messages::BaseMessage msg;
     msg.type = msgType;
     msg.data = data;
 
-    if (msgType != Messages::ACTOR_MESSAGE)
+    if (msgType != Messages::ChainMessage::actorMessage)
     {
         if (accountControler->getAccountCount() == 0)
             return;
@@ -121,7 +121,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
 
     //    qDebug() << "send " << msgType;
     QByteArray message = msg.serialize();
-    if (Messages::GETTERS.contains(msgType))
+    if (Messages::isGeneralRequest(msgType))
     {
         handlerFileMutex.lock();
         requestResponseMap->insert(calcKeccak256(message), Config::Net::NECESSARY_RESPONSE_COUNT);
@@ -131,7 +131,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
     //    emit sendMsg(message);
 }
 
-void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,
+void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned int &msgType,
                                          const QByteArray &requestHash, const SocketPair &receiver)
 
 {
@@ -139,7 +139,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArra
     rmsg.data = data;
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
-    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE)
+    if (msgType != Messages::GeneralResponse::getActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;

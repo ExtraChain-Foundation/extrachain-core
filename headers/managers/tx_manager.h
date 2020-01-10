@@ -13,7 +13,7 @@
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
 #include "datastorage/index/blockindex.h"
-
+#include "headers/network/packages/service/message_types.h"
 /**
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
@@ -109,7 +109,7 @@ signals:
      * @brief Sends new verified block to the network
      * @param block
      */
-    void SendBlock(QByteArray block, QByteArray msgType);
+    void SendBlock(QByteArray block, unsigned int msgType);
     /**
      * @brief Send transaction request
      * @param senderId

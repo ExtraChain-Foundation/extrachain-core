@@ -25,6 +25,16 @@ const QList<QByteArray> DistFileSystem::Status::serializedParams() const
     return list;
 }
 
+void DistFileSystem::Status::calcHash()
+{
+    QList<QByteArray> lt;
+    for (QString s : currentState)
+    {
+        lt.append(s.toUtf8());
+    }
+    hash = Utils::calcKeccak(Serialization::universalSerialize(lt));
+}
+
 void DistFileSystem::Status::operator=(QByteArray &serialized)
 {
     deserialize(serialized);

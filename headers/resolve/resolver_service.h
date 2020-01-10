@@ -21,6 +21,7 @@
 #include "network/socket_pair.h"
 #include "datastorage/genesis_block.h"
 #include "dfs/packages/headers/all.h"
+#include "headers/network/packages/service/message_types.h"
 
 static QMutex handlerFileMutex;
 
@@ -154,7 +155,7 @@ private:
      * @param message
      * @return
      */
-    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
+    bool addResponseHandler(const QByteArray &message, const unsigned int &msgType);
     /**
      * @brief checkResponseHandler
      * @param message

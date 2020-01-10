@@ -42,7 +42,6 @@ class SocketService : public QObject
     const QByteArray IDENTIFICATOR = "Ind:";
 
 private:
-    QByteArray *dpBuffer;
     NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;

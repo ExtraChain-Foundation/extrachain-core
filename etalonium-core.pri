@@ -115,6 +115,7 @@ HEADERS += \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/tx_pair.h \
     $$PWD/headers/network/packages/service/connections_message.h \
+    $$PWD/headers/network/packages/service/message_types.h \
     $$PWD/headers/profile/profile.h \
     $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \

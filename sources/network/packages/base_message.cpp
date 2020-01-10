@@ -35,7 +35,7 @@ void BaseMessage::operator=(QByteArray &serialized)
 void BaseMessage::operator=(QList<QByteArray> &list)
 {
     protocol = list.takeFirst();
-    type = list.takeFirst();
+    type = list.takeFirst().toUInt();
     QByteArray signBytes = list.takeFirst();
     signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
     digSig = list.takeFirst();
@@ -44,7 +44,7 @@ void BaseMessage::operator=(QList<QByteArray> &list)
 
 bool BaseMessage::isEmpty() const
 {
-    if (protocol.isEmpty() || type.isEmpty() || data.isEmpty())
+    if (protocol.isEmpty() || type == 0 || data.isEmpty())
         return true;
     else
         return false;
@@ -66,7 +66,7 @@ QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
     QByteArray signeR = signer == 0 ? signer.toByteArray() : signer.toActorId();
-    l << protocol << type << signeR << digSig << data;
+    l << protocol << QByteArray::number(type) << signeR << digSig << data;
     return l;
 }
 
@@ -77,35 +77,36 @@ short BaseMessage::getFieldsCount() const
 
 QByteArray BaseMessage::serialize() const
 {
-    QByteArray serialized = "";
+    //    QByteArray serialized = "";
+    return Serialization::universalSerialize(serializedParams(), Messages::FIELD_SIZE);
+    //    for (const QByteArray &param : serializedParams())
+    //    {
 
-    for (const QByteArray &param : serializedParams())
-    {
+    //        serialized += Utils::intToByteArray(param.size(), Messages::FIELD_SIZE);
+    //        serialized += param;
+    //    }
 
-        serialized += Utils::intToByteArray(param.size(), Messages::FIELD_SIZE);
-        serialized += param;
-    }
-
-    return serialized;
+    //    return serialized;
 }
 
 void BaseMessage::deserialize(const QByteArray &serialized)
 {
-    QList<QByteArray> list = {};
-    int pos = 0;
-    for (int i = 0; i < getFieldsCount(); i++)
-    {
-        int count = Utils::qByteArrayToInt(serialized.mid(pos, Messages::FIELD_SIZE));
-        pos += Messages::FIELD_SIZE;
-        QByteArray el = serialized.mid(pos, count);
-        pos += count;
-        list << el;
-    }
-    if (list.size() < getFieldsCount())
-    {
-        qDebug() << "Error: can't deserialize message:" << serialized;
-    }
-    operator=(list);
+    //    QList<QByteArray> list = {};
+    //    int pos = 0;
+    //    for (int i = 0; i < getFieldsCount(); i++)
+    //    {
+    //        int count = Utils::qByteArrayToInt(serialized.mid(pos, Messages::FIELD_SIZE));
+    //        pos += Messages::FIELD_SIZE;
+    //        QByteArray el = serialized.mid(pos, count);
+    //        pos += count;
+    //        list << el;
+    //    }
+    //    if (list.size() < getFieldsCount())
+    //    {
+    //        qDebug() << "Error: can't deserialize message:" << serialized;
+    //    }
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    operator=(l);
 }
 
 const QByteArray BaseMessage::hash() const

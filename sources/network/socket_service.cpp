@@ -1,5 +1,4 @@
 #include "network/socket_service.h"
-#include "dfs/packages/headers/dfs_universal.h"
 #ifndef DFS_NETWORK_MANAGER_DEF
 #define DFS_NETWORK_MANAGER_DEF
 class DFSNetManager;
@@ -121,9 +120,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
-        //        QList<QByteArray> d;
-        //        d.append(data);
-        QByteArray _wtSok = data /*Serialization::universalSerialize(d, 8)*/;
+        QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
 
         socket->write(_wtSok, _wtSok.size());
     }
@@ -143,7 +140,6 @@ void SocketService::closeSocket()
 
 void SocketService::process()
 {
-    dpBuffer = new QByteArray();
     if (socket == nullptr)
     {
         this->socket = new QTcpSocket(this);
@@ -197,15 +193,15 @@ void SocketService::setActive(bool active)
 
 void SocketService::doRead()
 {
-    if (pendMsgSize >= 0)
+    if (pendMsgSize > 0)
     {
         continueDoRead();
     }
     if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
     {
-        QByteArray data = socket->read(8);
+        QByteArray data = socket->read(Messages::FIELD_SIZE);
         pendMsgSize = Utils::qByteArrayToInt(data);
-        if ((pendMsgSize != -1))
+        if ((pendMsgSize > 0))
         {
             continueDoRead();
         }
@@ -215,37 +211,31 @@ void SocketService::continueDoRead()
 {
     if (socket->bytesAvailable() >= pendMsgSize)
     {
-        QByteArray pckg = socket->read(pendMsgSize);
-        //    qDebug() << "dpBuffer continueDoRead remove size:" << dpBuffer->size();
-
-        if (!this->isActive() && pckg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
+        std::string pckg;
+        int bytesRead = socket->read(pckg.data(), pendMsgSize);
+        if (pendMsgSize == bytesRead)
         {
-            QByteArray b = pckg.mid(IDENTIFICATOR.size());
-            this->processID(b);
-        }
-        else
-        {
-            pendMsg += Utils::intToByteArray(pendMsgSize, 8) + pckg;
-            counter++;
-            if (counter == 2)
+            pendMsgSize = -1;
+            pendMsg.append(QByteArray::fromStdString(pckg));
+            if (!this->isActive() && pendMsg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
             {
-                if (Messages::RESPONSE.indexOf(pendMsg) != -1)
-                {
-                    p = 1;
-                }
+                QByteArray b = pendMsg.mid(IDENTIFICATOR.size());
+                this->processID(b);
             }
-            if (counter == 5 + p)
+            else
             {
                 SocketPair receiver(this->getAddress().toStdString(), this->getPort());
                 receiver.setId(this->getID().toByteArray());
                 this->gotMessage(pendMsg, receiver);
-                pendMsg = "";
-                counter = 0;
-                p = 0;
             }
+            pendMsg.clear();
         }
-        pendMsgSize = -1;
-        if (socket->bytesAvailable() >= 8)
+        else
+        {
+            pendMsgSize = pendMsgSize - bytesRead;
+            pendMsg.append(QByteArray::fromStdString(pckg));
+        }
+        if (socket->bytesAvailable() >= pendMsgSize)
         {
             doRead();
         }

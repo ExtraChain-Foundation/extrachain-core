@@ -360,10 +360,12 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
     return flag_result;
 }
 
-void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
+void NetManager::dfsToPeerTmp(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
 {
-    BaseMessage msg(msgType);
-    msg.setMsgData(data);
+    BaseMessage msg;
+    msg.type = msgType;
+    msg.data = data;
+    //    msg.setMsgData(data);
 
     //    emit sendMsg(msg.serialize(), receiver);
     distMessage(msg.serialize(), receiver);
@@ -456,11 +458,12 @@ QByteArray NetManager::calcHash(const Messages::IMessage &message) const
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)
 {
-    ConnectionsMessage msg(message);
-    QList<std::pair<int, std::string>> list = msg.getEnableConnections();
+    Messages::ConnectionsMessage msg;
+    msg = message;
+    std::vector<std::pair<std::string, int>> list = msg.hosts;
     for (auto &el : list)
     {
-        SocketService *newSock = new SocketService(QString::fromStdString(el.second), el.first);
+        SocketService *newSock = new SocketService(QString::fromStdString(el.first), el.second);
         if (connections.indexOf(newSock) == -1)
         {
             connections.append(newSock);

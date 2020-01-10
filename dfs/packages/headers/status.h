@@ -2,6 +2,7 @@
 #define STATUS_H
 
 #include <QObject>
+#include "utils/utils.h"
 #include "dfs/packages/headers/dfs_message_interface.h"
 #include "headers/network/packages/message_interface.h"
 
@@ -16,6 +17,7 @@ struct Status : Messages::ISmallMessage
     QStringList currentState;
 
     const QList<QByteArray> serializedParams() const;
+    void calcHash();
 
 private:
     const QStringList deserializeState(const QByteArray &serialized);

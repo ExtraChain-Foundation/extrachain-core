@@ -1,7 +1,7 @@
 #ifndef SIMPLE_MESSAGE_H
 #define SIMPLE_MESSAGE_H
-
-#include "network/packages/base_message.h"
+#include <QByteArray>
+#include "headers/network/packages/service/message_types.h"
 
 namespace Messages {
 
@@ -11,7 +11,7 @@ struct BlockCount
 
     BlockCount()
     {
-        request = GET_BLOCK_COUNT_MESSAGE;
+        request = QByteArray::number(Messages::GeneralRequest::getBlockCount); /* GET_BLOCK_COUNT_MESSAGE;*/
     }
     BlockCount(const QByteArray &serialized)
     {
@@ -30,7 +30,7 @@ struct ActorCount
 
     ActorCount()
     {
-        request = GET_ACTOR_COUNT_MESSAGE;
+        request = QByteArray::number(Messages::GeneralRequest::getActorCount); /*GET_ACTOR_COUNT_MESSAGE;*/
     }
     ActorCount(const QByteArray &serialized)
     {

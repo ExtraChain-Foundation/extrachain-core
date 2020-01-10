@@ -132,7 +132,7 @@ void DFSNetManager::appendSocket(SocketService *socket)
     socketConnection();
 }
 
-void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
+void DFSNetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
 {
     Messages::BaseMessage msg;
     //    msg.setMsgData(data);

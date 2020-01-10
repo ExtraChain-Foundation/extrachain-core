@@ -24,6 +24,7 @@ class ResolveManager;
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "headers/network/packages/service/message_types.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
@@ -128,7 +129,7 @@ private:
 
 signals:
     void ready();
-    void sendMsg(const QByteArray &data, const QByteArray &type);
+    void sendMsg(const QByteArray &data, const unsigned int &type);
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
     // created keys for chat

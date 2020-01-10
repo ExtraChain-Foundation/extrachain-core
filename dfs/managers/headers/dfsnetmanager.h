@@ -46,7 +46,7 @@ private:
 public:
     NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
-    void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
+    void send(const QByteArray &message, const unsigned int &msgType,
               const SocketPair &receiver = SocketPair());
 
     void setDfs(Dfs *value);

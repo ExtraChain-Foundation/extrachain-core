@@ -116,7 +116,7 @@ Block TransactionManager::makeBlock()
 
     qDebug() << "Created block:" << block.getIndex();
     QByteArray blockSerialize = block.serialize();
-    emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
+    emit SendBlock(blockSerialize, Messages::ChainMessage::blockMessage);
     blockchain->addBlock(block);
     this->pendingTxs.clear();
     return block;

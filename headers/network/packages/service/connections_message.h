@@ -5,7 +5,7 @@
 namespace Messages {
 static const QByteArray ENABLE_LIST_CONNECTIONS = "connections";
 
-struct ConnectionsMessage : IMessage
+struct ConnectionsMessage : ISmallMessage
 {
     const short FIELD_SIZE = 3;
     const short FIELDS_COUNT = 1;
@@ -13,10 +13,11 @@ struct ConnectionsMessage : IMessage
 
 public:
     // IMessage interface
+    void operator=(const QByteArray &serialized);
     void operator=(QByteArray &serialized) override;
-    void operator=(QList<QByteArray> &list) override;
+    void operator=(QList<QByteArray> &list);
     bool isEmpty() const override;
-    QList<QByteArray> serializedParams() const override;
+    QList<QByteArray> serializedParams() const;
     short getFieldsCount() const override;
     QByteArray serialize() const override;
     void deserialize(const QByteArray &serialized) override;

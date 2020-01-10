@@ -10,6 +10,6 @@
 #include "status.h"
 
 namespace Messages {
-static const QByteArray DFS_MESSAGE = "dfsMessages";
+// static const QByteArray DFS_MESSAGE = "dfsMessages";
 }
 #endif // ALL_H

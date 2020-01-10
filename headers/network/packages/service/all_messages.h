@@ -13,5 +13,5 @@
 #include "network/packages/service/get_tx_pair_message.h"
 #include "network/packages/service/get_actor_message.h"
 #include "network/packages/service/verify_messages.h"
-
+#include "network/packages/service/connections_message.h"
 #endif // ALL_MESSAGES_H

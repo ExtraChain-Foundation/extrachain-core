@@ -1,5 +1,10 @@
 #include "network/packages/service/connections_message.h"
 
+void Messages::ConnectionsMessage::operator=(const QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
 void Messages::ConnectionsMessage::operator=(QByteArray &serialized)
 {
     deserialize(serialized);

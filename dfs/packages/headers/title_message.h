@@ -16,7 +16,8 @@ namespace DistFileSystem {
     QByteArray f_type;
     QByteArray dataHash; // Keccak256
 
-    void calcHash();
+    void calcHash(); // filesize, pckgAmount, datahash
+
     const QList<QByteArray> serializedParams() const;
     void operator=(titleMessage title);
     void operator=(const QByteArray &serialized);

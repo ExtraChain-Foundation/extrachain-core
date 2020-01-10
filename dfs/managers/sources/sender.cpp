@@ -50,7 +50,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
             pck.dataHash = title.dataHash;
             pck.pckgNumber = fragsID[i];
             pck.data = data;
-            sendDfsMessage(pck, receiver);
+            sendDfsMessage(pck, Messages::DFSMessage::fileDataMessage, receiver);
         }
     }
 }
@@ -76,6 +76,6 @@ void Sender::sendFile(const QString &filePath, const DfsStruct::Type &type, cons
     }
 
     qDebug() << "DataHash from title:" << title.dataHash;
-    sendDfsMessage(title, receiver);
+    sendDfsMessage(title, Messages::DFSMessage::titleMessage, receiver);
     file.close();
 }

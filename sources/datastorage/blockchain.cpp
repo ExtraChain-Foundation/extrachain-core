@@ -137,7 +137,7 @@ void Blockchain::getBlockZero()
         Messages::GetBlockMessage request;
         request.param = SearchEnum::BlockParam::Id;
         request.value = QByteArray::number(0);
-        emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
+        emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlock);
     }
     else
         actorIndex->setCompanyId(new QByteArray(zero.getApprover().toActorId()));
@@ -500,7 +500,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
                 Messages::GetBlockMessage request;
                 request.param = SearchEnum::BlockParam::Id;
                 request.value = id.toByteArray();
-                emit sendMessage(request.serialize(), Messages::GET_BLOCK_MESSAGE);
+                emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlock);
             }
         }
     }
@@ -517,7 +517,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
-        emit sendMessage(block.serialize(), block_message);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
         break;
     }
     case Errors::FILE_ALREADY_EXISTS:
@@ -818,13 +818,13 @@ void Blockchain::process()
 void Blockchain::updateBlockchain(BigNumber id, bool isUser)
 {
     Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GET_BLOCK_COUNT_MESSAGE);
+    emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlockCount);
 }
 
 void Blockchain::updateBlockchainForSignIn(QByteArray id, QByteArrayList idList)
 {
     Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GET_BLOCK_COUNT_MESSAGE);
+    emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlockCount);
 }
 
 void Blockchain::checkBlockExistence(const Block &block)
@@ -868,7 +868,7 @@ void Blockchain::blockCountResponse(const BigNumber &count)
         Messages::GetBlockMessage request;
         request.param = SearchEnum::BlockParam::Id;
         request.value = count.toByteArray();
-        emit sendMessage(request.serialize(), get_block_message);
+        emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlock);
     }
 }
 
@@ -878,7 +878,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
-    emit responseReady(srBlock, Messages::GET_BLOCK_RESPONSE_MESSAGE, requestHash, receiver);
+    emit responseReady(srBlock, Messages::GeneralResponse::getBlockResponse, requestHash, receiver);
 }
 
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
@@ -886,7 +886,7 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
     emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
-                       Messages::GET_BLOCK_COUNT_RESPONSE_MESSAGE, requestHash, receiver);
+                       Messages::GeneralResponse::getBlockCountResponse, requestHash, receiver);
 }
 
 void Blockchain::addBlockToBlockchain(Block block)
@@ -903,7 +903,7 @@ void Blockchain::addGenBlockToBlockchain(const GenesisBlock &block)
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0)
-        sendMessage(block.serialize(), Messages::GENESIS_BLOCK_MESSAGE);
+        sendMessage(block.serialize(), Messages::ChainMessage::genesisBlockMessage);
 }
 
 // Actors //
@@ -935,7 +935,8 @@ void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QBy
     Transaction transaction = getTransaction(param, value);
     if (!transaction.isEmpty())
     {
-        emit responseReady(transaction.serialize(), Messages::GET_TX_RESPONSE_MESSAGE, request, receiver);
+        emit responseReady(transaction.serialize(), Messages::GeneralResponse::getTxResponse, request,
+                           receiver);
     }
     else
     {

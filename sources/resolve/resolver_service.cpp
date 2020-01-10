@@ -125,12 +125,12 @@ bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message)
     return true;
 }
 
-bool ResolverService::addResponseHandler(const QByteArray &message, const QByteArray &msgType)
+bool ResolverService::addResponseHandler(const QByteArray &message, const unsigned int &msgType)
 {
     bool flag = false;
     handlerFileMutex.lock();
     QByteArray hash = Utils::calcKeccak(message);
-    if (Messages::RESPONSE.contains(msgType))
+    if (Messages::isGeneralResponse(msgType))
     {
         if (resolveManager->getRequestResponseMap()->find(hash)
             == resolveManager->getRequestResponseMap()->end())
@@ -195,26 +195,30 @@ void ResolverService::resolveGeneralTask()
     QList<QByteArray> res = Serialization::universalDeserialize(msg);
     using namespace Messages;
     BaseMessage message;
-    message.deserialize(msg);
+    message = msg;
 
-    QByteArray msgType = message.type;
+    unsigned int msgType = message.type;
     QByteArray data_test = message.serialize();
-    if (msgType.isEmpty())
+    if (msgType == 0)
     {
         qDebug() << "msgType.isEmpty()";
     }
-    if (message.data.isEmpty() && msgType != GET_ALL_ACTORS && msgType != GET_BLOCK_COUNT_MESSAGE)
+    if (message.data.isEmpty() && msgType != Messages::GeneralRequest::getAllActors
+        && msgType != Messages::GeneralRequest::getBlockCount)
     {
         finishWork();
         return;
     }
-    if (msgType != GET_ALL_ACTORS && msgType != GET_ALL_ACTORS_RESPONSE_MESSAGE)
+    if (msgType != Messages::GeneralRequest::getAllActors
+        && msgType != Messages::GeneralResponse::getAllActorsResponse)
         qDebug() << "Resolver: receive " << msgType;
-    if ((msgType != ACTOR_MESSAGE) && (msgType != DFS_MESSAGE) && (msgType != GET_ACTOR_RESPONSE_MESSAGE)
-        && (msgType != GET_ACTOR_MESSAGE) && (msgType != GET_ALL_ACTORS)
-        && (msgType != GET_ALL_ACTORS_RESPONSE_MESSAGE))
+    if ((msgType != Messages::ChainMessage::actorMessage) && (Messages::isDFSMessage(msgType))
+        && (msgType != Messages::GeneralRequest::getActor)
+        && (msgType != Messages::GeneralResponse::getActorResponse)
+        && (msgType != Messages::GeneralRequest::getAllActors)
+        && (msgType != Messages::GeneralResponse::getAllActorsResponse))
     {
-        if (RESPONSE.contains(msgType))
+        if (Messages::isGeneralResponse(msgType))
         {
             BaseMessageResponse responseMessage;
             responseMessage = msg;
@@ -234,13 +238,16 @@ void ResolverService::resolveGeneralTask()
             }
         }
     }
-    if (msgType == GET_ALL_ACTORS)
+    switch (msgType)
+    {
+    case Messages::GeneralRequest::getAllActors:
     {
         //        GetAllActorMessage response(message.getMsg_data());
         emit handleGetAllActor(calcHash(msg), receiver);
         finishWork();
+        break;
     }
-    else if (msgType == GET_ALL_ACTORS_RESPONSE_MESSAGE)
+    case Messages::GeneralResponse::getAllActorsResponse:
     {
         //        qDebug() << "RESOLVER SERVICE: "
         //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
@@ -252,30 +259,33 @@ void ResolverService::resolveGeneralTask()
         actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.data, 4));
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         finishWork();
+        break;
     }
-    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    //    else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
-    //    {
-    //        //
-    //        chatManager->msgReceiver(message);
-    //        finishWork();
-    //    }
-    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        //        else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
+        //        {
+        //            //
+        //            chatManager->msgReceiver(message);
+        //            finishWork();
+        //        }
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    // spread messages
-    else if (msgType == PROFILE_FILE)
+        // spread messages
+    case Messages::ChainMessage::profileMessage:
     {
         emit newProfile(message.data);
         finishWork();
+        break;
     }
-    else if (msgType == ACTOR_MESSAGE)
+    case Messages::ChainMessage::actorMessage:
     {
         Actor<KeyPublic> actor(message.data);
         actorIndex->handleNewActor(actor);
         //        emit newActor(actor);
         finishWork();
+        break;
     }
-    else if (msgType == BLOCK_MESSAGE)
+    case Messages::ChainMessage::blockMessage:
     {
         Block block(message.data);
         if (!validateBlock(block))
@@ -287,15 +297,17 @@ void ResolverService::resolveGeneralTask()
         blockchain->addBlockToBlockchain(block);
         //        emit newBlock(block);
         finishWork();
+        break;
     }
-    else if (msgType == GENESIS_BLOCK_MESSAGE)
+    case Messages::ChainMessage::genesisBlockMessage:
     {
         GenesisBlock block = message.data;
         blockchain->addGenBlockToBlockchain(block);
         //        emit newGenesisBlock(block);
         finishWork();
+        break;
     }
-    else if (msgType == COIN_REQUEST)
+    case Messages::ChainMessage::coinRequest:
     {
         QByteArray msg = message.data;
         auto list = msg.split(' ');
@@ -306,8 +318,9 @@ void ResolverService::resolveGeneralTask()
         node->coinResponse(message.signer, amount, plsr);
         //        emit coinRequest(message.getSigner(), amount);
         finishWork();
+        break;
     }
-    else if (msgType == TX_MESSAGE)
+    case Messages::ChainMessage::txMessage:
     {
         Transaction tx(message.data);
         //        if (!validate(tx))
@@ -317,12 +330,14 @@ void ResolverService::resolveGeneralTask()
         //        }
         emit newTx(tx);
         finishWork();
+        break;
     }
-    else if (msgType == CONTRACT_MESSAGE)
+    case Messages::ChainMessage::contractMessage:
     {
         //        Contract contract(message.getMsg_data());
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << CONTRACT_MESSAGE;
+                 << "recieveMsg(): type: "
+                 << "CONTRACT_MESSAGE";
         Transaction tx(message.data);
         if (!validate(tx))
         {
@@ -331,74 +346,84 @@ void ResolverService::resolveGeneralTask()
         }
         emit newTx(tx);
         finishWork();
+        break;
     }
 
-    //    else if (msgType == MERGED_BLOCK_MESSAGE)
-    //    {
-    //        //
-    //        qDebug() << "[resolve message] MERGED_BLOCK_MESSAGE";
-    //        finishWork();
-    //    }
-    //    else if (msgType == BLOCK_APPROVED_MESSAGE)
-    //    {
-    //        qDebug() << "RESOLVER SERVICE: "
-    //                 << "recieveMsg(): type: " << BLOCK_APPROVED_MESSAGE;
-    //        BlockApprovedMessage r(message.getData());
-    //        finishWork();
+        //    else if (msgType == MERGED_BLOCK_MESSAGE)
+        //    {
+        //        //
+        //        qDebug() << "[resolve message] MERGED_BLOCK_MESSAGE";
+        //        finishWork();
+        //    }
+        //    else if (msgType == BLOCK_APPROVED_MESSAGE)
+        //    {
+        //        qDebug() << "RESOLVER SERVICE: "
+        //                 << "recieveMsg(): type: " << BLOCK_APPROVED_MESSAGE;
+        //        BlockApprovedMessage r(message.getData());
+        //        finishWork();
 
-    //        //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
-    //    }
+        //        //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
+        //    }
+
     // request messages
-    else if (msgType == GET_ACTOR_MESSAGE)
+    case Messages::GeneralRequest::getActor:
     {
         GetActorMessage response;
         response = message.data;
         emit getActor(response.actorId, calcHash(msg), receiver);
         finishWork();
+        break;
     }
-
-    else if (msgType == GET_TX_MESSAGE)
+    case Messages::GeneralRequest::getTx:
     {
         GetTxMessage txMessage;
         txMessage = message.data;
         emit getTx(txMessage.param, txMessage.value, receiver, calcHash(msg));
         finishWork();
+        break;
     }
-    else if (msgType == GET_BLOCK_MESSAGE)
+    case Messages::GeneralRequest::getBlock:
     {
         GetBlockMessage blMessage;
         blMessage = message.data;
         emit getBlock(blMessage.param, blMessage.value, calcHash(msg), receiver);
         finishWork();
+        break;
     }
-    else if (msgType == GET_ACTOR_COUNT_MESSAGE)
+    case Messages::GeneralRequest::getActorCount:
     {
         emit getActorsCount(calcHash(msg), receiver);
         finishWork();
+        break;
     }
-    else if (msgType == GET_BLOCK_COUNT_MESSAGE)
+    case Messages::GeneralRequest::getBlockCount:
     {
         emit getBlocksCount(calcHash(msg), receiver);
         finishWork();
+        break;
     }
 
     // response messages
-    else if (msgType == GET_ACTOR_RESPONSE_MESSAGE)
+    case Messages::GeneralResponse::getActorResponse:
     {
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_ACTOR_RESPONSE_MESSAGE << "\nmessage: " << msg;
+                 << "recieveMsg(): type: "
+                 << "GET_ACTOR_RESPONSE_MESSAGE"
+                 << "\nmessage: " << msg;
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
         actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data));
         finishWork();
+        break;
     }
 
-    else if (msgType == GET_TX_RESPONSE_MESSAGE)
+    case Messages::GeneralResponse::getTxResponse:
     {
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_TX_RESPONSE_MESSAGE;
+                 << "recieveMsg(): type: "
+                 << "GET_TX_RESPONSE_MESSAGE";
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
@@ -411,11 +436,13 @@ void ResolverService::resolveGeneralTask()
         }
         emit newTx(tx);
         finishWork();
+        break;
     }
-    else if (msgType == GET_BLOCK_RESPONSE_MESSAGE)
+    case Messages::GeneralResponse::getBlockResponse:
     {
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_BLOCK_RESPONSE_MESSAGE;
+                 << "recieveMsg(): type: "
+                 << "GET_BLOCK_RESPONSE_MESSAGE";
 
         BaseMessageResponse responseMessage;
         responseMessage = msg;
@@ -443,31 +470,40 @@ void ResolverService::resolveGeneralTask()
             //            emit newBlock(block);
         }
         finishWork();
+        break;
     }
-    else if (msgType == GET_BLOCK_COUNT_RESPONSE_MESSAGE)
+    case Messages::GeneralResponse::getBlockCountResponse:
     {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_BLOCK_COUNT_RESPONSE_MESSAGE;
+                 << "recieveMsg(): type: "
+                 << "GET_BLOCK_COUNT_RESPONSE_MESSAGE";
         BigNumber count(responseMessage.data);
         emit blockCount(count);
         finishWork();
+        break;
     }
-    else if (msgType == GET_ACTOR_COUNT_RESPONSE_MESSAGE)
+    case Messages::GeneralResponse::getActorCountResponse:
     {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
         qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: " << GET_ACTOR_COUNT_RESPONSE_MESSAGE;
+                 << "recieveMsg(): type: "
+                 << "GET_ACTOR_COUNT_RESPONSE_MESSAGE";
         finishWork();
+        break;
     }
-    else
+    default:
+    {
         finishWork();
+        break;
+    }
+    }
 }
 // validation methods //
 

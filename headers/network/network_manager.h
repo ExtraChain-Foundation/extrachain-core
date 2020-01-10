@@ -227,7 +227,7 @@ public slots:
      * @brief Remove connections from connection list
      */
     void removeConnection();
-    void dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver);
+    void dfsToPeerTmp(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver);
 
 public:
     void distMessage(const QByteArray &data, const SocketPair &socketData);

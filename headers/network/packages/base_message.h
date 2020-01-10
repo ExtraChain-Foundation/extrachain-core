@@ -22,7 +22,7 @@ namespace Messages {
 struct BaseMessage : IMessage
 {
     QByteArray protocol = Config::Net::PROTOCOL_VERSION; // protocol version
-    QByteArray type;                                     // message type
+    unsigned int type = 0;                               // message type
     BigNumber signer;                                    // message signer actor's id
     QByteArray digSig;                                   // msg digital signature
     QByteArray data = "";

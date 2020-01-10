@@ -13,6 +13,7 @@
 #include "network/packages/base_message_response.h"
 #include "network/packages/service/response_messages.h"
 #include "network/packages/service/all_messages.h"
+#include "headers/network/packages/service/message_types.h"
 /**
  * @brief Actors that stored in blockchain
  */
@@ -21,11 +22,6 @@ class AccountController;
 class ActorIndex : public QObject
 {
     Q_OBJECT
-    const QByteArray classType = Messages::ACTOR_MESSAGE;
-    const QByteArray profileType = Messages::PROFILE_FILE;
-    const QByteArray getActorMessage = Messages::GET_ACTOR_MESSAGE;
-    const QByteArray getAllActorMessage = Messages::GET_ALL_ACTORS;
-
 private:
     AccountController *accController;
     ResolveManager *resolveManager = nullptr;
@@ -153,7 +149,7 @@ signals:
      * @param data
      * @param type
      */
-    void sendMessage(const QByteArray &data, const QByteArray &type);
+    void sendMessage(const QByteArray &data, const unsigned int &type);
     /**
      * @brief responseReady
      * @param data
@@ -161,7 +157,7 @@ signals:
      * @param requestHash
      * @param receiver
      */
-    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+    void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
                        const SocketPair &receiver);
 
     void sendProfileToUi(QString userID, QByteArrayList profile);

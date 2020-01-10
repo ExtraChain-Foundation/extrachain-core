@@ -191,24 +191,27 @@ void Dfs::loadFilesFromCard(const QString &card)
 
 void Dfs::getDFSStatus()
 {
-    if (QDir(DfsStruct::ROOT_FOOLDER_NAME).exists())
-    {
-        QDir dir(DfsStruct::ROOT_FOOLDER_NAME);
-        QStringList list = dir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-        for (const QString &el : list)
-        {
-            if (el != DfsStruct::ACTOR_CARD_FILE)
-            {
-                DistFileSystem::Status status(el.toUtf8(), CardManager::getAllFiles(el.toUtf8()));
-                emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
-            }
-        }
-    }
-    else
-    {
-        DistFileSystem::Status status("1", QStringList());
-        emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
-    }
+    //    if (QDir(DfsStruct::ROOT_FOOLDER_NAME).exists())
+    //    {
+    //        QDir dir(DfsStruct::ROOT_FOOLDER_NAME);
+    //        QStringList list = dir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+    //        for (const QString &el : list)
+    //        {
+    //            if (el != DfsStruct::ACTOR_CARD_FILE)
+    //            {
+    //                DistFileSystem::Status status;
+    //                status.dirOwner = el.toUtf8();
+    //                status.currentState = CardManager::getAllFiles(el.toUtf8());
+    //                status.calcHash();
+    //                emit sendMsg(status.serialize(), Messages::DFSMessage::statusMessage, SocketPair());
+    //            }
+    //        }
+    //    }
+    //    else
+    //    {
+    //        DistFileSystem::Status status("1", QStringList());
+    //        emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
+    //    }
 }
 
 void Dfs::signalConnection()
@@ -276,7 +279,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
 {
     qDebug() << "File request response:" << filePath;
-    DistFileSystem::titleMessage titleMessage(filePath);
+    DistFileSystem::TitleMessage titleMessage;
+    titleMessage.filePath = filePath;
     DfsStruct::Type type = getFileType(filePath);
     if (type == DfsStruct::Type::error)
     {
@@ -482,7 +486,7 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
     qDebug() << dfsChanges.data;
 
     if (applyChanges(dfsChanges))
-        sender->sendDfsMessage(dfsChanges);
+        sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
 }
 
 void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
@@ -502,7 +506,7 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     if (applyChanges(dfsChanges))
     {
     }
-    sender->sendDfsMessage(dfsChanges);
+    sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
 }
 
 bool Dfs::applyChanges(const DistFileSystem::DfsChanges &dfsChanges)
@@ -696,8 +700,9 @@ void Dfs::requestFile(const QString &filePath)
     if (dfsNetManager->isLoading(filePath))
         return;
     qDebug() << "Request file:" << filePath;
-    DistFileSystem::DfsRequest dfsRequest(filePath);
-    sender->sendDfsMessage(dfsRequest);
+    DistFileSystem::DfsRequest dfsRequest;
+    dfsRequest.filePath = filePath;
+    sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage);
 }
 
 QByteArray Dfs::buildDfsPath(QByteArray userID, DfsStruct::Type type)
@@ -993,7 +998,7 @@ void Dfs::init()
     signalConnection();
     //    ThreadPool::addThread(resolver);
 
-    getDFSStatus();
+    //    getDFSStatus();
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     initDFS(userId);
     QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);

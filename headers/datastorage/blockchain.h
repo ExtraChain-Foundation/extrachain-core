@@ -34,9 +34,6 @@ class Blockchain : public QObject
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
-    const int FIELS_SIZE = 4;
-    const QByteArray block_message = Messages::BLOCK_MESSAGE;
-    const QByteArray get_block_message = Messages::GET_BLOCK_MESSAGE;
     Q_OBJECT
 private:
     // storage //
@@ -287,7 +284,7 @@ signals:
     void NewBlock(Block block);
 
     // responses
-    void responseReady(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
+    void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
                        const SocketPair &receiver);
 
     /**
@@ -303,7 +300,7 @@ signals:
     void VerifiedTx(Transaction tx);
 
     void updateLastTransactionList();
-    void sendMessage(const QByteArray &data, const QByteArray &type);
+    void sendMessage(const QByteArray &data, const unsigned int &type);
     void finished();
 
 public:

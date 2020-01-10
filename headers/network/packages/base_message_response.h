@@ -19,7 +19,7 @@ public:
     //    virtual QByteArray concatenateAllData() const override;
     virtual QList<QByteArray> serializedParams() const override;
     virtual short getFieldsCount() const override;
-    virtual QByteArray serialize() const override;
+    //    virtual QByteArray serialize() const override;
     //    virtual void deserialize(const QByteArray &serialized) override;
     //    virtual const QByteArray hash() const override;
 

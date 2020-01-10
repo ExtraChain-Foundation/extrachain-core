@@ -104,7 +104,7 @@ void DFSResolverService::checkStatus()
             DistFileSystem::ReqFragsMessage reqFrags;
             reqFrags.filePath = title.filePath.toUtf8();
             reqFrags.listFrag = emptyFrags;
-            dfs->dfsNetManager->send(reqFrags.serialize());
+            dfs->dfsNetManager->send(reqFrags.serialize(), Messages::DFSMessage::requestFragments);
         }
     }
 }
@@ -262,7 +262,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const int &mType)
             // not apply && remove resolver && resend request
 
             if (dfs->applyChanges(message))
-                dfs->getSender()->sendDfsMessage(message);
+                dfs->getSender()->sendDfsMessage(message, Messages::DFSMessage::changesMessage);
             break;
         }
         default:
