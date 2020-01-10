@@ -16,6 +16,9 @@
 #include "profile/private_profile.h"
 #include "managers/chat.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#ifdef ETALONIUM_CLIENT
+#include "ui/ui_controller.h"
+#endif
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
@@ -44,6 +47,9 @@ Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
 Q_DECLARE_METATYPE(Network::DataStruct)
 Q_DECLARE_METATYPE(SubscribeController)
+#ifdef ETALONIUM_CLIENT
+Q_DECLARE_METATYPE(UiController*)
+#endif
 
 void registerMetaTypes()
 {
@@ -73,6 +79,7 @@ void registerMetaTypes()
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
     qRegisterMetaType<SubscribeController>();
+    qRegisterMetaType<UiController*>();
 }
 
 #endif

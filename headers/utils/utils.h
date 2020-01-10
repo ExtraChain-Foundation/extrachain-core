@@ -186,6 +186,26 @@ namespace DataStorage {
           "message BLOB             NOT NULL, "
           "owner   TEXT             NOT NULL  );";
 
+    static const std::string postTableName = "Post";
+    static const std::string commentsTableName = "Comments";
+    static const std::string likesTableName = "Likes";
+    static const std::string postTableCreation = "CREATE TABLE IF NOT EXISTS " + postTableName
+        + " ("
+          "body  TEXT PRIMARY KEY NOT NULL" // temp for compatibility with current solution
+          ");";
+    static const std::string commentsTableCreation = "CREATE TABLE IF NOT EXISTS " + commentsTableName
+        + " ("
+          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "sender     TEXT                     NOT NULL, "
+          "message    BLOB                     NOT NULL, "
+          "date       TEXT                     NOT NULL, "
+          "sign       TEXT                     NOT NULL "
+          ");";
+    static const std::string likesTableCreation = "CREATE TABLE IF NOT EXISTS " + likesTableName
+        + " ("
+          "liker TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
