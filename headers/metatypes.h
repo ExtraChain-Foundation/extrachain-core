@@ -79,7 +79,9 @@ void registerMetaTypes()
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
     qRegisterMetaType<SubscribeController>();
+#ifdef ETALONIUM_CLIENT
     qRegisterMetaType<UiController*>();
+#endif
 }
 
 #endif
