@@ -65,7 +65,11 @@ QByteArray BaseMessage::concatenateAllData() const
 QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
-    QByteArray signeR = signer == 0 ? signer.toByteArray() : signer.toActorId();
+    QByteArray signeR;
+    if (signer == 0)
+        signeR = "";
+    else
+        signeR = signer.toActorId();
     l << protocol << QByteArray::number(type) << signeR << digSig << data;
     return l;
 }

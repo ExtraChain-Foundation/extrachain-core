@@ -234,7 +234,7 @@ namespace Serialization {
 
 // Delimiters //
 static const int DFS_FIELD_SIZE = 8;
-static const int DEFAULT_FIELD_SIZE = 4;
+static const int DEFAULT_FIELD_SIZE = 8;
 
 static const QByteArray DEFAULT_FIELD_SPLITTER = ":";
 static const QByteArray ACTOR_FIELD_SPLITTER = ":";

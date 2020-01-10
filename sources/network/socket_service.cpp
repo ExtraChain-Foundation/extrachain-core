@@ -178,7 +178,7 @@ void SocketService::establishConnection()
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR + net::readNetManagerIdentificator();
 
-    this->distMsg(Utils::intToByteArray(idb.size(), 8) + idb,
+    this->distMsg(/*Utils::intToByteArray(idb.size(), 8) + */ idb,
                   SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address " << this->socket;
 
@@ -211,12 +211,13 @@ void SocketService::continueDoRead()
 {
     if (socket->bytesAvailable() >= pendMsgSize)
     {
-        std::string pckg;
-        int bytesRead = socket->read(pckg.data(), pendMsgSize);
+        char pckg[pendMsgSize];
+        int bytesRead = socket->read(pckg, pendMsgSize);
+        char rpckg[bytesRead];
+        memcpy(rpckg, pckg, bytesRead);
         if (pendMsgSize == bytesRead)
         {
-            pendMsgSize = -1;
-            pendMsg.append(QByteArray::fromStdString(pckg));
+            pendMsg.append(rpckg);
             if (!this->isActive() && pendMsg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
             {
                 QByteArray b = pendMsg.mid(IDENTIFICATOR.size());
@@ -228,12 +229,13 @@ void SocketService::continueDoRead()
                 receiver.setId(this->getID().toByteArray());
                 this->gotMessage(pendMsg, receiver);
             }
+            pendMsgSize = -1;
             pendMsg.clear();
         }
         else
         {
             pendMsgSize = pendMsgSize - bytesRead;
-            pendMsg.append(QByteArray::fromStdString(pckg));
+            pendMsg.append(rpckg);
         }
         if (socket->bytesAvailable() >= pendMsgSize)
         {
