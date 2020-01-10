@@ -59,7 +59,7 @@ std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
 }
 
 void SubscribeController::initSubscribe()
-{
+{ // TODO: move to UC
     QByteArray currentId = nodeManager->getIdPrivateProfile();
     QDir().mkpath("data/" + currentId + "/services");
 
@@ -75,10 +75,15 @@ void SubscribeController::initSubscribe()
     dbChatInvite.createTable(Config::DataStorage::chatInviteCreation);
     dbChatInvite.close();
 
+    DBConnector dbMyLikes("data/" + currentId.toStdString() + "/services/likes");
+    dbMyLikes.createTable(Config::DataStorage::myLikesTableCreation);
+    dbMyLikes.close();
+
     QTimer::singleShot(6000, [this]() {
         send(DfsStruct::DfsSave::Static, "chatinvite", "", DfsStruct::service, DfsStruct::SubType::undef);
         send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service, DfsStruct::SubType::undef);
         send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service, DfsStruct::SubType::undef);
+        send(DfsStruct::DfsSave::Static, "likes", "", DfsStruct::service, DfsStruct::SubType::undef);
     });
 }
 

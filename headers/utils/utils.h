@@ -190,7 +190,7 @@ namespace DataStorage {
     static const std::string postTextTableName = "PostText";
     static const std::string commentsTableName = "Comments";
     static const std::string likesTableName = "Likes";
-    static const std::string myLikesTableName = "MyLikes";
+    static const std::string myLikesPostsTableName = "Posts";
     static const std::string postTableCreation = "CREATE TABLE IF NOT EXISTS " + postTableName
         + " ("
           "version      TEXT  NOT NULL,"
@@ -218,10 +218,12 @@ namespace DataStorage {
         + " ("
           "liker TEXT PRIMARY KEY NOT NULL,"
           "sign  TEXT            NOT NULL);";
-    static const std::string myLikesTableCreation = "CREATE TABLE IF NOT EXISTS " + myLikesTableName
+    static const std::string myLikesTableCreation = "CREATE TABLE IF NOT EXISTS " + myLikesPostsTableName
         + " ("
-          "user TEXT PRIMARY KEY NOT NULL,"
-          "post TEXT PRIMARY KEY NOT NULL);";
+          "user TEXT NOT NULL,"
+          "post TEXT NOT NULL,"
+          "PRIMARY KEY (user, post)"
+          ");";
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
