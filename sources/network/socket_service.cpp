@@ -211,10 +211,11 @@ void SocketService::continueDoRead()
 {
     if (socket->bytesAvailable() >= pendMsgSize)
     {
-        char pckg[pendMsgSize];
+        char *pckg = new char[pendMsgSize];
         int bytesRead = socket->read(pckg, pendMsgSize);
-        char rpckg[bytesRead];
+        char *rpckg = new char[bytesRead];
         memcpy(rpckg, pckg, bytesRead);
+
         if (pendMsgSize == bytesRead)
         {
             pendMsg.append(rpckg);
@@ -237,6 +238,8 @@ void SocketService::continueDoRead()
             pendMsgSize = pendMsgSize - bytesRead;
             pendMsg.append(rpckg);
         }
+        delete[] pckg;
+        delete[] rpckg;
         if (socket->bytesAvailable() >= pendMsgSize)
         {
             doRead();
