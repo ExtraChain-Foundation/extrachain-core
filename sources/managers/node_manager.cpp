@@ -122,14 +122,14 @@ void NodeManager::connectSmContractManager()
     //            &NodeManager::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
             [this](const QByteArray &id, const QString &type, const bool &rewrite) {
-                emit nodeEditPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type, id,
-                                        rewrite);
+                emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, type, id,
+                                            rewrite);
             });
 
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
+    connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::prpEditPrivateProfile);
 
 #ifdef ETALONIUM_CLIENT
-    connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::prpEditPrivateProfile);
     connect(uiController, &UiController::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
     connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
