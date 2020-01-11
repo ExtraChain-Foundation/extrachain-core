@@ -457,7 +457,8 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), "wallet", id, false);
+        emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, "wallet", id,
+                                    false);
         qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
@@ -484,7 +485,8 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
+        emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, value, data,
+                                    rewrite);
         qDebug() << "222222222222";
     });
     connect(uiController, &UiController::getInfoFromPrProfile, [this](const QString &type) {
