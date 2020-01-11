@@ -264,7 +264,7 @@ QByteArray BigNumber::toByteArray(int base) const
 {
     char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
     QByteArray number(ch);
-    delete ch;
+//    delete ch; //PLZ CHECK
     return number;
 }
 

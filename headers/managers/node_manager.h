@@ -144,7 +144,7 @@ signals:
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile,
+    void nodeEditPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile,
                             const QString &type, const QByteArray &Data, const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
