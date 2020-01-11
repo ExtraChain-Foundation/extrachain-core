@@ -263,7 +263,7 @@ bool BigNumber::isEmpty() const // TODO
 QByteArray BigNumber::toByteArray(int base) const
 {
     char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
-    QByteArray number;
+    QByteArray number(ch);
     void (*freefunc)(void *, size_t);
     mp_get_memory_functions(NULL, NULL, &freefunc);
     freefunc(ch, strlen(ch) + 1);
