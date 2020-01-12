@@ -1,34 +1,33 @@
 #ifndef DFS_CHANGES_H
 #define DFS_CHANGES_H
 
-#include "dumessage.h"
+#include "dfs/packages/headers/dfs_message_interface.h"
+#include "headers/network/packages/message_interface.h"
 #include <QFile>
 
-namespace DFSMessage {
-struct DfsChanges : public DUMessage
+namespace DistFileSystem {
+struct DfsChanges : Messages::ISmallMessage
 {
     const short FIELDS_COUNT = 7;
 
     QString filePath;
 
-    QByteArrayList data;
+    QList<QByteArray> data;
     QByteArray range;
     int changeType = -1;
     QByteArray userId;
     QByteArray signature;
     QByteArray messHash;
 
-    DfsChanges();
-    DfsChanges(const QByteArray &serialized);
-    DfsChanges(const QString &filePath, const QByteArrayList &data, const QString &range, int changeType,
-               const QByteArray &actorId, const QByteArray &signature, const QByteArray &messHash);
-
-    ~DfsChanges() = default;
-
-    bool isEmpty() const;
-    const QList<QByteArray> serializedParams() const override final;
-
-    DfsChanges operator=(const DfsChanges &msg);
+    const QList<QByteArray> serializedParams() const;
+    void operator=(QList<QByteArray> &list);
+    // ISmallMessage interface
+public:
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
 };
 }
 

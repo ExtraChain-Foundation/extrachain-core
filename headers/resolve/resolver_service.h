@@ -21,6 +21,7 @@
 #include "network/socket_pair.h"
 #include "datastorage/genesis_block.h"
 #include "dfs/packages/headers/all.h"
+#include "headers/network/packages/service/message_types.h"
 
 static QMutex handlerFileMutex;
 
@@ -57,7 +58,7 @@ private:
     std::vector<bool> dataChecker;
     //    QString path;
     QFile file;
-    DFSMessage::title_message title;
+    DistFileSystem::TitleMessage title;
 
 private:
     bool active = false;
@@ -110,7 +111,7 @@ public:
 
     Lifetime getLifetime() const;
 
-    DFSMessage::title_message getTitle() const;
+    //    DFS::titleMessage getTitle() const;
 
 private:
     /**
@@ -130,7 +131,7 @@ private:
      * @param message
      * @return
      */
-    bool validate(const Messages::IMessage &message);
+    bool validate(const Messages::BaseMessage &message);
     /**
      * @brief checkMsgType
      * @param msg
@@ -148,13 +149,13 @@ private:
      * @param message
      * @return
      */
-    bool MessageIsNotValid(const Messages::IMessage &message);
+    bool MessageIsNotValid(const Messages::BaseMessage &message);
     /**
      * @brief addResponseHandler
      * @param message
      * @return
      */
-    bool addResponseHandler(const QByteArray &message, const QByteArray &msgType);
+    bool addResponseHandler(const QByteArray &message, const unsigned int &msgType);
     /**
      * @brief checkResponseHandler
      * @param message

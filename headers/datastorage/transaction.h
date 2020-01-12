@@ -13,7 +13,7 @@ class Transaction : public QObject
 {
     Q_OBJECT
 
-    const int FIELS_SIZE = 4;
+    const int FIELS_SIZE = 8;
 
 public:
     // Construct empty transaction

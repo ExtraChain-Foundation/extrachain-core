@@ -3,9 +3,11 @@
 
 #include "utils/utils.h"
 #include "dfs/types/headers/dfstruct.h"
-#include "dumessage.h"
-namespace DFSMessage {
-struct dfs_message : public DUMessage
+#include "dfs/packages/headers/dfs_message_interface.h"
+#include "headers/network/packages/message_interface.h"
+
+namespace DistFileSystem {
+struct DfsMessage : Messages::ISmallMessage
 {
 
     const short FIELDS_COUNT = 3;
@@ -13,13 +15,17 @@ struct dfs_message : public DUMessage
     QByteArray dataHash;
     long long pckgNumber = ULONG_MAX;
     QByteArray data;
-    dfs_message();
-    dfs_message(const QByteArray &hash, const std::size_t &pckgNumber, const QByteArray &data);
-    dfs_message(const QByteArray &serialized);
-    dfs_message(const dfs_message &temp);
-    ~dfs_message() override final;
 
-    const QList<QByteArray> serializedParams() const override;
+public:
+    const QList<QByteArray> serializedParams() const;
+
+    // ISmallMessage interface
+public:
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
 };
 }
 #endif // MESSAGE_STRCUT_H

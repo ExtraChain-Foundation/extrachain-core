@@ -96,7 +96,7 @@ signals:
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
-    void registrateMsg(const QByteArray &data, const QByteArray &msgType);
+    void registrateMsg(const QByteArray &data, const unsigned int &msgType);
     /**
      * @brief sendMessageResponse from resolver
      * @param data
@@ -104,8 +104,8 @@ public slots:
      * @param requestHash
      * @param receiver
      */
-    void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
-                             const SocketPair &receiver);
+    void sendMessageResponse(const QByteArray &data, const unsigned int &msgType,
+                             const QByteArray &requestHash, const SocketPair &receiver);
     void taskFinished();
 public slots:
     void process();

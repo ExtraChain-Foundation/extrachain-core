@@ -1,63 +1,30 @@
 #include <headers/network/packages/base_message_response.h>
 using namespace Messages;
 
-BaseMessageResponse::BaseMessageResponse(const QByteArray &msg, const QByteArray &hash,
-                                         const QByteArray &type)
-    : BaseMessage(type)
+void BaseMessageResponse::operator=(BaseMessageResponse bm)
 {
-    this->msg_data = msg;
-    this->dataHash = hash;
+    QList<QByteArray> list = bm.BaseMessage::serializedParams();
+    BaseMessage::operator=(list);
+    dataHash = bm.dataHash;
 }
-
-BaseMessageResponse::BaseMessageResponse(const QByteArray &serialized)
+// IMessage interface
+void BaseMessageResponse::operator=(QByteArray &serialized)
 {
     deserialize(serialized);
 }
 
-BaseMessageResponse::BaseMessageResponse(const BaseMessageResponse &temp)
+void BaseMessageResponse::operator=(QList<QByteArray> &list)
 {
-    QList<QByteArray> list = temp.BaseMessage::serializedParams();
-    this->BaseMessage::initFields(list);
-    dataHash = temp.dataHash;
-}
-
-BaseMessageResponse::~BaseMessageResponse()
-{
-}
-
-BaseMessageResponse BaseMessageResponse::operator=(const BaseMessageResponse &temp)
-{
-    QList<QByteArray> list = temp.BaseMessage::serializedParams();
-    this->BaseMessage::initFields(list);
-    dataHash = temp.dataHash;
-    return *this;
-}
-
-void BaseMessageResponse::deserialize(const QByteArray &serialized)
-{
-    QList<QByteArray> list = deserializeToList(serialized);
-    this->initFields(list);
-}
-
-const QByteArray BaseMessageResponse::hash() const
-{
-    return dataHash;
-}
-
-QByteArray BaseMessageResponse::getDataHash() const
-{
-    return dataHash;
-}
-
-short BaseMessageResponse::getFieldsCount() const
-{
-    return this->BaseMessage::getFieldsCount() + FIELDS_COUNT;
-}
-
-void BaseMessageResponse::initFields(QList<QByteArray> &list)
-{
-    BaseMessage::initFields(list);
+    BaseMessage::operator=(list);
     dataHash = list.takeFirst();
+}
+
+bool BaseMessageResponse::isEmpty() const
+{
+    if (BaseMessage::isEmpty() || dataHash.isEmpty())
+        return true;
+    else
+        return false;
 }
 
 QList<QByteArray> BaseMessageResponse::serializedParams() const
@@ -65,4 +32,9 @@ QList<QByteArray> BaseMessageResponse::serializedParams() const
     QList<QByteArray> list = BaseMessage::serializedParams();
     list << dataHash;
     return list;
+}
+
+short BaseMessageResponse::getFieldsCount() const
+{
+    return BaseMessage::getFieldsCount() + FIELDS_COUNT;
 }

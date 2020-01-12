@@ -29,9 +29,12 @@ void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray
     file.close();
 }
 
-void PrivateProfile::editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile,
-                                        const QString &type, const QByteArray &_data, const bool &reWrite)
+void PrivateProfile::prpEditPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
+                                           const QByteArray &Data, const bool &reWrite)
 {
+    QByteArray hashLogin = profile.first;
+    QByteArray idProfile = profile.second;
+
     QDir().mkdir(PathProfile);
     QFile file(PathProfile + "/" + idProfile + ".private");
     if (!file.exists())
@@ -49,9 +52,9 @@ void PrivateProfile::editPrivateProfile(const QByteArray &hashLogin, const QByte
         QMap<QString, QByteArray> map;
         readData(map, data);
         if (reWrite)
-            set(map, type, _data);
+            set(map, type, Data);
         else
-            add(map, type, _data);
+            add(map, type, Data);
         data.clear();
         writeData(map, data);
         data = hashLogin + data;

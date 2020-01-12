@@ -202,7 +202,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QString PROTOCOL_VERSION = "ExtraCoin_v2";
+    static const QByteArray PROTOCOL_VERSION = "ExtraCoin_v2";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
@@ -234,7 +234,7 @@ namespace Serialization {
 
 // Delimiters //
 static const int DFS_FIELD_SIZE = 8;
-static const int DEFAULT_FIELD_SIZE = 4;
+static const int DEFAULT_FIELD_SIZE = 8;
 
 static const QByteArray DEFAULT_FIELD_SPLITTER = ":";
 static const QByteArray ACTOR_FIELD_SPLITTER = ":";

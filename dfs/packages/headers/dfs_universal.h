@@ -1,4 +1,0 @@
-#ifndef DFS_UNIVERSAL_H
-#define DFS_UNIVERSAL_H
-
-#endif // DFS_UNIVERSAL_H

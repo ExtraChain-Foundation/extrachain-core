@@ -1,17 +1,13 @@
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
-INCLUDEPATH += $$PWD/deprecated/headers
 
 SOURCES += \
     $$PWD/dfs/controls/sources/subscribe_controller.cpp \
-    $$PWD/dfs/managers/headers/dfsnetmanager.cpp \
-    $$PWD/dfs/managers/headers/sender.cpp \
+    $$PWD/dfs/managers/sources/dfsnetmanager.cpp \
+    $$PWD/dfs/managers/sources/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
-    $$PWD/dfs/packages/headers/dclosing.cpp \
-    $$PWD/dfs/packages/headers/dumessage.cpp \
-    $$PWD/dfs/packages/headers/status.cpp \
+    $$PWD/dfs/packages/sources/status.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
-    $$PWD/dfs/packages/sources/dfs_status.cpp \
     $$PWD/dfs/packages/sources/dfs_changes.cpp \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/req_frags_message.cpp \
@@ -37,6 +33,7 @@ SOURCES += \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/tx_pair.cpp \
+    $$PWD/sources/network/packages/service/connections_message.cpp \
     $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
@@ -47,7 +44,6 @@ SOURCES += \
     $$PWD/sources/managers/logs_manager.cpp \
     $$PWD/sources/network/packages/base_message_response.cpp \
     $$PWD/sources/network/packages/service/get_all_actor_message.cpp \
-    $$PWD/sources/network/packages/service/list_connections.cpp \
     $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
@@ -61,7 +57,6 @@ SOURCES += \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/managers/sources/dfsindex.cpp \
     $$PWD/dfs/managers/sources/storedindex.cpp \
-    $$PWD/dfs/packages/sources/dfs_universal.cpp \
     $$PWD/dfs/types/sources/coin_price.cpp \
     $$PWD/dfs/types/sources/dfsitem.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
@@ -70,14 +65,10 @@ SOURCES += \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
     $$PWD/sources/network/packages/base_message.cpp \
-    $$PWD/deprecated/sources/network/packages/service/block_approved_message.cpp \
-    $$PWD/deprecated/sources/network/packages/service/chat_message.cpp \
-    $$PWD/deprecated/sources/network/packages/service/downloaddfsrequest.cpp \
     $$PWD/sources/network/packages/service/get_actor_message.cpp \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
-    $$PWD/sources/network/packages/service/merged_block_message.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp
@@ -87,9 +78,7 @@ HEADERS += \
     $$PWD/dfs/managers/headers/dfsnetmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \
-    $$PWD/dfs/packages/headers/dclosing.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
-    $$PWD/dfs/packages/headers/dumessage.h \
     $$PWD/dfs/packages/headers/message_struct.h \
     $$PWD/dfs/packages/headers/req_frags_message.h \
     $$PWD/dfs/packages/headers/status.h \
@@ -106,7 +95,6 @@ HEADERS += \
     $$PWD/headers/enc/crypt_interface.h \
     $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
-    $$PWD/dfs/packages/headers/dfs_status.h \
     $$PWD/dfs/packages/headers/dfs_changes.h \
     $$PWD/dfs/types/headers/cardfile_interface.h \
     $$PWD/headers/managers/chat.h \
@@ -126,6 +114,8 @@ HEADERS += \
     $$PWD/headers/datastorage/genesis_block.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/tx_pair.h \
+    $$PWD/headers/network/packages/service/connections_message.h \
+    $$PWD/headers/network/packages/service/message_types.h \
     $$PWD/headers/profile/profile.h \
     $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \
@@ -151,7 +141,6 @@ HEADERS += \
     $$PWD/dfs/managers/headers/card_manager.h \
     $$PWD/dfs/managers/headers/dfsindex.h \
     $$PWD/dfs/managers/headers/storedindex.h \
-    $$PWD/dfs/packages/headers/dfs_universal.h \
     $$PWD/dfs/types/headers/coin_price.h \
     $$PWD/dfs/types/headers/dfsitem.h \
     $$PWD/dfs/types/headers/dfstruct.h \
@@ -160,19 +149,13 @@ HEADERS += \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
     $$PWD/headers/network/packages/base_message.h \
-    $$PWD/headers/network/packages/entities/entity_message.h \
     $$PWD/headers/network/packages/message_interface.h \
     $$PWD/headers/network/packages/service/all_messages.h \
-    $$PWD/deprecated/headers/network/packages/service/block_approved_message.h \
-    $$PWD/deprecated/headers/network/packages/service/chat_message.h \
-    $$PWD/deprecated/headers/network/packages/service/downloaddfsrequest.h \
     $$PWD/headers/network/packages/service/get_actor_message.h \
     $$PWD/headers/network/packages/service/get_block_message.h \
     $$PWD/headers/network/packages/service/get_count_messages.h \
     $$PWD/headers/network/packages/service/get_tx_message.h \
     $$PWD/headers/network/packages/service/get_tx_pair_message.h \
-    $$PWD/headers/network/packages/service/list_connections.h \
-    $$PWD/headers/network/packages/service/merged_block_message.h \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/response_messages.h \
     $$PWD/headers/network/packages/service/verify_messages.h \

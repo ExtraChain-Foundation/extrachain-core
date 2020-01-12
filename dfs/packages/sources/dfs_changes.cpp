@@ -1,28 +1,19 @@
 #include "dfs/packages/headers/dfs_changes.h"
 
-DFSMessage::DfsChanges::DfsChanges()
-    : DUMessage(dfsMessageType::changesMessage)
+const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const
 {
+    QList<QByteArray> list;
+
+    list << filePath.toUtf8() << Serialization::universalSerialize(data, DistFileSystem::fieldsSize) << range
+         << QByteArray::number(changeType) << userId << signature << messHash;
+
+    return list;
 }
 
-DFSMessage::DfsChanges::DfsChanges(const QByteArray &serialized)
-    : DUMessage(dfsMessageType::changesMessage)
+void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list)
 {
-    QList<QByteArray> list = deserialize(serialized);
-
-    if (list.size() != FIELDS_COUNT + 1)
-    {
-        qDebug() << "[DfsChanges] Incorrect input data";
-        return;
-    }
-
-    if (dfsMessageType::changesMessage != list.takeFirst().toInt())
-    {
-        qDebug() << "[DfsChanges] Incorrect message type";
-    }
-
-    filePath = QString::fromUtf8(list.takeFirst());
-    data = Serialization::universalDeserialize(list.takeFirst(), DFSMessage::fieldsSize);
+    filePath = list.takeFirst();
+    data = Serialization::universalDeserialize(list.takeFirst(), DistFileSystem::fieldsSize);
     range = list.takeFirst();
     changeType = list.takeFirst().toInt();
     userId = list.takeFirst();
@@ -30,45 +21,29 @@ DFSMessage::DfsChanges::DfsChanges(const QByteArray &serialized)
     messHash = list.takeFirst();
 }
 
-DFSMessage::DfsChanges::DfsChanges(const QString &filePath, const QByteArrayList &data, const QString &range,
-                                   int type, const QByteArray &actorId, const QByteArray &signature,
-                                   const QByteArray &messHash)
-    : DUMessage(dfsMessageType::changesMessage)
+void DistFileSystem::DfsChanges::operator=(QByteArray &serialized)
 {
-    this->filePath = filePath;
-    this->data = data;
-    this->range = range.toLatin1();
-    this->changeType = type;
-    this->userId = actorId;
-    this->signature = signature;
-    this->messHash = messHash;
+    deserialize(serialized);
 }
 
-bool DFSMessage::DfsChanges::isEmpty() const
+bool DistFileSystem::DfsChanges::isEmpty() const
 {
-    return type == dfsMessageType::none || filePath.isEmpty() || data.isEmpty() || range.isEmpty()
-        || changeType == -1 || userId.isEmpty() || signature.isEmpty() || messHash.isEmpty();
+    return filePath.isEmpty() || data.isEmpty() || range.isEmpty() || changeType == -1 || userId.isEmpty()
+        || signature.isEmpty() || messHash.isEmpty();
 }
 
-const QList<QByteArray> DFSMessage::DfsChanges::serializedParams() const
+short DistFileSystem::DfsChanges::getFieldsCount() const
 {
-    QList<QByteArray> list;
-
-    list << QByteArray::number(type) << filePath.toUtf8()
-         << Serialization::universalSerialize(data, DFSMessage::fieldsSize) << range
-         << QByteArray::number(changeType) << userId << signature << messHash;
-
-    return list;
+    return DfsChanges::FIELDS_COUNT;
 }
 
-DFSMessage::DfsChanges DFSMessage::DfsChanges::operator=(const DFSMessage::DfsChanges &msg)
+QByteArray DistFileSystem::DfsChanges::serialize() const
 {
-    this->filePath = msg.filePath;
-    this->data = msg.data;
-    this->range = msg.range;
-    this->changeType = msg.changeType;
-    this->userId = msg.userId;
-    this->signature = msg.signature;
-    this->messHash = msg.messHash;
-    return *this;
+    return Serialization::universalSerialize(serializedParams(), DistFileSystem::fieldsSize);
+}
+
+void DistFileSystem::DfsChanges::deserialize(const QByteArray &serialized)
+{
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized, DistFileSystem::fieldsSize);
+    operator=(l);
 }

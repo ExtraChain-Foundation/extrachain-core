@@ -2,13 +2,9 @@
 #define DFS_H
 
 #include "dfs/managers/headers/dfsindex.h"
-#include "dfs/packages/headers/dfs_universal.h"
 #include "dfs/managers/headers/card_manager.h"
-#include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
-#include "dfs/packages/headers/dfs_status.h"
 #include "dfs/packages/headers/dfs_changes.h"
-//#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
@@ -89,7 +85,7 @@ public slots:
     void editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data);
     void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);
-    bool applyChanges(const DFSMessage::DfsChanges &dfsChanges);
+    bool applyChanges(const DistFileSystem::DfsChanges &dfsChanges);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void startDFS();
@@ -105,8 +101,8 @@ private:
                         QByteArray hash);
     void updateFromNewStored(QString filePath);
     bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
-    bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
-    bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
+    bool applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges);
+    bool applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges);
     DfsStruct::Type getFileType(const QString &filePath);
 
     QTimer *timerTmpFiles;
