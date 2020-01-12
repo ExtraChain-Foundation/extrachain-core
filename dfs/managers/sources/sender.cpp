@@ -11,7 +11,7 @@ void Sender::setNetManager(DFSNetManager *value)
     NetManager = value;
 }
 
-void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, SocketPair receiver)
+void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))

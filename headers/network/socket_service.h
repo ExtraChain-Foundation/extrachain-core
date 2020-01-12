@@ -107,13 +107,13 @@ private slots:
 
 public:
     void gotMessage(QByteArray msg, SocketPair rec);
-    BigNumber getID();
+    const BigNumber &getID();
     void processID(QByteArray id);
     /**
      * @brief Send message using QTcpSocket
      * @param message
      */
-    void *distMsg(const QByteArray data, const SocketPair socketData);
+    void *distMsg(const QByteArray data, const SocketPair &socketData);
     bool *socketStatus() const;
     bool isActive() const;
     QString getAddress() const;

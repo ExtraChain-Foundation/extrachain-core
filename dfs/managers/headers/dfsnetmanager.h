@@ -52,6 +52,8 @@ public:
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
 
+    QList<DFSResolverService *> getDfsResolvers() const;
+    bool nameIsTaken(QString name);
 signals:
     void newMessage(Network::DataStruct data);
     void finished();

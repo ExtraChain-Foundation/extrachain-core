@@ -41,7 +41,8 @@ public:
      * @brief Send any dfs message (template function)
      */
     template <typename T>
-    void sendDfsMessage(const T &dfsMessage, const unsigned int &type, const SocketPair &receiver = {})
+    void sendDfsMessage(const T &dfsMessage, const unsigned int &type,
+                        const SocketPair &receiver = SocketPair())
     {
         //        static_assert(std::is_base_of<DFS::DUMessage, T>::value, "Derived not derived from
         //        DUMessage");
@@ -70,7 +71,7 @@ signals:
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
 
 public slots:
-    void sendFragments(QString path, DfsStruct::Type type, QByteArray frag, SocketPair receiver);
+    void sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver);
 
     /**
      * @brief process

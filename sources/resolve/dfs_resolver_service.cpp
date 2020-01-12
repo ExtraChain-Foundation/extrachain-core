@@ -113,12 +113,12 @@ bool DFSResolverService::isActive() const
     return active;
 }
 
-void DFSResolverService::setTask(QByteArray msg, SocketPair receiver)
+void DFSResolverService::setTask(QByteArray _msg, SocketPair _receiver)
 {
     active = true;
-    this->msg = msg;
+    this->msg = _msg;
     this->hash = Utils::calcKeccak(msg);
-    this->receiver = receiver;
+    this->receiver = _receiver;
 }
 
 bool DFSResolverService::validate(const Messages::BaseMessage &message)

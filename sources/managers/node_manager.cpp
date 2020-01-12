@@ -43,9 +43,9 @@ NodeManager::NodeManager()
     actorIndex->setResolveManager(resolveManager);
     connectSignals();
 
-    static QTimer getAllActorsTimer;
-    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
-    getAllActorsTimer.start(10000);
+    //    static QTimer getAllActorsTimer;
+    //    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    //    getAllActorsTimer.start(10000);
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
@@ -286,9 +286,9 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
 
 void NodeManager::getAllActors()
 {
-    QByteArray res = getIdPrivateProfile();
-    if (!res.isEmpty())
-        emit getAllActorsNode(res, true);
+    //    QByteArray res = getIdPrivateProfile();
+    //    if (!res.isEmpty())
+    //        emit getAllActorsNode(res, true);
 }
 void NodeManager::getAllActorsTimerCall()
 {
@@ -636,7 +636,7 @@ void NodeManager::connectSignals()
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
-    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
+    //    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
 void NodeManager::prepareFolders()

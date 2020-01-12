@@ -121,13 +121,13 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
     {
         QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
-
         socket->write(_wtSok, _wtSok.size());
     }
 }
 
-void *SocketService::distMsg(const QByteArray data, const SocketPair socketData)
+void *SocketService::distMsg(const QByteArray data, const SocketPair &socketData)
 {
+    //    QThread::currentThread()->msleep(100);
     emit msgReady(data, socketData);
     // QCoreApplication::processEvents();
     return nullptr;
@@ -323,7 +323,7 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
         netManager->MessageReceived(bmsg, rec);
 }
 
-BigNumber SocketService::getID()
+const BigNumber &SocketService::getID()
 {
     return identificator;
 }

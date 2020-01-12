@@ -338,7 +338,10 @@ QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serializ
         pos += fiels_size;
         QByteArray el = serialized.mid(pos, count);
         pos += count;
-        list << el;
+        if (el.isEmpty())
+            list.append(el);
+        else
+            list << el;
     }
     //    serialized.remove(0, pos);
     return list;

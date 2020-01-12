@@ -121,7 +121,7 @@ public:
      * @param msg
      * @param receiver
      */
-    void setTask(QByteArray msg, SocketPair receiver);
+    void setTask(QByteArray _msg, SocketPair _receiver);
 
 public:
     void setDfs(Dfs *value);

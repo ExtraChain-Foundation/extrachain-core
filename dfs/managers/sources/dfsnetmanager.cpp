@@ -21,6 +21,21 @@ bool DFSNetManager::isLoading(const QString &fileName)
     return false;
 }
 
+QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
+{
+    return dfsResolvers;
+}
+
+bool DFSNetManager::nameIsTaken(QString name)
+{
+    for (DFSResolverService *resolver : dfsResolvers)
+    {
+        if (resolver->getTitle().filePath == name)
+            return true;
+    }
+    return false;
+}
+
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
     : NetManager(accountList, actInd)
 {

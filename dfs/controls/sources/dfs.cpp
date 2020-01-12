@@ -681,7 +681,7 @@ void Dfs::startDFS()
     timerTmpFiles = new QTimer(this);
     connect(timerTmpFiles, &QTimer::timeout, [this]() { searchTmp(true); });
     searchTmp(false);
-    timerTmpFiles->start(10000);
+    timerTmpFiles->start(3000);
 
     emit networkCreated();
 }
@@ -1062,19 +1062,25 @@ void Dfs::searchTmp(bool reqFile)
         if (file.isFile() && QFileInfo(dirIt.filePath()).suffix() == "tmp")
         {
             QString fileName = dirIt.filePath().chopped(4);
-            tmpFiles << fileName;
-            if (reqFile)
+            if (!dfsNetManager->nameIsTaken(fileName))
             {
+                QFile::remove(dirIt.filePath());
                 requestFile(fileName);
             }
+            //            else
+            //                tmpFiles << fileName;
+            //            if (reqFile)
+            //            {
+
+            //            }
         }
     }
 
-    if (tmpFiles.size() > 0)
-    {
-        qDebug() << tmpFiles;
-        this->m_tmpFiles = tmpFiles.toList();
-    }
+    //    if (tmpFiles.size() > 0)
+    //    {
+    //        qDebug() << tmpFiles;
+    //        this->m_tmpFiles = tmpFiles.toList();
+    //    }
 }
 
 void Dfs::requestCardById(QByteArray userId)

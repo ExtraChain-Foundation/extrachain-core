@@ -98,22 +98,22 @@ QByteArray BaseMessage::serialize() const
 
 void BaseMessage::deserialize(const QByteArray &serialized)
 {
-    //    QList<QByteArray> list = {};
-    //    int pos = 0;
-    //    for (int i = 0; i < getFieldsCount(); i++)
-    //    {
-    //        int count = Utils::qByteArrayToInt(serialized.mid(pos, Messages::FIELD_SIZE));
-    //        pos += Messages::FIELD_SIZE;
-    //        QByteArray el = serialized.mid(pos, count);
-    //        pos += count;
-    //        list << el;
-    //    }
-    //    if (list.size() < getFieldsCount())
-    //    {
-    //        qDebug() << "Error: can't deserialize message:" << serialized;
-    //    }
-    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
-    operator=(l);
+    QList<QByteArray> list = {};
+    int pos = 0;
+    for (int i = 0; i < getFieldsCount(); i++)
+    {
+        int count = Utils::qByteArrayToInt(serialized.mid(pos, Messages::FIELD_SIZE));
+        pos += Messages::FIELD_SIZE;
+        QByteArray el = serialized.mid(pos, count);
+        pos += count;
+        list << el;
+    }
+    if (list.size() < getFieldsCount())
+    {
+        qDebug() << "Error: can't deserialize message:" << serialized;
+    }
+    //    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    operator=(list);
 }
 
 const QByteArray BaseMessage::hash() const
