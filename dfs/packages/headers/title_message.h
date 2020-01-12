@@ -13,7 +13,7 @@ namespace DistFileSystem {
     QString filePath;
     unsigned long pckgsAmount = 0;
     long long fileSize = 0;
-    QByteArray f_type;
+    unsigned int f_type;
     QByteArray dataHash; // Keccak256
 
     void calcHash(); // filesize, pckgAmount, datahash

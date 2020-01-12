@@ -149,7 +149,6 @@ HEADERS += \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
     $$PWD/headers/network/packages/base_message.h \
-    $$PWD/headers/network/packages/entities/entity_message.h \
     $$PWD/headers/network/packages/message_interface.h \
     $$PWD/headers/network/packages/service/all_messages.h \
     $$PWD/headers/network/packages/service/get_actor_message.h \

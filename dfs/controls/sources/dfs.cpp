@@ -279,8 +279,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
 {
     qDebug() << "File request response:" << filePath;
-    DistFileSystem::TitleMessage titleMessage;
-    titleMessage.filePath = filePath;
     DfsStruct::Type type = getFileType(filePath);
     if (type == DfsStruct::Type::error)
     {
@@ -636,6 +634,8 @@ DfsStruct::Type Dfs::getFileType(const QString &filePath)
 {
     QString userId = filePath.mid(5, 20); //
     QString cardFile = "data/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE;
+    if (filePath == cardFile)
+        return DfsStruct::Type::card;
     if (!QFile::exists(cardFile))
         return DfsStruct::Type::error;
     DBConnector dfsCard(cardFile.toStdString());
@@ -870,8 +870,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
             switch (type)
             {
-            case DfsStruct::ChangeType::Insert:
-            {
+            case DfsStruct::ChangeType::Insert: {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
                 DBRow row;
@@ -880,8 +879,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 rows.push_back(row);
                 break;
             }
-            case DfsStruct::ChangeType::Delete:
-            {
+            case DfsStruct::ChangeType::Delete: {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
 

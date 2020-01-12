@@ -8,7 +8,6 @@
 #include "datastorage/index/fileindex.h"
 #include <datastorage/searchfilters.h>
 #include "profile/public_profile.h"
-#include "network/packages/entities/entity_message.h"
 #include "network/socket_pair.h"
 #include "network/packages/base_message_response.h"
 #include "network/packages/service/response_messages.h"

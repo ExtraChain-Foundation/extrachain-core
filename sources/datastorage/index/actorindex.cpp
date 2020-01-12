@@ -130,6 +130,7 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
     {
         Messages::GetAllActorMessage msg;
         resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getAllActors);
+        qDebug() << "GetAllActors";
         //    emit sendMessage(msg.serialize(), getAllActorMessage);
     }
 }

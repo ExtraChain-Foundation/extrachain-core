@@ -81,8 +81,7 @@ void DFSResolverService::checkStatus()
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
         file.close();
-        dfs->sendFromNetwork(DfsStruct::DfsSave::Network, title.filePath, "",
-                             DfsStruct::convertToDFType(title.f_type));
+        dfs->sendFromNetwork(DfsStruct::DfsSave::Network, title.filePath, "", (DfsStruct::Type)title.f_type);
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
@@ -191,162 +190,152 @@ void DFSResolverService::resolveDfsTask()
     }
     //    finishWork();
 }
-void DFSResolverService::resolveDfsMessage(QByteArray &data, const int &mType)
+void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int &msgType)
 {
     //    qDebug() << "[dfs resolve message] msg type:" << mType;
-    DistFileSystem::dfsMessageType msgType = static_cast<DistFileSystem::dfsMessageType>(mType);
-    using namespace DistFileSystem;
-
-    if (this->lifetime == Resolver::Lifetime::SHORT)
+    if (Messages::isDFSMessage(msgType))
     {
-        switch (msgType)
-        {
-        case dfsMessageType::titleMessage:
-        {
-            Network::DataStruct ds = { this->msg, this->receiver };
-            emit dfsTitle(ds);
-            break;
-        }
-        case dfsMessageType::requestFragments:
-        {
-            DistFileSystem::ReqFragsMessage message;
-            message = data;
-            if (message.filePath == "-1")
-                return;
-            dfs->sendFragments(message.filePath, message.listFrag, this->receiver);
-            break;
-        }
-        case dfsMessageType::requestMessage:
-        {
-            qDebug() << "[requestMessage:]";
-            DistFileSystem::DfsRequest message;
-            message = data;
+        using namespace Messages;
 
-            if (!QFile::exists(message.filePath))
+        if (this->lifetime == Resolver::Lifetime::SHORT)
+        {
+            switch (msgType)
             {
-                // dfs->getSender()->sendDfsMessage(message); // TODO
-                return;
+            case DFSMessage::titleMessage: {
+                Network::DataStruct ds = { this->msg, this->receiver };
+                emit dfsTitle(ds);
+                break;
             }
+            case DFSMessage::requestFragments: {
+                DistFileSystem::ReqFragsMessage message;
+                message = data;
+                if (message.filePath == "-1")
+                    return;
+                dfs->sendFragments(message.filePath, message.listFrag, this->receiver);
+                break;
+            }
+            case DFSMessage::requestMessage: {
+                qDebug() << "[requestMessage:]";
+                DistFileSystem::DfsRequest message;
+                message = data;
 
-            dfs->fileResponse(message.filePath, receiver);
+                if (!QFile::exists(message.filePath))
+                {
+                    // dfs->getSender()->sendDfsMessage(message); // TODO
+                    return;
+                }
 
-            break;
-        }
-        case dfsMessageType::responseMessage:
-        {
-            qDebug() << "[responseMessage:]";
-            break;
-        }
-        case dfsMessageType::statusMessage:
-        {
-            qDebug() << "[statusMessage:]";
-            DistFileSystem::Status message;
-            message = data;
-            break;
-        }
-        case dfsMessageType::storageMessage:
-        {
-            qDebug() << "[storageMessage:]";
-            break;
-        }
-        case dfsMessageType::closingMessage:
-        {
-            break;
-        }
-        case dfsMessageType::changesMessage:
-        {
-            DistFileSystem::DfsChanges message;
-            message = data;
+                dfs->fileResponse(message.filePath, receiver);
 
-            // if resolver with message.filePath exists
-            // not apply && remove resolver && resend request
+                break;
+            }
+            case DFSMessage::responseMessage: {
+                qDebug() << "[responseMessage:]";
+                break;
+            }
+            case DFSMessage::statusMessage: {
+                qDebug() << "[statusMessage:]";
+                DistFileSystem::Status message;
+                message = data;
+                break;
+            }
+            case DFSMessage::storageMessage: {
+                qDebug() << "[storageMessage:]";
+                break;
+            }
+            case DFSMessage::closingMessage: {
+                break;
+            }
+            case DFSMessage::changesMessage: {
+                DistFileSystem::DfsChanges message;
+                message = data;
 
-            if (dfs->applyChanges(message))
-                dfs->getSender()->sendDfsMessage(message, Messages::DFSMessage::changesMessage);
-            break;
+                // if resolver with message.filePath exists
+                // not apply && remove resolver && resend request
+
+                if (dfs->applyChanges(message))
+                    dfs->getSender()->sendDfsMessage(message, Messages::DFSMessage::changesMessage);
+                break;
+            }
+            default: {
+                // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
+                break;
+            }
+            }
         }
-        default:
+        else if (this->lifetime == Resolver::Lifetime::LONG)
         {
-            // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
-            break;
-        }
-        }
-    }
-    else if (this->lifetime == Resolver::Lifetime::LONG)
-    {
-        switch (msgType)
-        {
-        case dfsMessageType::titleMessage:
-        {
-            if (title.isEmpty())
+            switch (msgType)
             {
-                DistFileSystem::TitleMessage message;
-                title = data;
-                if (message.filePath.isEmpty())
+            case DFSMessage::titleMessage: {
+                if (title.isEmpty())
                 {
-                    return;
-                }
+                    DistFileSystem::TitleMessage message;
+                    message = data;
+                    if (message.filePath.isEmpty())
+                    {
+                        return;
+                    }
 
-                QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
-                if (QFile::exists(message.filePath)
-                    && (message.filePath.right(7) != ".stored" && message.filePath.right(5) != "/root"))
-                {
-                    finishWork();
-                    return;
+                    QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
+                    if (QFile::exists(message.filePath)
+                        && (message.filePath.right(7) != ".stored" && message.filePath.right(5) != "/root"))
+                    {
+                        finishWork();
+                        return;
+                    }
+                    if (!registerTitle(path, message))
+                    {
+                        qDebug() << "Title was not registered";
+                        active = false;
+                        // finishWork();
+                        return;
+                    }
+
+                    if (reloadTimer != NULL)
+                        reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
+                    else
+                        qDebug() << "timer error in title LONG";
                 }
-                if (!registerTitle(path, message))
+                break;
+            }
+            case DFSMessage::fileDataMessage: {
+                // qDebug() << "[fileDataMessage:]";
+                DistFileSystem::DfsMessage message;
+                message = data;
+                if (message.data.isEmpty())
                 {
-                    qDebug() << "Title was not registered";
                     active = false;
-                    // finishWork();
                     return;
                 }
-
-                if (reloadTimer != NULL)
-                    reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
-                else
-                    qDebug() << "timer error in title LONG";
+                if (message.dataHash != title.dataHash)
+                {
+                    active = false;
+                    return;
+                }
+                if (dataChecker[std::size_t(message.pckgNumber)])
+                {
+                    active = false;
+                    return;
+                }
+                //            mutex.lock();
+                file.seek(DistFileSystem::dataSize * message.pckgNumber);
+                file.write(message.data);
+                file.flush();
+                //            mutex.unlock();
+                //            qDebug() << message.pckgNumber;
+                dataChecker[std::size_t(message.pckgNumber)] = true;
+                reloadTimer->stop();
+                reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
+                break;
             }
-            break;
-        }
-        case dfsMessageType::fileDataMessage:
-        {
-            // qDebug() << "[fileDataMessage:]";
-            DistFileSystem::DfsMessage message;
-            message = data;
-            if (message.data.isEmpty())
-            {
-                active = false;
-                return;
+            default: {
+                // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
+                break;
             }
-            if (message.dataHash != title.dataHash)
-            {
-                active = false;
-                return;
             }
-            if (dataChecker[std::size_t(message.pckgNumber)])
-            {
-                active = false;
-                return;
-            }
-            //            mutex.lock();
-            file.seek(DistFileSystem::dataSize * message.pckgNumber);
-            file.write(message.data);
-            file.flush();
-            //            mutex.unlock();
-            //            qDebug() << message.pckgNumber;
-            dataChecker[std::size_t(message.pckgNumber)] = true;
-            reloadTimer->stop();
-            reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
-            break;
+            active = false;
         }
-        default:
-        {
-            // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
-            break;
-        }
-        }
-        active = false;
     }
 }
 
@@ -391,15 +380,15 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     return true;
 }
 
-bool DFSResolverService::registerTitle(const QString &tmpPath, DistFileSystem::TitleMessage title)
+bool DFSResolverService::registerTitle(const QString &tmpPath, DistFileSystem::TitleMessage message)
 {
     if (this->title.isEmpty())
     {
-        this->title = title;
-        if (createTempFile(tmpPath, title.fileSize, title.dataHash))
+        this->title = message;
+        if (createTempFile(tmpPath, message.fileSize, message.dataHash))
         {
-            dataChecker.assign(title.pckgsAmount, false);
-            qDebug() << "Ready to receive file:" << title.filePath;
+            dataChecker.assign(message.pckgsAmount, false);
+            qDebug() << "Ready to receive file:" << message.filePath;
         }
         else
         {
@@ -411,7 +400,7 @@ bool DFSResolverService::registerTitle(const QString &tmpPath, DistFileSystem::T
     }
     else
     {
-        qDebug() << "[NOT ready to receive file (title error)]" << title.filePath;
+        qDebug() << "[NOT ready to receive file (title error)]" << message.filePath;
         return false;
     }
 }

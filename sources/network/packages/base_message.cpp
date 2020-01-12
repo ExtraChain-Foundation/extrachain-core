@@ -34,12 +34,15 @@ void BaseMessage::operator=(QByteArray &serialized)
 
 void BaseMessage::operator=(QList<QByteArray> &list)
 {
-    protocol = list.takeFirst();
-    type = list.takeFirst().toUInt();
-    QByteArray signBytes = list.takeFirst();
-    signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
-    digSig = list.takeFirst();
-    data = list.takeFirst();
+    if (list.size() == 5)
+    {
+        protocol = list.takeFirst();
+        type = list.takeFirst().toUInt();
+        QByteArray signBytes = list.takeFirst();
+        signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
+        digSig = list.takeFirst();
+        data = list.takeFirst();
+    }
 }
 
 bool BaseMessage::isEmpty() const

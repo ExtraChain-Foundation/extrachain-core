@@ -90,7 +90,7 @@ private:
      * @param msgType
      * @param receiver
      */
-    void resolveDfsMessage(QByteArray &data, const int &msgType);
+    void resolveDfsMessage(QByteArray &data, const unsigned int &msgType);
     /**
      * @brief createTempFile
      * @param path
@@ -108,7 +108,7 @@ private:
      * @param tHash
      * @return
      */
-    bool registerTitle(const QString &tmpPath, DistFileSystem::TitleMessage title);
+    bool registerTitle(const QString &tmpPath, DistFileSystem::TitleMessage message);
 
 public:
     /**

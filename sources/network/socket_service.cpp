@@ -193,7 +193,7 @@ void SocketService::setActive(bool active)
 
 void SocketService::doRead()
 {
-    if (pendMsgSize > 0)
+    if (pendMsgSize >= 0)
     {
         continueDoRead();
     }
@@ -212,10 +212,15 @@ void SocketService::continueDoRead()
     if (socket->bytesAvailable() >= pendMsgSize)
     {
         char *pckg = new char[pendMsgSize];
-        int bytesRead = socket->read(pckg, pendMsgSize);
-        char *rpckg = new char[bytesRead];
-        memcpy(rpckg, pckg, bytesRead);
 
+        int bytesRead = socket->read(pckg, pendMsgSize);
+        QByteArray rpckg(pckg, bytesRead);
+        //        rpckg.append(pckg);
+
+        if (rpckg.size() > bytesRead)
+        {
+            rpckg.remove(bytesRead - 1, rpckg.size() - bytesRead);
+        }
         if (pendMsgSize == bytesRead)
         {
             pendMsg.append(rpckg);
@@ -231,7 +236,7 @@ void SocketService::continueDoRead()
                 this->gotMessage(pendMsg, receiver);
             }
             pendMsgSize = -1;
-            pendMsg.clear();
+            pendMsg = "";
         }
         else
         {
@@ -239,7 +244,6 @@ void SocketService::continueDoRead()
             pendMsg.append(rpckg);
         }
         delete[] pckg;
-        delete[] rpckg;
         if (socket->bytesAvailable() >= pendMsgSize)
         {
             doRead();
@@ -251,20 +255,72 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
 {
     // msg->get protocol -> end socket
     // netManager list connections
-    QByteArrayList msgList = Serialization::universalDeserialize(msg, 8);
-    QByteArray checkProtocol;
-    if (msgList.length() > 0)
-        checkProtocol = msgList.at(0);
+    QByteArray bmsg = msg;
+    Messages::BaseMessage dbm;
+    dbm.deserialize(bmsg);
+    if (dbm.isEmpty())
+        return;
+    //    QByteArrayList msgList = Serialization::universalDeserialize(bmsg, 8);
+    //    QByteArray checkProtocol;
+    //    if (msgList.length() > 0)
+    //        checkProtocol = msgList.at(0);
     //    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
     //    {
     //        this->removeMe();
     //    }
+    if (bmsg == Config::Net::PROTOCOL_VERSION)
+    {
+        qDebug() << "Protocol msg COLLECTED";
+        counter = 1;
+    }
+    //    switch (counter)
+    //    {
+    //    case 0:
+    //        break;
+    //    case 1:
+    //        bm.protocol = bmsg;
+    //        //        bmr.protocol = msgList.at(0);
+    //        counter++;
+    //        return;
+    //        //        break;
+    //    case 2:
+    //        bm.type = bmsg.toUInt();
+    //        //        bmr.type = msgList.at(0).toUInt();
+    //        counter++;
+    //        return;
+    //    case 3:
+    //        bm.signer = BigNumber(bmsg);
+    //        //        bmr.signer = BigNumber(msgList.at(0));
+    //        counter++;
+    //        return;
+    //    case 4:
+    //        bm.digSig = bmsg;
+    //        //        bmr.digSig = msgList.at(0);
+    //        counter++;
+    //        return;
+    //    case 5:
+    //        bm.data = bmsg;
+    //        //        bmr.data = msgList.at(0);
+    //        counter = 0;
+    //        bmsg = bm.serialize();
+    //        break;
+    //        //        if (Messages::isGeneralResponse(bm.type))
+    //        //        {
+    //        //            counter++;
+    //        //            return;
+    //        //        }
+    //        //    case 6:
+    //        //        bm.type = msgList.at(0).toUInt();
+    //        //        bmr.type = msgList.at(0).toUInt();
+    //        //        counter = 0;
+    //        //        break;
+    //    }
     if (socket->localPort() == 2223 || socket->localPort() == 2224)
     {
-        reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(msg, rec);
+        reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(bmsg, rec);
     }
     else
-        netManager->MessageReceived(msg, rec);
+        netManager->MessageReceived(bmsg, rec);
 }
 
 BigNumber SocketService::getID()

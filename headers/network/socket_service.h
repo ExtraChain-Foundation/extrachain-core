@@ -23,7 +23,8 @@ class NetManager;
 #include "datastorage/block.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "network/packages/service/response_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
 
 //#include "network/resolver_service.h"
 #include <QTimer>
@@ -54,9 +55,13 @@ private:
     //    QByteArray buffer;
     int reconnectTry = 0;
     QByteArray pendMsg;
-    int counter = 0;
+
     int pendMsgSize = -1;
-    int p = 0;
+
+    Messages::BaseMessage bm;
+    Messages::BaseMessageResponse bmr;
+    int counter = 0;
+    bool R = false;
 
 public:
     SocketService();

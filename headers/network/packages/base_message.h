@@ -27,7 +27,7 @@ struct BaseMessage : IMessage
     QByteArray digSig;                                   // msg digital signature
     QByteArray data = "";
 
-    static const short FIELDS_COUNT = 4;
+    static const short FIELDS_COUNT = 5;
 
     void setMsgData(const QByteArray &data);
     virtual void calcDigSig(const Actor<KeyPrivate> &actor);

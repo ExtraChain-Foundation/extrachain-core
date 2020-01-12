@@ -37,7 +37,7 @@ const QList<QByteArray> DistFileSystem::titleMessage::serializedParams() const
 {
     QList<QByteArray> list;
     list << filePath.toUtf8() << QByteArray::number(static_cast<long long>(pckgsAmount))
-         << QByteArray::number(fileSize) << dataHash << f_type;
+         << QByteArray::number(fileSize) << dataHash << QByteArray::number(f_type);
     return list;
 }
 
@@ -77,5 +77,5 @@ void DistFileSystem::titleMessage::deserialize(const QByteArray &serialized)
     pckgsAmount = l.takeFirst().toULong();
     fileSize = l.takeFirst().toLongLong();
     dataHash = l.takeFirst();
-    f_type = l.takeFirst();
+    f_type = l.takeFirst().toUInt();
 }

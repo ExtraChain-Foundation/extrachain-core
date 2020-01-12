@@ -321,6 +321,8 @@ void BigNumber::setInfinity(bool value)
 
 bool BigNumber::isValid(const QByteArray &bigNumber, int base)
 {
+    if (bigNumber.isEmpty())
+        return false;
     try
     {
         mpz_class(bigNumber.toStdString(), base);

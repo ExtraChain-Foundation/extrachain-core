@@ -18,7 +18,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
     {
         DistFileSystem::TitleMessage title;
         title.filePath = path;
-        title.f_type = DfsStruct::toByteArray(type);
+        title.f_type = type;
         title.calcHash();
         std::vector<long long> fragsID;
         QByteArrayList frags = frag.split(' ');
@@ -67,8 +67,8 @@ void Sender::sendFile(const QString &filePath, const DfsStruct::Type &type, cons
     // unsigned long pckgN = 0; // package number
     DistFileSystem::TitleMessage title;
     title.filePath = filePath;
-    title.f_type = DfsStruct::toByteArray(type);
-
+    title.f_type = type;
+    title.calcHash();
     if (title.isEmpty())
     {
         qDebug() << "empty title";
