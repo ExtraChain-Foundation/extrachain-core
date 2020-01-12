@@ -34,7 +34,7 @@ void BaseMessage::operator=(QByteArray &serialized)
 
 void BaseMessage::operator=(QList<QByteArray> &list)
 {
-    if (list.size() == 5)
+    if (list.size() >= 5)
     {
         protocol = list.takeFirst();
         type = list.takeFirst().toUInt();

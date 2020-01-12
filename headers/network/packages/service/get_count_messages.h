@@ -11,7 +11,7 @@ struct BlockCount
 
     BlockCount()
     {
-        request = QByteArray::number(Messages::GeneralRequest::getBlockCount); /* GET_BLOCK_COUNT_MESSAGE;*/
+        request = QByteArray::number(Messages::GeneralRequest::GetBlockCount); /* GET_BLOCK_COUNT_MESSAGE;*/
     }
     BlockCount(const QByteArray &serialized)
     {
@@ -30,7 +30,7 @@ struct ActorCount
 
     ActorCount()
     {
-        request = QByteArray::number(Messages::GeneralRequest::getActorCount); /*GET_ACTOR_COUNT_MESSAGE;*/
+        request = QByteArray::number(Messages::GeneralRequest::GetActorCount); /*GET_ACTOR_COUNT_MESSAGE;*/
     }
     ActorCount(const QByteArray &serialized)
     {

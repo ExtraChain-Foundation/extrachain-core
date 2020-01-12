@@ -42,9 +42,11 @@ NodeManager::NodeManager()
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
     connectSignals();
+
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
-    getAllActorsTimer.start(1000);
+    getAllActorsTimer.start(10000);
+
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);

@@ -27,7 +27,7 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     {
         Messages::GetActorMessage msg;
         msg.actorId = id;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getActor);
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         //        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
@@ -44,7 +44,7 @@ void ActorIndex::removeActor(const BigNumber &id, bool resend)
     {
         Messages::GetActorMessage msg;
         msg.actorId = id;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getActor);
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
     }
 }
 
@@ -95,7 +95,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         {
             Messages::GetActorMessage msg;
             msg.actorId = actorId;
-            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getActor);
+            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         }
         //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
     }
@@ -103,7 +103,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     {
         Messages::GetActorMessage msg;
         msg.actorId = actorId;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getActor);
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
     }
 }
 
@@ -115,8 +115,8 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
     QByteArrayList result = allActors();
     if (!result.isEmpty())
     {
-        resolveManager->sendMessageResponse(Serialization::universalSerialize(result, 4),
-                                            Messages::GeneralResponse::getAllActorsResponse, reqHash,
+        QByteArray data = Serialization::universalSerialize(result, 4);
+        resolveManager->sendMessageResponse(data, Messages::GeneralResponse::getAllActorsResponse, reqHash,
                                             receiver);
         //        emit responseReady(Serialization::universalSerialize(result, 4),
         //                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
@@ -129,8 +129,9 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
     if (accController->getAccountCount() > 0)
     {
         Messages::GetAllActorMessage msg;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getAllActors);
-        qDebug() << "GetAllActors";
+        msg.actorId = id.toActorId();
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetAllActors);
+        //        qDebug() << "GetAllActors";
         //    emit sendMessage(msg.serialize(), getAllActorMessage);
     }
 }
@@ -260,7 +261,7 @@ QByteArrayList ActorIndex::getProfile(QString id)
         {
             Messages::GetActorMessage msg;
             msg.actorId = BigNumber(id.toLocal8Bit());
-            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::getActor);
+            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         }
 
         return QByteArrayList();

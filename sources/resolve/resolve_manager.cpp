@@ -49,7 +49,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
     connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
-    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
+    //    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
@@ -143,6 +143,8 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
         rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;
+    if (msgType == Messages::GeneralResponse::getAllActorsResponse)
+        qDebug() << "306 is sending";
     networkManager->distMessage(rmsg.serialize(), receiver);
 }
 

@@ -137,7 +137,7 @@ void Blockchain::getBlockZero()
         Messages::GetBlockMessage request;
         request.param = SearchEnum::BlockParam::Id;
         request.value = QByteArray::number(0);
-        emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlock);
+        emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     }
     else
         actorIndex->setCompanyId(new QByteArray(zero.getApprover().toActorId()));
@@ -500,7 +500,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
                 Messages::GetBlockMessage request;
                 request.param = SearchEnum::BlockParam::Id;
                 request.value = id.toByteArray();
-                emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlock);
+                emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
             }
         }
     }
@@ -818,13 +818,13 @@ void Blockchain::process()
 void Blockchain::updateBlockchain(BigNumber id, bool isUser)
 {
     Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlockCount);
+    emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
 }
 
 void Blockchain::updateBlockchainForSignIn(QByteArray id, QByteArrayList idList)
 {
     Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlockCount);
+    emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
 }
 
 void Blockchain::checkBlockExistence(const Block &block)
@@ -868,7 +868,7 @@ void Blockchain::blockCountResponse(const BigNumber &count)
         Messages::GetBlockMessage request;
         request.param = SearchEnum::BlockParam::Id;
         request.value = count.toByteArray();
-        emit sendMessage(request.serialize(), Messages::GeneralRequest::getBlock);
+        emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     }
 }
 

@@ -239,6 +239,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     if (!QFile::exists(tmpPath))
     {
         qDebug() << "Thes es ochen ploho" << tmpPath;
+        //        file.remove();
         return;
     }
 

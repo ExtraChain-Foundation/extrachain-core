@@ -20,13 +20,13 @@ static bool isChainMessage(unsigned int value)
 }
 enum GeneralRequest
 {
-    getBlockCount = 200,
-    getActorCount = 201,
-    getActor = 202,
-    getBlock = 203,
-    getTx = 204,
-    getTxPair = 205,
-    getAllActors = 206
+    GetBlockCount = 200,
+    GetActorCount = 201,
+    GetActor = 202,
+    GetBlock = 203,
+    GetTx = 204,
+    GetTxPair = 205,
+    GetAllActors = 206
 };
 static bool isGeneralRequest(unsigned int value)
 {
