@@ -12,6 +12,8 @@
 class Transaction : public QObject
 {
     Q_OBJECT
+public:
+    static const int FIELD_SIZE = 4;
 
 public:
     // Construct empty transaction
