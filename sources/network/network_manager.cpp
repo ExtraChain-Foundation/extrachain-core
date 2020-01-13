@@ -421,7 +421,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     connectSocket();
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
-    ThreadPool::addThread(connections.last());
+    //    ThreadPool::addThread(connections.last());
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
@@ -433,7 +433,7 @@ void NetManager::addConnection(qint64 socketDescriptor)
     connections.append(socket);
     connectSocket();
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
-    ThreadPool::addThread(connections.last());
+    //    ThreadPool::addThread(connections.last());
 }
 
 void NetManager::removeConnection()
@@ -467,7 +467,7 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
         if (connections.indexOf(newSock) == -1)
         {
             connections.append(newSock);
-            ThreadPool::addThread(connections.last());
+            //            ThreadPool::addThread(connections.last());
             connectSocket();
         }
     }
