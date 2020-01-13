@@ -189,34 +189,34 @@ void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
 {
     return;
     //
-    if (msg.getMsgType() == Messages::INVITE_CHAT_MESSAGE)
-    {
-        InviteChatMessages message(msg.getData());
-        QByteArray owner = _accController->getMainActor()->getKey()->decrypt(message.owner);
+    //    if (msg.getMsgType() == Messages::INVITE_CHAT_MESSAGE)
+    //    {
+    //        InviteChatMessages message(msg.getData());
+    //        QByteArray owner = _accController->getMainActor()->getKey()->decrypt(message.owner);
 
-        if (owner.length() != 20 || !BigNumber::isValid(owner))
-        {
-            netManager->sendMessage(msg.serialize());
-            return;
-        }
+    //        if (owner.length() != 20 || !BigNumber::isValid(owner))
+    //        {
+    //            netManager->sendMessage(msg.serialize());
+    //            return;
+    //        }
 
-        if (owner == msg.getSigner())
-        {
-            AddChat(message.id, _accController->getMainActor()->getKey()->decrypt(message.key), owner);
-            QList<QByteArray> allUsers = { owner, _currentActorId };
-            QStringList tempusersList;
+    //        if (owner == msg.getSigner())
+    //        {
+    //            AddChat(message.id, _accController->getMainActor()->getKey()->decrypt(message.key), owner);
+    //            QList<QByteArray> allUsers = { owner, _currentActorId };
+    //            QStringList tempusersList;
 
-            Chat temp(message.id, _actorIndex, _accController);
-            temp.sendMessage("{ \"type\": \"first\" }");
+    //            Chat temp(message.id, _actorIndex, _accController);
+    //            temp.sendMessage("{ \"type\": \"first\" }");
 
-            for (auto user : allUsers)
-                tempusersList.append(user);
-            emit chatCreated(UIChat { tempusersList, message.id,
-                                      Chat(message.id, _actorIndex, _accController).getLastMessage() });
-        }
-        else
-            netManager->sendMessage(msg.serialize());
-    }
+    //            for (auto user : allUsers)
+    //                tempusersList.append(user);
+    //            emit chatCreated(UIChat { tempusersList, message.id,
+    //                                      Chat(message.id, _actorIndex, _accController).getLastMessage() });
+    //        }
+    //        else
+    //            netManager->sendMessage(msg.serialize());
+    //    }
 }
 
 bool ChatManager::isChatExist(QByteArray chatId)

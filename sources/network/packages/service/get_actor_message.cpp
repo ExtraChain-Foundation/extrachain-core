@@ -2,33 +2,32 @@
 
 using namespace Messages;
 
-BigNumber GetActorMessage::getActorId() const
-{
-    return actorId;
-}
-
-GetActorMessage::GetActorMessage(const BigNumber &id)
-{
-    this->actorId = id;
-}
-
-GetActorMessage::GetActorMessage(const QByteArray &serialized)
+void GetActorMessage::operator=(QByteArray &serialized)
 {
     deserialize(serialized);
 }
 
-GetActorMessage::~GetActorMessage()
+bool GetActorMessage::isEmpty() const
 {
+    if (actorId.isEmpty())
+        return true;
+    else
+        return false;
 }
 
-const QByteArray GetActorMessage::serialize() const
+short GetActorMessage::getFieldsCount() const
 {
-    return Serialization::universalSerialize({ actorId.toActorId() }, FIELDS_SIZE);
+    return FIELDS_COUNT;
+}
+
+QByteArray GetActorMessage::serialize() const
+{
+    return Serialization::universalSerialize({ actorId.toActorId() }, GetActorMessage::FIELD_SIZE);
 }
 
 void GetActorMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, GetActorMessage::FIELD_SIZE);
     if (list.isEmpty())
         qDebug() << "get actor message error";
     this->actorId = BigNumber(list.at(0));

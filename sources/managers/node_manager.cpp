@@ -42,9 +42,11 @@ NodeManager::NodeManager()
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
     connectSignals();
-    static QTimer getAllActorsTimer;
-    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
-    getAllActorsTimer.start(10000);
+
+    //    static QTimer getAllActorsTimer;
+    //    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    //    getAllActorsTimer.start(10000);
+
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
@@ -122,11 +124,12 @@ void NodeManager::connectSmContractManager()
     //            &NodeManager::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
             [this](const QByteArray &id, const QString &type, const bool &rewrite) {
-                emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type, id,
-                                        rewrite);
+                emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, type, id,
+                                            rewrite);
             });
-    connect(this, &NodeManager::editPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
+
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
+    connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::prpEditPrivateProfile);
 
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,
@@ -210,7 +213,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
         if (tx.getSender().toActorId() == *actorIndex->companyId)
             emit NewTx(tx);
         else
-            emit sendMsg(tx.serialize(), Messages::TX_MESSAGE);
+            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
 
         return tx;
     }
@@ -283,9 +286,9 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
 
 void NodeManager::getAllActors()
 {
-    QByteArray res = getIdPrivateProfile();
-    if (!res.isEmpty())
-        emit getAllActorsNode(res, true);
+    //    QByteArray res = getIdPrivateProfile();
+    //    if (!res.isEmpty())
+    //        emit getAllActorsNode(res, true);
 }
 void NodeManager::getAllActorsTimerCall()
 {
@@ -456,7 +459,8 @@ void NodeManager::connectUi()
     connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
 
     connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), "wallet", id, false);
+        emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, "wallet", id,
+                                    false);
         qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
@@ -483,7 +487,8 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
-        emit editPrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), value, data, rewrite);
+        emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, value, data,
+                                    rewrite);
         qDebug() << "222222222222";
     });
     connect(uiController, &UiController::getInfoFromPrProfile, [this](const QString &type) {
@@ -631,7 +636,7 @@ void NodeManager::connectSignals()
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
-    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
+    //    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
 void NodeManager::prepareFolders()

@@ -79,6 +79,18 @@ QByteArray DfsStruct::toByteArray(Type type)
     case DfsStruct::Type::service:
         res = "services";
         break;
+    case DfsStruct::Type::cdoctp:
+        res = "cdoctp";
+        break;
+    case DfsStruct::Type::card:
+        res = "cards";
+        break;
+    case DfsStruct::Type::contract:
+        res = "contract";
+        break;
+    case DfsStruct::Type::stored:
+        res = "stored";
+        break;
     default:
         return "";
     }

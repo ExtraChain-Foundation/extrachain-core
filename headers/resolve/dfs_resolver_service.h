@@ -17,6 +17,8 @@
 #include "network/packages/service/response_messages.h"
 #include "network/socket_pair.h"
 #include "dfs/packages/headers/all.h"
+#include "dfs/packages/headers/title_message.h"
+
 class AccountController;
 class ActorIndex;
 class Dfs;
@@ -41,7 +43,7 @@ private:
     std::vector<bool> dataChecker;
     //    QString path;
     QFile file;
-    DFSMessage::title_message title;
+    DistFileSystem::TitleMessage title;
 
 private:
     bool active = false;
@@ -74,7 +76,7 @@ private:
      * @param message
      * @return
      */
-    bool validate(const Messages::IMessage &message);
+    bool validate(const Messages::BaseMessage &message);
     bool MessageIsNotValid(const Messages::IMessage &message);
     /**
      * @brief addResponseHandler
@@ -88,7 +90,7 @@ private:
      * @param msgType
      * @param receiver
      */
-    void resolveDfsMessage(const QByteArray &data, const int &msgType);
+    void resolveDfsMessage(QByteArray &data, const unsigned int &msgType);
     /**
      * @brief createTempFile
      * @param path
@@ -106,7 +108,7 @@ private:
      * @param tHash
      * @return
      */
-    bool registerTitle(const QString &tmpPath, DFSMessage::title_message title);
+    bool registerTitle(const QString &tmpPath, DistFileSystem::TitleMessage message);
 
 public:
     /**
@@ -119,7 +121,7 @@ public:
      * @param msg
      * @param receiver
      */
-    void setTask(QByteArray msg, SocketPair receiver);
+    void setTask(QByteArray _msg, SocketPair _receiver);
 
 public:
     void setDfs(Dfs *value);
@@ -129,10 +131,10 @@ public:
 
     Lifetime getLifetime() const;
 
-    DFSMessage::title_message getTitle() const;
+    DistFileSystem::TitleMessage getTitle() const;
     void setLifetime(const Lifetime &value);
 
-    void setTitle(const DFSMessage::title_message &value);
+    void setTitle(const DistFileSystem::TitleMessage &value);
 
     QFile getFile() const;
 

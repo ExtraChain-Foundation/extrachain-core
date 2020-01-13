@@ -1,49 +1,6 @@
 #include "dfs/packages/headers/req_frags_message.h"
 
-QString DFSMessage::req_frags_message::getFilePath() const
-{
-    return filePath;
-}
-
-QByteArray DFSMessage::req_frags_message::getListFrag() const
-{
-    return listFrag;
-}
-
-DFSMessage::req_frags_message::req_frags_message(const QByteArray &filePath, QByteArray listFrag)
-    : DUMessage(dfsMessageType::requestFragments)
-{
-    this->filePath = filePath;
-    this->listFrag = listFrag;
-}
-
-DFSMessage::req_frags_message::req_frags_message(const QByteArray &serialized)
-    : DUMessage(dfsMessageType::requestFragments)
-{
-    QList<QByteArray> list = deserialize(serialized);
-
-    if (list.size() != FIELDS_COUNT + 1)
-    {
-        qDebug() << "title_message_struct << incorrect input data";
-        filePath = "-1";
-        return;
-    }
-
-    if (dfsMessageType::requestFragments != list.takeFirst().toInt())
-    {
-        qDebug() << "[type_title]"
-                 << "incorrect message type";
-    }
-
-    filePath = QString::fromUtf8(list.takeFirst());
-    listFrag = list.takeFirst();
-}
-
-DFSMessage::req_frags_message::~req_frags_message()
-{
-}
-
-bool DFSMessage::req_frags_message::empty() const
+bool DistFileSystem::ReqFragsMessage::isEmpty() const
 {
     if (filePath.isEmpty())
         return true;
@@ -52,9 +9,32 @@ bool DFSMessage::req_frags_message::empty() const
     return false;
 }
 
-const QList<QByteArray> DFSMessage::req_frags_message::serializedParams() const
+const QList<QByteArray> DistFileSystem::ReqFragsMessage::serializedParams() const
 {
     QList<QByteArray> list;
-    list << QByteArray::number(type) << filePath.toUtf8() << listFrag;
+    list << filePath.toUtf8() << listFrag;
     return list;
+}
+
+void DistFileSystem::ReqFragsMessage::operator=(QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
+short DistFileSystem::ReqFragsMessage::getFieldsCount() const
+{
+    return ReqFragsMessage::FIELDS_COUNT;
+}
+
+QByteArray DistFileSystem::ReqFragsMessage::serialize() const
+{
+    return Serialization::universalSerialize({ filePath.toLocal8Bit(), listFrag },
+                                             DistFileSystem::fieldsSize);
+}
+
+void DistFileSystem::ReqFragsMessage::deserialize(const QByteArray &serialized)
+{
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized, DistFileSystem::fieldsSize);
+    filePath = l.takeFirst();
+    listFrag = l.takeFirst();
 }

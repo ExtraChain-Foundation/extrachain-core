@@ -5,22 +5,21 @@
 
 namespace Messages {
 
-class GetTxMessage
+struct GetTxMessage : ISmallMessage
 {
-    short FIELDS_SIZE = 4;
+    static const short FIELD_SIZE = 3;
+    static const short FIELDS_COUNT = 2;
 
-private:
     SearchEnum::TxParam param;
     QByteArray value;
 
+    // ISmallMessage interface
 public:
-    GetTxMessage(const SearchEnum::TxParam param, const QByteArray &value);
-    GetTxMessage(const QByteArray &serialized);
-    ~GetTxMessage();
-    const QByteArray serialize() const;
-    void deserialize(const QByteArray &serilaized);
-    SearchEnum::TxParam getParam() const;
-    QByteArray getValue() const;
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serilaized) override;
 };
 }
 

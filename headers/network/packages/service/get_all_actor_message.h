@@ -5,23 +5,20 @@
 
 namespace Messages {
 
-class GetAllActorMessage
+struct GetAllActorMessage : ISmallMessage
 {
-    short FIELDS_SIZE = 4;
-
-private:
-    QList<QByteArray> actorId;
-    BigNumber actor;
+    static const short FIELD_SIZE = 2;
+    static const short FIELDS_COUNT = 1;
+    QByteArray actorId;
 
 public:
-    GetAllActorMessage(const BigNumber &id);
-    GetAllActorMessage(const QByteArrayList &id);
-    GetAllActorMessage(const QByteArray &serialized);
-    ~GetAllActorMessage();
-
-    const QByteArray serialize() const;
-    void deserialize(const QByteArray &serilaized);
-    BigNumber getActorId() const;
+    // ISmallMessage interface
+public:
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serilaized) override;
 };
 }
 #endif // GET_ALL_ACTOR_MESSAGE_H

@@ -2,39 +2,25 @@
 
 using namespace Messages;
 
-GetTxPairMessage::GetTxPairMessage(const BigNumber &senderId, const BigNumber &receiverId)
-{
-    this->senderId = senderId;
-    this->receiverId = receiverId;
-}
-
-GetTxPairMessage::GetTxPairMessage(const QByteArray &serialized)
+void Messages::GetTxPairMessage::operator=(QByteArray &serialized)
 {
     deserialize(serialized);
 }
 
-GetTxPairMessage::~GetTxPairMessage()
+short Messages::GetTxPairMessage::getFieldsCount() const
 {
+    return GetTxPairMessage::FIELDS_COUNT;
 }
 
-const QByteArray GetTxPairMessage::serialize() const
+QByteArray GetTxPairMessage::serialize() const
 {
-    return Serialization::universalSerialize({ senderId.toActorId(), receiverId.toActorId() }, FIELDS_SIZE);
+    return Serialization::universalSerialize({ senderId.toActorId(), receiverId.toActorId() },
+                                             GetTxPairMessage::FIELD_SIZE);
 }
 
 void GetTxPairMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, GetTxPairMessage::FIELD_SIZE);
     this->senderId = BigNumber(list.at(0));
     this->receiverId = BigNumber(list.at(1));
-}
-
-BigNumber GetTxPairMessage::getSenderId() const
-{
-    return senderId;
-}
-
-BigNumber GetTxPairMessage::getReceiverId() const
-{
-    return receiverId;
 }

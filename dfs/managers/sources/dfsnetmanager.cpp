@@ -1,4 +1,4 @@
-#include "dfsnetmanager.h"
+#include "dfs/managers/headers/dfsnetmanager.h"
 #include "resolve/resolve_manager.h"
 
 void DFSNetManager::setDfs(Dfs *value)
@@ -18,6 +18,21 @@ bool DFSNetManager::isLoading(const QString &fileName)
     }
 
     qDebug() << "isLoading false";
+    return false;
+}
+
+QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
+{
+    return dfsResolvers;
+}
+
+bool DFSNetManager::nameIsTaken(QString name)
+{
+    for (DFSResolverService *resolver : dfsResolvers)
+    {
+        if (resolver->getTitle().filePath == name)
+            return true;
+    }
     return false;
 }
 
@@ -132,10 +147,12 @@ void DFSNetManager::appendSocket(SocketService *socket)
     socketConnection();
 }
 
-void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
+void DFSNetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
 {
-    Messages::BaseMessage msg(msgType);
-    msg.init(data);
+    Messages::BaseMessage msg;
+    //    msg.setMsgData(data);
+    msg.type = msgType;
+    msg.data = data;
     QByteArray message = msg.serialize();
     std::for_each(socketsList.begin(), socketsList.end(),
                   [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });

@@ -116,7 +116,7 @@ Block TransactionManager::makeBlock()
 
     qDebug() << "Created block:" << block.getIndex();
     QByteArray blockSerialize = block.serialize();
-    emit SendBlock(blockSerialize, Messages::BLOCK_MESSAGE);
+    emit SendBlock(blockSerialize, Messages::ChainMessage::blockMessage);
     blockchain->addBlock(block);
     this->pendingTxs.clear();
     return block;
@@ -129,7 +129,7 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
     {
         l << tx.serialize();
     }
-    return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
+    return Serialization::universalSerialize(l, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
 BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)

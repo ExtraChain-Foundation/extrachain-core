@@ -2,37 +2,32 @@
 
 using namespace Messages;
 
-BigNumber GetAllActorMessage::getActorId() const
-{
-    return actor;
-}
-
-GetAllActorMessage::GetAllActorMessage(const BigNumber &id)
-{
-    actor = id;
-}
-
-GetAllActorMessage::GetAllActorMessage(const QByteArrayList &id)
-{
-    this->actorId = id;
-}
-
-GetAllActorMessage::GetAllActorMessage(const QByteArray &serialized)
+void GetAllActorMessage::operator=(QByteArray &serialized)
 {
     deserialize(serialized);
 }
 
-GetAllActorMessage::~GetAllActorMessage()
+bool GetAllActorMessage::isEmpty() const
 {
+    return actorId.isEmpty();
 }
 
-const QByteArray GetAllActorMessage::serialize() const
+short GetAllActorMessage::getFieldsCount() const
 {
-    return Serialization::universalSerialize({ actorId }, FIELDS_SIZE);
+    return GetAllActorMessage::FIELDS_COUNT;
+}
+
+QByteArray GetAllActorMessage::serialize() const
+{
+    return Serialization::universalSerialize({ actorId }, GetAllActorMessage::FIELD_SIZE);
 }
 
 void GetAllActorMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
-    this->actorId = list;
+    QList<QByteArray> list =
+        Serialization::universalDeserialize({ serilaized }, GetAllActorMessage::FIELD_SIZE);
+    if (list.size() > 0)
+    {
+        actorId = list.at(0);
+    }
 }

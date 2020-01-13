@@ -24,6 +24,7 @@ class ResolveManager;
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "headers/network/packages/service/message_types.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
@@ -128,7 +129,7 @@ private:
 
 signals:
     void ready();
-    void sendMsg(const QByteArray &data, const QByteArray &type);
+    void sendMsg(const QByteArray &data, const unsigned int &type);
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
     // created keys for chat
@@ -143,8 +144,8 @@ signals:
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile, const QString &type,
-                            const QByteArray &data, const bool &rewrite);
+    void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
+                                const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void getAllActorsNode(QByteArray id, bool acc);
