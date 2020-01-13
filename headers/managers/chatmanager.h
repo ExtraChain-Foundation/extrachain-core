@@ -102,7 +102,8 @@ signals:
 
     void chatListSend(QList<UIChat> chats);
     void chatSend(QByteArray chatId, QList<UIMessage> messages);
-    void sendMessage(const QByteArray &data, const unsigned int &type);
+    void sendMessage(const QByteArray &data, const unsigned int &type,
+                     const SocketPair &receiver = SocketPair());
 
     void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
     void chatCreated(UIChat);

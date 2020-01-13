@@ -63,7 +63,7 @@ public:
      * @param id - actor's id
      * @return Found actor, or empty actor (if not found)
      */
-    Actor<KeyPublic> getActor(const BigNumber &id);
+    Actor<KeyPublic> getActor(const BigNumber &id, const SocketPair &receiver = SocketPair());
     void removeActor(const BigNumber &id, bool resend = false);
 
     /**
@@ -111,7 +111,7 @@ public:
      */
     int addActor(const Actor<KeyPublic> &actor);
     QByteArrayList allActors();
-    void handleNewAllActors(const QByteArrayList actors);
+    void handleNewAllActors(const QByteArrayList actors, const SocketPair &receiver = SocketPair());
 
 public:
     void setResolveManager(ResolveManager *value);
@@ -148,7 +148,7 @@ signals:
      * @param data
      * @param type
      */
-    void sendMessage(const QByteArray &data, const unsigned int &type);
+    void sendMessage(const QByteArray &data, const unsigned int &type, const SocketPair &receiver);
     /**
      * @brief responseReady
      * @param data

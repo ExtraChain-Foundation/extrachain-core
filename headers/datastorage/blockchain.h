@@ -300,7 +300,8 @@ signals:
     void VerifiedTx(Transaction tx);
 
     void updateLastTransactionList();
-    void sendMessage(const QByteArray &data, const unsigned int &type);
+    void sendMessage(const QByteArray &data, const unsigned int &type,
+                     const SocketPair &receiver = SocketPair());
     void finished();
 
 public:

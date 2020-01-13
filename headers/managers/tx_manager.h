@@ -109,7 +109,7 @@ signals:
      * @brief Sends new verified block to the network
      * @param block
      */
-    void SendBlock(QByteArray block, unsigned int msgType);
+    void SendBlock(QByteArray block, unsigned int msgType, const SocketPair &receiver);
     /**
      * @brief Send transaction request
      * @param senderId

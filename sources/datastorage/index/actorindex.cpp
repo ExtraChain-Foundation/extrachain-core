@@ -16,7 +16,7 @@ ActorIndex::~ActorIndex()
 {
 }
 
-Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
+Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id, const SocketPair &receiver)
 {
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
@@ -27,7 +27,7 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     {
         Messages::GetActorMessage msg;
         msg.actorId = id;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor, receiver);
         //        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
@@ -155,10 +155,10 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
     }
 }
 
-void ActorIndex::handleNewAllActors(QByteArrayList actors)
+void ActorIndex::handleNewAllActors(QByteArrayList actors, const SocketPair &receiver)
 {
     for (const QByteArray &actor : actors)
-        getActor(actor);
+        getActor(actor, receiver);
 }
 
 void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)

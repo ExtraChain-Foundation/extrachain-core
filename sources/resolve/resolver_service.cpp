@@ -240,14 +240,16 @@ void ResolverService::resolveGeneralTask()
     }
     switch (msgType)
     {
-    case Messages::GeneralRequest::GetAllActors: {
+    case Messages::GeneralRequest::GetAllActors:
+    {
         //        GetAllActorMessage response(message.getMsg_data());
         //        emit handleGetAllActor(calcHash(msg), receiver);
         actorIndex->handleGetAllActor(calcHash(msg), receiver);
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getAllActorsResponse: {
+    case Messages::GeneralResponse::getAllActorsResponse:
+    {
         //        qDebug() << "RESOLVER SERVICE: "
         //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
         //                 msg;
@@ -255,7 +257,8 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.data, 4));
+        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.data, 4),
+                                       receiver);
         //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         finishWork();
         break;
@@ -270,19 +273,22 @@ void ResolverService::resolveGeneralTask()
         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         // spread messages
-    case Messages::ChainMessage::profileMessage: {
+    case Messages::ChainMessage::profileMessage:
+    {
         emit newProfile(message.data);
         finishWork();
         break;
     }
-    case Messages::ChainMessage::actorMessage: {
+    case Messages::ChainMessage::actorMessage:
+    {
         Actor<KeyPublic> actor(message.data);
         actorIndex->handleNewActor(actor);
         //        emit newActor(actor);
         finishWork();
         break;
     }
-    case Messages::ChainMessage::blockMessage: {
+    case Messages::ChainMessage::blockMessage:
+    {
         Block block(message.data);
         if (!validateBlock(block))
         {
@@ -295,14 +301,16 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::ChainMessage::genesisBlockMessage: {
+    case Messages::ChainMessage::genesisBlockMessage:
+    {
         GenesisBlock block = message.data;
         blockchain->addGenBlockToBlockchain(block);
         //        emit newGenesisBlock(block);
         finishWork();
         break;
     }
-    case Messages::ChainMessage::coinRequest: {
+    case Messages::ChainMessage::coinRequest:
+    {
         QByteArray msg = message.data;
         auto list = msg.split(' ');
         BigNumber amount(list[0]);
@@ -314,7 +322,8 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::ChainMessage::txMessage: {
+    case Messages::ChainMessage::txMessage:
+    {
         Transaction tx(message.data);
         //        if (!validate(tx))
         //        {
@@ -325,7 +334,8 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::ChainMessage::contractMessage: {
+    case Messages::ChainMessage::contractMessage:
+    {
         //        Contract contract(message.getMsg_data());
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: "
@@ -358,40 +368,46 @@ void ResolverService::resolveGeneralTask()
         //    }
 
     // request messages
-    case Messages::GeneralRequest::GetActor: {
+    case Messages::GeneralRequest::GetActor:
+    {
         GetActorMessage response;
         response = message.data;
         actorIndex->handleGetActor(response.actorId, calcHash(msg), receiver);
         finishWork();
         break;
     }
-    case Messages::GeneralRequest::GetTx: {
+    case Messages::GeneralRequest::GetTx:
+    {
         GetTxMessage txMessage;
         txMessage = message.data;
         emit getTx(txMessage.param, txMessage.value, receiver, calcHash(msg));
         finishWork();
         break;
     }
-    case Messages::GeneralRequest::GetBlock: {
+    case Messages::GeneralRequest::GetBlock:
+    {
         GetBlockMessage blMessage;
         blMessage = message.data;
         emit getBlock(blMessage.param, blMessage.value, calcHash(msg), receiver);
         finishWork();
         break;
     }
-    case Messages::GeneralRequest::GetActorCount: {
+    case Messages::GeneralRequest::GetActorCount:
+    {
         emit getActorsCount(calcHash(msg), receiver);
         finishWork();
         break;
     }
-    case Messages::GeneralRequest::GetBlockCount: {
+    case Messages::GeneralRequest::GetBlockCount:
+    {
         emit getBlocksCount(calcHash(msg), receiver);
         finishWork();
         break;
     }
 
     // response messages
-    case Messages::GeneralResponse::getActorResponse: {
+    case Messages::GeneralResponse::getActorResponse:
+    {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: "
                  << "GET_ACTOR_RESPONSE_MESSAGE"
@@ -405,7 +421,8 @@ void ResolverService::resolveGeneralTask()
         break;
     }
 
-    case Messages::GeneralResponse::getTxResponse: {
+    case Messages::GeneralResponse::getTxResponse:
+    {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: "
                  << "GET_TX_RESPONSE_MESSAGE";
@@ -423,7 +440,8 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getBlockResponse: {
+    case Messages::GeneralResponse::getBlockResponse:
+    {
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: "
                  << "GET_BLOCK_RESPONSE_MESSAGE";
@@ -456,7 +474,8 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getBlockCountResponse: {
+    case Messages::GeneralResponse::getBlockCountResponse:
+    {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
@@ -469,7 +488,8 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getActorCountResponse: {
+    case Messages::GeneralResponse::getActorCountResponse:
+    {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
@@ -480,7 +500,8 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    default: {
+    default:
+    {
         finishWork();
         break;
     }

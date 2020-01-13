@@ -129,7 +129,7 @@ private:
 
 signals:
     void ready();
-    void sendMsg(const QByteArray &data, const unsigned int &type);
+    void sendMsg(const QByteArray &data, const unsigned int &type, const SocketPair &receiver = SocketPair());
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
     // created keys for chat
