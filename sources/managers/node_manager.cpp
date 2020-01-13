@@ -129,7 +129,7 @@ void NodeManager::connectSmContractManager()
             });
 
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
-    connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::prpEditPrivateProfile);
+    connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
 
 #ifdef ETALONIUM_CLIENT
     connect(uiController, &UiController::generateSmartContract, smContractController,

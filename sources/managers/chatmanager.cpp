@@ -501,6 +501,11 @@ ChatManager::~ChatManager()
 void ChatManager::ActorInit()
 {
     this->_currentActorId = this->_accController->getMainActor()->getId().toActorId();
+    QFile file("keystore/personal/currentID");
+    file.open(QIODevice::ReadWrite);
+    file.resize(0);
+    file.write(this->_currentActorId);
+    file.close();
     InitializeConnectSignalSlot();
     InitializeChatList();
 }
