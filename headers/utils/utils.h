@@ -233,6 +233,7 @@ static const int NO_BLOCKS = 401;
 namespace Serialization {
 
 // Delimiters //
+static const int TRANSACTION_FIELD_SIZE = 4;
 static const int DFS_FIELD_SIZE = 8;
 static const int DEFAULT_FIELD_SIZE = 8;
 

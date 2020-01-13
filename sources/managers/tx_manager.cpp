@@ -129,7 +129,7 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
     {
         l << tx.serialize();
     }
-    return Serialization::universalSerialize(l, Transaction::FIELD_SIZE);
+    return Serialization::universalSerialize(l, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
 BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)
