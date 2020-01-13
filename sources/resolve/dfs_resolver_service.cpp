@@ -97,7 +97,7 @@ void DFSResolverService::checkStatus()
             reqFin = reqFin + Network::FRAGMENT_STACK_SIZE;
             if (reqFin > dataChecker.size() - 1)
                 reqFin = dataChecker.size() - 1;
-            checkStatus();
+            //            checkStatus();
         }
         else
         {
