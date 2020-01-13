@@ -50,6 +50,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
             pck.dataHash = title.dataHash;
             pck.pckgNumber = fragsID[i];
             pck.data = data;
+            QThread::currentThread()->sleep(1);
             sendDfsMessage(pck, Messages::DFSMessage::fileDataMessage, receiver);
         }
     }

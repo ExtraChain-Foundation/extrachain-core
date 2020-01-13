@@ -10,8 +10,8 @@
 
 namespace DistFileSystem {
 
-const long long dataSize = 512; // bytes
-const short fieldsSize = 8;     // bytes for size
+const long long dataSize = 20480; // bytes
+const short fieldsSize = 8;       // bytes for size
 const QByteArray stateDelimetr = "|";
 
 enum dfsMessageType
