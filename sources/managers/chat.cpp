@@ -71,6 +71,7 @@ bool Chat::isUserActual(QByteArray actorId, BigNumber sessionNumb)
     //    }
     return true;
 }
+
 void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId)
 {
 
@@ -79,8 +80,10 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
         // _ownerId = _currentActorId;
         this->ownerID = _ownerId;
     }
-    QDir().mkpath(ChatStorage::KEYSTORE_CHATS.c_str());
-    DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
+    pathR += "/" + _currentActorId + "/";
+    QDir().mkpath(pathR);
+    DBConnector DB(pathR.toStdString() + "chatsId");
     DB.createTable(Config::DataStorage::chatIdStorage);
 
     DBRow row;
@@ -88,11 +91,53 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     row.insert({ "key", key.toStdString() });
     row.insert({ "owner", _ownerId.toStdString() });
     DB.insert(Config::DataStorage::chatIdTableName, row);
+    saveChatsId(_chatId);
 }
+
+void Chat::saveChatsId(const QByteArray& chatId)
+{
+    if (chatId.size() < 63)
+    {
+        qDebug() << "Kurnul?";
+        return;
+    }
+    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
+    pathR += "/" + _currentActorId + "/";
+    QDir().mkpath(pathR);
+    if (QFile().exists(pathR + "fileChatsId"))
+    {
+        QFile file(pathR + "fileChatsId");
+        file.open(QIODevice::ReadWrite);
+        QByteArray dataFromFile = file.readAll();
+        QByteArrayList listChats = Serialization::universalDeserialize(dataFromFile);
+        if (!listChats.contains(chatId))
+        {
+            listChats.append(chatId);
+        }
+        else
+        {
+            file.close();
+        }
+        file.resize(0);
+        file.write(Serialization::universalSerialize(listChats));
+        file.close();
+    }
+    else
+    {
+        QFile file(pathR + "fileChatsId");
+        file.open(QIODevice::ReadWrite);
+        QByteArray listChats = Serialization::universalSerialize({ chatId });
+        file.write(listChats);
+        file.close();
+    }
+}
+
 QByteArray Chat::unloadChatKey()
 {
-    QDir().mkpath(ChatStorage::KEYSTORE_CHATS.c_str());
-    DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
+    pathR += "/" + _currentActorId + "/";
+    QDir().mkpath(pathR);
+    DBConnector DB(pathR.toStdString() + "chatsId");
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName
                                        + " WHERE chatId = " + "'" + _chatId.toStdString() + "';");
     if (res.size() == 0)
