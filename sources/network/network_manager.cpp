@@ -422,6 +422,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
     //    ThreadPool::addThread(connections.last());
+    connections.last()->process();
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
