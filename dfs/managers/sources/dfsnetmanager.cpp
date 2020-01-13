@@ -220,6 +220,10 @@ void DFSNetManager::removeResolver()
 void DFSNetManager::removeConnection()
 {
     QObject *sender = QObject::sender();
+
+    if (sender == nullptr)
+        return;
+
     SocketService *connection = qobject_cast<SocketService *>(sender);
     socketDisconnect(connection);
     socketsList.removeAt(socketsList.indexOf(connection));

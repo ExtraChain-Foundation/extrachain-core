@@ -439,6 +439,10 @@ void NetManager::addConnection(qint64 socketDescriptor)
 void NetManager::removeConnection()
 {
     QObject *sender = QObject::sender();
+
+    if (sender == nullptr)
+        return;
+
     SocketService *connection = qobject_cast<SocketService *>(sender);
     disconnectSocket(connection);
     connections.removeAt(connections.indexOf(connection));
