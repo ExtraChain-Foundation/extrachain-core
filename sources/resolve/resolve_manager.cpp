@@ -48,7 +48,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-    //    connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
+    connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     //    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
@@ -66,8 +66,7 @@ void ResolveManager::disconnectSignals(ResolverService *resolver)
 
     // request signals
     disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-    //    disconnect(resolver, &ResolverService::handleGetAllActor, actorIndex,
-    //    &ActorIndex::handleGetAllActor);
+    disconnect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     disconnect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     disconnect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     disconnect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
@@ -105,8 +104,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     return lockRes;
 }
 
-void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType,
-                                   const SocketPair &receiver)
+void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType)
 {
 
     Messages::BaseMessage msg;
@@ -129,8 +127,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &m
         requestResponseMap->insert(calcKeccak256(message), Config::Net::NECESSARY_RESPONSE_COUNT);
         handlerFileMutex.unlock();
     }
-    //    networkManager->broadcastMsg(message);
-    networkManager->distMessage(data, receiver);
+    networkManager->broadcastMsg(message);
     //    emit sendMsg(message);
 }
 

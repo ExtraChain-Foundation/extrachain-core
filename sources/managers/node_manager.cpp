@@ -213,7 +213,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
         if (tx.getSender().toActorId() == *actorIndex->companyId)
             emit NewTx(tx);
         else
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage, SocketPair());
+            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
 
         return tx;
     }
