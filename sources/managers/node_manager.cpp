@@ -547,8 +547,7 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
-    //    connect(accController, &AccountController::newActorIsCreated, actorIndex,
-    //    &ActorIndex::getAllActors);
+    connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
     //=============================================CHAT=======================================
     connect(uiController, &UiController::createChat, chatManager, &ChatManager::CreateNewChat);

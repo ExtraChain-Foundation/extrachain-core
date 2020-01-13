@@ -110,7 +110,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &m
     Messages::BaseMessage msg;
     msg.type = msgType;
     msg.data = data;
-
+    qDebug() << "sending" << msgType;
     if (msgType != Messages::ChainMessage::actorMessage)
     {
         if (accountControler->getAccountCount() == 0)
@@ -139,6 +139,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     rmsg.data = data;
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
+    qDebug() << "sending" << msgType;
     if (msgType != Messages::GeneralResponse::getActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 

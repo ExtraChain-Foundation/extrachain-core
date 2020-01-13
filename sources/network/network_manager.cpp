@@ -35,7 +35,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
     qDebug() << "Current server IPs:" << serverIp << "| allow local:" << allowLocalServer;
 
     //    deviceId = BigNumber(readNetManagerIdentificator());
-    // ThreadPool::addThread(this);
+    //    ThreadPool::addThread(this);
 
     this->extPort = 2223;
     this->netPort = serverPort;
@@ -422,6 +422,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
     ThreadPool::addThread(connections.last());
+    //    connections.last()->process();
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
