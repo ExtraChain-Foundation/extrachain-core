@@ -8,6 +8,8 @@
 #include <utility>
 #include <algorithm>
 
+#include <QMutex>
+
 #include "sqlite3.h"
 
 typedef std::unordered_map<std::string, std::string> DBRow;
