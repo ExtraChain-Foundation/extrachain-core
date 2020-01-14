@@ -33,6 +33,7 @@ SOURCES += \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/tx_pair.cpp \
+    $$PWD/sources/managers/notification_manager.cpp \
     $$PWD/sources/network/packages/service/connections_message.cpp \
     $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
@@ -99,6 +100,7 @@ HEADERS += \
     $$PWD/dfs/types/headers/cardfile_interface.h \
     $$PWD/headers/managers/chat.h \
     $$PWD/headers/managers/chatmanager.h \
+    $$PWD/headers/managers/notification_manager.h \
     $$PWD/headers/metatypes.h \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/dfs/packages/headers/ui_messages.h \

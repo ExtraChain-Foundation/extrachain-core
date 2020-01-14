@@ -41,6 +41,7 @@ NodeManager::NodeManager()
     //    dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
+    notifyM = new NotificationManager();
     connectSignals();
 
     //    static QTimer getAllActorsTimer;
@@ -497,13 +498,22 @@ void NodeManager::connectUi()
     connect(this, &NodeManager::loadInfoFromPrProfile, prProfile,
             &PrivateProfile::loadInfoFromPrivateProfile);
     connect(prProfile, &PrivateProfile::infoToUi, uiController, &UiController::loadInfo);
+    connect(prProfile, &PrivateProfile::infoToUi, this, [=](const QByteArray &info, const QString &type) {
+        emit setCurrentIdNotifyM(getIdPrivateProfile());
+    });
+    connect(prProfile, &PrivateProfile::initActorChatM,
+            [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
+    connect(this, &NodeManager::setCurrentIdNotifyM, notifyM, &NotificationManager::setCurrentID);
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
     connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
     connect(uiController, &UiController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
+    connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &UiController::allNotification);
+    connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &UiController::newNotification);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
+
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
 

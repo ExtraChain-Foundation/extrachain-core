@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <string>
 #include <sstream>
+#include <QDateTime>
 namespace Network {
 static QString serverIp = "51.68.181.53";
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
@@ -185,6 +186,13 @@ namespace DataStorage {
           "chatId  TEXT PRIMARY KEY NOT NULL, "
           "message BLOB             NOT NULL, "
           "owner   TEXT             NOT NULL  );";
+
+    static const std::string notificationTable = "Notification";
+    static const std::string notificationTableCreation = "CREATE TABLE IF NOT EXISTS " + notificationTable
+        + " ("
+          "time  INT  PRIMARY KEY NOT NULL, "
+          "type  INT              NOT NULL, "
+          "data  TEXT             NOT NULL  );";
 
     static const std::string postTableName = "PostCfg";
     static const std::string postTextTableName = "PostText";
@@ -487,4 +495,19 @@ static TxParam fromStringTxParam(QByteArray s)
 }
 } // namespace SearchEnum
 
+struct notification
+{
+    enum NotifyType
+    {
+        TxToUser,
+        TxToMe,
+        ChatMsg,
+        ChatInvite,
+        NewPost,
+        NewFollower
+    };
+    long long time;
+    NotifyType type;
+    QByteArray data = "";
+};
 #endif // UTILS_H
