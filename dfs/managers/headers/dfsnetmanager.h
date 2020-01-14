@@ -10,7 +10,7 @@ class SocketService;
 #include "dfs/packages/headers/all.h"
 #include "resolve/dfs_resolver_service.h"
 #include "utils/utils.h"
-static const int DFS_RESOLVERS_POOL_SIZE = 10000;
+static const int DFS_RESOLVERS_POOL_SIZE = 100;
 class Dfs;
 class DFSNetManager : public NetManager
 {
