@@ -19,7 +19,7 @@ class NodeManager;
 
 #include "managers/chatmanager.h"
 class ChatManager;
-static const short ResolverServicePoolMaxSize = 200;
+static const short ResolverServicePoolMaxSize = 5;
 
 #include <QObject>
 //#include <QQueue>
