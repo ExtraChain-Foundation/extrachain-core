@@ -75,6 +75,7 @@ signals:
                          const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
     void connectToServer();
     void networkCreated();
+    void newNotify(const notification ntf);
 
 public slots:
     void init();

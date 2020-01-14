@@ -97,6 +97,7 @@ public:
 
 public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
+
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
 #endif

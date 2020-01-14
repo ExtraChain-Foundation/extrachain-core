@@ -892,6 +892,20 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
 void Blockchain::addBlockToBlockchain(Block block)
 {
     addBlock(block);
+    QList<Transaction> list = block.extractTransactions();
+    for (const auto &tmp : list)
+    {
+        if (tmp.getSender() == accountController->getMainActor()->getId())
+        {
+            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToUser,
+                             tmp.getReceiver().toByteArray() });
+        }
+        else if (tmp.getReceiver() == accountController->getMainActor()->getId())
+        {
+            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToMe,
+                             tmp.getSender().toByteArray() });
+        }
+    }
 }
 
 void Blockchain::addGenBlockToBlockchain(const GenesisBlock &block)

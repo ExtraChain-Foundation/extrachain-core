@@ -20,7 +20,7 @@ private:
     void loadNotificationFromDB();
 
 public slots:
-    void addNotify(notification newNtf);
+    void addNotify(const notification newNtf);
     void setCurrentID(const QByteArray id);
 
 signals:

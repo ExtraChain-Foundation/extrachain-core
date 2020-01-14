@@ -274,6 +274,9 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
+    if (type == DfsStruct::Type::post)
+        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewPost,
+                         pathList.at(PathStruct::aId) + " " + pathList.at(PathStruct::name) });
 #endif
 }
 
@@ -871,7 +874,8 @@ void Dfs::updateFromNewStored(QString filePath)
 
             switch (type)
             {
-            case DfsStruct::ChangeType::Insert: {
+            case DfsStruct::ChangeType::Insert:
+            {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
                 DBRow row;
@@ -880,7 +884,8 @@ void Dfs::updateFromNewStored(QString filePath)
                 rows.push_back(row);
                 break;
             }
-            case DfsStruct::ChangeType::Delete: {
+            case DfsStruct::ChangeType::Delete:
+            {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
 

@@ -161,6 +161,8 @@ void ChatManager::parseInvite()
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
+        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatInvite,
+                         owner + " " + chatId });
         requestChatList();
     }
 }
@@ -403,22 +405,27 @@ void ChatManager::chatRemoved(QByteArray chatId)
 
 void ChatManager::changes(QString path)
 {
-    // if (!QFile::exists(path))
-    //    return;
 
     if (path.indexOf("chatinvite"))
+    {
         parseInvite();
+        return;
+    }
 
     DBConnector db(path.toStdString());
-    qDebug() << "changes " << path;
-    //    std::vector<DBRow> res =
-    //        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " DESC LIMIT 1");
-    //    if (res.size() != 1)
-    //        return;
 
+    std::vector<DBRow> res =
+        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " DESC LIMIT 1");
+    if (res.size() != 1)
+        return;
+    QByteArray userId = res[0].at("userId").c_str();
+    qDebug() << "changes " << path;
     QString chatID = path.mid(32, 64);
     Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
     //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
+    if (path.contains("chat"))
+        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatMsg,
+                         userId + " " + chatID.toUtf8() });
     emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
 }
 

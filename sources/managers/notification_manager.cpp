@@ -20,10 +20,11 @@ void NotificationManager::loadNotificationFromDB()
         notification tmp{ std::stoi(time), notification::NotifyType(std::stoi(type)), data.c_str() };
         list.append(tmp);
     }
+    qDebug() << list.size() << " notify loaded";
     emit allNotifyToUI(list);
 }
 
-void NotificationManager::addNotify(notification newNtf)
+void NotificationManager::addNotify(const notification newNtf)
 {
     DBConnector db(PATH_NOTIFICATION_FILE + _currentActorId.toStdString());
     db.createTable(Config::DataStorage::notificationTableCreation);
