@@ -48,7 +48,7 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
 
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(new Chat(chatId, key, 0, _actorIndex, _accController,
-                                  QList<QByteArray> { owner, _currentActorId }, owner));
+                                  QList<QByteArray>{ owner, _currentActorId }, owner));
     return;
     QString path(ChatStorage::STORED_CHATS + owner + "/chats/" + chatId);
     emit requestFile(path + "/0/msg");
@@ -65,7 +65,9 @@ void ChatManager::InitializeChatList()
 {
     //    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     _chatList.clear();
-    DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
+    pathR += "/" + _currentActorId + "/";
+    DBConnector DB(pathR.toStdString() + "chatsId");
     std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
     for (DBRow temp : chats)
     {
@@ -259,7 +261,7 @@ QByteArray ChatManager::CreateNewChat()
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(new Chat(chatId, generateChatKey(), 0, _actorIndex, _accController,
-                                  QList<QByteArray> { _currentActorId }, _currentActorId));
+                                  QList<QByteArray>{ _currentActorId }, _currentActorId));
     // Chat initialize
     QList<QByteArray> allUsers = Chat(chatId, _actorIndex, _accController).getAllUsers();
 
@@ -377,7 +379,7 @@ void ChatManager::requestChatList()
         for (auto user : tempUsers)
             tempusersList.append(user);
 
-        chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
+        chats.append(UIChat{ tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
     }
     emit chatListSend(chats);
 }
@@ -466,8 +468,9 @@ void ChatManager::initChat(bool status, int type)
         QByteArray pathToChatInvite =
             ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite.stored";
         emit requestFile(pathToChatInvite);
-
-        DBConnector DB(ChatStorage::KEYSTORE_CHATS + "chatsId");
+        QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
+        pathR += "/" + _currentActorId + "/";
+        DBConnector DB(pathR.toStdString() + "chatsId");
         std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
 
         for (DBRow &tmp : chats)
@@ -498,6 +501,11 @@ ChatManager::~ChatManager()
 void ChatManager::ActorInit()
 {
     this->_currentActorId = this->_accController->getMainActor()->getId().toActorId();
+    QFile file("keystore/personal/currentID");
+    file.open(QIODevice::ReadWrite);
+    file.resize(0);
+    file.write(this->_currentActorId);
+    file.close();
     InitializeConnectSignalSlot();
     InitializeChatList();
 }

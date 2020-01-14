@@ -29,8 +29,8 @@ void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray
     file.close();
 }
 
-void PrivateProfile::prpEditPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
-                                           const QByteArray &Data, const bool &reWrite)
+void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
+                                        const QByteArray &Data, const bool &reWrite)
 {
     QByteArray hashLogin = profile.first;
     QByteArray idProfile = profile.second;

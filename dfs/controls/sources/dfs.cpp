@@ -921,6 +921,13 @@ void Dfs::updateFromNewStored(QString filePath)
         }
         //
 
+        if (QFile(newStoredPath).size() == 0 || QFile(notStoredNew).size() == 0)
+        {
+            QFile::remove(newStoredPath);
+            QFile::remove(notStoredNew);
+            return;
+        }
+
         QFile::remove(filePath);
         QFile::remove(notStored);
         QFile::rename(newStoredPath, filePath);

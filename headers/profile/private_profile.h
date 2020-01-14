@@ -17,7 +17,7 @@ private:
 public slots:
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void loadPrivateProfile(const QByteArray &login, const QByteArray &password);
-    void prpEditPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
+    void editPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
                                const QByteArray &Data, const bool &reWrite);
     void loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void loadProfileForAutoLogin(const QByteArray &hash);
