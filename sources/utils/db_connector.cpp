@@ -91,7 +91,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
                 t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
                 break;
             case (SQLITE_INTEGER):
-                t = std::to_string(sqlite3_column_int(stmt, i));
+                t = std::to_string(sqlite3_column_int64(stmt, i));
                 break;
             case (SQLITE_FLOAT):
                 t = std::to_string(sqlite3_column_double(stmt, i));
@@ -107,8 +107,9 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
         rs = sqlite3_step(stmt);
     }
 
-    qDebug().nospace() << file().c_str() << "(" << (rs == SQLITE_DONE ? "true" : "false")
-                       << "): " << query.c_str();
+    if (QString(query.c_str()).indexOf("SELECT  type") == -1)
+        qDebug().nospace() << file().c_str() << "(" << (rs == SQLITE_DONE ? "true" : "false")
+                           << "): " << query.c_str();
     if (rs != SQLITE_DONE)
     {
         qDebug() << file().c_str() << "error: " << sqlite3_errmsg(db);

@@ -22,7 +22,7 @@ void NotificationManager::loadNotificationFromDB()
         std::string time = temp.at("time");
         std::string type = temp.at("type");
         std::string data = temp.at("data");
-        notification tmp{ std::stoi(time), notification::NotifyType(std::stoi(type)), data.c_str() };
+        notification tmp{ std::stoll(time), notification::NotifyType(std::stoi(type)), data.c_str() };
         list.append(tmp);
     }
     qDebug() << list.size() << " notify loaded";
