@@ -189,4 +189,9 @@ public:
     static const QMap<int, QString> fashionMap;
 };
 
+inline bool operator==(const Profile& lhs, const Profile& rhs)
+{
+    return lhs.userId() == rhs.userId();
+}
+
 #endif // PROFILE_H
