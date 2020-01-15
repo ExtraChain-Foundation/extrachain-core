@@ -26,5 +26,6 @@ public slots:
 signals:
     void allNotifyToUI(QList<notification> ntf);
     void newNotifyToUI(notification ntf);
+    void getCurrentID();
 };
 #endif // NOTIFICATION_MANAGER_H

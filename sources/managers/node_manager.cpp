@@ -299,9 +299,9 @@ void NodeManager::getAllActorsTimerCall()
         emit getAllActorsNode(res, true);
 #endif
 #ifdef ETALONIUM_CONSOLE
-    QByteArray res = accController->getMainActor()->getId().toActorId();
-    if (!res.isEmpty())
-        emit getAllActorsNode(res, true);
+    QByteArray res2 = accController->getMainActor()->getId().toActorId();
+    if (!res2.isEmpty())
+        emit getAllActorsNode(res2, true);
 #endif
 }
 
@@ -504,6 +504,8 @@ void NodeManager::connectUi()
     connect(prProfile, &PrivateProfile::initActorChatM,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
     connect(this, &NodeManager::setCurrentIdNotifyM, notifyM, &NotificationManager::setCurrentID);
+    connect(notifyM, &NotificationManager::getCurrentID, this,
+            [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
@@ -522,6 +524,7 @@ void NodeManager::connectUi()
     connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
         setIdPrivateProfile(id);
         emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
+        emit setCurrentIdNotifyM(getIdPrivateProfile());
     });
     connect(accController, &AccountController::savePrivateProfile, chatManager, &ChatManager::ActorInit);
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
@@ -533,6 +536,7 @@ void NodeManager::connectUi()
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
     connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
+    connect(dfs, &Dfs::newNotify, notifyM, &NotificationManager::addNotify);
     connect(blockchain, &Blockchain::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);

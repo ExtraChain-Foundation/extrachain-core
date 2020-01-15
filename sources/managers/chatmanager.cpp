@@ -406,27 +406,39 @@ void ChatManager::chatRemoved(QByteArray chatId)
 void ChatManager::changes(QString path)
 {
 
-    if (path.indexOf("chatinvite"))
+    if (path.contains("chatinvite"))
     {
         parseInvite();
         return;
     }
+    if (path.contains("follower") && path.contains(_currentActorId))
+    {
+        DBConnector db(path.toStdString());
 
-    DBConnector db(path.toStdString());
-
-    std::vector<DBRow> res =
-        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " DESC LIMIT 1");
-    if (res.size() != 1)
-        return;
-    QByteArray userId = res[0].at("userId").c_str();
-    qDebug() << "changes " << path;
-    QString chatID = path.mid(32, 64);
-    Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
-    //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
+        std::vector<DBRow> res =
+            db.select("SELECT * FROM " + Config::DataStorage::subscribeFollowerTableName + " DESC LIMIT 1");
+        if (res.size() != 1)
+            return;
+        QByteArray userId = res[0].at("subscriber").c_str();
+        emit newNotify(
+            { QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewFollower, userId });
+    }
     if (path.contains("chat"))
+    {
+        DBConnector db(path.toStdString());
+
+        std::vector<DBRow> res =
+            db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " DESC LIMIT 1");
+        if (res.size() != 1)
+            return;
+        QByteArray userId = res[0].at("userId").c_str();
+        QString chatID = path.mid(32, 64);
+        Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
         emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatMsg,
                          userId + " " + chatID.toUtf8() });
-    emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
+        emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
+    }
+    //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
 }
 
 void ChatManager::process()

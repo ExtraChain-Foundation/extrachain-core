@@ -8,6 +8,11 @@ NotificationManager::NotificationManager(QObject *parent)
 
 void NotificationManager::loadNotificationFromDB()
 {
+    if (_currentActorId == "")
+    {
+        qDebug() << "NotificationManager haven`t actorID";
+        return;
+    }
     QList<notification> list;
     DBConnector db(PATH_NOTIFICATION_FILE + _currentActorId.toStdString());
     db.createTable(Config::DataStorage::notificationTableCreation);
@@ -38,6 +43,12 @@ void NotificationManager::addNotify(const notification newNtf)
 
 void NotificationManager::setCurrentID(const QByteArray id)
 {
+    qDebug() << "NotificationManager set ID" << id;
+    if (id.isEmpty())
+    {
+        emit getCurrentID();
+        return;
+    }
     this->_currentActorId = id;
     loadNotificationFromDB();
 }

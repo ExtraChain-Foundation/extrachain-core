@@ -190,9 +190,9 @@ namespace DataStorage {
     static const std::string notificationTable = "Notification";
     static const std::string notificationTableCreation = "CREATE TABLE IF NOT EXISTS " + notificationTable
         + " ("
-          "time  INT  PRIMARY KEY NOT NULL, "
-          "type  INT              NOT NULL, "
-          "data  TEXT             NOT NULL  );";
+          "time  INTEGER  PRIMARY KEY NOT NULL, "
+          "type  INT                  NOT NULL, "
+          "data  TEXT                 NOT NULL  );";
 
     static const std::string postTableName = "PostCfg";
     static const std::string postTextTableName = "PostText";
