@@ -3,7 +3,7 @@
 
 #include <QObject>
 #include <QDebug>
-//#include <datastorage/index/actorindex.h>
+#include <QFile>
 
 class Profile
 {
@@ -141,6 +141,8 @@ public:
     void setDirection(QList<int> direction);
     void setWorkStyle(QList<int> workStyle);
     void setFashion(QList<int> fashion);
+
+    bool isServiceExists();
 
     enum Type
     {
