@@ -405,13 +405,14 @@ void ChatManager::chatRemoved(QByteArray chatId)
 
 void ChatManager::changes(QString path)
 {
-
+    if (path.contains(".stored"))
+        return;
     if (path.contains("chatinvite"))
     {
         parseInvite();
         return;
     }
-    if (path.contains("follower") && path.contains(_currentActorId))
+    else if (path.contains("follower") && path.contains(_currentActorId))
     {
         DBConnector db(path.toStdString());
 
@@ -423,7 +424,7 @@ void ChatManager::changes(QString path)
         emit newNotify(
             { QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewFollower, userId });
     }
-    if (path.contains("chat"))
+    else if (path.contains("chat"))
     {
         DBConnector db(path.toStdString());
 
