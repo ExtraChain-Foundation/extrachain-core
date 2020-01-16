@@ -250,7 +250,8 @@ void DFSNetManager::checkMyIdentificator()
                 emit el->removeMe();
         }
     });
-    dfs->requestAllCards();
+    dfs->dfsSync(connection->getSocketPair());
+    //    dfs->requestAllCards();
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }

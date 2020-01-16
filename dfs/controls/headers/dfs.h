@@ -30,7 +30,13 @@ private:
     DBConnector uCards;
     Sender *sender = nullptr;
     // DFSResolver *resolver;
-
+public:
+    /*DFS 1.5*/
+    void dfsSyncUsers(QList<QString> userID, const SocketPair &receiver = SocketPair());
+    void dfsSync();
+    void dfsSync(const SocketPair &receiver);
+    bool dfsValidate(QByteArray userID);
+    /*DFS 1.5*/
 private:
     void initDFS(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
@@ -77,7 +83,7 @@ signals:
     void networkCreated();
 
 public slots:
-    void init();
+    void initMyLocalStorage();
     void initUser(BigNumber userId);
 
     void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
@@ -89,7 +95,7 @@ public slots:
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void startDFS();
-    void requestFile(const QString &filePath);
+    void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
     void searchTmp(bool reqFile = false);
     void requestCardById(QByteArray userId);
     void requestAllCards();

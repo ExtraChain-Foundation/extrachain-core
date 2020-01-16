@@ -129,6 +129,7 @@ public:
     BigNumber getIdentificator() const;
     void setIdentificator(const BigNumber &value);
     bool getActive() const;
+    SocketPair getSocketPair();
     void setNetManager(NetManager *value);
 };
 #endif // SOCKET_SERVICE_H

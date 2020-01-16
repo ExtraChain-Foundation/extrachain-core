@@ -61,6 +61,13 @@ bool SocketService::getActive() const
     return active;
 }
 
+SocketPair SocketService::getSocketPair()
+{
+    SocketPair res(address.toStdString(), port);
+    res.id = identificator.toByteArray();
+    return res;
+}
+
 void SocketService::setNetManager(NetManager *value)
 {
     netManager = value;

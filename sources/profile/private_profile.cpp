@@ -141,7 +141,7 @@ void PrivateProfile::profile(const QByteArray &hash)
                 qDebug() << "Load private profile with id" << idList.first();
                 acContorller->loadActors(idList.first(), idList);
                 if (acContorller->getMainActor() != nullptr)
-                    dfs->init();
+                    dfs->initMyLocalStorage();
                 emit initActorChatM();
             }
             else

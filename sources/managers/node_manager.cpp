@@ -615,7 +615,7 @@ void NodeManager::dfsConnection()
 {
     // init dfs for user
     connect(this, &NodeManager::ready, dfs, &Dfs::startDFS);
-    connect(accController, &AccountController::initDfs, dfs, &Dfs::init);
+    connect(accController, &AccountController::initDfs, dfs, &Dfs::initMyLocalStorage);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
