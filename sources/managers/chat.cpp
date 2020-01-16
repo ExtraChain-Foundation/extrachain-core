@@ -109,7 +109,7 @@ void Chat::saveChatsId(const QByteArray& chatId)
         QFile file(pathR + "fileChatsId");
         file.open(QIODevice::ReadWrite);
         QByteArray dataFromFile = file.readAll();
-        QByteArrayList listChats = Serialization::universalDeserialize(dataFromFile);
+        QByteArrayList listChats = Serialization::universalDeserialize(dataFromFile, 4);
         if (!listChats.contains(chatId))
         {
             listChats.append(chatId);
@@ -119,14 +119,14 @@ void Chat::saveChatsId(const QByteArray& chatId)
             file.close();
         }
         file.resize(0);
-        file.write(Serialization::universalSerialize(listChats));
+        file.write(Serialization::universalSerialize(listChats, 4));
         file.close();
     }
     else
     {
         QFile file(pathR + "fileChatsId");
         file.open(QIODevice::ReadWrite);
-        QByteArray listChats = Serialization::universalSerialize({ chatId });
+        QByteArray listChats = Serialization::universalSerialize({ chatId }, 4);
         file.write(listChats);
         file.close();
     }

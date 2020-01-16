@@ -25,6 +25,7 @@ class ResolveManager;
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "headers/network/packages/service/message_types.h"
+#include "managers/notification_manager.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
@@ -52,6 +53,7 @@ private:
     ResolveManager *resolveManager;
     SubscribeController *subscribeController;
     PrivateProfile *prProfile;
+    NotificationManager *notifyM;
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
 
@@ -95,6 +97,7 @@ public:
 
 public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
+
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
 #endif
@@ -148,6 +151,7 @@ signals:
                                 const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
+    void setCurrentIdNotifyM(const QByteArray id);
     void getAllActorsNode(QByteArray id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
 

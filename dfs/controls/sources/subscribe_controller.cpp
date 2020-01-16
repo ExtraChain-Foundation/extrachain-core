@@ -20,7 +20,10 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
     sendEditSql(currentId, "subscribe", DfsStruct::Type::service,
                 isRemove ? DfsStruct::Delete : DfsStruct::Insert,
                 { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
-    // sendEditSql for followers
+
+    sendEditSql(
+        id, "follower", DfsStruct::Type::service, isRemove ? DfsStruct::Delete : DfsStruct::Insert,
+        { Config::DataStorage::subscribeFollowerTableName.c_str(), "subscriber", currentId, "sign", "TODO" });
 }
 
 bool SubscribeController::checkSubscribe(QByteArray id)

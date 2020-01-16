@@ -49,6 +49,7 @@ private:
      * @return
      */
     QString buildFilePath(const QByteArray &id) const;
+    QString buildPathPubProfile(const QByteArray &id);
 
 public:
     /**

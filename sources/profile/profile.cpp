@@ -547,6 +547,22 @@ void Profile::setFashion(QList<int> fashion)
     setValue("fashion", fromListInt(fashion).toUtf8());
 }
 
+bool Profile::isServiceExists()
+{
+    static QStringList files = { "chatinvite", "follower", "subscribe" };
+    QString servicePath = QString("data/%1/services/").arg(userId());
+
+    for (const QString &file : files)
+    {
+        QString original = servicePath + file;
+        QString stored = original + ".stored";
+        if (!QFile::exists(original) || !QFile::exists(stored))
+            return false;
+    }
+
+    return true;
+}
+
 QList<int> Profile::toListInt(const QString &field)
 {
     if (field.isEmpty())

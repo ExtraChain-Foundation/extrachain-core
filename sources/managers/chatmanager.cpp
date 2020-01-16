@@ -161,6 +161,8 @@ void ChatManager::parseInvite()
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
+        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatInvite,
+                         owner + " " + chatId });
         requestChatList();
     }
 }
@@ -403,23 +405,51 @@ void ChatManager::chatRemoved(QByteArray chatId)
 
 void ChatManager::changes(QString path)
 {
-    // if (!QFile::exists(path))
-    //    return;
-
-    if (path.indexOf("chatinvite"))
+    if (path.contains(".stored"))
+        return;
+    if (path.contains("chatinvite"))
+    {
         parseInvite();
+        return;
+    }
+    else if (path.contains("follower") && path.contains(_currentActorId))
+    {
+        DBConnector db(path.toStdString());
 
-    DBConnector db(path.toStdString());
-    qDebug() << "changes " << path;
-    //    std::vector<DBRow> res =
-    //        db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName + " DESC LIMIT 1");
-    //    if (res.size() != 1)
-    //        return;
+        std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::subscribeFollowerTableName
+                                           + " ORDER BY subscriber LIMIT 1");
+        if (res.size() != 1)
+            return;
+        QByteArray userId = res[0].at("subscriber").c_str();
+        emit newNotify(
+            { QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewFollower, userId });
+    }
+    else if (path.contains("chat"))
+    {
+        DBConnector db(path.toStdString());
 
-    QString chatID = path.mid(32, 64);
-    Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
+        std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
+                                           + " ORDER BY date DESC LIMIT 1");
+        if (res.size() != 1)
+            return;
+
+        QByteArray userId = res[0].at("userId").c_str();
+
+        QString chatID = path.mid(32, 64);
+        QFile file("keystore/chats/" + _currentActorId + "/fileChatsId");
+        file.open(QIODevice::ReadOnly);
+        QByteArray data = file.readAll();
+        file.close();
+        QByteArrayList chatsId = Serialization::universalDeserialize(data, 4);
+        if (!chatsId.contains(chatID.toUtf8()))
+            return;
+        Chat tmp(chatID.toUtf8(), _actorIndex, _accController);
+        if (userId != _currentActorId)
+            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatMsg,
+                             userId + " " + chatID.toUtf8() });
+        emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
+    }
     //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
-    emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
 }
 
 void ChatManager::process()
