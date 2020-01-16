@@ -216,6 +216,7 @@ void Dfs::getDFSStatus()
 
 void Dfs::signalConnection()
 {
+    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
     //    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
     //    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
     //    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
@@ -668,7 +669,7 @@ void Dfs::dfsSyncUsers(QList<QString> userID, const SocketPair &receiver)
     }
 }
 
-void Dfs::dfsSync()
+void Dfs::dfsSyncT()
 {
     // request other roots
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
@@ -698,6 +699,11 @@ void Dfs::dfsSync(const SocketPair &receiver)
     dfsSyncUsers(acList, receiver);
     // send my root
     fileResponse(myCardFile, receiver);
+}
+
+bool Dfs::dfsValidate(QByteArray userID)
+{
+    return true;
 }
 
 void Dfs::process()

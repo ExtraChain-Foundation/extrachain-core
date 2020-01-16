@@ -111,7 +111,7 @@ signals:
                      QByteArrayList sqlChanges);
     void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
               const DfsStruct::SubType subType);
-    void requestFile(const QString &filePath);
+    void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
 };
 
 #endif // CHATMANAGER_H

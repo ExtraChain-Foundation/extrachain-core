@@ -66,7 +66,7 @@ void ChatManager::InitializeChatList()
     //    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     _chatList.clear();
     QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-    pathR += "/" + _currentActorId + "/";
+    pathR += _currentActorId + "/";
     DBConnector DB(pathR.toStdString() + "chatsId");
     std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
     for (DBRow temp : chats)
@@ -469,7 +469,7 @@ void ChatManager::initChat(bool status, int type)
             ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite.stored";
         emit requestFile(pathToChatInvite);
         QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-        pathR += "/" + _currentActorId + "/";
+        pathR += _currentActorId + "/";
         DBConnector DB(pathR.toStdString() + "chatsId");
         std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
 

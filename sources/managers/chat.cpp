@@ -81,7 +81,7 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
         this->ownerID = _ownerId;
     }
     QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-    pathR += "/" + _currentActorId + "/";
+    pathR += _currentActorId + "/";
     QDir().mkpath(pathR);
     DBConnector DB(pathR.toStdString() + "chatsId");
     DB.createTable(Config::DataStorage::chatIdStorage);
@@ -102,7 +102,7 @@ void Chat::saveChatsId(const QByteArray& chatId)
         return;
     }
     QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-    pathR += "/" + _currentActorId + "/";
+    pathR += _currentActorId + "/";
     QDir().mkpath(pathR);
     if (QFile().exists(pathR + "fileChatsId"))
     {
@@ -135,7 +135,7 @@ void Chat::saveChatsId(const QByteArray& chatId)
 QByteArray Chat::unloadChatKey()
 {
     QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-    pathR += "/" + _currentActorId + "/";
+    pathR += _currentActorId + "/";
     QDir().mkpath(pathR);
     DBConnector DB(pathR.toStdString() + "chatsId");
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName

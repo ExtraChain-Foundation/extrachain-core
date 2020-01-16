@@ -30,10 +30,10 @@ private:
     DBConnector uCards;
     Sender *sender = nullptr;
     // DFSResolver *resolver;
-public:
+public slots:
     /*DFS 1.5*/
     void dfsSyncUsers(QList<QString> userID, const SocketPair &receiver = SocketPair());
-    void dfsSync();
+    void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
     bool dfsValidate(QByteArray userID);
     /*DFS 1.5*/
