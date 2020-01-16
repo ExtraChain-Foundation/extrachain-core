@@ -15,7 +15,6 @@ class PublicProfile
 {
 public:
     PublicProfile(QByteArrayList _profile, QByteArray _sign, QByteArray path, QByteArray _id);
-    PublicProfile(QByteArray _profile, QByteArray _sign, QByteArray path, QByteArray _id);
     PublicProfile(const QByteArray &serialize);
     PublicProfile(QByteArray _id, QByteArray _path);
     PublicProfile();

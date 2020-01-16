@@ -273,9 +273,7 @@ public:
     }
     PublicProfile profile()
     {
-        QByteArray section = id.toActorId().right(2);
-        QByteArray pathToFolder = DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/"
-            + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8() + "/" + section;
+        QByteArray pathToFolder = ChatStorage::STORED_CHATS + id.toActorId() + "/profile/";
         return PublicProfile(id.toActorId(), pathToFolder);
     }
 

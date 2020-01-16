@@ -212,8 +212,8 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 {
     if (key->getHash().isEmpty())
         return;
-    qDebug() << "Save profile with id" << newProfile.at(2);
-    QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
+    qDebug() << "Save PublicProfile with id" << newProfile.at(2);
+    QByteArray path = buildPathPubProfile(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
     if (pubProfile.sign == "")
@@ -240,9 +240,9 @@ void ActorIndex::requestProfile(QString id)
     QByteArrayList list = actor.profile().getListProfile();
 
     // for test data: start
-    if (id == "e29c3ac05137ccfc3cde" || id == "6a502ef66fc591980a25" || id == "5078dfb53efc693e1291"
-        || id == "91609376cc6ee0694255")
-        list.insert(15, "static/avatar");
+    //    if (id == "e29c3ac05137ccfc3cde" || id == "6a502ef66fc591980a25" || id == "5078dfb53efc693e1291"
+    //        || id == "91609376cc6ee0694255")
+    //        list.insert(15, "static/avatar");
     // for test data: remove
 
     emit sendProfileToUi(id, list);
@@ -306,6 +306,21 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const
     }
 
     return pathToFolder + "/" + Id;
+}
+
+QString ActorIndex::buildPathPubProfile(const QByteArray &id)
+{
+    QString pathToFolder = ChatStorage::STORED_CHATS + id + "/profile/";
+
+    QDir dir(pathToFolder);
+    if (!dir.exists())
+    {
+        qDebug() << "Creating dir:" << pathToFolder;
+        dir = QDir();
+        dir.mkpath(pathToFolder);
+    }
+
+    return pathToFolder + id + ".profile";
 }
 
 void ActorIndex::setCompanyId(QByteArray *value)

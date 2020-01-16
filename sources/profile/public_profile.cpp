@@ -6,13 +6,7 @@ PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QByteArr
     id = _id;
     setProfile(_profile, path);
 }
-PublicProfile::PublicProfile(QByteArray _profile, QByteArray _sign, QByteArray path, QByteArray _id)
-{
-    sign = _sign;
-    id = _id;
-    idPath = path;
-    saveProfileFromNet(_profile);
-}
+
 PublicProfile::PublicProfile()
 {
     idPath = "";
@@ -23,7 +17,7 @@ PublicProfile::PublicProfile()
 PublicProfile::PublicProfile(QByteArray _id, QByteArray _path)
 {
     id = _id;
-    idPath = _path + "/profile/" + id + ".profile";
+    idPath = _path + id + ".profile";
 
     QFile profile(idPath);
     if (!profile.exists())
@@ -50,6 +44,7 @@ PublicProfile::PublicProfile(const QByteArray &serialize)
     QByteArray dataToProfile = data.mid(0, data.size() - 4 - pathSize);
     saveProfileFromNet(dataToProfile);
 }
+
 QByteArray PublicProfile::serialize() const
 {
     QFile profile(idPath);
@@ -63,10 +58,8 @@ QByteArray PublicProfile::serialize() const
 
 void PublicProfile::setProfile(QByteArrayList profile, QByteArray path)
 {
-    QDir().mkdir(path.mid(0, path.size() - id.size()) + "profile/");
-    QString pathProfile = path.mid(0, path.size() - id.size()) + "profile/" + id + ".profile";
-    idPath = pathProfile.toUtf8();
-    QFile file(pathProfile);
+    idPath = path;
+    QFile file(path);
     QByteArray newProfile = serialize(profile);
     QByteArray signWrite = sign + Utils::intToByteArray(sign.size(), 4);
     file.open(QIODevice::WriteOnly);
@@ -114,9 +107,7 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
 
 void PublicProfile::saveProfileFromNet(QByteArray newProfile)
 {
-    QByteArray sec = this->id.mid(id.size() - 2);
-    QDir().mkdir(DataStorage::BLOCKCHAIN_INDEX.toUtf8() + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME.toUtf8()
-                 + "/" + sec + "/" + "profile");
+    QDir().mkdir(ChatStorage::STORED_CHATS + id + "/profile/");
     QFile profile(idPath);
     if (profile.exists())
     {
