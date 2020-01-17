@@ -19,7 +19,6 @@ class NodeManager;
 
 #include "managers/chatmanager.h"
 class ChatManager;
-static const short ResolverServicePoolMaxSize = 5;
 
 #include <QObject>
 //#include <QQueue>
@@ -29,6 +28,14 @@ static const short ResolverServicePoolMaxSize = 5;
 #include "datastorage/index/actorindex.h"
 #include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
+
+#ifdef ETALONIUM_CONSOLE
+static const short ResolverServicePoolMaxSize = 20;
+#endif
+
+#ifdef ETALONIUM_CLIENT
+static const short ResolverServicePoolMaxSize = 5;
+#endif
 
 class ResolveManager : public QObject
 {
