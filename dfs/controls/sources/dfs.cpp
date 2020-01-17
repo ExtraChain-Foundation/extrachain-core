@@ -141,24 +141,29 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
 
     auto newS = dbNew.select("SELECT * FROM Items");
     dbNew.close();
-
-    std::vector<std::string> diff;
+    std::string pathN;
+    std::string pathO;
+    //    std::vector<std::string> diff;
 
     for (DBRow &n : newS)
     {
-        std::string pathN = n["path"];
+        pathN = n["path"];
         // bool exists = false;
 
         for (DBRow &o : oldS)
         {
-            std::string pathO = o["path"];
+            pathO = o["path"];
 
             if (pathN == pathO && QFile::exists(QString::fromStdString(pathN)))
                 continue;
+            else
+                break;
         }
-
-        // diff.push_back(pathN);
-        requestFile(QString::fromStdString(pathN));
+        if (pathN != pathO)
+        {
+            // diff.push_back(pathN);
+            requestFile(QString::fromStdString(pathN));
+        }
     }
 
     // for (auto d : diff)
@@ -191,51 +196,16 @@ void Dfs::loadFilesFromCard(const QString &card)
 
 void Dfs::getDFSStatus()
 {
-    //    if (QDir(DfsStruct::ROOT_FOOLDER_NAME).exists())
-    //    {
-    //        QDir dir(DfsStruct::ROOT_FOOLDER_NAME);
-    //        QStringList list = dir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-    //        for (const QString &el : list)
-    //        {
-    //            if (el != DfsStruct::ACTOR_CARD_FILE)
-    //            {
-    //                DistFileSystem::Status status;
-    //                status.dirOwner = el.toUtf8();
-    //                status.currentState = CardManager::getAllFiles(el.toUtf8());
-    //                status.calcHash();
-    //                emit sendMsg(status.serialize(), Messages::DFSMessage::statusMessage, SocketPair());
-    //            }
-    //        }
-    //    }
-    //    else
-    //    {
-    //        DistFileSystem::Status status("1", QStringList());
-    //        emit sendMsg(status.serialize(), Messages::DFS_MESSAGE, SocketPair());
-    //    }
 }
 
 void Dfs::signalConnection()
 {
     QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
-    //    connect(sender, &Sender::sendPckg, dfsNetManager, &DFSNetManager::send);
-    //    connect(this, &Dfs::sendQ, sender, &Sender::sendFile);
-    //    connect(resolver, &DFSResolver::save, this, &Dfs::saveFN);
-    //    connect(this, &Dfs::resolveMsg, resolver, &DFSResolver::receiveMsg);
-    //    connect(resolver, &DFSResolver::checkStatus, this, &Dfs::checkAc);
-    //    connect(resolver, &DFSResolver::closingMsg, sender, &Sender::checkClosing);
-    //    connect(resolver, &DFSResolver::initDfs, this, &Dfs::initUser);
-    //    connect(this, &Dfs::networkCreated, this, &Dfs::requestAllCards);
 }
 
 void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type)
 {
     QFile file(tmpPath);
-    //    if (!file.open(QIODevice::ReadOnly))
-    //    {
-    //        qDebug() << "SaveFN not succeded: file not opened";
-    //        return;
-    //    }
-    //    file.close();
 
     if (!QFile::exists(tmpPath))
     {
