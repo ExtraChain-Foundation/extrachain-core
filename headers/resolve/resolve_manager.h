@@ -30,7 +30,7 @@ class ChatManager;
 #include "dfs/controls/headers/dfs.h"
 
 #ifdef ETALONIUM_CONSOLE
-static const short ResolverServicePoolMaxSize = 20;
+static const short ResolverServicePoolMaxSize = 100;
 #endif
 
 #ifdef ETALONIUM_CLIENT

@@ -198,6 +198,9 @@ void Dfs::getDFSStatus()
 
 void Dfs::signalConnection()
 {
+    static QTimer syncTimer;
+    connect(&syncTimer, &QTimer::timeout, this, &Dfs::dfsSyncT);
+    syncTimer.start(30000);
     QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
 }
 

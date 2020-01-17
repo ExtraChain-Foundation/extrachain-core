@@ -12,7 +12,7 @@ class SocketService;
 #include "utils/utils.h"
 
 #ifdef ETALONIUM_CONSOLE
-static const short DFS_RESOLVERS_POOL_SIZE = 20;
+static const short DFS_RESOLVERS_POOL_SIZE = 50;
 #endif
 
 #ifdef ETALONIUM_CLIENT
