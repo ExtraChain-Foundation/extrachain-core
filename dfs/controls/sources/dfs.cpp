@@ -154,9 +154,7 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
         {
             pathO = o["path"];
 
-            if (pathN == pathO && QFile::exists(QString::fromStdString(pathN)))
-                continue;
-            else
+            if (pathN == pathO /*&& QFile::exists(QString::fromStdString(pathN))*/)
                 break;
         }
         if (pathN != pathO)
