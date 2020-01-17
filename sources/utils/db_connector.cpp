@@ -268,8 +268,7 @@ bool DBConnector::isOpen() const
 
 bool DBConnector::query(std::string query)
 {
-    QMutex mutex;
-    mutex.lock();
+    dbmutex.lock();
     sqlite3_stmt *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
@@ -280,7 +279,7 @@ bool DBConnector::query(std::string query)
         qDebug() << "Query error: " << sqlite3_errmsg(db);
 
     sqlite3_finalize(stmt);
-    mutex.unlock();
+    dbmutex.unlock();
     return res == SQLITE_DONE;
 }
 

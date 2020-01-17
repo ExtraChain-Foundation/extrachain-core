@@ -11,7 +11,7 @@
 #include <QMutex>
 
 #include "sqlite3.h"
-
+static QMutex dbmutex;
 typedef std::unordered_map<std::string, std::string> DBRow;
 
 class DBConnector
