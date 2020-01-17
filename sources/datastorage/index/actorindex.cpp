@@ -340,7 +340,7 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
     qDebug() << "Saving the file:" << path;
 
-    QString profilePath = path + "/profile/" + id.toActorId() + ".profile";
+    QString profilePath = buildPathPubProfile(id.toActorId());
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
@@ -443,78 +443,78 @@ void ActorIndex::removeAll()
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
+    QString folderPath = "data";
     QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+
     for (const QString &section : sectionList)
     {
-        QString profileFolderPath = folderPath + section + "/profile";
+        QString profileFolderPath = folderPath + +"/" + section + "/" + section + ".profile";
         QStringList profilePathList =
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
-        for (const QString &profilePath : profilePathList)
-        {
-            Profile profile = getProfile(profilePath.mid(0, profilePath.size() - 8));
 
-            if (profile.at(2) == "")
-                continue;
-            if (profile.userId() == filters.currentId)
-                continue;
-            qint16 type = profile.type();
-            if (type == 0 || type == 6)
-                continue;
+        Profile profile = getProfile(section);
 
-            QString firstName = profile.firstName().toLower();
-            QString lastName = profile.lastName().toLower();
+        if (profile.at(2) == "")
+            continue;
+        if (profile.userId() == filters.currentId)
+            continue;
+        qint16 type = profile.type();
+        if (type == 0 || type == 6)
+            continue;
 
-            if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
-                  || profile.lastName().toLower().startsWith(filters.name.toLower())))
-                continue;
+        QString firstName = profile.firstName().toLower();
+        QString lastName = profile.lastName().toLower();
 
-            /*
-            if (profile.type() != filters.userType && filters.userType != -1)
-                continue;
-            if (profile.country() != filters.location && filters.location != -1)
-                continue;
-            if (profile.gender() != filters.gender && filters.gender != -1)
-                continue;
-            if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
-                continue;
-            if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
-                continue;
-            if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
-                continue;
-            if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
-                continue;
-            if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
-                continue;
-            if (filters.category != profile.category() && !filters.category.isEmpty())
-                continue;
-            if (filters.body != profile.body() && !filters.body.isEmpty())
-                continue;
-            if (filters.hair != profile.hair() && !filters.hair.isEmpty())
-                continue;
-            if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
-                continue;
-            if (filters.eye != profile.eye() && !filters.eye.isEmpty())
-                continue;
-            if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
-                continue;
-            if (filters.style != profile.style() && !filters.style.isEmpty())
-                continue;
-            if (filters.sports != profile.sports() && !filters.sports.isEmpty())
-                continue;
-            if (filters.skin != profile.skin() && !filters.skin.isEmpty())
-                continue;
-            if (filters.scope != profile.scope() && !filters.scope.isEmpty())
-                continue;
-            if (filters.direction != profile.direction() && !filters.direction.isEmpty())
-                continue;
-            if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
-                continue;
-            if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
-                continue;
-            */
+        if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
+              || profile.lastName().toLower().startsWith(filters.name.toLower())))
+            continue;
 
-            profiles.append(profile);
-        }
+        /*
+        if (profile.type() != filters.userType && filters.userType != -1)
+            continue;
+        if (profile.country() != filters.location && filters.location != -1)
+            continue;
+        if (profile.gender() != filters.gender && filters.gender != -1)
+            continue;
+        if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
+            continue;
+        if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
+            continue;
+        if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
+            continue;
+        if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
+            continue;
+        if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
+            continue;
+        if (filters.category != profile.category() && !filters.category.isEmpty())
+            continue;
+        if (filters.body != profile.body() && !filters.body.isEmpty())
+            continue;
+        if (filters.hair != profile.hair() && !filters.hair.isEmpty())
+            continue;
+        if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
+            continue;
+        if (filters.eye != profile.eye() && !filters.eye.isEmpty())
+            continue;
+        if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
+            continue;
+        if (filters.style != profile.style() && !filters.style.isEmpty())
+            continue;
+        if (filters.sports != profile.sports() && !filters.sports.isEmpty())
+            continue;
+        if (filters.skin != profile.skin() && !filters.skin.isEmpty())
+            continue;
+        if (filters.scope != profile.scope() && !filters.scope.isEmpty())
+            continue;
+        if (filters.direction != profile.direction() && !filters.direction.isEmpty())
+            continue;
+        if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
+            continue;
+        if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
+            continue;
+        */
+
+        profiles.append(profile);
     }
     emit sendProfileToSearchToUi(profiles);
 }
