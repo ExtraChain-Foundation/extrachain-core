@@ -225,11 +225,14 @@ void NetManager::checkMyIdentificator()
         if (el->getIdentificator() == connection->getIdentificator())
         {
             if (el == connection)
+            {
                 emit el->setActiveSignal(true);
+            }
             else
                 emit el->removeMe();
         }
     });
+    emit newSocket();
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }

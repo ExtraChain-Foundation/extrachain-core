@@ -246,7 +246,7 @@ signals:
     //    void newDfsSocket(SocketService *socket);
     //    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
     //    void sendMsg(const QByteArray &data, const SocketPair &socketData);
-
+    void newSocket();
     void qmlNetworkStatus(bool status);
     void qmlNetworkSockets(int socketsCount);
     void qmlServerError(bool serverError);

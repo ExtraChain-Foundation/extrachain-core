@@ -116,6 +116,7 @@ void NodeManager::connectResolveManager()
     //            &ResolveManager::resolveMessage);
     // TODO: move
     //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
+    connect(netManager, &NetManager::newSocket, this, &NodeManager::getAllActorsTimerCall);
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
