@@ -678,27 +678,31 @@ void Dfs::dfsSync(const SocketPair &receiver)
 bool Dfs::dfsValidate(QByteArray userID)
 {
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE;
-    QString profile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + userID + DfsStruct::PROFILE_EXT;
-    QString chatinvite = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::CHATINVITE;
-    QString chatinvite_s =
-        DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::CHATINVITE + DfsStruct::STORED_EXT;
-    QString follower = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::FOLLOWER;
-    QString follower_s =
-        DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::FOLLOWER + DfsStruct::STORED_EXT;
-    QString subscribe = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::SUBSCRIBE;
-    QString subscribe_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE
+    QString profile =
+        DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/profile/" + userID + DfsStruct::PROFILE_EXT;
+    QString chatinvite = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::CHATINVITE;
+    QString chatinvite_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::CHATINVITE
         + DfsStruct::STORED_EXT;
+    QString follower = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::FOLLOWER;
+    QString follower_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::FOLLOWER
+        + DfsStruct::STORED_EXT;
+    QString subscribe = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::SUBSCRIBE;
+    QString subscribe_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/"
+        + DfsStruct::ACTOR_CARD_FILE + DfsStruct::STORED_EXT;
+
     if (!(actorIndex->hasActor(BigNumber(userID))))
     {
         return false;
     }
+
     if (!QFile::exists(cardFile))
     {
         return false;
     }
+
     if (!QFile::exists(chatinvite) && !QFile::exists(chatinvite_s) && !QFile::exists(follower)
         && !QFile::exists(follower_s) && !QFile::exists(subscribe) && !QFile::exists(subscribe_s)
-        && !QFile::exists(profile))
+        /* && !QFile::exists(profile)*/)
     {
         return false;
     }

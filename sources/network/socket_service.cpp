@@ -273,6 +273,7 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
         checkProtocol = msgList.at(0);
     if (checkProtocol != Config::Net::PROTOCOL_VERSION)
     {
+        qDebug().noquote().nospace() << "Incorrect protocol version for " << address << ":" << port;
         this->removeMe();
     }
     if (bmsg == Config::Net::PROTOCOL_VERSION)

@@ -16,7 +16,7 @@
 #include <sstream>
 #include <QDateTime>
 #include <QStorageInfo>
-#include <QApplication>
+#include <QCoreApplication>
 
 namespace Network {
 static QString serverIp = "51.68.181.53";
