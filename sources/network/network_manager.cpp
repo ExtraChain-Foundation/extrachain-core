@@ -83,7 +83,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 void NetManager::process()
 {
     startNetwork();
-    connectToServer(serverPort, local);
+    // connectToServer(serverPort, local);
     QTimer *timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &NetManager::checkConnectionsStatus);
     timer->start(5000);

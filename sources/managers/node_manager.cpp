@@ -24,14 +24,15 @@ NodeManager::NodeManager()
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
+    dfs = new Dfs(actorIndex, accController);
 
 #ifdef ETALONIUM_CLIENT
     uiController = new UiController(this);
     uiController->setSubscribeController(subscribeController);
     uiWallet = uiController->getWallet();
     qDebug() << "========" << uiController;
+    uiController->setDfs(dfs);
 #endif
-    dfs = new Dfs(actorIndex, accController);
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
     resolveManager->setNode(this);
@@ -58,6 +59,9 @@ NodeManager::NodeManager()
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
+#ifdef ETALONIUM_CLIENT
+    Utils::checkMemoryFree();
+#endif
 }
 
 void NodeManager::createCompanyActor(const QString &email, const QString &password)
@@ -417,7 +421,7 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 
 void NodeManager::connectUi()
 {
-    connect(uiController, &UiController::authEnded, [this]() { emit this->ready(); });
+    connect(uiController, &UiController::ready, this, &NodeManager::ready);
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
     connect(uiController, &UiController::connectToServer, dfs, &Dfs::connectToServer);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
@@ -630,6 +634,7 @@ void NodeManager::connectActorIndex()
 void NodeManager::dfsConnection()
 {
     // init dfs for user
+    // connect(this, &NodeManager::ready, netManager, &NetManager::startNetwork);
     connect(this, &NodeManager::ready, dfs, &Dfs::startDFS);
     connect(accController, &AccountController::initDfs, dfs, &Dfs::initMyLocalStorage);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);

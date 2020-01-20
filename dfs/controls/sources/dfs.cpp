@@ -95,7 +95,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
     }
 
     if (stored)
-        sender->sendFile(dfsPath + DfsStruct::STORED_FILE_NAME, type, SocketPair());
+        sender->sendFile(dfsPath + DfsStruct::STORED_EXT, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath, type, userId); // TODO
@@ -264,7 +264,7 @@ void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
     // qDebug() << "fileResponse";
     sender->sendFile(filePath, type, receiver);
 
-    QString storedPath = filePath + DfsStruct::STORED_FILE_NAME;
+    QString storedPath = filePath + DfsStruct::STORED_EXT;
     if (QFile::exists(storedPath))
         sender->sendFile(storedPath, DfsStruct::Type::stored, receiver);
 
@@ -397,7 +397,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
     }
 
     if (stored)
-        sender->sendFile(dfsPath + DfsStruct::STORED_FILE_NAME, type, SocketPair());
+        sender->sendFile(dfsPath + DfsStruct::STORED_EXT, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 
 #ifdef ETALONIUM_CLIENT
@@ -677,7 +677,62 @@ void Dfs::dfsSync(const SocketPair &receiver)
 
 bool Dfs::dfsValidate(QByteArray userID)
 {
+    QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE;
+    QString profile =
+        DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/profile/" + userID + DfsStruct::PROFILE_EXT;
+    QString chatinvite = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::CHATINVITE;
+    QString chatinvite_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::CHATINVITE
+        + DfsStruct::STORED_EXT;
+    QString follower = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::FOLLOWER;
+    QString follower_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::FOLLOWER
+        + DfsStruct::STORED_EXT;
+    QString subscribe = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::SUBSCRIBE;
+    QString subscribe_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/"
+        + DfsStruct::ACTOR_CARD_FILE + DfsStruct::STORED_EXT;
+
+    if (!(actorIndex->hasActor(BigNumber(userID))))
+    {
+        return false;
+    }
+
+    if (!QFile::exists(cardFile))
+    {
+        return false;
+    }
+
+    if (!QFile::exists(chatinvite) && !QFile::exists(chatinvite_s) && !QFile::exists(follower)
+        && !QFile::exists(follower_s) && !QFile::exists(subscribe) && !QFile::exists(subscribe_s)
+        /* && !QFile::exists(profile)*/)
+    {
+        return false;
+    }
+    //    DBConnector root;
+    //    if (!root.open(cardFile.toStdString()))
+    //    {
+    //        return false;
+    //    }
     return true;
+}
+
+QList<QByteArray> Dfs::dfsValidateAll()
+{
+    QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
+    //    QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
+    QStringList reqCards;
+    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
+    QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+    //    int pos = acList.indexOf(mainActor);
+    //    if (pos != -1)
+    //        acList.removeAt(pos);
+    QList<QByteArray> res;
+    for (QString user : acList)
+    {
+        if (!dfsValidate(user.toUtf8()))
+        {
+            res.append(user.toUtf8());
+        }
+    }
+    return res;
 }
 
 void Dfs::process()
@@ -770,10 +825,10 @@ QByteArray Dfs::buildDfsPath(QByteArray userID, DfsStruct::Type type)
 
 bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type)
 {
-    QString dfsPath = filePath + DfsStruct::STORED_FILE_NAME;
+    QString dfsPath = filePath + DfsStruct::STORED_EXT;
     DBConnector dbc;
 
-    if (!dbc.open((filePath + DfsStruct::STORED_FILE_NAME).toStdString()))
+    if (!dbc.open((filePath + DfsStruct::STORED_EXT).toStdString()))
         return false;
     if (!dbc.createTable(Config::DataStorage::storedTableCreation))
         return false;
@@ -785,7 +840,7 @@ bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStru
 bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId,
                          bool init, QByteArray hash)
 {
-    DBConnector dbc((filePath + DfsStruct::STORED_FILE_NAME).toStdString());
+    DBConnector dbc((filePath + DfsStruct::STORED_EXT).toStdString());
     QByteArray sign = accountControler->getMainActor()->getKey()->sign(userId.toLatin1());
 
     if (init)

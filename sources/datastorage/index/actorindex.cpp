@@ -34,6 +34,19 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     }
 }
 
+bool ActorIndex::hasActor(const BigNumber &id)
+{
+    QByteArray serializedActor = this->getById(id);
+    if (!serializedActor.isEmpty())
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 void ActorIndex::removeActor(const BigNumber &id, bool resend)
 {
     QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();

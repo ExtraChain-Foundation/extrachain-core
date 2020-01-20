@@ -21,13 +21,17 @@ static const short name = 3;
 
 namespace DfsStruct {
 static const QString ROOT_FOOLDER_NAME = "data";
-static const QString USER_DATA_FOLDER = "data/user";
-static const QString USER_KEYS_DIR = "data/user/key";
-static const QString STORED_FILE_NAME = ".stored";
-static const QString CLON_SIGN = ".clone";
+static const QString STORED_EXT = ".stored";
 static const QString MINI_IMAGES = "/mini";
 static const QString FILE_IDENTIFICATOR = ".tmp";
 static const QString ACTOR_CARD_FILE = "root";
+static const QString PROFILE_EXT = ".profile";
+static const QString CHATINVITE = "chatinvite";
+static const QString FOLLOWER = "follower";
+static const QString SUBSCRIBE = "subscribe";
+// static const QString CLON_SIGN = ".clone";
+// static const QString USER_DATA_FOLDER = "data/user";
+// static const QString USER_KEYS_DIR = "data/user/key";
 
 enum State
 {

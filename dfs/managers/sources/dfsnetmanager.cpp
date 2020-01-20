@@ -173,7 +173,7 @@ void DFSNetManager::process()
 void DFSNetManager::startDFSNetwork()
 {
     startNetwork();
-    connectToServer(serverPort, local);
+    // connectToServer(serverPort, local);
 }
 
 void DFSNetManager::uiReconnect()

@@ -624,3 +624,17 @@ FileList::~FileList()
 {
     this->checkForDelete();
 }
+
+qint64 Utils::checkMemoryFree()
+{
+    QStorageInfo x(qApp->applicationDirPath());
+    qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
+    return x.bytesFree();
+}
+
+qint64 Utils::checkMemoryTotal()
+{
+    QStorageInfo x(qApp->applicationDirPath());
+    qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
+    return x.bytesTotal();
+}

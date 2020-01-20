@@ -15,6 +15,9 @@
 #include <string>
 #include <sstream>
 #include <QDateTime>
+#include <QStorageInfo>
+#include <QCoreApplication>
+
 namespace Network {
 static QString serverIp = "51.68.181.53";
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
@@ -249,7 +252,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QByteArray PROTOCOL_VERSION = "ExtraCoin_v2";
+    static const QByteArray PROTOCOL_VERSION = "ExtraCoin_v3";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
@@ -335,6 +338,9 @@ namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
+
+qint64 checkMemoryFree();  // MB
+qint64 checkMemoryTotal(); // MB
 
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
@@ -510,4 +516,5 @@ struct notification
     NotifyType type;
     QByteArray data = "";
 };
+
 #endif // UTILS_H
