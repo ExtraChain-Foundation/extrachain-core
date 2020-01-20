@@ -15,6 +15,9 @@
 #include <string>
 #include <sstream>
 #include <QDateTime>
+#include <QStorageInfo>
+#include <QApplication>
+
 namespace Network {
 static QString serverIp = "51.68.181.53";
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
@@ -336,6 +339,9 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
+qint64 checkMemoryFree();  // MB
+qint64 checkMemoryTotal(); // MB
+
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
@@ -510,4 +516,5 @@ struct notification
     NotifyType type;
     QByteArray data = "";
 };
+
 #endif // UTILS_H
