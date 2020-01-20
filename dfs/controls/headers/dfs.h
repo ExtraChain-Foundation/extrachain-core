@@ -36,6 +36,7 @@ public slots:
     void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
     bool dfsValidate(QByteArray userID);
+    QList<QByteArray> dfsValidateAll();
     /*DFS 1.5*/
 private:
     void initDFS(const QByteArray &userId);

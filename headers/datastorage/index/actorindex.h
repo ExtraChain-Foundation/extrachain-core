@@ -65,6 +65,7 @@ public:
      * @return Found actor, or empty actor (if not found)
      */
     Actor<KeyPublic> getActor(const BigNumber &id);
+    bool hasActor(const BigNumber &id);
     void removeActor(const BigNumber &id, bool resend = false);
 
     /**
