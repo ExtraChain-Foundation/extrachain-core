@@ -58,6 +58,9 @@ NodeManager::NodeManager()
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
+#ifdef ETALONIUM_CLIENT
+    Utils::checkMemoryFree();
+#endif
 }
 
 void NodeManager::createCompanyActor(const QString &email, const QString &password)
