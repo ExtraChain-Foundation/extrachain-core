@@ -93,7 +93,6 @@ DfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray
     mutex.lock();
     if (!dbConnect.open(pathLocal.toStdString() + DfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
-        //        qDebug() << "[Error][Card_Manager][getTypeByName] dimka nividimka";
         return DfsStruct::service;
     }
     QByteArray query = "SELECT  type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())

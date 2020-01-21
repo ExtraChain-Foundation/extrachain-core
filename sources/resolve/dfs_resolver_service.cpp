@@ -85,8 +85,11 @@ void DFSResolverService::checkStatus()
 
         qDebug() << "[&DFSResolver][file succed written to tmp]";
 
-        disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
-        //        reloadTimer->deleteLater();
+        if (reloadTimer != nullptr)
+        {
+            disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
+            reloadTimer->deleteLater();
+        }
         finishWork();
     }
     else

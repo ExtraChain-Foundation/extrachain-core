@@ -198,6 +198,34 @@ void NetManager::checkConnectionsStatus()
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit qmlNetworkStatus(flag);
     emit qmlNetworkSockets(connections.length());
+
+#ifdef ETALONIUM_CLIENT
+    if (flag)
+    {
+        QFile file("network_cache");
+        file.open(QFile::ReadOnly);
+        QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
+
+        for (QByteArray packageData : allPackages)
+        {
+            QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
+            if (package.length() != 4)
+                return;
+
+            QByteArray data = package[0];
+            SocketPair socketData;
+            socketData.ip = package[1].toStdString();
+            socketData.port = package[2].toShort();
+            socketData.iden = package[3];
+
+            for (int i = 0; i < connections.size(); i++)
+                connections[i]->distMsg(data, socketData);
+        }
+
+        file.close();
+        file.remove();
+    }
+#endif
 }
 
 void NetManager::restoreConnections(const QList<SocketPair> &socketList)
@@ -205,7 +233,7 @@ void NetManager::restoreConnections(const QList<SocketPair> &socketList)
     //
     for (const SocketPair &el : socketList)
     {
-        addConnectionFromPair(QHostAddress(QString::fromStdString(el.first)), el.second);
+        addConnectionFromPair(QHostAddress(QString::fromStdString(el.ip)), el.port);
     }
 }
 
@@ -386,8 +414,29 @@ void NetManager::dfsToPeerTmp(const QByteArray &data, const unsigned int &msgTyp
 
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
-    for (int i = 0; i < connections.size(); i++)
-        connections[i]->distMsg(data, socketData);
+#ifdef ETALONIUM_CLIENT
+    bool flag = false;
+    std::for_each(connections.begin(), connections.end(),
+                  [&flag](SocketService *el) { flag = flag || el->getActive(); });
+
+    if (flag)
+    {
+#endif
+        for (int i = 0; i < connections.size(); i++)
+            connections[i]->distMsg(data, socketData);
+#ifdef ETALONIUM_CLIENT
+    }
+    else
+    {
+        QFile file("network_cache");
+        file.open(QFile::Append);
+        QByteArrayList list = { data, QByteArray::fromStdString(socketData.ip),
+                                QByteArray::number(socketData.port), socketData.iden };
+        QByteArray package = Serialization::universalSerialize(list, 8);
+        file.write(Utils::intToByteArray(package.length(), 8) + package);
+        file.close();
+    }
+#endif
 }
 
 void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)

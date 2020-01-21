@@ -152,6 +152,20 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
 void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
+
+    if (resolver == nullptr)
+    {
+        int kill = -1;
+        for (int i = 0; i != l1Res.length(); i++)
+        {
+            if (resolver == nullptr)
+                kill = i;
+        }
+        if (kill > -1)
+            l1Res.removeAt(kill);
+        return;
+    }
+
     disconnectSignals(resolver);
     if (resolver->getType() == Resolver::Type::DFS)
     {
