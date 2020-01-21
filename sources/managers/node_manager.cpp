@@ -658,7 +658,7 @@ void NodeManager::connectSignals()
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
-    //    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
+    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
 void NodeManager::prepareFolders()
