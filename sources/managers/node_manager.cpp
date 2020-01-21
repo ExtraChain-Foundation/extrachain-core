@@ -47,7 +47,7 @@ NodeManager::NodeManager()
 
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
-    getAllActorsTimer.start(3000);
+    getAllActorsTimer.start(30000);
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
@@ -116,7 +116,7 @@ void NodeManager::connectResolveManager()
     //            &ResolveManager::resolveMessage);
     // TODO: move
     //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
-    connect(netManager, &NetManager::newSocket, this, &NodeManager::getAllActorsTimerCall);
+
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
@@ -658,6 +658,10 @@ void NodeManager::connectSignals()
     connectActorIndex();
     connectSmContractManager();
     dfsConnection();
+
+    connect(netManager, &NetManager::newSocket, this, &NodeManager::getAllActorsTimerCall);
+    connect(netManager, &NetManager::newSocket, dfs, &Dfs::dfsSyncT);
+
     connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 

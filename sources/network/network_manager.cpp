@@ -221,18 +221,28 @@ void NetManager::checkMyIdentificator()
         connection->removeMe();
 
     // short counter = 0;
-    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
-        if (el->getIdentificator() == connection->getIdentificator())
+    for (SocketService *el : connections)
+    {
+        if (el->getIdentificator() == connection->getIdentificator() && el != connection)
         {
-            if (el == connection)
-            {
-                emit el->setActiveSignal(true);
-            }
-            else
-                emit el->removeMe();
+            emit el->removeMe();
+            return;
         }
-    });
+    }
+    emit connection->setActiveSignal(true);
     emit newSocket();
+    //    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
+    //        if (el->getIdentificator() == connection->getIdentificator())
+    //        {
+    //            if (el == connection)
+    //            {
+    //                emit el->setActiveSignal(true);
+    //            }
+    //            else
+    //                emit el->removeMe();
+    //        }
+    //    });
+
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }
