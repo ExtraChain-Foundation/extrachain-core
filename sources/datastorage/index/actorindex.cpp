@@ -357,11 +357,6 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
-
-        auto actor = getActor(id);
-        if (actor.getAccount() != 0 && actor.getAccount() != 2 && QFile::exists(profilePath))
-            return 0;
-
         return Errors::FILE_ALREADY_EXISTS;
     }
     if (!file.exists())

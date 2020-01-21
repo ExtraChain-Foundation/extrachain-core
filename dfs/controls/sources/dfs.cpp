@@ -29,25 +29,29 @@ void Dfs::initDFS(const QByteArray &userId)
     subPathList.append("/services/");
     subPathList.append("/cdoctp/");
     subPathList.append("/cards/");
-    DBConnector dbc(
-        (DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
-    dbc.createTable(Config::DataStorage::cardTableCreation);
-    dbc.createTable(Config::DataStorage::lastSectionTableCreation);
-    for (int i = 0; i <= DfsStruct::Type::card; i++)
+
+    if (!QFile::exists(DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE))
     {
-        DBRow row;
-        row.insert({ "counter", "-1" });
-        row.insert({ "type", std::to_string(i) });
-        dbc.insert(Config::DataStorage::lsTableName, row);
+        DBConnector dbc(
+            (DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
+        dbc.createTable(Config::DataStorage::cardTableCreation);
+        dbc.createTable(Config::DataStorage::lastSectionTableCreation);
+        for (int i = 0; i <= DfsStruct::Type::card; i++)
+        {
+            DBRow row;
+            row.insert({ "counter", "-1" });
+            row.insert({ "type", std::to_string(i) });
+            dbc.insert(Config::DataStorage::lsTableName, row);
+        }
     }
+
     for (QByteArray currentPath : subPathList)
         QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
 
     qDebug() << "[init dfs for user]" << userId;
     //    signalConnections();
     qDebug() << "[init finished]";
-    if (dfsNetManager != nullptr)
-        requestCardById(userId);
+    requestCardById(userId);
 }
 
 void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct::Type &type,
