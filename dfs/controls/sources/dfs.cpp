@@ -753,10 +753,10 @@ void Dfs::startDFS()
         ThreadPool::addThread(sender);
     }
 
-    //    timerTmpFiles = new QTimer(this);
-    static QTimer TmpTimer;
-    connect(&TmpTimer, &QTimer::timeout, [this]() { searchTmp(true); });
-    searchTmp(false);
+    timerTmpFiles = new QTimer(this);
+    //    static QTimer TmpTimer;
+    connect(timerTmpFiles, &QTimer::timeout, this, &Dfs::searchTmp);
+    searchTmp();
     timerTmpFiles->start(3000);
 
     emit networkCreated();
@@ -1133,7 +1133,7 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
     }
 }
 
-void Dfs::searchTmp(bool reqFile)
+void Dfs::searchTmp()
 {
     QDir::setCurrent("etalonium-data");
     QDirIterator dirIt("data", QDirIterator::Subdirectories);

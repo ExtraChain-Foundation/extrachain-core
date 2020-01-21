@@ -98,7 +98,7 @@ public slots:
     void process();
     void startDFS();
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
-    void searchTmp(bool reqFile = false);
+    void searchTmp();
     void requestCardById(QByteArray userId);
     void requestAllCards();
 
