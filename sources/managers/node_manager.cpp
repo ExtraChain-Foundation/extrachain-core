@@ -728,6 +728,9 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber p
         return;
     }
 
+    if (actorIndex->companyId == nullptr)
+        return;
+
     BigNumber companyId = BigNumber(*actorIndex->companyId);
     if (mainActor->getId() == companyId)
     {

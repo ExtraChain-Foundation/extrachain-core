@@ -180,17 +180,16 @@ void SocketService::process()
 
 void SocketService::establishConnection()
 {
-    qDebug() << "status of socket " << this->thread() << "connection ::" << socket->isValid();
+    qDebug() << "status of socket" << this->thread() << "connection:" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR + net::readNetManagerIdentificator();
 
     this->distMsg(/*Utils::intToByteArray(idb.size(), 8) + */ idb,
                   SocketPair(this->address.toStdString(), this->port));
-    qDebug() << "SOCKET SERVICE: socket address " << this->socket;
+    qDebug() << "SOCKET SERVICE: socket address" << this->socket << address << port;
 
-    qDebug() << "SOCKET SERVICE: "
-             << "socket isOpen - " << socket->isOpen();
+    qDebug() << "SOCKET SERVICE: socket isOpen - " << socket->isOpen();
 }
 
 void SocketService::setActive(bool active)
