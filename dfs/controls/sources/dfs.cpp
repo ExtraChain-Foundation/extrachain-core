@@ -753,8 +753,9 @@ void Dfs::startDFS()
         ThreadPool::addThread(sender);
     }
 
-    timerTmpFiles = new QTimer(this);
-    connect(timerTmpFiles, &QTimer::timeout, [this]() { searchTmp(true); });
+    //    timerTmpFiles = new QTimer(this);
+    static QTimer TmpTimer;
+    connect(&TmpTimer, &QTimer::timeout, [this]() { searchTmp(true); });
     searchTmp(false);
     timerTmpFiles->start(3000);
 
