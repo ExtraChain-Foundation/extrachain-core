@@ -267,15 +267,15 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
     dbm.deserialize(bmsg);
     if (dbm.isEmpty())
         return;
-    QByteArrayList msgList = Serialization::universalDeserialize(bmsg, 8);
-    QByteArray checkProtocol;
-    if (msgList.length() > 0)
-        checkProtocol = msgList.at(0);
-    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
-    {
-        qDebug().noquote().nospace() << "Incorrect protocol version for " << address << ":" << port;
-        this->removeMe();
-    }
+    //    QByteArrayList msgList = Serialization::universalDeserialize(bmsg, 8);
+    //    QByteArray checkProtocol;
+    //    if (msgList.length() > 0)
+    //        checkProtocol = msgList.at(0);
+    //    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
+    //    {
+    //        qDebug().noquote().nospace() << "Incorrect protocol version for " << address << ":" << port;
+    //        this->removeMe();
+    //    }
     if (bmsg == Config::Net::PROTOCOL_VERSION)
     {
         qDebug() << "Protocol msg COLLECTED";
