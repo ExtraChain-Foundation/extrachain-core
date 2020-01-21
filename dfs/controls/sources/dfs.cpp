@@ -761,7 +761,7 @@ void Dfs::startDFS()
     //    static QTimer TmpTimer;
     connect(timerTmpFiles, &QTimer::timeout, this, &Dfs::searchTmp);
     searchTmp();
-    timerTmpFiles->start(3000);
+    timerTmpFiles->start(5000);
 
     emit networkCreated();
 }
@@ -1139,7 +1139,6 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
 
 void Dfs::searchTmp()
 {
-    QDir::setCurrent("etalonium-data");
     QDirIterator dirIt("data", QDirIterator::Subdirectories);
     QSet<QString> tmpFiles;
 
@@ -1153,7 +1152,7 @@ void Dfs::searchTmp()
             QString fileName = dirIt.filePath().chopped(4);
             if (!dfsNetManager->nameIsTaken(fileName))
             {
-                QFile::remove(dirIt.filePath());
+                // QFile::remove(dirIt.filePath());
                 requestFile(fileName);
             }
             //            else
