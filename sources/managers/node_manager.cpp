@@ -45,9 +45,9 @@ NodeManager::NodeManager()
     notifyM = new NotificationManager();
     connectSignals();
 
-    //    static QTimer getAllActorsTimer;
-    //    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
-    //    getAllActorsTimer.start(10000);
+    static QTimer getAllActorsTimer;
+    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    getAllActorsTimer.start(3000);
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
