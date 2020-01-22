@@ -186,6 +186,29 @@ UiController *NodeManager::getUiController() const
 {
     return uiController;
 }
+
+void NodeManager::setNotificationClient(NotificationClient *newNtfCl)
+{
+    notificationClient = newNtfCl;
+}
+
+void NodeManager::newNotify(const QString &msg, const QByteArray &user)
+{
+    if (user.isEmpty())
+        notificationClient->setNotification(msg);
+    else
+    {
+        QByteArrayList profile = actorIndex->getProfile(user);
+        if (profile.isEmpty())
+            notificationClient->setNotification(msg);
+        else
+        {
+            QString name = profile.at(3);
+            QString secName = profile.at(4);
+            notificationClient->setNotification(msg + name + " " + secName);
+        }
+    }
+}
 #endif
 
 Transaction NodeManager::createTransaction(Transaction tx)
@@ -520,7 +543,7 @@ void NodeManager::connectUi()
     connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &UiController::allNotification);
     connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &UiController::newNotification);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
-
+    connect(notifyM, &NotificationManager::sendToNotifyClient, this, &NodeManager::newNotify);
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
 
@@ -611,6 +634,7 @@ void NodeManager::addNewWallet()
         createWalletInUi();
     });
 }
+
 #elif ETALONIUM_CONSOLE
 void NodeManager::connectConsole()
 {

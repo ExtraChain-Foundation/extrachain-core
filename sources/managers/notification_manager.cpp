@@ -39,6 +39,7 @@ void NotificationManager::addNotify(const notification newNtf)
     row.insert({ "data", newNtf.data.toStdString() });
     db.insert(Config::DataStorage::notificationTable, row);
     emit newNotifyToUI(newNtf);
+    sendToNotify(newNtf);
 }
 
 void NotificationManager::setCurrentID(const QByteArray id)
@@ -51,4 +52,38 @@ void NotificationManager::setCurrentID(const QByteArray id)
     }
     this->_currentActorId = id;
     loadNotificationFromDB();
+}
+
+void NotificationManager::sendToNotify(const notification newNtf)
+{
+    switch (newNtf.type)
+    {
+    case (notification::NotifyType::TxToUser):
+        emit sendToNotifyClient("Transaction to *" + newNtf.data.right(5) + " completed", "");
+        break;
+    case (notification::NotifyType::TxToMe):
+        emit sendToNotifyClient("New transaction from *" + newNtf.data.right(5), "");
+        break;
+    case (notification::NotifyType::ChatMsg):
+    {
+        QByteArray chatId = newNtf.data.split(' ').at(0);
+        emit sendToNotifyClient("New message from ", chatId);
+        break;
+    }
+    case (notification::NotifyType::ChatInvite):
+    {
+        QByteArray userId = newNtf.data.split(' ').at(0);
+        emit sendToNotifyClient("New chat from ", userId);
+        break;
+    }
+    case (notification::NotifyType::NewPost):
+    {
+        QByteArray user = newNtf.data.split(' ').at(0);
+        emit sendToNotifyClient("New post from ", user);
+        break;
+    }
+    case (notification::NotifyType::NewFollower):
+        emit sendToNotifyClient("New follower ", newNtf.data);
+        break;
+    }
 }
