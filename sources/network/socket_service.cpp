@@ -265,6 +265,8 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
     dbm.deserialize(bmsg);
     if (dbm.isEmpty())
         return;
+    if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
+        return;
     //    QByteArrayList msgList = Serialization::universalDeserialize(bmsg, 8);
     //    QByteArray checkProtocol;
     //    if (msgList.length() > 0)
