@@ -659,14 +659,15 @@ void Dfs::dfsSyncT()
     it = aList.begin();
     while (it != aList.end())
     {
-        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(*it));
+        QByteArray b = *it;
+        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(b));
         if (actor.isEmpty())
         {
-            aList.removeOne(*it);
+            it = aList.erase(it);
         }
         else if (actor.getAccount() != actorType::ACCOUNT)
         {
-            aList.removeOne(*it);
+            it = aList.erase(it);
         }
         else
         {
