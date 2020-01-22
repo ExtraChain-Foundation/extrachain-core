@@ -643,24 +643,46 @@ void Dfs::dfsSyncUsers(QList<QString> userID, const SocketPair &receiver)
 {
     for (QString s : userID)
     {
-        if (dfsValidate(s.toUtf8()))
-        {
-            requestFile(DfsStruct::ROOT_FOOLDER_NAME + "/" + s + "/" + DfsStruct::ACTOR_CARD_FILE, receiver);
-        }
+        //        if (dfsValidate(s.toUtf8()))
+        //        {
+        requestFile(DfsStruct::ROOT_FOOLDER_NAME + "/" + s + "/" + DfsStruct::ACTOR_CARD_FILE, receiver);
+        //        }
     }
 }
 
 void Dfs::dfsSyncT()
 {
     // request other roots
+
+    //    QByteArrayList aList = actorIndex->allActors();
+    //    QList<QByteArray>::iterator it;
+    //    it = aList.begin();
+    //    while (it != aList.end())
+    //    {
+    //        QByteArray b = *it;
+    //        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(b));
+    //        if (actor.isEmpty())
+    //        {
+    //            it = aList.erase(it);
+    //        }
+    //        else if (actor.getAccount() != actorType::ACCOUNT)
+    //        {
+    //            it = aList.erase(it);
+    //        }
+    //        else
+    //        {
+    //            ++it;
+    //        }
+    //    }
+
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
     QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
     QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
     QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-    int pos = acList.indexOf(mainActor);
-    if (pos != -1)
-        acList.removeAt(pos);
+    //    int pos = acList.indexOf(mainActor);
+    //    if (pos != -1)
+    //        acList.removeAt(pos);
     dfsSyncUsers(acList);
     // send my root
     fileResponse(myCardFile, SocketPair());
@@ -669,14 +691,34 @@ void Dfs::dfsSyncT()
 void Dfs::dfsSync(const SocketPair &receiver)
 {
     // request other roots
+
+    //    QByteArrayList aList = actorIndex->allActors();
+    //    QList<QByteArray>::iterator it;
+    //    it = aList.begin();
+    //    while (it != aList.end())
+    //    {
+    //        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(*it));
+    //        if (actor.isEmpty())
+    //        {
+    //            aList.removeOne(*it);
+    //        }
+    //        else if (actor.getAccount() != actorType::ACCOUNT)
+    //        {
+    //            aList.removeOne(*it);
+    //        }
+    //        else
+    //        {
+    //            ++it;
+    //        }
+    //    }
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
     QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
     QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
     QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-    int pos = acList.indexOf(mainActor);
-    if (pos != -1)
-        acList.removeAt(pos);
+    //    int pos = acList.indexOf(mainActor);
+    //    if (pos != -1)
+    //        acList.removeAt(pos);
     dfsSyncUsers(acList, receiver);
     // send my root
     fileResponse(myCardFile, receiver);
