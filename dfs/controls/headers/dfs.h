@@ -32,7 +32,7 @@ private:
     // DFSResolver *resolver;
 public slots:
     /*DFS 1.5*/
-    void dfsSyncUsers(QList<QString> userID, const SocketPair &receiver = SocketPair());
+    void dfsSyncUsers(QList<QByteArray> userID, const SocketPair &receiver = SocketPair());
     void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
     bool dfsValidate(QByteArray userID);
