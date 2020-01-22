@@ -895,12 +895,16 @@ void Blockchain::addBlockToBlockchain(Block block)
     QList<Transaction> list = block.extractTransactions();
     for (const auto &tmp : list)
     {
-        if (tmp.getSender() == accountController->getMainActor()->getId())
+        QList<BigNumber> list;
+        for (auto tmp : accountController->getAccounts())
+            list.append(tmp->getId());
+
+        if (list.contains(tmp.getSender()))
         {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
         }
-        else if (tmp.getReceiver() == accountController->getMainActor()->getId())
+        else if (list.contains(tmp.getReceiver()))
         {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToMe,
                              tmp.getSender().toByteArray() });
