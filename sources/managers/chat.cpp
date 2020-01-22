@@ -253,6 +253,7 @@ QList<UIMessage> Chat::getAllMessages()
         for (DBRow tmp : row)
         {
             UIMessage ui;
+            ui.messId = tmp["messId"].c_str();
             ui.userId = tmp["userId"].c_str();
             ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
             QByteArray date = tmp["date"].c_str();
@@ -295,13 +296,14 @@ UIMessage Chat::getLastMessage()
     {
         std::vector<DBRow> row;
         row = DB.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
-                        + " ORDER BY date DESCLIMIT 1");
+                        + " ORDER BY date DESC LIMIT 1");
         if (row.size() == 0)
         {
             qDebug() << "[Error] File with session doesn't open. Chat";
             return {};
         }
         message.userId = row[0]["userId"].c_str();
+        message.messId = row[0]["messId"].c_str();
         if (row[0]["message"].size() == 0)
             message.message = "";
         else
