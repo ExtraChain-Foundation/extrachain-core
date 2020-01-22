@@ -8,7 +8,7 @@ void DFSNetManager::setDfs(Dfs *value)
 
 bool DFSNetManager::isLoading(const QString &fileName)
 {
-    qDebug() << "isLoading";
+    // qDebug() << "isLoading";
     for (const auto &resolver : dfsResolvers)
     {
         // qDebug() << fileName << resolver->getTitle().filePath;
@@ -17,7 +17,7 @@ bool DFSNetManager::isLoading(const QString &fileName)
             return true;
     }
 
-    qDebug() << "isLoading false";
+    // qDebug() << "isLoading false";
     return false;
 }
 
