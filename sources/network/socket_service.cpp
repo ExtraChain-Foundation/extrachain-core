@@ -185,8 +185,7 @@ void SocketService::establishConnection()
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR + net::readNetManagerIdentificator();
 
-    this->distMsg(/*Utils::intToByteArray(idb.size(), 8) + */ idb,
-                  SocketPair(this->address.toStdString(), this->port));
+    this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address" << this->socket << address << port;
 
     qDebug() << "SOCKET SERVICE: socket isOpen - " << socket->isOpen();

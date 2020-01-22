@@ -643,7 +643,10 @@ void Dfs::dfsSyncUsers(QList<QString> userID, const SocketPair &receiver)
 {
     for (QString s : userID)
     {
-        requestFile(DfsStruct::ROOT_FOOLDER_NAME + "/" + s + "/" + DfsStruct::ACTOR_CARD_FILE, receiver);
+        if (dfsValidate(s.toUtf8()))
+        {
+            requestFile(DfsStruct::ROOT_FOOLDER_NAME + "/" + s + "/" + DfsStruct::ACTOR_CARD_FILE, receiver);
+        }
     }
 }
 

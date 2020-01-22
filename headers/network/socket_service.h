@@ -40,7 +40,7 @@ using namespace SearchEnum;
 class SocketService : public QObject
 {
     Q_OBJECT
-    const QByteArray IDENTIFICATOR = "Ind:";
+    const QByteArray IDENTIFICATOR = "ind:";
 
 private:
     NetManager *netManager = nullptr;
