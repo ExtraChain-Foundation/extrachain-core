@@ -475,6 +475,8 @@ QByteArray Chat::sendMessage(QByteArray message)
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
 
     DBRow row;
+    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
+    row.insert({ "messId", std::to_string(messId) });
     row.insert({ "userId", _currentActorId.toStdString() });
     row.insert({ "message", encryptMessage(message).toStdString() });
     row.insert({ "type", "blob" });

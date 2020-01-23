@@ -324,7 +324,7 @@ void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
 
     QByteArray message = "{ \"type\":\"file\",\"message\":\"" + newFileNameData.toLatin1() + "\"}";
     qDebug() << message;
-    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(10000000);
+    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
     emit sendEditSql(
         temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg", DfsStruct::Type::chat,
         DfsStruct::ChangeType::Insert,
@@ -336,7 +336,7 @@ void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
     Chat temp(chatId, _actorIndex, _accController);
-    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(10000000);
+    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
 
     sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
                 DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
