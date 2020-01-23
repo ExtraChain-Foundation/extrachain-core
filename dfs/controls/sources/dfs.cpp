@@ -122,6 +122,22 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
 
 void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
 { // TODO: select diff from two dbs
+    syncTimer.stop();
+
+    if (!QFile::exists(newCard) || QFile(newCard).size() == 0)
+    {
+        qDebug() << "Doc, go home";
+        return;
+    }
+
+    if (QFile(newCard).size() > 0 && QFile(oldCard).size() == 0)
+    {
+        QFile::remove(oldCard);
+        QFile::rename(newCard, oldCard);
+        dfsValidate(oldCard.split("/")[1].toUtf8());
+        return;
+    }
+
     if (!QFile::exists(oldCard))
     {
         QFile::rename(newCard, oldCard);
@@ -147,7 +163,6 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
     dbNew.close();
     std::string pathN;
     std::string pathO;
-    //    std::vector<std::string> diff;
 
     for (DBRow &n : newS)
     {
@@ -163,15 +178,14 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
         }
         if (pathN != pathO)
         {
-            // diff.push_back(pathN);
-            requestFile(QString::fromStdString(pathN));
+            DBConnector dbNew(oldCard.toStdString());
+            dbNew.insert("Items", n);
+            dbNew.close();
         }
     }
 
-    // for (auto d : diff)
-    //    qDebug() << d.c_str();
-
     QFile::remove(newCard);
+    dfsValidate(oldCard.split("/")[1].toUtf8());
 }
 
 void Dfs::loadFilesFromCard(const QString &card)
@@ -202,10 +216,10 @@ void Dfs::getDFSStatus()
 
 void Dfs::signalConnection()
 {
-    static QTimer syncTimer;
+    //    static QTimer syncTimer;
     connect(&syncTimer, &QTimer::timeout, this, &Dfs::dfsSyncT);
     syncTimer.start(30000);
-    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
+    //    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
 }
 
 void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type)
@@ -215,7 +229,17 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     if (!QFile::exists(tmpPath))
     {
         qDebug() << "Thes es ochen ploho" << tmpPath;
-        //        file.remove();
+        return;
+    }
+
+    // TODO: no insert to dfs file with size = 0
+    if (QFile(tmpPath).size() == 0)
+    {
+        if (tmpPath.right(5) == "/root")
+        {
+            QFile::remove(tmpPath);
+            requestFile(path);
+        }
         return;
     }
 
@@ -247,6 +271,12 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     sender->sendFile(path, type, SocketPair());
 #endif
     qDebug() << "File received:" << path;
+    QByteArray userId = path.split("/")[1].toUtf8();
+
+    if (this->dfsValidate(userId))
+    {
+        syncTimer.start(5000);
+    }
 
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
@@ -750,23 +780,44 @@ bool Dfs::dfsValidate(QByteArray userID)
         return false;
     }
 
-    if (!QFile::exists(cardFile))
-    {
-        return false;
-    }
-
-    if (!QFile::exists(chatinvite) && !QFile::exists(chatinvite_s) && !QFile::exists(follower)
-        && !QFile::exists(follower_s) && !QFile::exists(subscribe) && !QFile::exists(subscribe_s)
-        /* && !QFile::exists(profile)*/)
-    {
-        return false;
-    }
-    //    DBConnector root;
-    //    if (!root.open(cardFile.toStdString()))
+    //    if (!QFile::exists(cardFile))
     //    {
     //        return false;
     //    }
-    return true;
+
+    //    if (!QFile::exists(chatinvite) && !QFile::exists(chatinvite_s) && !QFile::exists(follower)
+    //        && !QFile::exists(follower_s) && !QFile::exists(subscribe) && !QFile::exists(subscribe_s)
+    //        /* && !QFile::exists(profile)*/)
+    //    {
+    //        return false;
+    //    }
+    DBConnector root;
+    if (!root.open(cardFile.toStdString()))
+    {
+        return false;
+    }
+    auto items = root.select("SELECT * FROM Items");
+    root.close();
+    if (!items.empty())
+    {
+        std::string fPath;
+        bool flag = true;
+        for (DBRow &item : items)
+        {
+            fPath = item["path"];
+            if (!QFile::exists(QString::fromStdString(fPath))
+                && !dfsNetManager->nameIsTaken(QString::fromStdString(fPath)))
+            {
+                requestFile(QString::fromStdString(fPath));
+                flag = false;
+            }
+        }
+        return flag;
+    }
+    else
+    {
+        return true;
+    }
 }
 
 QList<QByteArray> Dfs::dfsValidateAll()
@@ -1204,7 +1255,7 @@ void Dfs::searchTmp()
         if (file.isFile() && QFileInfo(dirIt.filePath()).suffix() == "tmp")
         {
             QString fileName = dirIt.filePath().chopped(4);
-            if (!dfsNetManager->nameIsTaken(fileName))
+            if (!dfsNetManager->nameIsTaken(fileName) && fileName.right(4) != "root")
             {
                 // QFile::remove(dirIt.filePath());
                 requestFile(fileName);
