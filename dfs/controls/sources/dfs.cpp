@@ -675,6 +675,9 @@ void Dfs::dfsSyncT()
     //        }
     //    }
 
+    if (accountControler->getMainActor() == nullptr)
+        return;
+
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
     QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
@@ -711,6 +714,9 @@ void Dfs::dfsSync(const SocketPair &receiver)
     //            ++it;
     //        }
     //    }
+    if (accountControler->getMainActor() == nullptr)
+        return;
+
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
     QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
@@ -818,13 +824,16 @@ void Dfs::requestFile(const QString &filePath, const SocketPair &receiver)
     //    qDebug() << "File is exists";
     //     return;
     // }
-    if (dfsNetManager == nullptr)
+    if (dfsNetManager == nullptr || sender == nullptr)
     {
-        qDebug() << "Dog, dfsNetManager == nullptr";
+        qDebug().nospace() << "What's up, Doc? " << (dfsNetManager == nullptr ? "dfsNetManager" : "sender")
+                           << " == nullptr";
         return;
     }
+
     if (dfsNetManager->isLoading(filePath))
         return;
+
     qDebug() << "Request file:" << filePath;
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;

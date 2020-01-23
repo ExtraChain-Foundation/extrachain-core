@@ -48,7 +48,7 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
 
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(new Chat(chatId, key, 0, _actorIndex, _accController,
-                                  QList<QByteArray>{ owner, _currentActorId }, owner));
+                                  QList<QByteArray> { owner, _currentActorId }, owner));
     return;
     QString path(ChatStorage::STORED_CHATS + owner + "/chats/" + chatId);
     emit requestFile(path + "/0/msg");
@@ -263,7 +263,7 @@ QByteArray ChatManager::CreateNewChat()
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
     _chatList.push_front(new Chat(chatId, generateChatKey(), 0, _actorIndex, _accController,
-                                  QList<QByteArray>{ _currentActorId }, _currentActorId));
+                                  QList<QByteArray> { _currentActorId }, _currentActorId));
     // Chat initialize
     QList<QByteArray> allUsers = Chat(chatId, _actorIndex, _accController).getAllUsers();
 
@@ -324,23 +324,26 @@ void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
 
     QByteArray message = "{ \"type\":\"file\",\"message\":\"" + newFileNameData.toLatin1() + "\"}";
     qDebug() << message;
-    emit sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
-                     DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
-                     { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId,
-                       "message", temp.encryptMessage(message), "type", "blob", "session",
-                       temp.getSession().toByteArray(), "date",
-                       QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
+    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
+    emit sendEditSql(
+        temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg", DfsStruct::Type::chat,
+        DfsStruct::ChangeType::Insert,
+        { Config::DataStorage::chatMessageTableName.c_str(), "messId", QByteArray::number(messId), "userId",
+          _currentActorId, "message", temp.encryptMessage(message), "type", "blob", "session",
+          temp.getSession().toByteArray(), "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
 }
 
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
 {
     Chat temp(chatId, _actorIndex, _accController);
+    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
 
     sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
                 DfsStruct::Type::chat, DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::chatMessageTableName.c_str(), "userId", _currentActorId, "message",
-                  temp.encryptMessage(message), "type", "blob", "session", temp.getSession().toByteArray(),
-                  "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
+                { Config::DataStorage::chatMessageTableName.c_str(), "messId", QByteArray::number(messId),
+                  "userId", _currentActorId, "message", temp.encryptMessage(message), "type", "blob",
+                  "session", temp.getSession().toByteArray(), "date",
+                  QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
 }
 
 void ChatManager::createDialogue(QByteArray actorId)
@@ -381,7 +384,7 @@ void ChatManager::requestChatList()
         for (auto user : tempUsers)
             tempusersList.append(user);
 
-        chats.append(UIChat{ tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
+        chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
     }
     emit chatListSend(chats);
 }
@@ -447,6 +450,9 @@ void ChatManager::changes(QString path)
         if (userId != _currentActorId)
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatMsg,
                              userId + " " + chatID.toUtf8() });
+
+        auto allMessage = tmp.getAllMessages();
+        emit sendLastMessage(chatID.toUtf8(), allMessage.takeLast());
         emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
     }
     //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));

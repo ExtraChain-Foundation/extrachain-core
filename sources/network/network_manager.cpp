@@ -203,7 +203,10 @@ void NetManager::checkConnectionsStatus()
     if (flag)
     {
         QFile file("network_cache");
-        file.open(QFile::ReadOnly);
+        if (!file.exists())
+            return;
+        if (!file.open(QFile::ReadOnly))
+            return;
         QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
 
         for (QByteArray packageData : allPackages)

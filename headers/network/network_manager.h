@@ -250,6 +250,7 @@ signals:
     void qmlNetworkStatus(bool status);
     void qmlNetworkSockets(int socketsCount);
     void qmlServerError(bool serverError);
+    void buildError();
 };
 
 #endif // NETWORK_MANAGER_H
