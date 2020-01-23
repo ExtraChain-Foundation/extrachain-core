@@ -129,6 +129,7 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
         qDebug() << "Doc, go home";
         return;
     }
+
     if (QFile(newCard).size() > 0 && QFile(oldCard).size() == 0)
     {
         QFile::remove(oldCard);
@@ -136,6 +137,7 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
         dfsValidate(oldCard.split("/")[1].toUtf8());
         return;
     }
+
     if (!QFile::exists(oldCard))
     {
         QFile::rename(newCard, oldCard);
@@ -147,45 +149,43 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
     qDebug() << "Looking for difference in Card:" << oldCard;
 
     DBConnector dbOld;
+    if (!dbOld.open(oldCard.toStdString()))
+        return;
+
+    auto oldS = dbOld.select("SELECT * FROM Items");
+    dbOld.close();
     DBConnector dbNew;
-    if (dbOld.open(oldCard.toStdString()) && dbNew.open(newCard.toStdString()))
+
+    if (!dbNew.open(newCard.toStdString()))
+        return;
+
+    auto newS = dbNew.select("SELECT * FROM Items");
+    dbNew.close();
+    std::string pathN;
+    std::string pathO;
+
+    for (DBRow &n : newS)
     {
-        auto oldS = dbOld.select("SELECT * FROM Items");
-        dbOld.close();
-        auto newS = dbNew.select("SELECT * FROM Items");
-        //        dbNew.close();
-        std::string pathN;
-        std::string pathO;
+        pathN = n["path"];
+        // bool exists = false;
+
         for (DBRow &o : oldS)
         {
             pathO = o["path"];
-            // bool exists = false;
 
-            for (DBRow &n : newS)
-            {
-                pathN = n["path"];
-
-                if (pathN == pathO)
-                    break;
-            }
-            if (pathN != pathO)
-            {
-                dbNew.insert("Items", o);
-            }
+            if (pathN == pathO /*&& QFile::exists(QString::fromStdString(pathN))*/)
+                break;
         }
-        dbNew.close();
+        if (pathN != pathO)
+        {
+            DBConnector dbNew(oldCard.toStdString());
+            dbNew.insert("Items", n);
+            dbNew.close();
+        }
     }
 
-    bool remove = QFile::remove(oldCard);
-    bool rename = QFile::rename(newCard, oldCard);
-    qDebug() << "RRRRRRRRRRRR" << remove << rename << QFile::exists(newCard) << newCard;
-    if (remove && rename)
-    {
-        dfsValidate(oldCard.split("/")[1].toUtf8());
-        return;
-    }
-    //    QFile::remove(newCard);
-    //    syncTimer.start(30000);
+    QFile::remove(newCard);
+    dfsValidate(oldCard.split("/")[1].toUtf8());
 }
 
 void Dfs::loadFilesFromCard(const QString &card)
@@ -235,7 +235,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     // TODO: no insert to dfs file with size = 0
     if (QFile(tmpPath).size() == 0)
     {
-        if (tmpPath.right(5) == "/root") {
+        if (tmpPath.right(5) == "/root")
+        {
             QFile::remove(tmpPath);
             requestFile(path);
         }
