@@ -123,6 +123,19 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
 void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
 { // TODO: select diff from two dbs
     syncTimer.stop();
+
+    if (!QFile::exists(newCard) || QFile(newCard).size() == 0)
+    {
+        qDebug() << "Doc, go home";
+        return;
+    }
+    if (QFile(newCard).size() > 0 && QFile(oldCard).size() == 0)
+    {
+        QFile::remove(oldCard);
+        QFile::rename(newCard, oldCard);
+        dfsValidate(oldCard.split("/")[1].toUtf8());
+        return;
+    }
     if (!QFile::exists(oldCard))
     {
         QFile::rename(newCard, oldCard);
@@ -160,10 +173,17 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
                 dbNew.insert("Items", o);
             }
         }
+        dbNew.close();
     }
-    QFile::remove(oldCard);
-    QFile::rename(newCard, oldCard);
-    dfsValidate(oldCard.split("/")[1].toUtf8());
+
+    bool remove = QFile::remove(oldCard);
+    bool rename = QFile::rename(newCard, oldCard);
+    qDebug() << "RRRRRRRRRRRR" << remove << rename << QFile::exists(newCard) << newCard;
+    if (remove && rename)
+    {
+        dfsValidate(oldCard.split("/")[1].toUtf8());
+        return;
+    }
     //    QFile::remove(newCard);
     //    syncTimer.start(30000);
 }
@@ -209,7 +229,16 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     if (!QFile::exists(tmpPath))
     {
         qDebug() << "Thes es ochen ploho" << tmpPath;
-        //        file.remove();
+        return;
+    }
+
+    // TODO: no insert to dfs file with size = 0
+    if (QFile(tmpPath).size() == 0)
+    {
+        if (tmpPath.right(5) == "/root") {
+            QFile::remove(tmpPath);
+            requestFile(path);
+        }
         return;
     }
 
@@ -1225,7 +1254,7 @@ void Dfs::searchTmp()
         if (file.isFile() && QFileInfo(dirIt.filePath()).suffix() == "tmp")
         {
             QString fileName = dirIt.filePath().chopped(4);
-            if (!dfsNetManager->nameIsTaken(fileName))
+            if (!dfsNetManager->nameIsTaken(fileName) && fileName.right(4) != "root")
             {
                 // QFile::remove(dirIt.filePath());
                 requestFile(fileName);
