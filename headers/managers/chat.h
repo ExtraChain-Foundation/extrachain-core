@@ -10,6 +10,7 @@
 
 struct UIMessage
 {
+    QString messId;
     QString userId;
     QString message;
     QDateTime date;
@@ -83,7 +84,7 @@ public:
     QByteArray decryptMessage(QByteArray message);
     void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
     void saveChatsId(const QByteArray& chatId);
-    
+
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager
 };

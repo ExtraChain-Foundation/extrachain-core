@@ -20,6 +20,7 @@
 
 namespace Network {
 static QString serverIp = "51.68.181.53";
+static const int build = 1500;
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
 static const int DFS_FILE_STATUS_CHECK_TIME = 500;
 struct DataStruct
@@ -155,6 +156,7 @@ namespace DataStorage {
     static const std::string chatMessageTableName = "Chat";
     static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
         + " ("
+          "messId   TEXT PRIMARY KEY  NOT NULL, "
           "userId   TEXT              NOT NULL, "
           "message  BLOB              NOT NULL, "
           "type     TEXT              NOT NULL, "
@@ -361,6 +363,7 @@ int compare(const QByteArray &one, const QByteArray &two);
  */
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
+void softWipe(const QString &currentId);
 } // namespace Utils
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.

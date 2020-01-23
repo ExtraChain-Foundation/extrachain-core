@@ -463,6 +463,7 @@ void NodeManager::connectUi()
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
+    connect(netManager, &NetManager::buildError, uiController, &UiController::buildError);
 
     connect(uiController, &UiController::initSubscribe, subscribeController,
             &SubscribeController::initSubscribe);

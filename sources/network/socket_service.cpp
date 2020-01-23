@@ -183,7 +183,9 @@ void SocketService::establishConnection()
     qDebug() << "status of socket" << this->thread() << "connection:" << socket->isValid();
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
-    QByteArray idb = IDENTIFICATOR + net::readNetManagerIdentificator();
+    QByteArray idb = IDENTIFICATOR
+        + Serialization::universalSerialize(
+                         { QByteArray::number(Network::build), net::readNetManagerIdentificator() });
 
     this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address" << this->socket << address << port;
@@ -212,6 +214,7 @@ void SocketService::doRead()
         }
     }
 }
+
 void SocketService::continueDoRead()
 {
     if (socket->bytesAvailable() >= pendMsgSize)
@@ -232,7 +235,24 @@ void SocketService::continueDoRead()
             if (!this->isActive() && pendMsg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
             {
                 QByteArray b = pendMsg.mid(IDENTIFICATOR.size());
-                this->processID(b);
+                QByteArrayList bl = Serialization::universalDeserialize(b);
+                if (bl.length() == 2)
+                {
+                    this->processID(bl[1]);
+
+#ifdef ETALONIUM_CLIENT
+                    int netBuild = bl[0].toInt();
+                    if (netBuild != Network::build)
+                    {
+                        emit netManager->buildError();
+                        emit this->removeMe();
+                    }
+#endif
+                }
+                else
+                {
+                    emit this->removeMe();
+                }
             }
             else
             {
