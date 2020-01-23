@@ -29,6 +29,7 @@ class ResolveManager;
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
+#include "headers/ui/notificationclient.h"
 #endif
 
 #ifdef ETALONIUM_CONSOLE
@@ -60,6 +61,7 @@ private:
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;
+    NotificationClient *notificationClient;
 
 #endif
     CryptManager *cryptManager;
@@ -100,6 +102,7 @@ public:
 
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
+    void setNotificationClient(NotificationClient *newNtfCl);
 #endif
 
     QByteArray getIdPrivateProfile() const;
@@ -184,6 +187,7 @@ private slots:
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
     void addNewWallet();
+    void newNotify(const QString &msg, const QByteArray &user);
 
 #endif
 

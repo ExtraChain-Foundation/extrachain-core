@@ -18,6 +18,7 @@ public:
 
 private:
     void loadNotificationFromDB();
+    void sendToNotify(const notification newNtf);
 
 public slots:
     void addNotify(const notification newNtf);
@@ -27,5 +28,6 @@ signals:
     void allNotifyToUI(QList<notification> ntf);
     void newNotifyToUI(notification ntf);
     void getCurrentID();
+    void sendToNotifyClient(const QString &msg, const QByteArray &user);
 };
 #endif // NOTIFICATION_MANAGER_H
