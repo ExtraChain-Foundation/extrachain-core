@@ -29,6 +29,7 @@ private:
     ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
+    QTimer syncTimer;
     // DFSResolver *resolver;
 public slots:
     /*DFS 1.5*/

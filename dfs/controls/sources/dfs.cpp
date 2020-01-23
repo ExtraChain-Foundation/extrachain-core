@@ -122,6 +122,7 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
 
 void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
 { // TODO: select diff from two dbs
+    syncTimer.stop();
     if (!QFile::exists(oldCard))
     {
         QFile::rename(newCard, oldCard);
@@ -133,45 +134,37 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
     qDebug() << "Looking for difference in Card:" << oldCard;
 
     DBConnector dbOld;
-    if (!dbOld.open(oldCard.toStdString()))
-        return;
-
-    auto oldS = dbOld.select("SELECT * FROM Items");
-    dbOld.close();
     DBConnector dbNew;
-
-    if (!dbNew.open(newCard.toStdString()))
-        return;
-
-    auto newS = dbNew.select("SELECT * FROM Items");
-    dbNew.close();
-    std::string pathN;
-    std::string pathO;
-    //    std::vector<std::string> diff;
-
-    for (DBRow &n : newS)
+    if (dbOld.open(oldCard.toStdString()) && dbNew.open(newCard.toStdString()))
     {
-        pathN = n["path"];
-        // bool exists = false;
-
-        for (DBRow &o : oldS)
+        auto oldS = dbOld.select("SELECT * FROM Items");
+        dbOld.close();
+        auto newS = dbNew.select("SELECT * FROM Items");
+        dbNew.close();
+        std::string pathN;
+        std::string pathO;
+        for (DBRow &n : newS)
         {
-            pathO = o["path"];
+            pathN = n["path"];
+            // bool exists = false;
 
-            if (pathN == pathO /*&& QFile::exists(QString::fromStdString(pathN))*/)
-                break;
-        }
-        if (pathN != pathO)
-        {
-            // diff.push_back(pathN);
-            requestFile(QString::fromStdString(pathN));
+            for (DBRow &o : oldS)
+            {
+                pathO = o["path"];
+
+                if (pathN == pathO)
+                    break;
+            }
+            if (pathN != pathO)
+            {
+                requestFile(QString::fromStdString(pathN));
+            }
         }
     }
-
-    // for (auto d : diff)
-    //    qDebug() << d.c_str();
-
-    QFile::remove(newCard);
+    QFile::remove(oldCard);
+    QFile::rename(newCard, oldCard);
+    //    QFile::remove(newCard);
+    //    syncTimer.start(30000);
 }
 
 void Dfs::loadFilesFromCard(const QString &card)
@@ -202,10 +195,10 @@ void Dfs::getDFSStatus()
 
 void Dfs::signalConnection()
 {
-    static QTimer syncTimer;
+    //    static QTimer syncTimer;
     connect(&syncTimer, &QTimer::timeout, this, &Dfs::dfsSyncT);
     syncTimer.start(30000);
-    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
+    //    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
 }
 
 void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type)
@@ -247,6 +240,12 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     sender->sendFile(path, type, SocketPair());
 #endif
     qDebug() << "File received:" << path;
+    QByteArray userId = path.split("/")[1].toUtf8();
+
+    if (this->dfsValidate(userId))
+    {
+        syncTimer.start(5000);
+    }
 
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
@@ -755,11 +754,27 @@ bool Dfs::dfsValidate(QByteArray userID)
     {
         return false;
     }
-    //    DBConnector root;
-    //    if (!root.open(cardFile.toStdString()))
-    //    {
-    //        return false;
-    //    }
+    DBConnector root;
+    if (!root.open(cardFile.toStdString()))
+    {
+        return false;
+    }
+    auto items = root.select("SELECT * FROM Items");
+    root.close();
+    if (!items.empty())
+    {
+        std::string fPath;
+        for (DBRow &item : items)
+        {
+            fPath = item["path"];
+            if (!QFile::exists(QString::fromStdString(fPath))
+                && !dfsNetManager->nameIsTaken(QString::fromStdString(fPath)))
+            {
+                requestFile(QString::fromStdString(fPath));
+                return false;
+            }
+        }
+    }
     return true;
 }
 
