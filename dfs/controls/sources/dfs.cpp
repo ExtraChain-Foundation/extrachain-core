@@ -140,29 +140,30 @@ void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
         auto oldS = dbOld.select("SELECT * FROM Items");
         dbOld.close();
         auto newS = dbNew.select("SELECT * FROM Items");
-        dbNew.close();
+        //        dbNew.close();
         std::string pathN;
         std::string pathO;
-        for (DBRow &n : newS)
+        for (DBRow &o : oldS)
         {
-            pathN = n["path"];
+            pathO = o["path"];
             // bool exists = false;
 
-            for (DBRow &o : oldS)
+            for (DBRow &n : newS)
             {
-                pathO = o["path"];
+                pathN = n["path"];
 
                 if (pathN == pathO)
                     break;
             }
             if (pathN != pathO)
             {
-                requestFile(QString::fromStdString(pathN));
+                dbNew.insert("Items", o);
             }
         }
     }
     QFile::remove(oldCard);
     QFile::rename(newCard, oldCard);
+    dfsValidate(oldCard.split("/")[1].toUtf8());
     //    QFile::remove(newCard);
     //    syncTimer.start(30000);
 }
@@ -743,17 +744,17 @@ bool Dfs::dfsValidate(QByteArray userID)
         return false;
     }
 
-    if (!QFile::exists(cardFile))
-    {
-        return false;
-    }
+    //    if (!QFile::exists(cardFile))
+    //    {
+    //        return false;
+    //    }
 
-    if (!QFile::exists(chatinvite) && !QFile::exists(chatinvite_s) && !QFile::exists(follower)
-        && !QFile::exists(follower_s) && !QFile::exists(subscribe) && !QFile::exists(subscribe_s)
-        /* && !QFile::exists(profile)*/)
-    {
-        return false;
-    }
+    //    if (!QFile::exists(chatinvite) && !QFile::exists(chatinvite_s) && !QFile::exists(follower)
+    //        && !QFile::exists(follower_s) && !QFile::exists(subscribe) && !QFile::exists(subscribe_s)
+    //        /* && !QFile::exists(profile)*/)
+    //    {
+    //        return false;
+    //    }
     DBConnector root;
     if (!root.open(cardFile.toStdString()))
     {
@@ -764,6 +765,7 @@ bool Dfs::dfsValidate(QByteArray userID)
     if (!items.empty())
     {
         std::string fPath;
+        bool flag = true;
         for (DBRow &item : items)
         {
             fPath = item["path"];
@@ -771,11 +773,15 @@ bool Dfs::dfsValidate(QByteArray userID)
                 && !dfsNetManager->nameIsTaken(QString::fromStdString(fPath)))
             {
                 requestFile(QString::fromStdString(fPath));
-                return false;
+                flag = false;
             }
         }
+        return flag;
     }
-    return true;
+    else
+    {
+        return true;
+    }
 }
 
 QList<QByteArray> Dfs::dfsValidateAll()
