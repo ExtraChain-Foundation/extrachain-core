@@ -450,6 +450,9 @@ void ChatManager::changes(QString path)
         if (userId != _currentActorId)
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatMsg,
                              userId + " " + chatID.toUtf8() });
+
+        auto allMessage = tmp.getAllMessages();
+        emit sendLastMessage(chatID.toUtf8(), allMessage.takeLast());
         emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
     }
     //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
