@@ -11,7 +11,6 @@ class CardManager
 public:
     static std::vector<std::string> getAll(DfsStruct::Type type);
     static std::vector<std::string> getFilesByType(const std::string &userId, DfsStruct::Type type);
-    static std::string getLastFileName(const std::string &userId, DfsStruct::Type type);
     static QStringList getAllFiles(const QByteArray &userId);
     static DfsStruct::Type getTypeByName(const QString &path, const QByteArray &userId);
 

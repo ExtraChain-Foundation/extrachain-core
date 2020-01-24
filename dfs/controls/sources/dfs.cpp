@@ -19,33 +19,17 @@ void Dfs::initDFS(const QByteArray &userId)
 {
     QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME);
     QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId);
-    QList<QByteArray> subPathList;
-    subPathList.append("/images/");
-    subPathList.append("/video/");
-    subPathList.append("/events/");
-    subPathList.append("/system/");
-    subPathList.append("/chats/");
-    subPathList.append("/posts/");
-    subPathList.append("/services/");
-    subPathList.append("/cdoctp/");
-    subPathList.append("/cards/");
+    QList<QByteArray> subPathList = { "/images/", "/video/",    "/events/", "/system/", "/chats/",
+                                      "/posts/",  "/services/", "/cdoctp/", "/cards/" };
 
     if (!QFile::exists(DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE))
     {
         DBConnector dbc(
             (DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
         dbc.createTable(Config::DataStorage::cardTableCreation);
-        dbc.createTable(Config::DataStorage::lastSectionTableCreation);
-        for (int i = 0; i <= DfsStruct::Type::card; i++)
-        {
-            DBRow row;
-            row.insert({ "counter", "-1" });
-            row.insert({ "type", std::to_string(i) });
-            dbc.insert(Config::DataStorage::lsTableName, row);
-        }
     }
 
-    for (QByteArray currentPath : subPathList)
+    for (const QByteArray &currentPath : subPathList)
         QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
 
     qDebug() << "[init dfs for user]" << userId;
@@ -58,8 +42,41 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
                     const DfsStruct::SubType &subType)
 {
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
-    QByteArray dfsPath = buildDfsPath(userId, type);
+    QByteArray dfsPath;
     bool stored = false;
+    bool exists = false;
+
+    if (path.isEmpty()) // if !path AND data
+    {
+        dfsPath = buildDfsPath("", Utils::calcKeccak(data), userId, type);
+        exists = QFile::exists(dfsPath);
+
+        if (!exists)
+        {
+            QFile file(dfsPath);
+            file.open(QFile::WriteOnly);
+            file.write(data);
+            file.close();
+        }
+    }
+    else // if path
+    {
+        dfsPath = buildDfsPath(path, "", userId, type);
+        exists = QFile::exists(dfsPath);
+
+        if (!exists)
+        {
+            QFile file(path);
+            if (!file.copy(dfsPath))
+            {
+                QFile::remove(dfsPath);
+                file.copy(dfsPath);
+            }
+        }
+    }
+
+    if (exists)
+        return;
 
     if (!appendToCard(dfsPath, userId, type, subType))
         return;
@@ -78,23 +95,6 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             QByteArray hash = Utils::calcKeccak(QByteArray::number(QRandomGenerator::global()->bounded(50000)
                                                                    + QDateTime::currentMSecsSinceEpoch()));
             appendToStored(dfsPath, data, range, 3, userId, true, hash);
-        }
-    }
-
-    if (path.isEmpty()) // if !path AND data
-    {
-        QFile file(dfsPath);
-        file.open(QFile::WriteOnly);
-        file.write(data);
-        file.close();
-    }
-    else // if path
-    {
-        QFile file(path);
-        if (!file.copy(dfsPath))
-        {
-            QFile::remove(dfsPath);
-            file.copy(dfsPath);
         }
     }
 
@@ -893,46 +893,19 @@ void Dfs::requestFile(const QString &filePath, const SocketPair &receiver)
     sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage, receiver);
 }
 
-QByteArray Dfs::buildDfsPath(QByteArray userID, DfsStruct::Type type)
+QByteArray Dfs::buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type)
 {
     QByteArray sType = DfsStruct::toByteArray(type);
     QByteArray dfsPath = "data/" + userID + "/" + sType + "/";
     BigNumber ss = BigNumber(Config::DataStorage::SECTION_SIZE);
     DBConnector dfsCard(("data/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
     QByteArray t = QByteArray::number(type);
-    std::vector<DBRow> res =
-        dfsCard.select(("SELECT counter FROM " + QByteArray(Config::DataStorage::lsTableName.c_str())
-                        + " WHERE type='" + t + "';")
-                           .toStdString());
 
-    if (!res.empty())
-    {
-        BigNumber lsmax(QByteArray::fromStdString(res[0]["counter"]));
-        lsmax++;
-        BigNumber sec = lsmax / ss;
-        bool updres = dfsCard.update(("UPDATE " + QByteArray(Config::DataStorage::lsTableName.c_str())
-                                      + " SET counter='" + lsmax.toByteArray()
-                                      + "' WHERE type=" + QByteArray::number(type) + ";")
-                                         .toStdString());
-        if (!updres)
-        {
-            qDebug() << "path creation in UPDATE section failed";
-            return QByteArray();
-        }
-        else
-        {
-            dfsPath += sec.toByteArray() + "/";
-            QDir dir;
-            qDebug() << "mkpath result:" << dir.mkpath(dfsPath);
-            dfsPath += lsmax.toByteArray();
-            return dfsPath;
-        }
-    }
-    else
-    {
-        qDebug() << "DB Section corrupted";
-        return QByteArray();
-    }
+    QByteArray fileHash = hash.isEmpty() ? Utils::calcKeccakForFile(originalFile) : hash;
+    dfsPath += fileHash.right(2);
+    QDir().mkpath(dfsPath);
+    dfsPath += "/" + fileHash;
+    return dfsPath;
 }
 
 bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type)
