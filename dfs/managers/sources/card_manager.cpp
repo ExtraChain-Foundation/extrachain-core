@@ -24,31 +24,6 @@ std::vector<std::string> CardManager::getFilesByType(const std::string &userId, 
     return listData;
 }
 
-std::string CardManager::getLastFileName(const std::string &userId, DfsStruct::Type type)
-{
-    DBConnector dbConnect;
-
-    if (!dbConnect.open(pathToRoot(userId)))
-    {
-        qDebug() << "[Error][Card_Manager][getLastFileName]";
-        return "";
-    }
-
-    std::string query = "SELECT path FROM " + Config::DataStorage::cardTableName + " WHERE type='"
-        + std::to_string(type) + "' ORDER by path DESC LIMIT 1;";
-    std::vector<DBRow> res = dbConnect.select(query);
-
-    if (res.empty())
-        return "-1";
-
-    std::string path = res[0]["path"];
-    QString tempPath = QString::fromStdString(path);
-    tempPath = tempPath.mid(tempPath.lastIndexOf("/") + 1);
-    path = tempPath.toStdString();
-    qDebug() << "LAST FILE NAME:" << path.c_str();
-    return path.empty() ? "-1" : path;
-}
-
 QStringList CardManager::getAllFiles(const QByteArray &userId)
 {
     //    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
@@ -140,8 +115,7 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
     const std::string currentPath =
         (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
         + DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
-    const std::string section =
-        (BigNumber(file.c_str()) / BigNumber(Config::DataStorage::SECTION_SIZE)).toStdString();
+    const std::string section = QByteArray::fromStdString(file).right(2).toStdString();
     std::string typeName = DfsStruct::toString(type).toStdString();
     std::string path = currentPath + "/" + typeName + "/" + section + "/" + file;
 

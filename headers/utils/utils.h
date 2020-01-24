@@ -136,11 +136,6 @@ namespace DataStorage {
           "type    INT              NOT NULL, "
           "subtype INT                      , "
           "hash    TEXT             NOT NULL);";
-    static const std::string lsTableName = "Counters";
-    static const std::string lastSectionTableCreation = "CREATE TABLE IF NOT EXISTS " + lsTableName
-        + " ("
-          "type    INT  PRIMARY KEY NOT NULL, "
-          "counter TEXT             NOT NULL );";
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("

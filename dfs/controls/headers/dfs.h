@@ -104,7 +104,7 @@ public slots:
     void requestAllCards();
 
 private:
-    QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
+    QByteArray buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type);
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId, bool init,
                         QByteArray hash);
