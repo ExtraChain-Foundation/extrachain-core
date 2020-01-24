@@ -8,32 +8,18 @@ void DFSNetManager::setDfs(Dfs *value)
 
 bool DFSNetManager::isLoading(const QString &fileName)
 {
-    // qDebug() << "isLoading";
-    for (const auto &resolver : dfsResolvers)
+    for (DFSResolverService *resolver : dfsResolvers)
     {
-        // qDebug() << fileName << resolver->getTitle().filePath;
-
-        if (fileName == resolver->getTitle().filePath)
+        if (resolver->getTitle().filePath == fileName)
             return true;
     }
 
-    // qDebug() << "isLoading false";
     return false;
 }
 
 QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
 {
     return dfsResolvers;
-}
-
-bool DFSNetManager::nameIsTaken(QString name)
-{
-    for (DFSResolverService *resolver : dfsResolvers)
-    {
-        if (resolver->getTitle().filePath == name)
-            return true;
-    }
-    return false;
 }
 
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)

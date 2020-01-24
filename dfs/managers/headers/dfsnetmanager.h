@@ -61,12 +61,13 @@ public:
     bool isLoading(const QString &fileName);
 
     QList<DFSResolverService *> getDfsResolvers() const;
-    bool nameIsTaken(QString name);
+
 signals:
     void newMessage(Network::DataStruct data);
     void finished();
     //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
     //    void newMessage(const QByteArray &message, const SocketPair &receiver);
+
 public slots:
     void appendSocket(SocketService *socket);
     //    void newMsg(const QByteArray &message, const SocketPair &receiver);
