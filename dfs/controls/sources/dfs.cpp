@@ -806,7 +806,8 @@ bool Dfs::dfsValidate(QByteArray userID)
         for (DBRow &item : items)
         {
             fPath = item["path"];
-            if (!QFile::exists(QString::fromStdString(fPath))
+            QFileInfo file(QString::fromStdString(fPath));
+            if ((!file.exists() || file.size() == 0)
                 && !dfsNetManager->nameIsTaken(QString::fromStdString(fPath)))
             {
                 requestFile(QString::fromStdString(fPath));
