@@ -807,8 +807,7 @@ bool Dfs::dfsValidate(QByteArray userID)
         {
             fPath = item["path"];
             QFileInfo file(QString::fromStdString(fPath));
-            if ((!file.exists() || file.size() == 0)
-                && !dfsNetManager->nameIsTaken(QString::fromStdString(fPath)))
+            if (!file.exists() || file.size() == 0)
             {
                 requestFile(QString::fromStdString(fPath));
                 flag = false;
@@ -1231,7 +1230,7 @@ void Dfs::searchTmp()
         if (file.isFile() && QFileInfo(dirIt.filePath()).suffix() == "tmp")
         {
             QString fileName = dirIt.filePath().chopped(4);
-            if (!dfsNetManager->nameIsTaken(fileName) && fileName.right(4) != "root")
+            if (fileName.right(5) != "/root")
             {
                 // QFile::remove(dirIt.filePath());
                 requestFile(fileName);
