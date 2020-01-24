@@ -121,8 +121,8 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
 }
 
 void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
-{ // TODO: select diff from two dbs
-    syncTimer.stop();
+{   // TODO: select diff from two dbs
+    //    syncTimer.stop();
 
     if (!QFile::exists(newCard) || QFile(newCard).size() == 0)
     {
