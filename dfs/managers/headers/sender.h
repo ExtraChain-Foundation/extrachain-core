@@ -20,9 +20,6 @@ class Sender : public QObject
     const int data_offset = DistFileSystem::dataSize;
     DFSNetManager *NetManager = nullptr;
 
-    QMap<QByteArray, QString> titleHashs;
-    QMap<QString, QByteArray> serializedTitle;
-
 public:
     /**
      * @brief Sender
