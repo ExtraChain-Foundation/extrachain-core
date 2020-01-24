@@ -29,7 +29,7 @@ private:
     ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
-    QTimer syncTimer;
+    QTimer *syncTimer = nullptr;
     // DFSResolver *resolver;
 public slots:
     /*DFS 1.5*/
@@ -51,7 +51,7 @@ private:
     void cardDiffRequest(const QString &oldCard, const QString &newCard);
     void loadFilesFromCard(const QString &card);
     void getDFSStatus();
-    void signalConnection();
+    void prepareSyncTimer();
 
 public slots:
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);

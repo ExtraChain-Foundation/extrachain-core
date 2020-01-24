@@ -214,11 +214,12 @@ void Dfs::getDFSStatus()
 {
 }
 
-void Dfs::signalConnection()
+void Dfs::prepareSyncTimer()
 {
     //    static QTimer syncTimer;
-    connect(&syncTimer, &QTimer::timeout, this, &Dfs::dfsSyncT);
-    syncTimer.start(30000);
+    syncTimer = new QTimer();
+    connect(syncTimer, &QTimer::timeout, this, &Dfs::dfsSyncT);
+    syncTimer->start(30000);
     //    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
 }
 
@@ -275,7 +276,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
     if (this->dfsValidate(userId))
     {
-        syncTimer.start(5000);
+        syncTimer->start(5000);
     }
 
 #ifdef ETALONIUM_CLIENT
@@ -843,6 +844,7 @@ QList<QByteArray> Dfs::dfsValidateAll()
 
 void Dfs::process()
 {
+    prepareSyncTimer();
 }
 
 void Dfs::startDFS()
@@ -1188,7 +1190,7 @@ void Dfs::initMyLocalStorage()
 {
     //    resolver = new DFSResolver(actorIndex);
     //
-    signalConnection();
+
     //    ThreadPool::addThread(resolver);
 
     //    getDFSStatus();
