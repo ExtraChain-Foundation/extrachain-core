@@ -1,41 +1,83 @@
 #include "dfs/packages/headers/hash_operations.h"
 
-const QList<QByteArray> DistFileSystem::requestUpdate::serializedParams() const
+const QList<QByteArray> DistFileSystem::requestLast::serializedParams() const
 {
     QList<QByteArray> list;
-    list << filePath;
+    list << id;
     return list;
 }
 
-void DistFileSystem::requestUpdate::operator=(QList<QByteArray> &list)
+void DistFileSystem::requestLast::operator=(QList<QByteArray> &list)
 {
     if (list.size() == 1)
     {
-        filePath = list.takeFirst();
+        id = list.takeFirst();
     }
 }
 
-void DistFileSystem::requestUpdate::operator=(QByteArray &serialized)
+void DistFileSystem::requestLast::operator=(QByteArray &serialized)
 {
     deserialize(serialized);
 }
 
-bool DistFileSystem::requestUpdate::isEmpty() const
+bool DistFileSystem::requestLast::isEmpty() const
 {
-    return filePath.isEmpty();
+    return id.isEmpty();
 }
 
-short DistFileSystem::requestUpdate::getFieldsCount() const
+short DistFileSystem::requestLast::getFieldsCount() const
 {
-    return requestUpdate::FIELDS_COUNT;
+    return requestLast::FIELDS_COUNT;
 }
 
-QByteArray DistFileSystem::requestUpdate::serialize() const
+QByteArray DistFileSystem::requestLast::serialize() const
 {
     return Serialization::universalSerialize(serializedParams(), 2);
 }
 
-void DistFileSystem::requestUpdate::deserialize(const QByteArray &serialized)
+void DistFileSystem::requestLast::deserialize(const QByteArray &serialized)
+{
+    QList<QByteArray> l = Serialization::universalDeserialize(serialized, 2);
+    operator=(l);
+}
+
+const QList<QByteArray> DistFileSystem::responseLast::serializedParams() const
+{
+    QList<QByteArray> list;
+    list << pHash << cHash;
+    return list;
+}
+
+void DistFileSystem::responseLast::operator=(QList<QByteArray> &list)
+{
+    if (list.size() == 2)
+    {
+        pHash = list.takeFirst();
+        cHash = list.takeFirst();
+    }
+}
+
+void DistFileSystem::responseLast::operator=(QByteArray &serialized)
+{
+    deserialize(serialized);
+}
+
+bool DistFileSystem::responseLast::isEmpty() const
+{
+    return pHash.isEmpty() || cHash.isEmpty();
+}
+
+short DistFileSystem::responseLast::getFieldsCount() const
+{
+    return responseLast::FIELDS_COUNT;
+}
+
+QByteArray DistFileSystem::responseLast::serialize() const
+{
+    return Serialization::universalSerialize(serializedParams(), 2);
+}
+
+void DistFileSystem::responseLast::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized, 2);
     operator=(l);
