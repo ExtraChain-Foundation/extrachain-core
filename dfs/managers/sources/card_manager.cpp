@@ -12,14 +12,14 @@ std::vector<std::string> CardManager::getFilesByType(const std::string &userId, 
         return {};
     }
 
-    std::string query = "SELECT path FROM " + Config::DataStorage::cardTableName
-        + " WHERE type=" + std::to_string(type) + ';';
+    std::string query =
+        "SELECT id FROM " + Config::DataStorage::cardTableName + " WHERE type=" + std::to_string(type) + ';';
     std::vector<DBRow> data = dbConnect.select(query);
 
     std::vector<std::string> listData;
 
     for (DBRow &temp : data)
-        listData.push_back(temp["path"]);
+        listData.push_back(CardManager::buildPathForFile(userId, temp["id"], type, false));
 
     return listData;
 }
@@ -46,11 +46,15 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
         qDebug() << "[Error][Card_Manager][getAllFiles]";
         return QStringList();
     }
-    QByteArray query = "SELECT path FROM " + QByteArray(Config::DataStorage::cardTableName.c_str());
+    QByteArray query = "SELECT id, type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str());
 
     std::vector<DBRow> data = dbConnect.select(query.toStdString());
     for (DBRow &temp : data)
-        listData.append(QString::fromStdString(temp["path"]).toLocal8Bit());
+    {
+        std::string path = CardManager::buildPathForFile(userId.toStdString(), temp["id"],
+                                                         DfsStruct::Type(std::stoi(temp["type"])), false);
+        listData.append(QByteArray::fromStdString(path));
+    }
 
     return listData;
 }
@@ -60,18 +64,20 @@ DfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray
     QString pathLocal(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
     if (path == pathLocal + DfsStruct::ACTOR_CARD_FILE)
     {
-        return DfsStruct::Type::card;
+        return DfsStruct::Type::unknown;
     }
     DBConnector dbConnect;
     QStringList listData;
     static QMutex mutex;
     mutex.lock();
+
     if (!dbConnect.open(pathLocal.toStdString() + DfsStruct::ACTOR_CARD_FILE.toStdString()))
     {
         return DfsStruct::service;
     }
+
     QByteArray query = "SELECT  type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
-        + " WHERE path=" + "'" + path.toUtf8() + "'" + ';';
+        + " WHERE id=" + "'" + path.right(path.length() - path.lastIndexOf("/") - 1).toUtf8() + "'" + ';';
 
     std::vector<DBRow> data = dbConnect.select(query.toStdString());
     mutex.unlock();
@@ -79,9 +85,19 @@ DfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray
     {
         return DfsStruct::Type::unknown;
     }
-    QString x = QString::fromStdString(data[0]["type"]);
 
-    return DfsStruct::convertToDFType(x.toLocal8Bit());
+    int type = -1;
+    try
+    {
+        type = std::stoi(data[0]["type"]);
+        if (type > 100)
+            type -= 100;
+    } catch (std::exception e)
+    {
+        type = 100;
+    }
+
+    return DfsStruct::Type(type);
 }
 
 std::string CardManager::pathToRoot(std::string userId)
@@ -116,6 +132,8 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
         (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
         + DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
     const std::string section = QByteArray::fromStdString(file).right(2).toStdString();
+    if (int(type) > 100)
+        type = DfsStruct::Type(static_cast<int>(type) - 100);
     std::string typeName = DfsStruct::toString(type).toStdString();
     std::string path = currentPath + "/" + typeName + "/" + section + "/" + file;
 

@@ -98,8 +98,8 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         }
     }
 
-    if (stored)
-        sender->sendFile(dfsPath + DfsStruct::STORED_EXT, type, SocketPair());
+    // if (stored)
+    //     sender->sendFile(dfsPath + DfsStruct::STORED_EXT, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath, type, userId); // TODO
@@ -112,102 +112,10 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
     DBConnector dbc(
         (DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + DfsStruct::ACTOR_CARD_FILE).toStdString());
     DBRow row;
-    row.insert({ "path", path.toStdString() });
-    row.insert({ "date", std::to_string(QDateTime::currentDateTime().toSecsSinceEpoch()) });
+    row.insert({ "id", path.right(path.length() - path.lastIndexOf("/") - 1).toStdString() });
     row.insert({ "type", std::to_string(type) });
-    row.insert({ "subtype", std::to_string(subType) });
-    row.insert({ "hash", "" });
+    row.insert({ "prevId", "-" });
     return dbc.insert(Config::DataStorage::cardTableName, row);
-}
-
-void Dfs::cardDiffRequest(const QString &oldCard, const QString &newCard)
-{ // TODO: select diff from two dbs
-    //    syncTimer.stop();
-
-    if (!QFile::exists(newCard) || QFile(newCard).size() == 0)
-    {
-        qDebug() << "Doc, go home";
-        return;
-    }
-
-    if (QFile(newCard).size() > 0 && QFile(oldCard).size() == 0)
-    {
-        QFile::remove(oldCard);
-        QFile::rename(newCard, oldCard);
-        dfsValidate(oldCard.split("/")[1].toUtf8());
-        return;
-    }
-
-    if (!QFile::exists(oldCard))
-    {
-        QFile::rename(newCard, oldCard);
-        qDebug() << "File received:" << oldCard;
-        loadFilesFromCard(oldCard);
-        return;
-    }
-
-    qDebug() << "Looking for difference in Card:" << oldCard;
-
-    DBConnector dbOld;
-    if (!dbOld.open(oldCard.toStdString()))
-        return;
-
-    auto oldS = dbOld.select("SELECT * FROM Items");
-    dbOld.close();
-    DBConnector dbNew;
-
-    if (!dbNew.open(newCard.toStdString()))
-        return;
-
-    auto newS = dbNew.select("SELECT * FROM Items");
-    dbNew.close();
-    std::string pathN;
-    std::string pathO;
-
-    for (DBRow &n : newS)
-    {
-        pathN = n["path"];
-        // bool exists = false;
-
-        for (DBRow &o : oldS)
-        {
-            pathO = o["path"];
-
-            if (pathN == pathO /*&& QFile::exists(QString::fromStdString(pathN))*/)
-                break;
-        }
-        if (pathN != pathO)
-        {
-            DBConnector dbNew(oldCard.toStdString());
-            dbNew.insert("Items", n);
-            dbNew.close();
-        }
-    }
-
-    QFile::remove(newCard);
-    dfsValidate(oldCard.split("/")[1].toUtf8());
-}
-
-void Dfs::loadFilesFromCard(const QString &card)
-{
-    qDebug() << "Load all files from card" << card;
-
-    DBConnector dbOld;
-    if (!dbOld.open(card.toStdString()))
-        return;
-
-    auto oldS = dbOld.select("SELECT * FROM Items");
-    dbOld.close();
-
-    for (DBRow &n : oldS)
-    {
-        QString pathN = QString::fromStdString(n["path"]);
-
-        if (!QFile::exists(pathN) || QFile(pathN).size() == 0)
-        {
-            requestFile(pathN);
-        }
-    }
 }
 
 void Dfs::getDFSStatus()
@@ -223,6 +131,7 @@ void Dfs::prepareSyncTimer()
     //    QTimer::singleShot(10000, this, &Dfs::dfsSyncT);
 }
 
+// не создавать рут
 void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type)
 {
     QFile file(tmpPath);
@@ -246,7 +155,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
     if (path.right(5) == "/root" && path.length() == 30) // (type == DfsStruct::Type::root)
     {
-        cardDiffRequest(path, tmpPath);
+        if (!QFile::exists(path))
+            QFile::rename(tmpPath, path);
         return;
     }
 
@@ -267,8 +177,12 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
     QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
 
-    appendToCard(path, pathList.at(PathStruct::aId), type);
-#ifndef ETALONIUM_CLIENT
+    if (path.right(7) != ".stored")
+    {
+        // TODO: check types
+        requestFile(path + ".stored");
+    }
+#ifdef ETALONIUM_CONSOLE
     sender->sendFile(path, type, SocketPair());
 #endif
     qDebug() << "File received:" << path;
@@ -419,7 +333,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
             // temp
             QString range = QString("0:%1").arg(data.size());
             // DFSMessage::DfsChanges dfsChanges(dfsPath, { data }, range, 3, userId, userId);
-            bool card = appendToCard(dfsPath, userId, type, subType);
+            bool card = appendToCard(dfsPath, userId, DfsStruct::Type(static_cast<int>(type) + 100), subType);
             QByteArray hash = Utils::calcKeccak(QByteArray::number(QRandomGenerator::global()->bounded(50000)
                                                                    + QDateTime::currentMSecsSinceEpoch()));
             bool stored = appendToStored(dfsPath, data, range, 3, userId, true, hash);
@@ -431,8 +345,8 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubT
         }
     }
 
-    if (stored)
-        sender->sendFile(dfsPath + DfsStruct::STORED_EXT, type, SocketPair());
+    // if (stored)
+    //     sender->sendFile(dfsPath + DfsStruct::STORED_EXT, type, SocketPair());
     sender->sendFile(dfsPath, type, SocketPair());
 
 #ifdef ETALONIUM_CLIENT
@@ -646,14 +560,14 @@ DfsStruct::Type Dfs::getFileType(const QString &filePath)
     QString userId = filePath.mid(5, 20); //
     QString cardFile = "data/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE;
     if (filePath == cardFile)
-        return DfsStruct::Type::card;
+        return DfsStruct::Type::unknown;
     if (!QFile::exists(cardFile))
         return DfsStruct::Type::error;
     DBConnector dfsCard(cardFile.toStdString());
-    std::vector<DBRow> res =
-        dfsCard.select(("SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
-                        + " WHERE path='" + filePath + "';")
-                           .toStdString());
+    std::vector<DBRow> res = dfsCard.select(
+        ("SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str()) + " WHERE path='"
+         + filePath.right(filePath.length() - filePath.lastIndexOf("/") - 1) + "';")
+            .toStdString());
 
     if (!res.empty())
     {
@@ -805,7 +719,8 @@ bool Dfs::dfsValidate(QByteArray userID)
         bool flag = true;
         for (DBRow &item : items)
         {
-            fPath = item["path"];
+            fPath = CardManager::buildPathForFile(userID.toStdString(), item["id"],
+                                                  DfsStruct::Type(std::stoi(item["type"])), false);
             QFileInfo file(QString::fromStdString(fPath));
             if (!file.exists() || file.size() == 0)
             {
@@ -918,7 +833,7 @@ bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStru
     if (!dbc.createTable(Config::DataStorage::storedTableCreation))
         return false;
 
-    return appendToCard(dfsPath, userId, DfsStruct::Type::stored, DfsStruct::SubType::undef);
+    return true;
 }
 
 // TODO: update card file
@@ -953,11 +868,7 @@ bool Dfs::appendToStored(QString filePath, QByteArray data, QString range, int t
         + hash + sep + sign + sep + QByteArray::number(type) + sep + userId.toLatin1() + sep
         + range.toLatin1() + "', hash, ? FROM Stored LIMIT 1";
 
-    if (dbc.insertWithData(query.toStdString(), data))
-        return updateCard(filePath, userId.toLatin1(),
-                          QByteArray::number(QDateTime::currentDateTime().toMSecsSinceEpoch()), hash);
-    else
-        return false;
+    return dbc.insertWithData(query.toStdString(), data);
 }
 
 void Dfs::updateFromNewStored(QString filePath)
@@ -1138,25 +1049,6 @@ void Dfs::updateFromNewStored(QString filePath)
     */
 
     //    QFile::rename(old, new);
-}
-
-bool Dfs::updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash)
-{
-    DBConnector dbc;
-    std::string rootPath =
-        (DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + DfsStruct::ACTOR_CARD_FILE).toStdString();
-
-    if (!dbc.open(rootPath))
-        return false;
-
-    std::string query = QString("UPDATE %1 SET date = '%2', hash = '%3' WHERE path = '%4';")
-                            .arg(QString::fromStdString(Config::DataStorage::cardTableName))
-                            .arg(QString(date))
-                            .arg(QString(newHash))
-                            .arg(path)
-                            .toStdString();
-
-    return dbc.update(query);
 }
 
 void Dfs::initMyLocalStorage()

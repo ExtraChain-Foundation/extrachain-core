@@ -49,25 +49,3 @@ public:
     sqlite3 *getDb() const;
 };
 #endif // DB_CONNECTOR_H
-
-//    QElapsedTimer timer;
-//    timer.start();
-//    DBConnector dbc;
-//    if (dbc.open("test-db"))
-//    {
-//        dbc.createTable("CREATE TABLE DFS (ID TEXT PRIMARY KEY NOT NULL, PATH TEXT NOT NULL)");
-
-//        DBRow row1 = { { "ID", "0" }, { "PATH", "/data/images/0" } };
-//        dbc.insert("DFS", row1);
-//        for (int i = 0; i != 5000; ++i)
-//        {
-//            std::vector<DBRow> res2 = dbc.select("SELECT * FROM DFS");
-//        }
-//        dbc.deleteRow("DELETE from DFS WHERE ID='0';");
-//        std::vector<DBRow> res1 = dbc.select("SELECT * FROM DFS");
-//        //        qDebug() << "EEEEEEEEEEEEEEEEEEE";
-//    }
-//    else
-//        qDebug() << "bI.";
-//    qDebug() << timer.elapsed();
-//    return 0;

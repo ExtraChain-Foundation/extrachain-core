@@ -17,6 +17,7 @@
 #include <QDateTime>
 #include <QStorageInfo>
 #include <QCoreApplication>
+#include <exception>
 
 namespace Network {
 static QString serverIp = "51.68.181.53";
@@ -131,11 +132,11 @@ namespace DataStorage {
     static const std::string cardTableName = "Items";
     static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
-          "path    TEXT PRIMARY KEY NOT NULL, "
-          "date    INT              NOT NULL, "
-          "type    INT              NOT NULL, "
-          "subtype INT                      , "
-          "hash    TEXT             NOT NULL);";
+          "id      TEXT  NOT NULL, "
+          "type    INT   NOT NULL, "
+          "prevId  TEXT  NOT NULL,"
+          "PRIMARY KEY (id, type)"
+          ");";
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("

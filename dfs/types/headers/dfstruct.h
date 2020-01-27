@@ -61,19 +61,17 @@ QString toString(SubType);
 
 enum Type
 {
-    images = 0,
+    unknown = 0,
     video = 1,
     event = 2,
-    system = 3,
     chat = 4,
     post = 5,
     service = 6,
-    cdoctp = 7,
-    card = 8,
-    unknown = 9,
-    contract = 10,
-    stored = 11,
-    error = 100
+    files = 7,
+    images = 8,
+    contract = 9,
+    error = 100,
+    stored = 200
 };
 
 Type convertToDFType(QByteArray);
@@ -107,7 +105,7 @@ Key convertToKey(QByteArray key);
 QByteArray toByteArray(Key);
 QString toString(Key);
 
-static const std::vector<Type> typesVec = { images, video, event, system, chat, post, service };
+static const std::vector<Type> typesVec = { images, video, event, chat, post, service };
 
 static std::unordered_map<Type, QString> cardFileConnections = {};
 

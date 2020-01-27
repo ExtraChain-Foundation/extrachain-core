@@ -38,18 +38,14 @@ DfsStruct::Type DfsStruct::convertToDFType(QByteArray type)
         return Type::video;
     else if (type == "events")
         return Type::event;
-    else if (type == "system")
-        return Type::system;
     else if (type == "chats")
         return Type::chat;
     else if (type == "posts")
         return post;
-    else if (type == "cards")
-        return card;
     else if (type == "services")
         return service;
-    else if (type == "cdoctp")
-        return cdoctp;
+    else if (type == "files")
+        return files;
     return service;
 }
 
@@ -67,9 +63,6 @@ QByteArray DfsStruct::toByteArray(Type type)
     case DfsStruct::Type::event:
         res = "events";
         break;
-    case DfsStruct::Type::system:
-        res = "system";
-        break;
     case DfsStruct::Type::chat:
         res = "chats";
         break;
@@ -79,11 +72,8 @@ QByteArray DfsStruct::toByteArray(Type type)
     case DfsStruct::Type::service:
         res = "services";
         break;
-    case DfsStruct::Type::cdoctp:
-        res = "cdoctp";
-        break;
-    case DfsStruct::Type::card:
-        res = "cards";
+    case DfsStruct::Type::files:
+        res = "files";
         break;
     case DfsStruct::Type::contract:
         res = "contract";
@@ -96,9 +86,9 @@ QByteArray DfsStruct::toByteArray(Type type)
     }
     return res;
 }
+
 QString DfsStruct::toString(Type type)
 {
-
     return QString(DfsStruct::toByteArray(type));
 }
 //

@@ -49,7 +49,6 @@ private:
     bool appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                       const DfsStruct::SubType &subType = DfsStruct::SubType::undef);
     void cardDiffRequest(const QString &oldCard, const QString &newCard);
-    void loadFilesFromCard(const QString &card);
     void getDFSStatus();
     void prepareSyncTimer();
 
@@ -109,7 +108,6 @@ private:
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId, bool init,
                         QByteArray hash);
     void updateFromNewStored(QString filePath);
-    bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
     bool applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges);
     bool applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges);
     DfsStruct::Type getFileType(const QString &filePath);
