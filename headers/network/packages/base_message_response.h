@@ -2,7 +2,6 @@
 #define BASE_MESSAGE_RESPONSE_H
 
 #include "network/packages/base_message.h"
-#include "network/packages/service/response_messages.h"
 
 namespace Messages {
 struct BaseMessageResponse : BaseMessage

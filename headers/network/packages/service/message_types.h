@@ -57,12 +57,16 @@ enum DFSMessage
     titleMessage = 400,
     fileDataMessage = 401,
     requestMessage = 402,
-    statusMessage = 403,
-    storageMessage = 404,
-    responseMessage = 405,
+    responseMessage = 403,
+    statusMessage = 404,
+    storageMessage = 405,
     closingMessage = 406,
     requestFragments = 407,
     changesMessage = 408,
+
+    requestLast = 409,
+    responseLast = 410,
+
     none = 499
 };
 static bool isDFSMessage(unsigned int value)

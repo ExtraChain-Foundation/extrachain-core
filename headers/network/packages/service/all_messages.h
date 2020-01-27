@@ -7,7 +7,6 @@
 #include "network/packages/service/get_count_messages.h"
 #include "network/packages/service/get_block_message.h"
 #include "network/packages/service/get_all_actor_message.h"
-#include "network/packages/service/response_messages.h"
 #include "network/packages/service/get_tx_message.h"
 #include "network/packages/service/get_tx_pair_message.h"
 #include "network/packages/service/get_actor_message.h"
