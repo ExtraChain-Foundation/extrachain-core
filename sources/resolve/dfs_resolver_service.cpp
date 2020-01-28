@@ -205,14 +205,12 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
         {
             switch (msgType)
             {
-            case DFSMessage::titleMessage:
-            {
+            case DFSMessage::titleMessage: {
                 Network::DataStruct ds = { this->msg, this->receiver };
                 emit dfsTitle(ds);
                 break;
             }
-            case DFSMessage::requestFragments:
-            {
+            case DFSMessage::requestFragments: {
                 DistFileSystem::ReqFragsMessage message;
                 message = data;
                 if (message.filePath == "-1")
@@ -220,8 +218,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 dfs->sendFragments(message.filePath, message.listFrag, this->receiver);
                 break;
             }
-            case DFSMessage::requestMessage:
-            {
+            case DFSMessage::requestMessage: {
                 qDebug() << "[requestMessage:]";
                 DistFileSystem::DfsRequest message;
                 message = data;
@@ -236,29 +233,24 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
 
                 break;
             }
-            case DFSMessage::responseMessage:
-            {
+            case DFSMessage::responseMessage: {
                 qDebug() << "[responseMessage:]";
                 break;
             }
-            case DFSMessage::statusMessage:
-            {
+            case DFSMessage::statusMessage: {
                 qDebug() << "[statusMessage:]";
                 DistFileSystem::Status message;
                 message = data;
                 break;
             }
-            case DFSMessage::storageMessage:
-            {
+            case DFSMessage::storageMessage: {
                 qDebug() << "[storageMessage:]";
                 break;
             }
-            case DFSMessage::closingMessage:
-            {
+            case DFSMessage::closingMessage: {
                 break;
             }
-            case DFSMessage::changesMessage:
-            {
+            case DFSMessage::changesMessage: {
                 DistFileSystem::DfsChanges message;
                 message = data;
 
@@ -269,8 +261,23 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                     dfs->getSender()->sendDfsMessage(message, Messages::DFSMessage::changesMessage);
                 break;
             }
-            default:
-            {
+            case DFSMessage::requestLast: {
+                DistFileSystem::requestLast requestLast;
+                requestLast = data;
+                dfs->responseRequestLast(requestLast.actorId, this->receiver);
+                break;
+            }
+            case DFSMessage::responseLast: {
+                DistFileSystem::responseLast responseLast;
+                responseLast = data;
+                dfs->responseResponeLast(responseLast.actorId, responseLast.pHash, responseLast.cHash);
+            }
+            case DFSMessage::cardFileChange: {
+                DistFileSystem::CardFileChange cardFileChange;
+                cardFileChange = data;
+                // dfs->applyCardFileChange(cardFileChange);
+            }
+            default: {
                 // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
                 break;
             }
@@ -280,8 +287,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
         {
             switch (msgType)
             {
-            case DFSMessage::titleMessage:
-            {
+            case DFSMessage::titleMessage: {
                 if (title.isEmpty())
                 {
                     DistFileSystem::TitleMessage message;
@@ -313,8 +319,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 }
                 break;
             }
-            case DFSMessage::fileDataMessage:
-            {
+            case DFSMessage::fileDataMessage: {
                 // qDebug() << "[fileDataMessage:]";
                 DistFileSystem::DfsMessage message;
                 message = data;
@@ -344,8 +349,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 reloadTimer->start(Network::DFS_FILE_STATUS_CHECK_TIME);
                 break;
             }
-            default:
-            {
+            default: {
                 // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
                 break;
             }

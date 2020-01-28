@@ -66,6 +66,7 @@ enum DFSMessage
 
     requestLast = 409,
     responseLast = 410,
+    cardFileChange = 411,
 
     none = 499
 };

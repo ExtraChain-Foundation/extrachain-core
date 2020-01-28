@@ -15,6 +15,48 @@ Sender *Dfs::getSender() const
     return sender;
 }
 
+void Dfs::responseRequestLast(QByteArray userId, SocketPair receiver)
+{
+    CardFile cardFile(userId);
+    if (!cardFile.open())
+        return;
+
+    auto lastRes = cardFile.last();
+    if (!lastRes)
+        return;
+
+    DBRow last = lastRes.value();
+    DistFileSystem::responseLast responseLast;
+    responseLast.actorId = userId;
+    responseLast.cHash = last["id"].c_str();
+    responseLast.pHash = last["prevId"].c_str();
+
+    sender->sendDfsMessage(responseLast, Messages::DFSMessage::responseLast, receiver);
+}
+
+void Dfs::responseResponeLast(QByteArray userId, QByteArray pHash, QByteArray cHash)
+{
+    CardFile cardFile(userId);
+    if (!cardFile.open())
+        return;
+
+    auto lastRes = cardFile.last();
+    if (!lastRes)
+        return;
+
+    // TODO: если хэш есть, ничего не делать
+    DBRow last = lastRes.value();
+    if (last["prevId"] == pHash.toStdString() && last["id"] == cHash.toStdString())
+    {
+        // all okay
+        return;
+    }
+    else
+    {
+        requestFile(cardFile.fileName());
+    }
+}
+
 void Dfs::initDFS(const QByteArray &userId)
 {
     QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME);
@@ -22,6 +64,7 @@ void Dfs::initDFS(const QByteArray &userId)
     QList<QByteArray> subPathList = { "/images/", "/video/",    "/events/", "/system/", "/chats/",
                                       "/posts/",  "/services/", "/cdoctp/", "/cards/" };
 
+    // TODO: remove
     if (!QFile::exists(DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE))
     {
         DBConnector dbc(
@@ -33,7 +76,7 @@ void Dfs::initDFS(const QByteArray &userId)
         QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
 
     qDebug() << "[init dfs for user]" << userId;
-    //    signalConnections();
+    // signalConnections();
     qDebug() << "[init finished]";
     requestCardById(userId);
 }
@@ -115,6 +158,7 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
     row.insert({ "id", path.right(path.length() - path.lastIndexOf("/") - 1).toStdString() });
     row.insert({ "type", std::to_string(type) });
     row.insert({ "prevId", "-" });
+    row.insert({ "nextId", "-" });
     return dbc.insert(Config::DataStorage::cardTableName, row);
 }
 
@@ -156,7 +200,10 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     if (path.right(5) == "/root" && path.length() == 30) // (type == DfsStruct::Type::root)
     {
         if (!QFile::exists(path))
+        {
             QFile::rename(tmpPath, path);
+            dfsValidate(path.split("/")[1].toUtf8());
+        }
         return;
     }
 
@@ -590,7 +637,7 @@ void Dfs::dfsSyncUsers(QList<QString> userID, const SocketPair &receiver)
     {
         //        if (dfsValidate(s.toUtf8()))
         //        {
-        requestFile(DfsStruct::ROOT_FOOLDER_NAME + "/" + s + "/" + DfsStruct::ACTOR_CARD_FILE, receiver);
+        requestCardById(s.toLatin1(), receiver);
         //        }
     }
 }
@@ -942,8 +989,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
             switch (type)
             {
-            case DfsStruct::ChangeType::Insert:
-            {
+            case DfsStruct::ChangeType::Insert: {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
                 DBRow row;
@@ -952,8 +998,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 rows.push_back(row);
                 break;
             }
-            case DfsStruct::ChangeType::Delete:
-            {
+            case DfsStruct::ChangeType::Delete: {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
 
@@ -1143,9 +1188,26 @@ void Dfs::searchTmp()
     //    }
 }
 
-void Dfs::requestCardById(QByteArray userId)
+void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 {
-    requestFile("data/" + userId + "/root");
+    if (dfsNetManager == nullptr || sender == nullptr)
+    {
+        qDebug().nospace() << "What's up, Doc? " << (dfsNetManager == nullptr ? "dfsNetManager" : "sender")
+                           << " == nullptr";
+        return;
+    }
+
+    QString fileName = "data/" + userId + "/root";
+
+    if (!QFile::exists(fileName) || QFile(fileName).size() == 0)
+    {
+        requestFile(fileName);
+        return;
+    }
+
+    DistFileSystem::requestLast requestLast;
+    requestLast.actorId = userId;
+    sender->sendDfsMessage(requestLast, Messages::DFSMessage::requestLast, receiver);
 }
 
 void Dfs::requestAllCards()

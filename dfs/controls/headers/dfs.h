@@ -1,7 +1,6 @@
 #ifndef DFS_H
 #define DFS_H
 
-#include "dfs/managers/headers/dfsindex.h"
 #include "dfs/managers/headers/card_manager.h"
 #include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_changes.h"
@@ -11,6 +10,7 @@
 #include "utils/utils.h"
 #include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "dfs/types/headers/cardfile.h"
 #include <QTimer>
 #include <QDirIterator>
 #include <iterator>
@@ -68,6 +68,9 @@ public:
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;
 
+    void responseRequestLast(QByteArray userId, SocketPair receiver);
+    void responseResponeLast(QByteArray userId, QByteArray pHash, QByteArray cHash);
+
     QStringList tmpFiles() const;
 
 signals:
@@ -99,7 +102,7 @@ public slots:
     void startDFS();
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
     void searchTmp();
-    void requestCardById(QByteArray userId);
+    void requestCardById(QByteArray userId, const SocketPair &receiver = SocketPair());
     void requestAllCards();
 
 private:

@@ -134,9 +134,11 @@ namespace DataStorage {
         + " ("
           "id      TEXT  NOT NULL, "
           "type    INT   NOT NULL, "
-          "prevId  TEXT  NOT NULL,"
+          "prevId  TEXT  NOT NULL, "
+          "nextId  TEXT  NOT NULL, "
           "PRIMARY KEY (id, type)"
           ");";
+
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
