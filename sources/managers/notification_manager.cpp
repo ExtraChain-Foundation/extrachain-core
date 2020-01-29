@@ -64,6 +64,10 @@ void NotificationManager::setCurrentID(const QByteArray id)
     loadNotificationFromDB();
 }
 
+void NotificationManager::process()
+{
+}
+
 void NotificationManager::sendToNotify(const notification newNtf)
 {
     switch (newNtf.type)

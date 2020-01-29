@@ -35,11 +35,12 @@ private:
 public slots:
     void addNotify(const notification newNtf);
     void setCurrentID(const QByteArray id);
-
+    void process();
 signals:
     void allNotifyToUI(QList<notification> ntf);
     void newNotifyToUI(notification ntf);
     void getCurrentID();
+    void finished();
 };
 #endif
 #endif // NOTIFICATION_MANAGER_H
