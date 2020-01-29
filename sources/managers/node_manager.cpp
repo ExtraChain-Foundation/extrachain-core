@@ -32,6 +32,8 @@ NodeManager::NodeManager()
     uiWallet = uiController->getWallet();
     qDebug() << "========" << uiController;
     uiController->setDfs(dfs);
+    notifyM = new NotificationManager();
+    ThreadPool::addThread(notifyM);
 #endif
     cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
@@ -42,7 +44,6 @@ NodeManager::NodeManager()
     //    dfs->initDFSNetManager(resolveManager);
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
-    notifyM = new NotificationManager();
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -189,26 +190,10 @@ UiController *NodeManager::getUiController() const
 
 void NodeManager::setNotificationClient(NotificationClient *newNtfCl)
 {
-    notificationClient = newNtfCl;
+    notifyM->setNotifyClient(newNtfCl);
+    notifyM->setActorIndex(actorIndex);
 }
 
-void NodeManager::newNotify(const QString &msg, const QByteArray &user)
-{
-    if (user.isEmpty())
-        notificationClient->setNotification(msg);
-    else
-    {
-        QByteArrayList profile = actorIndex->getProfile(user);
-        if (profile.isEmpty())
-            notificationClient->setNotification(msg);
-        else
-        {
-            QString name = profile.at(3);
-            QString secName = profile.at(4);
-            notificationClient->setNotification(msg + name + " " + secName);
-        }
-    }
-}
 #endif
 
 Transaction NodeManager::createTransaction(Transaction tx)
@@ -544,7 +529,6 @@ void NodeManager::connectUi()
     connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &UiController::allNotification);
     connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &UiController::newNotification);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
-    connect(notifyM, &NotificationManager::sendToNotifyClient, this, &NodeManager::newNotify);
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
 

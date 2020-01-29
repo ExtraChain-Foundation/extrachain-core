@@ -1,9 +1,19 @@
 #include "headers/managers/notification_manager.h"
-
+#ifdef ETALONIUM_CLIENT
 NotificationManager::NotificationManager(QObject *parent)
     : QObject(parent)
 {
     QDir().mkpath(PATH_NOTIFICATION_FILE.c_str());
+}
+
+void NotificationManager::setNotifyClient(NotificationClient *newNtfCl)
+{
+    notifyClient = newNtfCl;
+}
+
+void NotificationManager::setActorIndex(ActorIndex *_actorIndex)
+{
+    actorIndex = _actorIndex;
 }
 
 void NotificationManager::loadNotificationFromDB()
@@ -22,7 +32,7 @@ void NotificationManager::loadNotificationFromDB()
         std::string time = temp.at("time");
         std::string type = temp.at("type");
         std::string data = temp.at("data");
-        notification tmp{ std::stoll(time), notification::NotifyType(std::stoi(type)), data.c_str() };
+        notification tmp { std::stoll(time), notification::NotifyType(std::stoi(type)), data.c_str() };
         list.append(tmp);
     }
     qDebug() << list.size() << " notify loaded";
@@ -59,31 +69,46 @@ void NotificationManager::sendToNotify(const notification newNtf)
     switch (newNtf.type)
     {
     case (notification::NotifyType::TxToUser):
-        emit sendToNotifyClient("Transaction to *" + newNtf.data.right(5) + " completed", "");
+        newNotify("Transaction to *" + newNtf.data.right(5) + " completed", "");
         break;
     case (notification::NotifyType::TxToMe):
-        emit sendToNotifyClient("New transaction from *" + newNtf.data.right(5), "");
+        newNotify("New transaction from *" + newNtf.data.right(5), "");
         break;
-    case (notification::NotifyType::ChatMsg):
-    {
+    case (notification::NotifyType::ChatMsg): {
         QByteArray chatId = newNtf.data.split(' ').at(0);
-        emit sendToNotifyClient("New message from ", chatId);
+        newNotify("New message from ", chatId);
         break;
     }
-    case (notification::NotifyType::ChatInvite):
-    {
+    case (notification::NotifyType::ChatInvite): {
         QByteArray userId = newNtf.data.split(' ').at(0);
-        emit sendToNotifyClient("New chat from ", userId);
+        newNotify("New chat from ", userId);
         break;
     }
-    case (notification::NotifyType::NewPost):
-    {
+    case (notification::NotifyType::NewPost): {
         QByteArray user = newNtf.data.split(' ').at(0);
-        emit sendToNotifyClient("New post from ", user);
+        newNotify("New post from ", user);
         break;
     }
     case (notification::NotifyType::NewFollower):
-        emit sendToNotifyClient("New follower ", newNtf.data);
+        newNotify("New follower ", newNtf.data);
         break;
     }
 }
+void NotificationManager::newNotify(const QString &msg, const QByteArray &user)
+{
+    if (user.isEmpty())
+        notifyClient->setNotification(msg);
+    else
+    {
+        QByteArrayList profile = actorIndex->getProfile(user);
+        if (profile.isEmpty())
+            notifyClient->setNotification(msg);
+        else
+        {
+            QString name = profile.at(3);
+            QString secName = profile.at(4);
+            notifyClient->setNotification(msg + name + " " + secName);
+        }
+    }
+}
+#endif
