@@ -65,8 +65,11 @@ public:
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;
 
-    void responseRequestLast(QByteArray userId, SocketPair receiver);
-    void responseResponeLast(QByteArray userId, QByteArray pHash, QByteArray cHash);
+    void responseRequestLast(const DistFileSystem::requestLast &request, SocketPair receiver);
+    void responseResponseLast(const DistFileSystem::responseLast &response, SocketPair receiver);
+    void responseRequestCardPath(const DistFileSystem::RequestCardPart &request, SocketPair receiver);
+    void responseResponseCardPath(const DistFileSystem::ResponseCardPart &response, SocketPair receiver);
+
     void applyCardFileChange(DistFileSystem::CardFileChange);
 
     QStringList tmpFiles() const;

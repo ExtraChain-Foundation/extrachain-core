@@ -15,46 +15,150 @@ Sender *Dfs::getSender() const
     return sender;
 }
 
-void Dfs::responseRequestLast(QByteArray userId, SocketPair receiver)
+void Dfs::responseRequestLast(const DistFileSystem::requestLast &request, SocketPair receiver)
 {
-    CardFile cardFile(userId);
-    if (!cardFile.open())
+    if (request.isEmpty())
         return;
 
-    auto lastRes = cardFile.last();
-    if (!lastRes)
-        return;
+    QByteArrayList res;
 
-    DBRow last = lastRes.value();
+    for (QByteArray userId : request.actors)
+    {
+        QString lastCacheName = QString("%1/%2/root.last").arg(DfsStruct::ROOT_FOOLDER_NAME, userId);
+        QByteArray lastHash;
+
+        QFile file(lastCacheName);
+        if (file.open(QFile::ReadOnly))
+        {
+            lastHash = file.readAll();
+
+            if (!lastHash.isEmpty())
+                res << userId + " " + lastHash;
+        }
+    }
+
     DistFileSystem::responseLast responseLast;
-    responseLast.actorId = userId;
-    responseLast.cHash = last["id"].c_str();
-    responseLast.pHash = last["prevId"].c_str();
+    responseLast.lasts = res;
 
     sender->sendDfsMessage(responseLast, Messages::DFSMessage::responseLast, receiver);
 }
 
-void Dfs::responseResponeLast(QByteArray userId, QByteArray pHash, QByteArray cHash)
+void Dfs::responseResponseLast(const DistFileSystem::responseLast &response, SocketPair receiver)
 {
-    CardFile cardFile(userId);
+    if (response.isEmpty())
+        return;
+
+    QByteArrayList needUpdate;
+
+    for (QByteArray last : response.lasts)
+    {
+        auto l = last.split(' ');
+        QByteArray userId = l[0];
+        QByteArray lastHash = l[1];
+
+        QString lastCacheName = QString("%1/%2/root.last").arg(DfsStruct::ROOT_FOOLDER_NAME, userId);
+        QFile file(lastCacheName);
+        if (!file.open(QFile::ReadOnly))
+            continue;
+        QByteArray lastHashFile = file.readAll();
+
+        if (lastHash.isEmpty())
+            return;
+
+        if (lastHash != lastHashFile)
+        {
+            needUpdate << userId;
+
+            DistFileSystem::RequestCardPart request;
+            request.actorId = userId;
+            request.count = 100;
+            request.offset = 0;
+            sender->sendDfsMessage(request, Messages::DFSMessage::requestCardPath, receiver);
+        }
+    }
+
+    qDebug() << "needUpdate" << needUpdate;
+}
+
+void Dfs::responseRequestCardPath(const DistFileSystem::RequestCardPart &request, SocketPair receiver)
+{
+    if (request.isEmpty())
+        return;
+
+    qDebug() << "responseRequestCardPath";
+
+    CardFile cardFile(request.actorId);
     if (!cardFile.open())
         return;
 
-    auto lastRes = cardFile.last();
-    if (!lastRes)
+    auto data = cardFile.select(request.count, request.offset);
+    QByteArrayList res;
+
+    for (auto row : data)
+    {
+        res << (QByteArrayList() << row["key"].c_str() << row["id"].c_str() << row["type"].c_str()
+                                 << row["prevId"].c_str() << row["nextId"].c_str() << row["sign"].c_str())
+                   .join(' ');
+    }
+
+    if (res.isEmpty())
         return;
 
-    // TODO: если хэш есть, ничего не делать
-    DBRow last = lastRes.value();
-    if (last["prevId"] == pHash.toStdString() && last["id"] == cHash.toStdString())
-    {
-        // all okay
+    DistFileSystem::ResponseCardPart response;
+    response.actorId = request.actorId;
+    response.count = request.count;
+    response.offset = request.offset;
+    response.data = res;
+    sender->sendDfsMessage(response, Messages::DFSMessage::responseCardPath, receiver);
+}
+
+// TODO: send changes after merge
+void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &response, SocketPair receiver)
+{
+    if (response.isEmpty())
         return;
-    }
-    else
+
+    qDebug() << "responseResponseCardPath";
+
+    CardFile cardFile(response.actorId);
+    if (!cardFile.open())
+        return;
+
+    std::vector<DBRow> local = cardFile.select(response.count, response.offset);
+    std::vector<DBRow> network;
+
+    for (auto el : response.data)
     {
-        requestFile(cardFile.fileName());
+        auto list = el.split(' ');
+        int networkKey = list[0].toInt();
+        QByteArray networkFileId = list[1];
+        int networkType = list[2].toInt();
+        QByteArray networkPrevId = list[3];
+        QByteArray networkNextId = list[4];
+        QByteArray networkSign = list[5];
+
+        DBRow row { { "key", std::to_string(networkKey) },     { "id", networkFileId.toStdString() },
+                    { "type", std::to_string(networkType) },   { "prevId", networkPrevId.toStdString() },
+                    { "nextId", networkNextId.toStdString() }, { "sign", networkSign.toStdString() } };
+        network.push_back(row);
     }
+
+    if (local.size() >= network.size())
+        return;
+
+    auto last = local.back();
+    bool ins = false;
+    for (auto el : network)
+    {
+        if (ins)
+            cardFile.append(el.at("id").c_str(), std::stoi(el.at("type").c_str()), el.at("sign").c_str());
+        if (last["id"] == el["id"])
+        {
+            ins = true;
+        }
+    }
+
+    dfsValidate(response.actorId);
 }
 
 void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cardFileChange)
@@ -257,8 +361,15 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     {
         if (!QFile::exists(path))
         {
-            QFile::rename(tmpPath, path);
-            dfsValidate(path.split("/")[1].toUtf8());
+            if (QFile::rename(tmpPath, path))
+            {
+                {
+                    CardFile cardFile(path.mid(5, 20));
+                    if (cardFile.open())
+                        cardFile.updateLastCache();
+                }
+                dfsValidate(path.split("/")[1].toUtf8());
+            }
         }
         return;
     }
@@ -1238,6 +1349,7 @@ void Dfs::searchTmp()
             {
                 // QFile::remove(dirIt.filePath());
                 requestFile(fileName);
+                // requestFile(fileName + ".last");
             }
             //            else
             //                tmpFiles << fileName;
@@ -1273,7 +1385,7 @@ void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
     }
 
     DistFileSystem::requestLast requestLast;
-    requestLast.actorId = userId;
+    requestLast.actors = actorIndex->allActors();
     sender->sendDfsMessage(requestLast, Messages::DFSMessage::requestLast, receiver);
 }
 

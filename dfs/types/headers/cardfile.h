@@ -18,11 +18,14 @@ public:
     std::optional<DBRow> last();
 
     bool append(QString fileId, int type, QByteArray sign, bool isFilePath = false);
+    bool updateLastCache();
+    std::vector<DBRow> select(int count, int offset);
 
 private:
     bool updateNextId();
 
     QString m_userId;
     QString m_fileName;
+    QString m_lastCacheName;
     DBConnector m_db;
 };

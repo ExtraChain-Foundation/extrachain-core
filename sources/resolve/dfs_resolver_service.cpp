@@ -264,19 +264,31 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
             case DFSMessage::requestLast: {
                 DistFileSystem::requestLast requestLast;
                 requestLast = data;
-                dfs->responseRequestLast(requestLast.actorId, this->receiver);
+                dfs->responseRequestLast(requestLast, this->receiver);
                 break;
             }
             case DFSMessage::responseLast: {
                 DistFileSystem::responseLast responseLast;
                 responseLast = data;
-                dfs->responseResponeLast(responseLast.actorId, responseLast.pHash, responseLast.cHash);
+                dfs->responseResponseLast(responseLast, receiver);
                 break;
             }
             case DFSMessage::cardFileChange: {
                 DistFileSystem::CardFileChange cardFileChange;
                 cardFileChange = data;
                 dfs->applyCardFileChange(cardFileChange);
+                break;
+            }
+            case DFSMessage::requestCardPath: {
+                DistFileSystem::RequestCardPart requestCardPath;
+                requestCardPath = data;
+                dfs->responseRequestCardPath(requestCardPath, receiver);
+                break;
+            }
+            case DFSMessage::responseCardPath: {
+                DistFileSystem::ResponseCardPart responseCardPath;
+                responseCardPath = data;
+                dfs->responseResponseCardPath(responseCardPath, receiver);
                 break;
             }
             default: {

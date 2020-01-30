@@ -10,7 +10,7 @@ namespace DistFileSystem {
 struct requestLast : Messages::ISmallMessage
 {
     const short FIELDS_COUNT = 1;
-    QByteArray actorId;
+    QByteArrayList actors;
 
     const QList<QByteArray> serializedParams() const;
     void operator=(QList<QByteArray> &list);
@@ -25,10 +25,8 @@ public:
 
 struct responseLast : Messages::ISmallMessage
 {
-    const short FIELDS_COUNT = 3;
-    QByteArray actorId;
-    QByteArray pHash;
-    QByteArray cHash;
+    const short FIELDS_COUNT = 1;
+    QByteArrayList lasts;
     const QList<QByteArray> serializedParams() const;
     void operator=(QList<QByteArray> &list);
 
@@ -40,7 +38,6 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-// TODO: add remove (insert for now)
 struct CardFileChange : Messages::ISmallMessage
 {
     const short FIELDS_COUNT = 7;
@@ -51,6 +48,43 @@ struct CardFileChange : Messages::ISmallMessage
     QByteArray nextId;
     int type = -1;
     QByteArray sign;
+
+    const QList<QByteArray> serializedParams() const;
+    void operator=(QList<QByteArray> &list);
+
+public:
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
+};
+
+struct RequestCardPart : Messages::ISmallMessage
+{
+    const short FIELDS_COUNT = 3;
+    QByteArray actorId;
+    int count = -1;
+    int offset = -1;
+
+    const QList<QByteArray> serializedParams() const;
+    void operator=(QList<QByteArray> &list);
+
+public:
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
+};
+
+struct ResponseCardPart : Messages::ISmallMessage
+{
+    const short FIELDS_COUNT = 4;
+    QByteArray actorId;
+    int count = -1;
+    int offset = -1;
+    QByteArrayList data;
 
     const QList<QByteArray> serializedParams() const;
     void operator=(QList<QByteArray> &list);

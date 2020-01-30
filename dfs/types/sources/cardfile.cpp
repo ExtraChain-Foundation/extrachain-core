@@ -6,6 +6,7 @@ CardFile::CardFile(QString userId)
 {
     m_userId = userId;
     m_fileName = QString("%1/%2/%3").arg(DfsStruct::ROOT_FOOLDER_NAME, userId, DfsStruct::ACTOR_CARD_FILE);
+    m_lastCacheName = QString("%1/%2/root.last").arg(DfsStruct::ROOT_FOOLDER_NAME, userId);
 }
 
 QString CardFile::userId() const
@@ -75,6 +76,13 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
     row.insert({ "nextId", "-" });
     row.insert({ "sign", sign.toStdString() });
 
+    QFile lastCacheFile(m_lastCacheName);
+    if (lastCacheFile.open(QFile::WriteOnly))
+    {
+        lastCacheFile.write(fileId.toLatin1());
+        lastCacheFile.close();
+    }
+
     bool res = m_db.insert(Config::DataStorage::cardTableName, row);
 
     if (res && lastRes)
@@ -84,4 +92,33 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
     }
 
     return res;
+}
+
+bool CardFile::updateLastCache()
+{
+    QFile lastCacheFile(m_lastCacheName);
+
+    if (lastCacheFile.open(QFile::WriteOnly))
+    {
+        std::string fileId = "-";
+        auto lastRes = last();
+        if (lastRes)
+            fileId = lastRes.value()["id"];
+
+        if (!fileId.empty())
+            lastCacheFile.write(fileId.c_str());
+        else
+            return false;
+        lastCacheFile.close();
+
+        return true;
+    }
+
+    return false;
+}
+
+std::vector<DBRow> CardFile::select(int count, int offset)
+{
+    return m_db.select("SELECT * FROM " + Config::DataStorage::cardTableName + " ORDER by key LIMIT "
+                       + std::to_string(count) + " OFFSET " + std::to_string(offset));
 }
