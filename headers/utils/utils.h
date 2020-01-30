@@ -132,10 +132,12 @@ namespace DataStorage {
     static const std::string cardTableName = "Items";
     static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
+          "key     INTEGER NOT NULL,"
           "id      TEXT  NOT NULL, "
           "type    INT   NOT NULL, "
           "prevId  TEXT  NOT NULL, "
           "nextId  TEXT  NOT NULL, "
+          "sign    TEXT  NOT NULL, "
           "PRIMARY KEY (id, type)"
           ");";
 

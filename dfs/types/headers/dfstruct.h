@@ -29,35 +29,6 @@ static const QString PROFILE_EXT = ".profile";
 static const QString CHATINVITE = "chatinvite";
 static const QString FOLLOWER = "follower";
 static const QString SUBSCRIBE = "subscribe";
-// static const QString CLON_SIGN = ".clone";
-// static const QString USER_DATA_FOLDER = "data/user";
-// static const QString USER_KEYS_DIR = "data/user/key";
-
-enum State
-{
-    NEWSTATE,
-    DELSTATE,
-    CHANGEDS
-};
-
-State convertToDFSstate(QByteArray);
-QByteArray toByteArray(State);
-QString toString(State);
-
-enum SubType
-{
-    undef = 0,
-    profile = 1,
-    avatar = 2,
-    subevent = 3,
-    subpost = 4,
-    mini = 5,
-    portfolio = 6
-};
-
-SubType convertToDFSSubType(QByteArray);
-QByteArray toByteArray(SubType);
-QString toString(SubType);
 
 enum Type
 {
@@ -94,22 +65,6 @@ enum ChangeType
     Update,
     Bytes
 };
-
-enum Key
-{
-    storedIndex,
-    dfsIndex
-};
-
-Key convertToKey(QByteArray key);
-QByteArray toByteArray(Key);
-QString toString(Key);
-
-static const std::vector<Type> typesVec = { images, video, event, chat, post, service };
-
-static std::unordered_map<Type, QString> cardFileConnections = {};
-
-static std::unordered_map<QFile *, bool> fileStatus = {};
 
 }
 namespace DFS_ERRORS {

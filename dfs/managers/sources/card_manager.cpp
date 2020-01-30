@@ -6,6 +6,8 @@ std::vector<std::string> CardManager::getFilesByType(const std::string &userId, 
 {
     DBConnector dbConnect;
 
+    if (!QFile::exists(pathToRoot(userId).c_str()))
+        return {};
     if (!dbConnect.open(pathToRoot(userId)))
     {
         qDebug() << "[Error][Card_Manager][getFilesByType]";
@@ -62,7 +64,8 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
 DfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
 {
     QString pathLocal(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
-    if (path == pathLocal + DfsStruct::ACTOR_CARD_FILE)
+    if (!QFile::exists(pathLocal + DfsStruct::ACTOR_CARD_FILE)
+        || path == pathLocal + DfsStruct::ACTOR_CARD_FILE)
     {
         return DfsStruct::Type::unknown;
     }
@@ -131,11 +134,14 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
     const std::string currentPath =
         (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
         + DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
-    const std::string section = QByteArray::fromStdString(file).right(2).toStdString();
+    std::string section = QByteArray::fromStdString(file).right(2).toStdString() + "/";
     if (int(type) > 100)
+    {
         type = DfsStruct::Type(static_cast<int>(type) - 100);
+        section = "";
+    }
     std::string typeName = DfsStruct::toString(type).toStdString();
-    std::string path = currentPath + "/" + typeName + "/" + section + "/" + file;
+    std::string path = currentPath + "/" + typeName + "/" + section + file;
 
     return path;
 }

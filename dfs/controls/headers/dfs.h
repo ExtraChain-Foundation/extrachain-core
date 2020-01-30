@@ -29,7 +29,6 @@ private:
     ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
-    QTimer *syncTimer = nullptr;
     // DFSResolver *resolver;
 public slots:
     /*DFS 1.5*/
@@ -42,15 +41,13 @@ public slots:
 private:
     void initDFS(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
-                   const DfsStruct::Type &type = DfsStruct::Type::images,
-                   const DfsStruct::SubType &subType = DfsStruct::SubType::subpost);
-    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType, bool needStored);
+                   const DfsStruct::Type &type = DfsStruct::Type::images);
+    void saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored);
     void saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type);
     bool appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
-                      const DfsStruct::SubType &subType = DfsStruct::SubType::undef);
+                      bool isFilePath);
     void cardDiffRequest(const QString &oldCard, const QString &newCard);
     void getDFSStatus();
-    void prepareSyncTimer();
 
 public slots:
     void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
@@ -70,6 +67,7 @@ public:
 
     void responseRequestLast(QByteArray userId, SocketPair receiver);
     void responseResponeLast(QByteArray userId, QByteArray pHash, QByteArray cHash);
+    void applyCardFileChange(DistFileSystem::CardFileChange);
 
     QStringList tmpFiles() const;
 
@@ -81,8 +79,7 @@ signals:
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
     void usersChanges(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
     void fileChanged(QString path);
-    void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
-                         const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void connectToServer();
     void networkCreated();
     void newNotify(const notification ntf);
@@ -91,8 +88,7 @@ public slots:
     void initMyLocalStorage();
     void initUser(BigNumber userId);
 
-    void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
-              const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data);
     void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);

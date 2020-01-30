@@ -43,12 +43,14 @@ public:
 // TODO: add remove (insert for now)
 struct CardFileChange : Messages::ISmallMessage
 {
-    const short FIELDS_COUNT = 5;
+    const short FIELDS_COUNT = 7;
+    int key = -1;
     QByteArray actorId;
     QByteArray fileId;
     QByteArray prevId;
     QByteArray nextId;
     int type = -1;
+    QByteArray sign;
 
     const QList<QByteArray> serializedParams() const;
     void operator=(QList<QByteArray> &list);

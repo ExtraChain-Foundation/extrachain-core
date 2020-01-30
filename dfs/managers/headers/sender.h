@@ -41,8 +41,8 @@ public:
     void sendDfsMessage(const T &dfsMessage, const unsigned int &type,
                         const SocketPair &receiver = SocketPair())
     {
-        //        static_assert(std::is_base_of<DFS::DUMessage, T>::value, "Derived not derived from
-        //        DUMessage");
+        static_assert(std::is_base_of<Messages::ISmallMessage, T>::value,
+                      "Derived not derived from Messages::ISmallMessage");
 
         if (dfsMessage.isEmpty())
         {

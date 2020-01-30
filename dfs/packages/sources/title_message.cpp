@@ -10,8 +10,8 @@ bool DistFileSystem::titleMessage::isEmpty() const
         return true;
     if (dataHash.isEmpty())
         return true;
-    if (prevId.isEmpty())
-        return true;
+    // if (prevId.isEmpty())
+    //    return true;
     return false;
 }
 

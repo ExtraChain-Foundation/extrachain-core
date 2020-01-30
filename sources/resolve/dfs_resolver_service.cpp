@@ -271,11 +271,13 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 DistFileSystem::responseLast responseLast;
                 responseLast = data;
                 dfs->responseResponeLast(responseLast.actorId, responseLast.pHash, responseLast.cHash);
+                break;
             }
             case DFSMessage::cardFileChange: {
                 DistFileSystem::CardFileChange cardFileChange;
                 cardFileChange = data;
-                // dfs->applyCardFileChange(cardFileChange);
+                dfs->applyCardFileChange(cardFileChange);
+                break;
             }
             default: {
                 // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";

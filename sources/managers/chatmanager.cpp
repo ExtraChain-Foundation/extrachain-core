@@ -319,8 +319,7 @@ void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
         return;
     }
 
-    emit send(DfsStruct::DfsSave::StaticNonStored, newFileName, "", DfsStruct::chat,
-              DfsStruct::SubType::undef);
+    emit send(DfsStruct::DfsSave::StaticNonStored, newFileName, "", DfsStruct::chat);
 
     QByteArray message = "{ \"type\":\"file\",\"message\":\"" + newFileNameData.toLatin1() + "\"}";
     qDebug() << message;
@@ -362,8 +361,8 @@ void ChatManager::createDialogue(QByteArray actorId)
     QString pathUser = temp.getChatId() + "/users";
     QString pathMsg = temp.getChatId() + "/" + temp.getSession().toByteArray() + "/msg";
 
-    emit send(DfsStruct::DfsSave::Static, pathUser, "", DfsStruct::chat, DfsStruct::SubType::undef);
-    emit send(DfsStruct::DfsSave::Static, pathMsg, "", DfsStruct::chat, DfsStruct::SubType::undef);
+    emit send(DfsStruct::DfsSave::Static, pathUser, "", DfsStruct::chat);
+    emit send(DfsStruct::DfsSave::Static, pathMsg, "", DfsStruct::chat);
 
     for (auto &user : allUsers)
         tempusersList.append(user);
