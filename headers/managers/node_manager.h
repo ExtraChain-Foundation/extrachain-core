@@ -25,11 +25,11 @@ class ResolveManager;
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "headers/network/packages/service/message_types.h"
-#include "managers/notification_manager.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
 #include "headers/ui/notificationclient.h"
+#include "managers/notification_manager.h"
 #endif
 
 #ifdef ETALONIUM_CONSOLE
@@ -54,15 +54,15 @@ private:
     ResolveManager *resolveManager;
     SubscribeController *subscribeController;
     PrivateProfile *prProfile;
-    NotificationManager *notifyM;
+
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
 
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;
-    NotificationClient *notificationClient;
-
+    NotificationClient *notificationClient = nullptr;
+    NotificationManager *notifyM;
 #endif
     CryptManager *cryptManager;
     //    ContractManager *contractManager;
@@ -187,7 +187,6 @@ private slots:
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
     void addNewWallet();
-    void newNotify(const QString &msg, const QByteArray &user);
 
 #endif
 
