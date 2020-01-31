@@ -3,6 +3,7 @@
 
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
+#include "dfs/managers/headers/card_manager.h"
 
 class CardFile
 {

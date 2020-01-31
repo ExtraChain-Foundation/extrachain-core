@@ -58,12 +58,13 @@ std::optional<DBRow> CardFile::last()
 bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath)
 {
     if (isFilePath)
-        fileId = fileId.right(fileId.length() - fileId.lastIndexOf("/") - 1);
+        fileId = CardManager::cutPath(fileId);
 
     std::string prevId = "-";
     auto lastRes = last();
 
-    if (lastRes) {
+    if (lastRes)
+    {
         auto lastRes2 = *lastRes;
         prevId = lastRes2["id"];
     }
@@ -106,7 +107,8 @@ bool CardFile::updateLastCache()
     {
         std::string fileId = "-";
         auto lastRes = last();
-        if (lastRes) {
+        if (lastRes)
+        {
             auto lastRes2 = *lastRes;
             fileId = lastRes2["id"];
         }

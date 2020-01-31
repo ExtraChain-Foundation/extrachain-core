@@ -61,46 +61,21 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     return listData;
 }
 
-DfsStruct::Type CardManager::getTypeByName(const QString &path, const QByteArray &userId)
+DfsStruct::Type CardManager::getTypeByName(const QString &fullPath)
 {
-    QString pathLocal(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
-    if (!QFile::exists(pathLocal + DfsStruct::ACTOR_CARD_FILE)
-        || path == pathLocal + DfsStruct::ACTOR_CARD_FILE)
-    {
-        return DfsStruct::Type::unknown;
-    }
-    DBConnector dbConnect;
-    QStringList listData;
-    static QMutex mutex;
-    mutex.lock();
+    QString userId = fullPath.mid(5, 20);
+    bool hasSection = false;
+    // int fromType = fullPath.indexOf("/", 26);
+    int from = fullPath.indexOf("/", 27) + 1;
+    // int fromSection = fullPath.indexOf("/", from) + 1;
+    hasSection = fullPath[from + 2] == "/";
+    // qDebug() << fullPath << fullPath[from + 2] << hasSection << fullPath.mid(hasSection ? fromSection :
+    // from);
+    QString type = fullPath.mid(26);
+    type = type.left(type.indexOf("/"));
+    // qDebug() << type;
 
-    if (!dbConnect.open(pathLocal.toStdString() + DfsStruct::ACTOR_CARD_FILE.toStdString()))
-    {
-        return DfsStruct::service;
-    }
-
-    QByteArray query = "SELECT  type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str())
-        + " WHERE id=" + "'" + path.right(path.length() - path.lastIndexOf("/") - 1).toUtf8() + "'" + ';';
-
-    std::vector<DBRow> data = dbConnect.select(query.toStdString());
-    mutex.unlock();
-    if (data.empty())
-    {
-        return DfsStruct::Type::unknown;
-    }
-
-    int type = -1;
-    try
-    {
-        type = std::stoi(data[0]["type"]);
-        if (type > 100)
-            type -= 100;
-    } catch (std::exception e)
-    {
-        type = 100;
-    }
-
-    return DfsStruct::Type(type);
+    return DfsStruct::convertToDFType(type.toLatin1());
 }
 
 std::string CardManager::pathToRoot(std::string userId)
@@ -158,6 +133,23 @@ std::vector<std::string> CardManager::buildPathForFiles(const std::string &userI
     }
 
     return result;
+}
+
+QString CardManager::cutPath(QString fullPath)
+{
+    QString userId = fullPath.mid(5, 20);
+    bool hasSection = false;
+    // int fromType = fullPath.indexOf("/", 26);
+    int from = fullPath.indexOf("/", 27) + 1;
+    int fromSection = fullPath.indexOf("/", from) + 1;
+    hasSection = fullPath[from + 2] == "/";
+    // qDebug() << fullPath << fullPath[from + 2] << hasSection << fullPath.mid(hasSection ? fromSection :
+    // from);
+    QString type = fullPath.mid(26);
+    type = type.left(type.indexOf("/"));
+    // qDebug() << type;
+
+    return fullPath.mid(hasSection ? fromSection : from);
 }
 
 CardManager::CardManager()

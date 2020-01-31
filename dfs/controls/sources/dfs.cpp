@@ -353,7 +353,7 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
                        bool isFilePath)
 {
     QByteArray sign = accountControler->getMainActor()->getKey()->sign(
-        (isFilePath ? path.right(path.length() - path.lastIndexOf("/") - 1) : path).toUtf8()); //
+        (isFilePath ? CardManager::cutPath(path) : path).toUtf8()); //
 
     CardFile cardFile(userId);
     if (!cardFile.open())
@@ -515,9 +515,7 @@ void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver)
 {
     if (sender == nullptr)
         return;
-    sender->sendFragments(
-        path, CardManager::getTypeByName(path, Serialization::deserialize(path, '/').at(1).toUtf8()), frags,
-        receiver);
+    sender->sendFragments(path, CardManager::getTypeByName(path), frags, receiver);
 }
 
 Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent)
@@ -814,26 +812,7 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
 
 DfsStruct::Type Dfs::getFileType(const QString &filePath)
 {
-    QString userId = filePath.mid(5, 20); //
-    QString cardFile = "data/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE;
-    if (filePath == cardFile)
-        return DfsStruct::Type::unknown;
-    if (!QFile::exists(cardFile))
-        return DfsStruct::Type::error;
-    DBConnector dfsCard(cardFile.toStdString());
-    std::vector<DBRow> res = dfsCard.select(
-        ("SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str()) + " WHERE id='"
-         + filePath.right(filePath.length() - filePath.lastIndexOf("/") - 1) + "';")
-            .toStdString());
-
-    if (!res.empty())
-    {
-        if (res[0]["type"].empty())
-            return DfsStruct::Type::error;
-        return DfsStruct::Type(std::stoi(res[0]["type"]));
-    }
-
-    return DfsStruct::Type::unknown;
+    return CardManager::getTypeByName(filePath);
 }
 
 QStringList Dfs::tmpFiles() const
@@ -1210,8 +1189,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
             switch (type)
             {
-            case DfsStruct::ChangeType::Insert:
-            {
+            case DfsStruct::ChangeType::Insert: {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
                 DBRow row;
@@ -1220,8 +1198,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 rows.push_back(row);
                 break;
             }
-            case DfsStruct::ChangeType::Delete:
-            {
+            case DfsStruct::ChangeType::Delete: {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
 
