@@ -159,6 +159,10 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
     }
 
     dfsValidate(response.actorId);
+
+#ifdef ETALONIUM_CONSOLE
+    sender->sendDfsMessage(response, Messages::DFSMessage::responseCardPath, receiver);
+#endif
 }
 
 void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cardFileChange)
@@ -793,7 +797,7 @@ DfsStruct::Type Dfs::getFileType(const QString &filePath)
         return DfsStruct::Type::error;
     DBConnector dfsCard(cardFile.toStdString());
     std::vector<DBRow> res = dfsCard.select(
-        ("SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str()) + " WHERE path='"
+        ("SELECT type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str()) + " WHERE id='"
          + filePath.right(filePath.length() - filePath.lastIndexOf("/") - 1) + "';")
             .toStdString());
 
@@ -850,7 +854,7 @@ void Dfs::dfsSyncT()
 
     if (accountControler->getMainActor() == nullptr)
         return;
-
+    dfsValidateAll();
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
     QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
