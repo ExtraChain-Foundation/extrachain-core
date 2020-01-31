@@ -28,6 +28,7 @@ bool DBConnector::open(std::string name)
 {
     this->m_file = name;
     int rc = sqlite3_open(name.c_str(), &db);
+    qDebug() << name.c_str();
     if (rc)
     {
         qDebug() << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
@@ -81,8 +82,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
             std::string t;
             switch (sqlite3_column_type(stmt, i))
             {
-            case (SQLITE_BLOB):
-            {
+            case (SQLITE_BLOB): {
                 int size = sqlite3_column_bytes(stmt, i);
                 t = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
                 break;
@@ -162,8 +162,15 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool n
         else
         {
             s = it->second; // ReplaceAll(it->second, "'", "''");
-            s.insert(0, "'");
-            s.append("', ");
+            if (it->second == "auto_max")
+            {
+                s = "(SELECT IFNULL(MAX(" + it->first + "), 0) + 1 FROM " + tableName + "), ";
+            }
+            else
+            {
+                s.insert(0, "'");
+                s.append("', ");
+            }
         }
         v.append(s);
     }

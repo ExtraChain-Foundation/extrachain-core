@@ -183,9 +183,12 @@ void NetManager::findLocal()
             {
                 local = new QNetworkAddressEntry(entry);
                 qDebug() << "Discovered local:" << local->ip().toString();
-                if (interface.type() == QNetworkInterface::Wifi
-                    || interface.type() == QNetworkInterface::Ethernet)
-                    break;
+
+                if (interface.name().left(2) == "wl" || interface.name().left(3) == "eth")
+                {
+                    qDebug() << "done";
+                    return;
+                }
             }
         }
     }

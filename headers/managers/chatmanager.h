@@ -97,9 +97,8 @@ public slots:
 signals:
     void newNotify(const notification ntf);
     void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
-    void sendDataToBlockhainFromChatManager(
-        const QString &path, const DfsStruct::Type &type,
-        const DfsStruct::SubType &subType = DfsStruct::SubType::subpost); //----- connet with dfs
+    void sendDataToBlockhainFromChatManager(const QString &path,
+                                            const DfsStruct::Type &type); //----- connet with dfs
 
     void chatListSend(QList<UIChat> chats);
     void chatSend(QByteArray chatId, QList<UIMessage> messages);
@@ -110,8 +109,7 @@ signals:
     void finished();
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
-    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
-              const DfsStruct::SubType subType);
+    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
 };
 

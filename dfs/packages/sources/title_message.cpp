@@ -10,6 +10,8 @@ bool DistFileSystem::titleMessage::isEmpty() const
         return true;
     if (dataHash.isEmpty())
         return true;
+    // if (prevId.isEmpty())
+    //    return true;
     return false;
 }
 
@@ -37,7 +39,7 @@ const QList<QByteArray> DistFileSystem::titleMessage::serializedParams() const
 {
     QList<QByteArray> list;
     list << filePath.toUtf8() << QByteArray::number(static_cast<long long>(pckgsAmount))
-         << QByteArray::number(fileSize) << dataHash << QByteArray::number(f_type);
+         << QByteArray::number(fileSize) << dataHash << QByteArray::number(f_type) << prevId;
     return list;
 }
 
@@ -48,6 +50,7 @@ void DistFileSystem::titleMessage::operator=(DistFileSystem::TitleMessage title)
     fileSize = title.fileSize;
     f_type = title.f_type;
     dataHash = title.dataHash;
+    prevId = title.prevId;
 }
 
 void DistFileSystem::titleMessage::operator=(const QByteArray &serialized)
@@ -73,9 +76,14 @@ QByteArray DistFileSystem::titleMessage::serialize() const
 void DistFileSystem::titleMessage::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+
+    if (l.size() != FIELDS_COUNT)
+        return;
+
     filePath = l.takeFirst();
     pckgsAmount = l.takeFirst().toULong();
     fileSize = l.takeFirst().toLongLong();
     dataHash = l.takeFirst();
     f_type = l.takeFirst().toUInt();
+    prevId = l.takeFirst();
 }

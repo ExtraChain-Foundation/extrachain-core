@@ -6,6 +6,7 @@ SOURCES += \
     $$PWD/dfs/managers/sources/dfsnetmanager.cpp \
     $$PWD/dfs/managers/sources/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
+    $$PWD/dfs/packages/sources/hash_operations.cpp \
     $$PWD/dfs/packages/sources/status.cpp \
     $$PWD/dfs/packages/sources/dfs_request.cpp \
     $$PWD/dfs/packages/sources/dfs_changes.cpp \
@@ -13,7 +14,7 @@ SOURCES += \
     $$PWD/dfs/packages/sources/req_frags_message.cpp \
     $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/packages/sources/ui_messages.cpp \
-    $$PWD/dfs/types/sources/cardfile_interface.cpp \
+    $$PWD/dfs/types/sources/cardfile.cpp \
     $$PWD/sources/managers/chat.cpp \
     $$PWD/sources/managers/chatmanager.cpp \
     $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
@@ -56,12 +57,8 @@ SOURCES += \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
-    $$PWD/dfs/managers/sources/dfsindex.cpp \
-    $$PWD/dfs/managers/sources/storedindex.cpp \
     $$PWD/dfs/types/sources/coin_price.cpp \
-    $$PWD/dfs/types/sources/dfsitem.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
-    $$PWD/dfs/types/sources/stored.cpp \
     $$PWD/sources/managers/node_manager.cpp \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
@@ -80,6 +77,7 @@ HEADERS += \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
+    $$PWD/dfs/packages/headers/hash_operations.h \
     $$PWD/dfs/packages/headers/message_struct.h \
     $$PWD/dfs/packages/headers/req_frags_message.h \
     $$PWD/dfs/packages/headers/status.h \
@@ -97,7 +95,7 @@ HEADERS += \
     $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_changes.h \
-    $$PWD/dfs/types/headers/cardfile_interface.h \
+    $$PWD/dfs/types/headers/cardfile.h \
     $$PWD/headers/managers/chat.h \
     $$PWD/headers/managers/chatmanager.h \
     $$PWD/headers/managers/notification_manager.h \
@@ -141,12 +139,8 @@ HEADERS += \
     $$PWD/headers/utils/list_container.h \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \
-    $$PWD/dfs/managers/headers/dfsindex.h \
-    $$PWD/dfs/managers/headers/storedindex.h \
     $$PWD/dfs/types/headers/coin_price.h \
-    $$PWD/dfs/types/headers/dfsitem.h \
     $$PWD/dfs/types/headers/dfstruct.h \
-    $$PWD/dfs/types/headers/stored.h \
     $$PWD/headers/managers/node_manager.h \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
@@ -159,7 +153,6 @@ HEADERS += \
     $$PWD/headers/network/packages/service/get_tx_message.h \
     $$PWD/headers/network/packages/service/get_tx_pair_message.h \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
-    $$PWD/headers/network/packages/service/response_messages.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \

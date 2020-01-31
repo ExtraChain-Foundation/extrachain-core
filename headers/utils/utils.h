@@ -17,12 +17,13 @@
 #include <QDateTime>
 #include <QStorageInfo>
 #include <QCoreApplication>
+#include <exception>
 
 namespace Network {
 static QString serverIp = "51.68.181.53";
 static const int build = 1500;
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
-static const int DFS_FILE_STATUS_CHECK_TIME = 500;
+static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
 struct DataStruct
 {
     QByteArray msg;
@@ -131,11 +132,15 @@ namespace DataStorage {
     static const std::string cardTableName = "Items";
     static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
-          "path    TEXT PRIMARY KEY NOT NULL, "
-          "date    INT              NOT NULL, "
-          "type    INT              NOT NULL, "
-          "subtype INT                      , "
-          "hash    TEXT             NOT NULL);";
+          "key     INTEGER NOT NULL,"
+          "id      TEXT  NOT NULL, "
+          "type    INT   NOT NULL, "
+          "prevId  TEXT  NOT NULL, "
+          "nextId  TEXT  NOT NULL, "
+          "sign    TEXT  NOT NULL, "
+          "PRIMARY KEY (id, type)"
+          ");";
+
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("

@@ -7,6 +7,7 @@
 #include "req_frags_message.h"
 #include "dfs_message_interface.h"
 #include "dfs_changes.h"
+#include "hash_operations.h"
 #include "status.h"
 
 namespace Messages {

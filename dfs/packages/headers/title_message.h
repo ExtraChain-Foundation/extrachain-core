@@ -5,16 +5,18 @@
 #include "headers/network/packages/message_interface.h"
 
 #include <QFile>
+
 namespace DistFileSystem {
-/*typedef*/ struct titleMessage : public Messages::ISmallMessage
+struct titleMessage : public Messages::ISmallMessage
 {
-    const short FIELDS_COUNT = 5;
+    const short FIELDS_COUNT = 6;
 
     QString filePath;
     unsigned long pckgsAmount = 0;
     long long fileSize = 0;
     unsigned int f_type;
     QByteArray dataHash; // Keccak256
+    QByteArray prevId;
 
     void calcHash(); // filesize, pckgAmount, datahash
 
@@ -22,7 +24,6 @@ namespace DistFileSystem {
     void operator=(titleMessage title);
     void operator=(const QByteArray &serialized);
 
-    // ISmallMessage interface
 public:
     void operator=(QByteArray &serialized) override;
 
@@ -30,7 +31,8 @@ public:
     short getFieldsCount() const override;
     QByteArray serialize() const override;
     void deserialize(const QByteArray &serialized) override;
-} /*TitleMessage*/;
+};
+
 typedef struct titleMessage TitleMessage;
 }
 
