@@ -24,7 +24,8 @@ void Dfs::responseRequestLast(const DistFileSystem::requestLast &request, Socket
 
     for (QByteArray userId : request.actors)
     {
-        QString lastCacheName = QString("%1/%2/root.last").arg(DfsStruct::ROOT_FOOLDER_NAME, userId);
+        QString lastCacheName =
+            QString("%1/%2/root.last").arg(QString(DfsStruct::ROOT_FOOLDER_NAME)).arg(QString(userId));
         QByteArray lastHash;
 
         QFile file(lastCacheName);
@@ -56,7 +57,8 @@ void Dfs::responseResponseLast(const DistFileSystem::responseLast &response, Soc
         QByteArray userId = l[0];
         QByteArray lastHash = l[1];
 
-        QString lastCacheName = QString("%1/%2/root.last").arg(DfsStruct::ROOT_FOOLDER_NAME, userId);
+        QString lastCacheName =
+            QString("%1/%2/root.last").arg(QString(DfsStruct::ROOT_FOOLDER_NAME)).arg(QString(userId));
         QFile file(lastCacheName);
         if (!file.open(QFile::ReadOnly))
             continue;
@@ -1208,7 +1210,8 @@ void Dfs::updateFromNewStored(QString filePath)
 
             switch (type)
             {
-            case DfsStruct::ChangeType::Insert: {
+            case DfsStruct::ChangeType::Insert:
+            {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
                 DBRow row;
@@ -1217,7 +1220,8 @@ void Dfs::updateFromNewStored(QString filePath)
                 rows.push_back(row);
                 break;
             }
-            case DfsStruct::ChangeType::Delete: {
+            case DfsStruct::ChangeType::Delete:
+            {
                 QByteArrayList list = Serialization::universalDeserialize(data, 8);
                 table = list[0];
 
