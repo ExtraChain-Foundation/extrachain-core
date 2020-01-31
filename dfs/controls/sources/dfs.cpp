@@ -466,7 +466,10 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
             cardFileChange.sign = itemFuture[0]["sign"].c_str();
             sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
         }
-        rootFuture.close();
+        else
+        {
+            rootFuture.close();
+        }
     }
 
     this->dfsValidate(userId);
