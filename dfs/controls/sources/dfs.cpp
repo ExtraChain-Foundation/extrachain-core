@@ -433,11 +433,11 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     }
 
     qDebug() << "File received:" << path;
-    auto list = path.split("/");
-    QByteArray userId = list[1].toUtf8();
-    QString fileId = list.last();
 
+    QByteArray userId = path.split("/")[1].toUtf8();
+    QString fileId = CardManager::cutPath(path);
     QString cardFile = "data/" + userId + "/root";
+
     if (QFile::exists(cardFile))
     {
         DBConnector rootFuture;
