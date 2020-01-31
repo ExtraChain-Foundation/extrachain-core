@@ -320,7 +320,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         qDebug() << "!lastRes";
         std::exit(1);
     }
-    DBRow last = lastRes.value();
+    DBRow last = *lastRes;
 
     if (last.empty())
     {
@@ -594,7 +594,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
     auto lastRes = cardFile.last();
     if (!lastRes)
         return;
-    DBRow last = lastRes.value();
+    DBRow last = *lastRes;
 
     DistFileSystem::CardFileChange cardFileChange;
     cardFileChange.key = std::stoi(last["key"]);

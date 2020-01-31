@@ -62,8 +62,11 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
 
     std::string prevId = "-";
     auto lastRes = last();
-    if (lastRes)
-        prevId = lastRes.value()["id"];
+
+    if (lastRes) {
+        auto lastRes2 = *lastRes;
+        prevId = lastRes2["id"];
+    }
 
     DBRow row;
     row.insert({
@@ -87,8 +90,9 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
 
     if (res && lastRes)
     {
+        auto lastRes2 = *lastRes;
         res = m_db.update("UPDATE " + Config::DataStorage::cardTableName + " SET nextId = '"
-                          + fileId.toStdString() + "' WHERE id = '" + lastRes.value()["id"] + "'");
+                          + fileId.toStdString() + "' WHERE id = '" + lastRes2["id"] + "'");
     }
 
     return res;
@@ -102,8 +106,10 @@ bool CardFile::updateLastCache()
     {
         std::string fileId = "-";
         auto lastRes = last();
-        if (lastRes)
-            fileId = lastRes.value()["id"];
+        if (lastRes) {
+            auto lastRes2 = *lastRes;
+            fileId = lastRes2["id"];
+        }
 
         if (!fileId.empty())
             lastCacheFile.write(fileId.c_str());
