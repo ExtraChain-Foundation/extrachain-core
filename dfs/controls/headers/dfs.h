@@ -11,6 +11,7 @@
 #include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "dfs/types/headers/cardfile.h"
+#include <QVector>
 #include <QTimer>
 #include <QDirIterator>
 #include <iterator>
@@ -49,9 +50,6 @@ private:
     void cardDiffRequest(const QString &oldCard, const QString &newCard);
     void getDFSStatus();
 
-public slots:
-    void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
-
 public:
     DFSNetManager *dfsNetManager = nullptr;
     Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
@@ -70,7 +68,7 @@ public:
     void responseRequestCardPath(const DistFileSystem::RequestCardPart &request, SocketPair receiver);
     void responseResponseCardPath(const DistFileSystem::ResponseCardPart &response, SocketPair receiver);
 
-    void applyCardFileChange(DistFileSystem::CardFileChange);
+    void applyCardFileChange(DistFileSystem::CardFileChange, SocketPair receiver);
 
     QStringList tmpFiles() const;
 

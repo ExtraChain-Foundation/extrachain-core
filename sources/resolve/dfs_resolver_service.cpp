@@ -77,6 +77,11 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 
 void DFSResolverService::checkStatus()
 {
+    if (title.filePath.indexOf("root") != -1)
+    {
+        qDebug() << "root";
+    }
+
     QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
@@ -276,7 +281,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
             case DFSMessage::cardFileChange: {
                 DistFileSystem::CardFileChange cardFileChange;
                 cardFileChange = data;
-                dfs->applyCardFileChange(cardFileChange);
+                dfs->applyCardFileChange(cardFileChange, receiver);
                 break;
             }
             case DFSMessage::requestCardPath: {

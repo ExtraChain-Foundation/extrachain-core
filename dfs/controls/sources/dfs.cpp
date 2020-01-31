@@ -161,42 +161,63 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
     dfsValidate(response.actorId);
 
 #ifdef ETALONIUM_CONSOLE
-    sender->sendDfsMessage(response, Messages::DFSMessage::responseCardPath, receiver);
+    // sender->sendDfsMessage(response, Messages::DFSMessage::responseCardPath, receiver);
 #endif
 }
+// int key = -1;
+// QByteArray actorId;
+// QByteArray fileId;
+// QByteArray prevId;
+// QByteArray nextId;
+// int type = -1;
+// QByteArray sign;
+void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair receiver)
+{ //
+#ifdef ETALONIUM_CONSOLE
+    sender->sendDfsMessage(cfc, Messages::DFSMessage::cardFileChange);
+#endif
 
-void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cardFileChange)
-{
-    if (QFile::exists(CardManager::buildPathForFile(cardFileChange.actorId.toStdString(),
-                                                    cardFileChange.fileId.toStdString(),
-                                                    DfsStruct::Type(cardFileChange.type), false)
+    if (QFile::exists(CardManager::buildPathForFile(cfc.actorId.toStdString(), cfc.fileId.toStdString(),
+                                                    DfsStruct::Type(cfc.type), false)
                           .c_str()))
         return;
-    if (cardFileChange.isEmpty())
+
+    if (cfc.isEmpty())
     {
         qDebug() << "cardFileChange = empty";
     }
     else
     {
-        qDebug() << "cardFileChange =" << cardFileChange.fileId << cardFileChange.type;
+        qDebug() << "cardFileChange =" << cfc.fileId << cfc.type;
     }
 
-    auto type = DfsStruct::Type(cardFileChange.type);
+    DBConnector dbc(
+        (DfsStruct::ROOT_FOOLDER_NAME + "/" + cfc.actorId + "/" + DfsStruct::ACTOR_CARD_FILE + ".future")
+            .toStdString());
+    dbc.createTable(Config::DataStorage::cardTableCreation);
 
-    CardFile cardFile(cardFileChange.actorId);
-    if (!cardFile.open())
-        return;
+    DBRow row = { { "key", std::to_string(cfc.key) },     { "id", cfc.fileId.toStdString() },
+                  { "prevId", cfc.prevId.toStdString() }, { "nextId", cfc.nextId.toStdString() },
+                  { "type", std::to_string(cfc.type) },   { "sign", cfc.sign.toStdString() } };
+    bool res = dbc.insert(Config::DataStorage::cardTableName, row);
+    qDebug() << "Save to future" << res;
 
-    bool result = cardFile.append(cardFileChange.fileId, type, cardFileChange.sign, false);
+    std::string file =
+        CardManager::buildPathForFile(cfc.actorId.toStdString(), row["id"], DfsStruct::Type(cfc.type), false);
+    requestFile(QString::fromStdString(file), receiver);
 
-    if (result)
-    {
-        dfsValidate(cardFileChange.actorId); // TODO: delay timer
+    //    auto type = DfsStruct::Type(cardFileChange.type);
 
-#ifdef ETALONIUM_CONSOLE
-        sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
-#endif
-    }
+    //    CardFile cardFile(cardFileChange.actorId);
+    //    if (!cardFile.open())
+    //        return;
+
+    //    bool result = cardFile.append(cardFileChange.fileId, type, cardFileChange.sign, false);
+
+    //    if (result)
+    //    {
+    //        dfsValidate(cardFileChange.actorId); // TODO: delay timer
+    //    }
 }
 
 void Dfs::initDFS(const QByteArray &userId)
@@ -205,6 +226,11 @@ void Dfs::initDFS(const QByteArray &userId)
     QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId);
     QList<QByteArray> subPathList = { "/images/", "/video/",    "/events/", "/system/", "/chats/",
                                       "/posts/",  "/services/", "/cdoctp/", "/cards/" };
+
+    DBConnector dbc(
+        (DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE + ".future")
+            .toStdString());
+    dbc.createTable(Config::DataStorage::cardTableCreation);
 
     for (const QByteArray &currentPath : subPathList)
         QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + currentPath);
@@ -368,6 +394,9 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
             if (QFile::rename(tmpPath, path))
             {
                 {
+                    sender->sendFile("data/" + path.split("/")[1].toUtf8() + "/root",
+                                     DfsStruct::Type::unknown, SocketPair());
+
                     CardFile cardFile(path.mid(5, 20));
                     if (cardFile.open())
                         cardFile.updateLastCache();
@@ -402,7 +431,40 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     }
 
     qDebug() << "File received:" << path;
-    QByteArray userId = path.split("/")[1].toUtf8();
+    auto list = path.split("/");
+    QByteArray userId = list[1].toUtf8();
+    QString fileId = list.last();
+
+    QString cardFile = "data/" + userId + "/root";
+    if (QFile::exists(cardFile))
+    {
+        DBConnector rootFuture;
+        if (!rootFuture.open(cardFile.toStdString() + ".future"))
+        {
+            return;
+        }
+
+        auto itemFuture = rootFuture.select("SELECT * FROM Items WHERE id = '" + fileId.toStdString() + "'");
+
+        if (!itemFuture.empty())
+        {
+            rootFuture.deleteRow("Items", "id", fileId.toStdString());
+            rootFuture.close();
+            DBConnector rootDb(cardFile.toStdString());
+            rootDb.insert("Items", itemFuture[0]);
+            rootDb.close();
+
+            DistFileSystem::CardFileChange cardFileChange;
+            cardFileChange.key = std::stoi(itemFuture[0]["key"]);
+            cardFileChange.actorId = userId;
+            cardFileChange.fileId = itemFuture[0]["id"].c_str();
+            cardFileChange.prevId = itemFuture[0]["prevId"].c_str();
+            cardFileChange.nextId = itemFuture[0]["nextId"].c_str();
+            cardFileChange.type = std::stoi(itemFuture[0]["type"]);
+            cardFileChange.sign = itemFuture[0]["sign"].c_str();
+            sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
+        }
+    }
 
     this->dfsValidate(userId);
 
@@ -454,45 +516,6 @@ void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver)
     sender->sendFragments(
         path, CardManager::getTypeByName(path, Serialization::deserialize(path, '/').at(1).toUtf8()), frags,
         receiver);
-}
-
-void Dfs::checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver)
-{
-    qDebug() << "[&Dfs] check dfs for " << actorId;
-    if (actorId == "1")
-    {
-        QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
-        QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-        for (const QString &el : acList)
-        {
-            QStringList fList = CardManager::getAllFiles(el.toUtf8());
-            for (const QString &file : fList)
-            {
-                DfsStruct::Type ftype = CardManager::getTypeByName(file, el.toUtf8());
-                sender->sendFile(file, ftype, receiver);
-            }
-        }
-    }
-    QDir dir(DfsStruct::ROOT_FOOLDER_NAME + '/' + actorId);
-    if (!dir.exists())
-    {
-        qDebug() << "[&Dfs] Directory for actor" << actorId << "not found";
-        //        emit newSender(request.serialize(), Messages::DFS_MESSAGE);
-        return;
-    }
-    QStringList fileList = CardManager::getAllFiles(actorId);
-    if (fileList != request)
-    {
-        for (const QString &el : fileList)
-            if (!request.contains(el))
-            {
-                DfsStruct::Type type = CardManager::getTypeByName(el, actorId);
-                if (type != DfsStruct::service)
-                    sender->sendFile(el, type, receiver);
-                else
-                    qDebug() << "[&Dfs] the file with path" << el << "not have been found";
-            }
-    }
 }
 
 Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent)
@@ -907,6 +930,7 @@ void Dfs::dfsSync(const SocketPair &receiver)
     fileResponse(myCardFile, receiver);
 }
 
+#include <QVector>
 bool Dfs::dfsValidate(QByteArray userID)
 {
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE;
@@ -945,14 +969,26 @@ bool Dfs::dfsValidate(QByteArray userID)
     {
         return false;
     }
-    auto items = root.select("SELECT * FROM Items");
+    DBConnector rootFuture;
+    if (!rootFuture.open(cardFile.toStdString() + ".future"))
+    {
+        return false;
+    }
+
+    auto itemsFuture = QVector<DBRow>::fromStdVector(rootFuture.select("SELECT * FROM Items"));
+    auto items = QVector<DBRow>::fromStdVector(root.select("SELECT * FROM Items"));
     root.close();
+    rootFuture.close();
+    items << itemsFuture;
+
     if (!items.empty())
     {
         std::string fPath;
         bool flag = true;
         for (DBRow &item : items)
         {
+            if (item["id"].empty())
+                continue;
             fPath = CardManager::buildPathForFile(userID.toStdString(), item["id"],
                                                   DfsStruct::Type(std::stoi(item["type"])), false);
             QFileInfo file(QString::fromStdString(fPath));
@@ -1338,6 +1374,31 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
 
 void Dfs::searchTmp()
 {
+    QStringList dataIds = QDir("data").entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (const QString &id : dataIds)
+    {
+        QString rootPath = "data/" + id + "/root";
+        QFileInfo root(rootPath);
+        // QFileInfo rootTmp(rootPath + ".tmp");
+
+        if (actorIndex->companyId)
+        {
+            QByteArray companyId = *actorIndex->companyId;
+
+            if (id == companyId)
+                continue;
+        }
+
+        if (dfsNetManager->isLoading(rootPath))
+            return;
+
+        if (!root.exists() || root.size() == 0)
+        {
+            requestFile(rootPath);
+        }
+    }
+
     QDirIterator dirIt("data", QDirIterator::Subdirectories);
     QSet<QString> tmpFiles;
 

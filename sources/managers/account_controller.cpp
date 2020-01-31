@@ -90,7 +90,7 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     if (account == 1)
     {
         qDebug() << "Dfs hash init for me";
-        emit initDfs();
+        emit initDfs(); //
     }
     emit newActorIsCreated(this->getMainActor()->getId(), account);
 
