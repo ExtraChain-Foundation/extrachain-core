@@ -85,6 +85,7 @@ void DFSNetManager::connectResolver(DFSResolverService *resolver)
     connect(resolver, &DFSResolverService::dfsTitle, this, &DFSNetManager::titleArrived);
     connect(this, &DFSNetManager::newMessage, resolver, &DFSResolverService::assignNewTask);
     connect(resolver, &DFSResolverService::TaskFinished, this, &DFSNetManager::removeResolver);
+    connect(this, &DFSNetManager::newSocket, dfs, &Dfs::dfsSyncT);
 }
 
 void DFSNetManager::disconnectResolver(DFSResolverService *resolver)
@@ -236,7 +237,8 @@ void DFSNetManager::checkMyIdentificator()
                 emit el->removeMe();
         }
     });
-    dfs->dfsSync(connection->getSocketPair());
+
+    emit newSocket();
     //    dfs->requestAllCards();
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);

@@ -379,15 +379,15 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     }
 
     // TODO: no insert to dfs file with size = 0
-    if (QFile(tmpPath).size() == 0)
-    {
-        if (tmpPath.right(5) == "/root")
-        {
-            QFile::remove(tmpPath);
-            requestFile(path);
-        }
-        return;
-    }
+    //    if (QFile(tmpPath).size() == 0)
+    //    {
+    //        if (path.right(5) == "/root")
+    //        {
+    //            QFile::remove(tmpPath);
+    //            requestFile(path);
+    //        }
+    //        return;
+    //    }
 
     if (path.right(5) == "/root" && path.length() == 30) // (type == DfsStruct::Type::root)
     {
@@ -396,9 +396,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
             if (QFile::rename(tmpPath, path))
             {
                 {
-                    sender->sendFile("data/" + path.split("/")[1].toUtf8() + "/root",
-                                     DfsStruct::Type::unknown, SocketPair());
-
                     CardFile cardFile(path.mid(5, 20));
                     if (cardFile.open())
                         cardFile.updateLastCache();
@@ -419,6 +416,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
         }
     }
     file.rename(path);
+    if (file.isOpen())
+        file.close();
 
     int indx = m_tmpFiles.indexOf(path);
     if (indx != -1)
@@ -528,6 +527,8 @@ Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *paren
     , actorIndex(actorIndex)
 {
     connect(this, &Dfs::sendFromNetwork, this, &Dfs::save, Qt::QueuedConnection);
+    connect(this, &Dfs::requestFile, this, &Dfs::requestFileHandle);
+    connect(this, &Dfs::titleReceived, this, &Dfs::titleReceivedHandle);
 }
 
 Dfs::~Dfs()
@@ -837,29 +838,6 @@ void Dfs::dfsSyncUsers(QList<QString> userID, const SocketPair &receiver)
 
 void Dfs::dfsSyncT()
 {
-    // request other roots
-
-    //    QByteArrayList aList = actorIndex->allActors();
-    //    QList<QByteArray>::iterator it;
-    //    it = aList.begin();
-    //    while (it != aList.end())
-    //    {
-    //        QByteArray b = *it;
-    //        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(b));
-    //        if (actor.isEmpty())
-    //        {
-    //            it = aList.erase(it);
-    //        }
-    //        else if (actor.getAccount() != actorType::ACCOUNT)
-    //        {
-    //            it = aList.erase(it);
-    //        }
-    //        else
-    //        {
-    //            ++it;
-    //        }
-    //    }
-
     if (accountControler->getMainActor() == nullptr)
         return;
     dfsValidateAll();
@@ -868,51 +846,44 @@ void Dfs::dfsSyncT()
     QStringList reqCards;
     QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
     QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-    //    int pos = acList.indexOf(mainActor);
-    //    if (pos != -1)
-    //        acList.removeAt(pos);
     dfsSyncUsers(acList);
-    // send my root
-    fileResponse(myCardFile, SocketPair());
 }
 
 void Dfs::dfsSync(const SocketPair &receiver)
 {
-    // request other roots
+    //    // request other roots
 
-    //    QByteArrayList aList = actorIndex->allActors();
-    //    QList<QByteArray>::iterator it;
-    //    it = aList.begin();
-    //    while (it != aList.end())
-    //    {
-    //        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(*it));
-    //        if (actor.isEmpty())
-    //        {
-    //            aList.removeOne(*it);
-    //        }
-    //        else if (actor.getAccount() != actorType::ACCOUNT)
-    //        {
-    //            aList.removeOne(*it);
-    //        }
-    //        else
-    //        {
-    //            ++it;
-    //        }
-    //    }
-    if (accountControler->getMainActor() == nullptr)
-        return;
+    //    //    QByteArrayList aList = actorIndex->allActors();
+    //    //    QList<QByteArray>::iterator it;
+    //    //    it = aList.begin();
+    //    //    while (it != aList.end())
+    //    //    {
+    //    //        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(*it));
+    //    //        if (actor.isEmpty())
+    //    //        {
+    //    //            aList.removeOne(*it);
+    //    //        }
+    //    //        else if (actor.getAccount() != actorType::ACCOUNT)
+    //    //        {
+    //    //            aList.removeOne(*it);
+    //    //        }
+    //    //        else
+    //    //        {
+    //    //            ++it;
+    //    //        }
+    //    //    }
+    //    if (accountControler->getMainActor() == nullptr)
+    //        return;
 
-    QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
-    QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
-    QStringList reqCards;
-    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
-    QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
-    //    int pos = acList.indexOf(mainActor);
-    //    if (pos != -1)
-    //        acList.removeAt(pos);
-    dfsSyncUsers(acList, receiver);
-    // send my root
-    fileResponse(myCardFile, receiver);
+    //    QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
+    //    QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
+    //    QStringList reqCards;
+    //    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
+    //    QStringList acList = acDir.entryList(QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+    //    //    int pos = acList.indexOf(mainActor);
+    //    //    if (pos != -1)
+    //    //        acList.removeAt(pos);
+    //    dfsSyncUsers(acList, receiver);
 }
 
 #include <QVector>
@@ -1039,7 +1010,7 @@ void Dfs::startDFS()
     emit networkCreated();
 }
 
-void Dfs::requestFile(const QString &filePath, const SocketPair &receiver)
+void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
 {
     // if (QFile::exists(filePath))
     // {
@@ -1053,13 +1024,47 @@ void Dfs::requestFile(const QString &filePath, const SocketPair &receiver)
         return;
     }
 
+    if (filePath.indexOf("/root") != -1)
+    {
+        qDebug() << "root requested";
+    }
+
     if (dfsNetManager->isLoading(filePath))
         return;
 
+    //    if (m_reqFiles.indexOf(filePath) != -1)
+    //        return;
+    auto it = std::find_if(m_reqFiles.begin(), m_reqFiles.end(),
+                           [filePath](std::pair<qint64, QString> pair) { return pair.second == filePath; });
+    if (it != m_reqFiles.end())
+    {
+        qint64 current = QDateTime::currentDateTime().toMSecsSinceEpoch();
+        qint64 reqDate = it->first;
+        if (reqDate + 5000 <= current)
+        {
+            // m_reqFiles.erase(it);
+        }
+        else
+            return;
+    }
+
+    m_reqFiles.append({ QDateTime::currentDateTime().toMSecsSinceEpoch(), filePath });
     qDebug() << "Request file:" << filePath; // TODO: fix for company actor
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
     sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage, receiver);
+}
+
+void Dfs::titleReceivedHandle(QString filePath)
+{
+    //    auto it = std::find_if(m_reqFiles.begin(), m_reqFiles.end(),
+    //                           [filePath](std::pair<qint64, QString> pair) { return pair.second == filePath;
+    //                           });
+    //    if (it != m_reqFiles.end())
+    //    {
+    //        m_reqFiles.erase(it);
+    //    }
+    //    qDebug() << "m_reqFiles" << m_reqFiles.length();
 }
 
 QByteArray Dfs::buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type)
@@ -1359,6 +1364,17 @@ void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Typ
 
 void Dfs::searchTmp()
 {
+    qint64 current = QDateTime::currentDateTime().toMSecsSinceEpoch();
+
+    for (auto it = m_reqFiles.begin(); it != m_reqFiles.end(); it++)
+    {
+        qint64 reqDate = it->first;
+        if (reqDate + 5000 <= current)
+            m_reqFiles.erase(it--);
+    }
+
+    qDebug() << "search tmp" << m_reqFiles.length();
+
     QStringList dataIds = QDir("data").entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
     for (const QString &id : dataIds)
@@ -1428,6 +1444,7 @@ void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 
     QString fileName = "data/" + userId + "/root";
 
+    qDebug() << ">>>>" << fileName << QFile::exists(fileName) << QFile(fileName).size();
     if (!QFile::exists(fileName) || QFile(fileName).size() == 0)
     {
         requestFile(fileName);
@@ -1447,5 +1464,5 @@ void Dfs::requestAllCards()
     const QByteArrayList allUserIds = actorIndex->allActors();
 
     for (const QString &id : allUserIds)
-        requestFile("data/" + id + "/root");
+        requestCardById(id.toLatin1());
 }

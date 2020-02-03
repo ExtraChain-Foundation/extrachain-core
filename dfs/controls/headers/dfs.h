@@ -84,6 +84,8 @@ signals:
     void connectToServer();
     void networkCreated();
     void newNotify(const notification ntf);
+    void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
+    void titleReceived(QString filePath);
 
 public slots:
     void initMyLocalStorage();
@@ -97,7 +99,8 @@ public slots:
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void startDFS();
-    void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
+    void requestFileHandle(const QString &filePath, const SocketPair &receiver);
+    void titleReceivedHandle(QString filePath);
     void searchTmp();
     void requestCardById(QByteArray userId, const SocketPair &receiver = SocketPair());
     void requestAllCards();
@@ -114,6 +117,7 @@ private:
 
     QTimer *timerTmpFiles;
     QStringList m_tmpFiles;
+    QVector<std::pair<qint64, QString>> m_reqFiles;
 };
 
 #endif // DFS_H
