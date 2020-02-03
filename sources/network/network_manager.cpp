@@ -35,7 +35,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
     qDebug() << "Current server IPs:" << serverIp << "| allow local:" << allowLocalServer;
 
     //    deviceId = BigNumber(readNetManagerIdentificator());
-    // ThreadPool::addThread(this);
+    //    ThreadPool::addThread(this);
 
     this->extPort = 2223;
     this->netPort = serverPort;
@@ -83,7 +83,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 void NetManager::process()
 {
     startNetwork();
-    connectToServer(serverPort, local);
+    // connectToServer(serverPort, local);
     QTimer *timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &NetManager::checkConnectionsStatus);
     timer->start(5000);
@@ -183,9 +183,12 @@ void NetManager::findLocal()
             {
                 local = new QNetworkAddressEntry(entry);
                 qDebug() << "Discovered local:" << local->ip().toString();
-                if (interface.type() == QNetworkInterface::Wifi
-                    || interface.type() == QNetworkInterface::Ethernet)
-                    break;
+
+                if (interface.name().left(2) == "wl" || interface.name().left(3) == "eth")
+                {
+                    qDebug() << "done";
+                    return;
+                }
             }
         }
     }
@@ -198,6 +201,37 @@ void NetManager::checkConnectionsStatus()
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit qmlNetworkStatus(flag);
     emit qmlNetworkSockets(connections.length());
+
+#ifdef ETALONIUM_CLIENT
+    if (flag)
+    {
+        QFile file("network_cache");
+        if (!file.exists())
+            return;
+        if (!file.open(QFile::ReadOnly))
+            return;
+        QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
+
+        for (QByteArray packageData : allPackages)
+        {
+            QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
+            if (package.length() != 4)
+                return;
+
+            QByteArray data = package[0];
+            SocketPair socketData;
+            socketData.ip = package[1].toStdString();
+            socketData.port = package[2].toShort();
+            socketData.iden = package[3];
+
+            for (int i = 0; i < connections.size(); i++)
+                connections[i]->distMsg(data, socketData);
+        }
+
+        file.close();
+        file.remove();
+    }
+#endif
 }
 
 void NetManager::restoreConnections(const QList<SocketPair> &socketList)
@@ -205,7 +239,7 @@ void NetManager::restoreConnections(const QList<SocketPair> &socketList)
     //
     for (const SocketPair &el : socketList)
     {
-        addConnectionFromPair(QHostAddress(QString::fromStdString(el.first)), el.second);
+        addConnectionFromPair(QHostAddress(QString::fromStdString(el.ip)), el.port);
     }
 }
 
@@ -221,15 +255,28 @@ void NetManager::checkMyIdentificator()
         connection->removeMe();
 
     // short counter = 0;
-    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
-        if (el->getIdentificator() == connection->getIdentificator())
+    for (SocketService *el : connections)
+    {
+        if (el->getIdentificator() == connection->getIdentificator() && el != connection)
         {
-            if (el == connection)
-                emit el->setActiveSignal(true);
-            else
-                emit el->removeMe();
+            emit el->removeMe();
+            return;
         }
-    });
+    }
+    emit connection->setActiveSignal(true);
+    emit newSocket();
+    //    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
+    //        if (el->getIdentificator() == connection->getIdentificator())
+    //        {
+    //            if (el == connection)
+    //            {
+    //                emit el->setActiveSignal(true);
+    //            }
+    //            else
+    //                emit el->removeMe();
+    //        }
+    //    });
+
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }
@@ -360,10 +407,12 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
     return flag_result;
 }
 
-void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
+void NetManager::dfsToPeerTmp(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
 {
-    BaseMessage msg(msgType);
-    msg.init(data);
+    BaseMessage msg;
+    msg.type = msgType;
+    msg.data = data;
+    //    msg.setMsgData(data);
 
     //    emit sendMsg(msg.serialize(), receiver);
     distMessage(msg.serialize(), receiver);
@@ -371,8 +420,29 @@ void NetManager::dfsToPeerTmp(const QByteArray &data, const QByteArray &msgType,
 
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
-    for (int i = 0; i < connections.size(); i++)
-        connections[i]->distMsg(data, socketData);
+#ifdef ETALONIUM_CLIENT
+    bool flag = false;
+    std::for_each(connections.begin(), connections.end(),
+                  [&flag](SocketService *el) { flag = flag || el->getActive(); });
+
+    if (flag)
+    {
+#endif
+        for (int i = 0; i < connections.size(); i++)
+            connections[i]->distMsg(data, socketData);
+#ifdef ETALONIUM_CLIENT
+    }
+    else
+    {
+        QFile file("network_cache");
+        file.open(QFile::Append);
+        QByteArrayList list = { data, QByteArray::fromStdString(socketData.ip),
+                                QByteArray::number(socketData.port), socketData.iden };
+        QByteArray package = Serialization::universalSerialize(list, 8);
+        file.write(Utils::intToByteArray(package.length(), 8) + package);
+        file.close();
+    }
+#endif
 }
 
 void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
@@ -420,6 +490,7 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
 
     ThreadPool::addThread(connections.last());
+    //    connections.last()->process();
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     return connections.last();
 }
@@ -437,6 +508,10 @@ void NetManager::addConnection(qint64 socketDescriptor)
 void NetManager::removeConnection()
 {
     QObject *sender = QObject::sender();
+
+    if (sender == nullptr)
+        return;
+
     SocketService *connection = qobject_cast<SocketService *>(sender);
     disconnectSocket(connection);
     connections.removeAt(connections.indexOf(connection));
@@ -444,7 +519,7 @@ void NetManager::removeConnection()
     checkConnectionsStatus();
 }
 
-void NetManager::signMessage(IMessage &message) const
+void NetManager::signMessage(BaseMessage &message) const
 {
     message.calcDigSig(*accounts->getMainActor());
 }
@@ -456,11 +531,12 @@ QByteArray NetManager::calcHash(const Messages::IMessage &message) const
 
 void NetManager::createNewConnectionsFromList(const QByteArray &message)
 {
-    EnableConnections msg(message);
-    QList<std::pair<int, std::string>> list = msg.getEnableConnections();
+    Messages::ConnectionsMessage msg;
+    msg = message;
+    std::vector<std::pair<std::string, int>> list = msg.hosts;
     for (auto &el : list)
     {
-        SocketService *newSock = new SocketService(QString::fromStdString(el.second), el.first);
+        SocketService *newSock = new SocketService(QString::fromStdString(el.first), el.second);
         if (connections.indexOf(newSock) == -1)
         {
             connections.append(newSock);

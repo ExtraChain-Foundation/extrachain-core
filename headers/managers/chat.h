@@ -10,6 +10,7 @@
 
 struct UIMessage
 {
+    QString messId;
     QString userId;
     QString message;
     QDateTime date;
@@ -40,19 +41,18 @@ private:
     QByteArray getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
     QByteArray pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
     // paths end
-    BigNumber findCurrentSession();                                                //+
-    void InitializeAllPaths();                                                     //+
-    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
-                                                                                   //+
-    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {});   //+
-    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);              //+
+    BigNumber findCurrentSession();                                              //+
+    void InitializeAllPaths();                                                   //+
+                                                                                 //+
+    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
+    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
 
 public:
     Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
          BigNumber sessionNumb = -1); //+
     Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
-         AccountController* accountController, QList<QByteArray> users, QByteArray ownerId = "-1"); //+
-    Chat(const Chat& tempChat);                                                                     //+
+         AccountController* accountController, QList<QByteArray> users, QByteArray _ownerId = "-1"); //+
+    Chat(const Chat& tempChat);                                                                      //+
     ~Chat();
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-
@@ -63,7 +63,6 @@ public:
     bool createNewSession(QByteArray key, QList<QByteArray> users = {},
                           QByteArray _ownerId = "-1"); //+
     QByteArray sendMessage(QByteArray message);        //+
-    void receiveMessage(QByteArray message);
     // getters setters
     QByteArray getChatId() const;                    //+
     QByteArray getEncryptionKey() const;             //+
@@ -83,6 +82,8 @@ public:
     void removeAllChatData();
     QByteArray encryptMessage(QByteArray message); //+
     QByteArray decryptMessage(QByteArray message);
+    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
+    void saveChatsId(const QByteArray& chatId);
 
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager

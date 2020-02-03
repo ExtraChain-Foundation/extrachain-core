@@ -10,11 +10,21 @@ class SocketService;
 #include "dfs/packages/headers/all.h"
 #include "resolve/dfs_resolver_service.h"
 #include "utils/utils.h"
+
+#ifdef ETALONIUM_CONSOLE
+static const short DFS_RESOLVERS_POOL_SIZE = 10;
+#endif
+
+#ifdef ETALONIUM_CLIENT
+static const short DFS_RESOLVERS_POOL_SIZE = 5;
+#endif
+
 class Dfs;
 class DFSNetManager : public NetManager
 {
     Q_OBJECT
 private:
+    std::queue<Network::DataStruct> titleVector;
     Dfs *dfs;
     DFSResolverService *uResolver;
     QList<DFSResolverService *> dfsResolvers;
@@ -39,21 +49,25 @@ private:
     //    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler) override;
     void connectResolver(DFSResolverService *resolver);
     void disconnectResolver(DFSResolverService *resolver);
+    void createDFSResolver(Network::DataStruct ds);
 
 public:
     NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
-    void send(const QByteArray &message, const QByteArray &msgType = Messages::DFS_MESSAGE,
+    void send(const QByteArray &message, const unsigned int &msgType,
               const SocketPair &receiver = SocketPair());
 
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
+
+    QList<DFSResolverService *> getDfsResolvers() const;
 
 signals:
     void newMessage(Network::DataStruct data);
     void finished();
     //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
     //    void newMessage(const QByteArray &message, const SocketPair &receiver);
+
 public slots:
     void appendSocket(SocketService *socket);
     //    void newMsg(const QByteArray &message, const SocketPair &receiver);

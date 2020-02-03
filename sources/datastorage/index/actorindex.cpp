@@ -25,11 +25,25 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     }
     else
     {
-        Messages::GetActorMessage msg(id);
-        resolveManager->registrateMsg(msg.serialize(), getActorMessage);
+        Messages::GetActorMessage msg;
+        msg.actorId = id;
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         //        emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
+    }
+}
+
+bool ActorIndex::hasActor(const BigNumber &id)
+{
+    QByteArray serializedActor = this->getById(id);
+    if (!serializedActor.isEmpty())
+    {
+        return true;
+    }
+    else
+    {
+        return false;
     }
 }
 
@@ -41,8 +55,9 @@ void ActorIndex::removeActor(const BigNumber &id, bool resend)
 
     if (resend)
     {
-        Messages::GetActorMessage msg(id);
-        resolveManager->registrateMsg(msg.serialize(), getActorMessage);
+        Messages::GetActorMessage msg;
+        msg.actorId = id;
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
     }
 }
 
@@ -81,13 +96,27 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.isEmpty())
     {
-        resolveManager->sendMessageResponse(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
-                                            receiver);
+        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse,
+                                            reqHash, receiver);
         //        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
         //        receiver);
+
         if (!actor.profile().getProfile().isEmpty())
-            resolveManager->registrateMsg(actor.profile().serialize(), Messages::PROFILE_FILE);
+            resolveManager->registrateMsg(actor.profile().serialize(),
+                                          Messages::ChainMessage::profileMessage);
+        else if (actor.getAccount() != 0 && actor.getAccount() != 2)
+        {
+            Messages::GetActorMessage msg;
+            msg.actorId = actorId;
+            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        }
         //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+    }
+    else
+    {
+        Messages::GetActorMessage msg;
+        msg.actorId = actorId;
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
     }
 }
 
@@ -95,24 +124,13 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
 {
     if (accController->getAccountCount() == 0)
         return;
-    QByteArrayList result;
-    QDir folder(folderPath);
-    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString &folderName : listFolder)
-    {
-        QDir folderActor(folderPath + "/" + folderName);
-        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
-        for (const QString &nameActor : listActor)
-        {
-            QFile file(folderPath + "/" + folderName + "/" + nameActor);
-            if (file.exists())
-                result.append(nameActor.toUtf8());
-        }
-    }
+
+    QByteArrayList result = allActors();
     if (!result.isEmpty())
     {
-        resolveManager->sendMessageResponse(Serialization::universalSerialize(result, 4),
-                                            Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
+        QByteArray data = Serialization::universalSerialize(result, 4);
+        resolveManager->sendMessageResponse(data, Messages::GeneralResponse::getAllActorsResponse, reqHash,
+                                            receiver);
         //        emit responseReady(Serialization::universalSerialize(result, 4),
         //                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
     }
@@ -123,8 +141,10 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
 {
     if (accController->getAccountCount() > 0)
     {
-        Messages::GetAllActorMessage msg(id);
-        resolveManager->registrateMsg(msg.serialize(), getAllActorMessage);
+        Messages::GetAllActorMessage msg;
+        msg.actorId = id.toActorId();
+        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetAllActors);
+        qDebug() << "GetAllActors";
         //    emit sendMessage(msg.serialize(), getAllActorMessage);
     }
 }
@@ -173,7 +193,8 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &
 
     qDebug() << "BLOCKCHAIN: getActorCount() count - " << this->getRecords();
     resolveManager->sendMessageResponse(this->getRecords().toByteArray(),
-                                        Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE, requestHash, receiver);
+                                        Messages::GeneralResponse::getActorCountResponse, requestHash,
+                                        receiver);
     //    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
     //                       requestHash, receiver);
 }
@@ -193,7 +214,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
         emit sendProfileToUi(profile.id, key.profile().getListProfile());
-        resolveManager->registrateMsg(profile.serialize(), profileType);
+        resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
         // emit sendMessage(profile.serialize(), profileType)
     }
     else
@@ -204,8 +225,8 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 {
     if (key->getHash().isEmpty())
         return;
-    qDebug() << "Save profile with id" << newProfile.at(2);
-    QByteArray path = buildFilePath(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
+    qDebug() << "Save PublicProfile with id" << newProfile.at(2);
+    QByteArray path = buildPathPubProfile(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
     QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
     if (pubProfile.sign == "")
@@ -215,7 +236,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     }
     else
     {
-        resolveManager->registrateMsg(pubProfile.serialize(), profileType);
+        resolveManager->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::profileMessage);
         //        emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
@@ -232,9 +253,9 @@ void ActorIndex::requestProfile(QString id)
     QByteArrayList list = actor.profile().getListProfile();
 
     // for test data: start
-    if (id == "e29c3ac05137ccfc3cde" || id == "6a502ef66fc591980a25" || id == "5078dfb53efc693e1291"
-        || id == "91609376cc6ee0694255")
-        list.insert(15, "static/avatar");
+    //    if (id == "e29c3ac05137ccfc3cde" || id == "6a502ef66fc591980a25" || id == "5078dfb53efc693e1291"
+    //        || id == "91609376cc6ee0694255")
+    //        list.insert(15, "static/avatar");
     // for test data: remove
 
     emit sendProfileToUi(id, list);
@@ -249,9 +270,11 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != 0)
+        if (actor.getAccount() != 0 && actor.getAccount() != 2 && resolveManager != nullptr)
         {
-            removeActor(id.toLatin1());
+            Messages::GetActorMessage msg;
+            msg.actorId = BigNumber(id.toLocal8Bit());
+            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         }
 
         return QByteArrayList();
@@ -298,6 +321,21 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const
     return pathToFolder + "/" + Id;
 }
 
+QString ActorIndex::buildPathPubProfile(const QByteArray &id)
+{
+    QString pathToFolder = ChatStorage::STORED_CHATS + id + "/profile/";
+
+    QDir dir(pathToFolder);
+    if (!dir.exists())
+    {
+        qDebug() << "Creating dir:" << pathToFolder;
+        dir = QDir();
+        dir.mkpath(pathToFolder);
+    }
+
+    return pathToFolder + id + ".profile";
+}
+
 void ActorIndex::setCompanyId(QByteArray *value)
 {
     companyId = value;
@@ -315,19 +353,19 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 
     qDebug() << "Saving the file:" << path;
 
+    QString profilePath = buildPathPubProfile(id.toActorId());
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
         return Errors::FILE_ALREADY_EXISTS;
     }
-
+    if (!file.exists())
+        this->records++;
     if (file.open(QIODevice::WriteOnly))
     {
         file.write(data);
         file.flush();
         file.close();
-
-        this->records++;
 
         return 0;
     }
@@ -362,7 +400,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     {
         qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
                  << "lsd: ";
-        resolveManager->registrateMsg(actor.serialize(), classType);
+        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
         //        emit sendMessage(actor.serialize(), classType);
 
         if (actor.getAccount() > 0)
@@ -373,6 +411,28 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     }
     return result;
 }
+
+QByteArrayList ActorIndex::allActors()
+{
+    QByteArrayList result;
+    QDir folder(folderPath);
+    QStringList listFolder = folder.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (const QString &folderName : listFolder)
+    {
+        QDir folderActor(folderPath + "/" + folderName);
+        QStringList listActor = folderActor.entryList(QDir::Files | QDir::NoDotAndDotDot);
+        for (const QString &nameActor : listActor)
+        {
+            QFile file(folderPath + "/" + folderName + "/" + nameActor);
+            if (file.exists())
+                result.append(nameActor.toUtf8());
+        }
+    }
+
+    return result;
+}
+
 void ActorIndex::removeAll()
 {
     qDebug() << "Clearing file index: " << folderPath;
@@ -391,78 +451,78 @@ void ActorIndex::removeAll()
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
+    QString folderPath = "data";
     QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+
     for (const QString &section : sectionList)
     {
-        QString profileFolderPath = folderPath + section + "/profile";
+        QString profileFolderPath = folderPath + +"/" + section + "/" + section + ".profile";
         QStringList profilePathList =
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
-        for (const QString &profilePath : profilePathList)
-        {
-            Profile profile = getProfile(profilePath.mid(0, profilePath.size() - 8));
 
-            if (profile.at(2) == "")
-                continue;
-            if (profile.userId() == filters.currentId)
-                continue;
-            qint16 type = profile.type();
-            if (type == 0 || type == 6)
-                continue;
+        Profile profile = getProfile(section);
 
-            QString firstName = profile.firstName().toLower();
-            QString lastName = profile.lastName().toLower();
+        if (profile.at(2) == "")
+            continue;
+        if (profile.userId() == filters.currentId)
+            continue;
+        qint16 type = profile.type();
+        if (type == 0 || type == 6)
+            continue;
 
-            if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
-                  || profile.lastName().toLower().startsWith(filters.name.toLower())))
-                continue;
+        QString firstName = profile.firstName().toLower();
+        QString lastName = profile.lastName().toLower();
 
-            /*
-            if (profile.type() != filters.userType && filters.userType != -1)
-                continue;
-            if (profile.country() != filters.location && filters.location != -1)
-                continue;
-            if (profile.gender() != filters.gender && filters.gender != -1)
-                continue;
-            if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
-                continue;
-            if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
-                continue;
-            if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
-                continue;
-            if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
-                continue;
-            if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
-                continue;
-            if (filters.category != profile.category() && !filters.category.isEmpty())
-                continue;
-            if (filters.body != profile.body() && !filters.body.isEmpty())
-                continue;
-            if (filters.hair != profile.hair() && !filters.hair.isEmpty())
-                continue;
-            if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
-                continue;
-            if (filters.eye != profile.eye() && !filters.eye.isEmpty())
-                continue;
-            if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
-                continue;
-            if (filters.style != profile.style() && !filters.style.isEmpty())
-                continue;
-            if (filters.sports != profile.sports() && !filters.sports.isEmpty())
-                continue;
-            if (filters.skin != profile.skin() && !filters.skin.isEmpty())
-                continue;
-            if (filters.scope != profile.scope() && !filters.scope.isEmpty())
-                continue;
-            if (filters.direction != profile.direction() && !filters.direction.isEmpty())
-                continue;
-            if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
-                continue;
-            if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
-                continue;
-            */
+        if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
+              || profile.lastName().toLower().startsWith(filters.name.toLower())))
+            continue;
 
-            profiles.append(profile);
-        }
+        /*
+        if (profile.type() != filters.userType && filters.userType != -1)
+            continue;
+        if (profile.country() != filters.location && filters.location != -1)
+            continue;
+        if (profile.gender() != filters.gender && filters.gender != -1)
+            continue;
+        if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
+            continue;
+        if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
+            continue;
+        if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
+            continue;
+        if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
+            continue;
+        if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
+            continue;
+        if (filters.category != profile.category() && !filters.category.isEmpty())
+            continue;
+        if (filters.body != profile.body() && !filters.body.isEmpty())
+            continue;
+        if (filters.hair != profile.hair() && !filters.hair.isEmpty())
+            continue;
+        if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
+            continue;
+        if (filters.eye != profile.eye() && !filters.eye.isEmpty())
+            continue;
+        if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
+            continue;
+        if (filters.style != profile.style() && !filters.style.isEmpty())
+            continue;
+        if (filters.sports != profile.sports() && !filters.sports.isEmpty())
+            continue;
+        if (filters.skin != profile.skin() && !filters.skin.isEmpty())
+            continue;
+        if (filters.scope != profile.scope() && !filters.scope.isEmpty())
+            continue;
+        if (filters.direction != profile.direction() && !filters.direction.isEmpty())
+            continue;
+        if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
+            continue;
+        if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
+            continue;
+        */
+
+        profiles.append(profile);
     }
     emit sendProfileToSearchToUi(profiles);
 }

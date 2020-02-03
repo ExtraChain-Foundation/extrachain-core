@@ -1,4 +1,4 @@
-#include "sender.h"
+#include "dfs/managers/headers/sender.h"
 
 Sender::Sender(QObject *parent)
     : QObject(parent)
@@ -11,13 +11,15 @@ void Sender::setNetManager(DFSNetManager *value)
     NetManager = value;
 }
 
-void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, SocketPair receiver)
+void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver)
 {
     QFile file(path);
     if (file.open(QIODevice::ReadOnly))
     {
-        DFSMessage::title_message title(path);
-        title.f_type = DfsStruct::toByteArray(type);
+        DistFileSystem::TitleMessage title;
+        title.filePath = path;
+        title.f_type = type;
+        title.calcHash();
         std::vector<long long> fragsID;
         QByteArrayList frags = frag.split(' ');
 
@@ -44,8 +46,12 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
         {
             file.seek(fragsID[i] * data_offset);
             QByteArray data = file.read(data_offset);
-            DFSMessage::dfs_message pck(title.dataHash, fragsID[i], data); // package for send
-            sendDfsMessage(pck, receiver);
+            DistFileSystem::DfsMessage pck; // package for send
+            pck.dataHash = title.dataHash;
+            pck.pckgNumber = fragsID[i];
+            pck.data = data;
+            //            QThread::currentThread()->wait(1000);
+            sendDfsMessage(pck, Messages::DFSMessage::fileDataMessage, receiver);
         }
     }
 }
@@ -60,39 +66,17 @@ void Sender::sendFile(const QString &filePath, const DfsStruct::Type &type, cons
     file.open(QIODevice::ReadOnly);
     // create title_message
     // unsigned long pckgN = 0; // package number
-    DFSMessage::title_message title(filePath);
-    title.f_type = DfsStruct::toByteArray(type);
-
-    if (title.empty())
+    DistFileSystem::TitleMessage title;
+    title.filePath = filePath;
+    title.f_type = type;
+    title.calcHash();
+    if (title.isEmpty())
     {
         qDebug() << "empty title";
         return;
     }
 
     qDebug() << "DataHash from title:" << title.dataHash;
-    sendDfsMessage(title, receiver);
+    sendDfsMessage(title, Messages::DFSMessage::titleMessage, receiver);
     file.close();
-}
-
-void Sender::checkClosing(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver)
-{
-    if (titleHashs.find(titleHash) == titleHashs.end())
-    {
-        qDebug() << "I don't send this file";
-        return;
-    }
-
-    if (serializedTitle.find(titleHashs[titleHash]) == serializedTitle.end())
-    {
-        qDebug() << "so it's not so good";
-        return;
-    }
-
-    DFSMessage::title_message tmpTitle(serializedTitle[titleHashs[titleHash]]);
-    serializedTitle.erase(serializedTitle.find(titleHashs[titleHash]));
-    titleHashs.erase(titleHashs.find(titleHash));
-    sendFile(titleHashs[titleHash], DfsStruct::convertToDFType(tmpTitle.f_type), receiver);
-
-    qDebug() << "repeat send for" << tmpTitle.filePath << "file because receiver have" << pckAF << "from"
-             << tmpTitle.pckgsAmount;
 }

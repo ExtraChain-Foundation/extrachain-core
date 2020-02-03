@@ -49,7 +49,7 @@ void ResolveManager::connectSignals(ResolverService *resolver)
     // request signals
     connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
     connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
-    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
+    //    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
@@ -104,13 +104,14 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     return lockRes;
 }
 
-void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msgType)
+void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType)
 {
 
-    Messages::BaseMessage msg(msgType);
-    msg.init(data);
-
-    if (msgType != Messages::ACTOR_MESSAGE)
+    Messages::BaseMessage msg;
+    msg.type = msgType;
+    msg.data = data;
+    qDebug() << "sending" << msgType;
+    if (msgType != Messages::ChainMessage::actorMessage)
     {
         if (accountControler->getAccountCount() == 0)
             return;
@@ -120,7 +121,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
 
     //    qDebug() << "send " << msgType;
     QByteArray message = msg.serialize();
-    if (Messages::GETTERS.contains(msgType))
+    if (Messages::isGeneralRequest(msgType))
     {
         handlerFileMutex.lock();
         requestResponseMap->insert(calcKeccak256(message), Config::Net::NECESSARY_RESPONSE_COUNT);
@@ -130,23 +131,41 @@ void ResolveManager::registrateMsg(const QByteArray &data, const QByteArray &msg
     //    emit sendMsg(message);
 }
 
-void ResolveManager::sendMessageResponse(const QByteArray &data, const QByteArray &msgType,
+void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned int &msgType,
                                          const QByteArray &requestHash, const SocketPair &receiver)
 
 {
-    Messages::BaseMessageResponse rmsg(data, requestHash, msgType);
-    if (msgType != Messages::GET_ACTOR_RESPONSE_MESSAGE
-        /*&& msgType != Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE*/)
+    Messages::BaseMessageResponse rmsg;
+    rmsg.data = data;
+    rmsg.type = msgType;
+    rmsg.dataHash = requestHash;
+    qDebug() << "sending" << msgType;
+    if (msgType != Messages::GeneralResponse::getActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;
+    if (msgType == Messages::GeneralResponse::getAllActorsResponse)
+        qDebug() << "306 is sending";
     networkManager->distMessage(rmsg.serialize(), receiver);
-    //    emit socketSendMsg(rmsg.serialize(), receiver);
 }
 
 void ResolveManager::taskFinished()
 {
     ResolverService *resolver = qobject_cast<ResolverService *>(QObject::sender());
+
+    if (resolver == nullptr)
+    {
+        int kill = -1;
+        for (int i = 0; i != l1Res.length(); i++)
+        {
+            if (resolver == nullptr)
+                kill = i;
+        }
+        if (kill > -1)
+            l1Res.removeAt(kill);
+        return;
+    }
+
     disconnectSignals(resolver);
     if (resolver->getType() == Resolver::Type::DFS)
     {

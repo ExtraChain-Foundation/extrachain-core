@@ -1,4 +1,4 @@
-#include "dfsnetmanager.h"
+#include "dfs/managers/headers/dfsnetmanager.h"
 #include "resolve/resolve_manager.h"
 
 void DFSNetManager::setDfs(Dfs *value)
@@ -8,17 +8,18 @@ void DFSNetManager::setDfs(Dfs *value)
 
 bool DFSNetManager::isLoading(const QString &fileName)
 {
-    qDebug() << "isLoading";
-    for (const auto &resolver : dfsResolvers)
+    for (DFSResolverService *resolver : dfsResolvers)
     {
-        // qDebug() << fileName << resolver->getTitle().filePath;
-
-        if (fileName == resolver->getTitle().filePath)
+        if (resolver->getTitle().filePath == fileName)
             return true;
     }
 
-    qDebug() << "isLoading false";
     return false;
+}
+
+QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
+{
+    return dfsResolvers;
 }
 
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
@@ -93,6 +94,17 @@ void DFSNetManager::disconnectResolver(DFSResolverService *resolver)
     disconnect(resolver, &DFSResolverService::TaskFinished, this, &DFSNetManager::removeResolver);
 }
 
+void DFSNetManager::createDFSResolver(Network::DataStruct ds)
+{
+    DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
+    resolver->setDfs(dfs);
+    resolver->setActorIndex(actorIndex);
+    resolver->setTask(ds.msg, ds.receiver);
+    dfsResolvers.append(resolver);
+    connectResolver(dfsResolvers.last());
+    ThreadPool::addThread(dfsResolvers.last());
+}
+
 NetManager *DFSNetManager::getNetManager()
 {
     return this->getMe();
@@ -121,10 +133,12 @@ void DFSNetManager::appendSocket(SocketService *socket)
     socketConnection();
 }
 
-void DFSNetManager::send(const QByteArray &data, const QByteArray &msgType, const SocketPair &receiver)
+void DFSNetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
 {
-    Messages::BaseMessage msg(msgType);
-    msg.init(data);
+    Messages::BaseMessage msg;
+    //    msg.setMsgData(data);
+    msg.type = msgType;
+    msg.data = data;
     QByteArray message = msg.serialize();
     std::for_each(socketsList.begin(), socketsList.end(),
                   [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
@@ -134,6 +148,7 @@ void DFSNetManager::process()
 {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
     uResolver->setDfs(dfs);
+    uResolver->setActorIndex(actorIndex);
 
     connectResolver(uResolver);
 
@@ -144,7 +159,7 @@ void DFSNetManager::process()
 void DFSNetManager::startDFSNetwork()
 {
     startNetwork();
-    connectToServer(serverPort, local);
+    // connectToServer(serverPort, local);
 }
 
 void DFSNetManager::uiReconnect()
@@ -154,12 +169,15 @@ void DFSNetManager::uiReconnect()
 
 void DFSNetManager::titleArrived(Network::DataStruct ds)
 {
-    DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
-    resolver->setDfs(dfs);
-    resolver->setTask(ds.msg, ds.receiver);
-    dfsResolvers.append(resolver);
-    connectResolver(dfsResolvers.last());
-    ThreadPool::addThread(dfsResolvers.last());
+    if (dfsResolvers.size() >= DFS_RESOLVERS_POOL_SIZE)
+    {
+        titleVector.push(ds);
+        return;
+    }
+    else
+    {
+        createDFSResolver(ds);
+    }
 }
 
 void DFSNetManager::removeResolver()
@@ -177,11 +195,21 @@ void DFSNetManager::removeResolver()
     }
     if (resolver != nullptr)
         emit resolver->finished();
+    if (titleVector.size() > 0)
+    {
+        Network::DataStruct ds = titleVector.front();
+        titleVector.pop();
+        createDFSResolver(ds);
+    }
 }
 
 void DFSNetManager::removeConnection()
 {
     QObject *sender = QObject::sender();
+
+    if (sender == nullptr)
+        return;
+
     SocketService *connection = qobject_cast<SocketService *>(sender);
     socketDisconnect(connection);
     socketsList.removeAt(socketsList.indexOf(connection));
@@ -208,6 +236,8 @@ void DFSNetManager::checkMyIdentificator()
                 emit el->removeMe();
         }
     });
+    dfs->dfsSync(connection->getSocketPair());
+    //    dfs->requestAllCards();
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }

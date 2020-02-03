@@ -16,6 +16,9 @@
 #include "profile/private_profile.h"
 #include "managers/chat.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#ifdef ETALONIUM_CLIENT
+#include "ui/ui_controller.h"
+#endif
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
@@ -25,10 +28,8 @@ Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
 Q_DECLARE_METATYPE(SocketService)
 // Q_DECLARE_METATYPE(SocketService*)
-Q_DECLARE_METATYPE(Messages::DownloadDfsRequestData)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
 Q_DECLARE_METATYPE(DfsStruct::Type)
-Q_DECLARE_METATYPE(DfsStruct::SubType)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
@@ -44,6 +45,10 @@ Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
 Q_DECLARE_METATYPE(Network::DataStruct)
 Q_DECLARE_METATYPE(SubscribeController)
+Q_DECLARE_METATYPE(notification)
+#ifdef ETALONIUM_CLIENT
+Q_DECLARE_METATYPE(UiController*)
+#endif
 
 void registerMetaTypes()
 {
@@ -55,11 +60,9 @@ void registerMetaTypes()
     qRegisterMetaType<Transaction>();
     qRegisterMetaType<SocketService>();
     // qRegisterMetaType<SocketService*>();
-    qRegisterMetaType<Messages::DownloadDfsRequestData>();
     qRegisterMetaType<Messages::BaseMessage>();
     // qRegisterMetaType<Contract>();
     qRegisterMetaType<DfsStruct::Type>();
-    qRegisterMetaType<DfsStruct::SubType>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
     qRegisterMetaType<Profile>();
@@ -73,6 +76,10 @@ void registerMetaTypes()
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
     qRegisterMetaType<SubscribeController>();
+    qRegisterMetaType<notification>();
+#ifdef ETALONIUM_CLIENT
+    qRegisterMetaType<UiController*>();
+#endif
 }
 
 #endif

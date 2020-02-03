@@ -91,7 +91,7 @@ BigNumber BigNumber::operator-(long long number)
     return ret;
 }
 
-BigNumber BigNumber::operator*(const BigNumber &bigNumber)
+BigNumber BigNumber::operator*(const BigNumber &bigNumber) const
 {
     BigNumber ret(m_data * bigNumber.data());
     return ret;
@@ -264,7 +264,9 @@ QByteArray BigNumber::toByteArray(int base) const
 {
     char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
     QByteArray number(ch);
-    delete ch;
+    void (*freefunc)(void *, size_t);
+    mp_get_memory_functions(NULL, NULL, &freefunc);
+    freefunc(ch, strlen(ch) + 1);
     return number;
 }
 
@@ -319,6 +321,8 @@ void BigNumber::setInfinity(bool value)
 
 bool BigNumber::isValid(const QByteArray &bigNumber, int base)
 {
+    if (bigNumber.isEmpty())
+        return false;
     try
     {
         mpz_class(bigNumber.toStdString(), base);

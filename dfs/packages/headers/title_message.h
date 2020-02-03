@@ -1,31 +1,39 @@
 #ifndef TITLE_MESSAGE_H
 #define TITLE_MESSAGE_H
 
-#include "dumessage.h"
-#include <QFile>
-namespace DFSMessage {
+#include "dfs/packages/headers/dfs_message_interface.h"
+#include "headers/network/packages/message_interface.h"
 
-struct title_message : public DUMessage
+#include <QFile>
+
+namespace DistFileSystem {
+struct titleMessage : public Messages::ISmallMessage
 {
-    const short FIELDS_COUNT = 5;
+    const short FIELDS_COUNT = 6;
 
     QString filePath;
     unsigned long pckgsAmount = 0;
     long long fileSize = 0;
-    QByteArray f_type;
-
+    unsigned int f_type;
     QByteArray dataHash; // Keccak256
-    title_message();
-    title_message(const QString &filePath);
-    title_message(const QByteArray &serialized);
-    title_message(const QString &filePath, const long long &pckgsAmount, const long long &fileSize,
-                  const QByteArray &hash, const QByteArray &f_type);
-    ~title_message() = default;
+    QByteArray prevId;
 
-    bool empty() const;
-    const QList<QByteArray> serializedParams() const override final;
-    title_message operator=(const title_message &msg);
+    void calcHash(); // filesize, pckgAmount, datahash
+
+    const QList<QByteArray> serializedParams() const;
+    void operator=(titleMessage title);
+    void operator=(const QByteArray &serialized);
+
+public:
+    void operator=(QByteArray &serialized) override;
+
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
 };
+
+typedef struct titleMessage TitleMessage;
 }
 
 #endif // TITLE_MESSAGE_H

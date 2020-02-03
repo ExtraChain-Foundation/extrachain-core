@@ -6,9 +6,9 @@
 class SocketPair
 {
 public:
-    std::string first;
-    quint16 second;
-    QByteArray id;
+    std::string ip;
+    quint16 port;
+    QByteArray iden;
     SocketPair();
     SocketPair(const std::string &f, const quint16 &s);
     SocketPair(const SocketPair &v);

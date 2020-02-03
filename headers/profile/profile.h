@@ -3,7 +3,7 @@
 
 #include <QObject>
 #include <QDebug>
-//#include <datastorage/index/actorindex.h>
+#include <QFile>
 
 class Profile
 {
@@ -142,6 +142,8 @@ public:
     void setWorkStyle(QList<int> workStyle);
     void setFashion(QList<int> fashion);
 
+    bool isServiceExists();
+
     enum Type
     {
         TypeWallet,
@@ -186,5 +188,10 @@ public:
     static const QMap<int, QString> workStyleMap;
     static const QMap<int, QString> fashionMap;
 };
+
+inline bool operator==(const Profile& lhs, const Profile& rhs)
+{
+    return lhs.userId() == rhs.userId();
+}
 
 #endif // PROFILE_H

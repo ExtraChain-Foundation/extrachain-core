@@ -1,20 +1,17 @@
 #ifndef DFS_H
 #define DFS_H
 
-#include "dfs/managers/headers/dfsindex.h"
-#include "dfs/packages/headers/dfs_universal.h"
 #include "dfs/managers/headers/card_manager.h"
-#include "network/packages/service/downloaddfsrequest.h"
 #include "dfs/packages/headers/ui_messages.h"
-#include "dfs/packages/headers/dfs_status.h"
 #include "dfs/packages/headers/dfs_changes.h"
-//#include "dfs/managers/headers/package_resolver.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
 #include "utils/utils.h"
 #include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "dfs/types/headers/cardfile.h"
+#include <QVector>
 #include <QTimer>
 #include <QDirIterator>
 #include <iterator>
@@ -30,27 +27,28 @@ class Dfs : public QObject
 private:
     // send from nodeManger
     AccountController *accountControler;
-    ActorIndex *actorIndex;
+    ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
     // DFSResolver *resolver;
-
+public slots:
+    /*DFS 1.5*/
+    void dfsSyncUsers(QList<QString> userID, const SocketPair &receiver = SocketPair());
+    void dfsSyncT();
+    void dfsSync(const SocketPair &receiver);
+    bool dfsValidate(QByteArray userID);
+    QList<QByteArray> dfsValidateAll();
+    /*DFS 1.5*/
 private:
     void initDFS(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
-                   const DfsStruct::Type &type = DfsStruct::Type::images,
-                   const DfsStruct::SubType &subType = DfsStruct::SubType::subpost);
-    void saveStaticFile(QString fileName, DfsStruct::Type type, DfsStruct::SubType subType, bool needStored);
+                   const DfsStruct::Type &type = DfsStruct::Type::images);
+    void saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored);
     void saveFN(const QString tmpPath, const QString &path, const DfsStruct::Type &type);
     bool appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
-                      const DfsStruct::SubType &subType = DfsStruct::SubType::undef);
+                      bool isFilePath);
     void cardDiffRequest(const QString &oldCard, const QString &newCard);
-    void loadFilesFromCard(const QString &card);
     void getDFSStatus();
-    void signalConnection();
-
-public slots:
-    void checkAc(const QByteArray &actorId, const QStringList &request, const SocketPair &receiver);
 
 public:
     DFSNetManager *dfsNetManager = nullptr;
@@ -65,6 +63,13 @@ public:
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;
 
+    void responseRequestLast(const DistFileSystem::requestLast &request, SocketPair receiver);
+    void responseResponseLast(const DistFileSystem::responseLast &response, SocketPair receiver);
+    void responseRequestCardPath(const DistFileSystem::RequestCardPart &request, SocketPair receiver);
+    void responseResponseCardPath(const DistFileSystem::ResponseCardPart &response, SocketPair receiver);
+
+    void applyCardFileChange(DistFileSystem::CardFileChange, SocketPair receiver);
+
     QStringList tmpFiles() const;
 
 signals:
@@ -75,38 +80,36 @@ signals:
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
     void usersChanges(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
     void fileChanged(QString path);
-    void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
-                         const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void connectToServer();
     void networkCreated();
+    void newNotify(const notification ntf);
 
 public slots:
-    void init();
+    void initMyLocalStorage();
     void initUser(BigNumber userId);
 
-    void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type,
-              const DfsStruct::SubType subType = DfsStruct::SubType::subpost);
+    void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data);
     void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);
-    bool applyChanges(const DFSMessage::DfsChanges &dfsChanges);
+    bool applyChanges(const DistFileSystem::DfsChanges &dfsChanges);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void startDFS();
-    void requestFile(const QString &filePath);
-    void searchTmp(bool reqFile = false);
-    void requestCardById(QByteArray userId);
+    void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
+    void searchTmp();
+    void requestCardById(QByteArray userId, const SocketPair &receiver = SocketPair());
     void requestAllCards();
 
 private:
-    QByteArray buildDfsPath(QByteArray userID, DfsStruct::Type type);
+    QByteArray buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type);
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
     bool appendToStored(QString filePath, QByteArray data, QString range, int type, QString userId, bool init,
                         QByteArray hash);
     void updateFromNewStored(QString filePath);
-    bool updateCard(const QString &path, const QByteArray &userId, QByteArray date, QByteArray newHash);
-    bool applyChangesBytes(const DFSMessage::DfsChanges &dfsChanges);
-    bool applyChangesSql(const DFSMessage::DfsChanges &dfsChanges);
+    bool applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges);
+    bool applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges);
     DfsStruct::Type getFileType(const QString &filePath);
 
     QTimer *timerTmpFiles;

@@ -23,6 +23,9 @@ class NetManager;
 #include "datastorage/block.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+
 //#include "network/resolver_service.h"
 #include <QTimer>
 
@@ -37,10 +40,9 @@ using namespace SearchEnum;
 class SocketService : public QObject
 {
     Q_OBJECT
-    const QByteArray IDENTIFICATOR = "Ind:";
+    const QByteArray IDENTIFICATOR = "ind:";
 
 private:
-    QByteArray *dpBuffer;
     NetManager *netManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
@@ -52,7 +54,14 @@ private:
     int _blockSize = 0;
     //    QByteArray buffer;
     int reconnectTry = 0;
-    int pendMsgSize = 0;
+    QByteArray pendMsg;
+
+    int pendMsgSize = -1;
+
+    Messages::BaseMessage bm;
+    Messages::BaseMessageResponse bmr;
+    int counter = 0;
+    bool R = false;
 
 public:
     SocketService();
@@ -98,13 +107,13 @@ private slots:
 
 public:
     void gotMessage(QByteArray msg, SocketPair rec);
-    BigNumber getID();
+    const BigNumber &getID();
     void processID(QByteArray id);
     /**
      * @brief Send message using QTcpSocket
      * @param message
      */
-    void *distMsg(const QByteArray data, const SocketPair socketData);
+    void *distMsg(const QByteArray data, const SocketPair &socketData);
     bool *socketStatus() const;
     bool isActive() const;
     QString getAddress() const;
@@ -120,6 +129,7 @@ public:
     BigNumber getIdentificator() const;
     void setIdentificator(const BigNumber &value);
     bool getActive() const;
+    SocketPair getSocketPair();
     void setNetManager(NetManager *value);
 };
 #endif // SOCKET_SERVICE_H

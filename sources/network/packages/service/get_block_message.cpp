@@ -2,39 +2,30 @@
 
 using namespace Messages;
 
-GetBlockMessage::GetBlockMessage(const SearchEnum::BlockParam param, const QByteArray &value)
-{
-    this->param = param;
-    this->value = value;
-}
-
-GetBlockMessage::GetBlockMessage(const QByteArray &serialized)
+void GetBlockMessage::operator=(QByteArray &serialized)
 {
     deserialize(serialized);
 }
 
-GetBlockMessage::~GetBlockMessage()
+bool GetBlockMessage::isEmpty() const
 {
+    return (param == SearchEnum::BlockParam::Null) || (value.isEmpty());
 }
 
-const QByteArray GetBlockMessage::serialize() const
+short GetBlockMessage::getFieldsCount() const
 {
-    return Serialization::universalSerialize({ SearchEnum::toString(param).toUtf8(), value }, FIELDS_SIZE);
+    return GetBlockMessage::FIELDS_COUNT;
+}
+
+QByteArray GetBlockMessage::serialize() const
+{
+    return Serialization::universalSerialize({ SearchEnum::toString(param).toUtf8(), value },
+                                             GetBlockMessage::FIELD_SIZE);
 }
 
 void GetBlockMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, GetBlockMessage::FIELD_SIZE);
     this->param = SearchEnum::fromStringBlockParam(list.at(0));
     this->value = list.at(1);
-}
-
-SearchEnum::BlockParam GetBlockMessage::getParam() const
-{
-    return param;
-}
-
-QByteArray GetBlockMessage::getValue() const
-{
-    return value;
 }

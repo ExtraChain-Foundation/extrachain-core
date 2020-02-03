@@ -338,7 +338,10 @@ QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serializ
         pos += fiels_size;
         QByteArray el = serialized.mid(pos, count);
         pos += count;
-        list << el;
+        if (el.isEmpty())
+            list.append(el);
+        else
+            list << el;
     }
     //    serialized.remove(0, pos);
     return list;
@@ -354,6 +357,8 @@ void Utils::wipeDataFiles()
     QFile("user.private.login").remove();
     QFile(".fileList").remove();
     QFile(".settings").remove();
+    QFile("network_cache").remove();
+
     /*
 #ifdef ETALONIUM_CONSOLE
     auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
@@ -400,6 +405,33 @@ void Utils::wipeDataFiles()
     QFile(".etalonium.lock").remove();
     QFile(".settings").remove();
     */
+}
+
+void Utils::softWipe(const QString &currentId)
+{
+    auto clearDir = [](const QString &dir, const QString &ignoredFile = "0", bool isFile = true) {
+        QDir dirToClear(dir);
+        auto filesList = dirToClear.entryInfoList(isFile ? QDir::Files : QDir::Dirs | QDir::NoDotAndDotDot);
+
+        for (auto &file : filesList)
+        {
+            qDebug() << file.fileName() << file.filePath();
+            if (file.fileName() != ignoredFile)
+                isFile ? QFile::remove(file.filePath()) : QDir(file.filePath()).removeRecursively();
+        }
+    };
+
+    QDir("blockchain/index/blocks").removeRecursively();
+    clearDir("blockchain/index/actors", currentId.right(2), false);
+    clearDir("blockchain/index/actors/" + currentId.right(2), currentId, true);
+    clearDir("data", "", true);
+    clearDir("data/" + currentId, "profile", false);
+    QFile::remove("data/" + currentId + "/root");
+    QFile::remove("data/" + currentId + "/root.tmp");
+    QDir("tmp").removeRecursively();
+    QFile("network_cache").remove();
+    QFile(".settings").remove();
+    QFile(".fileList").remove();
 }
 
 FileList::FileList()
@@ -620,4 +652,18 @@ indexRow::indexRow(std::string _hash, long long pos, short use)
 FileList::~FileList()
 {
     this->checkForDelete();
+}
+
+qint64 Utils::checkMemoryFree()
+{
+    QStorageInfo x(qApp->applicationDirPath());
+    qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
+    return x.bytesFree();
+}
+
+qint64 Utils::checkMemoryTotal()
+{
+    QStorageInfo x(qApp->applicationDirPath());
+    qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
+    return x.bytesTotal();
 }

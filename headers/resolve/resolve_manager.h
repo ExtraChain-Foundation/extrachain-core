@@ -19,7 +19,6 @@ class NodeManager;
 
 #include "managers/chatmanager.h"
 class ChatManager;
-static const short ResolverServicePoolMaxSize = 100;
 
 #include <QObject>
 //#include <QQueue>
@@ -29,6 +28,14 @@ static const short ResolverServicePoolMaxSize = 100;
 #include "datastorage/index/actorindex.h"
 #include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
+
+#ifdef ETALONIUM_CONSOLE
+static const short ResolverServicePoolMaxSize = 100;
+#endif
+
+#ifdef ETALONIUM_CLIENT
+static const short ResolverServicePoolMaxSize = 5;
+#endif
 
 class ResolveManager : public QObject
 {
@@ -96,7 +103,7 @@ signals:
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
 public slots:
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
-    void registrateMsg(const QByteArray &data, const QByteArray &msgType);
+    void registrateMsg(const QByteArray &data, const unsigned int &msgType);
     /**
      * @brief sendMessageResponse from resolver
      * @param data
@@ -104,8 +111,8 @@ public slots:
      * @param requestHash
      * @param receiver
      */
-    void sendMessageResponse(const QByteArray &data, const QByteArray &msgType, const QByteArray &requestHash,
-                             const SocketPair &receiver);
+    void sendMessageResponse(const QByteArray &data, const unsigned int &msgType,
+                             const QByteArray &requestHash, const SocketPair &receiver);
     void taskFinished();
 public slots:
     void process();

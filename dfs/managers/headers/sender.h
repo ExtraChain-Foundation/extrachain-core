@@ -17,11 +17,8 @@ class DFSNetManager;
 class Sender : public QObject
 {
     Q_OBJECT
-    const int data_offset = DFSMessage::dataSize;
+    const int data_offset = DistFileSystem::dataSize;
     DFSNetManager *NetManager = nullptr;
-
-    QMap<QByteArray, QString> titleHashs;
-    QMap<QString, QByteArray> serializedTitle;
 
 public:
     /**
@@ -41,9 +38,11 @@ public:
      * @brief Send any dfs message (template function)
      */
     template <typename T>
-    void sendDfsMessage(const T &dfsMessage, const SocketPair &receiver = {})
+    void sendDfsMessage(const T &dfsMessage, const unsigned int &type,
+                        const SocketPair &receiver = SocketPair())
     {
-        static_assert(std::is_base_of<DFSMessage::DUMessage, T>::value, "Derived not derived from DUMessage");
+        static_assert(std::is_base_of<Messages::ISmallMessage, T>::value,
+                      "Derived not derived from Messages::ISmallMessage");
 
         if (dfsMessage.isEmpty())
         {
@@ -52,7 +51,7 @@ public:
         }
 
         if (NetManager != nullptr)
-            NetManager->send(dfsMessage.serialize(), Messages::DFS_MESSAGE, receiver);
+            NetManager->send(dfsMessage.serialize(), type, receiver);
     }
 
 signals:
@@ -69,7 +68,7 @@ signals:
     void sendPckg(const QByteArray &msg, const QByteArray &msgType, const SocketPair &receiver);
 
 public slots:
-    void sendFragments(QString path, DfsStruct::Type type, QByteArray frag, SocketPair receiver);
+    void sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver);
 
     /**
      * @brief process
@@ -77,12 +76,6 @@ public slots:
     //    void resendFragmentsSlot(QString path, based_dfs_struct::Type type, QList<QByteArray> frags);
 
     void process();
-    /**
-     * @brief checkClosing
-     * @param titleHash
-     * @param pckAF
-     */
-    void checkClosing(const QByteArray &titleHash, const long long &pckAF, const SocketPair &receiver);
 };
 
 #endif // SENDER_H

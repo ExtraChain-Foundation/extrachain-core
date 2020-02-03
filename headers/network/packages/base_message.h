@@ -6,7 +6,6 @@
 #include "network/packages/message_interface.h"
 #include "utils/bignumber.h"
 #include "utils/utils.h"
-#include "network/packages/service/response_messages.h"
 
 namespace Messages {
 /**
@@ -19,79 +18,33 @@ namespace Messages {
  * 3) initFields
  *
  */
-class BaseMessage : public IMessage
+struct BaseMessage : IMessage
 {
-private:
-    //    QByteArray protocol; // protocol version
-    QByteArray msgType; // message type
-    BigNumber signer;   // message signer actor's id
+    QByteArray protocol = Config::Net::PROTOCOL_VERSION; // protocol version
+    unsigned int type = 0;                               // message type
+    BigNumber signer;                                    // message signer actor's id
+    QByteArray digSig;                                   // msg digital signature
+    QByteArray data = "";
 
-protected:
-    QByteArray msg_data = "";
-    QByteArray digSig; // for security
+    static const short FIELDS_COUNT = 5;
 
-public:
-    static const short FIELDS_COUNT = 4;
-
-public:
-    BaseMessage();
-    BaseMessage(const BaseMessage &msg);
-    BaseMessage(const QByteArray &msgType);
-    ~BaseMessage() override;
-
-protected:
-    /**
-     * @brief Concatenates all data (used in digSig calculation)
-     * @return all payload without delimiters
-     */
-    virtual QByteArray concatenateAllData() const;
-
-protected:
-    /**
-     * @brief Extract state. USE THIS METHOD IN SUBCLASSES.
-     * @param list with serialized fields on 0 to FIELDS_COUNT positions
-     */
-    virtual void initFields(QLinkedList<QByteArray> &list);
-    virtual void initFields(QList<QByteArray> &list);
-
-    // Override this methods and add subclasses fields.
-protected:
-    virtual short getFieldsCount() const;
-
-    /**
-     * @brief Collect's all fields in serialized form
-     * @return qlist
-     */
-    virtual QList<QByteArray> serializedParams() const;
-
-public:
-    void deserialize(const QByteArray &serialized) override;
-    QList<QByteArray> deserializeToList(const QByteArray &serialized);
+    void setMsgData(const QByteArray &data);
+    virtual void calcDigSig(const Actor<KeyPrivate> &actor);
+    virtual bool verifyDigSig(const Actor<KeyPublic> &actor) const;
+    void operator=(BaseMessage b);
 
     // IMessage interface
 public:
-    QByteArray serialize() const override;
-    QByteArray serialize(const QList<QByteArray> &list) const override final;
+    virtual void operator=(QByteArray &serialized) override;
+    virtual void operator=(QList<QByteArray> &list) override;
+    virtual bool isEmpty() const override;
+    virtual QByteArray concatenateAllData() const override;
+    virtual QList<QByteArray> serializedParams() const override;
+    virtual short getFieldsCount() const override;
+    virtual QByteArray serialize() const override;
+    virtual void deserialize(const QByteArray &serialized) override;
 
-    void calcDigSig(const Actor<KeyPrivate> &actor) override final;
-    bool verifyDigSig(const Actor<KeyPublic> &actor) const override final;
-
-    /**
-     * @brief Deserialization
-     * @param serialized msg
-     * @return messages
-     */
-    static BaseMessage deserializeMsg(const QByteArray serialized);
-
-    const QByteArray hash() const override;
-    void init(const QByteArray &data);
-
-public:
-    QByteArray getProtocol() const;
-    QByteArray getMsgType() const;
-    BigNumber getSigner() const override;
-    QByteArray getDigSig() const;
-    QByteArray getData() const;
+    virtual const QByteArray hash() const override;
 };
 }
 #endif // BASEMESSAGE_H

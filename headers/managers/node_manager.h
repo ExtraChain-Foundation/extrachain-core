@@ -24,9 +24,12 @@ class ResolveManager;
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "headers/network/packages/service/message_types.h"
 
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
+#include "headers/ui/notificationclient.h"
+#include "managers/notification_manager.h"
 #endif
 
 #ifdef ETALONIUM_CONSOLE
@@ -51,13 +54,15 @@ private:
     ResolveManager *resolveManager;
     SubscribeController *subscribeController;
     PrivateProfile *prProfile;
+
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
 
 #ifdef ETALONIUM_CLIENT
     UiController *uiController;
     WalletController *uiWallet;
-
+    NotificationClient *notificationClient = nullptr;
+    NotificationManager *notifyM;
 #endif
     CryptManager *cryptManager;
     //    ContractManager *contractManager;
@@ -94,8 +99,10 @@ public:
 
 public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
+
 #ifdef ETALONIUM_CLIENT
     UiController *getUiController() const;
+    void setNotificationClient(NotificationClient *newNtfCl);
 #endif
 
     QByteArray getIdPrivateProfile() const;
@@ -128,7 +135,7 @@ private:
 
 signals:
     void ready();
-    void sendMsg(const QByteArray &data, const QByteArray &type);
+    void sendMsg(const QByteArray &data, const unsigned int &type);
     void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
     // created keys for chat
@@ -143,10 +150,11 @@ signals:
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void editPrivateProfile(const QByteArray &hashLogin, const QByteArray &idProfile, const QString &type,
-                            const QByteArray &data, const bool &rewrite);
+    void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
+                                const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
+    void setCurrentIdNotifyM(const QByteArray id);
     void getAllActorsNode(QByteArray id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
 

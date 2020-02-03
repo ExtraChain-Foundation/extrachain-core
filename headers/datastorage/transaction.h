@@ -13,8 +13,6 @@ class Transaction : public QObject
 {
     Q_OBJECT
 
-    const int FIELS_SIZE = 4;
-
 public:
     // Construct empty transaction
     Transaction(QObject *parent = nullptr);

@@ -14,9 +14,15 @@
 #include <QStringList>
 #include <string>
 #include <sstream>
+#include <QDateTime>
+#include <QStorageInfo>
+#include <QCoreApplication>
+#include <exception>
+
 namespace Network {
 static QString serverIp = "51.68.181.53";
-static const unsigned long FRAGMENT_STACK_SIZE = 1024;
+static const int build = 1500;
+static const unsigned long FRAGMENT_STACK_SIZE = 2048;
 static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
 struct DataStruct
 {
@@ -126,20 +132,19 @@ namespace DataStorage {
     static const std::string cardTableName = "Items";
     static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
         + " ("
-          "path    TEXT PRIMARY KEY NOT NULL, "
-          "date    INT              NOT NULL, "
-          "type    INT              NOT NULL, "
-          "subtype INT                      , "
-          "hash    TEXT             NOT NULL);";
-    static const std::string lsTableName = "Counters";
-    static const std::string lastSectionTableCreation = "CREATE TABLE IF NOT EXISTS " + lsTableName
-        + " ("
-          "type    INT  PRIMARY KEY NOT NULL, "
-          "counter TEXT             NOT NULL );";
+          "key     INTEGER NOT NULL,"
+          "id      TEXT  NOT NULL, "
+          "type    INT   NOT NULL, "
+          "prevId  TEXT  NOT NULL, "
+          "nextId  TEXT  NOT NULL, "
+          "sign    TEXT  NOT NULL, "
+          "PRIMARY KEY (id, type)"
+          ");";
+
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
-          "chatId  TEXT              NOT NULL, "
+          "chatId  TEXT  PRIMARY KEY NOT NULL, "
           "key     TEXT              NOT NULL, "
           "owner   TEXT              NOT NULL );";
 
@@ -151,6 +156,7 @@ namespace DataStorage {
     static const std::string chatMessageTableName = "Chat";
     static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
         + " ("
+          "messId   TEXT PRIMARY KEY  NOT NULL, "
           "userId   TEXT              NOT NULL, "
           "message  BLOB              NOT NULL, "
           "type     TEXT              NOT NULL, "
@@ -186,6 +192,52 @@ namespace DataStorage {
           "message BLOB             NOT NULL, "
           "owner   TEXT             NOT NULL  );";
 
+    static const std::string notificationTable = "Notification";
+    static const std::string notificationTableCreation = "CREATE TABLE IF NOT EXISTS " + notificationTable
+        + " ("
+          "time  INTEGER  PRIMARY KEY NOT NULL, "
+          "type  INT                  NOT NULL, "
+          "data  TEXT                 NOT NULL  );";
+
+    static const std::string postTableName = "PostCfg";
+    static const std::string postTextTableName = "PostText";
+    static const std::string commentsTableName = "Comments";
+    static const std::string likesTableName = "Likes";
+    static const std::string myLikesPostsTableName = "Posts";
+    static const std::string postTableCreation = "CREATE TABLE IF NOT EXISTS " + postTableName
+        + " ("
+          "version      TEXT  NOT NULL,"
+          "sender       TEXT  NOT NULL,"
+          "dateCreate   TEXT  NOT NULL,"
+          "dateModify   TEXT  NOT NULL,"
+          "images       TEXT  NOT NULL,"
+          "isize        TEXT  NOT NULL "
+          ");";
+    static const std::string postTextTableCreation = "CREATE TABLE IF NOT EXISTS " + postTextTableName
+        + " ("
+          "locale TEXT PRIMARY KEY NOT NULL,"
+          "text   TEXT             NOT NULL "
+          ");";
+
+    static const std::string commentsTableCreation = "CREATE TABLE IF NOT EXISTS " + commentsTableName
+        + " ("
+          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "sender     TEXT                     NOT NULL, "
+          "message    BLOB                     NOT NULL, "
+          "date       TEXT                     NOT NULL, "
+          "sign       TEXT                     NOT NULL "
+          ");";
+    static const std::string likesTableCreation = "CREATE TABLE IF NOT EXISTS " + likesTableName
+        + " ("
+          "liker TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+    static const std::string myLikesTableCreation = "CREATE TABLE IF NOT EXISTS " + myLikesPostsTableName
+        + " ("
+          "user TEXT NOT NULL,"
+          "post TEXT NOT NULL,"
+          "PRIMARY KEY (user, post)"
+          ");";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
@@ -202,7 +254,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QString PROTOCOL_VERSION = "ExtraCoin_v2";
+    static const QByteArray PROTOCOL_VERSION = "ExtraCoin_v4";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
@@ -233,8 +285,9 @@ static const int NO_BLOCKS = 401;
 namespace Serialization {
 
 // Delimiters //
+static const int TRANSACTION_FIELD_SIZE = 4;
 static const int DFS_FIELD_SIZE = 8;
-static const int DEFAULT_FIELD_SIZE = 4;
+static const int DEFAULT_FIELD_SIZE = 8;
 
 static const QByteArray DEFAULT_FIELD_SPLITTER = ":";
 static const QByteArray ACTOR_FIELD_SPLITTER = ":";
@@ -288,6 +341,9 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
+qint64 checkMemoryFree();  // MB
+qint64 checkMemoryTotal(); // MB
+
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
@@ -307,6 +363,7 @@ int compare(const QByteArray &one, const QByteArray &two);
  */
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
+void softWipe(const QString &currentId);
 } // namespace Utils
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
@@ -446,5 +503,21 @@ static TxParam fromStringTxParam(QByteArray s)
     return TxParam::Null;
 }
 } // namespace SearchEnum
+
+struct notification
+{
+    enum NotifyType
+    {
+        TxToUser,
+        TxToMe,
+        ChatMsg,
+        ChatInvite,
+        NewPost,
+        NewFollower
+    };
+    long long time;
+    NotifyType type;
+    QByteArray data = "";
+};
 
 #endif // UTILS_H

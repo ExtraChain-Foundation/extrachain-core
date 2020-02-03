@@ -20,7 +20,10 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
     sendEditSql(currentId, "subscribe", DfsStruct::Type::service,
                 isRemove ? DfsStruct::Delete : DfsStruct::Insert,
                 { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
-    // sendEditSql for followers
+
+    sendEditSql(
+        id, "follower", DfsStruct::Type::service, isRemove ? DfsStruct::Delete : DfsStruct::Insert,
+        { Config::DataStorage::subscribeFollowerTableName.c_str(), "subscriber", currentId, "sign", "TODO" });
 }
 
 bool SubscribeController::checkSubscribe(QByteArray id)
@@ -59,25 +62,37 @@ std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
 }
 
 void SubscribeController::initSubscribe()
-{
-    QByteArray currentId = nodeManager->getIdPrivateProfile();
-    QDir().mkpath("data/" + currentId + "/services");
+{ // TODO: move to UC
+    std::string currentId = nodeManager->getIdPrivateProfile().toStdString();
 
-    DBConnector dbSubscribe("data/" + currentId.toStdString() + "/services/subscribe");
+    DBConnector dbc((DfsStruct::ROOT_FOOLDER_NAME + "/" + nodeManager->getIdPrivateProfile() + "/"
+                     + DfsStruct::ACTOR_CARD_FILE)
+                        .toStdString());
+    dbc.createTable(Config::DataStorage::cardTableCreation);
+
+    QDir().mkpath(QString("data/%1/services").arg(currentId.c_str()));
+
+    DBConnector dbSubscribe("data/" + currentId + "/services/subscribe");
     dbSubscribe.createTable(Config::DataStorage::tableMySubscribeCreation);
     dbSubscribe.close();
 
-    DBConnector dbFollower("data/" + currentId.toStdString() + "/services/follower");
+    DBConnector dbFollower("data/" + currentId + "/services/follower");
     dbFollower.createTable(Config::DataStorage::tableFollowerCreation);
     dbFollower.close();
 
-    DBConnector dbChatInvite("data/" + currentId.toStdString() + "/services/chatinvite");
+    DBConnector dbChatInvite("data/" + currentId + "/services/chatinvite");
     dbChatInvite.createTable(Config::DataStorage::chatInviteCreation);
     dbChatInvite.close();
 
-    send(DfsStruct::DfsSave::Static, "chatinvite", "", DfsStruct::service, DfsStruct::SubType::undef);
-    send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service, DfsStruct::SubType::undef);
-    send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service, DfsStruct::SubType::undef);
+    DBConnector dbMyLikes("keystore/profile/" + currentId + ".likes");
+    dbMyLikes.createTable(Config::DataStorage::myLikesTableCreation);
+    dbMyLikes.close();
+
+    // QTimer::singleShot(6000, [this]() {
+    send(DfsStruct::DfsSave::Static, "chatinvite", "", DfsStruct::service);
+    send(DfsStruct::DfsSave::Static, "subscribe", "", DfsStruct::service);
+    send(DfsStruct::DfsSave::Static, "follower", "", DfsStruct::service);
+    // });
 }
 
 void SubscribeController::setNodeManager(NodeManager *value)

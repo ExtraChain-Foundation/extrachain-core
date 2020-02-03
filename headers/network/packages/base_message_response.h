@@ -2,29 +2,30 @@
 #define BASE_MESSAGE_RESPONSE_H
 
 #include "network/packages/base_message.h"
-#include "network/packages/service/response_messages.h"
 
 namespace Messages {
-class BaseMessageResponse : public BaseMessage
+struct BaseMessageResponse : BaseMessage
 {
-private:
     QByteArray dataHash;
 
     static const short FIELDS_COUNT = 1;
-    short getFieldsCount() const override;
-    void initFields(QList<QByteArray> &list) override;
-    QList<QByteArray> serializedParams() const override;
-
+    void operator=(BaseMessageResponse bm);
+    // IMessage interface
 public:
-    BaseMessageResponse(const QByteArray &msg, const QByteArray &hash, const QByteArray &type);
-    BaseMessageResponse(const QByteArray &serialized);
-    BaseMessageResponse(const BaseMessageResponse &temp);
-    ~BaseMessageResponse() override;
-    BaseMessageResponse operator=(const BaseMessageResponse &temp);
-    //    QByteArray serialize() const override final;
-    void deserialize(const QByteArray &serialized) override;
-    const QByteArray hash() const override final;
-    QByteArray getDataHash() const;
+    virtual void operator=(QByteArray &serialized) override;
+    virtual void operator=(QList<QByteArray> &list) override;
+    virtual bool isEmpty() const override;
+    //    virtual QByteArray concatenateAllData() const override;
+    virtual QList<QByteArray> serializedParams() const override;
+    virtual short getFieldsCount() const override;
+    //    virtual QByteArray serialize() const override;
+    //    virtual void deserialize(const QByteArray &serialized) override;
+    //    virtual const QByteArray hash() const override;
+
+    // BaseMessage interface
+    // public:
+    //    virtual void calcDigSig(const Actor<KeyPrivate> &actor) override;
+    //    virtual bool verifyDigSig(const Actor<KeyPublic> &actor) const override;
 };
 }
 #endif // BASE_MESSAGE_RESPONSE_H

@@ -3,25 +3,25 @@
 SocketPair::SocketPair()
 {
 
-    id = "0";
-    first = "0.0.0.0";
-    second = 0;
+    iden = "0";
+    ip = "0.0.0.0";
+    port = 0;
 }
 
 SocketPair::SocketPair(const std::string &f, const quint16 &s)
 {
-    first = f;
-    second = s;
+    ip = f;
+    port = s;
 
-    id = "0";
+    iden = "0";
 }
 
 SocketPair::SocketPair(const SocketPair &v)
 {
-    first = v.first;
-    second = v.second;
+    ip = v.ip;
+    port = v.port;
 
-    id = v.id;
+    iden = v.iden;
 }
 
 SocketPair::~SocketPair()
@@ -30,35 +30,35 @@ SocketPair::~SocketPair()
 
 const QString SocketPair::serialize() const
 {
-    return QString::fromStdString(first) + QString::number(second) + QString(id);
+    return QString::fromStdString(ip) + QString::number(port) + QString(iden);
 }
 
 const SocketPair SocketPair::operator=(const SocketPair &v)
 {
-    first = v.first;
-    second = v.second;
-    id = v.id;
+    ip = v.ip;
+    port = v.port;
+    iden = v.iden;
     return *this;
 }
 
 bool SocketPair::operator==(const SocketPair &v) const
 {
-    return ((first == v.first) && (second == v.second) && (id == v.id));
+    return ((ip == v.ip) && (port == v.port) && (iden == v.iden));
 }
 
 BigNumber SocketPair::getId() const
 {
-    return id;
+    return iden;
 }
 
 void SocketPair::setId(const QByteArray &value)
 {
-    id = value;
+    iden = value;
 }
 
 bool SocketPair::isEmpty() const
 {
-    if ((first == "0.0.0.0") && (second == 0) && (id == "0"))
+    if ((ip == "0.0.0.0") && (port == 0) && (iden == "0"))
         return true;
     else
         return false;
