@@ -273,6 +273,19 @@ bool DBConnector::isOpen() const
     return m_open;
 }
 
+std::vector<std::string> DBConnector::tableNames()
+{
+    std::vector<std::string> res;
+    auto selectResult = select("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;");
+
+    for (auto row : selectResult)
+    {
+        res.push_back(row["name"]);
+    }
+
+    return res;
+}
+
 bool DBConnector::query(std::string query)
 {
     dbmutex.lock();
