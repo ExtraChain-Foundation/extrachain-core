@@ -41,6 +41,7 @@ public:
     bool insertWithData(std::string query, QByteArray data);
     std::string file() const;
     bool isOpen() const;
+    std::vector<std::string> tableNames();
 
 public:
     bool query(std::string query);
