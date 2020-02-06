@@ -270,11 +270,32 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
 
         if (!exists)
         {
-            QFile file(path);
-            if (!file.copy(dfsPath))
+            bool needCopy = false;
+
+#ifdef ETALONIUM_CLIENT
+            if (type == DfsStruct::Type::images)
             {
-                QFile::remove(dfsPath);
-                file.copy(dfsPath);
+                QImageReader imageReader(path);
+                QByteArray format = imageReader.format();
+                bool isIosImage = (format == "heic" || format == "heif");
+
+                if (isIosImage)
+                {
+                    imageReader.setAutoTransform(true);
+                    QImage image = imageReader.read();
+                    needCopy = image.save(dfsPath, "JPG");
+                }
+            }
+#endif
+
+            if (!needCopy)
+            {
+                QFile file(path);
+                if (!file.copy(dfsPath))
+                {
+                    QFile::remove(dfsPath);
+                    file.copy(dfsPath);
+                }
             }
         }
     }
@@ -886,7 +907,6 @@ void Dfs::dfsSync(const SocketPair &receiver)
     //    dfsSyncUsers(acList, receiver);
 }
 
-#include <QVector>
 bool Dfs::dfsValidate(QByteArray userID)
 {
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE;
