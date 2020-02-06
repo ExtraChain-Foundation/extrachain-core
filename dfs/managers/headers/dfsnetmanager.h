@@ -28,7 +28,6 @@ private:
     Dfs *dfs;
     DFSResolverService *uResolver;
     QList<DFSResolverService *> dfsResolvers;
-    QList<SocketService *> socketsList;
     QMap<QByteArray, int> handler;
     quint16 serverPort;
     ServerService *serverService;

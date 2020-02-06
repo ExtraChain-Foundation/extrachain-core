@@ -118,6 +118,13 @@ SocketService::~SocketService()
 
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
 {
+    // if(all)
+    // send
+    // if(allexcept && adress != closedAdress)
+    // send
+    // if(focused && adress == mustAdress)
+    // send
+
     // check socket status
     if (!socket->isValid())
         return;
@@ -125,11 +132,13 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     QString ipAddress = QString::fromStdString(socketData.ip);
     qint64 portAddress = socketData.port;
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
-    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
-    {
-        QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
-        socket->write(_wtSok, _wtSok.size());
-    }
+    //    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress ==
+    //    0)))
+    //    {
+
+    QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
+    socket->write(_wtSok, _wtSok.size());
+    //    }
 }
 
 void *SocketService::distMsg(const QByteArray data, const SocketPair &socketData)

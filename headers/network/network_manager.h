@@ -97,7 +97,6 @@ private:
     quint16 netPort;
 
 private:
-    QList<SocketService *> connections;
     QMap<QByteArray, int> handler = {};
 
 public:
@@ -107,6 +106,7 @@ public:
     void showMessage(const QHostAddress &from, const QString &message);
 
     void resolverMessage(const QHostAddress &from, const QString &message);
+    QList<SocketService *> connections;
 
 private:
     void connectSocket();
@@ -175,6 +175,8 @@ protected:
      */
     bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
                        const QList<SocketService *> list);
+    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver);
+    void sendFromCache();
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -222,14 +224,15 @@ public slots:
      * @param data for send
      * @param messageType type to compress
      */
-    void sendMessage(const QByteArray &message);
+
     /**
      * @brief Remove connections from connection list
      */
     void removeConnection();
-    void dfsToPeerTmp(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver);
 
 public:
+    virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
+                             const SocketPair &receiver);
     void distMessage(const QByteArray &data, const SocketPair &socketData);
     virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
