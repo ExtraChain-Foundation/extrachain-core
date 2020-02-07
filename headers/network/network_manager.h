@@ -90,7 +90,6 @@ protected:
     QNetworkAddressEntry *local = nullptr;
 
 private:
-    quint16 serverPort = isDebug ? 2221 : 2222;
     QMap<QByteArray, int> *requestResponseMap;
 
     ServerService *serverService;
@@ -108,6 +107,8 @@ public:
     void resolverMessage(const QHostAddress &from, const QString &message);
     QList<SocketService *> connections;
 
+    quint16 serverPort = isDebug ? 2221 : 2222;
+
 private:
     void connectSocket();
     void disconnectSocket(SocketService *connection);
@@ -123,22 +124,6 @@ signals:
     void finished();
 
 protected:
-    /**
-     * @brief Send message directly to the selected peer
-     * @param msg
-     * @param peerAddress
-     */
-    void sendMsgToPeer(Messages::IMessage &msg, QHostAddress peerAddress);
-    /**
-     * @brief sendMsgToPeerPort
-     * @param msg
-     * @param peerAddress
-     * @param port
-     */
-    void sendMsgToPeerPort(Messages::IMessage &msg, QHostAddress peerAddress, int port);
-    /**
-     * @brief findLocal
-     */
     void findLocal();
     /**
      * @brief startNetwork

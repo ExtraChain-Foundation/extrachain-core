@@ -205,35 +205,6 @@ void NetManager::checkConnectionsStatus()
 #ifdef ETALONIUM_CLIENT
     if (flag)
         sendFromCache();
-//    if (flag)
-//    {
-//        QFile file("network_cache");
-//        if (!file.exists())
-//            return;
-//        if (!file.open(QFile::ReadOnly))
-//            return;
-//        QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
-
-//        for (QByteArray packageData : allPackages)
-//        {
-//            QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
-//            if (package.length() != 4)
-//                return;
-
-//            QByteArray data = package[0];
-//            SocketPair socketData;
-//            socketData.ip = package[1].toStdString();
-//            socketData.port = package[2].toShort();
-//            socketData.iden = package[3];
-
-//            for (int i = 0; i < connections.size(); i++)
-//                connections[i]->distMsg(data, socketData);
-//            // sendmes();
-//        }
-
-//        file.close();
-//        file.remove();
-//    }
 #endif
 }
 
@@ -286,14 +257,12 @@ void NetManager::checkMyIdentificator()
 
 void NetManager::startNetwork()
 {
-    qDebug() << "NetManager::startNetwork()";
-    // netPort = serverPort;
-    qDebug() << "NetPort:" << serverPort;
+    qDebug() << "startNetwork()";
+    qDebug() << "NetPort:" << this->serverPort;
 
     if (local != nullptr)
     {
         serverService = new ServerService(serverPort, local);
-        // resolverService = new ResolverService(actorIndex, requestResponseMap);
         setupServerServiceConnections();
         serverService->startListen();
     }
@@ -521,20 +490,6 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
     mutex.unlock();
     return nullptr;
-}
-
-void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
-{
-    SocketPair socketPair(peerAddress.toString().toStdString(), 0);
-    //    emit sendMsg(msg.serialize(), socketPair);
-    distMessage(msg.serialize(), socketPair);
-}
-
-void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int port)
-{
-    SocketPair socketPair(peerAddress.toString().toStdString(), port);
-    //    emit sendMsg(msg.serialize(), socketPair);
-    distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::upnpErrDis(QString msg)

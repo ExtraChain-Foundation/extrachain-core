@@ -49,30 +49,6 @@ void DFSNetManager::socketDisconnect(SocketService *connection)
     disconnect(connection, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
 }
 
-void DFSNetManager::startNetwork()
-{
-    qDebug() << "DFSNetManager::startNetwork()";
-    //        netPort = serverPort;
-    qDebug() << "DFSNetManager:" << serverPort;
-
-    if (local != nullptr)
-    {
-        serverService = new ServerService(serverPort, local);
-        //    resolverService = new ResolverService(actorIndex, requestResponseMap);
-        setupServerServiceConnections();
-        serverService->startListen();
-    }
-}
-
-void DFSNetManager::setupServerServiceConnections()
-{
-    connect(serverService, &ServerService::newConnection, this, &DFSNetManager::addConnection,
-            Qt::UniqueConnection);
-#ifdef ETALONIUM_CLIENT
-    connect(serverService, &ServerService::serverStatus, this, &NetManager::qmlServerError);
-#endif
-}
-
 void DFSNetManager::connectResolver(DFSResolverService *resolver)
 {
     connect(resolver, &DFSResolverService::dfsTitle, this, &DFSNetManager::titleArrived);
@@ -260,43 +236,6 @@ void DFSNetManager::checkConnectionsStatus()
         const auto files = dfs->tmpFiles();
         for (const QString &file : files)
             dfs->requestFile(file);
-    }
-}
-
-void DFSNetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)
-{
-#ifdef ETALONIUM_CONSOLE
-    return;
-#endif
-    qDebug() << "void NetManager::connectToServer()";
-    QStringList servers = serverIp.split(";");
-    QString localIp = local != nullptr ? local->ip().toString() : "";
-
-    for (QString server : servers)
-    {
-        server = server.trimmed();
-        if (server.isEmpty())
-            continue;
-
-        quint16 port = serverPort;
-        bool customPort = server.indexOf(":") != -1;
-
-        if (customPort)
-        {
-            QStringList serverAndPort = server.split(":");
-            server = serverAndPort[0].trimmed();
-            port = quint16(serverAndPort[1].trimmed().toUInt());
-        }
-
-        if (server != localIp || allowLocalServer)
-        {
-            qDebug().noquote() << QString("Server: try connect to %1:%2").arg(server).arg(port);
-            addConnectionFromPair(QHostAddress(server), port);
-        }
-        else
-        {
-            qDebug().noquote() << QString("Server: ignore %1:%2").arg(server).arg(port);
-        }
     }
 }
 
