@@ -383,9 +383,10 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
                              const SocketPair &receiver)
 {
     Config::Net::TypeSend send;
-    if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400)
+    if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
+        || msgType == 402)
         send = Config::Net::TypeSend::ALL;
-    else if (Messages::isGeneralResponse(msgType))
+    else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
         send = Config::Net::TypeSend::FOCUSED;
     else
         send = Config::Net::TypeSend::EXCEPT;
