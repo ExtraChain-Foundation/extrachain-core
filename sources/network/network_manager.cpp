@@ -383,7 +383,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
                              const SocketPair &receiver)
 {
     Config::Net::TypeSend send;
-    if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType))
+    if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400)
         send = Config::Net::TypeSend::ALL;
     else if (Messages::isGeneralResponse(msgType))
         send = Config::Net::TypeSend::FOCUSED;
@@ -392,7 +392,6 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
     if (connections.isEmpty())
         saveToCache(message, msgType, receiver);
 
-    qDebug() << "atipa" << connections;
     for (const auto &tmp : connections)
     {
         bool isSend = false;

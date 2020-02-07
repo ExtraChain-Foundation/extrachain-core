@@ -129,8 +129,8 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     if (!socket->isValid())
         return;
     // take data from pair
-    QString ipAddress = QString::fromStdString(socketData.ip);
-    qint64 portAddress = socketData.port;
+    // QString ipAddress = QString::fromStdString(socketData.ip);
+    // qint64 portAddress = socketData.port;
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
     //    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress ==
     //    0)))
