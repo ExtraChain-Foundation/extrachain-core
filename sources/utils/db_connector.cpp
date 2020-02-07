@@ -61,6 +61,7 @@ bool DBConnector::close()
 
 std::vector<DBRow> DBConnector::select(std::string query) // std::pair with status
 {
+    dbmutex.lock();
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -107,6 +108,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
         rs = sqlite3_step(stmt);
     }
 
+    dbmutex.unlock();
     if (QString(query.c_str()).indexOf("SELECT  type") == -1)
         qDebug().nospace() << file().c_str() << "(" << (rs == SQLITE_DONE ? "true" : "false")
                            << "): " << query.c_str();
@@ -222,8 +224,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
 {
     int rc;
     sqlite3_stmt *stmt = NULL;
-    QMutex mutex;
-    mutex.lock();
+    dbmutex.lock();
     rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
     if (rc != SQLITE_OK)
     {
@@ -239,7 +240,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
         {
             qDebug() << "bind failed:" << sqlite3_errmsg(db);
             qDebug() << file().c_str() << "(false):" << query.c_str();
-            mutex.unlock();
+            dbmutex.unlock();
             return false;
         }
         else
@@ -249,7 +250,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
             {
                 qDebug() << "execution failed: " << sqlite3_errmsg(db);
                 qDebug() << file().c_str() << "(false):" << query.c_str();
-                mutex.unlock();
+                dbmutex.unlock();
                 return false;
             }
         }
@@ -257,7 +258,7 @@ bool DBConnector::insertWithData(std::string query, QByteArray data)
 
     qDebug() << file().c_str() << "(true):" << query.c_str();
     sqlite3_finalize(stmt);
-    mutex.unlock();
+    dbmutex.unlock();
     return true;
 }
 
