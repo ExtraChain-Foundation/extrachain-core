@@ -122,6 +122,48 @@ TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
     return fileMode ? blockIndex.searchPair(first, second) : memIndex.searchPair(first, second);
 }
 
+void Blockchain::saveTxInfoInEC(const QByteArray data) const
+{
+    QList<QByteArray> l = Serialization::universalDeserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
+    QList<Transaction> txs;
+    QList<QString> temp;
+
+    // data that need to write in database:
+    QByteArray actorIdS = "0";
+    QByteArray stateWalletS = "0";
+    QByteArray tokenS = "0";
+    QByteArray typeS = "0";
+
+    QByteArray actorIdR = "0";
+    QByteArray stateWalletR = "0";
+    QByteArray tokenR = "0";
+    QByteArray typeR = "0";
+
+    DBConnector cacheDB("cacheEC.db");
+    cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
+                        " ("
+                        "ActorId  TEXT  PRIMARY KEY NOT NULL, "
+                        "State     TEXT              NOT NULL, "
+                        "Token     TEXT              NOT NULL, "
+                        "Type   TEXT              NOT NULL );");
+
+    for (auto i : l)
+    {
+        temp = Serialization::deserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
+
+        actorIdS = temp[0].toLocal8Bit();
+        actorIdR = temp[1].toLocal8Bit();
+
+        std::vector<DBRow> extractSenderData =
+            cacheDB.select("SELECT * FROM cacheData WHERE ActorId ==" + actorIdS.toStdString() + ";");
+        std::vector<DBRow> extractReceiverData =
+            cacheDB.select("SELECT * FROM cacheData WHERE ActorId ==" + actorIdR.toStdString() + ";");
+
+        stateWalletS = (BigNumber(stateWalletS) - BigNumber(temp[2].toLocal8Bit())).toByteArray();
+        stateWalletR = (BigNumber(stateWalletR) + BigNumber(temp[2].toLocal8Bit())).toByteArray();
+    }
+}
+
 QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count,
                                                              BigNumber token)
 {
@@ -508,6 +550,10 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     {
         this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
     }
+
+    // crate cache transaction
+    saveTxInfoInEC(block.getData());
+
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -546,6 +592,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation())
         {
+            // get cache data
             createGenesisBlock(*(accountController->getMainActor()));
         }
     }

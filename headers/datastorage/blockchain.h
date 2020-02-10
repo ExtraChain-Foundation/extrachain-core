@@ -18,6 +18,9 @@
 #include <QString>
 #include <QMutex>
 #include <QTemporaryFile>
+
+// database
+#include "headers/utils/db_connector.h"
 class TransactionManager;
 /*
  * Main database class
@@ -76,6 +79,8 @@ private:
     Transaction getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     Transaction getTxByUser(const BigNumber &id, const QByteArray &token = "0");
     TxPair getTxPair(const BigNumber &first, const BigNumber second);
+
+    void saveTxInfoInEC(const QByteArray data) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
