@@ -162,12 +162,14 @@ HEADERS += \
 
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
+!android {
 !android!ios: DESTDIR = Etalonium
 android: DESTDIR = android-build
 OBJECTS_DIR = .obj
 MOC_DIR = .moc
 RCC_DIR = .qrc
 UI_DIR = .ui
+}
 
 QMAKE_SPEC_T = $$[QMAKE_SPEC]
 contains(QMAKE_SPEC_T,.*win32.*) {
@@ -182,6 +184,6 @@ QMAKE_SUBSTITUTES += preconfig.h.in
 
 include(../etalonium-libs/etalonium-libs.pri)
 
-lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.12+")
-lessThan(QT_MINOR_VERSION, 12): error("requires Qt 5.12+")
-lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.12+")
+lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.14+")
+lessThan(QT_MINOR_VERSION, 14): error("requires Qt 5.14+")
+# lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.14+")

@@ -669,8 +669,6 @@ void NodeManager::connectSignals()
     dfsConnection();
 
     connect(netManager, &NetManager::newSocket, this, &NodeManager::getAllActorsTimerCall);
-    connect(netManager, &NetManager::newSocket, dfs, &Dfs::dfsSyncT);
-
     connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
