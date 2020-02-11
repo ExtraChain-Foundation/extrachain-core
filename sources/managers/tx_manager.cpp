@@ -107,7 +107,6 @@ Block TransactionManager::makeBlock()
     }
 
     QByteArray data = convertTxs(pendingTxs);
-    qDebug() << data << "SEVA";
     Block lastBlock = blockchain->getLastBlock();
 
     Block block(data, lastBlock);
