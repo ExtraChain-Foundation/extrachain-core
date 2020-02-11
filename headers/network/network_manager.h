@@ -90,14 +90,12 @@ protected:
     QNetworkAddressEntry *local = nullptr;
 
 private:
-    quint16 serverPort = isDebug ? 2221 : 2222;
     QMap<QByteArray, int> *requestResponseMap;
 
     ServerService *serverService;
     quint16 netPort;
 
 private:
-    QList<SocketService *> connections;
     QMap<QByteArray, int> handler = {};
 
 public:
@@ -107,6 +105,9 @@ public:
     void showMessage(const QHostAddress &from, const QString &message);
 
     void resolverMessage(const QHostAddress &from, const QString &message);
+    QList<SocketService *> connections;
+
+    quint16 serverPort = isDebug ? 2221 : 2222;
 
 private:
     void connectSocket();
@@ -123,22 +124,6 @@ signals:
     void finished();
 
 protected:
-    /**
-     * @brief Send message directly to the selected peer
-     * @param msg
-     * @param peerAddress
-     */
-    void sendMsgToPeer(Messages::IMessage &msg, QHostAddress peerAddress);
-    /**
-     * @brief sendMsgToPeerPort
-     * @param msg
-     * @param peerAddress
-     * @param port
-     */
-    void sendMsgToPeerPort(Messages::IMessage &msg, QHostAddress peerAddress, int port);
-    /**
-     * @brief findLocal
-     */
     void findLocal();
     /**
      * @brief startNetwork
@@ -175,6 +160,8 @@ protected:
      */
     bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
                        const QList<SocketService *> list);
+    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver);
+    void sendFromCache();
 private slots:
     /**
      * @brief createNewConnectionsFromList
@@ -222,14 +209,15 @@ public slots:
      * @param data for send
      * @param messageType type to compress
      */
-    void sendMessage(const QByteArray &message);
+
     /**
      * @brief Remove connections from connection list
      */
     void removeConnection();
-    void dfsToPeerTmp(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver);
 
 public:
+    virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
+                             const SocketPair &receiver);
     void distMessage(const QByteArray &data, const SocketPair &socketData);
     virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 

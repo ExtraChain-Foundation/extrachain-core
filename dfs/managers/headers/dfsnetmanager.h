@@ -28,9 +28,7 @@ private:
     Dfs *dfs;
     DFSResolverService *uResolver;
     QList<DFSResolverService *> dfsResolvers;
-    QList<SocketService *> socketsList;
     QMap<QByteArray, int> handler;
-    quint16 serverPort;
     ServerService *serverService;
 
 public:
@@ -39,14 +37,11 @@ public:
 
 private:
     /**
-     * @brief socketConnection
+     * @brief socketConnectionf
      * create connection for last append socket to the list
      */
     void socketConnection();
     void socketDisconnect(SocketService *connection);
-    void startNetwork() override;
-    void setupServerServiceConnections() override;
-    //    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler) override;
     void connectResolver(DFSResolverService *resolver);
     void disconnectResolver(DFSResolverService *resolver);
     void createDFSResolver(Network::DataStruct ds);
@@ -70,7 +65,7 @@ signals:
 
 public slots:
     void appendSocket(SocketService *socket);
-    //    void newMsg(const QByteArray &message, const SocketPair &receiver);
+    //    void newMsg(const QByteArray &message, const SocketPafir &receiver);
     void process();
     void startDFSNetwork();
     void uiReconnect();
@@ -82,7 +77,6 @@ private slots:
     void checkMyIdentificator();
     void addConnection(qint64 socketDescriptor) override;
     void checkConnectionsStatus() override;
-    void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local) override;
     SocketService *addConnectionFromPair(QHostAddress address, quint16 port) override;
 };
 

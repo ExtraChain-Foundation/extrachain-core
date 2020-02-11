@@ -17,6 +17,7 @@
 #include <iterator>
 #ifdef ETALONIUM_CLIENT
 #include <QImage>
+#include <QImageReader>
 #endif
 
 class Dfs : public QObject

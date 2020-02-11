@@ -517,6 +517,7 @@ void NodeManager::connectUi()
     });
     connect(prProfile, &PrivateProfile::initActorChatM,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
+    connect(prProfile, &PrivateProfile::loginError, uiController, &UiController::loginError);
     connect(this, &NodeManager::setCurrentIdNotifyM, notifyM, &NotificationManager::setCurrentID);
     connect(notifyM, &NotificationManager::getCurrentID, this,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
