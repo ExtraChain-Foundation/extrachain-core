@@ -606,9 +606,6 @@ void NodeManager::connectUi()
     uiController->startThreads();
 }
 
-#include "asyncfuture.h" // temp
-#include <QtConcurrent>  // temp
-
 void NodeManager::addNewWallet()
 {
     auto future = QtConcurrent::run(accController, &AccountController::createActor, 0);
