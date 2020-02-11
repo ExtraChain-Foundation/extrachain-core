@@ -352,8 +352,6 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
     QFile file(path);
 
     qDebug() << "Saving the file:" << path;
-
-    QString profilePath = buildPathPubProfile(id.toActorId());
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";

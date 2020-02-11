@@ -1,8 +1,23 @@
 #include "datastorage/index/blockindex.h"
 
 BlockIndex::BlockIndex()
-    : FileIndex(/*DataStorage::BLOCKCHAIN_INDEX + '/' + */ DataStorage::BLOCK_INDEX_FOLDER_NAME)
 {
+    this->folderName = DataStorage::BLOCK_INDEX_FOLDER_NAME;
+    this->sectionSize = Config::DataStorage::SECTION_SIZE;
+    firstSavedId = loadFirstId();
+    lastSavedId = loadLastId();
+    QDir dir(DataStorage::BLOCKCHAIN_INDEX + '/' + folderName);
+    QFileInfoList sectionList =
+        dir.entryInfoList(QDir::Filter::Dirs | QDir::Filter::NoDot | QDir::Filter::NoDotDot);
+    int count = 0;
+    for (auto &el : sectionList)
+    {
+
+        QFileInfoList files =
+            el.dir().entryInfoList(QDir::Filter::Dirs | QDir::Filter::NoDot | QDir::Filter::NoDotDot);
+        count += files.size();
+    }
+    records = count;
 }
 
 BlockIndex::BlockIndex(const BigNumber &recordsLimit)
@@ -13,7 +28,6 @@ BlockIndex::BlockIndex(const BigNumber &recordsLimit)
 }
 
 BlockIndex::BlockIndex(const QString &folderName)
-    : FileIndex(folderName)
 {
     qDebug() << "BLOCK INDEX: constructor: folder name - " << folderName;
 }
@@ -399,4 +413,259 @@ TxPair BlockIndex::searchPair(const BigNumber &first, const BigNumber &second) c
         --records;
     }
     return pair;
+}
+
+QString BlockIndex::buildFilePath(const BigNumber &id) const
+{
+    BigNumber section = this->calcSection(id);
+    QString pathToFolder = getFolderPath() + "/" + section.toByteArray();
+
+    QDir dir(pathToFolder);
+    if (!dir.exists())
+    {
+        qDebug() << "Creating dir:" << pathToFolder;
+        dir = QDir();
+        dir.mkpath(pathToFolder);
+    }
+
+    return pathToFolder + "/" + id.toByteArray();
+}
+int BlockIndex::add(const BigNumber &id, const QByteArray &data)
+{
+    QString path = buildFilePath(id);
+    QFile file(path);
+
+    qDebug() << "Saving the file:" << path;
+
+    if (file.exists())
+    {
+        qDebug() << "Can't save the file" << path << "(File already exits)";
+        return Errors::FILE_ALREADY_EXISTS;
+    }
+
+    if (recordLimitIsReached())
+    {
+        if (this->firstSavedId != 0)
+        {
+            this->removeById(this->getFirstSavedId());
+            this->firstSavedId++; // todo: check!
+        }
+    }
+
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(data);
+        file.flush();
+        file.close();
+
+        this->records = records + 1;
+
+        // updating last saved id is a regular operation
+        if (id > this->lastSavedId)
+        {
+            this->lastSavedId = id;
+        }
+
+        // but updating the first saved id is rarely (should be logged)
+        if (id < this->firstSavedId || firstSavedId.isEmpty())
+        {
+            qDebug() << "First saved id is updated from" << firstSavedId << "to" << id;
+            this->firstSavedId = id;
+        }
+
+        return 0;
+    }
+
+    qCritical() << "Can't save the file" << path << "(File is not opened)";
+    return Errors::FILE_IS_NOT_OPENED;
+}
+
+bool BlockIndex::hasRecordLimit() const
+{
+    return !this->recordsLimit.isEmpty();
+}
+
+bool BlockIndex::recordLimitIsReached() const
+{
+    return this->hasRecordLimit() && (this->records >= this->recordsLimit);
+}
+
+int BlockIndex::removeById(const BigNumber &id)
+{
+    qDebug() << "Removing record with id" << id.toActorId();
+    if (id < firstSavedId)
+    {
+        removeAll();
+    }
+    qDebug() << lastSavedId << "(last saved id)" << id << "(id to remove)";
+
+    BigNumber currentIdToRemove = id;
+
+    while (currentIdToRemove <= lastSavedId)
+    {
+        QString pathToFile = buildFilePath(currentIdToRemove);
+        qDebug() << "To remove: " << pathToFile;
+        QFile file(pathToFile);
+        if (file.exists() && !file.isOpen())
+        {
+            bool isRemoved = file.remove();
+            if (isRemoved)
+            {
+                this->records--;
+            }
+        }
+        currentIdToRemove++;
+    }
+
+    this->lastSavedId = BigNumber(id) - 1;
+    return 0;
+}
+
+void BlockIndex::removeAll()
+{
+    QString folderPath = this->getFolderPath();
+    qDebug() << "Clearing file index: " << folderPath;
+
+    QDir folder(folderPath);
+    for (const QString &section :
+         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name))
+    {
+        QDir dir(folderPath + QString("/") + section);
+        dir.removeRecursively();
+    }
+
+    // update state
+    this->records = 0;
+    this->firstSavedId = 0;
+    this->lastSavedId = 0;
+}
+QString BlockIndex::getFolderPath() const
+{
+    return DataStorage::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
+}
+
+QString BlockIndex::getFolderName() const
+{
+    return this->folderName;
+}
+
+BigNumber BlockIndex::getFirstSavedId() const
+{
+    return this->firstSavedId;
+}
+
+BigNumber BlockIndex::calcSection(BigNumber id) const
+{
+    return id / BigNumber(sectionSize);
+}
+
+BigNumber BlockIndex::getLastSavedId() const
+{
+    return this->lastSavedId;
+}
+
+BigNumber BlockIndex::getRecords() const
+{
+    return this->records;
+}
+
+QByteArray BlockIndex::getById(const BigNumber &id) const
+{
+    QString path = buildFilePath(id);
+    QFile file(path);
+
+    if (!file.exists())
+    {
+        qDebug() << "Can't get the file" << path << "(File is not exits)";
+        return QByteArray();
+    }
+
+    if (file.open(QIODevice::ReadOnly))
+    {
+        QByteArray data;
+        data = file.readAll();
+        file.close();
+        // very strange code
+        if (data.mid(data.size() - 1, 1) == "\n")
+            return data.mid(0, data.size() - 1);
+        return data;
+    }
+
+    qDebug() << "Can't get the file:" << path << "(File is not opened)";
+    return QByteArray();
+}
+
+BigNumber BlockIndex::loadFirstId()
+{
+    BigNumber firstSavedId = loadFileFromSection([](const QStringList &folders) { return folders[0]; },
+                                                 [](const QStringList &files) { return files[0]; });
+
+    if (!firstSavedId.isEmpty())
+    {
+        qDebug() << "FIFE INDEX: loadFirsId: Loaded first saved id:" << firstSavedId;
+    }
+    else
+    {
+        qDebug() << "FIFE INDEX: loadFirsId: First saved id is not loaded";
+    }
+
+    return firstSavedId;
+}
+
+BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,
+                                          std::function<QString(const QStringList &files)> getFile)
+{
+    auto asBigNumComparator = [](const QString &file1, const QString &file2) {
+        return BigNumber(file1.toLocal8Bit()) < BigNumber(file2.toLocal8Bit());
+    };
+
+    QDir folder(getFolderPath());
+
+    // sections
+    qDebug() << "FILE INDEX: "
+             << "loadFileFromSection(): " << folder.path();
+    QStringList list = folder.entryList(QDir::Filter::Dirs | QDir::Filter::NoDotAndDotDot);
+    if (list.isEmpty())
+    {
+        qDebug() << "FILE INDEX: "
+                 << "loadFileFromSection(): "
+                 << "folder.entryList: empty";
+        return BigNumber();
+    }
+    std::sort(list.begin(), list.end(), asBigNumComparator);
+    folder.cd(getFolder(list)); // go to section
+
+    // files in sections
+    qDebug() << "FILE INDEX: "
+             << "loadFileFromSection(): " << folder.path();
+    list = folder.entryList(QDir::Filter::Files | QDir::Filter::NoDotAndDotDot);
+    if (list.isEmpty())
+    {
+        qDebug() << "FILE INDEX: "
+                 << "loadFileFromSection(): "
+                 << "folder.entryList->folder.entryList: empty";
+        return BigNumber();
+    }
+    std::sort(list.begin(), list.end(), asBigNumComparator);
+
+    qDebug() << "FILE INDEX: "
+             << "loadFileFromSection(): lastId - "
+             << (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLocal8Bit()));
+    return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLocal8Bit());
+}
+
+BigNumber BlockIndex::loadLastId()
+{
+    BigNumber lastSavedId = loadFileFromSection([](const QStringList &folders) { return folders.last(); },
+                                                [](const QStringList &files) { return files.last(); });
+
+    if (!lastSavedId.isEmpty())
+    {
+        qDebug() << "Loaded last saved id:" << lastSavedId;
+    }
+    else
+    {
+        qDebug() << "Last saved id is not loaded";
+    }
+    return lastSavedId;
 }

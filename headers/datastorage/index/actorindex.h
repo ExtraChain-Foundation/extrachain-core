@@ -5,7 +5,6 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include "datastorage/index/fileindex.h"
 #include <datastorage/searchfilters.h>
 #include "profile/public_profile.h"
 #include "network/socket_pair.h"
