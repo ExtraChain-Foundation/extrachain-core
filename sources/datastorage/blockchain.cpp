@@ -606,7 +606,6 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     }
 
     // crate cache transaction
-    saveTxInfoInEC(block.getData());
 
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
@@ -618,6 +617,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
         emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+        saveTxInfoInEC(block.getData());
         break;
     }
     case Errors::FILE_ALREADY_EXISTS:
