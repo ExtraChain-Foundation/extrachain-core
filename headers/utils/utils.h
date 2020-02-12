@@ -413,6 +413,11 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 
 // Dfs
 static const int DATA_OFFSET = 512;
+
+enum typeDataRow
+{
+    UNIVERSAL
+};
 } // namespace DataStorage
 
 namespace KeyStore {

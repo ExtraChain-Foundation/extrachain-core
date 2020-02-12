@@ -278,10 +278,10 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         {
             if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                 break;
-            GenesisDataRow recSender =
-                GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()), tx.getToken());
-            GenesisDataRow recReceiver =
-                GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()), tx.getToken());
+            GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
+                                                      tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
+            GenesisDataRow recReceiver = GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()),
+                                                        tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
             addRecordsIfNew(recReceiver, recSender);
         }
     }
@@ -309,7 +309,8 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 
                 for (QMap<BigNumber, BigNumber>::iterator i = states.begin(); i != states.end(); i++)
                 {
-                    genBlockData.append(GenesisDataRow(i.key(), i.value(), 0));
+                    genBlockData.append(
+                        GenesisDataRow(i.key(), i.value(), 0, DataStorage::typeDataRow::UNIVERSAL));
                 }
                 BigNumber comp = BigNumber(*(actorIndex->companyId));
                 //                nb.setApprover(BigNumber(*(actorIndex->companyId)));
@@ -598,8 +599,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0:
-    {
+    case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
@@ -607,8 +607,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         saveTxInfoInEC(block.getData());
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS:
-    {
+    case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
