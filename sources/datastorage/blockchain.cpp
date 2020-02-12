@@ -335,15 +335,12 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
             DBConnector cacheDB("cacheEC.db");
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
-                nb.addRow(GenesisDataRow(BigNumber(QByteArray::fromStdString(i["ActorId"])),
-                                         BigNumber(QByteArray::fromStdString(i["State"])),
-                                         BigNumber(QByteArray::fromStdString(i["Token"]))));
-            //            for (GenesisDataRow dr: genBlockData)
-            //            {
+                nb.addRow(
+                    GenesisDataRow(BigNumber(QByteArray::fromStdString(i["ActorId"])),
+                                   BigNumber(QByteArray::fromStdString(i["State"])),
+                                   BigNumber(QByteArray::fromStdString(i["Token"])),
+                                   DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
 
-            //
-            //                nb.addRow(dr);
-            //            }
             nb.setPrevGenHash(blockIndex.getBlockById(i).getHash());
         }
         qDebug() << "Genesis block created";
