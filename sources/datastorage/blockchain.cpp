@@ -125,42 +125,96 @@ TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
 void Blockchain::saveTxInfoInEC(const QByteArray data) const
 {
     QList<QByteArray> l = Serialization::universalDeserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
-    QList<Transaction> txs;
-    QList<QString> temp;
+    QList<QByteArray> temp;
 
-    // data that need to write in database:
-    QByteArray actorIdS = "0";
-    QByteArray stateWalletS = "0";
-    QByteArray tokenS = "0";
-    QByteArray typeS = "0";
+    std::vector<DBRow> extractData;
+    DBRow resultData;
 
-    QByteArray actorIdR = "0";
-    QByteArray stateWalletR = "0";
-    QByteArray tokenR = "0";
-    QByteArray typeR = "0";
+    QString typeS = "0"; // sender type
+    QString typeR = "0"; // receiver type
 
+    QByteArray token = "0"; // temp[5].toStdString();
     DBConnector cacheDB("cacheEC.db");
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
-                        "ActorId  TEXT  PRIMARY KEY NOT NULL, "
+                        "ActorId  TEXT   NOT NULL, "
                         "State     TEXT              NOT NULL, "
                         "Token     TEXT              NOT NULL, "
                         "Type   TEXT              NOT NULL );");
 
     for (auto i : l)
     {
-        temp = Serialization::deserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
+        temp = Serialization::universalDeserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
+        if (temp.size() != 12)
+        {
+            qDebug() << "[Error][" << __FILE__ << __FUNCTION__ << __LINE__ << "]Transaction size !=12";
+            return;
+        }
 
-        actorIdS = temp[0].toLocal8Bit();
-        actorIdR = temp[1].toLocal8Bit();
+        // modify sender data in db
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[0].toStdString()
+                                     + "' AND Token=='" + token.toStdString() + "';");
 
-        std::vector<DBRow> extractSenderData =
-            cacheDB.select("SELECT * FROM cacheData WHERE ActorId ==" + actorIdS.toStdString() + ";");
-        std::vector<DBRow> extractReceiverData =
-            cacheDB.select("SELECT * FROM cacheData WHERE ActorId ==" + actorIdR.toStdString() + ";");
+        resultData["ActorId"] = temp[0].toStdString();
+        resultData["Token"] = token.toStdString();
+        resultData["Type"] = typeS.toStdString();
 
-        stateWalletS = (BigNumber(stateWalletS) - BigNumber(temp[2].toLocal8Bit())).toByteArray();
-        stateWalletR = (BigNumber(stateWalletR) + BigNumber(temp[2].toLocal8Bit())).toByteArray();
+        if (extractData.empty())
+        {
+            resultData["State"] = ('-' + temp[2]).toStdString();
+            cacheDB.insert("cacheData", resultData);
+        }
+
+        else
+        {
+            qDebug() << "Extract state data Sender=" << QByteArray::fromStdString(extractData[0]["State"]);
+            resultData["State"] =
+                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(temp[2]))
+                    .toStdString();
+            cacheDB.update("UPDATE cacheData "
+                           "SET State ='"
+                           + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
+                           + "' AND Token=='" + resultData["Token"] + "';");
+        }
+        //        qDebug() << "Data sender: Actor id=" << QString::fromStdString(resultData["ActorId"])
+        //                 << " Token=" << QString::fromStdString(resultData["Token"])
+        //                 << "Type=" << QString::fromStdString(resultData["Type"])
+        //                 << "State=" << QString::fromStdString(resultData["State"]);
+
+        // cacheDB.insert("cacheData", resultData);
+
+        extractData.clear();
+        resultData.clear();
+
+        // modify receiver data in db
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[1].toStdString()
+                                     + "' AND Token=='" + token.toStdString() + "';");
+
+        resultData["ActorId"] = temp[1].toStdString();
+        resultData["Token"] = token.toStdString();
+        resultData["Type"] = typeR.toStdString();
+        if (extractData.empty())
+        {
+            resultData["State"] = temp[2].toStdString();
+            cacheDB.insert("cacheData", resultData);
+        }
+
+        else
+        {
+            qDebug() << "Extract state data Receiver=" << QByteArray::fromStdString(extractData[0]["State"]);
+            resultData["State"] =
+                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(temp[2]))
+                    .toStdString();
+            cacheDB.update("UPDATE cacheData "
+                           "SET State ='"
+                           + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
+                           + "' AND Token=='" + resultData["Token"] + "';");
+        }
+
+        qDebug() << "Data receiver: Actor id=" << QString::fromStdString(resultData["ActorId"])
+                 << " Token=" << QString::fromStdString(resultData["Token"])
+                 << "Type=" << QString::fromStdString(resultData["Type"])
+                 << "State=" << QString::fromStdString(resultData["State"]);
     }
 }
 
