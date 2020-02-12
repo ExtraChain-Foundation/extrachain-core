@@ -133,7 +133,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
     QString typeS = "0"; // sender type
     QString typeR = "0"; // receiver type
 
-    QByteArray token = "0"; // temp[5].toStdString();
+    // QByteArray token = "0"; // temp[5].toStdString();
     DBConnector cacheDB("cacheEC.db");
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
@@ -153,10 +153,10 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 
         // modify sender data in db
         extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[0].toStdString()
-                                     + "' AND Token=='" + token.toStdString() + "';");
+                                     + "' AND Token=='" + temp[5].toStdString() + "';");
 
         resultData["ActorId"] = temp[0].toStdString();
-        resultData["Token"] = token.toStdString();
+        resultData["Token"] = temp[5].toStdString();
         resultData["Type"] = typeS.toStdString();
 
         if (extractData.empty())
@@ -188,10 +188,10 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 
         // modify receiver data in db
         extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[1].toStdString()
-                                     + "' AND Token=='" + token.toStdString() + "';");
+                                     + "' AND Token=='" + temp[5].toStdString() + "';");
 
         resultData["ActorId"] = temp[1].toStdString();
-        resultData["Token"] = token.toStdString();
+        resultData["Token"] = temp[5].toStdString();
         resultData["Type"] = typeR.toStdString();
         if (extractData.empty())
         {
@@ -612,14 +612,16 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0: {
+    case 0:
+    {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
         emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS: {
+    case Errors::FILE_ALREADY_EXISTS:
+    {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
