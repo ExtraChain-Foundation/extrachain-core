@@ -133,7 +133,6 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
     QString typeS = "0"; // sender type
     QString typeR = "0"; // receiver type
 
-    // QByteArray token = "0"; // temp[5].toStdString();
     DBConnector cacheDB("cacheEC.db");
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
@@ -167,7 +166,6 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 
         else
         {
-            qDebug() << "Extract state data Sender=" << QByteArray::fromStdString(extractData[0]["State"]);
             resultData["State"] =
                 (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(temp[2]))
                     .toStdString();
@@ -176,12 +174,6 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
                            + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
                            + "' AND Token=='" + resultData["Token"] + "';");
         }
-        //        qDebug() << "Data sender: Actor id=" << QString::fromStdString(resultData["ActorId"])
-        //                 << " Token=" << QString::fromStdString(resultData["Token"])
-        //                 << "Type=" << QString::fromStdString(resultData["Type"])
-        //                 << "State=" << QString::fromStdString(resultData["State"]);
-
-        // cacheDB.insert("cacheData", resultData);
 
         extractData.clear();
         resultData.clear();
@@ -201,7 +193,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 
         else
         {
-            qDebug() << "Extract state data Receiver=" << QByteArray::fromStdString(extractData[0]["State"]);
+
             resultData["State"] =
                 (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(temp[2]))
                     .toStdString();
@@ -210,11 +202,6 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
                            + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
                            + "' AND Token=='" + resultData["Token"] + "';");
         }
-
-        qDebug() << "Data receiver: Actor id=" << QString::fromStdString(resultData["ActorId"])
-                 << " Token=" << QString::fromStdString(resultData["Token"])
-                 << "Type=" << QString::fromStdString(resultData["Type"])
-                 << "State=" << QString::fromStdString(resultData["State"]);
     }
 }
 
