@@ -83,6 +83,7 @@ public:
     QByteArray getDataForDigSig() const override;
     bool deserialize(const QByteArray &serialized) override;
     QByteArray serialize() const override;
+    void initFields(QList<QByteArray> &list) override;
 
     /**
      * @brief extract non-empty genesisDataRows from data

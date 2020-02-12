@@ -198,7 +198,6 @@ void ResolverService::resolveGeneralTask()
     message = msg;
 
     unsigned int msgType = message.type;
-    QByteArray data_test = message.serialize();
     if (msgType == 0)
     {
         qDebug() << "msgType.isEmpty()";
@@ -241,34 +240,19 @@ void ResolverService::resolveGeneralTask()
     switch (msgType)
     {
     case Messages::GeneralRequest::GetAllActors: {
-        //        GetAllActorMessage response(message.getMsg_data());
-        //        emit handleGetAllActor(calcHash(msg), receiver);
         actorIndex->handleGetAllActor(calcHash(msg), receiver);
         finishWork();
         break;
     }
     case Messages::GeneralResponse::getAllActorsResponse: {
-        //        qDebug() << "RESOLVER SERVICE: "
-        //                 << "recieveMsg(): type: " << GET_ALL_ACTORS_RESPONSE_MESSAGE << "\nmessage: " <<
-        //                 msg;
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
         actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.data, 4));
-        //        emit newActor(Actor<KeyPublic>(responseMessage.getMsg_data()));
         finishWork();
         break;
     }
-        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        //        else if ((msgType == INVITE_CHAT_MESSAGE) || (msgType == CHAT_MESSAGE))
-        //        {
-        //            //
-        //            chatManager->msgReceiver(message);
-        //            finishWork();
-        //        }
-        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
         // spread messages
     case Messages::ChainMessage::profileMessage: {
         emit newProfile(message.data);
@@ -340,23 +324,6 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-
-        //    else if (msgType == MERGED_BLOCK_MESSAGE)
-        //    {
-        //        //
-        //        qDebug() << "[resolve message] MERGED_BLOCK_MESSAGE";
-        //        finishWork();
-        //    }
-        //    else if (msgType == BLOCK_APPROVED_MESSAGE)
-        //    {
-        //        qDebug() << "RESOLVER SERVICE: "
-        //                 << "recieveMsg(): type: " << BLOCK_APPROVED_MESSAGE;
-        //        BlockApprovedMessage r(message.getData());
-        //        finishWork();
-
-        //        //        emit BlockApproved(message.getBlockId(), message.getApprover(), peerAddress);
-        //    }
-
     // request messages
     case Messages::GeneralRequest::GetActor: {
         GetActorMessage response;

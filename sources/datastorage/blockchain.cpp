@@ -512,16 +512,14 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0:
-    {
+    case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
         emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS:
-    {
+    case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
@@ -771,12 +769,6 @@ void Blockchain::showBlockchain() const
     Block currentBlock = blockIndex.getBlockById(i);
     do
     {
-        //        qDebug() << "     Block id: " << currentBlock.getIndex()
-        //                 << "\n     Aprover: " << currentBlock.getApprover()
-        //                 << "\n     Data: " << currentBlock.getData()
-        //                 << "\n     Hash: " << currentBlock.getHash()
-        //                 << "\n     PrevHash: " << currentBlock.getPrevHash()
-        //                 << "\n     DigSig: " << currentBlock.getDigSig();
         i++;
         currentBlock = blockIndex.getBlockById(i);
     } while (!currentBlock.isEmpty());

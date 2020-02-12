@@ -34,9 +34,8 @@ protected:
     const int FIELDS_SIZE = 4;
     QByteArray type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
     QByteArray data;                           // payload (serialized tx's, or other)
-private:
-    BigNumber index = BigNumber(-1);    // block id
-    BigNumber approver = BigNumber(-1); // block approver id
+    BigNumber index = BigNumber(-1);           // block id
+    BigNumber approver = BigNumber(-1);        // block approver id
 
     long long date;
     QByteArray prevHash; // previous block hash
@@ -113,10 +112,8 @@ public:
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
 
-protected:
-    void initFields(QList<QByteArray> &list);
-
 public:
+    virtual void initFields(QList<QByteArray> &list);
     QList<Block> getDataFromAllBlocks(QList<QByteArray>);
     void setPrevHash(const QByteArray &value);
     QByteArray getType() const;

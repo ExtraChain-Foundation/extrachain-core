@@ -4,6 +4,7 @@
 #include "datastorage/block.h"
 #include "datastorage/tx_pair.h"
 #include "datastorage/genesis_block.h"
+#include "utils/db_connector.h"
 
 class BlockIndex
 {
@@ -87,7 +88,7 @@ private:
     QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
                                           int count = 10, BigNumber token = 0) const;
     QString buildFilePath(const BigNumber &id) const;
-    int add(const BigNumber &id, const QByteArray &data);
+    int add(const BigNumber &id, const QByteArray &_data);
     bool hasRecordLimit() const;
     bool recordLimitIsReached() const;
     QString getFolderPath() const;

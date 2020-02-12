@@ -284,8 +284,8 @@ void Block::initFields(QList<QByteArray> &list)
     type = list.takeFirst();
     index = BigNumber(list.takeFirst());
     approver = BigNumber(list.takeFirst());
-    data = list.takeFirst();
     date = list.takeFirst().toLongLong();
+    data = list.takeFirst();
     prevHash = list.takeFirst();
     hash = list.takeFirst();
     digSig = list.takeFirst();

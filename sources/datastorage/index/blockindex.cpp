@@ -95,7 +95,6 @@ GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const
 Block BlockIndex::getBlockById(const BigNumber &id) const
 {
     QByteArray serializedBlock = this->getById(id);
-    //    qDebug() << "BLOCK: " << serializedBlock;
     if (!serializedBlock.isEmpty())
     {
         if (Block::isBlock(serializedBlock))
@@ -430,7 +429,7 @@ QString BlockIndex::buildFilePath(const BigNumber &id) const
 
     return pathToFolder + "/" + id.toByteArray();
 }
-int BlockIndex::add(const BigNumber &id, const QByteArray &data)
+int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
 {
     QString path = buildFilePath(id);
     QFile file(path);
@@ -452,12 +451,42 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &data)
         }
     }
 
-    if (file.open(QIODevice::WriteOnly))
+    DBConnector DB;
+    if (DB.open(path.toStdString()))
     {
-        file.write(data);
-        file.flush();
-        file.close();
+        if (GenesisBlock::isGenesisBlock(_data))
+        {
+            GenesisBlock block(_data);
+            DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
+            DBRow row;
 
+            row.insert({ "type", block.getType().toStdString() });
+            row.insert({ "id", block.getIndex().toStdString() });
+            row.insert({ "approver", block.getApprover().toStdString() });
+            row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
+            row.insert({ "data", block.getData().toStdString() });
+            row.insert({ "prevHash", block.getPrevHash().toStdString() });
+            row.insert({ "hash", block.getHash().toStdString() });
+            row.insert({ "digSig", block.getDigSig().toStdString() });
+            row.insert({ "prevGenHash", block.getPrevGenHash().toStdString() });
+            DB.insert(Config::DataStorage::GenesisBlockTable, row);
+        }
+        else
+        {
+            Block block(_data);
+            DB.createTable(Config::DataStorage::BlockTableCreate);
+            DBRow row;
+
+            row.insert({ "type", block.getType().toStdString() });
+            row.insert({ "id", block.getIndex().toStdString() });
+            row.insert({ "approver", block.getApprover().toStdString() });
+            row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
+            row.insert({ "data", block.getData().toStdString() });
+            row.insert({ "prevHash", block.getPrevHash().toStdString() });
+            row.insert({ "hash", block.getHash().toStdString() });
+            row.insert({ "digSig", block.getDigSig().toStdString() });
+            DB.insert(Config::DataStorage::BlockTable, row);
+        }
         this->records = records + 1;
 
         // updating last saved id is a regular operation
@@ -475,7 +504,6 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &data)
 
         return 0;
     }
-
     qCritical() << "Can't save the file" << path << "(File is not opened)";
     return Errors::FILE_IS_NOT_OPENED;
 }
@@ -580,19 +608,43 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
         return QByteArray();
     }
 
-    if (file.open(QIODevice::ReadOnly))
+    DBConnector DB(path.toStdString());
+    if (DB.tableNames()[0] == "GenesisBlock")
     {
-        QByteArray data;
-        data = file.readAll();
-        file.close();
-        // very strange code
-        if (data.mid(data.size() - 1, 1) == "\n")
-            return data.mid(0, data.size() - 1);
-        return data;
-    }
+        std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::GenesisBlockTable + " ;");
+        if (res.size() == 0)
+        {
+            qDebug() << "Can't get the file" << path << "(File is empty)";
+            return QByteArray();
+        }
+        QByteArrayList list;
+        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str())
+             << QByteArray(res[0].at("approver").c_str()) << res[0].at("date").c_str()
+             << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
+             << res[0].at("digSig").c_str() << res[0].at("prevGenHash").c_str();
 
-    qDebug() << "Can't get the file:" << path << "(File is not opened)";
-    return QByteArray();
+        GenesisBlock b;
+        b.initFields(list);
+        return b.serialize();
+    }
+    else
+    {
+        std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::BlockTable + " ;");
+        if (res.size() == 0)
+        {
+            qDebug() << "Can't get the file" << path << "(File is empty)";
+            return QByteArray();
+        }
+        QByteArrayList list;
+        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str())
+             << QByteArray(res[0].at("approver").c_str()) << res[0].at("date").c_str()
+             << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
+             << res[0].at("digSig").c_str();
+
+        Block b;
+        b.initFields(list);
+        return b.serialize();
+    }
 }
 
 BigNumber BlockIndex::loadFirstId()
