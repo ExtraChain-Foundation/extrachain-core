@@ -340,7 +340,8 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                                    BigNumber(QByteArray::fromStdString(i["State"])),
                                    BigNumber(QByteArray::fromStdString(i["Token"])),
                                    DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
-
+            cacheDB.query("DELETE FROM cacheDb");
+            cacheDB.query("VACUUM");
             nb.setPrevGenHash(blockIndex.getBlockById(i).getHash());
         }
         qDebug() << "Genesis block created";
