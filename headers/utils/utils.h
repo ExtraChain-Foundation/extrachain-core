@@ -238,6 +238,33 @@ namespace DataStorage {
           "PRIMARY KEY (user, post)"
           ");";
 
+    static const std::string BlockTable = "Block";
+    static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
+        + " ("
+          "type         TEXT  NOT NULL, "
+          "id           TEXT  NOT NULL, "
+          "approver     TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT  NOT NULL, "
+          "prevHash     TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL, "
+          "digSig       TEXT  NOT NULL "
+          ");";
+
+    static const std::string GenesisBlockTable = "GenesisBlock";
+    static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
+        + " ("
+          "type         TEXT  NOT NULL, "
+          "id           TEXT  NOT NULL, "
+          "approver     TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT  NOT NULL, "
+          "prevHash     TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL, "
+          "digSig       TEXT  NOT NULL, "
+          "prevGenHash  TEXT  NOT NULL "
+          ");";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
@@ -393,6 +420,11 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 
 // Dfs
 static const int DATA_OFFSET = 512;
+
+enum typeDataRow
+{
+    UNIVERSAL
+};
 } // namespace DataStorage
 
 namespace KeyStore {

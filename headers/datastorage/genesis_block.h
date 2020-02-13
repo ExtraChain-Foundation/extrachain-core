@@ -6,21 +6,25 @@
 /**
  * @brief Representation of one row in genesis block data field
  */
+
 class GenesisDataRow
 {
 public:
     BigNumber actorId;
     BigNumber state;
     BigNumber token;
+    DataStorage::typeDataRow type;
 
 public:
     GenesisDataRow()
     {
     }
-    GenesisDataRow(const BigNumber &actorId, const BigNumber &state, const BigNumber &token)
+    GenesisDataRow(const BigNumber &actorId, const BigNumber &state, const BigNumber &token,
+                   const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)
         , token(token)
+        , type(type)
     {
     }
     GenesisDataRow(const QByteArray &serialized)
@@ -31,24 +35,26 @@ public:
     QByteArray serialize() const
     {
         QList<QByteArray> l;
-        l << actorId.toActorId() << state.toByteArray() << token.toActorId();
+        l << actorId.toActorId() << state.toByteArray() << token.toActorId() << QByteArray::number(type);
         return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
     void deserialize(const QByteArray &serialized)
     {
         QList<QByteArray> l =
             Serialization::universalDeserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
-        if (l.size() == 3)
+        if (l.size() == 4)
         {
             actorId = BigNumber(l.at(0));
             state = BigNumber(l.at(1));
             token = BigNumber(l.at(2));
+            type = DataStorage::typeDataRow(l.at(3).toInt());
         }
     }
 
     bool operator==(const GenesisDataRow &other)
     {
-        return this->actorId == other.actorId && this->state == other.state && this->token == other.token;
+        return this->actorId == other.actorId && this->state == other.state && this->token == other.token
+            && this->type == other.type;
     }
 };
 
@@ -83,6 +89,7 @@ public:
     QByteArray getDataForDigSig() const override;
     bool deserialize(const QByteArray &serialized) override;
     QByteArray serialize() const override;
+    void initFields(QList<QByteArray> &list) override;
 
     /**
      * @brief extract non-empty genesisDataRows from data

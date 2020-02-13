@@ -122,6 +122,89 @@ TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
     return fileMode ? blockIndex.searchPair(first, second) : memIndex.searchPair(first, second);
 }
 
+void Blockchain::saveTxInfoInEC(const QByteArray data) const
+{
+    QList<QByteArray> l = Serialization::universalDeserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
+    QList<QByteArray> temp;
+
+    std::vector<DBRow> extractData;
+    DBRow resultData;
+
+    QString typeS = "0"; // sender type
+    QString typeR = "0"; // receiver type
+
+    DBConnector cacheDB("cacheEC.db");
+    cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
+                        " ("
+                        "ActorId  TEXT   NOT NULL, "
+                        "State     TEXT              NOT NULL, "
+                        "Token     TEXT              NOT NULL, "
+                        "Type   TEXT              NOT NULL );");
+
+    for (auto i : l)
+    {
+        temp = Serialization::universalDeserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
+        if (temp.size() != 12)
+        {
+            qDebug() << "[Error][" << __FILE__ << __FUNCTION__ << __LINE__ << "]Transaction size !=12";
+            return;
+        }
+
+        // modify sender data in db
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[0].toStdString()
+                                     + "' AND Token=='" + temp[5].toStdString() + "';");
+
+        resultData["ActorId"] = temp[0].toStdString();
+        resultData["Token"] = temp[5].toStdString();
+        resultData["Type"] = typeS.toStdString();
+
+        if (extractData.empty())
+        {
+            resultData["State"] = ('-' + temp[2]).toStdString();
+            cacheDB.insert("cacheData", resultData);
+        }
+
+        else
+        {
+            resultData["State"] =
+                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(temp[2]))
+                    .toStdString();
+            cacheDB.update("UPDATE cacheData "
+                           "SET State ='"
+                           + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
+                           + "' AND Token=='" + resultData["Token"] + "';");
+        }
+
+        extractData.clear();
+        resultData.clear();
+
+        // modify receiver data in db
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[1].toStdString()
+                                     + "' AND Token=='" + temp[5].toStdString() + "';");
+
+        resultData["ActorId"] = temp[1].toStdString();
+        resultData["Token"] = temp[5].toStdString();
+        resultData["Type"] = typeR.toStdString();
+        if (extractData.empty())
+        {
+            resultData["State"] = temp[2].toStdString();
+            cacheDB.insert("cacheData", resultData);
+        }
+
+        else
+        {
+
+            resultData["State"] =
+                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(temp[2]))
+                    .toStdString();
+            cacheDB.update("UPDATE cacheData "
+                           "SET State ='"
+                           + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
+                           + "' AND Token=='" + resultData["Token"] + "';");
+        }
+    }
+}
+
 QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count,
                                                              BigNumber token)
 {
@@ -195,10 +278,10 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         {
             if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                 break;
-            GenesisDataRow recSender =
-                GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()), tx.getToken());
-            GenesisDataRow recReceiver =
-                GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()), tx.getToken());
+            GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
+                                                      tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
+            GenesisDataRow recReceiver = GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()),
+                                                        tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
             addRecordsIfNew(recReceiver, recSender);
         }
     }
@@ -226,7 +309,8 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 
                 for (QMap<BigNumber, BigNumber>::iterator i = states.begin(); i != states.end(); i++)
                 {
-                    genBlockData.append(GenesisDataRow(i.key(), i.value(), 0));
+                    genBlockData.append(
+                        GenesisDataRow(i.key(), i.value(), 0, DataStorage::typeDataRow::UNIVERSAL));
                 }
                 BigNumber comp = BigNumber(*(actorIndex->companyId));
                 //                nb.setApprover(BigNumber(*(actorIndex->companyId)));
@@ -248,10 +332,15 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 findRecordsInBlock(b);
                 i--;
             }
-            foreach (GenesisDataRow dr, genBlockData)
-            {
-                nb.addRow(dr);
-            }
+            DBConnector cacheDB("cacheEC.db");
+            std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
+            for (auto i : extractData)
+                nb.addRow(
+                    GenesisDataRow(BigNumber(QByteArray::fromStdString(i["ActorId"])),
+                                   BigNumber(QByteArray::fromStdString(i["State"])),
+                                   BigNumber(QByteArray::fromStdString(i["Token"])),
+                                   DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
+
             nb.setPrevGenHash(blockIndex.getBlockById(i).getHash());
         }
         qDebug() << "Genesis block created";
@@ -508,20 +597,22 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
     {
         this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
     }
+
+    // crate cache transaction
+
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
     {
-    case 0:
-    {
+    case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
         emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+        saveTxInfoInEC(block.getData());
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS:
-    {
+    case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
@@ -548,6 +639,7 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation())
         {
+            // get cache data
             createGenesisBlock(*(accountController->getMainActor()));
         }
     }
@@ -771,12 +863,6 @@ void Blockchain::showBlockchain() const
     Block currentBlock = blockIndex.getBlockById(i);
     do
     {
-        //        qDebug() << "     Block id: " << currentBlock.getIndex()
-        //                 << "\n     Aprover: " << currentBlock.getApprover()
-        //                 << "\n     Data: " << currentBlock.getData()
-        //                 << "\n     Hash: " << currentBlock.getHash()
-        //                 << "\n     PrevHash: " << currentBlock.getPrevHash()
-        //                 << "\n     DigSig: " << currentBlock.getDigSig();
         i++;
         currentBlock = blockIndex.getBlockById(i);
     } while (!currentBlock.isEmpty());

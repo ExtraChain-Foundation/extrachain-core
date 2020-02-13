@@ -147,8 +147,6 @@ signals:
     // public:
     void sendActorToWallet(QList<QByteArray> list);
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
-
-    void sendActorIdSeva(bool status, BigNumber actorId);
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
