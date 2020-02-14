@@ -95,6 +95,8 @@ public:
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
     void getBlockZero();
+    BigNumber getSupply(const QByteArray &idToken);
+    BigNumber getFullSupply(const QByteArray &idToken);
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);

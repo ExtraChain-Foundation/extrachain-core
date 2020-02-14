@@ -151,7 +151,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
         }
 
         // modify sender data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[0].toStdString()
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + temp[0].toStdString()
                                      + "' AND Token=='" + temp[5].toStdString() + "';");
 
         resultData["ActorId"] = temp[0].toStdString();
@@ -171,7 +171,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
                     .toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
-                           + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
+                           + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
                            + "' AND Token=='" + resultData["Token"] + "';");
         }
 
@@ -226,6 +226,46 @@ void Blockchain::getBlockZero()
         actorIndex->setCompanyId(new QByteArray(zero.getApprover().toActorId()));
 }
 
+BigNumber Blockchain::getSupply(const QByteArray &idToken)
+{
+    GenesisBlock gen = blockIndex.getLastGenesisBlock();
+    BigNumber id = gen.getIndex();
+    std::string path = blockIndex.buildFilePath(id).toStdString();
+    DBConnector cacheDB(path);
+    std::vector<DBRow> extractData =
+        cacheDB.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString() + "' ;");
+    BigNumber res = 0;
+    for (const auto &tmp : extractData)
+    {
+        QByteArray sum(tmp.at("State").c_str());
+        res += sum.toInt();
+    }
+    return res;
+}
+
+BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
+{
+    BigNumber id = blockIndex.getLastGenesisBlock().getIndex();
+    std::string path = blockIndex.buildFilePath(id).toStdString();
+    DBConnector cacheDB(path);
+    std::vector<DBRow> extractData =
+        cacheDB.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString() + "' ;");
+    BigNumber res = 0;
+    for (const auto &tmp : extractData)
+    {
+        QByteArray sum(tmp.at("State").c_str());
+        res += sum.toInt();
+    }
+    DBConnector cacheDB2("cacheEC.db");
+    std::vector<DBRow> extractData2 =
+        cacheDB2.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString() + "' ;");
+    for (const auto &tmp : extractData2)
+    {
+        QByteArray sum(tmp.at("State").c_str());
+        res += sum.toInt();
+    }
+    return res;
+}
 // Genesis block //
 
 bool Blockchain::shouldStartGenesisCreation()
