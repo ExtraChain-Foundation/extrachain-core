@@ -26,6 +26,9 @@ class ResolveManager;
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "headers/network/packages/service/message_types.h"
 
+#include "asyncfuture.h"
+#include <QtConcurrent>
+
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
 #include "headers/ui/notificationclient.h"

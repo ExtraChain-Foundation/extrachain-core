@@ -51,7 +51,9 @@ public:
         }
 
         if (NetManager != nullptr)
+        {
             NetManager->send(dfsMessage.serialize(), type, receiver);
+        }
     }
 
 signals:

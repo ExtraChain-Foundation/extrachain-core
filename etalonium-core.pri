@@ -1,3 +1,4 @@
+QT += concurrent
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 

@@ -204,33 +204,7 @@ void NetManager::checkConnectionsStatus()
 
 #ifdef ETALONIUM_CLIENT
     if (flag)
-    {
-        QFile file("network_cache");
-        if (!file.exists())
-            return;
-        if (!file.open(QFile::ReadOnly))
-            return;
-        QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
-
-        for (QByteArray packageData : allPackages)
-        {
-            QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
-            if (package.length() != 4)
-                return;
-
-            QByteArray data = package[0];
-            SocketPair socketData;
-            socketData.ip = package[1].toStdString();
-            socketData.port = package[2].toShort();
-            socketData.iden = package[3];
-
-            for (int i = 0; i < connections.size(); i++)
-                connections[i]->distMsg(data, socketData);
-        }
-
-        file.close();
-        file.remove();
-    }
+        sendFromCache();
 #endif
 }
 
@@ -283,14 +257,12 @@ void NetManager::checkMyIdentificator()
 
 void NetManager::startNetwork()
 {
-    qDebug() << "NetManager::startNetwork()";
-    // netPort = serverPort;
-    qDebug() << "NetPort:" << serverPort;
+    qDebug() << "startNetwork()";
+    qDebug() << "NetPort:" << this->serverPort;
 
     if (local != nullptr)
     {
         serverService = new ServerService(serverPort, local);
-        // resolverService = new ResolverService(actorIndex, requestResponseMap);
         setupServerServiceConnections();
         serverService->startListen();
     }
@@ -376,11 +348,47 @@ void NetManager::broadcastMsg(const QByteArray &msg)
     distMessage(msg, socketPair);
 }
 
-void NetManager::sendMessage(const QByteArray &message)
+void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
+                             const SocketPair &receiver)
 {
+    Config::Net::TypeSend send;
+    if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
+        || msgType == 402)
+        send = Config::Net::TypeSend::ALL;
+    else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
+        send = Config::Net::TypeSend::FOCUSED;
+    else
+        send = Config::Net::TypeSend::EXCEPT;
+    if (connections.isEmpty())
+        saveToCache(message, msgType, receiver);
 
-    if (checkMsgCount(message, handler, connections))
-        broadcastMsg(message);
+    for (const auto &tmp : connections)
+    {
+        bool isSend = false;
+
+        switch (send)
+        {
+        case Config::Net::TypeSend::EXCEPT:
+            isSend = tmp->getAddress().toStdString() != receiver.ip && tmp->getPort() != receiver.port;
+            break;
+        case Config::Net::TypeSend::FOCUSED:
+            isSend = tmp->getAddress().toStdString() == receiver.ip && tmp->getPort() == receiver.port;
+            break;
+        case Config::Net::TypeSend::ALL:
+            isSend = true;
+            break;
+        }
+
+        if (!isSend)
+            continue;
+        if (tmp->getActive())
+            tmp->distMsg(message, receiver);
+        else
+            saveToCache(message, msgType, receiver);
+    }
+
+    //    if (checkMsgCount(message, handler, connections))
+    //        broadcastMsg(message);
 }
 bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
                                const QList<SocketService *> list)
@@ -407,17 +415,44 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
     return flag_result;
 }
 
-void NetManager::dfsToPeerTmp(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
+void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgType,
+                             const SocketPair &receiver)
 {
-    BaseMessage msg;
-    msg.type = msgType;
-    msg.data = data;
-    //    msg.setMsgData(data);
-
-    //    emit sendMsg(msg.serialize(), receiver);
-    distMessage(msg.serialize(), receiver);
+    QFile file("network_cache");
+    file.open(QFile::Append);
+    QByteArrayList list = { message, QByteArray::fromStdString(receiver.ip),
+                            QByteArray::number(receiver.port), receiver.iden, QByteArray::number(msgType) };
+    QByteArray package = Serialization::universalSerialize(list, 8);
+    file.write(Utils::intToByteArray(package.length(), 8) + package);
+    file.close();
 }
 
+void NetManager::sendFromCache()
+{
+    QFile file("network_cache");
+    if (!file.exists())
+        return;
+    if (!file.open(QFile::ReadOnly))
+        return;
+    QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
+    file.close();
+    file.remove();
+
+    for (QByteArray packageData : allPackages)
+    {
+        QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
+        if (package.length() != 5)
+            return;
+
+        QByteArray data = package[0];
+        SocketPair socketData;
+        socketData.ip = package[1].toStdString();
+        socketData.port = package[2].toShort();
+        socketData.iden = package[3];
+        unsigned int type = package[4].toUInt();
+        sendMessage(data, type, socketData);
+    }
+}
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
 #ifdef ETALONIUM_CLIENT
@@ -455,20 +490,6 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
     mutex.unlock();
     return nullptr;
-}
-
-void NetManager::sendMsgToPeer(IMessage &msg, QHostAddress peerAddress)
-{
-    SocketPair socketPair(peerAddress.toString().toStdString(), 0);
-    //    emit sendMsg(msg.serialize(), socketPair);
-    distMessage(msg.serialize(), socketPair);
-}
-
-void NetManager::sendMsgToPeerPort(IMessage &msg, QHostAddress peerAddress, int port)
-{
-    SocketPair socketPair(peerAddress.toString().toStdString(), port);
-    //    emit sendMsg(msg.serialize(), socketPair);
-    distMessage(msg.serialize(), socketPair);
 }
 
 void NetManager::upnpErrDis(QString msg)

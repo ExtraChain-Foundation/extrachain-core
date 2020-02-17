@@ -115,6 +115,7 @@ void PrivateProfile::profile(const QByteArray &hash)
 
     if (users.isEmpty())
     {
+        emit loginError(1);
         qDebug() << "ERROR: empty keystore";
         return;
     }
@@ -146,6 +147,7 @@ void PrivateProfile::profile(const QByteArray &hash)
             }
             else
             {
+                emit loginError(2);
 #ifdef ETALONIUM_CONSOLE
                 qInfo() << "---> Incorrect email or password";
                 std::exit(0);

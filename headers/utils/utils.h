@@ -292,6 +292,13 @@ namespace Net {
     // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
     // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
+
+    enum TypeSend
+    {
+        ALL,
+        EXCEPT,
+        FOCUSED
+    };
 } // namespace Net
 } // namespace Config
 
