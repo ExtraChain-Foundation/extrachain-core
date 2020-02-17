@@ -133,7 +133,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
     QString typeS = "0"; // sender type
     QString typeR = "0"; // receiver type
 
-    DBConnector cacheDB("cacheEC.db");
+    DBConnector cacheDB("blockchain/cacheEC.db");
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
                         "ActorId  TEXT   NOT NULL, "
@@ -152,7 +152,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 
         // modify sender data in db
         extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + temp[0].toStdString()
-                                     + "' AND Token=='" + temp[5].toStdString() + "';");
+                                     + "' AND Token='" + temp[5].toStdString() + "';");
 
         resultData["ActorId"] = temp[0].toStdString();
         resultData["Token"] = temp[5].toStdString();
@@ -172,15 +172,15 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
-                           + "' AND Token=='" + resultData["Token"] + "';");
+                           + "' AND Token='" + resultData["Token"] + "';");
         }
 
         extractData.clear();
         resultData.clear();
 
         // modify receiver data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId =='" + temp[1].toStdString()
-                                     + "' AND Token=='" + temp[5].toStdString() + "';");
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + temp[1].toStdString()
+                                     + "' AND Token='" + temp[5].toStdString() + "';");
 
         resultData["ActorId"] = temp[1].toStdString();
         resultData["Token"] = temp[5].toStdString();
@@ -199,8 +199,8 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
                     .toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
-                           + resultData["State"] + "' WHERE ActorId=='" + resultData["ActorId"]
-                           + "' AND Token=='" + resultData["Token"] + "';");
+                           + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
+                           + "' AND Token='" + resultData["Token"] + "';");
         }
     }
 }
@@ -232,13 +232,18 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken)
     BigNumber id = gen.getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
-    std::vector<DBRow> extractData =
-        cacheDB.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString() + "' ;");
+    std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM GenesisBlock ;");
     BigNumber res = 0;
     for (const auto &tmp : extractData)
     {
+        QByteArray data = tmp.at("data").c_str();
+        QByteArrayList list = Serialization::universalDeserialize(data, Serialization::DEFAULT_FIELD_SIZE);
+        GenesisDataRow row(data);
+    }
+    for (const auto &tmp : extractData)
+    {
         QByteArray sum(tmp.at("State").c_str());
-        res += sum.toInt();
+        res += sum.toLongLong();
     }
     return res;
 }
@@ -249,16 +254,17 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
     std::vector<DBRow> extractData =
-        cacheDB.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString() + "' ;");
+        cacheDB.select("SELECT * FROM GenesisBlock WHERE Token = '" + idToken.toStdString() + "' ;");
     BigNumber res = 0;
     for (const auto &tmp : extractData)
     {
         QByteArray sum(tmp.at("State").c_str());
         res += sum.toInt();
     }
-    DBConnector cacheDB2("cacheEC.db");
+    DBConnector cacheDB2("blockchain/cacheEC.db");
     std::vector<DBRow> extractData2 =
-        cacheDB2.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString() + "' ;");
+        cacheDB2.select("SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString()
+                        + "' AND ActorId = '" + actorIndex->companyId->toStdString() + "' ;");
     for (const auto &tmp : extractData2)
     {
         QByteArray sum(tmp.at("State").c_str());
@@ -372,7 +378,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 findRecordsInBlock(b);
                 i--;
             }
-            DBConnector cacheDB("cacheEC.db");
+            DBConnector cacheDB("blockchain/cacheEC.db");
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
                 nb.addRow(
@@ -380,7 +386,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                                    BigNumber(QByteArray::fromStdString(i["State"])),
                                    BigNumber(QByteArray::fromStdString(i["Token"])),
                                    DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
-            cacheDB.query("DELETE FROM cacheDb");
+            cacheDB.query("DELETE FROM cacheData");
             cacheDB.query("VACUUM");
             nb.setPrevGenHash(blockIndex.getBlockById(i).getHash());
         }
@@ -681,7 +687,14 @@ int Blockchain::addBlock(const Block &block, bool isGenesis)
         if (shouldStartGenesisCreation())
         {
             // get cache data
-            createGenesisBlock(*(accountController->getMainActor()));
+
+            if (blockIndex.addBlock(createGenesisBlock(*(accountController->getMainActor()))) == 0)
+            {
+                qDebug() << "Block" << block.getIndex() << block.getType()
+                         << "is successfully added to blockchain";
+                emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+                blocksFromLastGenesis = 0;
+            }
         }
     }
 

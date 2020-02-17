@@ -103,15 +103,11 @@ void Block::sign(const Actor<KeyPrivate> &actor)
 bool Block::verify(const Actor<KeyPublic> &actor) const
 {
     bool res = actor.getKey()->verify(getDataForDigSig(), getDigSig());
-    //    return res;
     return digSig.isEmpty() ? false : res;
 }
 
 bool Block::deserialize(const QByteArray &serialized)
 {
-
-    //    QList<QByteArray> list =
-    //        Serialization::deserialize(serialized, Serialization::BLOCK_FIELD_SPLITTER);
     QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
 
     if (list.length() == 8)
@@ -154,7 +150,7 @@ BlockCompare Block::compareBlock(const Block &b) const
 
 void Block::addData(const QByteArray &data)
 {
-    this->data = this->data + data /* + Serialization::DEFAULT_LIST_SPLITTER*/;
+    this->data = this->data + Serialization::universalSerialize({ data }, FIELDS_SIZE);
 }
 
 QList<Transaction> Block::extractTransactions() const
@@ -164,8 +160,6 @@ QList<Transaction> Block::extractTransactions() const
         return QList<Transaction>();
     }
 
-    //    QList<QByteArray> txsData =
-    //        Serialization::deserialize(data, Serialization::DEFAULT_LIST_SPLITTER);
     QList<QByteArray> txsData = Serialization::universalDeserialize(data, FIELDS_SIZE);
     QList<Transaction> transactions;
     for (const QByteArray &trData : txsData)

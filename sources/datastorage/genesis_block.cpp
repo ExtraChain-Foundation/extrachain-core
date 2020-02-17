@@ -26,7 +26,7 @@ GenesisBlock::GenesisBlock(const QByteArray &data, const Block &prevBlock, const
 
 void GenesisBlock::addRow(const GenesisDataRow &row)
 {
-    this->data += row.serialize();
+    this->data += Serialization::universalSerialize({ row.serialize() }, Serialization::DEFAULT_FIELD_SIZE);
 }
 
 QByteArray GenesisBlock::getDataForDigSig() const

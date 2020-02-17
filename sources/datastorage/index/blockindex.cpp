@@ -458,34 +458,67 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
         {
             GenesisBlock block(_data);
             DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
+            DB.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
             DBRow row;
 
             row.insert({ "type", block.getType().toStdString() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "approver", block.getApprover().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
-            row.insert({ "data", block.getData().toStdString() });
+            row.insert({ "data", "" });
             row.insert({ "prevHash", block.getPrevHash().toStdString() });
             row.insert({ "hash", block.getHash().toStdString() });
             row.insert({ "digSig", block.getDigSig().toStdString() });
             row.insert({ "prevGenHash", block.getPrevGenHash().toStdString() });
             DB.insert(Config::DataStorage::GenesisBlockTable, row);
+
+            QList<GenesisDataRow> rows = block.extractDataRows();
+            for (const auto &tmp : rows)
+            {
+                DBRow rowRow;
+                rowRow.insert({ "actorId", tmp.actorId.toStdString() });
+                rowRow.insert({ "state", tmp.state.toStdString() });
+                rowRow.insert({ "token", tmp.token.toStdString() });
+                rowRow.insert({ "type", QByteArray::number(tmp.type).toStdString() });
+                DB.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
+            }
         }
         else
         {
             Block block(_data);
             DB.createTable(Config::DataStorage::BlockTableCreate);
+            DB.createTable(Config::DataStorage::TxBlockTableCreate);
             DBRow row;
 
             row.insert({ "type", block.getType().toStdString() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "approver", block.getApprover().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
-            row.insert({ "data", block.getData().toStdString() });
+            row.insert({ "data", "" });
             row.insert({ "prevHash", block.getPrevHash().toStdString() });
             row.insert({ "hash", block.getHash().toStdString() });
             row.insert({ "digSig", block.getDigSig().toStdString() });
             DB.insert(Config::DataStorage::BlockTable, row);
+
+            DBRow rowRow;
+            QList<Transaction> rows = block.extractTransactions();
+            for (const auto &tmp : rows)
+            {
+                rowRow.insert({ "sender", tmp.getSender().toStdString() });
+                rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
+                rowRow.insert({ "amount", tmp.getAmount().toStdString() });
+                rowRow.insert({ "date", QByteArray::number(tmp.getDate()).toStdString() });
+                rowRow.insert({ "token", tmp.getToken().toStdString() });
+                rowRow.insert({ "data", tmp.getData().toStdString() });
+                rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
+                rowRow.insert({ "gas", QByteArray::number(tmp.getGas()).toStdString() });
+                rowRow.insert({ "hop", QByteArray::number(tmp.getHop()).toStdString() });
+                rowRow.insert({ "hash", tmp.getHash().toStdString() });
+                rowRow.insert({ "approver", tmp.getApprover().toStdString() });
+                rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
+
+                DB.insert(Config::DataStorage::TxBlockTable, rowRow);
+            }
         }
         this->records = records + 1;
 
@@ -622,9 +655,20 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
              << QByteArray(res[0].at("approver").c_str()) << res[0].at("date").c_str()
              << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
              << res[0].at("digSig").c_str() << res[0].at("prevGenHash").c_str();
-
+        std::vector<DBRow> rows =
+            DB.select("SELECT * FROM " + Config::DataStorage::RowGenesisBlockTable + " ;");
         GenesisBlock b;
         b.initFields(list);
+        for (const auto &tmp : rows)
+        {
+            GenesisDataRow dRow;
+            dRow.type = DataStorage::typeDataRow(QByteArray(tmp.at("type").c_str()).toInt());
+            dRow.state = BigNumber(QByteArray(tmp.at("state").c_str()));
+            dRow.token = BigNumber(QByteArray(tmp.at("token").c_str()));
+            dRow.actorId = BigNumber(QByteArray(tmp.at("actorId").c_str()));
+            b.addRow(dRow);
+        }
+
         return b.serialize();
     }
     else
@@ -640,9 +684,30 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
              << QByteArray(res[0].at("approver").c_str()) << res[0].at("date").c_str()
              << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
              << res[0].at("digSig").c_str();
-
+        std::vector<DBRow> rows = DB.select("SELECT * FROM " + Config::DataStorage::TxBlockTable + " ;");
         Block b;
         b.initFields(list);
+
+        for (const auto &tmp : rows)
+        {
+            QByteArrayList list;
+            QByteArray sender = tmp.at("sender").c_str();
+            QByteArray receiver = tmp.at("receiver").c_str();
+            QByteArray amount = tmp.at("amount").c_str();
+            QByteArray date = tmp.at("date").c_str();
+            QByteArray data = tmp.at("data").c_str();
+            QByteArray token = tmp.at("token").c_str();
+            QByteArray prevBlock = tmp.at("prevBlock").c_str();
+            QByteArray gas = tmp.at("gas").c_str();
+            QByteArray hop = tmp.at("hop").c_str();
+            QByteArray hash = tmp.at("hash").c_str();
+            QByteArray approver = tmp.at("approver").c_str();
+            QByteArray digSig = tmp.at("digSig").c_str();
+            list << sender << receiver << amount << date << data << token << prevBlock << gas << hop << hash
+                 << approver << digSig;
+            b.addData(Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE));
+        }
+
         return b.serialize();
     }
 }
