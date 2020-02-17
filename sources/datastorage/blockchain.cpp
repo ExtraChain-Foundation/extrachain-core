@@ -232,18 +232,13 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken)
     BigNumber id = gen.getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
-    std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM GenesisBlock ;");
+    std::vector<DBRow> extractData =
+        cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "';");
     BigNumber res = 0;
     for (const auto &tmp : extractData)
     {
-        QByteArray data = tmp.at("data").c_str();
-        QByteArrayList list = Serialization::universalDeserialize(data, Serialization::DEFAULT_FIELD_SIZE);
-        GenesisDataRow row(data);
-    }
-    for (const auto &tmp : extractData)
-    {
-        QByteArray sum(tmp.at("State").c_str());
-        res += sum.toLongLong();
+        QByteArray sum(tmp.at("state").c_str());
+        res += BigNumber(sum).abs();
     }
     return res;
 }
@@ -254,12 +249,12 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
     std::vector<DBRow> extractData =
-        cacheDB.select("SELECT * FROM GenesisBlock WHERE Token = '" + idToken.toStdString() + "' ;");
+        cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "' ;");
     BigNumber res = 0;
     for (const auto &tmp : extractData)
     {
-        QByteArray sum(tmp.at("State").c_str());
-        res += sum.toInt();
+        QByteArray sum(tmp.at("state").c_str());
+        res += BigNumber(sum).abs();
     }
     DBConnector cacheDB2("blockchain/cacheEC.db");
     std::vector<DBRow> extractData2 =
@@ -268,7 +263,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     for (const auto &tmp : extractData2)
     {
         QByteArray sum(tmp.at("State").c_str());
-        res += sum.toInt();
+        res += BigNumber(sum).abs();
     }
     return res;
 }
