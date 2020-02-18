@@ -307,7 +307,7 @@ void NetManager::reconnectUi()
 
 void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
 {
-    QNetworkAddressEntry *currentAddress = nullptr;
+    QNetworkAddressEntry *currentAddress = new QNetworkAddressEntry();
     QList<QByteArray> idIpPair;
     for(auto i :ipList)
     {
