@@ -305,13 +305,19 @@ void NetManager::reconnectUi()
     connectToServer(serverPort, local);
 }
 
-void NetManager::connectToServerByIpList(QList<QString> ipList)
+void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
 {
-    QNetworkAddressEntry *currentAddress;
-
+    QNetworkAddressEntry *currentAddress = nullptr;
+    QList<QByteArray> idIpPair;
     for(auto i :ipList)
     {
-        currentAddress->setIp((QHostAddress)i);
+        idIpPair=Serialization::universalDeserialize(i);
+        if(idIpPair.size()!=2)
+        {
+            qDebug()<<"[Error]["<<__LINE__<<"]["<<__FILE__<<"]"<<__FUNCTION__<<"] size!=2";
+            continue;
+        }
+        currentAddress->setIp((QHostAddress)(QString)idIpPair[1]);
         connectToServer(serverPort,currentAddress);
     }
 }

@@ -251,6 +251,7 @@ void SocketService::continueDoRead()
                     this->processID(bl[1]);
                     netManager->addTempConnections(Serialization::universalDeserialize( bl[2]));
                     netManager->checkOnValidConnection(this->getID().toByteArray(),this->getAddress().toLocal8Bit());
+                   netManager->connectToServerByIpList(Serialization::universalDeserialize( bl[2]));
 
 #ifdef ETALONIUM_CLIENT
                     int netBuild = bl[0].toInt();

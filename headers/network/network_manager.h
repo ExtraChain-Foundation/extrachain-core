@@ -196,7 +196,7 @@ public slots:
     void process();
     void logDebug();
     void reconnectUi();
-    void connectToServerByIpList(QList<QString> ipList);
+    void connectToServerByIpList(QList<QByteArray> ipList);
     virtual void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator
