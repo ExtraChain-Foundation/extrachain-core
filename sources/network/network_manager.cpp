@@ -626,8 +626,13 @@ QByteArray NetManager::getSerializedConnectionList() const
 {
     QList<QByteArray> connectionsList;
     for (auto i : this->connections)
+    {
+        if (i->getAddress() == local->ip().toString())
+            continue;
+
         connectionsList.append(
             Serialization::universalSerialize({ i->getID().toByteArray(), i->getAddress().toLocal8Bit() }));
+    }
     return Serialization::universalSerialize(connectionsList);
 }
 
