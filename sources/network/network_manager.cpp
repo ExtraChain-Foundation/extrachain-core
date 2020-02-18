@@ -251,7 +251,7 @@ void NetManager::checkMyIdentificator()
         if (el->getIdentificator() == connection->getIdentificator() && el != connection)
         {
             emit el->removeMe();
-            return;
+            // return;
         }
     }
     emit connection->setActiveSignal(true);
@@ -317,8 +317,13 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
         bool flag = false;
         for (const auto connection : connections)
         {
+            if (connection == nullptr)
+                continue;
             QString socketIp = connection->getAddress();
             QByteArray ind = connection->getIdentificator().toByteArray();
+
+            if (!connection->getActive() || ind == "0")
+                flag = true;
 
             if (ind == idIpPair[0] || ind == net::readNetManagerIdentificator()/*socketIp == ipStr || socketIp == local->ip().toString()*/)
             {

@@ -79,7 +79,7 @@ void Dfs::responseResponseLast(const DistFileSystem::responseLast &response, Soc
         }
     }
 
-    qDebug() << "needUpdate" << needUpdate;
+    // qDebug() << "needUpdate" << needUpdate;
 }
 
 void Dfs::responseRequestCardPath(const DistFileSystem::RequestCardPart &request, SocketPair receiver)
