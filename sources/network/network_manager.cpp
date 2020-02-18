@@ -20,7 +20,7 @@ void NetManager::setResolveManager(ResolveManager *value)
 
 void NetManager::addTempConnections(const QList<QByteArray> &value)
 {
-    tempConnections+=value;
+    tempConnections += value;
 }
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
@@ -125,9 +125,9 @@ void NetManager::disconnectSocket(SocketService *connection)
 
 void NetManager::removeConnectionByAddress(QByteArray address)
 {
-    for(auto i: connections)
+    for (auto i : connections)
     {
-        if(i->getAddress()==address)
+        if (i->getAddress() == address)
         {
             emit i->removeMe();
             return;
@@ -307,18 +307,19 @@ void NetManager::reconnectUi()
 
 void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
 {
-    QNetworkAddressEntry *currentAddress = new QNetworkAddressEntry();
-    QList<QByteArray> idIpPair;
-    for(auto i :ipList)
+    QByteArrayList idIpPair;
+
+    for (auto ip : ipList)
     {
-        idIpPair=Serialization::universalDeserialize(i);
-        if(idIpPair.size()!=2)
+        idIpPair = Serialization::universalDeserialize(ip);
+
+        if (idIpPair.size() != 2)
         {
-            qDebug()<<"[Error]["<<__LINE__<<"]["<<__FILE__<<"]"<<__FUNCTION__<<"] size!=2";
+            qDebug() << "[Error][" << __LINE__ << "][" << __FILE__ << "]" << __FUNCTION__ << "] size!=2";
             continue;
         }
-        currentAddress->setIp((QHostAddress)(QString)idIpPair[1]);
-        connectToServer(serverPort,currentAddress);
+
+        addConnectionFromPair(QHostAddress(QString(idIpPair[1])), serverPort);
     }
 }
 
@@ -387,7 +388,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
 {
     Config::Net::TypeSend send;
     if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
-            || msgType == 402)
+        || msgType == 402)
         send = Config::Net::TypeSend::ALL;
     else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
         send = Config::Net::TypeSend::FOCUSED;
@@ -624,8 +625,9 @@ QNetworkAddressEntry *NetManager::getLocal() const
 QByteArray NetManager::getSerializedConnectionList() const
 {
     QList<QByteArray> connectionsList;
-    for(auto i:this->connections)
-        connectionsList.append(Serialization::universalSerialize({ i->getID().toByteArray(),i->getAddress().toLocal8Bit()}));
+    for (auto i : this->connections)
+        connectionsList.append(
+            Serialization::universalSerialize({ i->getID().toByteArray(), i->getAddress().toLocal8Bit() }));
     return Serialization::universalSerialize(connectionsList);
 }
 
@@ -634,15 +636,15 @@ void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
     QByteArray currId;
     QByteArray currAddress;
     QList<QByteArray> idAddressPair;
-    for(auto i : tempConnections)
+    for (auto i : tempConnections)
     {
-        idAddressPair=Serialization::universalDeserialize(i);
-        if(idAddressPair.size()!=2)
+        idAddressPair = Serialization::universalDeserialize(i);
+        if (idAddressPair.size() != 2)
         {
-            qDebug()<<"[Error]["<<__LINE__<<"]["<<__FILE__<<"]"<<__FUNCTION__<<"] size!=2";
+            qDebug() << "[Error][" << __LINE__ << "][" << __FILE__ << "]" << __FUNCTION__ << "] size!=2";
             continue;
         }
-        if(idAddressPair[1]==address && idAddressPair[0]!=id)
+        if (idAddressPair[1] == address && idAddressPair[0] != id)
         {
             removeConnectionByAddress(address);
 
