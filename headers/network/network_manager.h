@@ -73,6 +73,7 @@ private:
     BigNumber maxBlockCount; // latest known block num in the blockchain
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
+    QList<QByteArray> tempConnections;
 
 protected:
     bool isDebug =
@@ -112,6 +113,7 @@ public:
 private:
     void connectSocket();
     void disconnectSocket(SocketService *connection);
+    void removeConnectionByAddress(QByteArray address);
 
 public:
     ServerService *getServerService();
@@ -194,6 +196,7 @@ public slots:
     void process();
     void logDebug();
     void reconnectUi();
+    void connectToServerByIpList(QList<QString> ipList);
     virtual void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator
@@ -229,6 +232,10 @@ public:
     QString getServerIp() const;
     bool getAllowLocalServer() const;
     QNetworkAddressEntry *getLocal() const;
+    QByteArray getSerializedConnectionList() const;
+    void checkOnValidConnection(QByteArray id, QByteArray address);
+
+    void addTempConnections(const QList<QByteArray> &value);
 
 signals:
     //    void newDfsSocket(SocketService *socket);

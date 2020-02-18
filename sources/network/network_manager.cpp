@@ -18,6 +18,11 @@ void NetManager::setResolveManager(ResolveManager *value)
     resolveManager = value;
 }
 
+void NetManager::addTempConnections(const QList<QByteArray> &value)
+{
+    tempConnections+=value;
+}
+
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 {
     requestResponseMap = new QMap<QByteArray, int>();
@@ -116,6 +121,18 @@ void NetManager::disconnectSocket(SocketService *connection)
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     //    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+}
+
+void NetManager::removeConnectionByAddress(QByteArray address)
+{
+    for(auto i: connections)
+    {
+        if(i->getAddress()==address)
+        {
+            emit i->removeMe();
+            return;
+        }
+    }
 }
 
 NetManager::~NetManager()
@@ -288,6 +305,17 @@ void NetManager::reconnectUi()
     connectToServer(serverPort, local);
 }
 
+void NetManager::connectToServerByIpList(QList<QString> ipList)
+{
+    QNetworkAddressEntry *currentAddress;
+
+    for(auto i :ipList)
+    {
+        currentAddress->setIp((QHostAddress)i);
+        connectToServer(serverPort,currentAddress);
+    }
+}
+
 void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)
 {
 #ifdef ETALONIUM_CONSOLE
@@ -353,7 +381,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
 {
     Config::Net::TypeSend send;
     if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
-        || msgType == 402)
+            || msgType == 402)
         send = Config::Net::TypeSend::ALL;
     else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
         send = Config::Net::TypeSend::FOCUSED;
@@ -585,4 +613,34 @@ bool NetManager::getAllowLocalServer() const
 QNetworkAddressEntry *NetManager::getLocal() const
 {
     return local;
+}
+
+QByteArray NetManager::getSerializedConnectionList() const
+{
+    QList<QByteArray> connectionsList;
+    for(auto i:this->connections)
+        connectionsList.append(Serialization::universalSerialize({ i->getID().toByteArray(),i->getAddress().toLocal8Bit()}));
+    return Serialization::universalSerialize(connectionsList);
+}
+
+void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
+{
+    QByteArray currId;
+    QByteArray currAddress;
+    QList<QByteArray> idAddressPair;
+    for(auto i : tempConnections)
+    {
+        idAddressPair=Serialization::universalDeserialize(i);
+        if(idAddressPair.size()!=2)
+        {
+            qDebug()<<"[Error]["<<__LINE__<<"]["<<__FILE__<<"]"<<__FUNCTION__<<"] size!=2";
+            continue;
+        }
+        if(idAddressPair[1]==address && idAddressPair[0]!=id)
+        {
+            removeConnectionByAddress(address);
+
+            return;
+        }
+    }
 }

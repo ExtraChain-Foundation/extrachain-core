@@ -194,8 +194,7 @@ void SocketService::establishConnection()
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR
         + Serialization::universalSerialize(
-                         { QByteArray::number(Network::build), net::readNetManagerIdentificator() });
-
+                         { QByteArray::number(Network::build), net::readNetManagerIdentificator(),netManager->getSerializedConnectionList()});
     this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address" << this->socket << address << port;
 
@@ -244,10 +243,14 @@ void SocketService::continueDoRead()
             if (!this->isActive() && pendMsg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
             {
                 QByteArray b = pendMsg.mid(IDENTIFICATOR.size());
+
                 QByteArrayList bl = Serialization::universalDeserialize(b);
-                if (bl.length() == 2)
+                if (bl.length() == 3)
                 {
+
                     this->processID(bl[1]);
+                    netManager->addTempConnections(Serialization::universalDeserialize( bl[2]));
+                    netManager->checkOnValidConnection(this->getID().toByteArray(),this->getAddress().toLocal8Bit());
 
 #ifdef ETALONIUM_CLIENT
                     int netBuild = bl[0].toInt();
