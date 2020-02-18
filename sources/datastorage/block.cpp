@@ -84,13 +84,22 @@ void Block::calcHash()
 
 QByteArray Block::getDataForHash() const
 {
-    return type + data + index.toByteArray() + approver.toActorId() + QByteArray::number(date) + prevHash;
+    QByteArray idHash = Utils::calcKeccak(getIndex().toByteArray());
+    QList<Transaction> list = extractTransactions();
+    if (list.isEmpty())
+        return idHash;
+    QByteArray txHash = Utils::calcKeccak(list[0].serialize());
+    for (int i = 1; i < list.size(); i++)
+    {
+        QByteArray tmpTxHash = Utils::calcKeccak(list[i].serialize());
+        txHash = Utils::calcKeccak(txHash + tmpTxHash);
+    }
+    return idHash + txHash;
 }
 
 QByteArray Block::getDataForDigSig() const
 {
-    return type + data + index.toByteArray() + approver.toActorId() + QByteArray::number(date) + prevHash
-        + hash;
+    return hash;
 }
 
 void Block::sign(const Actor<KeyPrivate> &actor)

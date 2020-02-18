@@ -10,6 +10,7 @@
 #include "actor.h"
 #include "utils/utils.h"
 #include <QDateTime>
+#include "headers/utils/db_connector.h"
 
 // Block comparison result
 struct BlockCompare

@@ -31,12 +31,12 @@ void GenesisBlock::addRow(const GenesisDataRow &row)
 
 QByteArray GenesisBlock::getDataForDigSig() const
 {
-    return Block::getDataForDigSig() + prevGenHash;
+    return Block::getDataForDigSig();
 }
 
 QByteArray GenesisBlock::getDataForHash() const
 {
-    return Block::getDataForHash() + prevGenHash;
+    return Block::getDataForHash();
 }
 
 bool GenesisBlock::deserialize(const QByteArray &serialized)
