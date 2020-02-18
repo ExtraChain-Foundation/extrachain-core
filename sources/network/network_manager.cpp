@@ -317,7 +317,10 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
         bool flag = false;
         for (const auto connection : connections)
         {
-            if (connection->getAddress() == ipStr)
+            QString socketIp = connection->getAddress();
+            QByteArray ind = connection->getIdentificator().toByteArray();
+
+            if (ind == idIpPair[0] || ind == net::readNetManagerIdentificator()/*socketIp == ipStr || socketIp == local->ip().toString()*/)
             {
                 flag = true;
                 break;
@@ -641,7 +644,9 @@ QByteArray NetManager::getSerializedConnectionList() const
     QList<QByteArray> connectionsList;
     for (auto i : this->connections)
     {
-        if (i->getAddress() == local->ip().toString())
+        if (!i->getActive())
+            continue;
+        if (net::readNetManagerIdentificator() == i->getIdentificator().toByteArray())
             continue;
 
         connectionsList.append(
