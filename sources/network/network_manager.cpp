@@ -312,6 +312,20 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     for (auto ip : ipList)
     {
         idIpPair = Serialization::universalDeserialize(ip);
+        QString ipStr = QString(idIpPair[1]);
+
+        bool flag = false;
+        for (const auto connection : connections)
+        {
+            if (connection->getAddress() == ipStr)
+            {
+                flag = true;
+                break;
+            }
+        }
+
+        if (flag)
+            continue;
 
         if (idIpPair.size() != 2)
         {
@@ -319,7 +333,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
             continue;
         }
 
-        addConnectionFromPair(QHostAddress(QString(idIpPair[1])), serverPort);
+        addConnectionFromPair(QHostAddress(ipStr), serverPort);
     }
 }
 
