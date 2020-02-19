@@ -130,16 +130,20 @@ const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
     static const std::string cardTableName = "Items";
-    static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
-        + " ("
-          "key     INTEGER NOT NULL,"
-          "id      TEXT  NOT NULL, "
-          "type    INT   NOT NULL, "
-          "prevId  TEXT  NOT NULL, "
-          "nextId  TEXT  NOT NULL, "
-          "sign    TEXT  NOT NULL, "
-          "PRIMARY KEY (id, type)"
-          ");";
+    static const std::string cardDeletedTableName = "ItemsDeleted";
+    static const std::string cardTableFields = " ("
+                                               "key     INTEGER NOT NULL,"
+                                               "id      TEXT  NOT NULL, "
+                                               "type    INT   NOT NULL, "
+                                               "prevId  TEXT  NOT NULL, "
+                                               "nextId  TEXT  NOT NULL, "
+                                               "sign    TEXT  NOT NULL, "
+                                               "PRIMARY KEY (id, type)"
+                                               ");";
+    static const std::string cardTableCreation =
+        "CREATE TABLE IF NOT EXISTS " + cardTableName + cardTableFields;
+    static const std::string cardDeletedTableCreation =
+        "CREATE TABLE IF NOT EXISTS " + cardDeletedTableName + cardTableFields;
 
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
@@ -162,6 +166,7 @@ namespace DataStorage {
           "type     TEXT              NOT NULL, "
           "session  TEXT              NOT NULL, "
           "date     TEXT              NOT NULL );";
+
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
         + " ("
@@ -199,44 +204,94 @@ namespace DataStorage {
           "type  INT                  NOT NULL, "
           "data  TEXT                 NOT NULL  );";
 
-    static const std::string postTableName = "PostCfg";
-    static const std::string postTextTableName = "PostText";
+    static const std::string propertiesTableName = "Properties";
+    static const std::string textTableName = "Text";
+    static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
     static const std::string likesTableName = "Likes";
     static const std::string myLikesPostsTableName = "Posts";
-    static const std::string postTableCreation = "CREATE TABLE IF NOT EXISTS " + postTableName
-        + " ("
-          "version      TEXT  NOT NULL,"
-          "sender       TEXT  NOT NULL,"
-          "dateCreate   TEXT  NOT NULL,"
-          "dateModify   TEXT  NOT NULL,"
-          "images       TEXT  NOT NULL,"
-          "isize        TEXT  NOT NULL "
+    static const std::string usersFollowersTableName = "UsersFollowers";
+    static const std::string usersConfirmedTableName = "UsersConfirmed";
+    static const std::string usersMarkedTableName = "UsersMarked";
+
+    static const std::string propertiesFields = " ("
+                                                "version    TEXT    NOT NULL,"
+                                                "sender     TEXT    NOT NULL,"
+                                                "dateCreate INTEGER NOT NULL,"
+                                                "dateModify INTEGER NOT NULL,"
+                                                "latitude   NUMERIC NOT NULL,"
+                                                "longitude  NUMERIC NOT NULL,";
+
+    static const std::string postPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS " + propertiesTableName
+        + propertiesFields
+        + "sign         TEXT     NOT NULL"
           ");";
-    static const std::string postTextTableCreation = "CREATE TABLE IF NOT EXISTS " + postTextTableName
+
+    static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + propertiesTableName + propertiesFields
+        + "eventName    TEXT    NOT NULL,"
+          "type         TEXT    NOT NULL,"
+          "locationName TEXT    NOT NULL,"
+          "scope        TEXT    NOT NULL,"
+          "agreement    INT     NOT NULL,"
+          "salary       TEXT    NOT NULL,"
+          "startEpoch   INTEGER NOT NULL,"
+          "endEpoch     INTEGER NOT NULL,"
+          "start        TEXT    NOT NULL,"
+          "end          TEXT    NOT NULL,"
+        + "sign         TEXT    NOT NULL"
+          ");";
+
+    static const std::string textTableCreation = "CREATE TABLE IF NOT EXISTS " + textTableName
         + " ("
-          "locale TEXT PRIMARY KEY NOT NULL,"
-          "text   TEXT             NOT NULL "
+          "locale TEXT PRIMARY KEY NOT NULL, "
+          "text   TEXT             NOT NULL, "
+          "sign   TEXT             NOT NULL  "
+          ");";
+
+    static const std::string attachTableCreation = "CREATE TABLE IF NOT EXISTS " + attachTableName
+        + " ("
+          "attachId   TEXT       NOT NULL,"
+          "type       TEXT       NOT NULL, " // image, gif, video, event, post
+          "date       INTEGER    NOT NULL, "
+          "data       TEXT       NOT NULL, "
+          "sign       TEXT       NOT NULL  "
           ");";
 
     static const std::string commentsTableCreation = "CREATE TABLE IF NOT EXISTS " + commentsTableName
         + " ("
-          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT, "
           "sender     TEXT                     NOT NULL, "
           "message    BLOB                     NOT NULL, "
           "date       TEXT                     NOT NULL, "
-          "sign       TEXT                     NOT NULL "
+          "sign       TEXT                     NOT NULL  "
           ");";
+
     static const std::string likesTableCreation = "CREATE TABLE IF NOT EXISTS " + likesTableName
         + " ("
           "liker TEXT PRIMARY KEY NOT NULL,"
           "sign  TEXT            NOT NULL);";
+
     static const std::string myLikesTableCreation = "CREATE TABLE IF NOT EXISTS " + myLikesPostsTableName
         + " ("
           "user TEXT NOT NULL,"
           "post TEXT NOT NULL,"
           "PRIMARY KEY (user, post)"
           ");";
+    static const std::string usersFollowersTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + usersFollowersTableName
+        + " ("
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+    static const std::string usersConfirmedTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + usersConfirmedTableName
+        + " ("
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+    static const std::string usersMarkedTableCreation = "CREATE TABLE IF NOT EXISTS " + usersMarkedTableName
+        + " ("
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
 
     static const std::string BlockTable = "Block";
     static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable

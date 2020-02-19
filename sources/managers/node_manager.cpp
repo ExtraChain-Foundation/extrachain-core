@@ -451,8 +451,6 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
     connect(netManager, &NetManager::buildError, uiController, &UiController::buildError);
 
-    connect(uiController, &UiController::initSubscribe, subscribeController,
-            &SubscribeController::initSubscribe);
     connect(uiController, &UiController::subscribe, subscribeController,
             &SubscribeController::editMySubscribe);
 

@@ -399,7 +399,10 @@ void Profile::setRegisterDate(qint64 registerDate)
 void Profile::setBirthDay(qint16 birthDay)
 {
     QString birthday = value("birthday").right(2 + 4);
-    setValue("birthday", (QString::number(birthDay) + birthday).toLatin1());
+    QString dayString = QString::number(birthDay);
+    if (dayString.length() == 1)
+        dayString = "0" + dayString;
+    setValue("birthday", (dayString + birthday).toLatin1());
 }
 
 void Profile::setBirthMonth(qint16 birthMonth)
@@ -407,7 +410,10 @@ void Profile::setBirthMonth(qint16 birthMonth)
     QString birthday = value("birthday");
     QString birthday1 = birthday.left(2);
     QString birthday2 = birthday.right(4);
-    setValue("birthday", (birthday1 + QString::number(birthMonth) + birthday2).toLatin1());
+    QString monthString = QString::number(birthMonth);
+    if (monthString.length() == 1)
+        monthString = "0" + monthString;
+    setValue("birthday", (birthday1 + monthString + birthday2).toLatin1());
 }
 
 void Profile::setBirthYear(qint16 birthYear)
