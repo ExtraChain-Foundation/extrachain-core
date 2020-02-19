@@ -459,16 +459,15 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
             GenesisBlock block(_data);
             DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
             DB.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
+            DB.createTable(Config::DataStorage::SignBlockTableCreate);
             DBRow row;
 
             row.insert({ "type", block.getType().toStdString() });
             row.insert({ "id", block.getIndex().toStdString() });
-            row.insert({ "approver", block.getApprover().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
             row.insert({ "data", "" });
             row.insert({ "prevHash", block.getPrevHash().toStdString() });
             row.insert({ "hash", block.getHash().toStdString() });
-            row.insert({ "digSig", block.getDigSig().toStdString() });
             row.insert({ "prevGenHash", block.getPrevGenHash().toStdString() });
             DB.insert(Config::DataStorage::GenesisBlockTable, row);
 
@@ -482,22 +481,29 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 rowRow.insert({ "type", QByteArray::number(tmp.type).toStdString() });
                 DB.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
             }
+            QByteArrayList listSign = block.getListSignatures();
+            for (int i = 0; i < listSign.size(); i += 2)
+            {
+                DBRow rowRow;
+                rowRow.insert({ "actorId", listSign[i].toStdString() });
+                rowRow.insert({ "digSig", listSign[i + 1].toStdString() });
+                DB.insert(Config::DataStorage::SignTable, rowRow);
+            }
         }
         else
         {
             Block block(_data);
             DB.createTable(Config::DataStorage::BlockTableCreate);
             DB.createTable(Config::DataStorage::TxBlockTableCreate);
+            DB.createTable(Config::DataStorage::SignBlockTableCreate);
             DBRow row;
 
             row.insert({ "type", block.getType().toStdString() });
             row.insert({ "id", block.getIndex().toStdString() });
-            row.insert({ "approver", block.getApprover().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
             row.insert({ "data", "" });
             row.insert({ "prevHash", block.getPrevHash().toStdString() });
             row.insert({ "hash", block.getHash().toStdString() });
-            row.insert({ "digSig", block.getDigSig().toStdString() });
             DB.insert(Config::DataStorage::BlockTable, row);
 
             DBRow rowRow;
@@ -518,6 +524,14 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
 
                 DB.insert(Config::DataStorage::TxBlockTable, rowRow);
+            }
+            QByteArrayList listSign = block.getListSignatures();
+            for (int i = 0; i < listSign.size(); i += 2)
+            {
+                DBRow rowRow;
+                rowRow.insert({ "actorId", listSign[i].toStdString() });
+                rowRow.insert({ "digSig", listSign[i + 1].toStdString() });
+                DB.insert(Config::DataStorage::SignTable, rowRow);
             }
         }
         this->records = records + 1;
@@ -642,6 +656,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
     }
 
     DBConnector DB(path.toStdString());
+    if (DB.tableNames().size() == 0)
+        return "";
     if (DB.tableNames()[0] == "GenesisBlock")
     {
         std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::GenesisBlockTable + " ;");
@@ -651,14 +667,25 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             return QByteArray();
         }
         QByteArrayList list;
-        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str())
-             << QByteArray(res[0].at("approver").c_str()) << res[0].at("date").c_str()
+        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str()) << res[0].at("date").c_str()
              << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
-             << res[0].at("digSig").c_str() << res[0].at("prevGenHash").c_str();
+             << res[0].at("prevGenHash").c_str();
+        GenesisBlock b;
+        std::vector<DBRow> rowsSign = DB.select("SELECT * FROM " + Config::DataStorage::SignTable + " ;");
+        QByteArray signes = "";
+        for (const auto &tmp : rowsSign)
+        {
+            QByteArray key, value;
+            key = QByteArray(tmp.at("actorId").c_str());
+            value = QByteArray(tmp.at("digSig").c_str());
+            QByteArray sign = Serialization::universalSerialize({ key, value }, 4);
+            signes += Serialization::universalSerialize({ sign }, 4);
+        }
+        list << signes;
+        b.initFields(list);
+
         std::vector<DBRow> rows =
             DB.select("SELECT * FROM " + Config::DataStorage::RowGenesisBlockTable + " ;");
-        GenesisBlock b;
-        b.initFields(list);
         for (const auto &tmp : rows)
         {
             GenesisDataRow dRow;
@@ -680,14 +707,23 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             return QByteArray();
         }
         QByteArrayList list;
-        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str())
-             << QByteArray(res[0].at("approver").c_str()) << res[0].at("date").c_str()
-             << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
-             << res[0].at("digSig").c_str();
-        std::vector<DBRow> rows = DB.select("SELECT * FROM " + Config::DataStorage::TxBlockTable + " ;");
+        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str()) << res[0].at("date").c_str()
+             << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str();
         Block b;
+        std::vector<DBRow> rowsSign = DB.select("SELECT * FROM " + Config::DataStorage::SignTable + " ;");
+        QByteArray signes = "";
+        for (const auto &tmp : rowsSign)
+        {
+            QByteArray key, value;
+            key = QByteArray(tmp.at("actorId").c_str());
+            value = QByteArray(tmp.at("digSig").c_str());
+            QByteArray sign = Serialization::universalSerialize({ key, value }, 4);
+            signes += Serialization::universalSerialize({ sign }, 4);
+        }
+        list << signes;
         b.initFields(list);
 
+        std::vector<DBRow> rows = DB.select("SELECT * FROM " + Config::DataStorage::TxBlockTable + " ;");
         for (const auto &tmp : rows)
         {
             QByteArrayList list;

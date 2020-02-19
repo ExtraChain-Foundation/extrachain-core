@@ -92,7 +92,8 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
 
         QMap<BigNumber, BigNumber> tm;
         tm.insert(0, 0);
-        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+        GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
+        blockchain->addBlock(tmp, true);
     }
 #endif
 }

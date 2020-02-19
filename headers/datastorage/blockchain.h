@@ -87,6 +87,7 @@ private:
 
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
+    bool signCheckAdd(Block &block);
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
@@ -100,9 +101,9 @@ public:
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
-
+    Block checkBlock(const Block &block);
     // merging //
-    int mergeBlockWithLocal(const Block &received);
+    int mergeBlockWithLocal(Block &received);
     int mergeGenesisBlockWithLocal(const GenesisBlock &received);
 
     /**
@@ -159,7 +160,7 @@ public:
      * Convert block to MemBlock or FileBlock according to a fileMode.
      * @return 0 is success, or error code
      */
-    int addBlock(const Block &block, bool isGenesis = false);
+    int addBlock(Block &block, bool isGenesis = false);
 
     /**
      * Removes block and all blocks after them
@@ -313,7 +314,7 @@ signals:
 
 public:
     void addBlockToBlockchain(Block block);
-    void addGenBlockToBlockchain(const GenesisBlock &block);
+    void addGenBlockToBlockchain(GenesisBlock block);
     void setTxManager(TransactionManager *value);
 
 public slots:
@@ -326,7 +327,7 @@ public slots:
      * Emits BlockExistence or SendMergedBlock signals.
      * @param block
      */
-    void checkBlockExistence(const Block &block);
+    void checkBlockExistence(Block &block);
     /**
      * @brief blockCountResponse
      * @param count

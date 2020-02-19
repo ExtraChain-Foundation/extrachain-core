@@ -240,15 +240,13 @@ namespace DataStorage {
 
     static const std::string BlockTable = "Block";
     static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
-        + " ("
+        + " ( "
           "type         TEXT  NOT NULL, "
           "id           TEXT  NOT NULL, "
-          "approver     TEXT  NOT NULL, "
           "date         TEXT  NOT NULL, "
           "data         TEXT          , "
           "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL "
+          "hash         TEXT  NOT NULL  "
           ");";
     static const std::string TxBlockTable = "Transactions";
     static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
@@ -266,18 +264,23 @@ namespace DataStorage {
           "approver     TEXT  NOT NULL, "
           "digSig       TEXT  NOT NULL "
           ");";
+    static const std::string SignTable = "Signatures";
+    static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
+        + " ("
+          "actorId      TEXT  NOT NULL, "
+          "digSig       TEXT  NOT NULL  "
+          ");";
+
     static const std::string GenesisBlockTable = "GenesisBlock";
     static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
         + " ("
           "type         TEXT  NOT NULL, "
           "id           TEXT  NOT NULL, "
-          "approver     TEXT  NOT NULL, "
           "date         TEXT  NOT NULL, "
           "data         TEXT          , "
           "prevHash     TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL, "
-          "prevGenHash  TEXT  NOT NULL "
+          "prevGenHash  TEXT            "
           ");";
     static const std::string RowGenesisBlockTable = "GenesisDataRow";
     static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
@@ -294,7 +297,7 @@ namespace DataStorage {
     static const int BLOCK_CREATION_PERIOD = 1000;
 
     // How often to construct genesis block (in blocks)
-    static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 3;
+    static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 1000;
 
     // Max number of saved blocks in mem index
     static const int MEM_INDEX_SIZE_LIMIT = 1000;
