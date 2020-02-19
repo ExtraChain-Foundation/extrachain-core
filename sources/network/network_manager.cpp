@@ -325,10 +325,8 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     for (auto ip : ipList)
     {
         idIpPair = Serialization::universalDeserialize(ip);
-        QString ipStr = QString(idIpPair[1]);
-
-         currentId=(getConnectionByAddress(ipStr.toLocal8Bit())).getID().toByteArray();
-         connectionIsActive=(getConnectionByAddress(ipStr.toLocal8Bit())).isActive();
+         currentId=(getConnectionByAddress(idIpPair[1])).getID().toByteArray();
+         connectionIsActive=(getConnectionByAddress(idIpPair[1])).isActive();
 
          if(!connectionIsActive || currentId=="0" || currentId==idIpPair[0] || currentId==net::readNetManagerIdentificator())
              continue;
@@ -339,7 +337,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
             continue;
         }
 
-        addConnectionFromPair(QHostAddress(ipStr), serverPort);
+        addConnectionFromPair(QHostAddress(QString(idIpPair[1])), serverPort);
     }
 }
 
