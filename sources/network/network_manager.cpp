@@ -139,6 +139,8 @@ SocketService NetManager::getConnectionByAddress(const QByteArray address) const
 {
     for (const auto currentConnection : connections)
     {
+        if(currentConnection==nullptr)
+            continue;
        if(currentConnection->getAddress()==address)
            return *currentConnection;
 
@@ -671,6 +673,7 @@ void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
         }
         if (idAddressPair[1] == address && idAddressPair[0] != id)
         {
+            tempConnections.removeOne(i);
             removeConnectionByAddress(address);
 
             return;
