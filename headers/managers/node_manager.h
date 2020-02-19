@@ -26,6 +26,9 @@ class ResolveManager;
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "headers/network/packages/service/message_types.h"
 
+#include "asyncfuture.h"
+#include <QtConcurrent>
+
 #ifdef ETALONIUM_CLIENT
 #include "ui/ui_controller.h"
 #include "headers/ui/notificationclient.h"
@@ -144,8 +147,6 @@ signals:
     // public:
     void sendActorToWallet(QList<QByteArray> list);
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
-
-    void sendActorIdSeva(bool status, BigNumber actorId);
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);

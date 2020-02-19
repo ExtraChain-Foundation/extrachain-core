@@ -1,3 +1,4 @@
+QT += concurrent
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
@@ -26,7 +27,6 @@ SOURCES += \
     $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
-    $$PWD/sources/datastorage/index/fileindex.cpp \
     $$PWD/sources/datastorage/index/memindex.cpp \
     $$PWD/sources/datastorage/block.cpp \
     $$PWD/sources/datastorage/blockchain.cpp \
@@ -105,7 +105,6 @@ HEADERS += \
     $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/headers/datastorage/index/actorindex.h \
     $$PWD/headers/datastorage/index/blockindex.h \
-    $$PWD/headers/datastorage/index/fileindex.h \
     $$PWD/headers/datastorage/index/memindex.h \
     $$PWD/headers/datastorage/actor.h \
     $$PWD/headers/datastorage/block.h \

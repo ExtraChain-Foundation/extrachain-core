@@ -3,7 +3,6 @@
 NotificationManager::NotificationManager(QObject *parent)
     : QObject(parent)
 {
-    QDir().mkpath(PATH_NOTIFICATION_FILE.c_str());
 }
 
 void NotificationManager::setNotifyClient(NotificationClient *newNtfCl)
@@ -20,13 +19,20 @@ void NotificationManager::loadNotificationFromDB()
 {
     if (_currentActorId == "")
     {
-        qDebug() << "NotificationManager haven`t actorID";
+        qDebug() << "NotificationManager haven't actorID";
         return;
     }
-    QList<notification> list;
-    DBConnector db(PATH_NOTIFICATION_FILE + _currentActorId.toStdString());
-    db.createTable(Config::DataStorage::notificationTableCreation);
+
+    QString dbPath = "data/" + _currentActorId + "/private/notifications";
+    if (!QFile::exists(dbPath))
+    {
+        qDebug() << "Error load notifications: no file exists";
+        return;
+    }
+
+    DBConnector db(dbPath.toStdString());
     std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::notificationTable);
+    QList<notification> list;
     for (const auto &temp : res)
     {
         std::string time = temp.at("time");
@@ -35,19 +41,16 @@ void NotificationManager::loadNotificationFromDB()
         notification tmp { std::stoll(time), notification::NotifyType(std::stoi(type)), data.c_str() };
         list.append(tmp);
     }
-    qDebug() << list.size() << " notify loaded";
+    qDebug() << list.size() << "notify loaded";
     emit allNotifyToUI(list);
 }
 
 void NotificationManager::addNotify(const notification newNtf)
 {
-    DBConnector db(PATH_NOTIFICATION_FILE + _currentActorId.toStdString());
-    db.createTable(Config::DataStorage::notificationTableCreation);
-    DBRow row;
-    row.insert({ "time", std::to_string(newNtf.time) });
-    row.insert({ "type", std::to_string(newNtf.type) });
-    row.insert({ "data", newNtf.data.toStdString() });
-    db.insert(Config::DataStorage::notificationTable, row);
+    sendEditSql(_currentActorId, "notifications", DfsStruct::Type::Private, DfsStruct::Insert,
+                { Config::DataStorage::notificationTable.c_str(), "time", QByteArray::number(newNtf.time),
+                  "type", QByteArray::number(newNtf.type), "data", newNtf.data });
+
     emit newNotifyToUI(newNtf);
     sendToNotify(newNtf);
 }

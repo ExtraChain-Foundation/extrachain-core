@@ -92,7 +92,8 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
 
         QMap<BigNumber, BigNumber> tm;
         tm.insert(0, 0);
-        blockchain->addBlock(blockchain->createGenesisBlock(company, tm), true);
+        GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
+        blockchain->addBlock(tmp, true);
     }
 #endif
 }
@@ -450,8 +451,6 @@ void NodeManager::connectUi()
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
     connect(netManager, &NetManager::buildError, uiController, &UiController::buildError);
 
-    connect(uiController, &UiController::initSubscribe, subscribeController,
-            &SubscribeController::initSubscribe);
     connect(uiController, &UiController::subscribe, subscribeController,
             &SubscribeController::editMySubscribe);
 
@@ -517,6 +516,7 @@ void NodeManager::connectUi()
     });
     connect(prProfile, &PrivateProfile::initActorChatM,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
+    connect(prProfile, &PrivateProfile::loginError, uiController, &UiController::loginError);
     connect(this, &NodeManager::setCurrentIdNotifyM, notifyM, &NotificationManager::setCurrentID);
     connect(notifyM, &NotificationManager::getCurrentID, this,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
@@ -528,6 +528,7 @@ void NodeManager::connectUi()
             &PrivateProfile::loadProfileForAutoLogin);
     connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &UiController::allNotification);
     connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &UiController::newNotification);
+    connect(notifyM, &NotificationManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
@@ -604,9 +605,6 @@ void NodeManager::connectUi()
     //
     uiController->startThreads();
 }
-
-#include "asyncfuture.h" // temp
-#include <QtConcurrent>  // temp
 
 void NodeManager::addNewWallet()
 {

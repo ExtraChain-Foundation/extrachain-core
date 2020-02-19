@@ -62,23 +62,13 @@ QList<QByteArray> AccountController::getAccountID()
 Actor<KeyPrivate> AccountController::createActor(int account)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-    // todo: local last saved id can be outdated
     actor->init(account);
 
     qDebug() << actor->serialize();
 
     emit verifyActor(actor->convertToPublic());
-    QFile file(KeyStore::user_actor_state);
-    file.open(QIODevice::WriteOnly | QIODevice::Append);
-    QByteArray str = "\n";
-    str += actor->getId().toActorId() + Serialization::TX_PAIR_FIELD_SPLITTER + "0"
-        + Serialization::TX_PAIR_FIELD_SPLITTER;
-    file.write(str);
-    file.flush();
-    file.close();
+
     actorIndex->addActor(actor->convertToPublic());
-    //    emit addActorInActorIndex(actor->convertToPublic());
-    //    actorIndex->addActor(actor->convertToPublic());
     savePrivateActor(*actor);
     accounts.append(actor);
     if (accounts.size() - 1 == 0)

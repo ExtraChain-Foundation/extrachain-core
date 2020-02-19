@@ -130,16 +130,20 @@ const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
     static const std::string cardTableName = "Items";
-    static const std::string cardTableCreation = "CREATE TABLE IF NOT EXISTS " + cardTableName
-        + " ("
-          "key     INTEGER NOT NULL,"
-          "id      TEXT  NOT NULL, "
-          "type    INT   NOT NULL, "
-          "prevId  TEXT  NOT NULL, "
-          "nextId  TEXT  NOT NULL, "
-          "sign    TEXT  NOT NULL, "
-          "PRIMARY KEY (id, type)"
-          ");";
+    static const std::string cardDeletedTableName = "ItemsDeleted";
+    static const std::string cardTableFields = " ("
+                                               "key     INTEGER NOT NULL,"
+                                               "id      TEXT  NOT NULL, "
+                                               "type    INT   NOT NULL, "
+                                               "prevId  TEXT  NOT NULL, "
+                                               "nextId  TEXT  NOT NULL, "
+                                               "sign    TEXT  NOT NULL, "
+                                               "PRIMARY KEY (id, type)"
+                                               ");";
+    static const std::string cardTableCreation =
+        "CREATE TABLE IF NOT EXISTS " + cardTableName + cardTableFields;
+    static const std::string cardDeletedTableCreation =
+        "CREATE TABLE IF NOT EXISTS " + cardDeletedTableName + cardTableFields;
 
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
@@ -162,6 +166,7 @@ namespace DataStorage {
           "type     TEXT              NOT NULL, "
           "session  TEXT              NOT NULL, "
           "date     TEXT              NOT NULL );";
+
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
         + " ("
@@ -199,45 +204,155 @@ namespace DataStorage {
           "type  INT                  NOT NULL, "
           "data  TEXT                 NOT NULL  );";
 
-    static const std::string postTableName = "PostCfg";
-    static const std::string postTextTableName = "PostText";
+    static const std::string propertiesTableName = "Properties";
+    static const std::string textTableName = "Text";
+    static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
     static const std::string likesTableName = "Likes";
-    static const std::string myLikesPostsTableName = "Posts";
-    static const std::string postTableCreation = "CREATE TABLE IF NOT EXISTS " + postTableName
-        + " ("
-          "version      TEXT  NOT NULL,"
-          "sender       TEXT  NOT NULL,"
-          "dateCreate   TEXT  NOT NULL,"
-          "dateModify   TEXT  NOT NULL,"
-          "images       TEXT  NOT NULL,"
-          "isize        TEXT  NOT NULL "
+    static const std::string savedPostsTableName = "Posts";
+    static const std::string savedEventsTableName = "Events";
+    static const std::string usersFollowersTableName = "UsersFollowers";
+    static const std::string usersConfirmedTableName = "UsersConfirmed";
+    static const std::string usersMarkedTableName = "UsersMarked";
+
+    static const std::string propertiesFields = " ("
+                                                "version    TEXT    NOT NULL,"
+                                                "sender     TEXT    NOT NULL,"
+                                                "dateCreate INTEGER NOT NULL,"
+                                                "dateModify INTEGER NOT NULL,"
+                                                "latitude   NUMERIC NOT NULL,"
+                                                "longitude  NUMERIC NOT NULL,";
+
+    static const std::string postPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS " + propertiesTableName
+        + propertiesFields
+        + "sign         TEXT     NOT NULL"
           ");";
-    static const std::string postTextTableCreation = "CREATE TABLE IF NOT EXISTS " + postTextTableName
+
+    static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + propertiesTableName + propertiesFields
+        + "eventName    TEXT    NOT NULL,"
+          "type         TEXT    NOT NULL,"
+          "locationName TEXT    NOT NULL,"
+          "scope        TEXT    NOT NULL,"
+          "agreement    INT     NOT NULL,"
+          "salary       TEXT    NOT NULL,"
+          "startEpoch   INTEGER NOT NULL,"
+          "endEpoch     INTEGER NOT NULL,"
+          "start        TEXT    NOT NULL,"
+          "end          TEXT    NOT NULL,"
+        + "sign         TEXT    NOT NULL"
+          ");";
+
+    static const std::string textTableCreation = "CREATE TABLE IF NOT EXISTS " + textTableName
         + " ("
-          "locale TEXT PRIMARY KEY NOT NULL,"
-          "text   TEXT             NOT NULL "
+          "locale TEXT PRIMARY KEY NOT NULL, "
+          "text   TEXT             NOT NULL, "
+          "sign   TEXT             NOT NULL  "
+          ");";
+
+    static const std::string attachTableCreation = "CREATE TABLE IF NOT EXISTS " + attachTableName
+        + " ("
+          "attachId   TEXT       NOT NULL,"
+          "type       TEXT       NOT NULL, " // image, gif, video, event, post
+          "date       INTEGER    NOT NULL, "
+          "data       TEXT       NOT NULL, "
+          "sign       TEXT       NOT NULL  "
           ");";
 
     static const std::string commentsTableCreation = "CREATE TABLE IF NOT EXISTS " + commentsTableName
         + " ("
-          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT, "
           "sender     TEXT                     NOT NULL, "
           "message    BLOB                     NOT NULL, "
           "date       TEXT                     NOT NULL, "
-          "sign       TEXT                     NOT NULL "
+          "sign       TEXT                     NOT NULL  "
           ");";
+
     static const std::string likesTableCreation = "CREATE TABLE IF NOT EXISTS " + likesTableName
         + " ("
           "liker TEXT PRIMARY KEY NOT NULL,"
           "sign  TEXT            NOT NULL);";
-    static const std::string myLikesTableCreation = "CREATE TABLE IF NOT EXISTS " + myLikesPostsTableName
+
+    static const std::string savedPostsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedPostsTableName
         + " ("
           "user TEXT NOT NULL,"
           "post TEXT NOT NULL,"
           "PRIMARY KEY (user, post)"
           ");";
+    static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
+        + " ("
+          "user TEXT NOT NULL,"
+          "event TEXT NOT NULL,"
+          "PRIMARY KEY (user, event)"
+          ");";
 
+    static const std::string usersFollowersTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + usersFollowersTableName
+        + " ("
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+    static const std::string usersConfirmedTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + usersConfirmedTableName
+        + " ("
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+    static const std::string usersMarkedTableCreation = "CREATE TABLE IF NOT EXISTS " + usersMarkedTableName
+        + " ("
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign  TEXT            NOT NULL);";
+
+    static const std::string BlockTable = "Block";
+    static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
+        + " ( "
+          "type         TEXT  NOT NULL, "
+          "id           TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT          , "
+          "prevHash     TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL  "
+          ");";
+    static const std::string TxBlockTable = "Transactions";
+    static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
+        + " ("
+          "sender       TEXT  NOT NULL, "
+          "receiver     TEXT  NOT NULL, "
+          "amount       TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT          , "
+          "token        TEXT  NOT NULL, "
+          "prevBlock    TEXT  NOT NULL, "
+          "gas          TEXT  NOT NULL, "
+          "hop          TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL, "
+          "approver     TEXT  NOT NULL, "
+          "digSig       TEXT  NOT NULL "
+          ");";
+    static const std::string SignTable = "Signatures";
+    static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
+        + " ("
+          "actorId      TEXT  NOT NULL, "
+          "digSig       TEXT  NOT NULL  "
+          ");";
+
+    static const std::string GenesisBlockTable = "GenesisBlock";
+    static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
+        + " ("
+          "type         TEXT  NOT NULL, "
+          "id           TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT          , "
+          "prevHash     TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL, "
+          "prevGenHash  TEXT            "
+          ");";
+    static const std::string RowGenesisBlockTable = "GenesisDataRow";
+    static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
+        + " ("
+          "actorId    TEXT  NOT NULL, "
+          "state      TEXT  NOT NULL, "
+          "token      TEXT  NOT NULL, "
+          "type       TEXT  NOT NULL "
+          ");";
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
@@ -265,6 +380,13 @@ namespace Net {
     // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
     // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
+
+    enum TypeSend
+    {
+        ALL,
+        EXCEPT,
+        FOCUSED
+    };
 } // namespace Net
 } // namespace Config
 
@@ -368,7 +490,6 @@ void softWipe(const QString &currentId);
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
 static const QByteArray STORED_CHATS = "data/";
-static const std::string KEYSTORE_CHATS = "keystore/chats/";
 // static const QByteArray SESSIONS = "/sessions/";
 }
 namespace DataStorage {
@@ -386,6 +507,11 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 
 // Dfs
 static const int DATA_OFFSET = 512;
+
+enum typeDataRow
+{
+    UNIVERSAL
+};
 } // namespace DataStorage
 
 namespace KeyStore {

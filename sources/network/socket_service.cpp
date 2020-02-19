@@ -75,6 +75,7 @@ void SocketService::setNetManager(NetManager *value)
 
 SocketService::SocketService()
 {
+    this->identificator=BigNumber("0");
     //    dpBuffer->clear();
 }
 
@@ -111,6 +112,8 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 
 SocketService::~SocketService()
 {
+    if(socket==nullptr)
+        return;
     socket->close();
     socket->deleteLater();
     qDebug() << "---------> Remove SocketService" << address << port;
@@ -118,18 +121,27 @@ SocketService::~SocketService()
 
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
 {
+    // if(all)
+    // send
+    // if(allexcept && adress != closedAdress)
+    // send
+    // if(focused && adress == mustAdress)
+    // send
+
     // check socket status
     if (!socket->isValid())
         return;
     // take data from pair
-    QString ipAddress = QString::fromStdString(socketData.ip);
-    qint64 portAddress = socketData.port;
+    // QString ipAddress = QString::fromStdString(socketData.ip);
+    // qint64 portAddress = socketData.port;
     // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
-    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress == 0)))
-    {
-        QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
-        socket->write(_wtSok, _wtSok.size());
-    }
+    //    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress ==
+    //    0)))
+    //    {
+
+    QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
+    socket->write(_wtSok, _wtSok.size());
+    //    }
 }
 
 void *SocketService::distMsg(const QByteArray data, const SocketPair &socketData)
@@ -184,9 +196,9 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR
-        + Serialization::universalSerialize(
-                         { QByteArray::number(Network::build), net::readNetManagerIdentificator() });
-
+        + Serialization::universalSerialize({ QByteArray::number(Network::build),
+                                              net::readNetManagerIdentificator(),
+                                              netManager->getSerializedConnectionList() });
     this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
     qDebug() << "SOCKET SERVICE: socket address" << this->socket << address << port;
 
@@ -235,10 +247,16 @@ void SocketService::continueDoRead()
             if (!this->isActive() && pendMsg.left(IDENTIFICATOR.size()) == IDENTIFICATOR)
             {
                 QByteArray b = pendMsg.mid(IDENTIFICATOR.size());
+
                 QByteArrayList bl = Serialization::universalDeserialize(b);
-                if (bl.length() == 2)
+                if (bl.length() == 3)
                 {
+
                     this->processID(bl[1]);
+                    netManager->addTempConnections(Serialization::universalDeserialize(bl[2]));
+                    netManager->checkOnValidConnection(this->getID().toByteArray(),
+                                                       this->getAddress().toLocal8Bit());
+                    netManager->connectToServerByIpList(Serialization::universalDeserialize(bl[2]));
 
 #ifdef ETALONIUM_CLIENT
                     int netBuild = bl[0].toInt();

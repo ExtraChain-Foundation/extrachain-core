@@ -2,11 +2,11 @@
 #define BLOCKINDEX_H
 
 #include "datastorage/block.h"
-#include "datastorage/index/fileindex.h"
 #include "datastorage/tx_pair.h"
 #include "datastorage/genesis_block.h"
+#include "utils/db_connector.h"
 
-class BlockIndex : public FileIndex
+class BlockIndex
 {
 public:
     BlockIndex();
@@ -15,6 +15,15 @@ public:
     /// custom folder name
     BlockIndex(const QString &folderName);
     BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
+
+    QString folderName;          // set in subclasses
+    int sectionSize;             // todo: 0 = use only one folder
+    BigNumber recordsLimit = -1; // -1 = no limit
+
+    // current state //
+    BigNumber records = 0;
+    BigNumber firstSavedId = -1;
+    BigNumber lastSavedId = -1;
 
 public:
     /**
@@ -67,11 +76,31 @@ public:
 
     TxPair searchPair(const BigNumber &first, const BigNumber &second) const;
 
+    void removeAll();
+    BigNumber getLastSavedId() const;
+    BigNumber getFirstSavedId() const;
+    BigNumber getRecords() const;
+    int removeById(const BigNumber &id);
+    QString buildFilePath(const BigNumber &id) const;
+
 private:
     Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
                                  const QByteArray &token) const;
     QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
                                           int count = 10, BigNumber token = 0) const;
+
+    int add(const BigNumber &id, const QByteArray &_data);
+    bool hasRecordLimit() const;
+    bool recordLimitIsReached() const;
+    QString getFolderPath() const;
+    QString getFolderName() const;
+    BigNumber calcSection(BigNumber id) const;
+    QByteArray getById(const BigNumber &id) const;
+    BigNumber loadFirstId();
+    BigNumber loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,
+                                  std::function<QString(const QStringList &files)> getFile);
+
+    BigNumber loadLastId();
 };
 
 #endif // BLOCKINDEX_H

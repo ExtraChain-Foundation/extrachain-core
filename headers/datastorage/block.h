@@ -10,6 +10,7 @@
 #include "actor.h"
 #include "utils/utils.h"
 #include <QDateTime>
+#include "headers/utils/db_connector.h"
 
 // Block comparison result
 struct BlockCompare
@@ -34,14 +35,15 @@ protected:
     const int FIELDS_SIZE = 4;
     QByteArray type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
     QByteArray data;                           // payload (serialized tx's, or other)
-private:
-    BigNumber index = BigNumber(-1);    // block id
-    BigNumber approver = BigNumber(-1); // block approver id
+    BigNumber index = BigNumber(-1);           // block id
+    //    BigNumber approver = BigNumber(-1);        // block approver id
 
     long long date;
     QByteArray prevHash; // previous block hash
     QByteArray hash;     // this block hash (from all previous fields)
-    QByteArray digSig;   // digital signature (from all fields)
+    //    QByteArray digSig;   // digital signature (from all fields)
+    QHash<QByteArray, QByteArray> signatures;
+
 public:
     Block();
     /**
@@ -113,10 +115,8 @@ public:
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
 
-protected:
-    void initFields(QList<QByteArray> &list);
-
 public:
+    virtual void initFields(QList<QByteArray> &list);
     QList<Block> getDataFromAllBlocks(QList<QByteArray>);
     void setPrevHash(const QByteArray &value);
     QByteArray getType() const;
@@ -126,12 +126,13 @@ public:
     QByteArray getHash() const;
     QByteArray getPrevHash() const;
     QByteArray getDigSig() const;
-
+    QByteArray getSignatures() const;
+    QByteArrayList getListSignatures() const;
+    void addSignature(const QByteArray &id, const QByteArray &sign);
     // void setType(QByteArray type);
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
-    void setApprover(const BigNumber &value);
 
     void setType(const QByteArray &value);
 };

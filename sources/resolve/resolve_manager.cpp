@@ -127,7 +127,8 @@ void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &m
         requestResponseMap->insert(calcKeccak256(message), Config::Net::NECESSARY_RESPONSE_COUNT);
         handlerFileMutex.unlock();
     }
-    networkManager->broadcastMsg(message);
+    networkManager->sendMessage(message, msgType, SocketPair());
+    //    networkManager->broadcastMsg(message);
     //    emit sendMsg(message);
 }
 
@@ -146,7 +147,9 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     //    qDebug() << "NetManager: send " << msgType;
     if (msgType == Messages::GeneralResponse::getAllActorsResponse)
         qDebug() << "306 is sending";
-    networkManager->distMessage(rmsg.serialize(), receiver);
+    //    sendMessage(message, msgType, receiver);
+    //    networkManager->distMessage(rmsg.serialize(), receiver);
+    networkManager->sendMessage(rmsg.serialize(), msgType, receiver);
 }
 
 void ResolveManager::taskFinished()

@@ -28,7 +28,6 @@ public slots:
     void editMySubscribe(QByteArray id, bool isRemove);
     int checkCountSubscribe(QByteArray id);
     std::vector<DBRow> getAllSubscribe(QByteArray id);
-    void initSubscribe();
 
 public:
     bool checkSubscribe(QByteArray id);

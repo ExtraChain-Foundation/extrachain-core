@@ -107,13 +107,11 @@ Block TransactionManager::makeBlock()
     }
 
     QByteArray data = convertTxs(pendingTxs);
-    qDebug() << data << "SEVA";
     Block lastBlock = blockchain->getLastBlock();
 
     Block block(data, lastBlock);
-    // blockchain->signBlock(block); // Non-approved code
-    block.sign(accountController->getCurrentActor());
-
+    //  block.sign(accountController->getCurrentActor());
+    blockchain->signBlock(block);
     qDebug() << "Created block:" << block.getIndex();
     QByteArray blockSerialize = block.serialize();
     emit SendBlock(blockSerialize, Messages::ChainMessage::blockMessage);
