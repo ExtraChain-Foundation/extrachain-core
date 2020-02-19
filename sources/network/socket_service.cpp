@@ -112,6 +112,8 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 
 SocketService::~SocketService()
 {
+    if(socket==nullptr)
+        return;
     socket->close();
     socket->deleteLater();
     qDebug() << "---------> Remove SocketService" << address << port;
