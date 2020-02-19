@@ -573,6 +573,8 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
 
 void NetManager::addConnection(qint64 socketDescriptor)
 {
+    if (connections.size() >= SIZE_OF_CONNECTIONS)
+        return;
     SocketService *socket = new SocketService(socketDescriptor);
     socket->setNetManager(this);
     connections.append(socket);

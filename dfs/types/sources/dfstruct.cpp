@@ -1,22 +1,26 @@
 #include "dfs/types/headers/dfstruct.h"
 
-DfsStruct::Type DfsStruct::convertToDFType(QByteArray type)
+DfsStruct::Type DfsStruct::toDfsType(QByteArray type)
 {
     if (type == "images")
-        return Type::images;
+        return DfsStruct::Type::Image;
     else if (type == "video")
-        return Type::video;
+        return DfsStruct::Type::Video;
     else if (type == "events")
-        return Type::event;
+        return DfsStruct::Type::Event;
     else if (type == "chats")
-        return Type::chat;
+        return DfsStruct::Type::Chat;
     else if (type == "posts")
-        return post;
+        return DfsStruct::Type::Post;
     else if (type == "services")
-        return service;
+        return DfsStruct::Type::Service;
     else if (type == "files")
-        return files;
-    return service;
+        return DfsStruct::Type::Files;
+    else if (type == "contract")
+        return DfsStruct::Type::Contract;
+    else if (type == "private")
+        return DfsStruct::Type::Private;
+    return DfsStruct::Type::Service;
 }
 
 QByteArray DfsStruct::toByteArray(Type type)
@@ -24,36 +28,40 @@ QByteArray DfsStruct::toByteArray(Type type)
     QByteArray res;
     switch (type)
     {
-    case DfsStruct::Type::images:
+    case DfsStruct::Type::Image:
         res = "images";
         break;
-    case DfsStruct::Type::video:
+    case DfsStruct::Type::Video:
         res = "video";
         break;
-    case DfsStruct::Type::event:
+    case DfsStruct::Type::Event:
         res = "events";
         break;
-    case DfsStruct::Type::chat:
+    case DfsStruct::Type::Chat:
         res = "chats";
         break;
-    case DfsStruct::Type::post:
+    case DfsStruct::Type::Post:
         res = "posts";
         break;
-    case DfsStruct::Type::service:
+    case DfsStruct::Type::Service:
         res = "services";
         break;
-    case DfsStruct::Type::files:
+    case DfsStruct::Type::Files:
         res = "files";
         break;
-    case DfsStruct::Type::contract:
+    case DfsStruct::Type::Contract:
         res = "contract";
         break;
-    case DfsStruct::Type::stored:
+    case DfsStruct::Type::Stored:
         res = "stored";
+        break;
+    case DfsStruct::Type::Private:
+        res = "private";
         break;
     default:
         return "";
     }
+
     return res;
 }
 

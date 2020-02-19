@@ -32,20 +32,21 @@ static const QString SUBSCRIBE = "subscribe";
 
 enum Type
 {
-    unknown = 0,
-    video = 1,
-    event = 2,
-    chat = 4,
-    post = 5,
-    service = 6,
-    files = 7,
-    images = 8,
-    contract = 9,
-    error = 100,
-    stored = 200
+    Unknown = 0,
+    Video = 1,
+    Event = 2,
+    Chat = 4,
+    Post = 5,
+    Service = 6,
+    Files = 7,
+    Image = 8,
+    Contract = 9,
+    Private = 10,
+    Error = 100,
+    Stored = 200
 };
 
-Type convertToDFType(QByteArray);
+Type toDfsType(QByteArray);
 QByteArray toByteArray(Type);
 QString toString(Type);
 

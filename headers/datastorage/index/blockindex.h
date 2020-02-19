@@ -81,13 +81,14 @@ public:
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
     int removeById(const BigNumber &id);
+    QString buildFilePath(const BigNumber &id) const;
 
 private:
     Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
                                  const QByteArray &token) const;
     QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
                                           int count = 10, BigNumber token = 0) const;
-    QString buildFilePath(const BigNumber &id) const;
+
     int add(const BigNumber &id, const QByteArray &_data);
     bool hasRecordLimit() const;
     bool recordLimitIsReached() const;

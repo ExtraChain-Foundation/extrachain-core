@@ -122,6 +122,12 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
     return res;
 }
 
+std::vector<DBRow> DBConnector::selectAll(std::string table, int limit)
+{
+    std::string query = "SELECT * FROM " + table + (limit > 0 ? " LIMIT " + std::to_string(limit) : "");
+    return select(query);
+}
+
 bool DBConnector::insert(std::string tableName, DBRow data)
 {
     if (data.size() == 0)
@@ -218,6 +224,14 @@ bool DBConnector::tableExists(std::string table)
 bool DBConnector::dropTable(std::string table)
 {
     return query("DROP TABLE IF EXISTS " + table);
+}
+
+int DBConnector::count(std::string table)
+{
+    auto res = select("SELECT COUNT(*) FROM " + table);
+    if (res.empty())
+        return 0;
+    return std::stoi(res[0]["COUNT(*)"]);
 }
 
 bool DBConnector::insertWithData(std::string query, QByteArray data)
