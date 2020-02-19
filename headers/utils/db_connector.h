@@ -30,6 +30,7 @@ public:
     bool open(std::string name);
     bool close();
     std::vector<DBRow> select(std::string query);
+    std::vector<DBRow> selectAll(std::string table, int limit = -1);
     bool insert(std::string tableName, DBRow data);
     std::string prepareInsert(std::string tableName, DBRow data, bool noEnd = false);
     bool update(std::string query);
@@ -38,6 +39,7 @@ public:
     bool deleteTable(std::string name);
     bool tableExists(std::string table);
     bool dropTable(std::string table);
+    int count(std::string table);
     bool insertWithData(std::string query, QByteArray data);
     std::string file() const;
     bool isOpen() const;
