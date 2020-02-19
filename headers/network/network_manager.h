@@ -73,6 +73,7 @@ private:
     BigNumber maxBlockCount; // latest known block num in the blockchain
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
+    QList<QByteArray> tempConnections;
 #ifdef ETALONIUM_CONSOLE
     const int SIZE_OF_CONNECTIONS = 100;
 #endif
@@ -117,6 +118,8 @@ public:
 private:
     void connectSocket();
     void disconnectSocket(SocketService *connection);
+    void removeConnectionByAddress(QByteArray address);
+    SocketService getConnectionByAddress(const QByteArray address) const;
 
 public:
     ServerService *getServerService();
@@ -199,6 +202,7 @@ public slots:
     void process();
     void logDebug();
     void reconnectUi();
+    void connectToServerByIpList(QList<QByteArray> ipList);
     virtual void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
     /**
      * @brief checkMyIdentificator
@@ -234,6 +238,10 @@ public:
     QString getServerIp() const;
     bool getAllowLocalServer() const;
     QNetworkAddressEntry *getLocal() const;
+    QByteArray getSerializedConnectionList() const;
+    void checkOnValidConnection(QByteArray id, QByteArray address);
+
+    void addTempConnections(const QList<QByteArray> &value);
 
 signals:
     //    void newDfsSocket(SocketService *socket);

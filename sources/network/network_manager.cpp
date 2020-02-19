@@ -18,6 +18,11 @@ void NetManager::setResolveManager(ResolveManager *value)
     resolveManager = value;
 }
 
+void NetManager::addTempConnections(const QList<QByteArray> &value)
+{
+    tempConnections += value;
+}
+
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 {
     requestResponseMap = new QMap<QByteArray, int>();
@@ -116,6 +121,31 @@ void NetManager::disconnectSocket(SocketService *connection)
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     //    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+}
+
+void NetManager::removeConnectionByAddress(QByteArray address)
+{
+    for (auto i : connections)
+    {
+        if (i->getAddress() == address)
+        {
+            emit i->removeMe();
+            return;
+        }
+    }
+}
+
+SocketService NetManager::getConnectionByAddress(const QByteArray address) const
+{
+    for (const auto currentConnection : connections)
+    {
+        if(currentConnection==nullptr)
+            continue;
+       if(currentConnection->getAddress()==address)
+           return *currentConnection;
+
+    }
+    return SocketService();
 }
 
 NetManager::~NetManager()
@@ -234,7 +264,7 @@ void NetManager::checkMyIdentificator()
         if (el->getIdentificator() == connection->getIdentificator() && el != connection)
         {
             emit el->removeMe();
-            return;
+            // return;
         }
     }
     emit connection->setActiveSignal(true);
@@ -286,6 +316,31 @@ void NetManager::logDebug()
 void NetManager::reconnectUi()
 {
     connectToServer(serverPort, local);
+}
+
+void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
+{
+    QByteArrayList idIpPair;
+
+    bool connectionIsActive;
+    QByteArray currentId;
+    for (auto ip : ipList)
+    {
+        idIpPair = Serialization::universalDeserialize(ip);
+         currentId=(getConnectionByAddress(idIpPair[1])).getID().toByteArray();
+         connectionIsActive=(getConnectionByAddress(idIpPair[1])).isActive();
+
+         if(!connectionIsActive || currentId=="0" || currentId==idIpPair[0] || currentId==net::readNetManagerIdentificator())
+             continue;
+
+        if (idIpPair.size() != 2)
+        {
+            qDebug() << "[Error][" << __LINE__ << "][" << __FILE__ << "]" << __FUNCTION__ << "] size!=2";
+            continue;
+        }
+
+        addConnectionFromPair(QHostAddress(QString(idIpPair[1])), serverPort);
+    }
 }
 
 void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)
@@ -587,4 +642,43 @@ bool NetManager::getAllowLocalServer() const
 QNetworkAddressEntry *NetManager::getLocal() const
 {
     return local;
+}
+
+QByteArray NetManager::getSerializedConnectionList() const
+{
+    QList<QByteArray> connectionsList;
+    for (auto i : this->connections)
+    {
+        if (!i->getActive())
+            continue;
+        if (net::readNetManagerIdentificator() == i->getIdentificator().toByteArray())//if it equivalent to my indetificator
+            continue;
+        if(i->getAddress()==this->getLocal()->ip().toString().toLocal8Bit())    //if it's my ip address
+            continue;
+
+        connectionsList.append(
+            Serialization::universalSerialize({ i->getID().toByteArray(), i->getAddress().toLocal8Bit() }));
+    }
+    return Serialization::universalSerialize(connectionsList);
+}
+
+void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
+{
+    QList<QByteArray> idAddressPair;
+    for (auto i : tempConnections)
+    {
+        idAddressPair = Serialization::universalDeserialize(i);
+        if (idAddressPair.size() != 2)
+        {
+            qDebug() << "[Error][" << __LINE__ << "][" << __FILE__ << "]" << __FUNCTION__ << "] size!=2";
+            continue;
+        }
+        if (idAddressPair[1] == address && idAddressPair[0] != id)
+        {
+            tempConnections.removeOne(i);
+            removeConnectionByAddress(address);
+
+            return;
+        }
+    }
 }
