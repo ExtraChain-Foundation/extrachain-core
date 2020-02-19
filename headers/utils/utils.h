@@ -209,7 +209,8 @@ namespace DataStorage {
     static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
     static const std::string likesTableName = "Likes";
-    static const std::string myLikesPostsTableName = "Posts";
+    static const std::string savedPostsTableName = "Posts";
+    static const std::string savedEventsTableName = "Events";
     static const std::string usersFollowersTableName = "UsersFollowers";
     static const std::string usersConfirmedTableName = "UsersConfirmed";
     static const std::string usersMarkedTableName = "UsersMarked";
@@ -272,12 +273,19 @@ namespace DataStorage {
           "liker TEXT PRIMARY KEY NOT NULL,"
           "sign  TEXT            NOT NULL);";
 
-    static const std::string myLikesTableCreation = "CREATE TABLE IF NOT EXISTS " + myLikesPostsTableName
+    static const std::string savedPostsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedPostsTableName
         + " ("
           "user TEXT NOT NULL,"
           "post TEXT NOT NULL,"
           "PRIMARY KEY (user, post)"
           ");";
+    static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
+        + " ("
+          "user TEXT NOT NULL,"
+          "event TEXT NOT NULL,"
+          "PRIMARY KEY (user, event)"
+          ");";
+
     static const std::string usersFollowersTableCreation = "CREATE TABLE IF NOT EXISTS "
         + usersFollowersTableName
         + " ("
