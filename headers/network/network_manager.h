@@ -114,6 +114,7 @@ private:
     void connectSocket();
     void disconnectSocket(SocketService *connection);
     void removeConnectionByAddress(QByteArray address);
+    SocketService getConnectionByAddress(const QByteArray address) const;
 
 public:
     ServerService *getServerService();

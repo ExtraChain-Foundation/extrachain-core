@@ -135,6 +135,17 @@ void NetManager::removeConnectionByAddress(QByteArray address)
     }
 }
 
+SocketService NetManager::getConnectionByAddress(const QByteArray address) const
+{
+    for (const auto currentConnection : connections)
+    {
+       if(currentConnection->getAddress()==address)
+           return *currentConnection;
+
+    }
+    return SocketService();
+}
+
 NetManager::~NetManager()
 {
     //    delete resolverService;
@@ -309,31 +320,18 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
 {
     QByteArrayList idIpPair;
 
+    bool connectionIsActive;
+    QByteArray currentId;
     for (auto ip : ipList)
     {
         idIpPair = Serialization::universalDeserialize(ip);
         QString ipStr = QString(idIpPair[1]);
 
-        bool flag = false;
-        for (const auto connection : connections)
-        {
-            if (connection == nullptr)
-                continue;
-            QString socketIp = connection->getAddress();
-            QByteArray ind = connection->getIdentificator().toByteArray();
+         currentId=(getConnectionByAddress(ipStr.toLocal8Bit())).getID().toByteArray();
+         connectionIsActive=(getConnectionByAddress(ipStr.toLocal8Bit())).isActive();
 
-            if (!connection->getActive() || ind == "0")
-                flag = true;
-
-            if (ind == idIpPair[0] || ind == net::readNetManagerIdentificator()/*socketIp == ipStr || socketIp == local->ip().toString()*/)
-            {
-                flag = true;
-                break;
-            }
-        }
-
-        if (flag)
-            continue;
+         if(!connectionIsActive || currentId=="0" || currentId==idIpPair[0] || currentId==net::readNetManagerIdentificator())
+             continue;
 
         if (idIpPair.size() != 2)
         {
@@ -651,7 +649,9 @@ QByteArray NetManager::getSerializedConnectionList() const
     {
         if (!i->getActive())
             continue;
-        if (net::readNetManagerIdentificator() == i->getIdentificator().toByteArray())
+        if (net::readNetManagerIdentificator() == i->getIdentificator().toByteArray())//if it equivalent to my indetificator
+            continue;
+        if(i->getAddress()==this->getLocal()->ip().toString().toLocal8Bit())    //if it's my ip address
             continue;
 
         connectionsList.append(
@@ -662,8 +662,6 @@ QByteArray NetManager::getSerializedConnectionList() const
 
 void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
 {
-    QByteArray currId;
-    QByteArray currAddress;
     QList<QByteArray> idAddressPair;
     for (auto i : tempConnections)
     {

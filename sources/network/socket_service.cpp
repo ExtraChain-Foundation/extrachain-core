@@ -75,6 +75,7 @@ void SocketService::setNetManager(NetManager *value)
 
 SocketService::SocketService()
 {
+    this->identificator=BigNumber("0");
     //    dpBuffer->clear();
 }
 
