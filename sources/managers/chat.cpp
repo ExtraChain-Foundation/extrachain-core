@@ -1,8 +1,10 @@
 #include "managers/chat.h"
+#include "managers/chatmanager.h"
 
-Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
-           BigNumber sessionNumb)
+Chat::Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
+           AccountController* accountController, BigNumber sessionNumb)
 {
+    this->_chatManager = chatManager;
     this->_chatId = chatId;
     this->_currentActorId = accountController->getMainActor()->getId().toActorId();
     this->_actorIndex = actorIndex;
@@ -16,10 +18,11 @@ Chat::Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* account
     InitializeAllPaths();
 }
 
-Chat::Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
-           AccountController* accountController, QList<QByteArray> users, QByteArray _ownerId)
+Chat::Chat(ChatManager* chatManager, QByteArray chatId, QByteArray key, BigNumber currentSession,
+           ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
+           QByteArray _ownerId)
 {
-
+    this->_chatManager = chatManager;
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
@@ -36,6 +39,7 @@ Chat::Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorInd
 
 Chat::Chat(const Chat& tempChat)
 {
+    this->_chatManager = tempChat._chatManager;
     this->_chatId = tempChat.getChatId();
     this->_encryptionKey = tempChat.getEncryptionKey();
     this->_currentSession = tempChat.getSession();
@@ -74,16 +78,13 @@ bool Chat::isUserActual(QByteArray actorId, BigNumber sessionNumb)
 
 void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId)
 {
-
     if (this->ownerID == "-1")
     {
         // _ownerId = _currentActorId;
         this->ownerID = _ownerId;
     }
-    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-    pathR += _currentActorId + "/";
-    QDir().mkpath(pathR);
-    DBConnector DB(pathR.toStdString() + "chatsId");
+
+    DBConnector DB("data/" + _currentActorId.toStdString() + "/private/chats");
     DB.createTable(Config::DataStorage::chatIdStorage);
 
     DBRow row;
@@ -91,6 +92,11 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     row.insert({ "key", key.toStdString() });
     row.insert({ "owner", _ownerId.toStdString() });
     DB.insert(Config::DataStorage::chatIdTableName, row);
+
+    _chatManager->sendEditSql(
+        _currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
+        { Config::DataStorage::chatIdTableName.c_str(), "chatId", _chatId, "key", key, "owner", _ownerId });
+
     saveChatsId(_chatId);
 }
 
@@ -101,7 +107,7 @@ void Chat::saveChatsId(const QByteArray& chatId)
         qDebug() << "Kurnul?";
         return;
     }
-    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
+    QByteArray pathR = "keystore/chats/";
     pathR += _currentActorId + "/";
     QDir().mkpath(pathR);
     if (QFile().exists(pathR + "fileChatsId"))
@@ -134,10 +140,12 @@ void Chat::saveChatsId(const QByteArray& chatId)
 
 QByteArray Chat::unloadChatKey()
 {
-    QByteArray pathR = ChatStorage::KEYSTORE_CHATS.c_str();
-    pathR += _currentActorId + "/";
-    QDir().mkpath(pathR);
-    DBConnector DB(pathR.toStdString() + "chatsId");
+    QString filePath = "data/" + _currentActorId + "/private/chats";
+
+    if (!QFile::exists(filePath))
+        return "";
+
+    DBConnector DB(filePath.toStdString());
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName
                                        + " WHERE chatId = " + "'" + _chatId.toStdString() + "';");
     if (res.size() == 0)

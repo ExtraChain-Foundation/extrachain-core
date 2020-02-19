@@ -527,6 +527,7 @@ void NodeManager::connectUi()
             &PrivateProfile::loadProfileForAutoLogin);
     connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &UiController::allNotification);
     connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &UiController::newNotification);
+    connect(notifyM, &NotificationManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
     //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });

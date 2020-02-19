@@ -4,6 +4,7 @@
 #include "managers/account_controller.h"
 #include "enc/algorithms/blowfish_crypt.h"
 #include "utils/db_connector.h"
+#include "dfs/types/headers/dfstruct.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QObject>
@@ -23,6 +24,8 @@ struct UIChat
     UIMessage lastMessage;
 };
 
+class ChatManager;
+
 class Chat : public QObject
 {
     Q_OBJECT
@@ -34,6 +37,7 @@ private:
     QByteArray _currentActorId = "-1";
     AccountController* _accountController;
     ActorIndex* _actorIndex;
+    ChatManager* _chatManager;
 
 private:
     // paths getters:
@@ -48,11 +52,13 @@ private:
     bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
 
 public:
-    Chat(QByteArray chatId, ActorIndex* actorIndex, AccountController* accountController,
+    Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
+         AccountController* accountController,
          BigNumber sessionNumb = -1); //+
-    Chat(QByteArray chatId, QByteArray key, BigNumber currentSession, ActorIndex* actorIndex,
-         AccountController* accountController, QList<QByteArray> users, QByteArray _ownerId = "-1"); //+
-    Chat(const Chat& tempChat);                                                                      //+
+    Chat(ChatManager* chatManager, QByteArray chatId, QByteArray key, BigNumber currentSession,
+         ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
+         QByteArray _ownerId = "-1"); //+
+    Chat(const Chat& tempChat);       //+
     ~Chat();
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-

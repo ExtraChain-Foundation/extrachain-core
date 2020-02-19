@@ -457,7 +457,6 @@ void softWipe(const QString &currentId);
 namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
 static const QByteArray STORED_CHATS = "data/";
-static const std::string KEYSTORE_CHATS = "keystore/chats/";
 // static const QByteArray SESSIONS = "/sessions/";
 }
 namespace DataStorage {
