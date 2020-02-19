@@ -295,15 +295,35 @@ namespace DataStorage {
 
     static const std::string BlockTable = "Block";
     static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
-        + " ("
+        + " ( "
           "type         TEXT  NOT NULL, "
           "id           TEXT  NOT NULL, "
-          "approver     TEXT  NOT NULL, "
           "date         TEXT  NOT NULL, "
-          "data         TEXT  NOT NULL, "
+          "data         TEXT          , "
           "prevHash     TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL  "
+          ");";
+    static const std::string TxBlockTable = "Transactions";
+    static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
+        + " ("
+          "sender       TEXT  NOT NULL, "
+          "receiver     TEXT  NOT NULL, "
+          "amount       TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT          , "
+          "token        TEXT  NOT NULL, "
+          "prevBlock    TEXT  NOT NULL, "
+          "gas          TEXT  NOT NULL, "
+          "hop          TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
+          "approver     TEXT  NOT NULL, "
           "digSig       TEXT  NOT NULL "
+          ");";
+    static const std::string SignTable = "Signatures";
+    static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
+        + " ("
+          "actorId      TEXT  NOT NULL, "
+          "digSig       TEXT  NOT NULL  "
           ");";
 
     static const std::string GenesisBlockTable = "GenesisBlock";
@@ -311,15 +331,20 @@ namespace DataStorage {
         + " ("
           "type         TEXT  NOT NULL, "
           "id           TEXT  NOT NULL, "
-          "approver     TEXT  NOT NULL, "
           "date         TEXT  NOT NULL, "
-          "data         TEXT  NOT NULL, "
+          "data         TEXT          , "
           "prevHash     TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL, "
-          "prevGenHash  TEXT  NOT NULL "
+          "prevGenHash  TEXT            "
           ");";
-
+    static const std::string RowGenesisBlockTable = "GenesisDataRow";
+    static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
+        + " ("
+          "actorId    TEXT  NOT NULL, "
+          "state      TEXT  NOT NULL, "
+          "token      TEXT  NOT NULL, "
+          "type       TEXT  NOT NULL "
+          ");";
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

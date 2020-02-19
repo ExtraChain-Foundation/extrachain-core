@@ -85,8 +85,8 @@ public:
     // Block interface
 public:
     void addRow(const GenesisDataRow &row);
-    QByteArray getDataForHash() const override;
-    QByteArray getDataForDigSig() const override;
+    QByteArray getDataForHash() const override;   // deprecate?
+    QByteArray getDataForDigSig() const override; // deprecate?
     bool deserialize(const QByteArray &serialized) override;
     QByteArray serialize() const override;
     void initFields(QList<QByteArray> &list) override;

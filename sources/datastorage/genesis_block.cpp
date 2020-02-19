@@ -26,23 +26,23 @@ GenesisBlock::GenesisBlock(const QByteArray &data, const Block &prevBlock, const
 
 void GenesisBlock::addRow(const GenesisDataRow &row)
 {
-    this->data += row.serialize();
+    this->data += Serialization::universalSerialize({ row.serialize() }, Serialization::DEFAULT_FIELD_SIZE);
 }
 
 QByteArray GenesisBlock::getDataForDigSig() const
 {
-    return Block::getDataForDigSig() + prevGenHash;
+    return Block::getDataForDigSig();
 }
 
 QByteArray GenesisBlock::getDataForHash() const
 {
-    return Block::getDataForHash() + prevGenHash;
+    return Block::getDataForHash();
 }
 
 bool GenesisBlock::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
-    if (l.length() == 9)
+    if (l.length() == 8)
     {
         initFields(l);
         return true;
@@ -53,9 +53,8 @@ bool GenesisBlock::deserialize(const QByteArray &serialized)
 QByteArray GenesisBlock::serialize() const
 {
     QList<QByteArray> list;
-    list << getType() << getIndex().toByteArray() << getApprover().toActorId()
-         << QByteArray::number(getDate()) << getData() << getPrevHash() << getHash() << getDigSig()
-         << getPrevGenHash();
+    list << getType() << getIndex().toByteArray() << QByteArray::number(getDate()) << getData()
+         << getPrevHash() << getHash() << getPrevGenHash() << getSignatures();
     return Serialization::universalSerialize(list, FIELDS_SIZE);
 }
 
@@ -63,13 +62,18 @@ void GenesisBlock::initFields(QList<QByteArray> &list)
 {
     type = list.takeFirst();
     index = BigNumber(list.takeFirst());
-    approver = BigNumber(list.takeFirst());
     date = list.takeFirst().toLongLong();
     data = list.takeFirst();
     prevHash = list.takeFirst();
     hash = list.takeFirst();
-    digSig = list.takeFirst();
     prevGenHash = list.takeFirst();
+    QByteArray signs = list.takeFirst();
+    QByteArrayList lists = Serialization::universalDeserialize(signs, FIELDS_SIZE);
+    for (const auto &tmp : lists)
+    {
+        QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
+        signatures.insert(tmps.at(0), tmps.at(1));
+    }
 }
 
 QList<GenesisDataRow> GenesisBlock::extractDataRows() const
