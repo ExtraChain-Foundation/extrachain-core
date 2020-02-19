@@ -75,7 +75,7 @@ DfsStruct::Type CardManager::getTypeByName(const QString &fullPath)
     type = type.left(type.indexOf("/"));
     // qDebug() << type;
 
-    return DfsStruct::convertToDFType(type.toLatin1());
+    return DfsStruct::toDfsType(type.toLatin1());
 }
 
 std::string CardManager::pathToRoot(std::string userId)

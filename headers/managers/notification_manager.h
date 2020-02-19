@@ -3,9 +3,11 @@
 #include "utils/db_connector.h"
 #include "utils/utils.h"
 #include <QDateTime>
+
 #ifdef ETALONIUM_CLIENT
-#include "headers/ui/notificationclient.h"
+#include "ui/notificationclient.h"
 #include "datastorage/index/actorindex.h"
+#include "dfs/types/headers/dfstruct.h"
 
 class NotificationManager : public QObject
 {
@@ -14,7 +16,6 @@ class NotificationManager : public QObject
 private:
     QByteArray _currentActorId;
     uint DBCount = 100;
-    const std::string PATH_NOTIFICATION_FILE = "keystore/notification/";
 
     NotificationClient *notifyClient = nullptr;
 
@@ -41,6 +42,8 @@ signals:
     void newNotifyToUI(notification ntf);
     void getCurrentID();
     void finished();
+    void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
+                     QByteArrayList sqlChanges);
 };
 #endif
 #endif // NOTIFICATION_MANAGER_H
