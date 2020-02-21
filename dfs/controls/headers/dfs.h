@@ -101,6 +101,7 @@ public slots:
     void process();
     void startDFS();
     void requestFileHandle(const QString &filePath, const SocketPair &receiver);
+    void requestFileUiHandle(QString filePath);
     void titleReceivedHandle(QString filePath);
     void searchTmp();
     void requestCardById(QByteArray userId, const SocketPair &receiver = SocketPair());
@@ -115,6 +116,7 @@ private:
     bool applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges);
     bool applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges);
     DfsStruct::Type getFileType(const QString &filePath);
+    bool isHaveStoredType(int type);
 
     QTimer *timerTmpFiles;
     QStringList m_tmpFiles;

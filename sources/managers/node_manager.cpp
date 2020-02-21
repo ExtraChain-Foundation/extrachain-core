@@ -555,7 +555,7 @@ void NodeManager::connectUi()
     connect(chatManager, &ChatManager::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);
     connect(uiController->getUiResolver(), &UIResolver::loadChat, chatManager, &ChatManager::fileLoaded);
-    connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFile);
+    connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFileUiHandle);
     connect(uiController, &UiController::authEnded, chatManager, &ChatManager::initChat);
 
     connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);
