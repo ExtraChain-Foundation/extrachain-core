@@ -306,8 +306,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
     if (!appendToCard(dfsPath, userId, type, true))
         return;
 
-    if (type == DfsStruct::Post || type == DfsStruct::Event || type == DfsStruct::Service
-        || type == DfsStruct::Contract || type == DfsStruct::Chat)
+    if (isHaveStoredType(type))
     {
         if (!createStored(dfsPath, userId, type))
         {
@@ -575,9 +574,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
         return;
 
     bool stored = false;
-    if (needStored
-        && (type == DfsStruct::Post || type == DfsStruct::Event || type == DfsStruct::Service
-            || type == DfsStruct::Contract || type == DfsStruct::Chat || type == DfsStruct::Private))
+    if (needStored && isHaveStoredType(type))
     {
         if (!createStored(dfsPath, userId, type))
         {
@@ -844,6 +841,18 @@ DfsStruct::Type Dfs::getFileType(const QString &filePath)
     return CardManager::getTypeByName(filePath);
 }
 
+bool Dfs::isHaveStoredType(int type)
+{
+    if (type > 100)
+        type -= 100;
+
+    if (type == DfsStruct::Post || type == DfsStruct::Event || type == DfsStruct::Service
+        || type == DfsStruct::Contract || type == DfsStruct::Chat || type == DfsStruct::Private)
+        return true;
+
+    return false;
+}
+
 QStringList Dfs::tmpFiles() const
 {
     return m_tmpFiles;
@@ -968,13 +977,29 @@ bool Dfs::dfsValidate(QByteArray userID)
         {
             if (item["id"].empty())
                 continue;
-            fPath = CardManager::buildPathForFile(userID.toStdString(), item["id"],
-                                                  DfsStruct::Type(std::stoi(item["type"])), false);
+
+            std::string typeStr = item["type"];
+            if (typeStr.empty())
+                typeStr = "0";
+            int type = std::stoi(typeStr);
+
+            fPath =
+                CardManager::buildPathForFile(userID.toStdString(), item["id"], DfsStruct::Type(type), false);
             QFileInfo file(QString::fromStdString(fPath));
             if (!file.exists() || file.size() == 0)
             {
                 requestFile(QString::fromStdString(fPath));
                 flag = false;
+            }
+
+            if (isHaveStoredType(type))
+            {
+                QFileInfo file(QString::fromStdString(fPath + ".stored"));
+                if (!file.exists() || file.size() == 0)
+                {
+                    requestFile(QString::fromStdString(fPath));
+                    flag = false;
+                }
             }
         }
         return flag;
@@ -1076,6 +1101,11 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
     sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage, receiver);
+}
+
+void Dfs::requestFileUiHandle(QString filePath)
+{
+    requestFile(filePath);
 }
 
 void Dfs::titleReceivedHandle(QString filePath)
