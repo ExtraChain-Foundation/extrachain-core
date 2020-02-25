@@ -1,4 +1,4 @@
-﻿#include "dfs/controls/headers/dfs.h"
+#include "dfs/controls/headers/dfs.h"
 
 DFSNetManager *Dfs::getDfsNetManager() const
 {
@@ -457,7 +457,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     QString fileId = CardManager::cutPath(path);
     QString cardFile = "data/" + userId + "/root";
 
-    if (QFile::exists(cardFile))
+    if (QFile::exists(cardFile + ".future"))
     {
         DBConnector rootFuture;
         if (!rootFuture.open(cardFile.toStdString() + ".future"))
@@ -471,19 +471,25 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
         {
             rootFuture.deleteRow("Items", "id", fileId.toStdString());
             rootFuture.close();
-            DBConnector rootDb(cardFile.toStdString());
-            rootDb.insert("Items", itemFuture[0]);
-            rootDb.close();
 
-            DistFileSystem::CardFileChange cardFileChange;
-            cardFileChange.key = std::stoi(itemFuture[0]["key"]);
-            cardFileChange.actorId = userId;
-            cardFileChange.fileId = itemFuture[0]["id"].c_str();
-            cardFileChange.prevId = itemFuture[0]["prevId"].c_str();
-            cardFileChange.nextId = itemFuture[0]["nextId"].c_str();
-            cardFileChange.type = std::stoi(itemFuture[0]["type"]);
-            cardFileChange.sign = itemFuture[0]["sign"].c_str();
-            sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
+            CardFile card(userId);
+            card.open();
+            card.append(fileId, type, QByteArray::fromStdString(itemFuture[0]["sign"]), false,
+                        QString::fromStdString(itemFuture[0]["key"]).toInt());
+            auto lastRes = card.last();
+            if (lastRes)
+            {
+                auto lastRow = *lastRes;
+                DistFileSystem::CardFileChange cardFileChange;
+                cardFileChange.key = std::stoi(lastRow["key"]);
+                cardFileChange.actorId = userId;
+                cardFileChange.fileId = lastRow["id"].c_str();
+                cardFileChange.prevId = lastRow["prevId"].c_str();
+                cardFileChange.nextId = lastRow["nextId"].c_str();
+                cardFileChange.type = std::stoi(lastRow["type"]);
+                cardFileChange.sign = lastRow["sign"].c_str();
+                sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
+            }
         }
         else
         {
@@ -1426,7 +1432,7 @@ void Dfs::searchTmp()
             m_reqFiles.erase(it--);
     }
 
-    qDebug() << "search tmp" << m_reqFiles.length();
+    // qDebug() << "search tmp" << m_reqFiles.length();
 
     QStringList dataIds = QDir("data").entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
