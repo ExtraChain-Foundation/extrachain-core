@@ -55,7 +55,7 @@ std::optional<DBRow> CardFile::last()
     return {};
 }
 
-bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath)
+bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath, int key)
 {
     if (isFilePath)
         fileId = CardManager::cutPath(fileId);
@@ -70,10 +70,7 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
     }
 
     DBRow row;
-    row.insert({
-        "key",
-        "auto_max",
-    });
+    row.insert({ "key", key == -1 ? "auto_max" : std::to_string(key) });
     row.insert({ "id", fileId.toStdString() });
     row.insert({ "type", std::to_string(type) });
     row.insert({ "prevId", prevId });
@@ -91,9 +88,9 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
 
     if (res && lastRes)
     {
-        auto lastRes2 = *lastRes;
+        auto lastRow = *lastRes;
         res = m_db.update("UPDATE " + Config::DataStorage::cardTableName + " SET nextId = '"
-                          + fileId.toStdString() + "' WHERE id = '" + lastRes2["id"] + "'");
+                          + fileId.toStdString() + "' WHERE id = '" + lastRow["id"] + "'");
     }
 
     return res;

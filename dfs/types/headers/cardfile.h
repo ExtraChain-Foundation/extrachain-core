@@ -18,7 +18,7 @@ public:
 
     std::optional<DBRow> last();
 
-    bool append(QString fileId, int type, QByteArray sign, bool isFilePath = false);
+    bool append(QString fileId, int type, QByteArray sign, bool isFilePath = false, int key = -1);
     bool updateLastCache();
     std::vector<DBRow> select(int count, int offset);
 
