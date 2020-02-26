@@ -19,7 +19,7 @@ NodeManager::NodeManager()
     //    this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
-    txManager = new TransactionManager(accController, blockchain);
+    txManager = new TransactionManager(accController, blockchain, this);
     prProfile->setAccountController(accController);
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetManager(netManager);
@@ -223,24 +223,45 @@ Transaction NodeManager::createTransaction(Transaction tx)
         tx.setPrevBlock(lastBlockId);
 
         // 2) sign transaction
+
         tx.sign(actor);
         qDebug() << tx.toString();
         if (tx.getSender().toActorId() == *actorIndex->companyId)
             emit NewTx(tx);
-        else
+        else if (tx.getSender() == BigNumber(Trash::NullActor))
+        {
+            qDebug() << "Send fee transaction";
             emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+        }
+        else
+        {
+
+            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+
+            // send transaction - fee
+            BigNumber amountTemp(tx.getAmount());
+
+            amountTemp /= 100;
+            tx.setAmount(amountTemp);
+            tx.setReceiver(BigNumber(Trash::NullActor).toActorId()); // send fee to 0 actor
+            tx.sign(actor);
+            qDebug() << "[Info]" << tx.getSender() << " sent fee to 0 actor";
+            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage); // send fee to 0 actor
+            // [Change it] end
+        }
 
         return tx;
     }
     else
-    {
+
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
-    }
+
     return Transaction();
 }
 
 Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount, BigNumber token)
 {
+
     if (receiver.isEmpty() || amount.isEmpty())
     {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -261,11 +282,8 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
 
         return this->createTransaction(tx);
     }
-    else
-    {
-        qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                        .arg(QString(receiver.toActorId()));
-    }
+    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
+                    .arg(QString(receiver.toActorId()));
     return Transaction();
 }
 Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,

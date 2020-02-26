@@ -363,6 +363,7 @@ bool Blockchain::signCheckAdd(Block &block)
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
+                        rowRow.insert({ "type", "0" });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                         count++;
                     }
@@ -399,6 +400,7 @@ bool Blockchain::signCheckAdd(Block &block)
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
+                        rowRow.insert({ "type", "0" });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                     }
                 }

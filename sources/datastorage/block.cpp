@@ -168,9 +168,7 @@ void Block::addData(const QByteArray &data)
 QList<Transaction> Block::extractTransactions() const
 {
     if (type != Config::DATA_BLOCK_TYPE)
-    {
         return QList<Transaction>();
-    }
 
     QList<QByteArray> txsData = Serialization::universalDeserialize(data, FIELDS_SIZE);
     QList<Transaction> transactions;
@@ -178,11 +176,18 @@ QList<Transaction> Block::extractTransactions() const
     {
         Transaction tx(trData);
         if (!tx.isEmpty())
-        {
             transactions.append(tx);
-        }
     }
     return transactions;
+}
+
+Transaction Block::getTransactionByHash(QByteArray hash) const
+{
+    QList<Transaction> txList = extractTransactions();
+    for (const auto i : txList)
+        if (i.getHash() == hash)
+            return i;
+    return Transaction();
 }
 
 bool Block::contain(Block &from) const
@@ -286,6 +291,7 @@ QByteArray Block::getData() const
 
 QByteArray Block::getHash() const
 {
+
     return hash;
 }
 
@@ -312,6 +318,11 @@ bool Block::isBlock(const QByteArray &data)
     return data.contains(Config::DATA_BLOCK_TYPE);
 }
 
+bool Block::isApprover(QByteArray actorId) const
+{
+    return actorId == getApprover();
+}
+
 void Block::initFields(QList<QByteArray> &list)
 {
     type = list.takeFirst();
@@ -335,7 +346,8 @@ QList<Block> Block::getDataFromAllBlocks(QList<QByteArray> paths)
     QList<Block> res;
 
     //  QString temp;
-    for (int count = 0; count++; count < paths.size())
+    int size = paths.size();
+    for (int count = 0; count < size; ++count)
     {
 
         QFile file(paths.at(count));

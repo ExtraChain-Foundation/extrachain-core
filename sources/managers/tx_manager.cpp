@@ -1,9 +1,11 @@
 #include "managers/tx_manager.h"
 
-TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain)
+TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain,
+                                       NodeManager *nodeManager)
 {
     this->accountController = accountController;
     this->blockchain = blockchain;
+    this->nodeManager = nodeManager;
 
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
@@ -110,13 +112,20 @@ Block TransactionManager::makeBlock()
     Block lastBlock = blockchain->getLastBlock();
 
     Block block(data, lastBlock);
-    //  block.sign(accountController->getCurrentActor());
+
     blockchain->signBlock(block);
     qDebug() << "Created block:" << block.getIndex();
     QByteArray blockSerialize = block.serialize();
     emit SendBlock(blockSerialize, Messages::ChainMessage::blockMessage);
     blockchain->addBlock(block);
     this->pendingTxs.clear();
+
+    // fee section start
+    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
+                                                               accountController->getMainActor()->getId());
+    for (const auto i : feeTxs)
+        nodeManager->createTransaction(i);
+    // fee section end
     return block;
 }
 

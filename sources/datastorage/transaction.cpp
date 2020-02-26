@@ -93,6 +93,21 @@ Transaction::Transaction(const Transaction &other, QObject *parent)
     calcHash();
 }
 
+void Transaction::setReceiver(const BigNumber &value)
+{
+    receiver = value;
+}
+
+void Transaction::setSender(const BigNumber &value)
+{
+    sender = value;
+}
+
+void Transaction::setAmount(const BigNumber &value)
+{
+    amount = value;
+}
+
 void Transaction::setData(const QByteArray &value)
 {
     data = value;
@@ -174,6 +189,24 @@ void Transaction::setHop(int hop)
 void Transaction::decrementHop()
 {
     this->hop--;
+
+    calcHash();
+}
+
+void Transaction::clear()
+{
+    this->sender = BigNumber(0);
+    this->receiver = BigNumber(0);
+    this->amount = BigNumber(0);
+    this->date = QDateTime::currentDateTime().toTime_t();
+    this->data = QByteArray();
+    this->token = BigNumber(0);
+    this->prevBlock = BigNumber(0);
+    this->gas = 0;
+    this->hop = 0;
+    this->hash = "";
+    this->approver = BigNumber(0);
+    this->digSig = QByteArray();
 
     calcHash();
 }

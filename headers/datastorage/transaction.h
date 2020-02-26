@@ -73,6 +73,7 @@ public:
     void setGas(int gas);
     void setHop(int hop);
     void decrementHop();
+    void clear();
 
 public:
     int getGas() const;
@@ -88,6 +89,7 @@ public:
     BigNumber getToken() const;
     BigNumber getApprover() const;
     QByteArray getDigSig() const;
+
     bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;
     bool operator!=(const Transaction &transaction) const;
@@ -121,6 +123,9 @@ public:
      * @param number
      */
     static QString amountToVisible(BigNumber number);
+    void setAmount(const BigNumber &value);
+    void setSender(const BigNumber &value);
+    void setReceiver(const BigNumber &value);
 };
 
 inline bool operator<(const Transaction &l, const Transaction &r)

@@ -22,6 +22,7 @@
 #include "dfs/packages/headers/all.h"
 #include "headers/network/packages/service/message_types.h"
 
+#include <cassert>
 static QMutex handlerFileMutex;
 
 /**

@@ -14,6 +14,8 @@
 #include "datastorage/transaction.h"
 #include "datastorage/index/blockindex.h"
 #include "headers/network/packages/service/message_types.h"
+#include "headers/utils/coinprocess.h"
+#include "headers/managers/node_manager.h"
 /**
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
@@ -39,12 +41,15 @@ private:
     //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
 
+    NodeManager *nodeManager;
+
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
 public:
     // todo: add ref to blockchain
-    TransactionManager(AccountController *accountController, Blockchain *blockchain);
+    TransactionManager(AccountController *accountController, Blockchain *blockchain,
+                       NodeManager *nodeManager);
 
 private:
     void removeTransaction(int i);

@@ -96,6 +96,7 @@ public:
      * @return transaction list
      */
     QList<Transaction> extractTransactions() const;
+    Transaction getTransactionByHash(QByteArray hash) const;
 
     bool contain(Block &from) const;
 
@@ -114,6 +115,7 @@ public:
     QString toString() const;
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
+    bool isApprover(QByteArray) const;
 
 public:
     virtual void initFields(QList<QByteArray> &list);
