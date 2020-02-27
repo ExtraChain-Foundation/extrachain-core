@@ -353,7 +353,7 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if (list != savedList)
             {
-                for (int i = 0; i < list.size(); i += 2)
+                for (int i = 0; i < list.size(); i += 3)
                 {
                     if (!savedList.contains(list[i]))
                     {
@@ -363,7 +363,7 @@ bool Blockchain::signCheckAdd(Block &block)
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
-                        rowRow.insert({ "type", "0" });
+                        rowRow.insert({ "type", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                         count++;
                     }
@@ -372,15 +372,21 @@ bool Blockchain::signCheckAdd(Block &block)
         }
         if (count != 0)
             return true;
-        if ((list.size() / 2) > 2)
-            return false;
-
-        QByteArray id = accountController->getMainActor()->getId().toByteArray();
-        if (!list.contains(id))
+        if ((list.size() / 3) <= COUNT_APPROVER_BLOCK)
         {
-            QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
-            block.addSignature(id, sign);
+            if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
+                return false;
+            QByteArray id = accountController->getMainActor()->getId().toByteArray();
+            if (!list.contains(id))
+            {
+                QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
+                block.addSignature(id, sign, false);
+            }
         }
+        //        else
+        //        {
+        //            block.sign(*accountController->getMainActor());
+        //        }
     }
     else
     {
@@ -390,7 +396,7 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if (list != savedList)
             {
-                for (int i = 0; i < list.size(); i += 2)
+                for (int i = 0; i < list.size(); i += 3)
                 {
                     if (!savedList.contains(list[i]))
                     {
@@ -400,7 +406,7 @@ bool Blockchain::signCheckAdd(Block &block)
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
-                        rowRow.insert({ "type", "0" });
+                        rowRow.insert({ "type", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                     }
                 }
@@ -408,15 +414,21 @@ bool Blockchain::signCheckAdd(Block &block)
         }
         if (count != 0)
             return true;
-        if ((list.size() / 2) > 2)
-            return false;
-
-        QByteArray id = accountController->getMainActor()->getId().toByteArray();
-        if (!list.contains(id))
+        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
         {
-            QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
-            block.addSignature(id, sign);
+            if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
+                return false;
+            QByteArray id = accountController->getMainActor()->getId().toByteArray();
+            if (!list.contains(id))
+            {
+                QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
+                block.addSignature(id, sign, false);
+            }
         }
+        //        else
+        //        {
+        //            block.sign(*accountController->getMainActor());
+        //        }
     }
     return false;
 }

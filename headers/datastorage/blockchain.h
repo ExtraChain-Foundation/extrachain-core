@@ -58,7 +58,6 @@ public:
     ~Blockchain();
 
 private:
-    //    template <typename T>
     Block getBlockByIndex(const BigNumber &index)
     {
         Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
@@ -88,6 +87,9 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
+
+    const int COUNT_APPROVER_BLOCK = 1;
+    const int COUNT_CHECKER_BLOCK = 3;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,

@@ -1,4 +1,4 @@
-#include "coinprocess.h"
+#include "headers/utils/coinprocess.h"
 
 CoinProcess::CoinProcess(QObject *parent)
     : QObject(parent)

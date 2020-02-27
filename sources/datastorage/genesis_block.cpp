@@ -72,7 +72,7 @@ void GenesisBlock::initFields(QList<QByteArray> &list)
     for (const auto &tmp : lists)
     {
         QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
-        signatures.insert(tmps.at(0), tmps.at(1));
+        signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
     }
 }
 

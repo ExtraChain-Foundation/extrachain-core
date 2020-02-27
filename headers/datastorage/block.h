@@ -13,6 +13,12 @@
 #include "headers/utils/db_connector.h"
 
 // Block comparison result
+struct forApprovers
+{
+    QByteArray actorId = "";
+    QByteArray sign = "";
+    bool isApprove = false;
+};
 struct BlockCompare
 {
     BigNumber indexDiff;
@@ -42,7 +48,7 @@ protected:
     QByteArray prevHash; // previous block hash
     QByteArray hash;     // this block hash (from all previous fields)
     //    QByteArray digSig;   // digital signature (from all fields)
-    QHash<QByteArray, QByteArray> signatures;
+    QList<forApprovers> signatures;
 
 public:
     Block();
@@ -130,7 +136,7 @@ public:
     QByteArray getDigSig() const;
     QByteArray getSignatures() const;
     QByteArrayList getListSignatures() const;
-    void addSignature(const QByteArray &id, const QByteArray &sign);
+    void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
     // void setType(QByteArray type);
     long long getDate() const;
     void setDate(long long value);

@@ -331,7 +331,8 @@ namespace DataStorage {
     static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
         + " ("
           "actorId      TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL  "
+          "digSig       TEXT  NOT NULL, "
+          "type         TEXT  NOT NULL  "
           ");";
 
     static const std::string GenesisBlockTable = "GenesisBlock";

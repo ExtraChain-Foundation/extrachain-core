@@ -12,7 +12,6 @@ BlockIndex::BlockIndex()
     int count = 0;
     for (auto &el : sectionList)
     {
-
         QFileInfoList files =
             el.dir().entryInfoList(QDir::Filter::Dirs | QDir::Filter::NoDot | QDir::Filter::NoDotDot);
         count += files.size();
@@ -482,11 +481,12 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 DB.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
             }
             QByteArrayList listSign = block.getListSignatures();
-            for (int i = 0; i < listSign.size(); i += 2)
+            for (int i = 0; i < listSign.size(); i += 3)
             {
                 DBRow rowRow;
                 rowRow.insert({ "actorId", listSign[i].toStdString() });
                 rowRow.insert({ "digSig", listSign[i + 1].toStdString() });
+                rowRow.insert({ "type", listSign[i + 2].toStdString() });
                 DB.insert(Config::DataStorage::SignTable, rowRow);
             }
         }
@@ -526,11 +526,12 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 DB.insert(Config::DataStorage::TxBlockTable, rowRow);
             }
             QByteArrayList listSign = block.getListSignatures();
-            for (int i = 0; i < listSign.size(); i += 2)
+            for (int i = 0; i < listSign.size(); i += 3)
             {
                 DBRow rowRow;
                 rowRow.insert({ "actorId", listSign[i].toStdString() });
                 rowRow.insert({ "digSig", listSign[i + 1].toStdString() });
+                rowRow.insert({ "type", listSign[i + 2].toStdString() });
                 DB.insert(Config::DataStorage::SignTable, rowRow);
             }
         }
@@ -675,10 +676,11 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
         QByteArray signes = "";
         for (const auto &tmp : rowsSign)
         {
-            QByteArray key, value;
+            QByteArray key, value, type;
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
-            QByteArray sign = Serialization::universalSerialize({ key, value }, 4);
+            type = QByteArray(tmp.at("type").c_str());
+            QByteArray sign = Serialization::universalSerialize({ key, value, type }, 4);
             signes += Serialization::universalSerialize({ sign }, 4);
         }
         list << signes;
@@ -714,10 +716,11 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
         QByteArray signes = "";
         for (const auto &tmp : rowsSign)
         {
-            QByteArray key, value;
+            QByteArray key, value, type;
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
-            QByteArray sign = Serialization::universalSerialize({ key, value }, 4);
+            type = QByteArray(tmp.at("type").c_str());
+            QByteArray sign = Serialization::universalSerialize({ key, value, type }, 4);
             signes += Serialization::universalSerialize({ sign }, 4);
         }
         list << signes;
