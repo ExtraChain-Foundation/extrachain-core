@@ -238,8 +238,10 @@ Transaction NodeManager::createTransaction(Transaction tx)
         else
         {
             BigNumber amountTemp(tx.getAmount());
-            BigNumber senderBalance = tx.getSenderBalance();
-            if (senderBalance - amountTemp - amountTemp / 100 * Fee::TRANSACTION_FEE >= 0)
+
+            if (blockchain->getUserBalance(tx.getSender()) - amountTemp
+                    - amountTemp / 100 * Fee::TRANSACTION_FEE
+                >= 0)
             {
 
                 tx.sign(actor);

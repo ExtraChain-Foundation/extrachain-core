@@ -82,8 +82,6 @@ public:
     BigNumber getReceiver() const;
     BigNumber getAmount() const;
     BigNumber getPrevBlock() const;
-    BigNumber getSenderBalance() const;
-    BigNumber getReceiverBalance() const;
     QByteArray getData() const;
     QByteArray getHash() const;
     BigNumber getToken() const;
