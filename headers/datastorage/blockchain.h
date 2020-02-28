@@ -58,12 +58,7 @@ public:
     ~Blockchain();
 
 private:
-    Block getBlockByIndex(const BigNumber &index)
-    {
-        Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-        Block block2 = validateAndReturnBlock(block);
-        return block2;
-    }
+    Block getBlockByIndex(const BigNumber &index);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
     Block getBlockByHash(const QByteArray &hash);
@@ -195,12 +190,6 @@ public:
 
     // - ACTORS - //
 
-    /**
-     * Add actor to actor index
-     * @param actor - serialized actor
-     * @return 0 is success, or error code
-     */
-    int addActor(const Actor<KeyPublic> &actor);
     /**
      * Gets actor from actor index
      * @param actorId

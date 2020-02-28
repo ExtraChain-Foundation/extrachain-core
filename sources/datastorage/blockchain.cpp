@@ -13,6 +13,13 @@ Blockchain::~Blockchain()
 {
 }
 
+Block Blockchain::getBlockByIndex(const BigNumber &index)
+{
+    Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
+    //        Block block2 = validateAndReturnBlock(block);
+    return block;
+}
+
 BigNumber Blockchain::checkIntegrity()
 {
     if (fileMode)
@@ -368,11 +375,12 @@ bool Blockchain::signCheckAdd(Block &block)
                         count++;
                     }
                 }
+                if (count != 0)
+                    return true;
             }
         }
-        if (count != 0)
-            return true;
-        if ((list.size() / 3) <= COUNT_APPROVER_BLOCK)
+
+        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
         {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
@@ -408,12 +416,13 @@ bool Blockchain::signCheckAdd(Block &block)
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
                         rowRow.insert({ "type", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
+                        count++;
                     }
                 }
+                if (count != 0)
+                    return true;
             }
         }
-        if (count != 0)
-            return true;
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
         {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
@@ -423,6 +432,7 @@ bool Blockchain::signCheckAdd(Block &block)
             {
                 QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
                 block.addSignature(id, sign, false);
+                return true;
             }
         }
         //        else
@@ -501,27 +511,25 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 
 int Blockchain::mergeBlockWithLocal(Block &received)
 {
-
     Block existed = getBlockByIndex(received.getIndex());
-    if (canMergeBlocks(received, existed))
+    if (!canMergeBlocks(received, existed))
     {
         qWarning() << "Blocks with id" << received.getIndex() << "can't be merged";
         return Errors::BLOCKS_CANT_MERGE;
     }
 
-    qDebug()
-        << QString("Start merging block [%1] with exising [%2]").arg(received.toString(), existed.toString());
+    qDebug() << "Start merging block" << received.getIndex();
     if (received == existed)
-    { // Non-approved code
+    {
         qDebug() << QString("Blocks are equal ([%1])").arg(Errors::BLOCKS_ARE_EQUAL);
         return Errors::BLOCKS_ARE_EQUAL;
     }
-    if (received.contain(existed))
-    {
-        removeBlock(existed);
-        int res = addBlock(received);
-        return res;
-    }
+    //    if (received.contain(existed)) // hui znaet nahuya ono
+    //    {
+    //        removeBlock(existed);
+    //        int res = addBlock(received);
+    //        return res;
+    //    }
 
     // step 1 - create merged block
     Block merged = mergeBlocks(received, existed);
@@ -743,7 +751,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     {
         this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
     }
-    signCheckAdd(block);
+    if (signCheckAdd(block))
+        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -1161,12 +1170,6 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
 }
 
 // Actors //
-
-int Blockchain::addActor(const Actor<KeyPublic> &actor)
-{
-    //    return actorIndex->addActor(actor);
-    return 0;
-}
 
 Actor<KeyPublic> Blockchain::getActor(const BigNumber &actorId)
 {

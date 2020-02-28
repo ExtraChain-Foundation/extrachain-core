@@ -152,9 +152,8 @@ inline bool operator<(const Block &l, const Block &r)
 
 inline bool operator==(const Block &l, const Block &r)
 {
-    return l.getIndex() == r.getIndex() && l.getApprover() == r.getApprover() && l.getData() == r.getData()
-        && l.getDate() == r.getDate() && l.getPrevHash() == r.getPrevHash() && l.getHash() == r.getHash()
-        && l.getDigSig() == r.getDigSig();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
+        && l.extractTransactions() == r.extractTransactions();
 }
 
 #endif // MEMBLOCK_H

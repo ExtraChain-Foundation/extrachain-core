@@ -121,6 +121,7 @@ void NodeManager::connectResolveManager()
 
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
+    connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
@@ -496,7 +497,6 @@ void NodeManager::connectUi()
         qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
-    connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
 
     //======================================CONTRACT===========================================
     /*
