@@ -227,31 +227,46 @@ Transaction NodeManager::createTransaction(Transaction tx)
 
         tx.sign(actor);
         qDebug() << tx.toString();
-        if (tx.getSender().toActorId() == *actorIndex->companyId
-            || tx.getSender().toActorId() == Trash::NullActor)
+
+        // send without fee
+        if (tx.getSender() == BigNumber(Trash::NullActor)
+            || tx.getSender() == BigNumber(*actorIndex->companyId)
+            || tx.getReceiver() == BigNumber(Trash::NullActor)
+            || tx.getReceiver() == BigNumber(*actorIndex->companyId))
             emit NewTx(tx);
 
         else
         {
-
-            // send usual tx
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
-
-            // restructure tx for fee
+            BigNumber amountTemp(tx.getAmount());
+            BigNumber senderBalance = tx.getSenderBalance();
+            if (senderBalance - amountTemp - amountTemp / 100 * Fee::TRANSACTION_FEE >= 0)
             {
-                BigNumber amountTemp(tx.getAmount());
-                amountTemp /= 100 * Fee::TRANSACTION_FEE;
-                tx.setAmount(amountTemp);
-                tx.setReceiver(BigNumber(Trash::NullActor)); // send fee to 0 actor
-                // ENUM | Tx hash that fee refer
-                tx.setData(Serialization::universalSerialize(
-                    { QByteArray::number(Fee::TypeRevert::Fee), tx.getHash() }));
-                tx.sign(actor);
-                qDebug() << "[Info]" << tx.getSender() << " sent fee to NullActor actor";
-            }
 
-            // send fee tx
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage); // send fee to 0 actor
+                tx.sign(actor);
+                // send with fee
+                emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+                Transaction txFee = tx;
+                // restructure tx for fee
+                {
+
+                    amountTemp /= 100 * Fee::TRANSACTION_FEE;
+                    txFee.setAmount(amountTemp);
+                    txFee.setReceiver(BigNumber(Trash::NullActor)); // send fee to 0 actor
+                    // ENUM | Tx hash that fee refer
+                    txFee.setData(Serialization::universalSerialize(
+                        { QByteArray::number(Fee::TypeRevert::Fee), txFee.getHash() }));
+                    txFee.sign(actor);
+                    qDebug() << "[Info]" << txFee.getSender() << " sent fee to NullActor actor";
+                }
+
+                // send fee tx
+                emit sendMsg(txFee.serialize(), Messages::ChainMessage::txMessage); // send fee to 0 actor
+            }
+            else
+            {
+                qDebug() << "Not enough money ";
+                return Transaction();
+            }
         }
 
         return tx;

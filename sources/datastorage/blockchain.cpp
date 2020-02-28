@@ -1260,6 +1260,12 @@ void Blockchain::proveTx(Transaction *tx)
             emit tx->NotApproved(tx);
             return;
         }
+        if (tx->getAmount() <= 0)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
+            emit tx->NotApproved(tx);
+            return;
+        }
         emit tx->addPendingFeeApproverTxs(tx);
         return;
     }
@@ -1277,6 +1283,12 @@ void Blockchain::proveTx(Transaction *tx)
         if (Serialization::universalDeserialize(tx->getData()).size() != 2)
         {
             qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        if (tx->getAmount() <= 0)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
             emit tx->NotApproved(tx);
             return;
         }

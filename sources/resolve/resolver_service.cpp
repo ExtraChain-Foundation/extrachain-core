@@ -307,11 +307,6 @@ void ResolverService::resolveGeneralTask()
             return;
         }
         // transaction - fee
-        if (tx.getSender() != BigNumber(Trash::NullActor))
-        {
-            BigNumber amountTemp(tx.getAmount());
-            tx.setAmount(amountTemp - amountTemp / 100 * Fee::TRANSACTION_FEE);
-        }
 
         emit newTx(tx);
         finishWork();

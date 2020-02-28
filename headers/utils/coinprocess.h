@@ -4,15 +4,16 @@
 #include <QObject>
 #include "datastorage/transaction.h"
 #include <cassert>
+
 class CoinProcess : public QObject
 {
     Q_OBJECT
 public:
-    explicit CoinProcess(QObject *parent = nullptr);
+    explicit CoinProcess(QObject* parent = nullptr);
 
 public:
     static QList<Transaction> blockDataToFeeTxs(QList<Transaction> pendingTxs, QByteArray blockHash,
-                                                BigNumber myActorId);
+                                                BigNumber myActorId, QByteArray* companyId);
 signals:
 };
 

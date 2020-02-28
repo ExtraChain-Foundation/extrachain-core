@@ -100,28 +100,32 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
         emit tx->NotApproved(tx);
         return;
     }
-
-    if (block.getTransactionByHash(tempData[2]).isEmpty())
+    Transaction tempTx = block.getTransactionByHash(tempData[2]);
+    if (tempTx.isEmpty())
     {
         qDebug() << "[Check fee] Fee transaction is not found in block. Invalid transaction";
         emit tx->NotApproved(tx);
         return;
     }
-    if (block.isApprover(tx->getReceiver().toByteArray()))
+
+    if (tempTx.getApprover() == tx->getReceiver())
     {
         qDebug() << "Fee approver transaciton successfull approved";
         emit tx->Approved(tx);
         return;
     }
-    qDebug() << "Undefined behaviour in addPendingFeeApproverTxs";
-    tx->NotApproved(tx);
+    else
+    {
+        qDebug() << "Current actor is not tx approver and don't get fee";
+        tx->NotApproved(tx);
+    }
 }
 
 void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
 {
     // sender actor  receiver 0
     QByteArray hashTx = Serialization::universalDeserialize(tx->getData())[1];
-    for (const auto i : pendingForFeeTxs)
+    for (const auto &i : pendingForFeeTxs)
     {
 
         if (i->getHash() == hashTx)
@@ -130,12 +134,12 @@ void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
             {
                 qDebug() << i->getHash() << " transaction successfull approved";
                 emit i->Approved(i);
-                delete tx;
+                emit tx->Approved(tx);
             }
             else
             {
                 qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
-                delete tx;
+                emit tx->NotApproved(tx);
                 emit i->NotApproved(i);
             }
         }
@@ -193,14 +197,15 @@ Block TransactionManager::makeBlock()
     qDebug() << "Created block:" << block.getIndex();
     QByteArray blockSerialize = block.serialize();
     blockchain->addBlock(block);
-    this->pendingTxs.clear();
 
     // fee section start
     QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
-                                                               accountController->getMainActor()->getId());
+                                                               accountController->getMainActor()->getId(),
+                                                               accountController->getActorIndex()->companyId);
     for (const auto &i : feeTxs)
         nodeManager->createTransaction(i);
     // fee section end
+    this->pendingTxs.clear();
     return block;
 }
 

@@ -6,7 +6,7 @@ CoinProcess::CoinProcess(QObject* parent)
 }
 
 QList<Transaction> CoinProcess::blockDataToFeeTxs(QList<Transaction> pendingTxs, QByteArray blockHash,
-                                                  BigNumber myActorId)
+                                                  BigNumber myActorId, QByteArray* companyId)
 {
 
     static_assert(Fee::APPROVER_FEE > 0 && Fee::APPROVER_FEE < 100, "APPROVER_FEE fee error");
@@ -18,7 +18,8 @@ QList<Transaction> CoinProcess::blockDataToFeeTxs(QList<Transaction> pendingTxs,
     for (const auto& i : pendingTxs)
     {
         // if current transaction ==fee transaction continue
-        if (i.getSender() == BigNumber(Trash::NullActor))
+        if (i.getSender() == BigNumber(Trash::NullActor) || i.getSender() == BigNumber(*companyId)
+            || i.getReceiver() == BigNumber(Trash::NullActor) || i.getReceiver() == BigNumber(*companyId))
             continue;
 
         temp.clear();
