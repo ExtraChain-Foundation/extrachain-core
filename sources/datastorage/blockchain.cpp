@@ -389,6 +389,7 @@ bool Blockchain::signCheckAdd(Block &block)
             {
                 QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
                 block.addSignature(id, sign, false);
+                return true;
             }
         }
         //        else
