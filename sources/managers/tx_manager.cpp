@@ -31,9 +31,13 @@ void TransactionManager::addTransaction(Transaction tx)
     connect(trx, &Transaction::ProveMe, blockchain, &Blockchain::proveTx);
     connect(trx, &Transaction::Approved, this, &TransactionManager::addProvedTransaction);
     connect(trx, &Transaction::NotApproved, this, &TransactionManager::removeUnApprovedTransaction);
+
+    connect(trx, &Transaction::addPendingForFeeTxs, this, &TransactionManager::addPendingForFeeTxs);
+    connect(trx, &Transaction::addPendingFeeSenderTxs, this, &TransactionManager::addPendingFeeSenderTxs);
+    connect(trx, &Transaction::addPendingFeeApproverTxs, this, &TransactionManager::verifyApproverFeeTx);
     //    connect(&tx, &Transaction::Approved, this,
     //    &TransactionManager::makeBlock);
-    emit trx->ProveMe();
+    emit trx->ProveMe(trx);
     //    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
     //                "function)\n after emit tx.ProveMe() signal to Blockshain";
     //    BigNumber receiverBalance = tx.getReceiverBalance();
@@ -45,26 +49,98 @@ void TransactionManager::addTransaction(Transaction tx)
     //    //    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());`
 }
 
-void TransactionManager::addProvedTransaction()
+void TransactionManager::addProvedTransaction(Transaction *tx)
 {
-    QObject *s = QObject::sender();
-    Transaction *tx = qobject_cast<Transaction *>(s);
-
     qDebug() << "addProvedTransaction";
 
     if (!pendingTxs.contains(*tx))
-    {
         pendingTxs.append(*tx);
-    }
 
     receivedTxList.removeOne(tx);
 }
 
-void TransactionManager::removeUnApprovedTransaction()
+void TransactionManager::removeUnApprovedTransaction(Transaction *tx)
 {
-    QObject *s = QObject::sender();
-    Transaction *tx = qobject_cast<Transaction *>(s);
+
     receivedTxList.removeOne(tx);
+}
+
+void TransactionManager::addPendingForFeeTxs(Transaction *transaction)
+{
+    for (const auto i : pendingFeeTxs)
+    {
+        if (transaction->getHash() == Serialization::universalDeserialize(i->getData())[1])
+        {
+            if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount())
+            {
+                pendingFeeTxs.removeOne(i);
+                emit transaction->Approved(transaction);
+            }
+            else
+            {
+                qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
+                emit transaction->NotApproved(transaction);
+            }
+        }
+    }
+    pendingForFeeTxs.append(transaction);
+}
+
+void TransactionManager::verifyApproverFeeTx(Transaction *tx)
+{
+    // sender == 0  receive ==actor id
+    // IF it's fee transaction
+    // WAIT FOR 3 SEC
+    QList<QByteArray> tempData = Serialization::universalDeserialize(tx->getData());
+
+    Block block = blockchain->getBlockByHash(tempData[1]);
+    if (block.isEmpty())
+    {
+        qDebug() << "[Check fee] Block is not valid. Invalid fee transaction";
+        emit tx->NotApproved(tx);
+        return;
+    }
+
+    if (block.getTransactionByHash(tempData[2]).isEmpty())
+    {
+        qDebug() << "[Check fee] Fee transaction is not found in block. Invalid transaction";
+        emit tx->NotApproved(tx);
+        return;
+    }
+    if (block.isApprover(tx->getReceiver().toByteArray()))
+    {
+        qDebug() << "Fee approver transaciton successfull approved";
+        emit tx->Approved(tx);
+        return;
+    }
+    qDebug() << "Undefined behaviour in addPendingFeeApproverTxs";
+    tx->NotApproved(tx);
+}
+
+void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
+{
+    // sender actor  receiver 0
+    QByteArray hashTx = Serialization::universalDeserialize(tx->getData())[1];
+    for (const auto i : pendingForFeeTxs)
+    {
+
+        if (i->getHash() == hashTx)
+        {
+            if (i->getAmount() / 100 * Fee::TRANSACTION_FEE == tx->getAmount())
+            {
+                qDebug() << i->getHash() << " transaction successfull approved";
+                emit i->Approved(i);
+                delete tx;
+            }
+            else
+            {
+                qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
+                delete tx;
+                emit i->NotApproved(i);
+            }
+        }
+    }
+    pendingFeeSenderTxs.append(tx);
 }
 
 // Tx hashes (for network)

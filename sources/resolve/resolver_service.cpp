@@ -310,7 +310,7 @@ void ResolverService::resolveGeneralTask()
         if (tx.getSender() != BigNumber(Trash::NullActor))
         {
             BigNumber amountTemp(tx.getAmount());
-            tx.setAmount(amountTemp - amountTemp / 100);
+            tx.setAmount(amountTemp - amountTemp / 100 * Fee::TRANSACTION_FEE);
         }
 
         emit newTx(tx);
@@ -472,29 +472,6 @@ bool ResolverService::validateBlock(const Block &block)
 
 bool ResolverService::validate(const Transaction &tx)
 {
-    // if get fee transaction
-    if (tx.getSender() == BigNumber(Trash::NullActor))
-    {
-        QList<QByteArray> tempData = Serialization::universalDeserialize(tx.getData());
-        assert(tempData.size() == 3);
-
-        Block block = blockchain->getBlock(SearchEnum::BlockParam::Hash, tempData[1]);
-        if (block.isEmpty())
-        {
-            qDebug() << "[Check fee] Block is not valid. Invalid transaction";
-            return false;
-        }
-        Transaction transaction = block.getTransactionByHash(tempData[2]);
-        if (transaction.isEmpty())
-        {
-            qDebug() << "[Check fee] Fee transaction is not found in block. Invalid transaction";
-            return false;
-        }
-        return block.isApprover(tx.getReceiver().toByteArray());
-    }
-    else
-        return true;
-
     qDebug() << "RESOLVER SERVICE: "
              << "validate(Transaction):";
     bool result = actorIndex->validateTx(tx);

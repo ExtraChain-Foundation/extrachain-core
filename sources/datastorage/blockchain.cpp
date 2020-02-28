@@ -1218,114 +1218,126 @@ void Blockchain::VerifyTx(Transaction tx)
     emit VerifiedTx(tx);
 }
 
-void Blockchain::proveTx()
+void Blockchain::proveTx(Transaction *tx)
 {
+
     qDebug() << "proveTx: started";
-    QObject *s = QObject::sender();
-    Transaction *tx = qobject_cast<Transaction *>(s);
-    //    if (tx->getSender() == BigNumber(*actorIndex->companyId))
-    //    {
+
     BigNumber targetSender = tx->getSender();
+    BigNumber targetReceiver = tx->getReceiver();
     Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
-    if (senderActor.isEmpty())
-    {
-        qDebug() << "Tx" << tx->getHash() << "not approved: no such actor";
-        emit tx->NotApproved();
-        return;
-    }
-    bool sig = senderActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
-    if (!sig)
-    {
-        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
-        emit tx->NotApproved();
-        return;
-    }
-    //        if (sig)
-    //        {
-    //            emit tx->Approved();
-    //            return;
-    //        }
-    //        else
-    //        {
-    //            emit tx->NotApproved();
-    //            qDebug() << "Transaction not approved: false zero user";
-    //            return;
-    //        }
-    //    }
-    if (tx->getData() == "initcontract")
-    {
-        // type = 6, token = correct
-        //        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
+    Actor<KeyPublic> receiverActor = actorIndex->getActor(targetReceiver);
 
-        //        if (profile.type() != 6)
-        //        {
-        //            emit tx->NotApproved();
-        //            qDebug() << "Transaction not approved: genesis block is not from contract";
-        //            return;
-        //        }
-
-        if (tx->getSender() != tx->getToken())
-        {
-            emit tx->NotApproved();
-            qDebug() << "Transaction not approved: sender != token in genesis block";
-            return;
-        }
-        emit tx->Approved();
-        return;
-    }
-
-    if (tx->getSender() == tx->getReceiver())
+    if (targetSender == targetReceiver)
     {
-        emit tx->NotApproved();
+        emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: sender == receiver";
         return;
     }
-    if (tx->getAmount() <= 0 && targetSender.toActorId() != *actorIndex->companyId)
+
+    // if receiver is not exist
+
+    if (receiverActor.isEmpty() || senderActor.isEmpty())
     {
-        emit tx->NotApproved();
-        qDebug() << "Transaction not approved: amount <= 0";
+        emit tx->NotApproved(tx);
+        qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }
 
-    // verify sender state
-    //    BigNumber targetSender = tx->getSender();
-    //    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
-    if (senderActor.isEmpty())
+    if (targetSender == BigNumber(Trash::NullActor))
     {
-        emit tx->NotApproved();
-        return;
-    }
-    if (tx->getData() == "initcontract")
-    {
-        qDebug() << "Contract tx proving";
-        QByteArrayList profile = senderActor.profile().getListProfile();
-        if (profile[0] == "6" && profile[5] == tx->getReceiver())
+
+        // if !sig
+        if (!receiverActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
-            qDebug() << "Contract tx proved";
-            tx->sign(accountController->getCurrentActor());
-            emit tx->Approved();
+            qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
+            emit tx->NotApproved(tx);
             return;
         }
-    }
-    BigNumber senderCurBal = 0;
-    if (targetSender.toActorId() != *actorIndex->companyId)
-    {
-        senderCurBal = getUserBalance(targetSender, tx->getToken());
-        BigNumber check = txManager->checkPendingTxsList(targetSender);
-        senderCurBal += check;
-    }
-
-    if (senderCurBal - tx->getAmount() < 0 && targetSender.toActorId() != *actorIndex->companyId)
-    {
-        qDebug() << senderCurBal << tx->getAmount();
-        qDebug() << "Transaction "
-                    "not approved: sender's or receiver's balance will be < 0";
-        emit tx->NotApproved();
+        if (Serialization::universalDeserialize(tx->getData()).size() != 3)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee from NullActor to actor not approved: data size !=3";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        emit tx->addPendingFeeApproverTxs(tx);
         return;
     }
 
-    tx->sign(accountController->getCurrentActor());
-    emit tx->Approved();
+    // if !sig
+    if (!senderActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
+    {
+        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
+        emit tx->NotApproved(tx);
+        return;
+    }
+
+    if (targetReceiver == BigNumber(Trash::NullActor))
+    {
+        if (Serialization::universalDeserialize(tx->getData()).size() != 2)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        emit tx->addPendingFeeSenderTxs(tx);
+    }
+
+    // if current transaction not fee
+    else
+    {
+
+        if (tx->getData() == "initcontract")
+        {
+            QByteArrayList profile = senderActor.profile().getListProfile();
+            if (profile[0] == "6" && profile[5] == targetReceiver && (targetSender == tx->getToken()))
+            {
+                qDebug() << "Contract tx proved";
+                tx->sign(accountController->getCurrentActor());
+                emit tx->Approved(tx);
+                return;
+            }
+            emit tx->NotApproved(tx);
+            qDebug() << "Transaction not approved: sender != token in genesis block";
+            // type = 6, token = correct
+            //        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
+
+            //        if (profile.type() != 6)
+            //        {
+            //            emit tx->NotApproved();
+            //            qDebug() << "Transaction not approved: genesis block is not from contract";
+            //            return;
+            //        }
+        }
+
+        if (targetSender.toActorId() != *actorIndex->companyId)
+        {
+            BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
+
+            senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
+
+            if (tx->getAmount() <= 0)
+            {
+                emit tx->NotApproved(tx);
+                qDebug() << "Transaction not approved: amount <= 0";
+                return;
+            }
+
+            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0)
+            {
+                qDebug() << senderCurrentBalance << tx->getAmount();
+                qDebug() << "Transaction "
+                            "not approved: sender's or receiver's balance will be < 0";
+                emit tx->NotApproved(tx);
+                return;
+            }
+        }
+
+        tx->sign(accountController->getCurrentActor());
+        emit tx->addPendingForFeeTxs(tx);
+    }
+    qDebug() << "Undefine behaviour blockhain.cpp proveTx";
+    tx->NotApproved(tx);
 }
 
 // Other //

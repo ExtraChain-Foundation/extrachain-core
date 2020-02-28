@@ -18,7 +18,7 @@
 #include <QString>
 #include <QMutex>
 #include <QTemporaryFile>
-
+#include <cassert>
 // database
 #include "headers/utils/db_connector.h"
 class TransactionManager;
@@ -55,13 +55,13 @@ private:
 
 public:
     Blockchain(AccountController *accountController, bool fileMode = true);
+    Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
 private:
     Block getBlockByIndex(const BigNumber &index);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
-    Block getBlockByHash(const QByteArray &hash);
 
     QByteArray getBlockDataByIndex(const BigNumber &index);
 
@@ -342,6 +342,6 @@ public slots:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    void proveTx();
+    void proveTx(Transaction *tx);
 };
 #endif // BLOCKCHAIN_H

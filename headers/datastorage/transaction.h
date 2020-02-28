@@ -107,9 +107,13 @@ public:
     void setData(const QByteArray &value);
 
 signals:
-    void ProveMe();
-    void Approved();
-    void NotApproved();
+    void ProveMe(Transaction *transaction);
+    void Approved(Transaction *transaction);
+    void NotApproved(Transaction *transaction);
+
+    void addPendingForFeeTxs(Transaction *transaction);
+    void addPendingFeeApproverTxs(Transaction *transaction);
+    void addPendingFeeSenderTxs(Transaction *transaction);
 
 public:
     /**

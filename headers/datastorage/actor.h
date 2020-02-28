@@ -15,7 +15,7 @@
  * Users, Smart-contracts
  */
 namespace Trash {
-static QByteArray NullActor = "0";
+static const QByteArray NullActor = "0";
 };
 enum actorType
 {

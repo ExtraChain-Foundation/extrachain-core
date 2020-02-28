@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include "datastorage/transaction.h"
+#include <cassert>
 class CoinProcess : public QObject
 {
     Q_OBJECT
@@ -16,8 +17,11 @@ signals:
 };
 
 namespace Fee {
+static constexpr int TRANSACTION_FEE = 1; // 1% from transaction amount
+static constexpr int APPROVER_FEE = 5;    // 5% from TRANSACTION_FEE
 enum TypeRevert
 {
+    Fee,
     ApproverRevert,
     CheckerRevert,
     StackRevert

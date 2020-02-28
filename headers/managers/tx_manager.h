@@ -31,6 +31,11 @@ private:
     // received transactions that will be packed into block
     QList<Transaction> pendingTxs;
 
+    QList<Transaction *> pendingForFeeTxs;
+    QList<Transaction *> pendingFeeSenderTxs;
+
+    QList<Transaction *> pendingFeeTxs;
+
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
     QList<QByteArray> unApprovedTxHashes;
@@ -70,10 +75,14 @@ public slots:
      * @param tx - transaction
      * @return 0 is transaction is successfully added
      */
-    void addTransaction(Transaction tx);
-    void addProvedTransaction();
-    void removeUnApprovedTransaction();
 
+    void addTransaction(Transaction tx);
+    void addProvedTransaction(Transaction *transaction);
+    void removeUnApprovedTransaction(Transaction *tx);
+
+    void addPendingForFeeTxs(Transaction *transaction);
+    void verifyApproverFeeTx(Transaction *transaction);
+    void addPendingFeeSenderTxs(Transaction *transaction);
     // Unapproved tx's //
 
     /**
