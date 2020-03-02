@@ -1344,9 +1344,16 @@ void Blockchain::proveTx(Transaction *tx)
                 return;
             }
         }
+        else
+        {
+            tx->sign(accountController->getCurrentActor());
+            emit tx->Approved(tx);
+            return;
+        }
 
         tx->sign(accountController->getCurrentActor());
         emit tx->addPendingForFeeTxs(tx);
+        return;
     }
     qDebug() << "Undefine behaviour blockhain.cpp proveTx";
     tx->NotApproved(tx);
