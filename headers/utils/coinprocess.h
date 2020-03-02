@@ -18,8 +18,8 @@ signals:
 };
 
 namespace Fee {
-static constexpr int TRANSACTION_FEE = 10; // 1% from transaction amount
-static constexpr int APPROVER_FEE = 5;     // 5% from TRANSACTION_FEE
+static constexpr int TRANSACTION_FEE = 1; // 1% from transaction amount
+static constexpr int APPROVER_FEE = 5;    // 5% from TRANSACTION_FEE
 enum TypeRevert
 {
     Fee,

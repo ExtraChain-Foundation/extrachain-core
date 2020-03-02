@@ -238,25 +238,22 @@ Transaction NodeManager::createTransaction(Transaction tx)
         else
         {
             BigNumber amountTemp(tx.getAmount());
-
             if (blockchain->getUserBalance(tx.getSender()) - amountTemp
                     - amountTemp / 100 * Fee::TRANSACTION_FEE
                 >= 0)
             {
-
-                tx.sign(actor);
                 // send with fee
                 emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
                 Transaction txFee = tx;
                 // restructure tx for fee
                 {
 
-                    amountTemp /= 100 * Fee::TRANSACTION_FEE;
+                    amountTemp /= 100 / Fee::TRANSACTION_FEE;
                     txFee.setAmount(amountTemp);
                     txFee.setReceiver(BigNumber(Trash::NullActor)); // send fee to 0 actor
                     // ENUM | Tx hash that fee refer
                     txFee.setData(Serialization::universalSerialize(
-                        { QByteArray::number(Fee::TypeRevert::Fee), txFee.getHash() }));
+                        { QByteArray::number(Fee::TypeRevert::Fee), tx.getHash() }));
                     txFee.sign(actor);
                     qDebug() << "[Info]" << txFee.getSender() << " sent fee to NullActor actor";
                 }

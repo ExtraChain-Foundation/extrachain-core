@@ -506,10 +506,10 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
             row.insert({ "hash", block.getHash().toStdString() });
             DB.insert(Config::DataStorage::BlockTable, row);
 
-            DBRow rowRow;
             QList<Transaction> rows = block.extractTransactions();
             for (const auto &tmp : rows)
             {
+                DBRow rowRow;
                 rowRow.insert({ "sender", tmp.getSender().toStdString() });
                 rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });

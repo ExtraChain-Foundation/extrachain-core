@@ -1225,8 +1225,12 @@ void Blockchain::proveTx(Transaction *tx)
 
     BigNumber targetSender = tx->getSender();
     BigNumber targetReceiver = tx->getReceiver();
-    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
-    Actor<KeyPublic> receiverActor = actorIndex->getActor(targetReceiver);
+    Actor<KeyPublic> senderActor;
+    if (targetSender != 0)
+        senderActor = actorIndex->getActor(targetSender);
+    Actor<KeyPublic> receiverActor;
+    if (targetReceiver != 0)
+        receiverActor = actorIndex->getActor(targetReceiver);
 
     if (targetSender == targetReceiver)
     {
@@ -1237,7 +1241,7 @@ void Blockchain::proveTx(Transaction *tx)
 
     // if receiver is not exist
 
-    if (receiverActor.isEmpty() || senderActor.isEmpty())
+    if ((receiverActor.isEmpty() && targetReceiver != 0) || (senderActor.isEmpty() && targetSender != 0))
     {
         emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: receiver or sender is not exist";
@@ -1293,6 +1297,7 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
         emit tx->addPendingFeeSenderTxs(tx);
+        return;
     }
 
     // if current transaction not fee
@@ -1311,15 +1316,8 @@ void Blockchain::proveTx(Transaction *tx)
             }
             emit tx->NotApproved(tx);
             qDebug() << "Transaction not approved: sender != token in genesis block";
-            // type = 6, token = correct
-            //        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
 
-            //        if (profile.type() != 6)
-            //        {
-            //            emit tx->NotApproved();
-            //            qDebug() << "Transaction not approved: genesis block is not from contract";
-            //            return;
-            //        }
+            return;
         }
 
         if (targetSender.toActorId() != *actorIndex->companyId)
@@ -1351,7 +1349,6 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        tx->sign(accountController->getCurrentActor());
         emit tx->addPendingForFeeTxs(tx);
         return;
     }

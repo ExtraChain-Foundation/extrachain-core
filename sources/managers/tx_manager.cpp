@@ -74,6 +74,7 @@ void TransactionManager::addPendingForFeeTxs(Transaction *transaction)
             if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount())
             {
                 pendingFeeTxs.removeOne(i);
+                transaction->sign(accountController->getCurrentActor());
                 emit transaction->Approved(transaction);
             }
             else
@@ -101,6 +102,13 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
         return;
     }
     Transaction tempTx = block.getTransactionByHash(tempData[2]);
+    if (tempTx.getAmount() / 100 / 100 * Fee::TRANSACTION_FEE * Fee::APPROVER_FEE != tx->getAmount())
+    {
+        qDebug() << "[Check fee] amount1 != amount2 Fee";
+        emit tx->NotApproved(tx);
+
+        return;
+    }
     if (tempTx.isEmpty())
     {
         qDebug() << "[Check fee] Fee transaction is not found in block. Invalid transaction";
@@ -111,6 +119,7 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
     if (tempTx.getApprover() == tx->getReceiver())
     {
         qDebug() << "Fee approver transaciton successfull approved";
+        tx->sign(accountController->getCurrentActor());
         emit tx->Approved(tx);
         return;
     }
@@ -127,12 +136,13 @@ void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
     QByteArray hashTx = Serialization::universalDeserialize(tx->getData())[1];
     for (const auto &i : pendingForFeeTxs)
     {
-
         if (i->getHash() == hashTx)
         {
             if (i->getAmount() / 100 * Fee::TRANSACTION_FEE == tx->getAmount())
             {
                 qDebug() << i->getHash() << " transaction successfull approved";
+                tx->sign(accountController->getCurrentActor());
+                i->sign(accountController->getCurrentActor());
                 emit i->Approved(i);
                 emit tx->Approved(tx);
             }
@@ -192,10 +202,9 @@ Block TransactionManager::makeBlock()
     Block lastBlock = blockchain->getLastBlock();
 
     Block block(data, lastBlock);
-
+    QList<Transaction> x = block.extractTransactions();
     blockchain->signBlock(block);
     qDebug() << "Created block:" << block.getIndex();
-    QByteArray blockSerialize = block.serialize();
     blockchain->addBlock(block);
 
     // fee section start
