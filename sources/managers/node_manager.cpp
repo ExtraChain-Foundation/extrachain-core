@@ -326,8 +326,7 @@ Transaction NodeManager::createFreezeTransaction(BigNumber receiver, BigNumber a
 
         Transaction tx(actor.getId(), receiver, amount);
         // add sent tx balances
-        toFreeze ? tx.setData(DataStorage::FREEZE_TX) : tx.setData(DataStorage::UNFREEZE_TX);
-        tx.setData(DataStorage::FREEZE_TX);
+        tx.setData(toFreeze ? DataStorage::FREEZE_TX : DataStorage::UNFREEZE_TX);
         tx.setToken(token);
         //        if (actorIndex->companyId != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->companyId))
