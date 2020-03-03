@@ -427,28 +427,6 @@ void NodeManager::createWalletInUi()
 
 void NodeManager::updateWalletInUi()
 {
-    // FOR SEVA:
-    // check freeze tx for watch him in WalletStackingPage
-    // maybe:
-    //
-    // void NodeManager::updateWalletStacking()
-    // {
-    // QByteArrayList currentWallets = uiWallet->getCurrentWallets();
-
-    //    for (const QByteArray &currentId : currentWallets)
-    //    {
-    //        if (actorIndex->getActor(currentId).isEmpty())
-    //            break;
-
-    //        walletList.append(currentId);
-
-    //        QByteArray amount = blockchain->getFreezeUserBalance(currentId,
-    //        uiWallet->getCurrentToken()).toByteArray();
-    //        walletList.append(Transaction::amountToVisible(amount).toLatin1());
-    //    }
-    //  uiWallet->stacking(walletList); ????
-    // }
-
     uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().getId().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
@@ -472,7 +450,10 @@ void NodeManager::updateWalletList()
         walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        walletList.append(Transaction::amountToVisible(amount).toLatin1());
+        QByteArray staking =
+            blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
+        walletList << Transaction::amountToVisible(amount).toLatin1()
+                   << Transaction::amountToVisible(staking).toLatin1();
     }
 
     uiWallet->updateWalletListModel(&walletList);
