@@ -1016,6 +1016,51 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
     return balance;
 }
 
+BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId) const
+{
+    BigNumber balance;
+
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
+    {
+        Block currentBlock = blockIndex.getBlockById(i);
+
+        if (currentBlock.getData() == "genesis")
+        {
+            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
+            const auto rows = genesis.extractDataRows();
+
+            for (const auto &row : rows)
+            {
+                if (userId == row.actorId /* && row.type == stacking ? */)
+                    return balance + row.state;
+            }
+
+            return balance;
+        }
+
+        if (currentBlock.isEmpty())
+            break;
+
+        QList<Transaction> txs = currentBlock.extractTransactions();
+
+        for (auto &tx : txs)
+        {
+            if (tx.getReceiver() == userId && tx.getToken() == tokenId
+                && tx.getData() == DataStorage::UNFREEZE_TX)
+            {
+                balance -= tx.getAmount();
+            }
+            else if (tx.getReceiver() == userId && tx.getToken() == tokenId
+                     && tx.getData() == DataStorage::FREEZE_TX)
+            {
+                balance += tx.getAmount();
+            }
+        }
+    }
+
+    return balance;
+}
+
 void Blockchain::showBlockchain() const
 {
     qDebug() << "BLOCKCHAIN: showBlockchain()";
@@ -1231,7 +1276,47 @@ void Blockchain::proveTx(Transaction *tx)
     Actor<KeyPublic> receiverActor;
     if (targetReceiver != 0)
         receiverActor = actorIndex->getActor(targetReceiver);
+    if (tx->getData() == DataStorage::FREEZE_TX)
+    {
+        BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
 
+        senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
+
+        if (tx->getAmount() <= 0)
+        {
+            emit tx->NotApproved(tx);
+            qDebug() << "Transaction Freeze not approved: amount <= 0";
+            return;
+        }
+
+        if ((senderCurrentBalance - tx->getAmount()) < 0)
+        {
+            qDebug() << "Transaction Freeze "
+                        "not approved: sender's balance will be < 0";
+            emit tx->NotApproved(tx);
+            return;
+        }
+
+        tx->sign(accountController->getCurrentActor());
+        emit tx->Approved(tx);
+        return;
+    }
+    if (tx->getData() == DataStorage::UNFREEZE_TX)
+    {
+        BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken());
+
+        if ((senderCurrentBalance - tx->getAmount()) < 0)
+        {
+            qDebug() << "Transaction Freeze "
+                        "not approved: sender's balance will be < 0";
+            emit tx->NotApproved(tx);
+            return;
+        }
+
+        tx->sign(accountController->getCurrentActor());
+        emit tx->Approved(tx);
+        return;
+    }
     if (targetSender == targetReceiver)
     {
         emit tx->NotApproved(tx);

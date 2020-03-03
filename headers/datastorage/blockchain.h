@@ -250,6 +250,7 @@ public:
     BigNumber getRecords() const;
 
     BigNumber getUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
+    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
     /**
      * @brief Show blockchain
      */

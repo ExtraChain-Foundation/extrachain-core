@@ -234,7 +234,10 @@ Transaction NodeManager::createTransaction(Transaction tx)
             || tx.getReceiver() == BigNumber(Trash::NullActor)
             || tx.getReceiver() == BigNumber(*actorIndex->companyId))
             emit NewTx(tx);
-
+        else if (tx.getData() == DataStorage::FREEZE_TX || tx.getData() == DataStorage::UNFREEZE_TX)
+        {
+            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+        }
         else
         {
             BigNumber amountTemp(tx.getAmount());
@@ -304,6 +307,39 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
                     .arg(QString(receiver.toActorId()));
     return Transaction();
 }
+
+Transaction NodeManager::createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
+                                                 BigNumber token)
+{
+
+    Actor<KeyPrivate> actor = accController->getCurrentActor();
+
+    if (!actor.isEmpty())
+    {
+        if (receiver == 0)
+        {
+            qDebug() << "Create freeze tx to me";
+            receiver = actor.getId();
+        }
+        else
+            qDebug() << "Create freeze tx to" << receiver;
+
+        Transaction tx(actor.getId(), receiver, amount);
+        // add sent tx balances
+        toFreeze ? tx.setData(DataStorage::FREEZE_TX) : tx.setData(DataStorage::UNFREEZE_TX);
+        tx.setData(DataStorage::FREEZE_TX);
+        tx.setToken(token);
+        //        if (actorIndex->companyId != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->companyId))
+        //                tx.setSenderBalance(BigNumber(0));
+
+        return this->createTransaction(tx);
+    }
+    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
+                    .arg(QString(receiver.toActorId()));
+    return Transaction();
+}
+
 Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
                                                BigNumber token)
 {
@@ -391,6 +427,28 @@ void NodeManager::createWalletInUi()
 
 void NodeManager::updateWalletInUi()
 {
+    // FOR SEVA:
+    // check freeze tx for watch him in WalletStackingPage
+    // maybe:
+    //
+    // void NodeManager::updateWalletStacking()
+    // {
+    // QByteArrayList currentWallets = uiWallet->getCurrentWallets();
+
+    //    for (const QByteArray &currentId : currentWallets)
+    //    {
+    //        if (actorIndex->getActor(currentId).isEmpty())
+    //            break;
+
+    //        walletList.append(currentId);
+
+    //        QByteArray amount = blockchain->getFreezeUserBalance(currentId,
+    //        uiWallet->getCurrentToken()).toByteArray();
+    //        walletList.append(Transaction::amountToVisible(amount).toLatin1());
+    //    }
+    //  uiWallet->stacking(walletList); ????
+    // }
+
     uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().getId().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().getId(), uiWallet->getCurrentToken()));
@@ -498,6 +556,8 @@ void NodeManager::connectUi()
 
     //=======================================WALLET=========================================
     connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
+    connect(uiWallet, &WalletController::sendNewTransactionFreeze, this,
+            &NodeManager::createFreezeTransaction);
     connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
     //    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);

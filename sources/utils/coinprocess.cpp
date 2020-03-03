@@ -19,7 +19,8 @@ QList<Transaction> CoinProcess::blockDataToFeeTxs(QList<Transaction> pendingTxs,
     {
         // if current transaction ==fee transaction continue
         if (i.getSender() == BigNumber(Trash::NullActor) || i.getSender() == BigNumber(*companyId)
-            || i.getReceiver() == BigNumber(Trash::NullActor) || i.getReceiver() == BigNumber(*companyId))
+            || i.getReceiver() == BigNumber(Trash::NullActor) || i.getReceiver() == BigNumber(*companyId)
+            || i.getData() == DataStorage::FREEZE_TX || i.getData() == DataStorage::UNFREEZE_TX)
             continue;
 
         temp.clear();
