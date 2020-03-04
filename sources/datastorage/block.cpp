@@ -301,7 +301,6 @@ QByteArray Block::getData() const
 
 QByteArray Block::getHash() const
 {
-
     return hash;
 }
 

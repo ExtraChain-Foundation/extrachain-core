@@ -334,11 +334,25 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         {
             if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                 break;
-            GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
-                                                      tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
-            GenesisDataRow recReceiver = GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()),
-                                                        tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
-            addRecordsIfNew(recReceiver, recSender);
+            if (tx.getData() == DataStorage::FREEZE_TX || tx.getData() == DataStorage::UNFREEZE_TX)
+            {
+                GenesisDataRow recSender =
+                    GenesisDataRow(tx.getSender(), getFreezeUserBalance(tx.getSender()), tx.getToken(),
+                                   DataStorage::typeDataRow::STAKING);
+                GenesisDataRow recReceiver =
+                    GenesisDataRow(tx.getReceiver(), getFreezeUserBalance(tx.getReceiver()), tx.getToken(),
+                                   DataStorage::typeDataRow::STAKING);
+                addRecordsIfNew(recReceiver, recSender);
+            }
+            else
+            {
+                GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
+                                                          tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
+                GenesisDataRow recReceiver =
+                    GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()), tx.getToken(),
+                                   DataStorage::typeDataRow::UNIVERSAL);
+                addRecordsIfNew(recReceiver, recSender);
+            }
         }
     }
     return QByteArray();
@@ -981,7 +995,7 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
     {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (currentBlock.getData() == "genesis")
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
         {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
@@ -1002,7 +1016,12 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
 
         for (auto &tx : txs)
         {
-            if (tx.getSender() == userId && tx.getToken() == tokenId)
+            if (tx.getData() == DataStorage::UNFREEZE_TX && tx.getReceiver() == userId
+                && tx.getToken() == tokenId)
+            {
+                balance += tx.getAmount();
+            }
+            else if (tx.getSender() == userId && tx.getToken() == tokenId)
             {
                 balance -= tx.getAmount();
             }
@@ -1024,14 +1043,14 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId) 
     {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (currentBlock.getData() == "genesis")
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
         {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
 
             for (const auto &row : rows)
             {
-                if (userId == row.actorId /* && row.type == stacking ? */)
+                if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
                     return balance + row.state;
             }
 
@@ -1307,7 +1326,7 @@ void Blockchain::proveTx(Transaction *tx)
 
         if ((senderCurrentBalance - tx->getAmount()) < 0)
         {
-            qDebug() << "Transaction Freeze "
+            qDebug() << "Transaction UNFreeze "
                         "not approved: sender's balance will be < 0";
             emit tx->NotApproved(tx);
             return;

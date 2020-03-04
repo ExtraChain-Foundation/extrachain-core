@@ -80,7 +80,7 @@ public:
     GenesisBlock(const QByteArray &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    GenesisBlock(const QByteArray &data, const Block &prevBlock, const QByteArray &prevGenHash);
+    GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
 
     // Block interface
 public:

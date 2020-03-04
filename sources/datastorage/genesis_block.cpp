@@ -17,8 +17,8 @@ GenesisBlock::GenesisBlock(const QByteArray &serialized)
     deserialize(serialized);
 }
 
-GenesisBlock::GenesisBlock(const QByteArray &data, const Block &prevBlock, const QByteArray &prevGenHash)
-    : Block(data, prevBlock)
+GenesisBlock::GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash)
+    : Block(_data, prevBlock)
     , prevGenHash(prevGenHash)
 {
     this->type = Config::GENESIS_BLOCK_TYPE;

@@ -514,7 +514,8 @@ static const int DATA_OFFSET = 512;
 
 enum typeDataRow
 {
-    UNIVERSAL
+    UNIVERSAL,
+    STAKING
 };
 } // namespace DataStorage
 
