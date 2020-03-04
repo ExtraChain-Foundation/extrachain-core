@@ -104,7 +104,7 @@ void Block::sign(const Actor<KeyPrivate> &actor)
 {
     calcHash();
     QByteArray sign = actor.getKey()->sign(getDataForDigSig());
-    this->signatures.append({ actor.getId().toByteArray(), sign, true });
+    this->signatures.append({ actor.getId().toActorId(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const

@@ -82,9 +82,10 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
+    void sendFeeUnfreeze(Block &block);
 
     const int COUNT_APPROVER_BLOCK = 1;
-    const int COUNT_CHECKER_BLOCK = 3;
+    const int COUNT_CHECKER_BLOCK = 2;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,

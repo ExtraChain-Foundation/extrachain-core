@@ -14,7 +14,7 @@ Transaction::Transaction(QObject *parent)
     this->hash = "";
     this->approver = BigNumber(0);
     this->digSig = QByteArray();
-
+    this->producer = BigNumber(0);
     calcHash();
 }
 
@@ -25,7 +25,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
     QList<QByteArray> list =
         Serialization::universalDeserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
-    if (list.size() == 12)
+    if (list.size() == 13)
     {
         this->sender = BigNumber(list.at(0));
         this->receiver = BigNumber(list.at(1));
@@ -39,6 +39,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
         this->hash = QByteArray(list.at(9));
         this->approver = BigNumber(list.at(10));
         this->digSig = list.at(11);
+        this->producer = BigNumber(list.at(12));
     }
     else
         qDebug() << "Incorrect TX";
@@ -62,7 +63,7 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     this->hash = "";
     this->approver = BigNumber(0);
     this->digSig = QByteArray();
-
+    this->producer = BigNumber(0);
     calcHash();
 }
 
@@ -89,7 +90,7 @@ Transaction::Transaction(const Transaction &other, QObject *parent)
     this->hash = other.hash;
     this->approver = other.approver;
     this->digSig = other.digSig;
-
+    this->producer = other.producer;
     calcHash();
 }
 
@@ -98,9 +99,19 @@ void Transaction::setReceiver(const BigNumber &value)
     receiver = value;
 }
 
+void Transaction::setProducer(const BigNumber &value)
+{
+    producer = value;
+}
+
 void Transaction::setSender(const BigNumber &value)
 {
     sender = value;
+}
+
+BigNumber Transaction::getProducer() const
+{
+    return producer;
 }
 
 void Transaction::setAmount(const BigNumber &value)
@@ -140,7 +151,8 @@ void Transaction::calcHash()
 QByteArray Transaction::getDataForHash() const
 {
     return (sender.toActorId() + receiver.toActorId() + amount.toByteArray() + QByteArray::number(date) + data
-            + token.toActorId() + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId());
+            + token.toActorId() + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId()
+            + producer.toActorId());
 }
 
 QByteArray Transaction::getDataForDigSig() const
@@ -207,7 +219,7 @@ void Transaction::clear()
     this->hash = "";
     this->approver = BigNumber(0);
     this->digSig = QByteArray();
-
+    this->producer = BigNumber(0);
     calcHash();
 }
 
@@ -315,6 +327,7 @@ void Transaction::operator=(const Transaction &other)
     this->hash = other.hash;
     this->approver = other.approver;
     this->digSig = other.digSig;
+    this->producer = other.producer;
 }
 
 QString Transaction::toString() const
@@ -333,7 +346,8 @@ QByteArray Transaction::serialize() const
     QList<QByteArray> list;
     list << sender.toActorId() << receiver.toActorId() << amount.toByteArray() << QByteArray::number(date)
          << data << token.toActorId() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
-         << QString::number(hop).toLocal8Bit() << hash << approver.toActorId() << digSig;
+         << QString::number(hop).toLocal8Bit() << hash << approver.toActorId() << digSig
+         << producer.toActorId();
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 
     return Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE);

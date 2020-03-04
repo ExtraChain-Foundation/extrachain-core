@@ -522,7 +522,10 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 rowRow.insert({ "hash", tmp.getHash().toStdString() });
                 rowRow.insert({ "approver", tmp.getApprover().toStdString() });
                 rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
-
+                if (tmp.getProducer() == 0)
+                    rowRow.insert({ "producer", "0" });
+                else
+                    rowRow.insert({ "producer", tmp.getProducer().toStdString() });
                 DB.insert(Config::DataStorage::TxBlockTable, rowRow);
             }
             QByteArrayList listSign = block.getListSignatures();
@@ -742,8 +745,9 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             QByteArray hash = tmp.at("hash").c_str();
             QByteArray approver = tmp.at("approver").c_str();
             QByteArray digSig = tmp.at("digSig").c_str();
+            QByteArray producer = tmp.at("producer").c_str();
             list << sender << receiver << amount << date << data << token << prevBlock << gas << hop << hash
-                 << approver << digSig;
+                 << approver << digSig << producer;
             b.addData(Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE));
         }
 

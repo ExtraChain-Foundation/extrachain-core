@@ -240,6 +240,11 @@ Transaction NodeManager::createTransaction(Transaction tx)
         }
         else
         {
+            // FOR SANYA
+            // txFee :
+            // sender = me = receiver
+            // amount = txAmount / 100;
+            // txFee.setData = serialize({tx.getHash, DataStorage::FEE_FREEZE_TX});
             BigNumber amountTemp(tx.getAmount());
             if (blockchain->getUserBalance(tx.getSender()) - amountTemp
                     - amountTemp / 100 * Fee::TRANSACTION_FEE
