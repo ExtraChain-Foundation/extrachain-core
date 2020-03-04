@@ -19,7 +19,7 @@ NodeManager::NodeManager()
     //    this->thread()->sleep(1);
     blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(blockchain);
-    txManager = new TransactionManager(accController, blockchain);
+    txManager = new TransactionManager(accController, blockchain, this);
     prProfile->setAccountController(accController);
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetManager(netManager);
@@ -121,6 +121,7 @@ void NodeManager::connectResolveManager()
 
     connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
+    connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
@@ -223,24 +224,65 @@ Transaction NodeManager::createTransaction(Transaction tx)
         tx.setPrevBlock(lastBlockId);
 
         // 2) sign transaction
+
         tx.sign(actor);
         qDebug() << tx.toString();
-        if (tx.getSender().toActorId() == *actorIndex->companyId)
+
+        // send without fee
+        if (tx.getSender() == BigNumber(Trash::NullActor)
+            || tx.getSender() == BigNumber(*actorIndex->companyId)
+            || tx.getReceiver() == BigNumber(Trash::NullActor)
+            || tx.getReceiver() == BigNumber(*actorIndex->companyId))
             emit NewTx(tx);
-        else
+        else if (tx.getData() == DataStorage::FREEZE_TX || tx.getData() == DataStorage::UNFREEZE_TX)
+        {
             emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+        }
+        else
+        {
+            BigNumber amountTemp(tx.getAmount());
+            if (blockchain->getUserBalance(tx.getSender()) - amountTemp
+                    - amountTemp / 100 * Fee::TRANSACTION_FEE
+                >= 0)
+            {
+                // send with fee
+                emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+                Transaction txFee = tx;
+                // restructure tx for fee
+                {
+
+                    amountTemp /= 100 / Fee::TRANSACTION_FEE;
+                    txFee.setAmount(amountTemp);
+                    txFee.setReceiver(BigNumber(Trash::NullActor)); // send fee to 0 actor
+                    // ENUM | Tx hash that fee refer
+                    txFee.setData(Serialization::universalSerialize(
+                        { QByteArray::number(Fee::TypeRevert::Fee), tx.getHash() }));
+                    txFee.sign(actor);
+                    qDebug() << "[Info]" << txFee.getSender() << " sent fee to NullActor actor";
+                }
+
+                // send fee tx
+                emit sendMsg(txFee.serialize(), Messages::ChainMessage::txMessage); // send fee to 0 actor
+            }
+            else
+            {
+                qDebug() << "Not enough money ";
+                return Transaction();
+            }
+        }
 
         return tx;
     }
     else
-    {
+
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
-    }
+
     return Transaction();
 }
 
 Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount, BigNumber token)
 {
+
     if (receiver.isEmpty() || amount.isEmpty())
     {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -261,13 +303,42 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
 
         return this->createTransaction(tx);
     }
-    else
-    {
-        qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                        .arg(QString(receiver.toActorId()));
-    }
+    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
+                    .arg(QString(receiver.toActorId()));
     return Transaction();
 }
+
+Transaction NodeManager::createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
+                                                 BigNumber token)
+{
+
+    Actor<KeyPrivate> actor = accController->getCurrentActor();
+
+    if (!actor.isEmpty())
+    {
+        if (receiver == 0)
+        {
+            qDebug() << "Create freeze tx to me";
+            receiver = actor.getId();
+        }
+        else
+            qDebug() << "Create freeze tx to" << receiver;
+
+        Transaction tx(actor.getId(), receiver, amount);
+        // add sent tx balances
+        tx.setData(toFreeze ? DataStorage::FREEZE_TX : DataStorage::UNFREEZE_TX);
+        tx.setToken(token);
+        //        if (actorIndex->companyId != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->companyId))
+        //                tx.setSenderBalance(BigNumber(0));
+
+        return this->createTransaction(tx);
+    }
+    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
+                    .arg(QString(receiver.toActorId()));
+    return Transaction();
+}
+
 Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
                                                BigNumber token)
 {
@@ -378,7 +449,10 @@ void NodeManager::updateWalletList()
         walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        walletList.append(Transaction::amountToVisible(amount).toLatin1());
+        QByteArray staking =
+            blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
+        walletList << Transaction::amountToVisible(amount).toLatin1()
+                   << Transaction::amountToVisible(staking).toLatin1();
     }
 
     uiWallet->updateWalletListModel(&walletList);
@@ -462,6 +536,8 @@ void NodeManager::connectUi()
 
     //=======================================WALLET=========================================
     connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
+    connect(uiWallet, &WalletController::sendNewTransactionFreeze, this,
+            &NodeManager::createFreezeTransaction);
     connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
     //    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
     connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
@@ -478,7 +554,6 @@ void NodeManager::connectUi()
         qDebug() << "1111111111111111111";
     });
     connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
-    connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
 
     //======================================CONTRACT===========================================
     /*

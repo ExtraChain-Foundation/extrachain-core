@@ -13,6 +13,13 @@ Blockchain::~Blockchain()
 {
 }
 
+Block Blockchain::getBlockByIndex(const BigNumber &index)
+{
+    Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
+    //        Block block2 = validateAndReturnBlock(block);
+    return block;
+}
+
 BigNumber Blockchain::checkIntegrity()
 {
     if (fileMode)
@@ -327,11 +334,25 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         {
             if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                 break;
-            GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
-                                                      tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
-            GenesisDataRow recReceiver = GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()),
-                                                        tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
-            addRecordsIfNew(recReceiver, recSender);
+            if (tx.getData() == DataStorage::FREEZE_TX || tx.getData() == DataStorage::UNFREEZE_TX)
+            {
+                GenesisDataRow recSender =
+                    GenesisDataRow(tx.getSender(), getFreezeUserBalance(tx.getSender()), tx.getToken(),
+                                   DataStorage::typeDataRow::STAKING);
+                GenesisDataRow recReceiver =
+                    GenesisDataRow(tx.getReceiver(), getFreezeUserBalance(tx.getReceiver()), tx.getToken(),
+                                   DataStorage::typeDataRow::STAKING);
+                addRecordsIfNew(recReceiver, recSender);
+            }
+            else
+            {
+                GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
+                                                          tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
+                GenesisDataRow recReceiver =
+                    GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()), tx.getToken(),
+                                   DataStorage::typeDataRow::UNIVERSAL);
+                addRecordsIfNew(recReceiver, recSender);
+            }
         }
     }
     return QByteArray();
@@ -353,7 +374,7 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if (list != savedList)
             {
-                for (int i = 0; i < list.size(); i += 2)
+                for (int i = 0; i < list.size(); i += 3)
                 {
                     if (!savedList.contains(list[i]))
                     {
@@ -363,23 +384,32 @@ bool Blockchain::signCheckAdd(Block &block)
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
+                        rowRow.insert({ "type", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                         count++;
                     }
                 }
+                if (count != 0)
+                    return true;
             }
         }
-        if (count != 0)
-            return true;
-        if ((list.size() / 2) > 2)
-            return false;
 
-        QByteArray id = accountController->getMainActor()->getId().toByteArray();
-        if (!list.contains(id))
+        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
         {
-            QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
-            block.addSignature(id, sign);
+            if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
+                return false;
+            QByteArray id = accountController->getMainActor()->getId().toByteArray();
+            if (!list.contains(id))
+            {
+                QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
+                block.addSignature(id, sign, false);
+                return true;
+            }
         }
+        //        else
+        //        {
+        //            block.sign(*accountController->getMainActor());
+        //        }
     }
     else
     {
@@ -389,7 +419,7 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if (list != savedList)
             {
-                for (int i = 0; i < list.size(); i += 2)
+                for (int i = 0; i < list.size(); i += 3)
                 {
                     if (!savedList.contains(list[i]))
                     {
@@ -399,22 +429,31 @@ bool Blockchain::signCheckAdd(Block &block)
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
+                        rowRow.insert({ "type", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
+                        count++;
                     }
                 }
+                if (count != 0)
+                    return true;
             }
         }
-        if (count != 0)
-            return true;
-        if ((list.size() / 2) > 2)
-            return false;
-
-        QByteArray id = accountController->getMainActor()->getId().toByteArray();
-        if (!list.contains(id))
+        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
         {
-            QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
-            block.addSignature(id, sign);
+            if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
+                return false;
+            QByteArray id = accountController->getMainActor()->getId().toByteArray();
+            if (!list.contains(id))
+            {
+                QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
+                block.addSignature(id, sign, false);
+                return true;
+            }
         }
+        //        else
+        //        {
+        //            block.sign(*accountController->getMainActor());
+        //        }
     }
     return false;
 }
@@ -487,27 +526,25 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 
 int Blockchain::mergeBlockWithLocal(Block &received)
 {
-
     Block existed = getBlockByIndex(received.getIndex());
-    if (canMergeBlocks(received, existed))
+    if (!canMergeBlocks(received, existed))
     {
         qWarning() << "Blocks with id" << received.getIndex() << "can't be merged";
         return Errors::BLOCKS_CANT_MERGE;
     }
 
-    qDebug()
-        << QString("Start merging block [%1] with exising [%2]").arg(received.toString(), existed.toString());
+    qDebug() << "Start merging block" << received.getIndex();
     if (received == existed)
-    { // Non-approved code
+    {
         qDebug() << QString("Blocks are equal ([%1])").arg(Errors::BLOCKS_ARE_EQUAL);
         return Errors::BLOCKS_ARE_EQUAL;
     }
-    if (received.contain(existed))
-    {
-        removeBlock(existed);
-        int res = addBlock(received);
-        return res;
-    }
+    //    if (received.contain(existed)) // hui znaet nahuya ono
+    //    {
+    //        removeBlock(existed);
+    //        int res = addBlock(received);
+    //        return res;
+    //    }
 
     // step 1 - create merged block
     Block merged = mergeBlocks(received, existed);
@@ -729,7 +766,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     {
         this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
     }
-    signCheckAdd(block);
+    if (signCheckAdd(block))
+        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -957,7 +995,7 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
     {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (currentBlock.getData() == "genesis")
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
         {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
@@ -978,11 +1016,61 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
 
         for (auto &tx : txs)
         {
-            if (tx.getSender() == userId && tx.getToken() == tokenId)
+            if (tx.getData() == DataStorage::UNFREEZE_TX && tx.getReceiver() == userId
+                && tx.getToken() == tokenId)
+            {
+                balance += tx.getAmount();
+            }
+            else if (tx.getSender() == userId && tx.getToken() == tokenId)
             {
                 balance -= tx.getAmount();
             }
             else if (tx.getReceiver() == userId && tx.getToken() == tokenId)
+            {
+                balance += tx.getAmount();
+            }
+        }
+    }
+
+    return balance;
+}
+
+BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId) const
+{
+    BigNumber balance;
+
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
+    {
+        Block currentBlock = blockIndex.getBlockById(i);
+
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
+        {
+            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
+            const auto rows = genesis.extractDataRows();
+
+            for (const auto &row : rows)
+            {
+                if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
+                    return balance + row.state;
+            }
+
+            return balance;
+        }
+
+        if (currentBlock.isEmpty())
+            break;
+
+        QList<Transaction> txs = currentBlock.extractTransactions();
+
+        for (auto &tx : txs)
+        {
+            if (tx.getReceiver() == userId && tx.getToken() == tokenId
+                && tx.getData() == DataStorage::UNFREEZE_TX)
+            {
+                balance -= tx.getAmount();
+            }
+            else if (tx.getReceiver() == userId && tx.getToken() == tokenId
+                     && tx.getData() == DataStorage::FREEZE_TX)
             {
                 balance += tx.getAmount();
             }
@@ -1148,12 +1236,6 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
 
 // Actors //
 
-int Blockchain::addActor(const Actor<KeyPublic> &actor)
-{
-    //    return actorIndex->addActor(actor);
-    return 0;
-}
-
 Actor<KeyPublic> Blockchain::getActor(const BigNumber &actorId)
 {
     return actorIndex->getActor(actorId);
@@ -1200,114 +1282,182 @@ void Blockchain::VerifyTx(Transaction tx)
     emit VerifiedTx(tx);
 }
 
-void Blockchain::proveTx()
+void Blockchain::proveTx(Transaction *tx)
 {
+
     qDebug() << "proveTx: started";
-    QObject *s = QObject::sender();
-    Transaction *tx = qobject_cast<Transaction *>(s);
-    //    if (tx->getSender() == BigNumber(*actorIndex->companyId))
-    //    {
+
     BigNumber targetSender = tx->getSender();
-    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
-    if (senderActor.isEmpty())
+    BigNumber targetReceiver = tx->getReceiver();
+    Actor<KeyPublic> senderActor;
+    if (targetSender != 0)
+        senderActor = actorIndex->getActor(targetSender);
+    Actor<KeyPublic> receiverActor;
+    if (targetReceiver != 0)
+        receiverActor = actorIndex->getActor(targetReceiver);
+    if (tx->getData() == DataStorage::FREEZE_TX)
     {
-        qDebug() << "Tx" << tx->getHash() << "not approved: no such actor";
-        emit tx->NotApproved();
-        return;
-    }
-    bool sig = senderActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig());
-    if (!sig)
-    {
-        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
-        emit tx->NotApproved();
-        return;
-    }
-    //        if (sig)
-    //        {
-    //            emit tx->Approved();
-    //            return;
-    //        }
-    //        else
-    //        {
-    //            emit tx->NotApproved();
-    //            qDebug() << "Transaction not approved: false zero user";
-    //            return;
-    //        }
-    //    }
-    if (tx->getData() == "initcontract")
-    {
-        // type = 6, token = correct
-        //        Profile profile = actorIndex->getProfile(tx->getSender().toActorId());
+        BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
 
-        //        if (profile.type() != 6)
-        //        {
-        //            emit tx->NotApproved();
-        //            qDebug() << "Transaction not approved: genesis block is not from contract";
-        //            return;
-        //        }
+        senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
-        if (tx->getSender() != tx->getToken())
+        if (tx->getAmount() <= 0)
         {
-            emit tx->NotApproved();
-            qDebug() << "Transaction not approved: sender != token in genesis block";
+            emit tx->NotApproved(tx);
+            qDebug() << "Transaction Freeze not approved: amount <= 0";
             return;
         }
-        emit tx->Approved();
+
+        if ((senderCurrentBalance - tx->getAmount()) < 0)
+        {
+            qDebug() << "Transaction Freeze "
+                        "not approved: sender's balance will be < 0";
+            emit tx->NotApproved(tx);
+            return;
+        }
+
+        tx->sign(accountController->getCurrentActor());
+        emit tx->Approved(tx);
         return;
     }
-
-    if (tx->getSender() == tx->getReceiver())
+    if (tx->getData() == DataStorage::UNFREEZE_TX)
     {
-        emit tx->NotApproved();
+        BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken());
+
+        if ((senderCurrentBalance - tx->getAmount()) < 0)
+        {
+            qDebug() << "Transaction UNFreeze "
+                        "not approved: sender's balance will be < 0";
+            emit tx->NotApproved(tx);
+            return;
+        }
+
+        tx->sign(accountController->getCurrentActor());
+        emit tx->Approved(tx);
+        return;
+    }
+    if (targetSender == targetReceiver)
+    {
+        emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: sender == receiver";
         return;
     }
-    if (tx->getAmount() <= 0 && targetSender.toActorId() != *actorIndex->companyId)
+
+    // if receiver is not exist
+
+    if ((receiverActor.isEmpty() && targetReceiver != 0) || (senderActor.isEmpty() && targetSender != 0))
     {
-        emit tx->NotApproved();
-        qDebug() << "Transaction not approved: amount <= 0";
+        emit tx->NotApproved(tx);
+        qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }
 
-    // verify sender state
-    //    BigNumber targetSender = tx->getSender();
-    //    Actor<KeyPublic> senderActor = actorIndex->getActor(targetSender);
-    if (senderActor.isEmpty())
+    if (targetSender == BigNumber(Trash::NullActor))
     {
-        emit tx->NotApproved();
-        return;
-    }
-    if (tx->getData() == "initcontract")
-    {
-        qDebug() << "Contract tx proving";
-        QByteArrayList profile = senderActor.profile().getListProfile();
-        if (profile[0] == "6" && profile[5] == tx->getReceiver())
+
+        // if !sig
+        if (!receiverActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
-            qDebug() << "Contract tx proved";
-            tx->sign(accountController->getCurrentActor());
-            emit tx->Approved();
+            qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
+            emit tx->NotApproved(tx);
             return;
         }
-    }
-    BigNumber senderCurBal = 0;
-    if (targetSender.toActorId() != *actorIndex->companyId)
-    {
-        senderCurBal = getUserBalance(targetSender, tx->getToken());
-        BigNumber check = txManager->checkPendingTxsList(targetSender);
-        senderCurBal += check;
-    }
-
-    if (senderCurBal - tx->getAmount() < 0 && targetSender.toActorId() != *actorIndex->companyId)
-    {
-        qDebug() << senderCurBal << tx->getAmount();
-        qDebug() << "Transaction "
-                    "not approved: sender's or receiver's balance will be < 0";
-        emit tx->NotApproved();
+        if (Serialization::universalDeserialize(tx->getData()).size() != 3)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee from NullActor to actor not approved: data size !=3";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        if (tx->getAmount() <= 0)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        emit tx->addPendingFeeApproverTxs(tx);
         return;
     }
 
-    tx->sign(accountController->getCurrentActor());
-    emit tx->Approved();
+    // if !sig
+    if (!senderActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
+    {
+        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
+        emit tx->NotApproved(tx);
+        return;
+    }
+
+    if (targetReceiver == BigNumber(Trash::NullActor))
+    {
+        if (Serialization::universalDeserialize(tx->getData()).size() != 2)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        if (tx->getAmount() <= 0)
+        {
+            qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
+            emit tx->NotApproved(tx);
+            return;
+        }
+        emit tx->addPendingFeeSenderTxs(tx);
+        return;
+    }
+
+    // if current transaction not fee
+    else
+    {
+
+        if (tx->getData() == "initcontract")
+        {
+            QByteArrayList profile = senderActor.profile().getListProfile();
+            if (profile[0] == "6" && profile[5] == targetReceiver && (targetSender == tx->getToken()))
+            {
+                qDebug() << "Contract tx proved";
+                tx->sign(accountController->getCurrentActor());
+                emit tx->Approved(tx);
+                return;
+            }
+            emit tx->NotApproved(tx);
+            qDebug() << "Transaction not approved: sender != token in genesis block";
+
+            return;
+        }
+
+        if (targetSender.toActorId() != *actorIndex->companyId)
+        {
+            BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
+
+            senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
+
+            if (tx->getAmount() <= 0)
+            {
+                emit tx->NotApproved(tx);
+                qDebug() << "Transaction not approved: amount <= 0";
+                return;
+            }
+
+            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0)
+            {
+                qDebug() << senderCurrentBalance << tx->getAmount();
+                qDebug() << "Transaction "
+                            "not approved: sender's or receiver's balance will be < 0";
+                emit tx->NotApproved(tx);
+                return;
+            }
+        }
+        else
+        {
+            tx->sign(accountController->getCurrentActor());
+            emit tx->Approved(tx);
+            return;
+        }
+
+        emit tx->addPendingForFeeTxs(tx);
+        return;
+    }
+    qDebug() << "Undefine behaviour blockhain.cpp proveTx";
+    tx->NotApproved(tx);
 }
 
 // Other //

@@ -73,6 +73,7 @@ public:
     void setGas(int gas);
     void setHop(int hop);
     void decrementHop();
+    void clear();
 
 public:
     int getGas() const;
@@ -81,13 +82,12 @@ public:
     BigNumber getReceiver() const;
     BigNumber getAmount() const;
     BigNumber getPrevBlock() const;
-    BigNumber getSenderBalance() const;
-    BigNumber getReceiverBalance() const;
     QByteArray getData() const;
     QByteArray getHash() const;
     BigNumber getToken() const;
     BigNumber getApprover() const;
     QByteArray getDigSig() const;
+
     bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;
     bool operator!=(const Transaction &transaction) const;
@@ -105,9 +105,13 @@ public:
     void setData(const QByteArray &value);
 
 signals:
-    void ProveMe();
-    void Approved();
-    void NotApproved();
+    void ProveMe(Transaction *transaction);
+    void Approved(Transaction *transaction);
+    void NotApproved(Transaction *transaction);
+
+    void addPendingForFeeTxs(Transaction *transaction);
+    void addPendingFeeApproverTxs(Transaction *transaction);
+    void addPendingFeeSenderTxs(Transaction *transaction);
 
 public:
     /**
@@ -121,6 +125,9 @@ public:
      * @param number
      */
     static QString amountToVisible(BigNumber number);
+    void setAmount(const BigNumber &value);
+    void setSender(const BigNumber &value);
+    void setReceiver(const BigNumber &value);
 };
 
 inline bool operator<(const Transaction &l, const Transaction &r)

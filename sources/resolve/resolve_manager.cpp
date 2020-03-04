@@ -106,7 +106,6 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 
 void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType)
 {
-
     Messages::BaseMessage msg;
     msg.type = msgType;
     msg.data = data;

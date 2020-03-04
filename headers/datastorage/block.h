@@ -13,6 +13,12 @@
 #include "headers/utils/db_connector.h"
 
 // Block comparison result
+struct forApprovers
+{
+    QByteArray actorId = "";
+    QByteArray sign = "";
+    bool isApprove = false;
+};
 struct BlockCompare
 {
     BigNumber indexDiff;
@@ -42,7 +48,7 @@ protected:
     QByteArray prevHash; // previous block hash
     QByteArray hash;     // this block hash (from all previous fields)
     //    QByteArray digSig;   // digital signature (from all fields)
-    QHash<QByteArray, QByteArray> signatures;
+    QList<forApprovers> signatures;
 
 public:
     Block();
@@ -96,6 +102,7 @@ public:
      * @return transaction list
      */
     QList<Transaction> extractTransactions() const;
+    Transaction getTransactionByHash(QByteArray hash) const;
 
     bool contain(Block &from) const;
 
@@ -114,6 +121,7 @@ public:
     QString toString() const;
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
+    bool isApprover(QByteArray) const;
 
 public:
     virtual void initFields(QList<QByteArray> &list);
@@ -128,7 +136,7 @@ public:
     QByteArray getDigSig() const;
     QByteArray getSignatures() const;
     QByteArrayList getListSignatures() const;
-    void addSignature(const QByteArray &id, const QByteArray &sign);
+    void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
     // void setType(QByteArray type);
     long long getDate() const;
     void setDate(long long value);
@@ -144,9 +152,8 @@ inline bool operator<(const Block &l, const Block &r)
 
 inline bool operator==(const Block &l, const Block &r)
 {
-    return l.getIndex() == r.getIndex() && l.getApprover() == r.getApprover() && l.getData() == r.getData()
-        && l.getDate() == r.getDate() && l.getPrevHash() == r.getPrevHash() && l.getHash() == r.getHash()
-        && l.getDigSig() == r.getDigSig();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
+        && l.extractTransactions() == r.extractTransactions();
 }
 
 #endif // MEMBLOCK_H

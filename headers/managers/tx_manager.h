@@ -14,6 +14,8 @@
 #include "datastorage/transaction.h"
 #include "datastorage/index/blockindex.h"
 #include "headers/network/packages/service/message_types.h"
+#include "headers/utils/coinprocess.h"
+#include "headers/managers/node_manager.h"
 /**
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
@@ -29,6 +31,11 @@ private:
     // received transactions that will be packed into block
     QList<Transaction> pendingTxs;
 
+    QList<Transaction *> pendingForFeeTxs;
+    QList<Transaction *> pendingFeeSenderTxs;
+
+    QList<Transaction *> pendingFeeTxs;
+
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
     QList<QByteArray> unApprovedTxHashes;
@@ -39,12 +46,15 @@ private:
     //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
 
+    NodeManager *nodeManager;
+
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
 public:
     // todo: add ref to blockchain
-    TransactionManager(AccountController *accountController, Blockchain *blockchain);
+    TransactionManager(AccountController *accountController, Blockchain *blockchain,
+                       NodeManager *nodeManager);
 
 private:
     void removeTransaction(int i);
@@ -65,10 +75,14 @@ public slots:
      * @param tx - transaction
      * @return 0 is transaction is successfully added
      */
-    void addTransaction(Transaction tx);
-    void addProvedTransaction();
-    void removeUnApprovedTransaction();
 
+    void addTransaction(Transaction tx);
+    void addProvedTransaction(Transaction *transaction);
+    void removeUnApprovedTransaction(Transaction *tx);
+
+    void addPendingForFeeTxs(Transaction *transaction);
+    void verifyApproverFeeTx(Transaction *transaction);
+    void addPendingFeeSenderTxs(Transaction *transaction);
     // Unapproved tx's //
 
     /**

@@ -18,6 +18,11 @@ ActorIndex::~ActorIndex()
 
 Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
 {
+    if (id == 0)
+    {
+        qDebug() << "0 actor? Ebobo?";
+        return Actor<KeyPublic>();
+    }
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {

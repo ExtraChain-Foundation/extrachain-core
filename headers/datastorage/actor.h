@@ -14,6 +14,9 @@
  * Acting entity.
  * Users, Smart-contracts
  */
+namespace Trash {
+static const QByteArray NullActor = "0";
+};
 enum actorType
 {
     WALLET = 0,

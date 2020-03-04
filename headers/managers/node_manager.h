@@ -97,6 +97,16 @@ public:
 
     Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
                                       BigNumber token = 0);
+    /**
+     * @brief createFreezeTransaction
+     * if receiver = 0 -> to me
+     * @param receiver
+     * @param amount
+     * @param token
+     * @return
+     */
+    Transaction createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
+                                        BigNumber token = 0);
 
     int getClientList();
 

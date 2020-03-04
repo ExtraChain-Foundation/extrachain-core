@@ -53,6 +53,7 @@ SOURCES += \
     $$PWD/sources/resolve/resolve_manager.cpp \
     $$PWD/sources/resolve/resolver_service.cpp \
     $$PWD/sources/utils/bignumber.cpp \
+    $$PWD/sources/utils/coinprocess.cpp \
     $$PWD/sources/utils/db_connector.cpp \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
@@ -134,6 +135,7 @@ HEADERS += \
     $$PWD/headers/resolve/resolver_service.h \
     $$PWD/headers/utils/Keccak256.h \
     $$PWD/headers/utils/bignumber.h \
+    $$PWD/headers/utils/coinprocess.h \
     $$PWD/headers/utils/db_connector.h \
     $$PWD/headers/utils/list_container.h \
     $$PWD/dfs/controls/headers/dfs.h \
