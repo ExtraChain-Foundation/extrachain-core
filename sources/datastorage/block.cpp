@@ -282,9 +282,11 @@ BigNumber Block::getApprover() const
         return BigNumber();
     else
     {
-        for (const auto &tmp : signatures)
-            if (tmp.isApprove)
-                return tmp.actorId;
+        for (int i = signatures.size() - 1; i >= 0; i--)
+        {
+            if (signatures[i].isApprove)
+                return signatures[i].actorId;
+        }
     }
     return BigNumber();
 }

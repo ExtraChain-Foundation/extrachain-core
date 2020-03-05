@@ -1,5 +1,10 @@
 #include "managers/tx_manager.h"
 
+QList<Transaction *> TransactionManager::getReceivedTxList() const
+{
+    return receivedTxList;
+}
+
 TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain,
                                        NodeManager *nodeManager)
 {

@@ -62,6 +62,8 @@ private:
 public:
     static QByteArray convertTxs(const QList<Transaction> &txs);
     BigNumber checkPendingTxsList(const BigNumber &sender);
+    QList<Transaction *> getReceivedTxList() const;
+
 public slots:
     /**
      * Serialize all transactions to a serialized data.

@@ -83,10 +83,12 @@ private:
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
     void sendFeeUnfreeze(Block &block);
+    void sendUnFee(Block &block);
     bool checkHaveUNFreezeTx(const Transaction &tx, const BigNumber &indexBlock); // return true if haven`t
 
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;
+    const int COUNT_UNFROZE_FEE = 3;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
