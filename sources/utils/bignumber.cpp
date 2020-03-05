@@ -275,13 +275,23 @@ std::string BigNumber::toStdString(int base) const
     return m_data.get_str(base);
 }
 
+QByteArray BigNumber::toZeroByteArray(int size) const
+{
+    auto number = this->toByteArray();
+    if (size <= number.length())
+        return number;
+
+    auto zero = QByteArray().fill('0', size - number.length());
+    return zero + number;
+}
+
 QByteArray BigNumber::toActorId() const
 {
     QByteArray actorId = this->toByteArray();
+
     while (actorId.length() < 20)
-    {
         actorId.push_front('0');
-    }
+
     return actorId;
 }
 

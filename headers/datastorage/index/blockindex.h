@@ -63,12 +63,16 @@ public:
 
     Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
 
-    Transaction getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
-    Transaction getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
-    Transaction getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const;
-    Transaction getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const;
-    Transaction getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const;
-    Transaction getLastTxByApprover(const BigNumber &id, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByReceiver(const BigNumber &id,
+                                                           const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxBySenderOrReceiver(const BigNumber &id,
+                                                                   const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxBySenderOrReceiverAndToken(const BigNumber &id,
+                                                                           const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByApprover(const BigNumber &id,
+                                                           const QByteArray &token) const;
     QList<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
@@ -84,8 +88,8 @@ public:
     QString buildFilePath(const BigNumber &id) const;
 
 private:
-    Transaction getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
-                                 const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
+                                                        const QByteArray &token) const;
     QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
                                           int count = 10, BigNumber token = 0) const;
 

@@ -65,13 +65,15 @@ private:
 
     QByteArray getBlockDataByIndex(const BigNumber &index);
 
-    Transaction getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
-    Transaction getTxBySender(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByUser(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySenderOrReceiver(const BigNumber &id,
+                                                               const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySenderOrReceiverAndToken(const BigNumber &id,
+                                                                       const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
     TxPair getTxPair(const BigNumber &first, const BigNumber second);
 
     void saveTxInfoInEC(const QByteArray data) const;
@@ -154,8 +156,8 @@ public:
      * @param type of param
      * @return transaction
      */
-    Transaction getTransaction(SearchEnum::TxParam type, const QByteArray &value,
-                               const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTransaction(SearchEnum::TxParam type, const QByteArray &value,
+                                                      const QByteArray &token = "0");
 
     /**
      * Add block to blockchain

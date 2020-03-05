@@ -87,39 +87,41 @@ Block Blockchain::getBlockByHash(const QByteArray &hash)
     return validateAndReturnBlock(block);
 }
 
-Transaction Blockchain::getTxByHash(const QByteArray &hash, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &hash, const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxByHash(hash, token) : memIndex.getLastTxByHash(hash, token);
 }
 
-Transaction Blockchain::getTxBySender(const BigNumber &id, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxBySender(id, token) : memIndex.getLastTxBySender(id, token);
 }
 
-Transaction Blockchain::getTxByReceiver(const BigNumber &id, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxByReceiver(const BigNumber &id, const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxByReceiver(id, token) : memIndex.getLastTxByReceiver(id, token);
 }
 
-Transaction Blockchain::getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxBySenderOrReceiver(const BigNumber &id,
+                                                                       const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxBySenderOrReceiver(id, token)
                     : memIndex.getLastTxBySenderOrReceiver(id, token);
 }
 
-Transaction Blockchain::getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxBySenderOrReceiverAndToken(const BigNumber &id,
+                                                                               const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxBySenderOrReceiverAndToken(id, token)
                     : memIndex.getLastTxBySenderOrReceiverAndToken(id, token);
 }
 
-Transaction Blockchain::getTxByApprover(const BigNumber &id, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxByApprover(const BigNumber &id, const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-Transaction Blockchain::getTxByUser(const BigNumber &id, const QByteArray &token)
+std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, const QByteArray &token)
 {
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
@@ -805,8 +807,8 @@ QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArra
     return res;
 }
 
-Transaction Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value,
-                                       const QByteArray &token)
+std::pair<Transaction, QByteArray>
+Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token)
 {
     switch (type)
     {
@@ -826,7 +828,7 @@ Transaction Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArra
         return getTxBySenderOrReceiver(value, token);
     default:
         qWarning() << "Can't get tx: incorrent SearchEnum::TxParam. Value:" << value;
-        return Transaction();
+        return { Transaction(), "-1" };
     }
 }
 
@@ -1352,7 +1354,7 @@ void Blockchain::setApprover(const Actor<KeyPrivate> &value)
 void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
                                      const SocketPair &receiver, const QByteArray &request)
 {
-    Transaction transaction = getTransaction(param, value);
+    Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty())
     {
         emit responseReady(transaction.serialize(), Messages::GeneralResponse::getTxResponse, request,

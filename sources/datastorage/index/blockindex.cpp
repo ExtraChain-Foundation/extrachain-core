@@ -187,33 +187,38 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
     return Block();
 }
 
-Transaction BlockIndex::getLastTxByHash(const QByteArray &hash, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByHash(const QByteArray &hash,
+                                                               const QByteArray &token) const
 {
     return getLastTxByParam(BigNumber(hash), SearchEnum::TxParam::Hash, token);
 }
 
-Transaction BlockIndex::getLastTxBySender(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxBySender(const BigNumber &id,
+                                                                 const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSender, token);
 }
 
-Transaction BlockIndex::getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByReceiver(const BigNumber &id,
+                                                                   const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserReceiver, token);
 }
 
-Transaction BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id,
+                                                                           const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
-Transaction BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id,
-                                                            const QByteArray &token) const
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-Transaction BlockIndex::getLastTxByApprover(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByApprover(const BigNumber &id,
+                                                                   const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserApprover, token);
 }
@@ -229,8 +234,8 @@ QList<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id
 
 //}
 
-Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
-                                         const QByteArray &token) const
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, const QByteArray &token) const
 {
     BigNumber records = getRecords();
     QByteArray tokenActor = BigNumber(token).toActorId();
@@ -238,7 +243,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
     if (records == 0)
     {
         qDebug() << "There no tx's in blockIndex";
-        return Transaction();
+        return { Transaction(), "-1" };
     }
 
     BigNumber lastBlockId = getLastSavedId();
@@ -258,32 +263,32 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
 
                 if (tx.getSender() == id || tx.getReceiver() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSender: {
                 if (tx.getSender() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
                 if (tx.getReceiver() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if (tx.getSender() == id || tx.getReceiver() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
                 if (tx.getApprover() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id.toActorId())
-                    return tx;
+                if (tx.getHash() == id.toZeroByteArray(64))
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             default: {
@@ -292,7 +297,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
         }
         --lastBlockId;
     }
-    return Transaction();
+    return { Transaction(), "-1" };
 }
 
 QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param,
