@@ -67,6 +67,7 @@ public:
     void setActorIndex(ActorIndex *value);
 
     void setBlockchain(Blockchain *value);
+    Blockchain *getBlockchain() const;
 
 public slots:
     /**

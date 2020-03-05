@@ -36,6 +36,11 @@ void AccountController::setBlockchain(Blockchain *value)
     blockchain = value;
 }
 
+Blockchain *AccountController::getBlockchain() const
+{
+    return blockchain;
+}
+
 AccountController::AccountController(ActorIndex *actorIndex)
 {
     this->actorIndex = actorIndex;

@@ -371,6 +371,14 @@ QString Transaction::amountToVisible(BigNumber number)
         return "0";
 
     QByteArray numberArr = number.toByteArray(10);
+    bool minus = false;
+
+    if (numberArr[0] == '-')
+    {
+        numberArr = numberArr.remove(0, 1);
+        minus = true;
+    }
+
     QString second = numberArr.right(18); //
     second = QString("0").repeated(18 - second.length()).toLatin1() + second;
     second = second.remove(QRegExp("[0]*$"));
@@ -379,5 +387,5 @@ QString Transaction::amountToVisible(BigNumber number)
     QString numberDec =
         (first.isEmpty() ? "0" : first) + (second == "0" || second.isEmpty() ? "" : "." + second);
 
-    return numberDec.toLatin1();
+    return (minus ? "-" : "") + numberDec.toLatin1();
 }
