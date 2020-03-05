@@ -152,7 +152,8 @@ public:
      * @param type of param
      * @return transaction
      */
-    Transaction getTransaction(SearchEnum::TxParam type, const QByteArray &value);
+    Transaction getTransaction(SearchEnum::TxParam type, const QByteArray &value,
+                               const QByteArray &token = "0");
 
     /**
      * Add block to blockchain

@@ -754,26 +754,27 @@ QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArra
     return res;
 }
 
-Transaction Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value)
+Transaction Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value,
+                                       const QByteArray &token)
 {
     switch (type)
     {
     case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
-        return getTxBySenderOrReceiverAndToken(value);
+        return getTxBySenderOrReceiverAndToken(value, token);
     case SearchEnum::TxParam::Hash:
-        return getTxByHash(value);
+        return getTxByHash(value, token);
     case SearchEnum::TxParam::User:
-        return getTxByUser(BigNumber(value));
+        return getTxByUser(value, token);
     case SearchEnum::TxParam::UserApprover:
-        return getTxByApprover(BigNumber(value));
+        return getTxByApprover(value, token);
     case SearchEnum::TxParam::UserReceiver:
-        return getTxByReceiver(BigNumber(value));
+        return getTxByReceiver(value, token);
     case SearchEnum::TxParam::UserSender:
-        return getTxBySender(BigNumber(value));
+        return getTxBySender(value, token);
     case SearchEnum::TxParam::UserSenderOrReceiver:
-        return getTxBySenderOrReceiver(BigNumber(value));
+        return getTxBySenderOrReceiver(value, token);
     default:
-        qWarning() << "Can't get tx by Null and value:" + value;
+        qWarning() << "Can't get tx: incorrent SearchEnum::TxParam. Value:" << value;
         return Transaction();
     }
 }
@@ -1067,7 +1068,7 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
 
         for (auto &tx : txs)
         {
-            if (tx.getSender() == userId && tx.getToken() == tokenId
+            if (tx.getSender() == userId && tx.getToken() == tokenId && tx.getData() != Fee::UNFREEZE_TX
                 && !tx.getData().contains(Fee::FEE_UNFREEZE_TX))
             {
                 balance -= tx.getAmount();

@@ -233,6 +233,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
                                          const QByteArray &token) const
 {
     BigNumber records = getRecords();
+    QByteArray tokenActor = BigNumber(token).toActorId();
 
     if (records == 0)
     {
@@ -247,9 +248,10 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
     {
         Block lastBlock = getBlockById(lastBlockId);
         QList<Transaction> txs = lastBlock.extractTransactions();
+
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken().toActorId() != token)
+            if (tx.getToken().toActorId() != tokenActor)
                 continue;
             switch (param)
             {
