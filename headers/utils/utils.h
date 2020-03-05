@@ -498,11 +498,6 @@ namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";
 
-static const QByteArray FREEZE_TX = "freeze";
-static const QByteArray UNFREEZE_TX = "unfreeze";
-static const QByteArray FEE_FREEZE_TX = "Feefreeze";
-static const QByteArray FEE_UNFREEZE_TX = "FeeUNfreeze";
-
 // Temporary folder
 static const QString TMP_FOLDER = "tmp";
 static const QString TMP_GENESIS_BLOCK = "tmp/genesis_block";

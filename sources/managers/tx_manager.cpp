@@ -102,7 +102,7 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
         return;
     }
     Transaction tempTx = block.getTransactionByHash(tempData[2]);
-    if (tempTx.getAmount() / 100 / 100 * Fee::TRANSACTION_FEE * Fee::APPROVER_FEE != tx->getAmount())
+    if (tempTx.getAmount() / 100 / 100 * Fee::TRANSACTION_FEE != tx->getAmount())
     {
         qDebug() << "[Check fee] amount1 != amount2 Fee";
         emit tx->NotApproved(tx);
@@ -208,11 +208,11 @@ Block TransactionManager::makeBlock()
     blockchain->addBlock(block);
 
     // fee section start
-    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
-                                                               accountController->getMainActor()->getId(),
-                                                               accountController->getActorIndex()->companyId);
-    for (const auto &i : feeTxs)
-        nodeManager->createTransaction(i);
+    //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
+    //                                                               accountController->getMainActor()->getId(),
+    //                                                               accountController->getActorIndex()->companyId);
+    //    for (const auto &i : feeTxs)
+    //        nodeManager->createTransaction(i);
     // fee section end
     this->pendingTxs.clear();
     return block;

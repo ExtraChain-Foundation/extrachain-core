@@ -234,40 +234,33 @@ Transaction NodeManager::createTransaction(Transaction tx)
             || tx.getReceiver() == BigNumber(Trash::NullActor)
             || tx.getReceiver() == BigNumber(*actorIndex->companyId))
             emit NewTx(tx);
-        else if (tx.getData() == DataStorage::FREEZE_TX || tx.getData() == DataStorage::UNFREEZE_TX)
+        else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
             emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
         }
         else
         {
-            // FOR SANYA
-            // txFee :
-            // sender = me = receiver
-            // amount = txAmount / 100;
-            // txFee.setData = serialize({tx.getHash, DataStorage::FEE_FREEZE_TX});
             BigNumber amountTemp(tx.getAmount());
-            if (blockchain->getUserBalance(tx.getSender()) - amountTemp
-                    - amountTemp / 100 * Fee::TRANSACTION_FEE
-                >= 0)
+            if (blockchain->getUserBalance(tx.getSender()) - amountTemp - amountTemp / 100 >= 0)
             {
                 // send with fee
-                emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+
                 Transaction txFee = tx;
                 // restructure tx for fee
                 {
 
-                    amountTemp /= 100 / Fee::TRANSACTION_FEE;
+                    amountTemp /= 100;
                     txFee.setAmount(amountTemp);
-                    txFee.setReceiver(BigNumber(Trash::NullActor)); // send fee to 0 actor
+                    txFee.setReceiver(actor.getId()); // send fee to my freezeFee
                     // ENUM | Tx hash that fee refer
-                    txFee.setData(Serialization::universalSerialize(
-                        { QByteArray::number(Fee::TypeRevert::Fee), tx.getHash() }));
+                    txFee.setData(Serialization::universalSerialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
                     txFee.sign(actor);
                     qDebug() << "[Info]" << txFee.getSender() << " sent fee to NullActor actor";
                 }
 
                 // send fee tx
                 emit sendMsg(txFee.serialize(), Messages::ChainMessage::txMessage); // send fee to 0 actor
+                emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
             }
             else
             {
@@ -331,7 +324,7 @@ Transaction NodeManager::createFreezeTransaction(BigNumber receiver, BigNumber a
 
         Transaction tx(actor.getId(), receiver, amount);
         // add sent tx balances
-        tx.setData(toFreeze ? DataStorage::FREEZE_TX : DataStorage::UNFREEZE_TX);
+        tx.setData(toFreeze ? Fee::FREEZE_TX : Fee::UNFREEZE_TX);
         tx.setToken(token);
         //        if (actorIndex->companyId != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->companyId))
