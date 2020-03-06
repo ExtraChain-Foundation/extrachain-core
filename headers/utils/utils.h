@@ -325,7 +325,8 @@ namespace DataStorage {
           "hop          TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
           "approver     TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL "
+          "digSig       TEXT  NOT NULL, "
+          "producer     TEXT  NOT NULL "
           ");";
     static const std::string SignTable = "Signatures";
     static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
@@ -496,9 +497,6 @@ static const QByteArray STORED_CHATS = "data/";
 namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";
-
-static const QByteArray FREEZE_TX = "freeze";
-static const QByteArray UNFREEZE_TX = "unfreeze";
 
 // Temporary folder
 static const QString TMP_FOLDER = "tmp";

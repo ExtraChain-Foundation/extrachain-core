@@ -43,6 +43,7 @@ private:
                          // aprovement
     QByteArray hash;     // hash from all fields
     BigNumber approver;  // address of the transaction approver.
+    BigNumber producer;
     QByteArray digSig;
 
 private:
@@ -72,6 +73,7 @@ public:
     void setPrevBlock(const BigNumber &value);
     void setGas(int gas);
     void setHop(int hop);
+    void setProducer(const BigNumber &value);
     void decrementHop();
     void clear();
 
@@ -87,6 +89,7 @@ public:
     BigNumber getToken() const;
     BigNumber getApprover() const;
     QByteArray getDigSig() const;
+    BigNumber getProducer() const;
 
     bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;

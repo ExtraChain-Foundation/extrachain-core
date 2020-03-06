@@ -104,7 +104,7 @@ void Block::sign(const Actor<KeyPrivate> &actor)
 {
     calcHash();
     QByteArray sign = actor.getKey()->sign(getDataForDigSig());
-    this->signatures.append({ actor.getId().toByteArray(), sign, true });
+    this->signatures.append({ actor.getId().toActorId(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const
@@ -282,9 +282,11 @@ BigNumber Block::getApprover() const
         return BigNumber();
     else
     {
-        for (const auto &tmp : signatures)
-            if (tmp.isApprove)
-                return tmp.actorId;
+        for (int i = signatures.size() - 1; i >= 0; i--)
+        {
+            if (signatures[i].isApprove)
+                return signatures[i].actorId;
+        }
     }
     return BigNumber();
 }

@@ -65,13 +65,15 @@ private:
 
     QByteArray getBlockDataByIndex(const BigNumber &index);
 
-    Transaction getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
-    Transaction getTxBySender(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByUser(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySenderOrReceiver(const BigNumber &id,
+                                                               const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySenderOrReceiverAndToken(const BigNumber &id,
+                                                                       const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
     TxPair getTxPair(const BigNumber &first, const BigNumber second);
 
     void saveTxInfoInEC(const QByteArray data) const;
@@ -82,9 +84,13 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
+    void sendFeeUnfreeze(Block &block);
+    void sendUnFee(Block &block);
+    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
 
     const int COUNT_APPROVER_BLOCK = 1;
-    const int COUNT_CHECKER_BLOCK = 3;
+    const int COUNT_CHECKER_BLOCK = 2;
+    const int COUNT_UNFROZE_FEE = 3;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
@@ -150,7 +156,8 @@ public:
      * @param type of param
      * @return transaction
      */
-    Transaction getTransaction(SearchEnum::TxParam type, const QByteArray &value);
+    std::pair<Transaction, QByteArray> getTransaction(SearchEnum::TxParam type, const QByteArray &value,
+                                                      const QByteArray &token = "0");
 
     /**
      * Add block to blockchain

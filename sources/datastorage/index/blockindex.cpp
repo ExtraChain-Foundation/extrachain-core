@@ -187,33 +187,38 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
     return Block();
 }
 
-Transaction BlockIndex::getLastTxByHash(const QByteArray &hash, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByHash(const QByteArray &hash,
+                                                               const QByteArray &token) const
 {
     return getLastTxByParam(BigNumber(hash), SearchEnum::TxParam::Hash, token);
 }
 
-Transaction BlockIndex::getLastTxBySender(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxBySender(const BigNumber &id,
+                                                                 const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSender, token);
 }
 
-Transaction BlockIndex::getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByReceiver(const BigNumber &id,
+                                                                   const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserReceiver, token);
 }
 
-Transaction BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id,
+                                                                           const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
-Transaction BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id,
-                                                            const QByteArray &token) const
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-Transaction BlockIndex::getLastTxByApprover(const BigNumber &id, const QByteArray &token) const
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByApprover(const BigNumber &id,
+                                                                   const QByteArray &token) const
 {
     return getLastTxByParam(id, SearchEnum::TxParam::UserApprover, token);
 }
@@ -229,15 +234,16 @@ QList<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id
 
 //}
 
-Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
-                                         const QByteArray &token) const
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, const QByteArray &token) const
 {
     BigNumber records = getRecords();
+    QByteArray tokenActor = BigNumber(token).toActorId();
 
     if (records == 0)
     {
         qDebug() << "There no tx's in blockIndex";
-        return Transaction();
+        return { Transaction(), "-1" };
     }
 
     BigNumber lastBlockId = getLastSavedId();
@@ -247,41 +253,42 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
     {
         Block lastBlock = getBlockById(lastBlockId);
         QList<Transaction> txs = lastBlock.extractTransactions();
+
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken().toActorId() != token)
+            if (tx.getToken().toActorId() != tokenActor)
                 continue;
             switch (param)
             {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
 
                 if (tx.getSender() == id || tx.getReceiver() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSender: {
                 if (tx.getSender() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
                 if (tx.getReceiver() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if (tx.getSender() == id || tx.getReceiver() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
                 if (tx.getApprover() == id)
-                    return tx;
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id.toActorId())
-                    return tx;
+                if (tx.getHash() == id.toZeroByteArray(64))
+                    return { tx, lastBlockId.toByteArray() };
                 break;
             }
             default: {
@@ -290,7 +297,7 @@ Transaction BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxPara
         }
         --lastBlockId;
     }
-    return Transaction();
+    return { Transaction(), "-1" };
 }
 
 QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param,
@@ -522,7 +529,10 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 rowRow.insert({ "hash", tmp.getHash().toStdString() });
                 rowRow.insert({ "approver", tmp.getApprover().toStdString() });
                 rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
-
+                if (tmp.getProducer() == 0)
+                    rowRow.insert({ "producer", "0" });
+                else
+                    rowRow.insert({ "producer", tmp.getProducer().toStdString() });
                 DB.insert(Config::DataStorage::TxBlockTable, rowRow);
             }
             QByteArrayList listSign = block.getListSignatures();
@@ -742,8 +752,9 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             QByteArray hash = tmp.at("hash").c_str();
             QByteArray approver = tmp.at("approver").c_str();
             QByteArray digSig = tmp.at("digSig").c_str();
+            QByteArray producer = tmp.at("producer").c_str();
             list << sender << receiver << amount << date << data << token << prevBlock << gas << hop << hash
-                 << approver << digSig;
+                 << approver << digSig << producer;
             b.addData(Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE));
         }
 
