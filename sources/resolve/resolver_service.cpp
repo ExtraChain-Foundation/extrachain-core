@@ -300,11 +300,14 @@ void ResolverService::resolveGeneralTask()
     }
     case Messages::ChainMessage::txMessage: {
         Transaction tx(message.data);
-        //        if (!validate(tx))
-        //        {
-        //            qDebug() << "Received tx" << tx.getHash() << "is not valid";
-        //            return;
-        //        }
+
+        if (!validate(tx))
+        {
+            qDebug() << "Received tx" << tx.getHash() << "is not valid";
+            return;
+        }
+        // transaction - fee
+
         emit newTx(tx);
         finishWork();
         break;

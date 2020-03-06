@@ -17,8 +17,8 @@ GenesisBlock::GenesisBlock(const QByteArray &serialized)
     deserialize(serialized);
 }
 
-GenesisBlock::GenesisBlock(const QByteArray &data, const Block &prevBlock, const QByteArray &prevGenHash)
-    : Block(data, prevBlock)
+GenesisBlock::GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash)
+    : Block(_data, prevBlock)
     , prevGenHash(prevGenHash)
 {
     this->type = Config::GENESIS_BLOCK_TYPE;
@@ -72,7 +72,7 @@ void GenesisBlock::initFields(QList<QByteArray> &list)
     for (const auto &tmp : lists)
     {
         QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
-        signatures.insert(tmps.at(0), tmps.at(1));
+        signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
     }
 }
 

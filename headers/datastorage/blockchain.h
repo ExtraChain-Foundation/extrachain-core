@@ -18,7 +18,7 @@
 #include <QString>
 #include <QMutex>
 #include <QTemporaryFile>
-
+#include <cassert>
 // database
 #include "headers/utils/db_connector.h"
 class TransactionManager;
@@ -55,19 +55,13 @@ private:
 
 public:
     Blockchain(AccountController *accountController, bool fileMode = true);
+    Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
 private:
-    //    template <typename T>
-    Block getBlockByIndex(const BigNumber &index)
-    {
-        Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-        Block block2 = validateAndReturnBlock(block);
-        return block2;
-    }
+    Block getBlockByIndex(const BigNumber &index);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
-    Block getBlockByHash(const QByteArray &hash);
 
     QByteArray getBlockDataByIndex(const BigNumber &index);
 
@@ -88,6 +82,9 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
+
+    const int COUNT_APPROVER_BLOCK = 1;
+    const int COUNT_CHECKER_BLOCK = 3;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
@@ -194,12 +191,6 @@ public:
     // - ACTORS - //
 
     /**
-     * Add actor to actor index
-     * @param actor - serialized actor
-     * @return 0 is success, or error code
-     */
-    int addActor(const Actor<KeyPublic> &actor);
-    /**
      * Gets actor from actor index
      * @param actorId
      * @return actor
@@ -259,6 +250,7 @@ public:
     BigNumber getRecords() const;
 
     BigNumber getUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
+    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
     /**
      * @brief Show blockchain
      */
@@ -351,6 +343,6 @@ public slots:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    void proveTx();
+    void proveTx(Transaction *tx);
 };
 #endif // BLOCKCHAIN_H
