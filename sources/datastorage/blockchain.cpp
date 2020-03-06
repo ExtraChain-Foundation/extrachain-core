@@ -1408,7 +1408,7 @@ bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
         for (const auto &tmp : listTxs)
         {
             if (tmp.getSender() == tx->getSender() && tmp.getReceiver() == tx->getReceiver()
-                && tmp.getAmount() == tx->getAmount() && tmp.getData() == tx->getData())
+                && tmp.getData() == tx->getData())
             {
                 return false;
             }
