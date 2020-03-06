@@ -517,7 +517,6 @@ void Blockchain::sendUnFee(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        qDebug() << "SEND UNFEE TX";
         sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
     }
 }
@@ -1432,8 +1431,6 @@ void Blockchain::proveTx(Transaction *tx)
     BigNumber fee = tx->getAmount();
     if (tx->getData().contains(Fee::UNFEE))
     {
-        qDebug() << "PROBA PROVE UNFEE TX";
-
         QByteArrayList dataList = Serialization::universalDeserialize(tx->getData());
         if (dataList.size() != 3)
         {
@@ -1463,7 +1460,6 @@ void Blockchain::proveTx(Transaction *tx)
         }
         if (actorIndex->getActor(tx->getProducer()).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
-            qDebug() << "PROVE UNFEE TX";
             tx->setAmount(fee);
             tx->sign(accountController->getCurrentActor());
             emit tx->Approved(tx);
