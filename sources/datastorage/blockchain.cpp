@@ -339,20 +339,21 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
             if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
             {
                 GenesisDataRow recSender =
-                    GenesisDataRow(tx.getSender(), getFreezeUserBalance(tx.getSender()), tx.getToken(),
-                                   DataStorage::typeDataRow::STAKING);
+                    GenesisDataRow(tx.getSender(), getFreezeUserBalance(tx.getSender(), tx.getToken()),
+                                   tx.getToken(), DataStorage::typeDataRow::STAKING);
                 GenesisDataRow recReceiver =
-                    GenesisDataRow(tx.getReceiver(), getFreezeUserBalance(tx.getReceiver()), tx.getToken(),
-                                   DataStorage::typeDataRow::STAKING);
+                    GenesisDataRow(tx.getReceiver(), getFreezeUserBalance(tx.getReceiver(), tx.getToken()),
+                                   tx.getToken(), DataStorage::typeDataRow::STAKING);
                 addRecordsIfNew(recReceiver, recSender);
             }
             else
             {
-                GenesisDataRow recSender = GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender()),
-                                                          tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
+                GenesisDataRow recSender =
+                    GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender(), tx.getToken()),
+                                   tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
                 GenesisDataRow recReceiver =
-                    GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver()), tx.getToken(),
-                                   DataStorage::typeDataRow::UNIVERSAL);
+                    GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver(), tx.getToken()),
+                                   tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
                 addRecordsIfNew(recReceiver, recSender);
             }
         }

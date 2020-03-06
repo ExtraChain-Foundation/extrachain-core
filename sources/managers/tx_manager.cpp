@@ -212,7 +212,7 @@ Block TransactionManager::makeBlock()
     Block lastBlock = blockchain->getLastBlock();
 
     Block block(data, lastBlock);
-    QList<Transaction> x = block.extractTransactions();
+    // QList<Transaction> x = block.extractTransactions();
     blockchain->signBlock(block);
     qDebug() << "Created block:" << block.getIndex();
     blockchain->addBlock(block);

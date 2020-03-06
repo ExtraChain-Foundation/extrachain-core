@@ -521,7 +521,7 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });
                 rowRow.insert({ "date", QByteArray::number(tmp.getDate()).toStdString() });
-                rowRow.insert({ "token", tmp.getToken().toStdString() });
+                rowRow.insert({ "token", tmp.getToken().toActorId().toStdString() });
                 rowRow.insert({ "data", tmp.getData().toStdString() });
                 rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
                 rowRow.insert({ "gas", QByteArray::number(tmp.getGas()).toStdString() });

@@ -241,7 +241,8 @@ Transaction NodeManager::createTransaction(Transaction tx)
         else
         {
             BigNumber amountTemp(tx.getAmount());
-            if (blockchain->getUserBalance(tx.getSender()) - amountTemp - amountTemp / 100 >= 0)
+            if (blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
+                >= 0)
             {
                 // send with fee
 
@@ -821,7 +822,7 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber p
             return;
         }
 
-        if (blockchain->getUserBalance(mainActor->getId()) < amount)
+        if (blockchain->getUserBalance(mainActor->getId(), BigNumber(0)) < amount)
         {
             qInfo().noquote() << "Not enough coins on wallet" << mainActor;
             return;

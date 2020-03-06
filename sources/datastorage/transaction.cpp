@@ -5,7 +5,7 @@ Transaction::Transaction(QObject *parent)
     this->sender = BigNumber(0);
     this->receiver = BigNumber(0);
     this->amount = BigNumber(0);
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
     this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
@@ -54,7 +54,7 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
     this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
@@ -210,7 +210,7 @@ void Transaction::clear()
     this->sender = BigNumber(0);
     this->receiver = BigNumber(0);
     this->amount = BigNumber(0);
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
     this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
@@ -334,7 +334,7 @@ QString Transaction::toString() const
 {
     QStringList list;
     list << "sender:" + sender.toActorId() << "receiver:" + receiver.toActorId()
-         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromTime_t(date).toString()
+         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromMSecsSinceEpoch(date).toString()
          << "data:" + data << "token:" + token.toActorId() << "prevBlock:" + prevBlock.toByteArray()
          << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
          << "approver:" + approver.toActorId() << "digitalSignature:" + digSig;

@@ -148,7 +148,7 @@ QByteArrayList PublicProfile::getListProfile()
     QFile profile(pathProfile);
     if (!profile.exists())
     {
-        qDebug() << "Profile isn't exist" << id;
+        // qDebug() << "Profile isn't exist" << id;
         return { QByteArrayList() };
     }
     profile.open(QIODevice::ReadOnly);

@@ -5,7 +5,7 @@ Block::Block()
     this->type = Config::DATA_BLOCK_TYPE;
 
     this->index = BigNumber(-1);
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
     this->data = "";
     this->prevHash = "";
     this->hash = "";
@@ -45,7 +45,7 @@ Block::Block(const QByteArray &data, const Block &prev)
         this->prevHash = prev.getHash();
     }
 
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     this->data = data;
 }

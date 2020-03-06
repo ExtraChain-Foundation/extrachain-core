@@ -43,7 +43,7 @@ int SubscribeController::checkCountSubscribe(QByteArray id)
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res =
         DB.select("SELECT COUNT (*) FROM " + Config::DataStorage::subscribeColumnTableName);
-    int count = std::stoi(res[0]["COUNT (*)"]);
+    int count = res.empty() ? 0 : std::stoi(res[0]["COUNT (*)"]);
     return count;
 }
 
