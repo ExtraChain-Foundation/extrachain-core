@@ -437,7 +437,13 @@ bool Blockchain::signCheckAdd(Block &block)
                     }
                 }
                 if (count != 0)
+                {
+                    if ((list.size() / 3) + 1 >= COUNT_UNFROZE_FEE)
+                    {
+                        sendUnFee(block);
+                    }
                     return true;
+                }
             }
         }
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
@@ -482,7 +488,7 @@ void Blockchain::sendUnFee(Block &block)
         BigNumber fee = tmpTx.getAmount() / 100;
         Actor<KeyPrivate> actor = accountController->getCurrentActor();
         BigNumber producer = actor.getId();
-        if (/*producer == approver || */ producer == sender)
+        if (producer == approver /* || producer == sender*/)
             continue;
         Transaction tx(sender, sender, fee);
         tx.setToken(tmpTx.getToken());
@@ -511,6 +517,7 @@ void Blockchain::sendUnFee(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
+        qDebug() << "SEND UNFEE TX";
         sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
     }
 }
@@ -1122,7 +1129,7 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
         for (auto &tx : txs)
         {
             if (tx.getSender() == userId && tx.getToken() == tokenId && tx.getData() != Fee::UNFREEZE_TX
-                && !tx.getData().contains(Fee::FEE_UNFREEZE_TX))
+                && !tx.getData().contains(Fee::FEE_UNFREEZE_TX) && !tx.getData().contains(Fee::UNFEE))
             {
                 balance -= tx.getAmount();
             }
@@ -1382,14 +1389,14 @@ void Blockchain::VerifyTx(Transaction tx)
     emit VerifiedTx(tx);
 }
 
-bool Blockchain::checkHaveUNFreezeTx(const Transaction &tx,
+bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
                                      const BigNumber &indexBlock) // return true if haven`t
 {
-    QList<Transaction *> list = txManager->getReceivedTxList();
-    for (const auto &tmpTx : list)
+    QList<Transaction> listProve = txManager->getPendingTxs();
+    for (const auto &tmpTx : listProve)
     {
-        if (tmpTx->getSender() == tx.getSender() && tmpTx->getReceiver() == tx.getReceiver()
-            && tmpTx->getAmount() == tx.getAmount() && tmpTx->getData() == tx.getData())
+        if (tmpTx.getSender() == tx->getSender() && tmpTx.getReceiver() == tx->getReceiver()
+            && tmpTx.getData() == tx->getData())
         {
             return false;
         }
@@ -1400,8 +1407,8 @@ bool Blockchain::checkHaveUNFreezeTx(const Transaction &tx,
         QList<Transaction> listTxs = tmpBlock.extractTransactions();
         for (const auto &tmp : listTxs)
         {
-            if (tmp.getSender() == tx.getSender() && tmp.getReceiver() == tx.getReceiver()
-                && tmp.getAmount() == tx.getAmount() && tmp.getData() == tx.getData())
+            if (tmp.getSender() == tx->getSender() && tmp.getReceiver() == tx->getReceiver()
+                && tmp.getAmount() == tx->getAmount() && tmp.getData() == tx->getData())
             {
                 return false;
             }
@@ -1425,6 +1432,7 @@ void Blockchain::proveTx(Transaction *tx)
     BigNumber fee = tx->getAmount();
     if (tx->getData().contains(Fee::UNFEE))
     {
+        qDebug() << "PROBA PROVE UNFEE TX";
 
         QByteArrayList dataList = Serialization::universalDeserialize(tx->getData());
         if (dataList.size() != 3)
@@ -1455,6 +1463,7 @@ void Blockchain::proveTx(Transaction *tx)
         }
         if (actorIndex->getActor(tx->getProducer()).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
+            qDebug() << "PROVE UNFEE TX";
             tx->setAmount(fee);
             tx->sign(accountController->getCurrentActor());
             emit tx->Approved(tx);

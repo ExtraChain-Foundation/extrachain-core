@@ -5,6 +5,11 @@ QList<Transaction *> TransactionManager::getReceivedTxList() const
     return receivedTxList;
 }
 
+QList<Transaction> TransactionManager::getPendingTxs() const
+{
+    return pendingTxs;
+}
+
 TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain,
                                        NodeManager *nodeManager)
 {

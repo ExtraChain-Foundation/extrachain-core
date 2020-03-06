@@ -255,11 +255,10 @@ Transaction NodeManager::createTransaction(Transaction tx)
                     // ENUM | Tx hash that fee refer
                     txFee.setData(Serialization::universalSerialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
                     txFee.sign(actor);
-                    qDebug() << "[Info]" << txFee.getSender() << " sent fee to NullActor actor";
                 }
 
                 // send fee tx
-                emit sendMsg(txFee.serialize(), Messages::ChainMessage::txMessage); // send fee to 0 actor
+                emit sendMsg(txFee.serialize(), Messages::ChainMessage::txMessage); // send fee
                 emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
             }
             else

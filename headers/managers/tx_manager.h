@@ -64,6 +64,8 @@ public:
     BigNumber checkPendingTxsList(const BigNumber &sender);
     QList<Transaction *> getReceivedTxList() const;
 
+    QList<Transaction> getPendingTxs() const;
+
 public slots:
     /**
      * Serialize all transactions to a serialized data.
