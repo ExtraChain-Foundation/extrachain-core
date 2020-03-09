@@ -67,42 +67,23 @@ void PublicProfile::setProfile(QByteArrayList profile, QByteArray path)
     file.write(newProfile + signWrite);
     file.flush();
     file.close();
-#ifdef ETALONIUM_CLIENT
+
     if (newProfile.mid(0, 1) == "6")
     {
         QByteArrayList list = deserialize(newProfile);
         saveTokenNames(list.at(2), list.at(3), list.at(6));
     }
-#endif
-    return;
 }
 
 void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArray color)
 {
-    QFile file("blockchain/.tokens");
-    if (file.exists())
-    {
-        file.open(QIODevice::ReadOnly);
-        QByteArray dataFromFile = file.readAll();
-        QByteArrayList list = Serialization::universalDeserialize(dataFromFile, 4);
-        for (int i = 0; i < list.size(); i = i + 2)
-        {
-            if (id == list.at(i))
-            {
-                file.flush();
-                file.close();
-                return;
-            }
-        }
-        file.flush();
-        file.close();
-    }
-    file.open(QIODevice::WriteOnly | QIODevice::Append);
-    QByteArray data = Serialization::universalSerialize({ id, nameToken, color }, 4);
-
-    file.write(data);
-    file.flush();
-    file.close();
+    DBConnector db("blockchain/tokens.cache");
+    db.createTable(Config::DataStorage::tokensCacheTableCreate);
+    db.insert(Config::DataStorage::tokensCacheTable,
+              { { "tokenId", id.toStdString() },
+                { "name", nameToken.toStdString() },
+                { "color", color.toStdString() },
+                { "canStaking", "1" } }); // TODO
 }
 
 void PublicProfile::saveProfileFromNet(QByteArray newProfile)
@@ -128,7 +109,7 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
     profile.write(newProfile);
     profile.flush();
     profile.close();
-#ifdef ETALONIUM_CLIENT
+
     if (newProfile.mid(0, 1) == "6")
     {
         int signSize = Utils::qByteArrayToInt(newProfile.mid(newProfile.size() - 4, 4));
@@ -137,8 +118,6 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
         QByteArrayList list = deserialize(serializeData);
         saveTokenNames(list.at(2), list.at(3), list.at(6));
     }
-#endif
-    return;
 }
 
 QByteArrayList PublicProfile::getListProfile()

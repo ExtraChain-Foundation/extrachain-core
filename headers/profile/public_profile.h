@@ -3,6 +3,7 @@
 
 #include "profile/profile.h"
 #include "utils/utils.h"
+#include "utils/db_connector.h"
 
 struct indexList
 {

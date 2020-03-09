@@ -57,18 +57,17 @@ void SmartContractManager::process()
 void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
                                                   QByteArray quantity)
 {
-#ifdef ETALONIUM_CLIENT
     Transaction tx(sender->getId(), receiver, Transaction::visibleToAmount(quantity));
     tx.setData("initcontract");
 
     tx.setToken(sender->getId());
     tx.sign(*sender);
 
+#ifdef ETALONIUM_CLIENT
     emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::contractMessage);
-#else
-    Q_UNUSED(sender)
-    Q_UNUSED(receiver)
-    Q_UNUSED(quantity)
+#endif
+#ifdef ETALONIUM_CONSOLE
+    emit initConsoleToken(tx);
 #endif
 }
 

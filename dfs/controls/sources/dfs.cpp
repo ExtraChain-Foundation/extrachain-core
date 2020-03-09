@@ -1080,7 +1080,7 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
 
     if (filePath.indexOf("/root") != -1)
     {
-        qDebug() << "root requested";
+        // qDebug() << "root requested";
     }
 
     if (dfsNetManager->isLoading(filePath))
@@ -1503,7 +1503,7 @@ void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 
     QString fileName = "data/" + userId + "/root";
 
-    qDebug() << ">>>>" << fileName << QFile::exists(fileName) << QFile(fileName).size();
+    // qDebug() << ">>>>" << fileName << QFile::exists(fileName) << QFile(fileName).size();
     if (!QFile::exists(fileName) || QFile(fileName).size() == 0)
     {
         requestFile(fileName);

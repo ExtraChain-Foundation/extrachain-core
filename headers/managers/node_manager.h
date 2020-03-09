@@ -168,8 +168,11 @@ signals:
     void setCurrentIdNotifyM(const QByteArray id);
     void getAllActorsNode(QByteArray id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
+    void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
+                               QByteArray color);
 
 private slots:
+    void initConsoleToken(Transaction tx);
     void getAllActors();
     void getAllActorsTimerCall();
     void setIdPrivateProfile(QByteArray id);

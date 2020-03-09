@@ -94,7 +94,24 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
         tm.insert(0, 0);
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
+
+        // TODO: as console argument
+        emit generateSmartContract("1000", "Etalonium Coin", company.getId().toActorId(), "#fa4868");
     }
+#endif
+}
+
+void NodeManager::initConsoleToken(Transaction tx)
+{
+    Q_UNUSED(tx)
+#ifdef ETALONIUM_CONSOLE
+    QByteArray data =
+        Serialization::universalSerialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
+    Block lastBlock = blockchain->getLastBlock();
+    Block block(data, lastBlock);
+    blockchain->signBlock(block);
+    qDebug() << "Created block:" << block.getIndex();
+    blockchain->addBlock(block);
 #endif
 }
 
@@ -140,13 +157,16 @@ void NodeManager::connectSmContractManager()
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
     connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
 
-#ifdef ETALONIUM_CLIENT
-    connect(uiController, &UiController::generateSmartContract, smContractController,
+    connect(this, &NodeManager::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
     connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
             &ResolveManager::registrateMsg);
-
+    connect(smContractController, &SmartContractManager::initConsoleToken, this,
+            &NodeManager::initConsoleToken);
+#ifdef ETALONIUM_CLIENT
+    connect(uiController, &UiController::generateSmartContract, this, &NodeManager::generateSmartContract);
 #endif
+
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
     // &NetManager::NewActor);
 }
