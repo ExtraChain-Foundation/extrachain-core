@@ -1182,7 +1182,7 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
                 {
                     balance += tx.getAmount();
                 }
-                else if (tx.getReceiver() != sender && tx.getData() == Fee::UNFREEZE_TX)
+                else if (tx.getReceiver() != userId && tx.getData() == Fee::UNFREEZE_TX)
                 {
                     balance -= tx.getAmount();
                 }
@@ -1494,9 +1494,14 @@ void Blockchain::proveTx(Transaction *tx)
     Actor<KeyPublic> receiverActor;
     if (targetReceiver != 0)
         receiverActor = actorIndex->getActor(targetReceiver);
-    BigNumber fee = tx->getAmount();
+    if (tx->getAmount() < 0)
+    {
+        emit tx->NotApproved(tx);
+        return;
+    }
     if (tx->getData().contains(Fee::UNFEE))
     {
+        BigNumber fee = tx->getAmount();
         QByteArrayList dataList = Serialization::universalDeserialize(tx->getData());
         if (dataList.size() != 3)
         {
@@ -1649,8 +1654,9 @@ void Blockchain::proveTx(Transaction *tx)
     }
     else if (tx->getData() == Fee::UNFREEZE_TX)
     {
-        BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken());
-
+        BigNumber senderCurrentBalance =
+            getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender());
+        BigNumber sender = tx->getSender();
         if ((senderCurrentBalance - tx->getAmount()) < 0)
         {
             qDebug() << "Transaction UNFreeze "
@@ -1658,7 +1664,8 @@ void Blockchain::proveTx(Transaction *tx)
             emit tx->NotApproved(tx);
             return;
         }
-
+        tx->setSender(targetReceiver);
+        tx->setReceiver(sender);
         tx->sign(accountController->getCurrentActor());
         emit tx->Approved(tx);
         return;

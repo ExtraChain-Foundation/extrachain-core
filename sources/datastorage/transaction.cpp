@@ -355,6 +355,9 @@ QByteArray Transaction::serialize() const
 
 BigNumber Transaction::visibleToAmount(QByteArray amount)
 {
+    if (amount.isEmpty())
+        return 0;
+
     amount += amount.indexOf(".") == -1 ? "." : "";
     QByteArrayList amountList = amount.split('.');
     int secondLength = amountList[1].length();
