@@ -1173,21 +1173,26 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
 
         for (auto &tx : txs)
         {
-            if (tx.getSender() != userId && tx.getReceiver() != userId && tx.getToken() != tokenId)
+            bool isStaking = tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX;
+
+            if (tx.getSender() != userId && tx.getReceiver() != userId)
+                continue;
+            if (tx.getToken() != tokenId || !isStaking)
                 continue;
 
-            if (sender == -2)
+            if (sender == -2) // all
             {
-                if (tx.getSender() != userId && tx.getData() == Fee::FREEZE_TX)
+                if (tx.getSender() != userId && tx.getReceiver() == userId && tx.getData() == Fee::FREEZE_TX)
                 {
                     balance += tx.getAmount();
                 }
-                else if (tx.getReceiver() != userId && tx.getData() == Fee::UNFREEZE_TX)
+                else if (tx.getReceiver() != userId && tx.getSender() == userId
+                         && tx.getData() == Fee::UNFREEZE_TX)
                 {
                     balance -= tx.getAmount();
                 }
             }
-            else if (sender != -1)
+            else if (sender != -1) // only sender
             {
                 if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX)
                 {
@@ -1198,9 +1203,9 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
                     balance -= tx.getAmount();
                 }
             }
-            else
+            else // only my
             {
-                if (tx.getSender() == userId && tx.getReceiver() == userId && tx.getToken() == tokenId)
+                if (tx.getSender() == userId && tx.getReceiver() == userId)
                 {
                     if (tx.getData() == Fee::UNFREEZE_TX)
                         balance -= tx.getAmount();
