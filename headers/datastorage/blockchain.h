@@ -91,7 +91,7 @@ private:
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;
     const int COUNT_UNFROZE_FEE = 3;
-    const int StackingCoef = 5;
+    const BigNumber StakingCoef = 5;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
@@ -122,6 +122,11 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block);
+    void stakingReward(const Block &block);
+
+    std::pair<BigNumber, BigNumber> getLastTxForStaking(const BigNumber &receiver, const BigNumber &token);
+
+    bool checkStakingReward(const QByteArray &hash, const BigNumber &token, const BigNumber receiver);
 
 public:
     /**

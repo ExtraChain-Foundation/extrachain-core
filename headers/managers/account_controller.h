@@ -68,6 +68,7 @@ public:
 
     void setBlockchain(Blockchain *value);
     Blockchain *getBlockchain() const;
+    QList<BigNumber> getListAccounts() const;
 
 public slots:
     /**
