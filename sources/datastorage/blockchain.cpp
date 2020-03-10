@@ -1176,7 +1176,18 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
             if (tx.getSender() != userId && tx.getReceiver() != userId && tx.getToken() != tokenId)
                 continue;
 
-            if (sender != -1)
+            if (sender == -2)
+            {
+                if (tx.getSender() != userId && tx.getData() == Fee::FREEZE_TX)
+                {
+                    balance += tx.getAmount();
+                }
+                else if (tx.getReceiver() != sender && tx.getData() == Fee::UNFREEZE_TX)
+                {
+                    balance -= tx.getAmount();
+                }
+            }
+            else if (sender != -1)
             {
                 if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX)
                 {
@@ -1346,6 +1357,15 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
 {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
+
+    //
+    QByteArray lastSavedId = this->blockIndex.getLastSavedId().toByteArray();
+    BigNumber res = this->blockIndex.getRecords();
+
+    QJsonObject obj;
+    obj["lastId"] = QString(lastSavedId);
+    obj["count"] = QString(res.toByteArray());
+    QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
     emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
                        Messages::GeneralResponse::getBlockCountResponse, requestHash, receiver);

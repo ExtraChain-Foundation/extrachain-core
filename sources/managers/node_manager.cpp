@@ -1,4 +1,4 @@
-#include "managers/node_manager.h"
+﻿#include "managers/node_manager.h"
 
 NodeManager::NodeManager()
 {
@@ -467,10 +467,13 @@ void NodeManager::updateWalletList()
         walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        QByteArray staking =
+        QByteArray stakingMy =
             blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
+        QByteArray stakingOther =
+            blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken(), -2).toByteArray();
         walletList << Transaction::amountToVisible(amount).toLatin1()
-                   << Transaction::amountToVisible(staking).toLatin1();
+                   << Transaction::amountToVisible(stakingMy).toLatin1()
+                   << Transaction::amountToVisible(stakingOther).toLatin1();
     }
 
     uiWallet->updateWalletListModel(&walletList);
