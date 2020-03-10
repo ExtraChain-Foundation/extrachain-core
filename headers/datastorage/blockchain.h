@@ -91,6 +91,7 @@ private:
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;
     const int COUNT_UNFROZE_FEE = 3;
+    const int StackingCoef = 5;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
@@ -257,7 +258,9 @@ public:
     BigNumber getRecords() const;
 
     BigNumber getUserBalance(BigNumber userId, BigNumber tokenId) const;
-    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId) const;
+    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId, BigNumber sender = -1) const;
+
+    QMap<QByteArray, BigNumber> getAllStakingForMe(BigNumber userId, BigNumber tokenId) const;
     /**
      * @brief Show blockchain
      */

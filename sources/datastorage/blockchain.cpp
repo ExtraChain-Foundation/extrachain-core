@@ -1144,7 +1144,7 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
     return balance;
 }
 
-BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId) const
+BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, BigNumber sender) const
 {
     BigNumber balance;
 
@@ -1173,18 +1173,63 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId) 
 
         for (auto &tx : txs)
         {
-            if (tx.getReceiver() == userId && tx.getToken() == tokenId && tx.getData() == Fee::UNFREEZE_TX)
+            if (tx.getSender() != userId && tx.getReceiver() != userId && tx.getToken() != tokenId)
+                continue;
+
+            if (sender != -1)
             {
-                balance -= tx.getAmount();
+                if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX)
+                {
+                    balance += tx.getAmount();
+                }
+                else if (tx.getReceiver() == sender && tx.getData() == Fee::UNFREEZE_TX)
+                {
+                    balance -= tx.getAmount();
+                }
             }
-            else if (tx.getReceiver() == userId && tx.getToken() == tokenId && tx.getData() == Fee::FREEZE_TX)
+            else
             {
-                balance += tx.getAmount();
+                if (tx.getSender() == userId && tx.getReceiver() == userId && tx.getToken() == tokenId)
+                {
+                    if (tx.getData() == Fee::UNFREEZE_TX)
+                        balance -= tx.getAmount();
+                    else if (tx.getData() == Fee::FREEZE_TX)
+                        balance += tx.getAmount();
+                }
             }
         }
     }
 
     return balance;
+}
+
+QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(BigNumber userId, BigNumber tokenId) const
+{
+    QMap<QByteArray, BigNumber> res;
+    BigNumber balance;
+
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
+    {
+        Block currentBlock = blockIndex.getBlockById(i);
+
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
+        {
+            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
+            const auto rows = genesis.extractDataRows();
+
+            for (const auto &row : rows)
+            {
+                if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
+                    balance += row.state;
+            }
+        }
+
+        if (currentBlock.isEmpty())
+            break;
+
+        QList<Transaction> txs = currentBlock.extractTransactions();
+    }
+    return res;
 }
 
 void Blockchain::showBlockchain() const
