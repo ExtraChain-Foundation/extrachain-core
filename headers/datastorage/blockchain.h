@@ -87,6 +87,7 @@ private:
     void sendFeeUnfreeze(Block &block);
     void sendUnFee(Block &block);
     bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
+    QMap<QByteArray, BigNumber> getInvestmentsStaking(const BigNumber &wallet, const BigNumber &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;

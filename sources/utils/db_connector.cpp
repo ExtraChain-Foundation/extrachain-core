@@ -37,7 +37,6 @@ bool DBConnector::open(std::string name)
     }
     else
     {
-        qDebug() << "Connected to" << name.c_str();
         m_open = true;
         return true;
     }
