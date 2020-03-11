@@ -130,6 +130,7 @@ public:
     static QString amountToVisible(BigNumber number);
     static BigNumber amountNormalizeMul(BigNumber number);
     static BigNumber amountMul(BigNumber number1, BigNumber number2);
+    static BigNumber amountDiv(BigNumber number1, BigNumber number2);
     static BigNumber amountPercent(BigNumber number, uint percent);
     void setAmount(const BigNumber &value);
     void setSender(const BigNumber &value);

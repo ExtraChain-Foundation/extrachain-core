@@ -404,6 +404,17 @@ BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
     return amountNormalizeMul(number);
 }
 
+BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)
+{
+    QByteArray two = Transaction::amountToVisible(number2).toLatin1();
+    int index = two.indexOf(".");
+    int div = two.size() - index - 1;
+    QByteArray newTwoByte = two.remove(index, 1);
+    BigNumber qqq = BigNumber(10).pow(div);
+    qDebug() << index << newTwoByte.toInt() << div;
+    return number1 / newTwoByte.toInt() * (index == -1 ? 1 : qqq);
+}
+
 BigNumber Transaction::amountPercent(BigNumber number, uint percent)
 {
     if (percent > 100)
