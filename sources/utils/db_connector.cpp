@@ -3,6 +3,8 @@
 #include <QDir>
 #include <iostream>
 
+// #define ENABLE_SQLITE_TRUE_LOGS
+
 DBConnector::DBConnector()
 {
     db = nullptr;
@@ -28,7 +30,6 @@ bool DBConnector::open(std::string name)
 {
     this->m_file = name;
     int rc = sqlite3_open(name.c_str(), &db);
-    qDebug() << name.c_str();
     if (rc)
     {
         qDebug() << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
@@ -36,6 +37,7 @@ bool DBConnector::open(std::string name)
     }
     else
     {
+        qDebug() << "Connected to" << name.c_str();
         m_open = true;
         return true;
     }
@@ -109,9 +111,12 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
     }
 
     dbmutex.unlock();
-    if (QString(query.c_str()).indexOf("SELECT  type") == -1)
-        qDebug().nospace() << file().c_str() << "(" << (rs == SQLITE_DONE ? "true" : "false")
-                           << "): " << query.c_str();
+#ifndef ENABLE_SQLITE_TRUE_LOGS
+    if (rs != SQLITE_DONE)
+#endif
+        if (QString(query.c_str()).indexOf("SELECT  type") == -1)
+            qDebug().nospace() << file().c_str() << "(" << (rs == SQLITE_DONE ? "true" : "false")
+                               << "): " << query.c_str();
     if (rs != SQLITE_DONE)
     {
         qDebug() << file().c_str() << "error: " << sqlite3_errmsg(db);
@@ -308,8 +313,11 @@ bool DBConnector::query(std::string query)
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
 
-    qDebug().nospace() << file().c_str() << "(" << (res == SQLITE_DONE ? "true" : "false")
-                       << "): " << query.c_str();
+#ifndef ENABLE_SQLITE_TRUE_LOGS
+    if (res != SQLITE_DONE)
+#endif
+        qDebug().nospace() << file().c_str() << "(" << (res == SQLITE_DONE ? "true" : "false")
+                           << "): " << query.c_str();
     if (res != SQLITE_DONE)
         qDebug() << "Query error: " << sqlite3_errmsg(db);
 
