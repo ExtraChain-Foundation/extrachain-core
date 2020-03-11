@@ -392,3 +392,21 @@ QString Transaction::amountToVisible(BigNumber number)
 
     return (minus ? "-" : "") + numberDec.toLatin1();
 }
+
+BigNumber Transaction::amountNormalizeMul(BigNumber number)
+{
+    return BigNumber(number.toByteArray(10).chopped(18), 10);
+}
+
+BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
+{
+    BigNumber number = number1 * number2;
+    return amountNormalizeMul(number);
+}
+
+BigNumber Transaction::amountPercent(BigNumber number, uint percent)
+{
+    if (percent > 100)
+        percent = 100;
+    return number * percent / 100;
+}
