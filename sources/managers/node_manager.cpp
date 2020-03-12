@@ -1,4 +1,4 @@
-#include "managers/node_manager.h"
+﻿#include "managers/node_manager.h"
 
 NodeManager::NodeManager()
 {
@@ -94,7 +94,24 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
         tm.insert(0, 0);
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
+
+        // TODO: as console argument
+        emit generateSmartContract("1000", "Etalonium Coin", company.getId().toActorId(), "#fa4868");
     }
+#endif
+}
+
+void NodeManager::initConsoleToken(Transaction tx)
+{
+    Q_UNUSED(tx)
+#ifdef ETALONIUM_CONSOLE
+    QByteArray data =
+        Serialization::universalSerialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
+    Block lastBlock = blockchain->getLastBlock();
+    Block block(data, lastBlock);
+    blockchain->signBlock(block);
+    qDebug() << "Created block:" << block.getIndex();
+    blockchain->addBlock(block);
 #endif
 }
 
@@ -140,13 +157,16 @@ void NodeManager::connectSmContractManager()
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
     connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
 
-#ifdef ETALONIUM_CLIENT
-    connect(uiController, &UiController::generateSmartContract, smContractController,
+    connect(this, &NodeManager::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
     connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
             &ResolveManager::registrateMsg);
-
+    connect(smContractController, &SmartContractManager::initConsoleToken, this,
+            &NodeManager::initConsoleToken);
+#ifdef ETALONIUM_CLIENT
+    connect(uiController, &UiController::generateSmartContract, this, &NodeManager::generateSmartContract);
 #endif
+
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
     // &NetManager::NewActor);
 }
@@ -226,7 +246,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
         // 2) sign transaction
 
         tx.sign(actor);
-        qDebug() << tx.toString();
+        qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
         if (tx.getSender() == BigNumber(Trash::NullActor)
@@ -241,7 +261,8 @@ Transaction NodeManager::createTransaction(Transaction tx)
         else
         {
             BigNumber amountTemp(tx.getAmount());
-            if (blockchain->getUserBalance(tx.getSender()) - amountTemp - amountTemp / 100 >= 0)
+            if (blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
+                >= 0)
             {
                 // send with fee
 
@@ -446,10 +467,13 @@ void NodeManager::updateWalletList()
         walletList.append(currentId);
 
         QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        QByteArray staking =
+        QByteArray stakingMy =
             blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
+        QByteArray stakingOther =
+            blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken(), -2).toByteArray();
         walletList << Transaction::amountToVisible(amount).toLatin1()
-                   << Transaction::amountToVisible(staking).toLatin1();
+                   << Transaction::amountToVisible(stakingMy).toLatin1()
+                   << Transaction::amountToVisible(stakingOther).toLatin1();
     }
 
     uiWallet->updateWalletListModel(&walletList);
@@ -821,7 +845,7 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber p
             return;
         }
 
-        if (blockchain->getUserBalance(mainActor->getId()) < amount)
+        if (blockchain->getUserBalance(mainActor->getId(), BigNumber(0)) < amount)
         {
             qInfo().noquote() << "Not enough coins on wallet" << mainActor;
             return;

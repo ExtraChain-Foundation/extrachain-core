@@ -41,6 +41,16 @@ Blockchain *AccountController::getBlockchain() const
     return blockchain;
 }
 
+QList<BigNumber> AccountController::getListAccounts() const
+{
+    QList<BigNumber> res;
+    for (const auto &tmp : accounts)
+    {
+        res.append(tmp->getId());
+    }
+    return res;
+}
+
 AccountController::AccountController(ActorIndex *actorIndex)
 {
     this->actorIndex = actorIndex;

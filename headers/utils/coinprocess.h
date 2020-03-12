@@ -24,6 +24,8 @@ static const QByteArray UNFREEZE_TX = "unfreeze";
 static const QByteArray FEE_FREEZE_TX = "Feefreeze";
 static const QByteArray FEE_UNFREEZE_TX = "FeeUNfreeze";
 static const QByteArray UNFEE = "UNFee";
+static const QByteArray FEE = "Fee";
+static const QByteArray STAKING_REWARD = "StakingReward";
 
 static constexpr int TRANSACTION_FEE = 1; // 1% from transaction amount
 enum TypeRevert

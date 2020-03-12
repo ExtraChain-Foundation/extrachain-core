@@ -517,22 +517,22 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
             for (const auto &tmp : rows)
             {
                 DBRow rowRow;
-                rowRow.insert({ "sender", tmp.getSender().toStdString() });
-                rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
+                rowRow.insert({ "sender", tmp.getSender().toActorId().toStdString() });
+                rowRow.insert({ "receiver", tmp.getReceiver().toActorId().toStdString() });
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });
                 rowRow.insert({ "date", QByteArray::number(tmp.getDate()).toStdString() });
-                rowRow.insert({ "token", tmp.getToken().toStdString() });
+                rowRow.insert({ "token", tmp.getToken().toActorId().toStdString() });
                 rowRow.insert({ "data", tmp.getData().toStdString() });
                 rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
                 rowRow.insert({ "gas", QByteArray::number(tmp.getGas()).toStdString() });
                 rowRow.insert({ "hop", QByteArray::number(tmp.getHop()).toStdString() });
                 rowRow.insert({ "hash", tmp.getHash().toStdString() });
-                rowRow.insert({ "approver", tmp.getApprover().toStdString() });
+                rowRow.insert({ "approver", tmp.getApprover().toActorId().toStdString() });
                 rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
                 if (tmp.getProducer() == 0)
                     rowRow.insert({ "producer", "0" });
                 else
-                    rowRow.insert({ "producer", tmp.getProducer().toStdString() });
+                    rowRow.insert({ "producer", tmp.getProducer().toActorId().toStdString() });
                 DB.insert(Config::DataStorage::TxBlockTable, rowRow);
             }
             QByteArrayList listSign = block.getListSignatures();

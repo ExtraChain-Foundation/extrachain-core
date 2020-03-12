@@ -5,7 +5,7 @@ Transaction::Transaction(QObject *parent)
     this->sender = BigNumber(0);
     this->receiver = BigNumber(0);
     this->amount = BigNumber(0);
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
     this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
@@ -54,7 +54,7 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
     this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
@@ -210,7 +210,7 @@ void Transaction::clear()
     this->sender = BigNumber(0);
     this->receiver = BigNumber(0);
     this->amount = BigNumber(0);
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
     this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
@@ -334,7 +334,7 @@ QString Transaction::toString() const
 {
     QStringList list;
     list << "sender:" + sender.toActorId() << "receiver:" + receiver.toActorId()
-         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromTime_t(date).toString()
+         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromMSecsSinceEpoch(date).toString()
          << "data:" + data << "token:" + token.toActorId() << "prevBlock:" + prevBlock.toByteArray()
          << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
          << "approver:" + approver.toActorId() << "digitalSignature:" + digSig;
@@ -355,6 +355,9 @@ QByteArray Transaction::serialize() const
 
 BigNumber Transaction::visibleToAmount(QByteArray amount)
 {
+    if (amount.isEmpty())
+        return 0;
+
     amount += amount.indexOf(".") == -1 ? "." : "";
     QByteArrayList amountList = amount.split('.');
     int secondLength = amountList[1].length();
@@ -388,4 +391,33 @@ QString Transaction::amountToVisible(BigNumber number)
         (first.isEmpty() ? "0" : first) + (second == "0" || second.isEmpty() ? "" : "." + second);
 
     return (minus ? "-" : "") + numberDec.toLatin1();
+}
+
+BigNumber Transaction::amountNormalizeMul(BigNumber number)
+{
+    return BigNumber(number.toByteArray(10).chopped(18), 10);
+}
+
+BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
+{
+    BigNumber number = number1 * number2;
+    return amountNormalizeMul(number);
+}
+
+BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)
+{
+    QByteArray two = Transaction::amountToVisible(number2).toLatin1();
+    int index = two.indexOf(".");
+    int div = two.size() - index - 1;
+    QByteArray newTwoByte = two.remove(index, 1);
+    BigNumber qqq = BigNumber(10).pow(div);
+    qDebug() << index << newTwoByte.toInt() << div;
+    return number1 / newTwoByte.toInt() * (index == -1 ? 1 : qqq);
+}
+
+BigNumber Transaction::amountPercent(BigNumber number, uint percent)
+{
+    if (percent > 100)
+        percent = 100;
+    return number * percent / 100;
 }

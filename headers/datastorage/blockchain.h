@@ -86,11 +86,12 @@ private:
     bool signCheckAdd(Block &block);
     void sendFeeUnfreeze(Block &block);
     void sendUnFee(Block &block);
-    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
+    QMap<QByteArray, BigNumber> getInvestmentsStaking(const BigNumber &wallet, const BigNumber &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;
     const int COUNT_UNFROZE_FEE = 3;
+    const BigNumber StakingCoef = 5;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
@@ -102,6 +103,7 @@ public:
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
 
+    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
     Block checkBlock(const Block &block);
@@ -121,6 +123,11 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block);
+    void stakingReward(const Block &block);
+
+    std::pair<BigNumber, BigNumber> getLastTxForStaking(const BigNumber &receiver, const BigNumber &token);
+
+    bool checkStakingReward(const QByteArray &hash, const BigNumber &token, const BigNumber receiver);
 
 public:
     /**
@@ -256,8 +263,10 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumber getUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
-    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
+    BigNumber getUserBalance(BigNumber userId, BigNumber tokenId) const;
+    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId, BigNumber sender = -1) const;
+
+    QMap<QByteArray, BigNumber> getAllStakingForMe(BigNumber userId, BigNumber tokenId) const;
     /**
      * @brief Show blockchain
      */

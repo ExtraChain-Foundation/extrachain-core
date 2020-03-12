@@ -331,9 +331,9 @@ namespace DataStorage {
     static const std::string SignTable = "Signatures";
     static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
         + " ("
-          "actorId      TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL, "
-          "type         TEXT  NOT NULL  "
+          "actorId      TEXT PRIMARY KEY NOT NULL, "
+          "digSig       TEXT             NOT NULL, "
+          "type         TEXT             NOT NULL  "
           ");";
 
     static const std::string GenesisBlockTable = "GenesisBlock";
@@ -355,6 +355,16 @@ namespace DataStorage {
           "token      TEXT  NOT NULL, "
           "type       TEXT  NOT NULL "
           ");";
+
+    static const std::string tokensCacheTable = "Tokens";
+    static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
+        + " ("
+          "tokenId      TEXT PRIMARY KEY NOT NULL, "
+          "name         TEXT             NOT NULL, "
+          "color        TEXT             NOT NULL, "
+          "canStaking   INT              NOT NULL  "
+          ");";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

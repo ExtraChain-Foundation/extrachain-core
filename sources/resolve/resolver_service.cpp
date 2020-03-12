@@ -469,6 +469,8 @@ bool ResolverService::validate(const Transaction &tx)
 {
     qDebug() << "RESOLVER SERVICE: "
              << "validate(Transaction):";
+    if (tx.getSender() == 0 && tx.getData().contains(Fee::STAKING_REWARD))
+        return true;
     if (actorIndex->getActor(tx.getSender()).isEmpty())
     {
         this->thread()->sleep(5);
