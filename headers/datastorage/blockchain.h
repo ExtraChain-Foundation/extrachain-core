@@ -86,7 +86,6 @@ private:
     bool signCheckAdd(Block &block);
     void sendFeeUnfreeze(Block &block);
     void sendUnFee(Block &block);
-    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
     QMap<QByteArray, BigNumber> getInvestmentsStaking(const BigNumber &wallet, const BigNumber &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
@@ -104,6 +103,7 @@ public:
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
 
+    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
     Block checkBlock(const Block &block);

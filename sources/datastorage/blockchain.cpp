@@ -267,12 +267,16 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     }
     DBConnector cacheDB2("blockchain/cacheEC.db");
     std::vector<DBRow> extractData2 = cacheDB2.select(
-        "SELECT * FROM cacheData WHERE Token = '" + idToken.toStdString()
-        + /*"' AND ActorId != '" + actorIndex->companyId->toStdString() +*/ "' AND ActorId != '"
-        + BigNumber(0).toActorId().toStdString() + "';");
+        "SELECT * FROM cacheData WHERE Token = '"
+        + idToken.toStdString()
+        /* + "' AND ActorId != '" + actorIndex->companyId->toStdString() + "' AND ActorId != '"
+         + BigNumber(0).toActorId().toStdString()*/
+        + "';");
     for (const auto &tmp : extractData2)
     {
         QByteArray sum(tmp.at("State").c_str());
+        if (sum[0] == '-')
+            continue;
         res += BigNumber(sum).abs();
     }
     return res;
@@ -315,7 +319,8 @@ void Blockchain::stakingReward(const Block &block)
         for (const auto &tmp : listWallet)
         {
             BigNumber myFullStaking = getFreezeUserBalance(tmp, tx.getToken(), -3);
-            BigNumber myStaking = getFreezeUserBalance(tmp, tx.getToken());
+
+            //            BigNumber myStaking = getFreezeUserBalance(tmp, tx.getToken());
             QMap<QByteArray, BigNumber> investments = getInvestmentsStaking(tmp, tx.getToken());
             if (myFullStaking == 0 && investments.isEmpty())
                 continue;

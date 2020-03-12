@@ -246,7 +246,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
         // 2) sign transaction
 
         tx.sign(actor);
-        qDebug() << tx.toString();
+        qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
         if (tx.getSender() == BigNumber(Trash::NullActor)
