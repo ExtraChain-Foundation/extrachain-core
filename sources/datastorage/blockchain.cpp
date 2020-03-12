@@ -331,9 +331,7 @@ void Blockchain::stakingReward(const Block &block)
                 BigNumber RTx = tx.getAmount() / 1000;
                 BigNumber myPercent = Transaction::amountDiv(i.value(), myFullStaking) * 100;
                 BigNumber StakingReward =
-                    Transaction::amountMul(
-                        Transaction::amountMul(Transaction::amountMul(MSP, RTx), myPercent), StakingCoef)
-                    / 100;
+                    Transaction::amountMul(Transaction::amountMul(MSP, RTx), myPercent) * StakingCoef / 1000;
                 if (StakingReward == 0)
                 {
                     qDebug() << "0 on Staking";
