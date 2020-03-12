@@ -16,7 +16,9 @@
 #include "gmpxx.h"
 
 #ifdef QT_DEBUG
-#define UPDATE_DEBUG() qdata = m_data.get_str(16).c_str();
+#define UPDATE_DEBUG()                  \
+    qdata = m_data.get_str(16).c_str(); \
+    qdataDec = m_data.get_str(10).c_str();
 #else
 #define UPDATE_DEBUG()
 #endif
@@ -46,6 +48,7 @@ private:
 
 #ifdef QT_DEBUG
     QByteArray qdata;
+    QByteArray qdataDec;
 #endif
 
 public:

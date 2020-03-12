@@ -327,10 +327,16 @@ void Blockchain::stakingReward(const Block &block)
             for (auto i = investments.begin(); i != investments.end(); i++)
             {
                 BigNumber fullSupply = getFullSupply(tx.getToken().toActorId());
-                BigNumber MSP = myFullStaking * 100 / fullSupply;
+                BigNumber MSP = Transaction::amountDiv(myFullStaking, fullSupply) * 100;
                 BigNumber RTx = tx.getAmount() / 1000;
-                BigNumber myPercent = i.value() * 100 / myFullStaking;
-                BigNumber StakingReward = MSP * RTx * StakingCoef * myPercent / 10000;
+                BigNumber myPercent = Transaction::amountDiv(i.value(), myFullStaking) * 100;
+                BigNumber StakingReward =
+                    Transaction::amountMul(Transaction::amountMul(MSP, RTx), myPercent) * StakingCoef / 10000;
+                if (StakingReward == 0)
+                {
+                    qDebug() << "0 on Staking";
+                    continue;
+                }
                 // if (StakingReward + fullSupply > BigNumber(10).pow(9))
                 //     continue;
                 if (checkStakingReward(tx.getHash(), tx.getToken(), tmp))
@@ -1505,13 +1511,15 @@ void Blockchain::addBlockToBlockchain(Block block)
         QList<BigNumber> list;
         for (auto tmp : accountController->getAccounts())
             list.append(tmp->getId());
-
-        if (list.contains(tmp.getSender()))
+        QByteArray data = tmp.getData();
+        if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
+            && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
         {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
         }
-        else if (list.contains(tmp.getReceiver()))
+        else if (list.contains(tmp.getReceiver()) && !data.contains(Fee::FREEZE_TX)
+                 && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
         {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToMe,
                              tmp.getSender().toByteArray() });
