@@ -72,10 +72,12 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
     Actor<KeyPrivate> company;
     QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
 
+    bool created = false;
     if (QDir("keystore/profile").isEmpty())
     {
         company = CreateExtracoin();
         emit savePrivateProfile(consoleHash, company.getId().toActorId());
+        created = true;
     }
     else
     {
@@ -96,7 +98,8 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
         blockchain->addBlock(tmp, true);
 
         // TODO: as console argument
-        emit generateSmartContract("1000", "Etalonium Coin", company.getId().toActorId(), "#fa4868");
+        if (created)
+            emit generateSmartContract("1000", "Etalonium Coin", company.getId().toActorId(), "#fa4868");
     }
 #endif
 }

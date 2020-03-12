@@ -91,7 +91,7 @@ private:
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;
     const int COUNT_UNFROZE_FEE = 3;
-    const BigNumber StakingCoef = 5;
+    const BigNumber StakingCoef = Transaction::visibleToAmount("0.5");
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,

@@ -331,7 +331,9 @@ void Blockchain::stakingReward(const Block &block)
                 BigNumber RTx = tx.getAmount() / 1000;
                 BigNumber myPercent = Transaction::amountDiv(i.value(), myFullStaking) * 100;
                 BigNumber StakingReward =
-                    Transaction::amountMul(Transaction::amountMul(MSP, RTx), myPercent) * StakingCoef / 10000;
+                    Transaction::amountMul(
+                        Transaction::amountMul(Transaction::amountMul(MSP, RTx), myPercent), StakingCoef)
+                    / 100;
                 if (StakingReward == 0)
                 {
                     qDebug() << "0 on Staking";
@@ -998,7 +1000,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0: {
+    case 0:
+    {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
@@ -1008,7 +1011,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
         stakingReward(block);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS: {
+    case Errors::FILE_ALREADY_EXISTS:
+    {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
