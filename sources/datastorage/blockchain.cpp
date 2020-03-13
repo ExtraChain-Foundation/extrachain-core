@@ -998,8 +998,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
 
     switch (resultCode)
     {
-    case 0:
-    {
+    case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
@@ -1009,8 +1008,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
         stakingReward(block);
         break;
     }
-    case Errors::FILE_ALREADY_EXISTS:
-    {
+    case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
         if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
         {
@@ -1893,10 +1891,11 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        if (targetSender.toActorId() != *actorIndex->companyId)
+        QByteArray companyId = actorIndex->companyId != nullptr ? *actorIndex->companyId : "";
+
+        if (targetSender.toActorId() != companyId)
         {
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
-
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
             if (tx->getAmount() <= 0)
@@ -1914,6 +1913,7 @@ void Blockchain::proveTx(Transaction *tx)
                 emit tx->NotApproved(tx);
                 return;
             }
+
             emit tx->Approved(tx);
         }
         else
@@ -1923,7 +1923,7 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        //        emit tx->addPendingForFeeTxs(tx);
+        // emit tx->addPendingForFeeTxs(tx);
         return;
     }
     qDebug() << "Undefine behaviour blockhain.cpp proveTx";

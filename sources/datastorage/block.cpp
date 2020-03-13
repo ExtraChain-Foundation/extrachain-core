@@ -128,16 +128,20 @@ bool Block::deserialize(const QByteArray &serialized)
         hash = list.at(5);
         QByteArray signs = list.at(6);
         QByteArrayList lists = Serialization::universalDeserialize(signs, FIELDS_SIZE);
+
         for (const auto &tmp : lists)
         {
             QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
-            signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
+            if (tmps.length() == 3)
+                signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
         }
+
         if (isEmpty())
         {
             qDebug() << "Can't deserialize, block" << getIndex() << "is empty";
             return false;
         }
+
         return true;
     }
     return false;
@@ -347,7 +351,8 @@ void Block::initFields(QList<QByteArray> &list)
     for (const auto &tmp : lists)
     {
         QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
-        signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
+        if (tmps.length() == 3)
+            signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
     }
 }
 
