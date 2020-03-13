@@ -48,7 +48,7 @@ NodeManager::NodeManager()
 
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
-    getAllActorsTimer.start(30000);
+    // getAllActorsTimer.start(30000);
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
@@ -542,7 +542,8 @@ void NodeManager::connectUi()
     connect(this, &NodeManager::profileToUi, uiController, &UiController::profileUpdated);
     connect(uiController, &UiController::saveProfile, this, [this](QByteArrayList profile) {
         Actor<KeyPrivate> *key = accController->getMainActor();
-        emit saveProfile(key, profile);
+        actorIndex->saveProfile(key, profile);
+        // emit saveProfile(key, profile);
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
@@ -676,7 +677,7 @@ void NodeManager::connectUi()
             &UiController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
-    connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
+    // connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
     //=============================================CHAT=======================================
     connect(uiController, &UiController::createChat, chatManager, &ChatManager::CreateNewChat);

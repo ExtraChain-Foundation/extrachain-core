@@ -372,7 +372,7 @@ namespace DataStorage {
     static const int BLOCK_CREATION_PERIOD = 1000;
 
     // How often to construct genesis block (in blocks)
-    static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 1000;
+    static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
 
     // Max number of saved blocks in mem index
     static const int MEM_INDEX_SIZE_LIMIT = 1000;

@@ -410,9 +410,13 @@ BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)
     int index = two.indexOf(".");
     int div = two.size() - index - 1;
     QByteArray newTwoByte = two.remove(index, 1);
-    BigNumber qqq = BigNumber(10).pow(div);
-    qDebug() << index << BigNumber(newTwoByte, 10) << div;
-    return number1 / BigNumber(newTwoByte, 10) * (index == -1 ? 1 : qqq);
+
+    BigNumber returned = index == -1 ? 1 : BigNumber(10).pow(div);
+    auto second = BigNumber(newTwoByte, 10);
+    if (second == 0)
+        return 0;
+
+    return number1 / second * returned;
 }
 
 BigNumber Transaction::amountPercent(BigNumber number, uint percent)
