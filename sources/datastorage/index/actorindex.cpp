@@ -111,6 +111,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
                                           Messages::ChainMessage::profileMessage);
         else if (actor.getAccount() != 0 && actor.getAccount() != 2)
         {
+            qDebug() << "NO PROFILE >>>>>>>>>>>>" << actorId;
             Messages::GetActorMessage msg;
             msg.actorId = actorId;
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);

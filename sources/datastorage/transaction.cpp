@@ -395,7 +395,10 @@ QString Transaction::amountToVisible(BigNumber number)
 
 BigNumber Transaction::amountNormalizeMul(BigNumber number)
 {
-    return BigNumber(number.toByteArray(10).chopped(18), 10);
+    QByteArray n = number.toByteArray(10);
+    if (n.length() < 36)
+        return number;
+    return BigNumber(n.chopped(18), 10);
 }
 
 BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
@@ -416,7 +419,7 @@ BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)
     if (second == 0)
         return 0;
 
-    return number1 / second * returned;
+    return number1 * returned / second;
 }
 
 BigNumber Transaction::amountPercent(BigNumber number, uint percent)
