@@ -403,8 +403,18 @@ BigNumber Transaction::amountNormalizeMul(BigNumber number)
 
 BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
 {
-    BigNumber number = number1 * number2;
-    return amountNormalizeMul(number);
+    QByteArray one = Transaction::amountToVisible(number1).toLatin1();
+    QByteArray two = Transaction::amountToVisible(number1).toLatin1();
+    int index1 = one.indexOf(".");
+    int index2 = two.indexOf(".");
+    int div1 = one.size() - index1 - 1;
+    int div2 = two.size() - index2 - 1;
+    BigNumber returned1 = index1 == -1 ? 1 : BigNumber(10).pow(div1);
+    BigNumber returned2 = index2 == -1 ? 1 : BigNumber(10).pow(div2);
+
+    BigNumber number = (number1 * returned1) * (number2 * returned2);
+
+    return amountNormalizeMul(number) / returned1 / returned2;
 }
 
 BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)

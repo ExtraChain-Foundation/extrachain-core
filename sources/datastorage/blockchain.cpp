@@ -330,15 +330,33 @@ void Blockchain::stakingReward(const Block &block)
                 BigNumber MSP = Transaction::amountDiv(myFullStaking, fullSupply) * 100;
                 BigNumber RTx = tx.getAmount() / 1000;
                 BigNumber myPercent = Transaction::amountDiv(i.value(), myFullStaking) * 100;
-                BigNumber StakingReward =
-                    Transaction::amountMul(Transaction::amountMul(MSP, RTx), myPercent) * StakingCoef / 1000;
+
+                BigNumber MSP_RTx = Transaction::amountMul(MSP, RTx);
+                BigNumber MSP_RTx_myPercent = Transaction::amountMul(MSP_RTx, myPercent);
+                if (MSP_RTx_myPercent == 0)
+                {
+                    qDebug() << "0 on Staking (MSP_RTx_myPercent)";
+                    continue;
+                }
+                BigNumber StakingReward = MSP_RTx_myPercent * StakingCoef / 1000;
+                //                qDebug() << "STAKING: who " << i.key() << ";\n full supply "
+                //                         << Transaction::amountToVisible(fullSupply) << ";\n MSP "
+                //                         << Transaction::amountToVisible(MSP) << ";\n RTx "
+                //                         << Transaction::amountToVisible(RTx) << ";\n myPercent "
+                //                         << Transaction::amountToVisible(myPercent) << "\n StakingReward "
+                //                         << Transaction::amountToVisible(StakingReward) << ";\n
+                //                         myFullStaking "
+                //                         << Transaction::amountToVisible(myFullStaking);
                 if (StakingReward == 0)
                 {
                     qDebug() << "0 on Staking";
                     continue;
                 }
-                // if (StakingReward + fullSupply > BigNumber(10).pow(9))
-                //     continue;
+                if (StakingReward + fullSupply > Transaction::visibleToAmount("1000000000"))
+                {
+                    qDebug() << "STAKING ENDED";
+                    continue;
+                }
                 if (checkStakingReward(tx.getHash(), tx.getToken(), tmp))
                     continue;
                 Transaction rtx(Trash::NullActor, i.key(), StakingReward);
