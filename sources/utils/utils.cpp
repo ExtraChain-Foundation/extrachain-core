@@ -359,6 +359,12 @@ void Utils::wipeDataFiles()
     QFile(".settings").remove();
     QFile("network_cache").remove();
 
+    QDir dir(QDir::currentPath());
+    dir.cdUp();
+    QDir::setCurrent(dir.canonicalPath());
+    QDir("etalonium-data").removeRecursively();
+    QDir().mkdir("etalonium-data");
+
     /*
 #ifdef ETALONIUM_CONSOLE
     auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
