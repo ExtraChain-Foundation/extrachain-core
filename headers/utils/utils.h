@@ -205,6 +205,7 @@ namespace DataStorage {
           "data  TEXT                 NOT NULL  );";
 
     static const std::string propertiesTableName = "Properties";
+    static const std::string usersSubscribedOnEvent = "UserList";
     static const std::string textTableName = "Text";
     static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
@@ -223,10 +224,21 @@ namespace DataStorage {
                                                 "latitude   NUMERIC NOT NULL,"
                                                 "longitude  NUMERIC NOT NULL,";
 
+    static const std::string userListSubscribedTablepropertiesFields = " ("
+                                                "UserId    TEXT    NOT NULL,"
+                                                "Sign     TEXT    NULL,"
+                                                "Approver TEXT NULL"
+                                                                       ")";
+
+
     static const std::string postPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS " + propertiesTableName
         + propertiesFields
         + "sign         TEXT     NOT NULL"
           ");";
+
+    static const std::string userListPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS " + usersSubscribedOnEvent+
+userListSubscribedTablepropertiesFields+
+       ";";
 
     static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
         + propertiesTableName + propertiesFields

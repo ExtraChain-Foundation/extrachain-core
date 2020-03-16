@@ -5,6 +5,11 @@
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
+std::string DBConnector::getFile() const
+{
+    return m_file;
+}
+
 DBConnector::DBConnector()
 {
     db = nullptr;
@@ -28,7 +33,8 @@ DBConnector::~DBConnector()
 
 bool DBConnector::open(std::string name)
 {
-    this->m_file = name;
+    if(name!="NULL")
+       this->m_file = name;
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc)
     {
