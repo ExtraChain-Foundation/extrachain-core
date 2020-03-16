@@ -353,7 +353,7 @@ BigNumber BigNumber::factorial(unsigned long number)
 BigNumber BigNumber::random(int n, bool zeroAllowed)
 {
     QByteArray str;
-    str.reserve(n);
+    str.resize(n);
     str[0] = '0';
 
     while (str[0] == '0')
