@@ -33,8 +33,8 @@ DBConnector::~DBConnector()
 
 bool DBConnector::open(std::string name)
 {
-    if(name!="NULL")
-       this->m_file = name;
+    if (name != "NULL")
+        this->m_file = name;
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc)
     {
@@ -142,28 +142,29 @@ bool DBConnector::insert(std::string tableName, DBRow data)
 {
     if (data.size() == 0)
     {
-        qDebug() << "Insert: DBRow is empty";
+        qDebug() << file().c_str() << "(false): Insert: DBRow is empty";
         return false;
     }
-    std::string query = prepareInsert(tableName, data);
-    // qDebug() << query.c_str();
+    std::string query = prepareInsert(tableName, data, false);
     return this->query(query);
 }
 
-std::string ReplaceAll(std::string str, const std::string &from, const std::string &to)
+bool DBConnector::replace(std::string tableName, DBRow data)
 {
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos)
+    if (data.size() == 0)
     {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+        qDebug() << file().c_str() << "(false): Replace: DBRow is empty";
+        return false;
     }
-    return str;
+
+    std::string query = prepareInsert(tableName, data, true);
+    return this->query(query);
 }
 
-std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool noEnd)
+std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool isReplace)
 {
-    std::string query = "INSERT OR IGNORE INTO ";
+    std::string type = isReplace ? "REPLACE" : "IGNORE";
+    std::string query = "INSERT OR " + type + " INTO ";
     query.append(tableName + " (");
     std::string f;
     std::string v;
