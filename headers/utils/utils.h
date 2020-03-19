@@ -200,9 +200,9 @@ namespace DataStorage {
     static const std::string notificationTable = "Notification";
     static const std::string notificationTableCreation = "CREATE TABLE IF NOT EXISTS " + notificationTable
         + " ("
-          "time  INTEGER  PRIMARY KEY NOT NULL, "
-          "type  INT                  NOT NULL, "
-          "data  TEXT                 NOT NULL  );";
+          "time  INTEGER PRIMARY KEY NOT NULL, "
+          "type  INT                 NOT NULL, "
+          "data  TEXT                NOT NULL  );";
 
     static const std::string propertiesTableName = "Properties";
     static const std::string usersDBAddition = "UserListDB";
@@ -213,8 +213,6 @@ namespace DataStorage {
     static const std::string likesTableName = "Likes";
     static const std::string savedPostsTableName = "Posts";
     static const std::string savedEventsTableName = "Events";
-    static const std::string usersFollowersTableName = "UsersFollowers";
-    static const std::string usersConfirmedTableName = "UsersConfirmed";
     static const std::string usersMarkedTableName = "UsersMarked";
 
     static const std::string propertiesFields = " ("
@@ -225,19 +223,18 @@ namespace DataStorage {
                                                 "latitude   NUMERIC NOT NULL,"
                                                 "longitude  NUMERIC NOT NULL,";
 
-    static const std::string userListSubscribedTablepropertiesFields = " ("
-                                                                       "UserId    TEXT    NOT NULL,"
-                                                                       "Sign     TEXT    NULL,"
-                                                                       "Approver TEXT NULL"
-                                                                       ")";
-
     static const std::string postPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS " + propertiesTableName
         + propertiesFields
         + "sign         TEXT     NOT NULL"
           ");";
 
     static const std::string userListPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
-        + usersSubscribedOnEventTable + userListSubscribedTablepropertiesFields + ";";
+        + usersSubscribedOnEventTable
+        + " ("
+          "userId   TEXT PRIMARY KEY NOT NULL,"
+          "sign     TEXT             NULL,    "
+          "approver TEXT             NULL     "
+          ");";
 
     static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
         + propertiesTableName + propertiesFields
@@ -251,7 +248,8 @@ namespace DataStorage {
           "endEpoch     INTEGER NOT NULL,"
           "start        TEXT    NOT NULL,"
           "end          TEXT    NOT NULL,"
-        + "sign         TEXT    NOT NULL"
+          "usersDB      TEXT    NOT NULL,"
+          "sign         TEXT    NOT NULL"
           ");";
 
     static const std::string textTableCreation = "CREATE TABLE IF NOT EXISTS " + textTableName
@@ -297,16 +295,6 @@ namespace DataStorage {
           "PRIMARY KEY (user, event)"
           ");";
 
-    static const std::string usersFollowersTableCreation = "CREATE TABLE IF NOT EXISTS "
-        + usersFollowersTableName
-        + " ("
-          "userId TEXT PRIMARY KEY NOT NULL,"
-          "sign  TEXT            NOT NULL);";
-    static const std::string usersConfirmedTableCreation = "CREATE TABLE IF NOT EXISTS "
-        + usersConfirmedTableName
-        + " ("
-          "userId TEXT PRIMARY KEY NOT NULL,"
-          "sign  TEXT            NOT NULL);";
     static const std::string usersMarkedTableCreation = "CREATE TABLE IF NOT EXISTS " + usersMarkedTableName
         + " ("
           "userId TEXT PRIMARY KEY NOT NULL,"

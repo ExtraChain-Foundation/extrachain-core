@@ -27,7 +27,7 @@ public:
     ~DBConnector();
 
 public:
-    bool open(std::string name = "NULL");
+    bool open(std::string name);
     bool close();
     std::vector<DBRow> select(std::string query);
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
@@ -51,6 +51,5 @@ public:
 
 public:
     sqlite3 *getDb() const;
-    std::string getFile() const;
 };
 #endif // DB_CONNECTOR_H
