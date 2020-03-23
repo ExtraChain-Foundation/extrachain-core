@@ -288,10 +288,19 @@ namespace DataStorage {
           "post TEXT NOT NULL,"
           "PRIMARY KEY (user, post)"
           ");";
-    static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
+    static const std::string likedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
         + " ("
           "user TEXT NOT NULL,"
           "event TEXT NOT NULL,"
+          "PRIMARY KEY (user, event)"
+          ");";
+    static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
+        + " ("
+          "user       TEXT NOT NULL,"
+          "event      TEXT NOT NULL,"
+          "name       TEXT NOT NULL,"
+          "start      TEXT NOT NULL,"
+          "end        TEXT NOT NULL,"
           "PRIMARY KEY (user, event)"
           ");";
 
