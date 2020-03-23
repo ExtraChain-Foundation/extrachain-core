@@ -2,22 +2,23 @@
 #define UTILS_H
 
 #include <QByteArray>
+#include <QCoreApplication>
+#include <QDateTime>
 #include <QDebug>
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
-#include <QString>
-#include "utils/bignumber.h"
-#include "utils/Keccak256.h"
-#include "network/socket_pair.h"
-#include <QStringList>
-#include <string>
-#include <sstream>
-#include <QDateTime>
 #include <QStorageInfo>
-#include <QCoreApplication>
+#include <QString>
+#include <QStringList>
 #include <exception>
+#include <sstream>
+#include <string>
+
+#include "network/socket_pair.h"
+#include "utils/Keccak256.h"
+#include "utils/bignumber.h"
 
 namespace Network {
 static QString serverIp = "51.68.181.53";
@@ -29,7 +30,7 @@ struct DataStruct
     QByteArray msg;
     SocketPair receiver;
 };
-}
+} // namespace Network
 
 namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
@@ -44,7 +45,6 @@ struct indexRow
 };
 class FileList
 {
-
 public:
     FileList();
     ~FileList();
@@ -88,7 +88,7 @@ static QByteArray dfsreadNetManagerIdentificator()
     file.close();
     return id;
 }
-}
+} // namespace net
 class Transaction;
 // using namespace CryptoPP;
 namespace storedSpace {
@@ -118,7 +118,7 @@ enum Type
     DFS = 2,
     GENERAL = 3
 };
-}
+} // namespace Resolver
 
 namespace Config {
 
@@ -200,19 +200,19 @@ namespace DataStorage {
     static const std::string notificationTable = "Notification";
     static const std::string notificationTableCreation = "CREATE TABLE IF NOT EXISTS " + notificationTable
         + " ("
-          "time  INTEGER  PRIMARY KEY NOT NULL, "
-          "type  INT                  NOT NULL, "
-          "data  TEXT                 NOT NULL  );";
+          "time  INTEGER PRIMARY KEY NOT NULL, "
+          "type  INT                 NOT NULL, "
+          "data  TEXT                NOT NULL  );";
 
     static const std::string propertiesTableName = "Properties";
+    static const std::string usersDBAddition = "UserListDB";
+    static const std::string usersSubscribedOnEventTable = "UserList";
     static const std::string textTableName = "Text";
     static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
     static const std::string likesTableName = "Likes";
     static const std::string savedPostsTableName = "Posts";
     static const std::string savedEventsTableName = "Events";
-    static const std::string usersFollowersTableName = "UsersFollowers";
-    static const std::string usersConfirmedTableName = "UsersConfirmed";
     static const std::string usersMarkedTableName = "UsersMarked";
 
     static const std::string propertiesFields = " ("
@@ -228,6 +228,14 @@ namespace DataStorage {
         + "sign         TEXT     NOT NULL"
           ");";
 
+    static const std::string userListPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + usersSubscribedOnEventTable
+        + " ("
+          "userId   TEXT PRIMARY KEY NOT NULL,"
+          "sign     TEXT             NULL,    "
+          "approver TEXT             NULL     "
+          ");";
+
     static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
         + propertiesTableName + propertiesFields
         + "eventName    TEXT    NOT NULL,"
@@ -240,7 +248,8 @@ namespace DataStorage {
           "endEpoch     INTEGER NOT NULL,"
           "start        TEXT    NOT NULL,"
           "end          TEXT    NOT NULL,"
-        + "sign         TEXT    NOT NULL"
+          "usersDB      TEXT    NOT NULL,"
+          "sign         TEXT    NOT NULL"
           ");";
 
     static const std::string textTableCreation = "CREATE TABLE IF NOT EXISTS " + textTableName
@@ -279,23 +288,22 @@ namespace DataStorage {
           "post TEXT NOT NULL,"
           "PRIMARY KEY (user, post)"
           ");";
-    static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
+    static const std::string likedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
         + " ("
           "user TEXT NOT NULL,"
           "event TEXT NOT NULL,"
           "PRIMARY KEY (user, event)"
           ");";
+    static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
+        + " ("
+          "user       TEXT NOT NULL,"
+          "event      TEXT NOT NULL,"
+          "name       TEXT NOT NULL,"
+          "start      TEXT NOT NULL,"
+          "end        TEXT NOT NULL,"
+          "PRIMARY KEY (user, event)"
+          ");";
 
-    static const std::string usersFollowersTableCreation = "CREATE TABLE IF NOT EXISTS "
-        + usersFollowersTableName
-        + " ("
-          "userId TEXT PRIMARY KEY NOT NULL,"
-          "sign  TEXT            NOT NULL);";
-    static const std::string usersConfirmedTableCreation = "CREATE TABLE IF NOT EXISTS "
-        + usersConfirmedTableName
-        + " ("
-          "userId TEXT PRIMARY KEY NOT NULL,"
-          "sign  TEXT            NOT NULL);";
     static const std::string usersMarkedTableCreation = "CREATE TABLE IF NOT EXISTS " + usersMarkedTableName
         + " ("
           "userId TEXT PRIMARY KEY NOT NULL,"
@@ -503,7 +511,7 @@ namespace ChatStorage {
 // keystore/chats/[chat ID]/[sessionID]/ users,key etc.
 static const QByteArray STORED_CHATS = "data/";
 // static const QByteArray SESSIONS = "/sessions/";
-}
+} // namespace ChatStorage
 namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";
@@ -540,7 +548,7 @@ QString makeKeyFileName(QString name);
 namespace SmartContractStorage {
 static const QString CONTRACTSTORE = "keystore/contracts/";
 static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
-}
+} // namespace SmartContractStorage
 namespace FileSystem {
 void createFolderIfNotExist(QString path);
 /**

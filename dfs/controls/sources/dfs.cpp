@@ -817,7 +817,7 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
         //    query += " AND " + data[1] + " = '" + data[2] + "'";
         return db.query(query.toStdString());
     }
-    else if (dfsChanges.changeType == DfsStruct::Insert)
+    else if (dfsChanges.changeType == DfsStruct::Insert || dfsChanges.changeType == DfsStruct::Update)
     {
         DBRow row;
 
@@ -826,18 +826,23 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
             row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
         }
 
-        std::string query = db.prepareInsert(data[0].toStdString(), row);
-
         if (data.indexOf("message") != -1)
+        {
+            std::string query =
+                db.prepareInsert(data[0].toStdString(), row, dfsChanges.changeType == DfsStruct::Update);
             return db.insertWithData(query, data[data.indexOf("message") + 1]);
+        }
         else
-            return db.insert(data[0].toStdString(), row);
+        {
+            return dfsChanges.changeType == DfsStruct::Update ? db.replace(data[0].toStdString(), row)
+                                                              : db.insert(data[0].toStdString(), row);
+        }
     }
-    else if (dfsChanges.changeType == DfsStruct::Update)
-    {
-        // QByteArray query = "UPDATE " + data[0] + "SET ... WHERE " + data[1] + " = '" + data[2] + "';";
-        return false; // db.update(query.toStdString());
-    }
+    // else if (dfsChanges.changeType == DfsStruct::Update)
+    // {
+    //     // QByteArray query = "UPDATE " + data[0] + "SET ... WHERE " + data[1] + " = '" + data[2] + "';";
+    //     return false; // db.update(query.toStdString());
+    // }
 
     return false;
 }
@@ -1298,7 +1303,8 @@ void Dfs::updateFromNewStored(QString filePath)
             if (filePath.indexOf("/msg.stored") != -1 || filePath.indexOf("/chatinvite.stored") != -1)
             {
                 std::string d = row.at("message");
-                db.insertWithData(db.prepareInsert(table.toStdString(), row), QByteArray::fromStdString(d));
+                db.insertWithData(db.prepareInsert(table.toStdString(), row, false),
+                                  QByteArray::fromStdString(d));
             }
             else
             {
