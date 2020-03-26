@@ -205,7 +205,7 @@ namespace DataStorage {
           "data  TEXT                NOT NULL  );";
 
     static const std::string propertiesTableName = "Properties";
-    static const std::string usersDBAddition = "UserListDB";
+    static const std::string usersDBAddition = ".users";
     static const std::string usersSubscribedOnEventTable = "UserList";
     static const std::string textTableName = "Text";
     static const std::string attachTableName = "Attachments";
@@ -229,6 +229,12 @@ namespace DataStorage {
           ");";
 
     static const std::string userListPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + propertiesTableName
+        + " ("
+          "eventId TEXT NOT NULL"
+          ");";
+
+    static const std::string eventUserDbProperties = "CREATE TABLE IF NOT EXISTS "
         + usersSubscribedOnEventTable
         + " ("
           "userId   TEXT PRIMARY KEY NOT NULL,"
@@ -248,7 +254,6 @@ namespace DataStorage {
           "endEpoch     INTEGER NOT NULL,"
           "start        TEXT    NOT NULL,"
           "end          TEXT    NOT NULL,"
-          "usersDB      TEXT    NOT NULL,"
           "sign         TEXT    NOT NULL"
           ");";
 

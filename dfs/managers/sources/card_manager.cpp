@@ -109,7 +109,11 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
     const std::string currentPath =
         (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
         + DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
-    std::string section = QByteArray::fromStdString(file).right(2).toStdString() + "/";
+
+    QString fileStr = QString::fromStdString(file);
+    std::string section = fileStr.contains(".")
+        ? fileStr.mid(fileStr.indexOf(".") - 2, 2).toStdString() + "/"
+        : QByteArray::fromStdString(file).right(2).toStdString() + "/";
     if (int(type) > 100)
     {
         type = DfsStruct::Type(static_cast<int>(type) - 100);
