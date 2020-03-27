@@ -315,10 +315,20 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         else
         {
             stored = true;
-            QString range = QString("0:%1").arg(data.size());
+
+            QByteArray d = data;
+            if (data.isEmpty())
+            {
+                QFile file(dfsPath);
+                file.open(QFile::ReadOnly);
+                d = file.readAll();
+                file.close();
+            }
+
+            QString range = QString("0:%1").arg(d.size());
             QByteArray hash = Utils::calcKeccak(QByteArray::number(QRandomGenerator::global()->bounded(50000)
                                                                    + QDateTime::currentMSecsSinceEpoch()));
-            appendToStored(dfsPath, data, range, 3, userId, true, hash);
+            appendToStored(dfsPath, d, range, 3, userId, true, hash);
         }
     }
 
