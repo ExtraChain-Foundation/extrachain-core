@@ -641,7 +641,8 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
     cardFileChange.nextId = last["nextId"].c_str();
     cardFileChange.type = std::stoi(last["type"]);
     cardFileChange.sign = last["sign"].c_str();
-    sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
+    if (sender != nullptr)
+        sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
 
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath.toLatin1(), type, userId);

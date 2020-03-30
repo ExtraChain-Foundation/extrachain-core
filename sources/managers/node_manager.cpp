@@ -89,8 +89,8 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
     {
         QByteArray td = company.getKey()->sign("test");
         std::cout << company.getKey()->verify("test", td) << std::endl;
-        TMP::companyActorId = new QByteArray(company.getId().toByteArray());
-        actorIndex->setCompanyId(new QByteArray(company.getId().toByteArray()));
+        TMP::companyActorId = new QByteArray(company.getId().toActorId());
+        actorIndex->setCompanyId(new QByteArray(company.getId().toActorId()));
 
         QMap<BigNumber, BigNumber> tm;
         tm.insert(0, 0);
@@ -99,7 +99,20 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
 
         // TODO: as console argument
         if (created)
+        {
             emit generateSmartContract("1000", "Etalonium Coin", company.getId().toActorId(), "#fa4868");
+
+            QString companyId = *TMP::companyActorId;
+            DBConnector dbc(
+                (DfsStruct::ROOT_FOOLDER_NAME + "/" + companyId + "/" + DfsStruct::ACTOR_CARD_FILE)
+                    .toStdString());
+            dbc.createTable(Config::DataStorage::cardTableCreation);
+            dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
+            QString usernamesPath = QString("data/%1/services/usernames").arg(companyId);
+            DBConnector usernamesDB(usernamesPath.toStdString());
+            usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
+            dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
+        }
     }
 #endif
 }

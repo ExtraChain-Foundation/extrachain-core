@@ -145,6 +145,13 @@ namespace DataStorage {
     static const std::string cardDeletedTableCreation =
         "CREATE TABLE IF NOT EXISTS " + cardDeletedTableName + cardTableFields;
 
+    static const std::string userNameTableName = "Usernames";
+    static const std::string userNameTableCreation = "CREATE TABLE IF NOT EXISTS " + userNameTableName
+        + " ("
+          "actorId  TEXT PRIMARY KEY NOT NULL, "
+          "username TEXT             NOT NULL, "
+          "sign     TEXT             NOT NULL );";
+
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
