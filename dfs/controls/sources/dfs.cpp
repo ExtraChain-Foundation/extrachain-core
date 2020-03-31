@@ -315,10 +315,20 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         else
         {
             stored = true;
-            QString range = QString("0:%1").arg(data.size());
+
+            QByteArray d = data;
+            if (data.isEmpty())
+            {
+                QFile file(dfsPath);
+                file.open(QFile::ReadOnly);
+                d = file.readAll();
+                file.close();
+            }
+
+            QString range = QString("0:%1").arg(d.size());
             QByteArray hash = Utils::calcKeccak(QByteArray::number(QRandomGenerator::global()->bounded(50000)
                                                                    + QDateTime::currentMSecsSinceEpoch()));
-            appendToStored(dfsPath, data, range, 3, userId, true, hash);
+            appendToStored(dfsPath, d, range, 3, userId, true, hash);
         }
     }
 
@@ -631,7 +641,8 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
     cardFileChange.nextId = last["nextId"].c_str();
     cardFileChange.type = std::stoi(last["type"]);
     cardFileChange.sign = last["sign"].c_str();
-    sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
+    if (sender != nullptr)
+        sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
 
 #ifdef ETALONIUM_CLIENT
     emit usersChanges(dfsPath.toLatin1(), type, userId);

@@ -21,7 +21,7 @@
 #include "utils/bignumber.h"
 
 namespace Network {
-static QString serverIp = "51.68.181.53";
+static QString serverIp = "51.68.181.52";
 static const int build = 1500;
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
 static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
@@ -145,6 +145,13 @@ namespace DataStorage {
     static const std::string cardDeletedTableCreation =
         "CREATE TABLE IF NOT EXISTS " + cardDeletedTableName + cardTableFields;
 
+    static const std::string userNameTableName = "Usernames";
+    static const std::string userNameTableCreation = "CREATE TABLE IF NOT EXISTS " + userNameTableName
+        + " ("
+          "actorId  TEXT PRIMARY KEY NOT NULL, "
+          "username TEXT             NOT NULL, "
+          "sign     TEXT             NOT NULL );";
+
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
@@ -205,7 +212,7 @@ namespace DataStorage {
           "data  TEXT                NOT NULL  );";
 
     static const std::string propertiesTableName = "Properties";
-    static const std::string usersDBAddition = "UserListDB";
+    static const std::string usersDBAddition = ".users";
     static const std::string usersSubscribedOnEventTable = "UserList";
     static const std::string textTableName = "Text";
     static const std::string attachTableName = "Attachments";
@@ -229,11 +236,18 @@ namespace DataStorage {
           ");";
 
     static const std::string userListPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + propertiesTableName
+        + " ("
+          "eventId TEXT NOT NULL"
+          ");";
+
+    static const std::string eventUserDbProperties = "CREATE TABLE IF NOT EXISTS "
         + usersSubscribedOnEventTable
         + " ("
-          "userId   TEXT PRIMARY KEY NOT NULL,"
-          "sign     TEXT             NULL,    "
-          "approver TEXT             NULL     "
+          "userId       TEXT PRIMARY KEY NOT NULL,"
+          "sign         TEXT             NOT NULL,"
+          "approver     TEXT             NULL,    "
+          "approverSign TEXT             NULL     "
           ");";
 
     static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
@@ -248,7 +262,6 @@ namespace DataStorage {
           "endEpoch     INTEGER NOT NULL,"
           "start        TEXT    NOT NULL,"
           "end          TEXT    NOT NULL,"
-          "usersDB      TEXT    NOT NULL,"
           "sign         TEXT    NOT NULL"
           ");";
 
