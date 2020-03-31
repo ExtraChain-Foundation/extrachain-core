@@ -244,9 +244,10 @@ namespace DataStorage {
     static const std::string eventUserDbProperties = "CREATE TABLE IF NOT EXISTS "
         + usersSubscribedOnEventTable
         + " ("
-          "userId   TEXT PRIMARY KEY NOT NULL,"
-          "sign     TEXT             NULL,    "
-          "approver TEXT             NULL     "
+          "userId       TEXT PRIMARY KEY NOT NULL,"
+          "sign         TEXT             NOT NULL,"
+          "approver     TEXT             NULL,    "
+          "approverSign TEXT             NULL     "
           ");";
 
     static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
