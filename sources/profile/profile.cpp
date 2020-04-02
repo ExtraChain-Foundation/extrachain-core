@@ -205,11 +205,6 @@ qint16 Profile::country() const
     return qint16(value("country").toInt());
 }
 
-QString Profile::miniAvatar() const
-{
-    return value("miniAvatar");
-}
-
 QString Profile::bio() const
 {
     return value("bio");
@@ -437,12 +432,6 @@ void Profile::setBio(const QString &bio)
     setValue("bio", bio.toUtf8());
 }
 
-void Profile::setMiniAvatar(const QString &miniAvatar)
-{
-    setValue("miniAvatar", miniAvatar.toUtf8());
-    qDebug() << "miniAvatar" << miniAvatar;
-}
-
 void Profile::setUrl(const QString &url)
 {
     setValue("url", url.toUtf8());
@@ -592,11 +581,10 @@ QString Profile::fromListInt(const QList<int> &list)
 }
 
 //
-const QStringList Profile::fieldsCustomer = { "type",      "version",      "userId",    "firstName",
-                                              "lastName",  "registerDate", "birthday",  "gender",
-                                              "avatar",    "country",      "bio",       "url",
-                                              "urlName",   "facebook",     "instagram", "ethereum",
-                                              "miniAvatar" };
+const QStringList Profile::fieldsCustomer = { "type",     "version",      "userId",    "firstName",
+                                              "lastName", "registerDate", "birthday",  "gender",
+                                              "avatar",   "country",      "bio",       "url",
+                                              "urlName",  "facebook",     "instagram", "ethereum" };
 
 const QStringList Profile::fieldsModel = fieldsCustomer
     + QStringList({ "unit", "category", "body", "hair", "hairLength", "eye", "sizes", "ethnicity", "style",

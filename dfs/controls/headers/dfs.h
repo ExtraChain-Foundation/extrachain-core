@@ -79,7 +79,7 @@ signals:
 
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
-    void usersChanges(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
+    void fileAdded(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
     void fileChanged(QString path);
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void connectToServer();
@@ -97,6 +97,7 @@ public slots:
     void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);
     bool applyChanges(const DistFileSystem::DfsChanges &dfsChanges);
+    void applyReplace(QString userId, QString fileName, QString dfsFileName, DfsStruct::Type type);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
     void startDFS();

@@ -375,7 +375,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
     qDebug() << "Send root change" << cardFileChange.fileId << cardFileChange.type;
 
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(dfsPath, type, userId); // TODO
+    emit fileAdded(dfsPath, type, userId); // TODO
 #endif
 }
 
@@ -510,7 +510,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     this->dfsValidate(userId);
 
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
+    emit fileAdded(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
     if (type == DfsStruct::Type::Post && !path.contains(".stored"))
         emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewPost,
                          pathList.at(PathStruct::aId) + " " + pathList.at(PathStruct::name) });
@@ -645,7 +645,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
         sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
 
 #ifdef ETALONIUM_CLIENT
-    emit usersChanges(dfsPath.toLatin1(), type, userId);
+    emit fileAdded(dfsPath.toLatin1(), type, userId);
 #endif
 }
 
@@ -669,13 +669,13 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
         auto readed = file.read(DistFileSystem::dataSize);
 
         QByteArray newDataPart = data.mid(DistFileSystem::dataSize * pckg, DistFileSystem::dataSize);
-        qDebug() << "rea" << readed;
-        qDebug() << "new" << newDataPart;
-        qDebug() << "";
+        // qDebug() << "rea" << readed;
+        // qDebug() << "new" << newDataPart;
+        // qDebug() << "";
         if (readed != newDataPart)
         {
             pckgNums << QByteArray::number(pckg);
-            //            dfsChanges.range += " " + QByteArray::number(pckg);
+            // dfsChanges.range += " " + QByteArray::number(pckg);
             dfsChanges.data << newDataPart;
         }
 
@@ -701,7 +701,7 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
     pckgNums.clear();
 
     qDebug() << dfsChanges.range;
-    qDebug() << dfsChanges.data;
+    // qDebug() << dfsChanges.data;
 
     if (applyChanges(dfsChanges))
         sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
@@ -721,9 +721,7 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     dfsChanges.messHash = Utils::calcKeccak(
         QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
 
-    if (applyChanges(dfsChanges))
-    {
-    }
+    if (applyChanges(dfsChanges)) { }
     sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
 }
 
@@ -771,6 +769,18 @@ bool Dfs::applyChanges(const DistFileSystem::DfsChanges &dfsChanges)
     }
 
     return false;
+}
+
+void Dfs::applyReplace(QString userId, QString fileName, QString dfsFileName, DfsStruct::Type type)
+{
+    QByteArray data;
+    QFile f(fileName);
+    f.open(QFile::ReadOnly);
+    data = f.readAll();
+    f.close();
+    f.remove();
+
+    editData(userId, dfsFileName, type, data);
 }
 
 bool Dfs::applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges)
@@ -953,8 +963,8 @@ bool Dfs::dfsValidate(QByteArray userID)
     QString follower_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::FOLLOWER
         + DfsStruct::STORED_EXT;
     QString subscribe = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::SUBSCRIBE;
-    QString subscribe_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/"
-        + DfsStruct::ACTOR_CARD_FILE + DfsStruct::STORED_EXT;
+    QString subscribe_s = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/services/" + DfsStruct::SUBSCRIBE
+        + DfsStruct::STORED_EXT;
 
     if (!(actorIndex->hasActor(BigNumber(userID))))
     {
@@ -1004,6 +1014,9 @@ bool Dfs::dfsValidate(QByteArray userID)
             if (typeStr.empty())
                 typeStr = "0";
             int type = std::stoi(typeStr);
+
+            if (item["id"] == "avatar")
+                type = 106;
 
             fPath =
                 CardManager::buildPathForFile(userID.toStdString(), item["id"], DfsStruct::Type(type), false);
@@ -1120,6 +1133,7 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
 
     m_reqFiles.append({ QDateTime::currentDateTime().toMSecsSinceEpoch(), filePath });
     qDebug() << "Request file:" << filePath; // TODO: fix for company actor
+
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
     sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage, receiver);
@@ -1335,7 +1349,7 @@ void Dfs::updateFromNewStored(QString filePath)
         QFile::remove(notStored);
         QFile::rename(newStoredPath, filePath);
         QFile::rename(notStoredNew, notStored);
-        fileChanged(notStored);
+        emit fileChanged(notStored);
     }
 
     /*
