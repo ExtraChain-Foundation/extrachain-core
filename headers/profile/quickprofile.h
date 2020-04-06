@@ -14,19 +14,16 @@ struct QuickProfile
     Q_PROPERTY(QString firstName MEMBER firstName)
     Q_PROPERTY(QString lastName MEMBER lastName)
     Q_PROPERTY(QString avatar MEMBER avatar)
-    Q_PROPERTY(QString miniAvatar MEMBER miniAvatar)
 
 public:
     QString userId;
     QString firstName;
     QString lastName;
     QString avatar;
-    QString miniAvatar;
 
     operator QString() const // for QDebug
     {
-        return QString("first name: %1, last name: %2, avatar: %3, miniAvatar: %4")
-            .arg(firstName, lastName, avatar, miniAvatar);
+        return QString("first name: %1, last name: %2, avatar: %3").arg(firstName, lastName, avatar);
     }
 };
 

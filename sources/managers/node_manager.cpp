@@ -613,6 +613,7 @@ void NodeManager::connectUi()
     connect(chatManager, &ChatManager::send, dfs, &Dfs::save);
     connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
     connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
+    connect(uiController, &UiController::sendReplace, dfs, &Dfs::applyReplace);
     connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
         emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, value, data,
                                     rewrite);
@@ -661,7 +662,8 @@ void NodeManager::connectUi()
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
-    connect(dfs, &Dfs::usersChanges, uiController->getUiResolver(), &UIResolver::resolveMsg);
+    connect(dfs, &Dfs::fileAdded, uiController->getUiResolver(), &UIResolver::fileAdded);
+    connect(dfs, &Dfs::fileChanged, uiController->getUiResolver(), &UIResolver::fileChanged);
     connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
     connect(dfs, &Dfs::newNotify, notifyM, &NotificationManager::addNotify);
     connect(blockchain, &Blockchain::newNotify, notifyM, &NotificationManager::addNotify);
