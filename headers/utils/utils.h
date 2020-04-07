@@ -137,6 +137,7 @@ namespace DataStorage {
                                                "type    INT   NOT NULL, "
                                                "prevId  TEXT  NOT NULL, "
                                                "nextId  TEXT  NOT NULL, "
+                                               "version INT   NOT NULL, "
                                                "sign    TEXT  NOT NULL, "
                                                "PRIMARY KEY (id, type)"
                                                ");";
@@ -217,6 +218,7 @@ namespace DataStorage {
     static const std::string textTableName = "Text";
     static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
+    static const std::string commentsLikesTableName = "Likes";
     static const std::string likesTableName = "Likes";
     static const std::string savedPostsTableName = "Posts";
     static const std::string savedEventsTableName = "Events";
@@ -283,17 +285,26 @@ namespace DataStorage {
 
     static const std::string commentsTableCreation = "CREATE TABLE IF NOT EXISTS " + commentsTableName
         + " ("
-          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT, "
-          "sender     TEXT                     NOT NULL, "
-          "message    BLOB                     NOT NULL, "
-          "date       TEXT                     NOT NULL, "
-          "sign       TEXT                     NOT NULL  "
+          "commentId  TEXT  PRIMARY KEY  NOT NULL, "
+          "sender     TEXT               NOT NULL, "
+          "message    BLOB               NOT NULL, "
+          "date       TEXT               NOT NULL, "
+          "sub        TEXT               NULL, "
+          "sign       TEXT               NOT NULL  "
+          ");";
+    static const std::string commentsLikesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + commentsLikesTableName
+        + " ("
+          "commentId TEXT NOT NULL,"
+          "userId    TEXT NOT NULL,"
+          "sign      TEXT NOT NULL,"
+          "PRIMARY KEY (commentId, userId)"
           ");";
 
     static const std::string likesTableCreation = "CREATE TABLE IF NOT EXISTS " + likesTableName
         + " ("
-          "liker TEXT PRIMARY KEY NOT NULL,"
-          "sign  TEXT            NOT NULL);";
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign   TEXT            NOT NULL);";
 
     static const std::string savedPostsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedPostsTableName
         + " ("
