@@ -84,7 +84,6 @@ signals:
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void connectToServer();
     void networkCreated();
-    void newNotify(const notification ntf);
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
     void titleReceived(QString filePath);
 

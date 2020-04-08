@@ -523,9 +523,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
 #ifdef ETALONIUM_CLIENT
     emit fileAdded(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
-    if (type == DfsStruct::Type::Post && !path.contains(".stored"))
-        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewPost,
-                         pathList.at(PathStruct::aId) + " " + pathList.at(PathStruct::name) });
 #endif
 }
 

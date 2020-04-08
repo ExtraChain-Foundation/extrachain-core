@@ -675,7 +675,7 @@ static TxParam fromStringTxParam(QByteArray s)
 }
 } // namespace SearchEnum
 
-struct notification
+struct Notification
 {
     enum NotifyType
     {
@@ -684,6 +684,7 @@ struct notification
         ChatMsg,
         ChatInvite,
         NewPost,
+        NewEvent,
         NewFollower
     };
     long long time;

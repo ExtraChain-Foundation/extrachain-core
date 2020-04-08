@@ -45,8 +45,8 @@ Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
 Q_DECLARE_METATYPE(Network::DataStruct)
 Q_DECLARE_METATYPE(SubscribeController)
-Q_DECLARE_METATYPE(notification)
-Q_DECLARE_METATYPE(QList<notification>)
+Q_DECLARE_METATYPE(Notification)
+Q_DECLARE_METATYPE(QList<Notification>)
 
 #ifdef ETALONIUM_CLIENT
 Q_DECLARE_METATYPE(UiController*)
@@ -78,8 +78,8 @@ void registerMetaTypes()
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
     qRegisterMetaType<SubscribeController>();
-    qRegisterMetaType<notification>();
-    qRegisterMetaType<QList<notification>>();
+    qRegisterMetaType<Notification>();
+    qRegisterMetaType<QList<Notification>>();
 #ifdef ETALONIUM_CLIENT
     qRegisterMetaType<UiController*>();
 #endif

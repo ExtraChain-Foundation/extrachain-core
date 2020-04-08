@@ -1533,13 +1533,13 @@ void Blockchain::addBlockToBlockchain(Block block)
         if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
             && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
         {
-            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToUser,
+            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
         }
         else if (list.contains(tmp.getReceiver()) && !data.contains(Fee::FREEZE_TX)
                  && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
         {
-            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::TxToMe,
+            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToMe,
                              tmp.getSender().toByteArray() });
         }
     }
