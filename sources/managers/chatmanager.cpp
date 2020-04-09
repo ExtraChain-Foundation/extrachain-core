@@ -164,8 +164,8 @@ void ChatManager::parseInvite()
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
-        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::ChatInvite,
-                         owner + " " + chatId });
+        // emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::ChatInvite,
+        //                 owner + " " + chatId });
         requestChatList();
     }
 }
