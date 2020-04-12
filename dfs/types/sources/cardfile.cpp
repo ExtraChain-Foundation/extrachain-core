@@ -75,6 +75,7 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
     row.insert({ "type", std::to_string(type) });
     row.insert({ "prevId", prevId });
     row.insert({ "nextId", "-" });
+    row.insert({ "version", "1" });
     row.insert({ "sign", sign.toStdString() });
 
     QFile lastCacheFile(m_lastCacheName);

@@ -14,6 +14,8 @@
 static QMutex dbmutex;
 typedef std::unordered_map<std::string, std::string> DBRow;
 
+// TODO: while select, open check in query, normal insert, std::vector<DBColumn>
+
 class DBConnector
 {
 private:
@@ -23,25 +25,25 @@ private:
 
 public:
     DBConnector();
-    DBConnector(std::string name);
+    DBConnector(const std::string &name);
     ~DBConnector();
 
 public:
-    bool open(std::string name);
+    bool open(const std::string &name);
     bool close();
     std::vector<DBRow> select(std::string query);
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
-    bool insert(std::string tableName, DBRow data);
-    bool replace(std::string tableName, DBRow data);
-    std::string prepareInsert(std::string tableName, DBRow data, bool isReplace);
-    bool update(std::string query);
-    bool createTable(std::string query);
-    bool deleteRow(std::string tableName, std::string nameColumn, std::string query);
-    bool deleteTable(std::string name);
-    bool tableExists(std::string table);
-    bool dropTable(std::string table);
-    int count(std::string table);
-    bool insertWithData(std::string query, QByteArray data);
+    bool insert(const std::string &tableName, const DBRow &data);
+    bool replace(const std::string &tableName, const DBRow &data);
+    std::string prepareInsert(const std::string &tableName, const DBRow &data, bool isReplace);
+    bool update(const std::string &query);
+    bool createTable(const std::string &query);
+    bool deleteRow(const std::string &tableName, const std::string &nameColumn, const std::string &query);
+    bool deleteTable(const std::string &name);
+    bool tableExists(const std::string &table);
+    bool dropTable(const std::string &table);
+    int count(const std::string &table, const std::string &where = "");
+    bool insertWithData(const std::string &query, const QByteArray &data);
     std::string file() const;
     bool isOpen() const;
     std::vector<std::string> tableNames();

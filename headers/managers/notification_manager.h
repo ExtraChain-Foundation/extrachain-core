@@ -30,16 +30,16 @@ public:
 
 private:
     void loadNotificationFromDB();
-    void sendToNotify(const notification newNtf);
+    void sendToNotify(const Notification newNtf);
     void newNotify(const QString &msg, const QByteArray &user);
 
 public slots:
-    void addNotify(const notification newNtf);
+    void addNotify(const Notification newNtf);
     void setCurrentID(const QByteArray id);
     void process();
 signals:
-    void allNotifyToUI(QList<notification> ntf);
-    void newNotifyToUI(notification ntf);
+    void allNotifyToUI(QList<Notification> ntf);
+    void newNotifyToUI(Notification ntf);
     void getCurrentID();
     void finished();
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,

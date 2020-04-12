@@ -164,8 +164,8 @@ void ChatManager::parseInvite()
 
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Delete,
                     { "Invite", "chatId", chatId });
-        emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatInvite,
-                         owner + " " + chatId });
+        // emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::ChatInvite,
+        //                 owner + " " + chatId });
         requestChatList();
     }
 }
@@ -427,7 +427,7 @@ void ChatManager::changes(QString path)
             return;
         QByteArray userId = res[0].at("subscriber").c_str();
         emit newNotify(
-            { QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::NewFollower, userId });
+            { QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::NewFollower, userId });
     }
     else if (path.contains("chat"))
     {
@@ -450,7 +450,7 @@ void ChatManager::changes(QString path)
             return;
         Chat tmp(this, chatID.toUtf8(), _actorIndex, _accController);
         if (userId != _currentActorId)
-            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), notification::NotifyType::ChatMsg,
+            emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::ChatMsg,
                              userId + " " + chatID.toUtf8() });
 
         auto allMessage = tmp.getAllMessages();

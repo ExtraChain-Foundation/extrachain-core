@@ -10,7 +10,7 @@ DBConnector::DBConnector()
     db = nullptr;
 }
 
-DBConnector::DBConnector(std::string name)
+DBConnector::DBConnector(const std::string &name)
 {
     this->open(name);
 }
@@ -26,7 +26,7 @@ DBConnector::~DBConnector()
     // close();
 }
 
-bool DBConnector::open(std::string name)
+bool DBConnector::open(const std::string &name)
 {
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc)
@@ -131,7 +131,7 @@ std::vector<DBRow> DBConnector::selectAll(std::string table, int limit)
     return select(query);
 }
 
-bool DBConnector::insert(std::string tableName, DBRow data)
+bool DBConnector::insert(const std::string &tableName, const DBRow &data)
 {
     if (data.size() == 0)
     {
@@ -142,7 +142,7 @@ bool DBConnector::insert(std::string tableName, DBRow data)
     return this->query(query);
 }
 
-bool DBConnector::replace(std::string tableName, DBRow data)
+bool DBConnector::replace(const std::string &tableName, const DBRow &data)
 {
     if (data.size() == 0)
     {
@@ -154,7 +154,7 @@ bool DBConnector::replace(std::string tableName, DBRow data)
     return this->query(query);
 }
 
-std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool isReplace)
+std::string DBConnector::prepareInsert(const std::string &tableName, const DBRow &data, bool isReplace)
 {
     std::string type = isReplace ? "REPLACE" : "IGNORE";
     std::string query = "INSERT OR " + type + " INTO ";
@@ -162,7 +162,7 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool i
     std::string f;
     std::string v;
     // for(auto [column, value] : data)
-    for (DBRow::iterator it = data.begin(); it != data.end(); ++it)
+    for (auto it = data.cbegin(); it != data.cend(); ++it)
     {
         std::string s = it->first;
         s.insert(0, "'");
@@ -196,49 +196,54 @@ std::string DBConnector::prepareInsert(std::string tableName, DBRow data, bool i
     return query;
 }
 
-bool DBConnector::update(std::string query)
+bool DBConnector::update(const std::string &query)
 {
     return this->query(query);
 }
 
-bool DBConnector::createTable(std::string query)
+bool DBConnector::createTable(const std::string &query)
 {
     return this->query(query);
 }
 
-bool DBConnector::deleteRow(std::string tableName, std::string nameColumn, std::string query)
+bool DBConnector::deleteRow(const std::string &tableName, const std::string &nameColumn,
+                            const std::string &query)
 {
     std::string _query = "DELETE FROM " + tableName;
     _query.append(" WHERE " + nameColumn + " = '" + query + "'");
     return this->query(_query);
 }
 
-bool DBConnector::deleteTable(std::string name)
+bool DBConnector::deleteTable(const std::string &name)
 {
     std::string query = "DROP TABLE " + name + ";";
     return this->query(query);
 }
 
-bool DBConnector::tableExists(std::string table)
+bool DBConnector::tableExists(const std::string &table)
 {
     std::string query = "SELECT name FROM sqlite_master WHERE type='table' AND name='" + table + "';";
     return select(query).size() > 0;
 }
 
-bool DBConnector::dropTable(std::string table)
+bool DBConnector::dropTable(const std::string &table)
 {
     return query("DROP TABLE IF EXISTS " + table);
 }
 
-int DBConnector::count(std::string table)
+int DBConnector::count(const std::string &table, const std::string &where)
 {
-    auto res = select("SELECT COUNT(*) FROM " + table);
+    std::string query = "SELECT COUNT(*) FROM " + table;
+    if (!where.empty())
+        query += " WHERE " + where;
+
+    auto res = select(query);
     if (res.empty())
         return 0;
     return std::stoi(res[0]["COUNT(*)"]);
 }
 
-bool DBConnector::insertWithData(std::string query, QByteArray data)
+bool DBConnector::insertWithData(const std::string &query, const QByteArray &data)
 {
     int rc;
     sqlite3_stmt *stmt = NULL;

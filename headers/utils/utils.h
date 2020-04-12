@@ -137,6 +137,7 @@ namespace DataStorage {
                                                "type    INT   NOT NULL, "
                                                "prevId  TEXT  NOT NULL, "
                                                "nextId  TEXT  NOT NULL, "
+                                               "version INT   NOT NULL, "
                                                "sign    TEXT  NOT NULL, "
                                                "PRIMARY KEY (id, type)"
                                                ");";
@@ -167,23 +168,23 @@ namespace DataStorage {
     static const std::string chatMessageTableName = "Chat";
     static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
         + " ("
-          "messId   TEXT PRIMARY KEY  NOT NULL, "
-          "userId   TEXT              NOT NULL, "
-          "message  BLOB              NOT NULL, "
-          "type     TEXT              NOT NULL, "
-          "session  TEXT              NOT NULL, "
-          "date     TEXT              NOT NULL );";
+          "messId   TEXT PRIMARY KEY NOT NULL, "
+          "userId   TEXT             NOT NULL, "
+          "message  BLOB             NOT NULL, "
+          "type     TEXT             NOT NULL, "
+          "session  TEXT             NOT NULL, "
+          "date     TEXT             NOT NULL );";
 
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
         + " ("
-          "hash  TEXT PRIMARY KEY NOT NULL, "
-          "data  BLOB             NOT NULL, "
-          "range TEXT             NOT NULL, "
-          "type  INT              NOT NULL, "
-          "uid   TEXT             NOT NULL, "
-          "sign  BLOB             NOT NULL, "
-          "prevHash TEXT          NOT NULL);";
+          "hash     TEXT PRIMARY KEY NOT NULL, "
+          "data     BLOB             NOT NULL, "
+          "range    TEXT             NOT NULL, "
+          "type     INT              NOT NULL, "
+          "uid      TEXT             NOT NULL, "
+          "sign     BLOB             NOT NULL, "
+          "prevHash TEXT             NOT NULL);";
 
     static const std::string subscribeFollowerTableName = "Subscribers";
     static const std::string tableFollowerCreation = "CREATE TABLE IF NOT EXISTS "
@@ -213,10 +214,11 @@ namespace DataStorage {
 
     static const std::string propertiesTableName = "Properties";
     static const std::string usersDBAddition = ".users";
-    static const std::string usersSubscribedOnEventTable = "UserList";
+    static const std::string usersSubscribedOnEventTable = "Users";
     static const std::string textTableName = "Text";
     static const std::string attachTableName = "Attachments";
     static const std::string commentsTableName = "Comments";
+    static const std::string commentsLikesTableName = "Likes";
     static const std::string likesTableName = "Likes";
     static const std::string savedPostsTableName = "Posts";
     static const std::string savedEventsTableName = "Events";
@@ -245,9 +247,9 @@ namespace DataStorage {
         + usersSubscribedOnEventTable
         + " ("
           "userId       TEXT PRIMARY KEY NOT NULL,"
-          "sign         TEXT             NOT NULL,"
-          "approver     TEXT             NULL,    "
-          "approverSign TEXT             NULL     "
+          "sign         TEXT                 NULL,"
+          "approver     TEXT                 NULL,"
+          "approverSign TEXT                 NULL "
           ");";
 
     static const std::string eventPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS "
@@ -283,17 +285,26 @@ namespace DataStorage {
 
     static const std::string commentsTableCreation = "CREATE TABLE IF NOT EXISTS " + commentsTableName
         + " ("
-          "commentId  INTEGER PRIMARY KEY AUTOINCREMENT, "
-          "sender     TEXT                     NOT NULL, "
-          "message    BLOB                     NOT NULL, "
-          "date       TEXT                     NOT NULL, "
-          "sign       TEXT                     NOT NULL  "
+          "commentId  TEXT  PRIMARY KEY  NOT NULL, "
+          "sender     TEXT               NOT NULL, "
+          "message    BLOB               NOT NULL, "
+          "date       TEXT               NOT NULL, "
+          "sub        TEXT               NULL, "
+          "sign       TEXT               NOT NULL  "
+          ");";
+    static const std::string commentsLikesTableCreation = "CREATE TABLE IF NOT EXISTS "
+        + commentsLikesTableName
+        + " ("
+          "commentId TEXT NOT NULL,"
+          "userId    TEXT NOT NULL,"
+          "sign      TEXT NOT NULL,"
+          "PRIMARY KEY (commentId, userId)"
           ");";
 
     static const std::string likesTableCreation = "CREATE TABLE IF NOT EXISTS " + likesTableName
         + " ("
-          "liker TEXT PRIMARY KEY NOT NULL,"
-          "sign  TEXT            NOT NULL);";
+          "userId TEXT PRIMARY KEY NOT NULL,"
+          "sign   TEXT            NOT NULL);";
 
     static const std::string savedPostsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedPostsTableName
         + " ("
@@ -303,7 +314,7 @@ namespace DataStorage {
           ");";
     static const std::string likedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
         + " ("
-          "user TEXT NOT NULL,"
+          "user  TEXT NOT NULL,"
           "event TEXT NOT NULL,"
           "PRIMARY KEY (user, event)"
           ");";
@@ -664,7 +675,7 @@ static TxParam fromStringTxParam(QByteArray s)
 }
 } // namespace SearchEnum
 
-struct notification
+struct Notification
 {
     enum NotifyType
     {
@@ -673,6 +684,7 @@ struct notification
         ChatMsg,
         ChatInvite,
         NewPost,
+        NewEvent,
         NewFollower
     };
     long long time;
