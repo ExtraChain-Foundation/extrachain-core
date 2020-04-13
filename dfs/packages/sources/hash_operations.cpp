@@ -90,7 +90,7 @@ const QList<QByteArray> DistFileSystem::CardFileChange::serializedParams() const
 {
     QList<QByteArray> list;
     list << QByteArray::number(key) << actorId << fileId << prevId << nextId << QByteArray::number(type)
-         << sign;
+         << QByteArray::number(version) << sign;
     return list;
 }
 
@@ -104,6 +104,7 @@ void DistFileSystem::CardFileChange::operator=(QList<QByteArray> &list)
         prevId = list.takeFirst();
         nextId = list.takeFirst();
         type = list.takeFirst().toInt();
+        version = list.takeFirst().toInt();
         sign = list.takeFirst();
     }
     else
@@ -120,7 +121,7 @@ void DistFileSystem::CardFileChange::operator=(QByteArray &serialized)
 bool DistFileSystem::CardFileChange::isEmpty() const
 {
     return key == -1 || actorId.isEmpty() || fileId.isEmpty() || prevId.isEmpty() || nextId.isEmpty()
-        || type == -1 || sign.isEmpty();
+        || type == -1 || version == -1 || sign.isEmpty();
 }
 
 short DistFileSystem::CardFileChange::getFieldsCount() const

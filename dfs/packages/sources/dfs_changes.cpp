@@ -5,7 +5,8 @@ const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const
     QList<QByteArray> list;
 
     list << filePath.toUtf8() << Serialization::universalSerialize(data, DistFileSystem::fieldsSize) << range
-         << QByteArray::number(changeType) << userId << signature << messHash;
+         << QByteArray::number(changeType) << userId << signature << messHash
+         << QByteArray::number(fileVersion);
 
     return list;
 }
@@ -19,6 +20,7 @@ void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list)
     userId = list.takeFirst();
     signature = list.takeFirst();
     messHash = list.takeFirst();
+    fileVersion = list.takeFirst().toInt();
 }
 
 void DistFileSystem::DfsChanges::operator=(QByteArray &serialized)
@@ -29,7 +31,7 @@ void DistFileSystem::DfsChanges::operator=(QByteArray &serialized)
 bool DistFileSystem::DfsChanges::isEmpty() const
 {
     return filePath.isEmpty() || data.isEmpty() || range.isEmpty() || changeType == -1 || userId.isEmpty()
-        || signature.isEmpty() || messHash.isEmpty();
+        || signature.isEmpty() || messHash.isEmpty() || fileVersion == -1;
 }
 
 short DistFileSystem::DfsChanges::getFieldsCount() const

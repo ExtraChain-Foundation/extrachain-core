@@ -3,7 +3,7 @@
 #include <QUrl>
 
 std::vector<std::string> CardManager::getFilesByType(const std::string &userId, DfsStruct::Type type)
-{
+{ // ignore "."?
     DBConnector dbConnect;
 
     if (!QFile::exists(pathToRoot(userId).c_str()))
@@ -153,7 +153,65 @@ QString CardManager::cutPath(QString fullPath)
     type = type.left(type.indexOf("/"));
     // qDebug() << type;
 
+    if (fullPath.contains(".comments") || fullPath.contains(".likes"))
+    {
+        hasSection = false;
+    }
+
     return fullPath.mid(hasSection ? fromSection : from);
+}
+
+int CardManager::dfsVersion(QString path)
+{
+    using namespace DfsStruct;
+    QString name = cutPath(path);
+    DfsStruct::Type type = getTypeByName(path);
+
+    switch (type)
+    {
+    case DfsStruct::Type::Post:
+        if (path.contains(".comments"))
+            return dfsVersions[DfsVersionType::PostCommentsVersion];
+        else if (path.contains(".likes"))
+            return dfsVersions[DfsVersionType::PostLikesVersion];
+        else
+            return dfsVersions[DfsVersionType::PostVersion];
+        break;
+    case DfsStruct::Type::Event:
+        if (path.contains(".comments"))
+            return dfsVersions[DfsVersionType::EventCommentsVersion];
+        else if (path.contains(".likes"))
+            return dfsVersions[DfsVersionType::EventLikesVersion];
+        else
+            return dfsVersions[DfsVersionType::EventVersion];
+        break;
+    case DfsStruct::Type::Private:
+        if (path == "chats")
+            return dfsVersions[DfsVersionType::PrivateChats];
+        else if (path == "events")
+            return dfsVersions[DfsVersionType::PrivateEvents];
+        else if (path == "likes")
+            return dfsVersions[DfsVersionType::PrivateLikes];
+        else if (path == "notifications")
+            return dfsVersions[DfsVersionType::PrivateNotifications];
+        else if (path == "saved")
+            return dfsVersions[DfsVersionType::PrivateSaved];
+        break;
+    case DfsStruct::Type::Service:
+        if (path == "chatinvite")
+            return dfsVersions[DfsVersionType::ServiceChatInvite];
+        else if (path == "events")
+            return dfsVersions[DfsVersionType::ServiceEvents];
+        else if (path == "follower")
+            return dfsVersions[DfsVersionType::ServiceFollower];
+        else if (path == "subscribe")
+            return dfsVersions[DfsVersionType::ServiceSubscribe];
+        break;
+    default:
+        return 0;
+    }
+
+    return 0;
 }
 
 CardManager::CardManager()
