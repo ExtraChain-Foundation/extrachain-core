@@ -15,6 +15,7 @@ void FileUpdaterManager::checkAllFiles()
     QStringList listUsers = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (const auto userId : listUsers)
     {
+        // TODO: check version
         // Chats
         {
             QString folder = "data/" + userId + "/chats/";
@@ -154,6 +155,7 @@ void FileUpdaterManager::sendEditDB(const QByteArray &filePath, const QByteArray
                                     const QString &userId, const QString &nameFile,
                                     const DfsStruct::Type &type, const QByteArrayList &listProve)
 {
+    // TODO: maybe add type new column
     if (QFile().exists(filePath))
     {
         DBConnector db(filePath.toStdString());
@@ -169,20 +171,15 @@ void FileUpdaterManager::sendEditDB(const QByteArray &filePath, const QByteArray
                 {
                     if (!listProve.contains(tmp))
                     {
-                        emit editDB(
-                            userId, nameFile, type,
-                            DfsStruct::ChangeType::Delete, // TODO: add DfsStruct::ChangeType::deleteRow + add
-                                                           // in editSql()
-                            { nameTable, tmp });
+                        emit editDB(userId, nameFile, type, DfsStruct::ChangeType::RemoveColumn,
+                                    { nameTable, tmp });
                     }
                 }
                 for (const auto &tmp : listProve)
                 {
                     if (!listExist.contains(tmp))
                     {
-                        emit editDB(userId, nameFile, type,
-                                    DfsStruct::ChangeType::Insert, // TODO: DfsStruct::ChangeType::AddRow(with
-                                                                   // type?) + add in editSql()
+                        emit editDB(userId, nameFile, type, DfsStruct::ChangeType::NewColumn,
                                     { nameTable, tmp });
                     }
                 }
@@ -194,4 +191,23 @@ void FileUpdaterManager::sendEditDB(const QByteArray &filePath, const QByteArray
 
 void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
 {
+}
+
+void FileUpdaterManager::checkRoot(const QString &userId, const QString &ver)
+{
+
+    QString folder = "data/" + userId + "/root";
+    DBConnector db(folder.toStdString());
+    if (db.open("Items"))
+    {
+        auto res = db.select("SELECT * FROM Items WHERE version = '" + ver.toStdString() + "'");
+        QByteArrayList list;
+        for (auto &tmp : res)
+        {
+            list.append(tmp["type"].c_str());
+            list.append(tmp["id"].c_str());
+        }
+        // editSomeFiles(userId, list);
+    }
+    db.close();
 }

@@ -20,6 +20,7 @@ public:
 public:
     void checkAllFiles();
     void checkUserFiles(const QByteArray &userId);
+    void checkRoot(const QString &userId, const QString &ver);
 
 public slots:
     //    void process();
