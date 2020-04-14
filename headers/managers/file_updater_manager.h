@@ -20,6 +20,7 @@ public:
 public:
     void checkAllFiles();
     void checkUserFiles(const QByteArray &userId);
+    void verifyMyFiles(const QByteArray &userId);
     void checkRoot(const QString &userId, const QString &ver);
 
 public slots:
@@ -28,11 +29,14 @@ public slots:
 signals:
     void editDB(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                 QByteArrayList sqlChanges);
+    void sendGetNewVersFile(const QByteArray &filePath);
     //    void finished();
 
 private:
     void sendEditDB(const QByteArray &filePath, const QByteArray &nameTable, const QString &userId,
                     const QString &nameFile, const DfsStruct::Type &type, const QByteArrayList &listProve);
+    void checkVersionFile(const QByteArray &filePath, const QByteArray &nameTable,
+                          const QByteArrayList &listVerify);
 
     // --DFS--
     // Card Files
