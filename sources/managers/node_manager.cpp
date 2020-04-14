@@ -63,8 +63,8 @@ NodeManager::NodeManager()
 #ifdef ETALONIUM_CLIENT
     Utils::checkMemoryFree();
 #endif
-    FileUpdaterManager fl;
-    fl.verifyMyFiles("02c9b394cf3785389f82");
+    // FileUpdaterManager fl;
+    // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
 
 void NodeManager::createCompanyActor(const QString &email, const QString &password)

@@ -5,7 +5,7 @@ const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const
     QList<QByteArray> list;
 
     list << filePath.toUtf8() << Serialization::universalSerialize(data, DistFileSystem::fieldsSize) << range
-         << QByteArray::number(changeType) << userId << signature << messHash
+         << QByteArray::number(changeType) << userId << signature << messHash << prevHash
          << QByteArray::number(fileVersion);
 
     return list;
@@ -20,6 +20,7 @@ void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list)
     userId = list.takeFirst();
     signature = list.takeFirst();
     messHash = list.takeFirst();
+    prevHash = list.takeFirst();
     fileVersion = list.takeFirst().toInt();
 }
 
@@ -48,4 +49,16 @@ void DistFileSystem::DfsChanges::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized, DistFileSystem::fieldsSize);
     operator=(l);
+}
+
+QByteArray DistFileSystem::DfsChanges::prepareSign()
+{
+    QList<QByteArray> list;
+    list << filePath.toUtf8() << Serialization::universalSerialize(data, DistFileSystem::fieldsSize) << range
+         << QByteArray::number(changeType) << userId << messHash << prevHash
+         << QByteArray::number(fileVersion);
+    // qDebug() << "prepareSign" << list;
+    QByteArray keccak =
+        Utils::calcKeccak(Serialization::universalSerialize(list, DistFileSystem::fieldsSize));
+    return keccak;
 }

@@ -8,7 +8,7 @@
 namespace DistFileSystem {
 struct DfsChanges : Messages::ISmallMessage
 {
-    const short FIELDS_COUNT = 8;
+    const short FIELDS_COUNT = 9;
 
     QString filePath;
 
@@ -18,6 +18,7 @@ struct DfsChanges : Messages::ISmallMessage
     QByteArray userId;
     QByteArray signature;
     QByteArray messHash;
+    QByteArray prevHash;
     int fileVersion = -1;
 
     const QList<QByteArray> serializedParams() const;
@@ -29,6 +30,7 @@ public:
     short getFieldsCount() const override;
     QByteArray serialize() const override;
     void deserialize(const QByteArray &serialized) override;
+    QByteArray prepareSign();
 };
 }
 
