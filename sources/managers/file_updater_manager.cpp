@@ -275,7 +275,7 @@ void FileUpdaterManager::sendEditDB(const QByteArray &filePath, const QByteArray
     if (QFile().exists(filePath))
     {
         DBConnector db;
-        if (db.open(nameTable.toStdString()))
+        if (db.open(filePath.toStdString()))
         {
             std::vector<DBRow> res = db.select("PRAGMA table_info('" + nameTable.toStdString() + "')");
             if (res.size() != 0)
@@ -311,7 +311,7 @@ void FileUpdaterManager::checkVersionFile(const QByteArray &filePath, const QByt
     if (QFile().exists(filePath))
     {
         DBConnector db;
-        if (db.open(nameTable.toStdString()))
+        if (db.open(filePath.toStdString()))
         {
             std::vector<DBRow> res = db.select("PRAGMA table_info('" + nameTable.toStdString() + "')");
             if (res.size() != 0)
