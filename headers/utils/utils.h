@@ -182,7 +182,7 @@ namespace DataStorage {
           "data      BLOB             NOT NULL, "
           "range     TEXT             NOT NULL, "
           "type      INT              NOT NULL, "
-          "uid       TEXT             NOT NULL, "
+          "userId    TEXT             NOT NULL, "
           "version   INT              NOT NULL, "
           "prevHash  TEXT             NOT NULL,"
           "sign      BLOB             NOT NULL"

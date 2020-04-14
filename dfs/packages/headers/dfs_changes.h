@@ -16,7 +16,7 @@ struct DfsChanges : Messages::ISmallMessage
     QByteArray range;
     int changeType = -1;
     QByteArray userId;
-    QByteArray signature;
+    QByteArray sign;
     QByteArray messHash;
     QByteArray prevHash;
     int fileVersion = -1;

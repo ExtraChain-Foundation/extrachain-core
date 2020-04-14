@@ -343,7 +343,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.signature = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
 
             appendToStored(dfsChanges, true);
         }
@@ -644,7 +644,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.signature = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
 
@@ -767,8 +767,9 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
     {
         bool verify = actorIndex->getActor(dfsChanges.userId)
                           .getKey()
-                          ->verify(dfsChanges.prepareSign(), dfsChanges.signature);
-        qDebug() << "DfsChanges Verify applyChanges:" << verify << dfsChanges.prepareSign() << dfsChanges.signature;
+                          ->verify(dfsChanges.prepareSign(), dfsChanges.sign);
+        qDebug() << "DfsChanges Verify applyChanges:" << verify << dfsChanges.prepareSign()
+                 << dfsChanges.sign;
     }
 
     int type = dfsChanges.changeType;
@@ -1270,14 +1271,14 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
         if (!res.size())
             return false;
         dfsChanges.prevHash = QByteArray::fromStdString(res[0]["hash"]);
-        dfsChanges.signature = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
+        dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
     }
 
-    QByteArray query("INSERT OR IGNORE INTO Stored ('version', 'hash', 'sign', 'type', 'uid', 'range', "
+    QByteArray query("INSERT OR IGNORE INTO Stored ('version', 'hash', 'sign', 'type', 'userId', 'range', "
                      "'prevHash', 'data' "
                      ") VALUES ('"
                      + QByteArray::number(dfsChanges.fileVersion) + "', '" + dfsChanges.messHash + "', '"
-                     + dfsChanges.signature + "', '" + QByteArray::number(dfsChanges.changeType) + "', '"
+                     + dfsChanges.sign + "', '" + QByteArray::number(dfsChanges.changeType) + "', '"
                      + dfsChanges.userId + "', '" + dfsChanges.range + "', '" + dfsChanges.prevHash
                      + "', ?);");
 
@@ -1371,7 +1372,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
             QByteArray data = QByteArray::fromStdString(stored.at("data"));
             QByteArray range = QByteArray::fromStdString(stored.at("range"));
-            QByteArray userId = stored.at("uid").c_str();
+            QByteArray userId = stored.at("userId").c_str();
 
             switch (type)
             {

@@ -46,7 +46,7 @@ private:
     const QByteArrayList chatUser { "userId" };
     const QByteArrayList chatMessage { "messId", "userId", "message", "type", "session", "date" };
     // Stored Files
-    const QByteArrayList stored { "hash", "data", "range", "type", "uid", "sign", "prevHash" };
+    const QByteArrayList stored { "hash", "data", "range", "type", "userId", "sign", "prevHash" };
     // Service Files
     const QByteArrayList subscriptions { "subscription" }; // ?
     const QByteArrayList subscriber { "subscriber", "sign" };
