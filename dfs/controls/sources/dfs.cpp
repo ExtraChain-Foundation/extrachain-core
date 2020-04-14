@@ -1293,7 +1293,6 @@ bool Dfs::appendToStored(const DistFileSystem::DfsChanges &dfsChanges, bool init
         QString fileId = CardManager::cutPath(dfsChanges.filePath);
         std::string query = "UPDATE " + Config::DataStorage::cardTableName + " SET version = '" + version
             + "' WHERE id = '" + fileId.toStdString() + "' AND version < " + version;
-        qDebug() << "ASDASDASD" << query.c_str();
         queryRes2 = db.update(query);
     }
 

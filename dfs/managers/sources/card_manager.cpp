@@ -170,42 +170,50 @@ int CardManager::dfsVersion(QString path)
     switch (type)
     {
     case DfsStruct::Type::Post:
-        if (path.contains(".comments"))
+        if (name.contains(".comments"))
             return dfsVersions[DfsVersionType::PostCommentsVersion];
-        else if (path.contains(".likes"))
+        else if (name.contains(".likes"))
             return dfsVersions[DfsVersionType::PostLikesVersion];
         else
             return dfsVersions[DfsVersionType::PostVersion];
         break;
     case DfsStruct::Type::Event:
-        if (path.contains(".comments"))
+        if (name.contains(".comments"))
             return dfsVersions[DfsVersionType::EventCommentsVersion];
-        else if (path.contains(".likes"))
+        else if (name.contains(".likes"))
             return dfsVersions[DfsVersionType::EventLikesVersion];
+        else if (name.contains(".users"))
+            return dfsVersions[DfsVersionType::EventUsersVersion];
         else
             return dfsVersions[DfsVersionType::EventVersion];
         break;
     case DfsStruct::Type::Private:
-        if (path == "chats")
+        if (name == "chats")
             return dfsVersions[DfsVersionType::PrivateChats];
-        else if (path == "events")
+        else if (name == "events")
             return dfsVersions[DfsVersionType::PrivateEvents];
-        else if (path == "likes")
+        else if (name == "likes")
             return dfsVersions[DfsVersionType::PrivateLikes];
-        else if (path == "notifications")
+        else if (name == "notifications")
             return dfsVersions[DfsVersionType::PrivateNotifications];
-        else if (path == "saved")
+        else if (name == "saved")
             return dfsVersions[DfsVersionType::PrivateSaved];
         break;
     case DfsStruct::Type::Service:
-        if (path == "chatinvite")
+        if (name == "chatinvite")
             return dfsVersions[DfsVersionType::ServiceChatInvite];
-        else if (path == "events")
+        else if (name == "events")
             return dfsVersions[DfsVersionType::ServiceEvents];
-        else if (path == "follower")
+        else if (name == "follower")
             return dfsVersions[DfsVersionType::ServiceFollower];
-        else if (path == "subscribe")
+        else if (name == "subscribe")
             return dfsVersions[DfsVersionType::ServiceSubscribe];
+        break;
+    case DfsStruct::Type::Chat:
+        if (name.contains("/msg"))
+            return dfsVersions[DfsVersionType::ChatMsg];
+        else if (name.contains("/users"))
+            return dfsVersions[DfsVersionType::ChatUsers];
         break;
     default:
         return 0;
