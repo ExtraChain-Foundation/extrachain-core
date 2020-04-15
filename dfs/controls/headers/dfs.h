@@ -95,7 +95,7 @@ public slots:
     void editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data);
     void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                          QByteArrayList sqlChanges);
-    bool applyChanges(const DistFileSystem::DfsChanges &dfsChanges);
+    bool applyChanges(DistFileSystem::DfsChanges &dfsChanges);
     void applyReplace(QString userId, QString fileName, QString dfsFileName, DfsStruct::Type type);
     // void appendData(QString userId, QString fileName, QByteArray data);
     void process();
@@ -110,7 +110,7 @@ public slots:
 private:
     QByteArray buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type);
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
-    bool appendToStored(const DistFileSystem::DfsChanges &dfsChanges, bool init);
+    bool appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init);
     void updateFromNewStored(QString filePath);
     bool applyChangesBytes(const DistFileSystem::DfsChanges &dfsChanges);
     bool applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges);

@@ -99,7 +99,8 @@ void Dfs::responseRequestCardPath(const DistFileSystem::RequestCardPart &request
     for (auto row : data)
     {
         res << (QByteArrayList() << row["key"].c_str() << row["id"].c_str() << row["type"].c_str()
-                                 << row["prevId"].c_str() << row["nextId"].c_str() << row["sign"].c_str())
+                                 << row["prevId"].c_str() << row["nextId"].c_str() << row["version"].c_str()
+                                 << row["sign"].c_str())
                    .join(' ');
     }
 
@@ -137,11 +138,13 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
         int networkType = list[2].toInt();
         QByteArray networkPrevId = list[3];
         QByteArray networkNextId = list[4];
-        QByteArray networkSign = list[5];
+        QByteArray networkVersion = list[5];
+        QByteArray networkSign = list[6];
 
         DBRow row { { "key", std::to_string(networkKey) },     { "id", networkFileId.toStdString() },
                     { "type", std::to_string(networkType) },   { "prevId", networkPrevId.toStdString() },
-                    { "nextId", networkNextId.toStdString() }, { "sign", networkSign.toStdString() } };
+                    { "nextId", networkNextId.toStdString() }, { "version", networkVersion.toStdString() },
+                    { "sign", networkSign.toStdString() } };
         network.push_back(row);
     }
 
@@ -153,7 +156,8 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
     for (auto el : network)
     {
         if (ins)
-            cardFile.append(el.at("id").c_str(), std::stoi(el.at("type").c_str()), el.at("sign").c_str());
+            cardFile.append(el.at("id").c_str(), std::stoi(el.at("type").c_str()),
+                            std::stoi(el.at("version").c_str()), el.at("sign").c_str());
         if (last["id"] == el["id"])
         {
             ins = true;
@@ -179,9 +183,10 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
     sender->sendDfsMessage(cfc, Messages::DFSMessage::cardFileChange);
 #endif
 
-    if (QFile::exists(CardManager::buildPathForFile(cfc.actorId.toStdString(), cfc.fileId.toStdString(),
-                                                    DfsStruct::Type(cfc.type), false)
-                          .c_str()))
+    QString filePath = QString::fromStdString(CardManager::buildPathForFile(
+        cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type), false));
+
+    if (QFile::exists(filePath))
         return;
 
     if (cfc.isEmpty())
@@ -200,7 +205,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
 
     DBRow row = { { "key", std::to_string(cfc.key) },     { "id", cfc.fileId.toStdString() },
                   { "prevId", cfc.prevId.toStdString() }, { "nextId", cfc.nextId.toStdString() },
-                  { "type", std::to_string(cfc.type) },   { "version", "1" },
+                  { "type", std::to_string(cfc.type) },   { "version", std::to_string(cfc.version) },
                   { "sign", cfc.sign.toStdString() } };
     bool res = dbc.insert(Config::DataStorage::cardTableName, row);
     qDebug() << "Save to future" << res;
@@ -331,14 +336,14 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             DistFileSystem::DfsChanges dfsChanges;
             dfsChanges.data << d;
             dfsChanges.range = "sql";
-            dfsChanges.userId = userId;
+            dfsChanges.userId = accountControler->getMainActor()->getId().toActorId();
             QByteArray sType = DfsStruct::toByteArray(type);
             dfsChanges.filePath = dfsPath;
             dfsChanges.changeType = 3;
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
-            dfsChanges.signature =
-                accountControler->getMainActor()->getKey()->sign(Utils::calcKeccak(dfsChanges.serialize()));
+            dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
+            dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
 
             appendToStored(dfsChanges, true);
         }
@@ -377,6 +382,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
     cardFileChange.prevId = last["prevId"].c_str();
     cardFileChange.nextId = last["nextId"].c_str();
     cardFileChange.type = std::stoi(last["type"]);
+    cardFileChange.version = std::stoi(last["version"]);
     cardFileChange.sign = last["sign"].c_str();
     if (cardFileChange.fileId.isEmpty())
     {
@@ -395,13 +401,18 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
                        bool isFilePath)
 {
     QByteArray sign = accountControler->getMainActor()->getKey()->sign(
-        (isFilePath ? CardManager::cutPath(path) : path).toUtf8()); //
+        (isFilePath ? CardManager::cutPath(path) : path).toLatin1() + QByteArray::number(type));
 
     CardFile cardFile(userId);
     if (!cardFile.open())
         return false;
 
-    bool result = cardFile.append(path.toUtf8(), type, sign, isFilePath);
+    QString fileId = isFilePath ? CardManager::cutPath(path) : path;
+    QString filePath = QString::fromStdString(CardManager::buildPathForFile(
+        userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type), false));
+    int version = CardManager::dfsVersion(filePath);
+
+    bool result = cardFile.append(path.toUtf8(), type, version, sign, isFilePath);
     return result;
 }
 
@@ -493,10 +504,13 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
         {
             rootFuture.deleteRow("Items", "id", fileId.toStdString());
             rootFuture.close();
+            int version = QString::fromStdString(itemFuture[0]["version"]).toInt();
+            if (version == 0)
+                version = 1;
 
             CardFile card(userId);
             card.open();
-            card.append(fileId, type, QByteArray::fromStdString(itemFuture[0]["sign"]), false,
+            card.append(fileId, type, version, QByteArray::fromStdString(itemFuture[0]["sign"]), false,
                         QString::fromStdString(itemFuture[0]["key"]).toInt());
             auto lastRes = card.last();
             if (lastRes)
@@ -509,6 +523,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
                 cardFileChange.prevId = lastRow["prevId"].c_str();
                 cardFileChange.nextId = lastRow["nextId"].c_str();
                 cardFileChange.type = std::stoi(lastRow["type"]);
+                cardFileChange.version = std::stoi(lastRow["version"]);
                 cardFileChange.sign = lastRow["sign"].c_str();
                 sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
             }
@@ -622,14 +637,14 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             DistFileSystem::DfsChanges dfsChanges;
             dfsChanges.data << data;
             dfsChanges.range = "sql";
-            dfsChanges.userId = userId;
+            dfsChanges.userId = accountControler->getMainActor()->getId().toActorId();
             QByteArray sType = DfsStruct::toByteArray(type);
             dfsChanges.filePath = dfsPath;
             dfsChanges.changeType = 3;
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
-            dfsChanges.signature =
-                accountControler->getMainActor()->getKey()->sign(Utils::calcKeccak(dfsChanges.serialize()));
+            dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
+            dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
 
@@ -660,6 +675,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
     cardFileChange.prevId = last["prevId"].c_str();
     cardFileChange.nextId = last["nextId"].c_str();
     cardFileChange.type = std::stoi(last["type"]);
+    cardFileChange.version = std::stoi(last["version"]);
     cardFileChange.sign = last["sign"].c_str();
     if (sender != nullptr)
         sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
@@ -672,12 +688,13 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
 void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data)
 {
     DistFileSystem::DfsChanges dfsChanges;
-    dfsChanges.userId = userId.toLatin1();
+    dfsChanges.userId = accountControler->getMainActor()->getId().toActorId();
     dfsChanges.changeType = 3;
+    dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
     int pckg = 0;
 
     QByteArray sType = DfsStruct::toByteArray(type);
-    dfsChanges.filePath = "data/" + dfsChanges.userId + "/" + sType + "/" + fileName;
+    dfsChanges.filePath = "data/" + userId + "/" + sType + "/" + fileName;
     QFile file(dfsChanges.filePath);
     qDebug() << "->" << file.open(QFile::ReadOnly);
 
@@ -718,8 +735,6 @@ void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByte
     dfsChanges.messHash = Utils::calcKeccak(
         QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
     pckgNums.clear();
-    dfsChanges.signature =
-        accountControler->getMainActor()->getKey()->sign(Utils::calcKeccak(dfsChanges.serialize()));
 
     // qDebug() << dfsChanges.range;
     // qDebug() << dfsChanges.data;
@@ -734,21 +749,29 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     DistFileSystem::DfsChanges dfsChanges;
     dfsChanges.data << sqlChanges;
     dfsChanges.range = "sql";
-    dfsChanges.userId = userId.toLatin1();
+    dfsChanges.userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray sType = DfsStruct::toByteArray(type);
-    dfsChanges.filePath = "data/" + dfsChanges.userId + "/" + sType + "/" + fileName;
+    dfsChanges.filePath = "data/" + userId + "/" + sType + "/" + fileName;
     dfsChanges.changeType = sqlType;
     dfsChanges.messHash = Utils::calcKeccak(
         QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
-    dfsChanges.signature =
-        accountControler->getMainActor()->getKey()->sign(Utils::calcKeccak(dfsChanges.serialize()));
+    dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
 
     if (applyChanges(dfsChanges)) { }
     sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
 }
 
-bool Dfs::applyChanges(const DistFileSystem::DfsChanges &dfsChanges)
+bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
 {
+    if (dfsChanges.userId != accountControler->getMainActor()->getId().toActorId())
+    {
+        bool verify = actorIndex->getActor(dfsChanges.userId)
+                          .getKey()
+                          ->verify(dfsChanges.prepareSign(), dfsChanges.sign);
+        qDebug() << "DfsChanges Verify applyChanges:" << verify << dfsChanges.prepareSign()
+                 << dfsChanges.sign;
+    }
+
     int type = dfsChanges.changeType;
     bool apply = false;
 
@@ -879,6 +902,42 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
                                                               : db.insert(data[0].toStdString(), row);
         }
     }
+    else if (dfsChanges.changeType == DfsStruct::NewColumn)
+    {
+        QByteArray query;
+        if (data.length() >= 3)
+        {
+            if (data.length() == 3)
+                query = "ALTER TABLE " + data[0] + " ADD COLUMN " + data[1] + " " + data[2];
+            if (data.length() == 4)
+                query += " " + data[3];
+            return db.query(query.toStdString());
+        }
+    }
+    else if (dfsChanges.changeType == DfsStruct::RemoveColumn)
+    {
+    }
+    else if (dfsChanges.changeType == DfsStruct::CreateTable)
+    {
+        if (data.length() == 2)
+        {
+            QByteArray query = "CREATE TABLE IF NOT EXISTS " + data[0] + " (" + data[1] + ");";
+            return db.query(query.toStdString());
+        }
+    }
+    else if (dfsChanges.changeType == DfsStruct::RenameTable)
+    {
+    }
+    else if (dfsChanges.changeType == DfsStruct::DropTable)
+    {
+        if (data.length() == 1)
+        {
+            QByteArray query;
+            query = "DROP TABLE " + data[0];
+            return db.query(query.toStdString());
+        }
+    }
+
     // else if (dfsChanges.changeType == DfsStruct::Update)
     // {
     //     // QByteArray query = "UPDATE " + data[0] + "SET ... WHERE " + data[1] + " = '" + data[2] + "';";
@@ -1202,29 +1261,48 @@ bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStru
 }
 
 // TODO: update card file
-bool Dfs::appendToStored(const DistFileSystem::DfsChanges &dfsChanges, bool init)
+bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
 {
     DBConnector dbc((dfsChanges.filePath + DfsStruct::STORED_EXT).toStdString());
 
-    if (init)
+    if (!init && dfsChanges.userId == accountControler->getMainActor()->getId().toActorId())
     {
-        QByteArray q(
-            "INSERT OR IGNORE INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', 'data' "
-            ") VALUES ('"
-            + dfsChanges.messHash + "', '" + dfsChanges.signature + "', '"
-            + QByteArray::number(dfsChanges.changeType) + "', '" + dfsChanges.userId + "', '"
-            + dfsChanges.range + "', '', ?);");
-        return dbc.insertWithData(q.toStdString(), Serialization::universalSerialize(dfsChanges.data, 8));
-        // return dbc.insert(Config::DataStorage::storedTableName, row);
+        auto res = dbc.select("SELECT hash FROM Stored ORDER by _ROWID_ DESC LIMIT 1 ");
+        if (!res.size())
+            return false;
+        dfsChanges.prevHash = QByteArray::fromStdString(res[0]["hash"]);
+        dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
     }
 
-    QByteArray sep = "', '";
-    QByteArray query = "INSERT INTO Stored ('hash', 'sign', 'type', 'uid', 'range', 'prevHash', "
-                       "'data') SELECT '"
-        + dfsChanges.messHash + sep + dfsChanges.signature + sep + QByteArray::number(dfsChanges.changeType)
-        + sep + dfsChanges.userId + sep + dfsChanges.range + "', hash, ? FROM Stored LIMIT 1";
+    QByteArray query("INSERT OR IGNORE INTO Stored ('version', 'hash', 'sign', 'type', 'userId', 'range', "
+                     "'prevHash', 'data' "
+                     ") VALUES ('"
+                     + QByteArray::number(dfsChanges.fileVersion) + "', '" + dfsChanges.messHash + "', '"
+                     + dfsChanges.sign + "', '" + QByteArray::number(dfsChanges.changeType) + "', '"
+                     + dfsChanges.userId + "', '" + dfsChanges.range + "', '" + dfsChanges.prevHash
+                     + "', ?);");
 
-    return dbc.insertWithData(query.toStdString(), Serialization::universalSerialize(dfsChanges.data, 8));
+    if (init)
+    {
+        return dbc.insertWithData(query.toStdString(), Serialization::universalSerialize(dfsChanges.data, 8));
+    }
+
+    bool queryRes1 =
+        dbc.insertWithData(query.toStdString(), Serialization::universalSerialize(dfsChanges.data, 8));
+
+    bool queryRes2 = false;
+    if (queryRes1)
+    {
+        DBConnector db("data/" + dfsChanges.filePath.mid(5, 20).toStdString() + "/root");
+        std::string version = std::to_string(dfsChanges.fileVersion);
+
+        QString fileId = CardManager::cutPath(dfsChanges.filePath);
+        std::string query = "UPDATE " + Config::DataStorage::cardTableName + " SET version = '" + version
+            + "' WHERE id = '" + fileId.toStdString() + "' AND version < " + version;
+        queryRes2 = db.update(query);
+    }
+
+    return queryRes2;
 }
 
 void Dfs::updateFromNewStored(QString filePath)
@@ -1282,7 +1360,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
                 if (!file.open(QFile::WriteOnly))
                 {
-                    qDebug() << "-------> VSE PROPALO";
+                    qDebug() << "-------> Not so good";
                     return;
                 }
 
@@ -1294,7 +1372,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
             QByteArray data = QByteArray::fromStdString(stored.at("data"));
             QByteArray range = QByteArray::fromStdString(stored.at("range"));
-            QByteArray userId = stored.at("uid").c_str();
+            QByteArray userId = stored.at("userId").c_str();
 
             switch (type)
             {

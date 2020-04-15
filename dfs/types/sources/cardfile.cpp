@@ -55,10 +55,21 @@ std::optional<DBRow> CardFile::last()
     return {};
 }
 
-bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath, int key)
+bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bool isFilePath, int key)
 {
     if (isFilePath)
         fileId = CardManager::cutPath(fileId);
+
+    /*
+    if (type == 105 || type == 102)
+    {
+        int i = fileId.indexOf(".");
+        fileId = fileId.mid(i - 2, 2) + "/" + fileId;
+    }
+    */
+
+    QString filePath = QString::fromStdString(CardManager::buildPathForFile(
+        m_userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type), false));
 
     std::string prevId = "-";
     auto lastRes = last();
@@ -75,7 +86,7 @@ bool CardFile::append(QString fileId, int type, QByteArray sign, bool isFilePath
     row.insert({ "type", std::to_string(type) });
     row.insert({ "prevId", prevId });
     row.insert({ "nextId", "-" });
-    row.insert({ "version", "1" });
+    row.insert({ "version", std::to_string(version) });
     row.insert({ "sign", sign.toStdString() });
 
     QFile lastCacheFile(m_lastCacheName);

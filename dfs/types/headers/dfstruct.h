@@ -64,7 +64,45 @@ enum ChangeType
     Delete,
     Insert,
     Update,
-    Bytes
+    Bytes,
+    NewColumn,
+    RemoveColumn,
+    CreateTable,
+    RenameTable,
+    DropTable
+};
+
+enum DfsVersionType
+{
+    PostVersion = 0,
+    PostLikesVersion = 1,
+    PostCommentsVersion = 2,
+    EventVersion = 3,
+    EventLikesVersion = 4,
+    EventCommentsVersion = 5,
+    EventUsersVersion = 6,
+    PrivateLikes = 7,
+    PrivateSaved = 8,
+    PrivateChats = 9,
+    PrivateNotifications = 10,
+    PrivateEvents = 11,
+    PrivateChatInvite = 12,
+    ServiceSubscribe = 13,
+    ServiceFollower = 14,
+    ServiceEvents = 15,
+    ServiceChatInvite = 16,
+    ChatMsg = 17,
+    ChatUsers = 18
+};
+
+static QMap<DfsVersionType, int> dfsVersions = {
+    { PostVersion, 1 },       { PostLikesVersion, 1 },     { PostCommentsVersion, 1 },
+    { EventVersion, 1 },      { EventLikesVersion, 1 },    { EventCommentsVersion, 1 },
+    { EventUsersVersion, 1 }, { PrivateLikes, 1 },         { PrivateSaved, 1 },
+    { PrivateChats, 1 },      { PrivateNotifications, 1 }, { PrivateEvents, 1 },
+    { PrivateChatInvite, 1 }, { ServiceSubscribe, 1 },     { ServiceFollower, 1 },
+    { ServiceEvents, 1 },     { ServiceChatInvite, 1 },    { ChatMsg, 1 },
+    { ChatUsers, 1 }
 };
 
 }

@@ -40,7 +40,7 @@ public:
 
 struct CardFileChange : Messages::ISmallMessage
 {
-    const short FIELDS_COUNT = 7;
+    const short FIELDS_COUNT = 8;
     int key = -1;
     QByteArray actorId;
     QByteArray fileId;
@@ -48,6 +48,7 @@ struct CardFileChange : Messages::ISmallMessage
     QByteArray nextId;
     int type = -1;
     QByteArray sign;
+    int version = -1;
 
     const QList<QByteArray> serializedParams() const;
     void operator=(QList<QByteArray> &list);

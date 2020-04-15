@@ -23,6 +23,8 @@ public:
 
     static QString cutPath(QString fullPath);
 
+    static int dfsVersion(QString path);
+
 private:
     CardManager();
 };

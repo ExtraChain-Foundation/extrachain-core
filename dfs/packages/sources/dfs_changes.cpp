@@ -5,7 +5,8 @@ const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const
     QList<QByteArray> list;
 
     list << filePath.toUtf8() << Serialization::universalSerialize(data, DistFileSystem::fieldsSize) << range
-         << QByteArray::number(changeType) << userId << signature << messHash;
+         << QByteArray::number(changeType) << userId << sign << messHash << prevHash
+         << QByteArray::number(fileVersion);
 
     return list;
 }
@@ -17,8 +18,10 @@ void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list)
     range = list.takeFirst();
     changeType = list.takeFirst().toInt();
     userId = list.takeFirst();
-    signature = list.takeFirst();
+    sign = list.takeFirst();
     messHash = list.takeFirst();
+    prevHash = list.takeFirst();
+    fileVersion = list.takeFirst().toInt();
 }
 
 void DistFileSystem::DfsChanges::operator=(QByteArray &serialized)
@@ -29,7 +32,7 @@ void DistFileSystem::DfsChanges::operator=(QByteArray &serialized)
 bool DistFileSystem::DfsChanges::isEmpty() const
 {
     return filePath.isEmpty() || data.isEmpty() || range.isEmpty() || changeType == -1 || userId.isEmpty()
-        || signature.isEmpty() || messHash.isEmpty();
+        || sign.isEmpty() || messHash.isEmpty() || fileVersion == -1;
 }
 
 short DistFileSystem::DfsChanges::getFieldsCount() const
@@ -46,4 +49,16 @@ void DistFileSystem::DfsChanges::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized, DistFileSystem::fieldsSize);
     operator=(l);
+}
+
+QByteArray DistFileSystem::DfsChanges::prepareSign()
+{
+    QList<QByteArray> list;
+    list << filePath.toUtf8() << Serialization::universalSerialize(data, DistFileSystem::fieldsSize) << range
+         << QByteArray::number(changeType) << userId << messHash << prevHash
+         << QByteArray::number(fileVersion);
+    // qDebug() << "prepareSign" << list;
+    QByteArray keccak =
+        Utils::calcKeccak(Serialization::universalSerialize(list, DistFileSystem::fieldsSize));
+    return keccak;
 }

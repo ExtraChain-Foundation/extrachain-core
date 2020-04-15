@@ -25,6 +25,7 @@ class ResolveManager;
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "headers/network/packages/service/message_types.h"
+#include "managers/file_updater_manager.h"
 
 #include "asyncfuture.h"
 #include <QtConcurrent>
