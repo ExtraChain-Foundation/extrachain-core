@@ -510,7 +510,8 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
             CardFile card(userId);
             card.open();
-            card.append(fileId, type, version, QByteArray::fromStdString(itemFuture[0]["sign"]), false,
+            card.append(fileId, std::stoi(itemFuture[0]["type"]), version,
+                        QByteArray::fromStdString(itemFuture[0]["sign"]), false,
                         QString::fromStdString(itemFuture[0]["key"]).toInt());
             auto lastRes = card.last();
             if (lastRes)
@@ -1562,7 +1563,7 @@ void Dfs::searchTmp()
         QFileInfo root(rootPath);
         // QFileInfo rootTmp(rootPath + ".tmp");
 
-        if (actorIndex->companyId)
+        if (actorIndex->companyId != nullptr)
         {
             QByteArray companyId = *actorIndex->companyId;
 
