@@ -104,9 +104,9 @@ void BaseMessage::deserialize(const QByteArray &serialized)
     {
         int count = Utils::qByteArrayToInt(serialized.mid(pos, Messages::FIELD_SIZE));
         pos += Messages::FIELD_SIZE;
-        QByteArray el = serialized.mid(pos, count);
+        //        QByteArray el =
+        list << serialized.mid(pos, count);
         pos += count;
-        list << el;
     }
     if (list.size() < getFieldsCount())
     {
