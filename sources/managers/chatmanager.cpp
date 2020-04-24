@@ -300,31 +300,13 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     //                       actorId);
 }
 
-void ChatManager::sendChatFile(QByteArray chatId, QString filePath)
+void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originName, int originSize)
 {
-    Chat temp(this, chatId, _actorIndex, _accController);
+    Chat temp(this, chatId.toLatin1(), _actorIndex, _accController);
 
-    QString fileName = QUrl(filePath).toLocalFile();
-
-    QFile file(fileName);
-    if (!file.exists())
-    {
-        qDebug() << "Cant send file";
-        return;
-    }
-
-    QString newFileName =
-        chatId + "/" + temp.getSession().toByteArray() + "/" + QFileInfo(fileName).fileName();
-    QString newFileNameData = "data/" + temp.getOwner() + "/chats/" + newFileName;
-    if (!file.copy(newFileNameData))
-    {
-        qDebug() << "Cant copy file";
-        return;
-    }
-
-    emit send(DfsStruct::DfsSave::StaticNonStored, newFileName, "", DfsStruct::Chat);
-
-    QByteArray message = "{ \"type\":\"file\",\"message\":\"" + newFileNameData.toLatin1() + "\"}";
+    QByteArray data = originName.toUtf8() + " " + QByteArray::number(originSize);
+    QByteArray message =
+        "{ \"type\":\"file\",\"message\":\"" + dfsName.toLatin1() + "\",\"data\":\"" + data + "\"}";
     qDebug() << message;
     qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
     emit sendEditSql(

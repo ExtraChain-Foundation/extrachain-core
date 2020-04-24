@@ -664,14 +664,16 @@ void NodeManager::connectUi()
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
-    connect(dfs, &Dfs::fileAdded, uiController->getUiResolver(), &UIResolver::fileAdded);
-    connect(dfs, &Dfs::fileChanged, uiController->getUiResolver(), &UIResolver::fileChanged);
+    auto uiResolver = uiController->getUiResolver();
+    connect(dfs, &Dfs::fileAdded, uiResolver, &UiResolver::fileAdded);
+    connect(dfs, &Dfs::fileChanged, uiResolver, &UiResolver::fileChanged);
+    connect(dfs, &Dfs::fileDuplicated, uiResolver, &UiResolver::fileDuplicated);
     connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
     connect(uiController, &UiController::newNotify, notifyM, &NotificationManager::addNotify);
     connect(blockchain, &Blockchain::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);
-    connect(uiController->getUiResolver(), &UIResolver::loadChat, chatManager, &ChatManager::fileLoaded);
+    connect(uiController->getUiResolver(), &UiResolver::loadChat, chatManager, &ChatManager::fileLoaded);
     connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFileUiHandle);
     connect(uiController, &UiController::authEnded, chatManager, &ChatManager::initChat);
 

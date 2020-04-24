@@ -308,6 +308,58 @@ QByteArray Utils::calcKeccakForFile(const QString &path)
     return Utils::calcKeccak(hash);
 }
 
+bool Utils::encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
+                        int blockSize)
+{
+    QFile orig(originalName);
+    if (!orig.exists())
+        return false;
+    QFile encrypt(encryptName);
+    orig.open(QFile::ReadOnly);
+    encrypt.open(QFile::WriteOnly);
+
+    while (!orig.atEnd())
+    {
+        QByteArray part = orig.read(blockSize);
+        QByteArray encrypted = blowFish_crypt().EncryptBlowFish(part, key);
+        encrypt.write(encrypted);
+        qDebug() << "encrypted" << part.size() << encrypted.size();
+    }
+
+    qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" << orig.size()
+             << encrypt.size();
+    orig.close();
+    encrypt.close();
+    return true;
+}
+
+bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
+                        int blockSize) //
+{
+    blockSize = (blockSize / 8 + 1) * 8;
+    QFile encrypt(encryptName);
+    if (!encrypt.exists())
+        return false;
+    QFile decrypt(decryptName);
+    encrypt.open(QFile::ReadOnly);
+    decrypt.open(QFile::WriteOnly);
+
+    while (!encrypt.atEnd())
+    {
+        QByteArray part = encrypt.read(blockSize);
+        QByteArray decrypted = blowFish_crypt().DecryptBlowFish(part, key);
+        decrypt.write(decrypted);
+        // qDebug() << "encrypted" << part.size() << encrypted.size();
+    }
+
+    // qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" <<
+    // orig.size()
+    //    << encrypt.size();
+    encrypt.close();
+    decrypt.close();
+    return true;
+}
+
 QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, const int &fiels_size)
 {
     QByteArray serialized = "";

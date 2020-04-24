@@ -224,7 +224,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 break;
             }
             case DFSMessage::requestMessage: {
-                qDebug() << "[requestMessage:]";
+                // qDebug() << "[requestMessage:]";
                 DistFileSystem::DfsRequest message;
                 message = data;
 
