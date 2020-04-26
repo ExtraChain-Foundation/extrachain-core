@@ -1,6 +1,7 @@
 #include "utils/utils.h"
 
 #include <QMimeDatabase>
+#include <QStandardPaths>
 
 template <typename T>
 
@@ -436,6 +437,10 @@ void Utils::wipeDataFiles()
     QDir::setCurrent(dir.canonicalPath());
     QDir("etalonium-data").removeRecursively();
     QDir().mkdir("etalonium-data");
+
+    QString shareFolder =
+        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/EtaloniumShare";
+    QDir(shareFolder).removeRecursively();
 
     /*
 #ifdef ETALONIUM_CONSOLE
