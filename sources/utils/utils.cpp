@@ -1,5 +1,8 @@
 #include "utils/utils.h"
 
+#include <QMimeDatabase>
+#include <QStandardPaths>
+
 template <typename T>
 
 std::string to_string(T value)
@@ -308,6 +311,76 @@ QByteArray Utils::calcKeccakForFile(const QString &path)
     return Utils::calcKeccak(hash);
 }
 
+bool Utils::encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
+                        int blockSize)
+{
+    QFile orig(originalName);
+    if (!orig.exists())
+        return false;
+    QFile encrypt(encryptName);
+    bool origOpen = orig.open(QFile::ReadOnly);
+    bool encryptOpen = encrypt.open(QFile::WriteOnly);
+    if (!origOpen || !encryptOpen)
+    {
+        qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
+        return false;
+    }
+
+    while (!orig.atEnd())
+    {
+        QByteArray part = orig.read(blockSize);
+        QByteArray encrypted = blowFish_crypt().EncryptBlowFish(part, key);
+        encrypt.write(encrypted);
+        qDebug() << "encrypted" << part.size() << encrypted.size();
+    }
+
+    qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" << orig.size()
+             << encrypt.size();
+    orig.close();
+    encrypt.close();
+    return QFile::exists(encryptName);
+}
+
+bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
+                        int blockSize) //
+{
+    blockSize = (blockSize / 8 + 1) * 8;
+    QFile encrypt(encryptName);
+    if (!encrypt.exists())
+        return false;
+    QFile decrypt(decryptName);
+
+    bool encryptOpen = encrypt.open(QFile::ReadOnly);
+    bool decryptOpen = decrypt.open(QFile::WriteOnly);
+    if (!encryptOpen || !decryptOpen)
+    {
+        qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
+        return false;
+    }
+
+    while (!encrypt.atEnd())
+    {
+        QByteArray part = encrypt.read(blockSize);
+        QByteArray decrypted = blowFish_crypt().DecryptBlowFish(part, key);
+        decrypt.write(decrypted);
+        qDebug() << "decrypted" << part.size() << decrypted.size();
+    }
+
+    // qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" <<
+    // orig.size()
+    //    << encrypt.size();
+    encrypt.close();
+    decrypt.close();
+    return QFile::exists(decryptName);
+}
+
+QString Utils::fileMimeType(const QString &filePath)
+{
+    QMimeDatabase db;
+    QMimeType type = db.mimeTypeForFile(filePath);
+    return type.name();
+}
+
 QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, const int &fiels_size)
 {
     QByteArray serialized = "";
@@ -364,6 +437,10 @@ void Utils::wipeDataFiles()
     QDir::setCurrent(dir.canonicalPath());
     QDir("etalonium-data").removeRecursively();
     QDir().mkdir("etalonium-data");
+
+    QString shareFolder =
+        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/EtaloniumShare";
+    QDir(shareFolder).removeRecursively();
 
     /*
 #ifdef ETALONIUM_CONSOLE

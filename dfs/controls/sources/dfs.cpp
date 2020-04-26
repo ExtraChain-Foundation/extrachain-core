@@ -251,12 +251,41 @@ void Dfs::initDFS(const QByteArray &userId)
 
 void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct::Type &type)
 {
+    if (path.isEmpty() && data.isEmpty())
+    {
+        qDebug() << "[DFS Save] Path or data is empty";
+        return;
+    }
+    if (!path.isEmpty() && !QFile::exists(path))
+    {
+        qDebug() << "[DFS Save] File" << path << "not exists";
+        return;
+    }
+
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray dfsPath;
     bool stored = false;
     bool exists = false;
 
-    if (path.isEmpty()) // if !path AND data
+    if (data.left(13) == "encryptfile::")
+    {
+        QString encryptPath = "tmp/"
+            + QString::number(QDateTime::currentSecsSinceEpoch()
+                              + QRandomGenerator::global()->bounded(10000));
+        Utils::encryptFile(path, encryptPath, data.mid(13));
+        dfsPath = buildDfsPath(encryptPath, "", userId, type);
+        bool renameRes = QFile::rename(encryptPath, dfsPath);
+        qDebug() << "renameRes" << renameRes;
+        if (!renameRes)
+        {
+            qDebug() << QFile(encryptPath).size() << QFile(dfsPath).size();
+            if (QFile(encryptPath).size() == QFile(dfsPath).size())
+                emit fileDuplicated(dfsPath, path, type);
+            QFile::remove(encryptPath);
+            return;
+        }
+    }
+    else if (path.isEmpty()) // if !path AND data
     {
         dfsPath = buildDfsPath("", Utils::calcKeccak(data), userId, type);
         exists = QFile::exists(dfsPath);
@@ -393,7 +422,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
     qDebug() << "Send root change" << cardFileChange.fileId << cardFileChange.type;
 
 #ifdef ETALONIUM_CLIENT
-    emit fileAdded(dfsPath, type, userId); // TODO
+    emit fileAdded(dfsPath, path, type, userId);
 #endif
 }
 
@@ -538,7 +567,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     this->dfsValidate(userId);
 
 #ifdef ETALONIUM_CLIENT
-    emit fileAdded(path.toUtf8(), type, pathList.at(PathStruct::aId)); // TODO
+    emit fileAdded(path.toUtf8(), "network", type, pathList.at(PathStruct::aId));
 #endif
 }
 
@@ -682,7 +711,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
         sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
 
 #ifdef ETALONIUM_CLIENT
-    emit fileAdded(dfsPath.toLatin1(), type, userId);
+    emit fileAdded(dfsPath.toLatin1(), fileName, type, userId);
 #endif
 }
 
@@ -1094,6 +1123,11 @@ bool Dfs::dfsValidate(QByteArray userID)
             if (typeStr.empty())
                 typeStr = "0";
             int type = std::stoi(typeStr);
+
+#ifdef ETALONIUM_CLIENT
+            if (type == DfsStruct::Type::Files)
+                continue;
+#endif
 
             if (item["id"] == "avatar")
                 type = 106;

@@ -79,8 +79,9 @@ signals:
 
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
-    void fileAdded(const QByteArray &path, const DfsStruct::Type &type, const QByteArray &actorId);
+    void fileAdded(QString path, QString original, DfsStruct::Type type, QByteArray actorId);
     void fileChanged(QString path);
+    void fileDuplicated(QString path, QString original, DfsStruct::Type type);
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void connectToServer();
     void networkCreated();
