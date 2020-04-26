@@ -304,7 +304,8 @@ void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originNa
 {
     Chat temp(this, chatId.toLatin1(), _actorIndex, _accController);
 
-    QByteArray data = originName.toUtf8() + " " + QByteArray::number(originSize);
+    QByteArray mime = Utils::fileMimeType(dfsName).toLatin1();
+    QByteArray data = originName.toUtf8() + " " + QByteArray::number(originSize) + " " + mime;
     QByteArray message =
         "{ \"type\":\"file\",\"message\":\"" + dfsName.toLatin1() + "\",\"data\":\"" + data + "\"}";
     qDebug() << message;

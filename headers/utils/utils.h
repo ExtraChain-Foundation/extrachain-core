@@ -522,6 +522,7 @@ bool encryptFile(const QString &originalName, const QString &encryptName, const 
                  int blockSize = 60007);
 bool decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
                  int blockSize = 60007);
+QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
 std::vector<std::string> split(const std::string &s);

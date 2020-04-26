@@ -1,5 +1,7 @@
 #include "utils/utils.h"
 
+#include <QMimeDatabase>
+
 template <typename T>
 
 std::string to_string(T value)
@@ -315,8 +317,13 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
     if (!orig.exists())
         return false;
     QFile encrypt(encryptName);
-    orig.open(QFile::ReadOnly);
-    encrypt.open(QFile::WriteOnly);
+    bool origOpen = orig.open(QFile::ReadOnly);
+    bool encryptOpen = encrypt.open(QFile::WriteOnly);
+    if (!origOpen || !encryptOpen)
+    {
+        qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
+        return false;
+    }
 
     while (!orig.atEnd())
     {
@@ -330,7 +337,7 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
              << encrypt.size();
     orig.close();
     encrypt.close();
-    return true;
+    return QFile::exists(encryptName);
 }
 
 bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
@@ -341,15 +348,21 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
     if (!encrypt.exists())
         return false;
     QFile decrypt(decryptName);
-    encrypt.open(QFile::ReadOnly);
-    decrypt.open(QFile::WriteOnly);
+
+    bool encryptOpen = encrypt.open(QFile::ReadOnly);
+    bool decryptOpen = decrypt.open(QFile::WriteOnly);
+    if (!encryptOpen || !decryptOpen)
+    {
+        qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
+        return false;
+    }
 
     while (!encrypt.atEnd())
     {
         QByteArray part = encrypt.read(blockSize);
         QByteArray decrypted = blowFish_crypt().DecryptBlowFish(part, key);
         decrypt.write(decrypted);
-        // qDebug() << "encrypted" << part.size() << encrypted.size();
+        qDebug() << "decrypted" << part.size() << decrypted.size();
     }
 
     // qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" <<
@@ -357,7 +370,14 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
     //    << encrypt.size();
     encrypt.close();
     decrypt.close();
-    return true;
+    return QFile::exists(decryptName);
+}
+
+QString Utils::fileMimeType(const QString &filePath)
+{
+    QMimeDatabase db;
+    QMimeType type = db.mimeTypeForFile(filePath);
+    return type.name();
 }
 
 QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, const int &fiels_size)
