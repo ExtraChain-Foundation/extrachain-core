@@ -300,15 +300,23 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     //                       actorId);
 }
 
-void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originName, int originSize)
+void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originName, QString mime,
+                               int originSize)
 {
     Chat temp(this, chatId.toLatin1(), _actorIndex, _accController);
 
-    QByteArray mime = Utils::fileMimeType(dfsName).toLatin1();
-    QByteArray data = originName.toUtf8() + " " + QByteArray::number(originSize) + " " + mime;
-    QByteArray message =
-        "{ \"type\":\"file\",\"message\":\"" + dfsName.toLatin1() + "\",\"data\":\"" + data + "\"}";
-    qDebug() << message;
+    QJsonObject dataObj;
+    dataObj["name"] = originName;
+    dataObj["size"] = originSize;
+    dataObj["mime"] = mime;
+
+    QJsonObject jsonObj;
+    jsonObj["type"] = "file";
+    jsonObj["message"] = dfsName;
+    jsonObj["data"] = QString(QJsonDocument(dataObj).toJson(QJsonDocument::Compact));
+
+    QByteArray message = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
+    qDebug() << "message:" << message;
     qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
     emit sendEditSql(
         temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg", DfsStruct::Type::Chat,
