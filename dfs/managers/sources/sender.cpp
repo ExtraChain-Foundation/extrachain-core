@@ -53,7 +53,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
             if (p >= 20)
             {
                 p = 0;
-                QThread::currentThread()->msleep(110);
+                QThread::currentThread()->msleep(50);
             }
             else
             {
