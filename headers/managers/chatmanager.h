@@ -83,7 +83,7 @@ public slots:
     QByteArray CreateNewChat();                                       //+
 
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
-    void sendChatFile(QString chatId, QString dfsName, QString originName, QString mime, int originSize);
+    void sendChatFile(QString chatId, QString dfsName, QString originName, std::pair<QString, int> mimesize);
     void SendMessage(QByteArray chatId, QByteArray message); //+
     void createDialogue(QByteArray actorId);                 //+
     void requestChatList();                                  //+

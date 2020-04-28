@@ -300,15 +300,15 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
     //                       actorId);
 }
 
-void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originName, QString mime,
-                               int originSize)
+void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originName,
+                               std::pair<QString, int> pair)
 {
     Chat temp(this, chatId.toLatin1(), _actorIndex, _accController);
 
     QJsonObject dataObj;
     dataObj["name"] = originName;
-    dataObj["size"] = originSize;
-    dataObj["mime"] = mime;
+    dataObj["size"] = pair.second;
+    dataObj["mime"] = pair.first;
 
     QJsonObject jsonObj;
     jsonObj["type"] = "file";
