@@ -435,8 +435,9 @@ void Utils::wipeDataFiles()
     QDir dir(QDir::currentPath());
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
-    QDir("etalonium-data").removeRecursively();
-    QDir().mkdir("etalonium-data");
+    QString dataName = Utils::dataName();
+    QDir(dataName).removeRecursively();
+    QDir().mkdir(dataName);
 
     QString shareFolder =
         QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/EtaloniumShare";
@@ -749,4 +750,19 @@ qint64 Utils::checkMemoryTotal()
     QStorageInfo x(qApp->applicationDirPath());
     qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
     return x.bytesTotal();
+}
+
+QString Utils::dataName()
+{
+    QSettings settings;
+    if (!settings.value("network/serverIp").isValid())
+        settings.setValue("network/serverIp", Network::serverIp);
+    QString serverIp = settings.value("network/serverIp").toString();
+
+    if (serverIp == "51.68.181.53")
+        return "/etalonium-";
+    else if (serverIp == "51.68.181.52")
+        return "/etalonium-test";
+    else
+        return "/etalonium-private-" + serverIp.replace(".", "");
 }

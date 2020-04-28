@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
+#include <QSettings>
 #include <QStorageInfo>
 #include <QString>
 #include <QStringList>
@@ -510,6 +511,7 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
+QString dataName();
 qint64 checkMemoryFree();  // MB
 qint64 checkMemoryTotal(); // MB
 
