@@ -10,7 +10,7 @@
 
 namespace DistFileSystem {
 
-const long long dataSize = 800; // bytes
+const long long dataSize = 512; // bytes
 const short fieldsSize = 8;     // bytes for size
 const QByteArray stateDelimetr = "|";
 }
