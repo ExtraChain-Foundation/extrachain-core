@@ -430,12 +430,14 @@ void Utils::wipeDataFiles()
     QFile("user.private.login").remove();
     QFile(".fileList").remove();
     QFile(".settings").remove();
+    QFile(".dsettings").remove();
     QFile("network_cache").remove();
 
     QDir dir(QDir::currentPath());
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
-    QString dataName = Utils::dataName();
+    QString dataName = Utils::dataName().replace("/", "");
+    qDebug() << "wipe dataName" << dataName;
     QDir(dataName).removeRecursively();
     QDir().mkdir(dataName);
 
@@ -760,7 +762,7 @@ QString Utils::dataName()
     QString serverIp = settings.value("network/serverIp").toString();
 
     if (serverIp == "51.68.181.53")
-        return "/etalonium-";
+        return "/etalonium-public";
     else if (serverIp == "51.68.181.52")
         return "/etalonium-test";
     else
