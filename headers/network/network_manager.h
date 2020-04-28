@@ -113,7 +113,7 @@ public:
     void resolverMessage(const QHostAddress &from, const QString &message);
     QList<SocketService *> connections;
 
-    quint16 serverPort = isDebug ? 2221 : 2222;
+    quint16 serverPort = isDebug ? 2222 : 2222;
 
 private:
     void connectSocket();
