@@ -334,3 +334,67 @@ sqlite3 *DBConnector::getDb() const
 {
     return db;
 }
+
+bool DBConnector::insertModern(const std::string &tableName, const DBRow &data,
+                               const std::vector<std::string> &blobFields)
+{
+    std::string query = "INSERT OR IGNORE INTO " + tableName + " ";
+    std::string fields;
+    std::string values;
+
+    for (auto &el : data)
+    {
+        fields += "'" + el.first + "', ";
+        values += "?, ";
+    }
+
+    fields.erase(fields.size() - 2, 2);
+    values.erase(values.size() - 2, 2);
+    query += "(" + fields + ") VALUES (" + values + ")";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+    {
+        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
+        qDebug() << "prepare failed:" << sqlite3_errmsg(db);
+        return false;
+    }
+
+    int fieldNum = 1;
+
+    for (auto &el : data)
+    {
+        qDebug() << el.second.data() << el.second.size();
+
+        bool isBlob = !blobFields.size()
+            ? false
+            : std::find(blobFields.begin(), blobFields.end(), el.first) != blobFields.end();
+
+        rc = isBlob ? sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC)
+                    : sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        fieldNum++;
+
+        if (rc != SQLITE_OK)
+        {
+            qDebug() << "bind failed:" << sqlite3_errmsg(db);
+            qDebug() << file().c_str() << "(false):" << query.c_str() << el.first.c_str()
+                     << el.second.c_str();
+            return false;
+        }
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE)
+    {
+        qDebug() << "execution failed: " << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        return false;
+    }
+
+#ifdef ENABLE_SQLITE_TRUE_LOGS
+    qDebug() << file().c_str() << "(true):" << query.c_str();
+#endif
+    sqlite3_finalize(stmt);
+    return true;
+}

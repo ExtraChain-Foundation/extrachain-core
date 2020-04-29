@@ -48,6 +48,9 @@ public:
     bool isOpen() const;
     std::vector<std::string> tableNames();
 
+    bool insertModern(const std::string &tableName, const DBRow &data,
+                      const std::vector<std::string> &blobFields = {});
+
 public:
     bool query(std::string query);
 
