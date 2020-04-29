@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
+#include <QSettings>
 #include <QStorageInfo>
 #include <QString>
 #include <QStringList>
@@ -510,6 +511,13 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
+#ifdef Q_OS_WIN
+static QString filePrefix = "file:///";
+#else
+static QString filePrefix = "file://";
+#endif
+
+QString dataName();
 qint64 checkMemoryFree();  // MB
 qint64 checkMemoryTotal(); // MB
 
