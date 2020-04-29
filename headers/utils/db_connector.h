@@ -48,10 +48,8 @@ public:
     bool close();
     std::vector<DBRow> select(std::string query);
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
-    bool insert(const std::string &tableName, const DBRow &data,
-                const std::vector<std::string> &blobFields = { "key", "owner", "message", "data" });
-    bool replace(const std::string &tableName, const DBRow &data,
-                 const std::vector<std::string> &blobFields = {});
+    bool insert(const std::string &tableName, const DBRow &data);
+    bool replace(const std::string &tableName, const DBRow &data);
     bool update(const std::string &query);
     bool createTable(const std::string &query);
     bool deleteRow(const std::string &tableName, const std::string &nameColumn, const std::string &query);
@@ -64,8 +62,7 @@ public:
     std::vector<std::string> tableNames();
     std::vector<DBColumn> tableColumns(const std::string &table);
 
-    bool insertModern(const std::string &tableName, const DBRow &data, bool isReplace,
-                      const std::vector<std::string> &blobFields = {});
+    bool insertModern(const std::string &tableName, const DBRow &data, bool isReplace);
 
 public:
     bool query(std::string query);

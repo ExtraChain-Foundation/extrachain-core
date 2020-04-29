@@ -89,8 +89,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
                 break;
             }
             case (SQLITE3_TEXT): {
-                int size = sqlite3_column_bytes(stmt, i);
-                t = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
+                t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
                 break;
             }
             case (SQLITE_INTEGER):
@@ -133,8 +132,7 @@ std::vector<DBRow> DBConnector::selectAll(std::string table, int limit)
     return select(query);
 }
 
-bool DBConnector::insert(const std::string &tableName, const DBRow &data,
-                         const std::vector<std::string> &blobFields)
+bool DBConnector::insert(const std::string &tableName, const DBRow &data)
 {
     if (data.size() == 0)
     {
@@ -142,11 +140,10 @@ bool DBConnector::insert(const std::string &tableName, const DBRow &data,
         return false;
     }
 
-    return this->insertModern(tableName, data, false, blobFields);
+    return this->insertModern(tableName, data, false);
 }
 
-bool DBConnector::replace(const std::string &tableName, const DBRow &data,
-                          const std::vector<std::string> &blobFields)
+bool DBConnector::replace(const std::string &tableName, const DBRow &data)
 {
     if (data.size() == 0)
     {
@@ -154,7 +151,7 @@ bool DBConnector::replace(const std::string &tableName, const DBRow &data,
         return false;
     }
 
-    return this->insertModern(tableName, data, true, blobFields);
+    return this->insertModern(tableName, data, true);
 }
 
 bool DBConnector::update(const std::string &query)
@@ -268,8 +265,7 @@ sqlite3 *DBConnector::getDb() const
     return db;
 }
 
-bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, bool isReplace,
-                               const std::vector<std::string> &blobFields)
+bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, bool isReplace)
 {
     std::string queryType = isReplace ? "REPLACE" : "IGNORE";
     std::string query = "INSERT OR " + queryType + " INTO " + tableName + " ";
@@ -286,6 +282,8 @@ bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, 
     values.erase(values.size() - 2, 2);
     query += "(" + fields + ") VALUES (" + values + ")";
 
+    auto columns = tableColumns(tableName);
+
     sqlite3_stmt *stmt = NULL;
     int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
     if (rc != SQLITE_OK)
@@ -299,12 +297,30 @@ bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, 
 
     for (auto &el : data)
     {
-        bool isBlob = !blobFields.size()
-            ? false
-            : std::find(blobFields.begin(), blobFields.end(), el.first) != blobFields.end();
+        std::string toFind = el.first;
+        auto it = std::find_if(columns.begin(), columns.end(),
+                               [&toFind](const DBColumn &column) { return column.name == toFind; });
+        if (it == columns.end())
+        {
+            qDebug() << "Insert error";
+            std::exit(-1);
+            return false;
+        }
 
-        rc = isBlob ? sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC)
-                    : sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        int indx = std::distance(columns.begin(), it);
+        auto column = columns[indx].type;
+        qDebug() << "Finded" << column.c_str();
+
+        if (column == "BLOB")
+            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        else if (column == "TEXT")
+            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        else if (column == "INT")
+            rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
+        else if (column == "INTEGER")
+            rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
+        else
+            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
         fieldNum++;
 
         if (rc != SQLITE_OK)
