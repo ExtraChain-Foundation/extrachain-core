@@ -916,23 +916,10 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
         DBRow row;
 
         for (int i = 1; i < data.length(); i += 2)
-        {
             row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
-        }
 
-        if (data[0] == "chat")
-            db.insertModern(data[0].toStdString(), row);
-        else if (data.indexOf("message") != -1)
-        {
-            std::string query =
-                db.prepareInsert(data[0].toStdString(), row, dfsChanges.changeType == DfsStruct::Update);
-            return db.insertWithData(query, data[data.indexOf("message") + 1]);
-        }
-        else
-        {
-            return dfsChanges.changeType == DfsStruct::Update ? db.replace(data[0].toStdString(), row)
-                                                              : db.insert(data[0].toStdString(), row);
-        }
+        return dfsChanges.changeType == DfsStruct::Update ? db.replace(data[0].toStdString(), row)
+                                                          : db.insert(data[0].toStdString(), row);
     }
     else if (dfsChanges.changeType == DfsStruct::NewColumn)
     {
@@ -1311,21 +1298,19 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
         dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
     }
 
-    QByteArray query("INSERT OR IGNORE INTO Stored ('version', 'hash', 'sign', 'type', 'userId', 'range', "
-                     "'prevHash', 'data' "
-                     ") VALUES ('"
-                     + QByteArray::number(dfsChanges.fileVersion) + "', '" + dfsChanges.messHash + "', '"
-                     + dfsChanges.sign + "', '" + QByteArray::number(dfsChanges.changeType) + "', '"
-                     + dfsChanges.userId + "', '" + dfsChanges.range + "', '" + dfsChanges.prevHash
-                     + "', ?);");
+    DBRow row = { { "version", std::to_string(dfsChanges.fileVersion) },
+                  { "hash", dfsChanges.messHash.toStdString() },
+                  { "sign", dfsChanges.sign.toStdString() },
+                  { "type", std::to_string(dfsChanges.changeType) },
+                  { "userId", dfsChanges.userId.toStdString() },
+                  { "range", dfsChanges.range.toStdString() },
+                  { "prevHash", dfsChanges.prevHash.toStdString() },
+                  { "data", Serialization::universalSerialize(dfsChanges.data, 8).toStdString() } };
 
     if (init)
-    {
-        return dbc.insertWithData(query.toStdString(), Serialization::universalSerialize(dfsChanges.data, 8));
-    }
+        return dbc.insert("Stored", row);
 
-    bool queryRes1 =
-        dbc.insertWithData(query.toStdString(), Serialization::universalSerialize(dfsChanges.data, 8));
+    bool queryRes1 = dbc.insert("Stored", row);
 
     bool queryRes2 = false;
     if (queryRes1)
@@ -1446,22 +1431,10 @@ void Dfs::updateFromNewStored(QString filePath)
 
         DBConnector db;
         if (!db.open(notStoredNew.toStdString()))
-        {
             return;
-        }
+
         for (const auto &row : rows)
-        {
-            if (filePath.indexOf("/msg.stored") != -1 || filePath.indexOf("/chatinvite.stored") != -1)
-            {
-                std::string d = row.at("message");
-                db.insertWithData(db.prepareInsert(table.toStdString(), row, false),
-                                  QByteArray::fromStdString(d));
-            }
-            else
-            {
-                db.insert(table.toStdString(), row);
-            }
-        }
+            db.insert(table.toStdString(), row);
         //
 
         if (QFile(newStoredPath).size() == 0 || QFile(notStoredNew).size() == 0)

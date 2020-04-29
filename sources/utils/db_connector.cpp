@@ -88,9 +88,11 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
                 t = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
                 break;
             }
-            case (SQLITE3_TEXT):
-                t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
+            case (SQLITE3_TEXT): {
+                int size = sqlite3_column_bytes(stmt, i);
+                t = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
                 break;
+            }
             case (SQLITE_INTEGER):
                 t = std::to_string(sqlite3_column_int64(stmt, i));
                 break;
@@ -131,18 +133,20 @@ std::vector<DBRow> DBConnector::selectAll(std::string table, int limit)
     return select(query);
 }
 
-bool DBConnector::insert(const std::string &tableName, const DBRow &data)
+bool DBConnector::insert(const std::string &tableName, const DBRow &data,
+                         const std::vector<std::string> &blobFields)
 {
     if (data.size() == 0)
     {
         qDebug() << file().c_str() << "(false): Insert: DBRow is empty";
         return false;
     }
-    std::string query = prepareInsert(tableName, data, false);
-    return this->query(query);
+
+    return this->insertModern(tableName, data, false, blobFields);
 }
 
-bool DBConnector::replace(const std::string &tableName, const DBRow &data)
+bool DBConnector::replace(const std::string &tableName, const DBRow &data,
+                          const std::vector<std::string> &blobFields)
 {
     if (data.size() == 0)
     {
@@ -150,50 +154,7 @@ bool DBConnector::replace(const std::string &tableName, const DBRow &data)
         return false;
     }
 
-    std::string query = prepareInsert(tableName, data, true);
-    return this->query(query);
-}
-
-std::string DBConnector::prepareInsert(const std::string &tableName, const DBRow &data, bool isReplace)
-{
-    std::string type = isReplace ? "REPLACE" : "IGNORE";
-    std::string query = "INSERT OR " + type + " INTO ";
-    query.append(tableName + " (");
-    std::string f;
-    std::string v;
-    // for(auto [column, value] : data)
-    for (auto it = data.cbegin(); it != data.cend(); ++it)
-    {
-        std::string s = it->first;
-        s.insert(0, "'");
-        s.append("', ");
-        f.append(s);
-
-        if (it->first == "message")
-            s = "?, ";
-        else
-        {
-            s = it->second; // ReplaceAll(it->second, "'", "''");
-            if (it->second == "auto_max")
-            {
-                s = "(SELECT IFNULL(MAX(" + it->first + "), 0) + 1 FROM " + tableName + "), ";
-            }
-            else
-            {
-                s.insert(0, "'");
-                s.append("', ");
-            }
-        }
-        v.append(s);
-    }
-    f.erase(f.size() - 2, 2);
-    v.erase(v.size() - 2, 2);
-    query.append(f);
-    query.append(" ) VALUES (");
-    query.append(v);
-    // if (!noEnd)
-    query.append(" );");
-    return query;
+    return this->insertModern(tableName, data, true, blobFields);
 }
 
 bool DBConnector::update(const std::string &query)
@@ -203,7 +164,8 @@ bool DBConnector::update(const std::string &query)
 
 bool DBConnector::createTable(const std::string &query)
 {
-    return this->query(query);
+    QString queryTemp = QString::fromStdString(query).replace(QRegExp("\\s+"), " "); // temp
+    return this->query(queryTemp.toStdString());
 }
 
 bool DBConnector::deleteRow(const std::string &tableName, const std::string &nameColumn,
@@ -243,48 +205,6 @@ int DBConnector::count(const std::string &table, const std::string &where)
     return std::stoi(res[0]["COUNT(*)"]);
 }
 
-bool DBConnector::insertWithData(const std::string &query, const QByteArray &data)
-{
-    int rc;
-    sqlite3_stmt *stmt = NULL;
-    dbmutex.lock();
-    rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
-    if (rc != SQLITE_OK)
-    {
-        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
-        qDebug() << "prepare failed:" << sqlite3_errmsg(db);
-    }
-    else
-    {
-        // SQLITE_STATIC because the statement is finalized
-        // before the buffer is freed:
-        rc = sqlite3_bind_blob(stmt, 1, data.data(), data.size(), SQLITE_STATIC);
-        if (rc != SQLITE_OK)
-        {
-            qDebug() << "bind failed:" << sqlite3_errmsg(db);
-            qDebug() << file().c_str() << "(false):" << query.c_str();
-            dbmutex.unlock();
-            return false;
-        }
-        else
-        {
-            rc = sqlite3_step(stmt);
-            if (rc != SQLITE_DONE)
-            {
-                qDebug() << "execution failed: " << sqlite3_errmsg(db);
-                qDebug() << file().c_str() << "(false):" << query.c_str();
-                dbmutex.unlock();
-                return false;
-            }
-        }
-    }
-
-    qDebug() << file().c_str() << "(true):" << query.c_str();
-    sqlite3_finalize(stmt);
-    dbmutex.unlock();
-    return true;
-}
-
 std::string DBConnector::file() const
 {
     // QString dbFile = sqlite3_db_filename(db, nullptr);
@@ -308,6 +228,19 @@ std::vector<std::string> DBConnector::tableNames()
     }
 
     return res;
+}
+
+std::vector<DBColumn> DBConnector::tableColumns(const std::string &table)
+{
+    auto sel = select("PRAGMA table_info('" + table + "')");
+    if (sel.size() == 0)
+        return {};
+
+    std::vector<DBColumn> columns;
+    for (auto &el : sel)
+        columns.push_back(DBColumn { .name = el["name"], .type = el["type"] });
+
+    return columns;
 }
 
 bool DBConnector::query(std::string query)
@@ -335,10 +268,11 @@ sqlite3 *DBConnector::getDb() const
     return db;
 }
 
-bool DBConnector::insertModern(const std::string &tableName, const DBRow &data,
+bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, bool isReplace,
                                const std::vector<std::string> &blobFields)
 {
-    std::string query = "INSERT OR IGNORE INTO " + tableName + " ";
+    std::string queryType = isReplace ? "REPLACE" : "IGNORE";
+    std::string query = "INSERT OR " + queryType + " INTO " + tableName + " ";
     std::string fields;
     std::string values;
 
@@ -365,8 +299,6 @@ bool DBConnector::insertModern(const std::string &tableName, const DBRow &data,
 
     for (auto &el : data)
     {
-        qDebug() << el.second.data() << el.second.size();
-
         bool isBlob = !blobFields.size()
             ? false
             : std::find(blobFields.begin(), blobFields.end(), el.first) != blobFields.end();

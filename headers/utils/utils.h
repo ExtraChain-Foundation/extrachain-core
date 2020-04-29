@@ -187,7 +187,7 @@ namespace DataStorage {
           "userId    TEXT             NOT NULL, "
           "version   INT              NOT NULL, "
           "prevHash  TEXT             NOT NULL,"
-          "sign      BLOB             NOT NULL"
+          "sign      TEXT             NOT NULL"
           ");";
 
     static const std::string subscribeFollowerTableName = "Subscribers";

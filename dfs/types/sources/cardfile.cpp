@@ -78,10 +78,12 @@ bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bo
     {
         auto lastRes2 = *lastRes;
         prevId = lastRes2["id"];
+        if (key == 1)
+            key = std::stoi(lastRes2["key"]) + 1;
     }
 
     DBRow row;
-    row.insert({ "key", key == -1 ? "auto_max" : std::to_string(key) });
+    row.insert({ "key", std::to_string(key) });
     row.insert({ "id", fileId.toStdString() });
     row.insert({ "type", std::to_string(type) });
     row.insert({ "prevId", prevId });

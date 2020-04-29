@@ -90,8 +90,8 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     auto mainActor = _accountController->getMainActor()->getKey();
     DBRow row;
     row.insert({ "chatId", _chatId.toStdString() });
-    row.insert({ "key", mainActor->encrypt(key).toStdString() });
-    row.insert({ "owner", mainActor->encrypt(_ownerId).toStdString() });
+    row.insert({ "key", mainActor->encryptSymmetric(key).toStdString() });
+    row.insert({ "owner", mainActor->encryptSymmetric(_ownerId).toStdString() });
     DB.insert(Config::DataStorage::chatIdTableName, row);
 
     _chatManager->sendEditSql(
@@ -156,8 +156,8 @@ QByteArray Chat::unloadChatKey()
     }
 
     auto mainActor = _accountController->getMainActor()->getKey();
-    QByteArray key = mainActor->decrypt(QByteArray::fromStdString(res[0]["key"]));
-    this->ownerID = mainActor->decrypt(QByteArray::fromStdString(res[0]["owner"]));
+    QByteArray key = mainActor->decryptSymmetric(QByteArray::fromStdString(res[0]["key"]));
+    this->ownerID = mainActor->decryptSymmetric(QByteArray::fromStdString(res[0]["owner"]));
     return key;
     //    if (!file.exists())
     //        return "0";

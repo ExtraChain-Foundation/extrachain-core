@@ -68,7 +68,7 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data)
     ECC::curve secpCurve;
     QList<QByteArray> res;
     res = Serialization::universalDeserialize(data, Serialization::DEFAULT_FIELD_SIZE);
-    qDebug() << res.size();
+    // qDebug() << res.size();
     if (res.size() != 3)
     {
         qDebug() << "Wrong data \n Error in decrypt keyprivate.";
@@ -78,6 +78,16 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data)
     EllipticPoint R(res.at(1), res.at(2));
     EllipticPoint S2 = ECC::multiply(secpCurve, this->prkey, R);
     return blowFish_crypt().DecryptBlowFish(s, S2.X().toByteArray() + S2.Y().toByteArray());
+}
+
+QByteArray KeyPrivate::encryptSymmetric(const QByteArray &data)
+{
+    return blowFish_crypt().EncryptBlowFish(data, this->prkey.toByteArray());
+}
+
+QByteArray KeyPrivate::decryptSymmetric(const QByteArray &data)
+{
+    return blowFish_crypt().DecryptBlowFish(data, this->prkey.toByteArray());
 }
 
 QByteArray KeyPrivate::sign(const QByteArray &data)

@@ -508,7 +508,7 @@ void ChatManager::initChat(bool status, int type)
 
         for (DBRow &tmp : chats)
         {
-            QByteArray owner = mainActor->decrypt(QByteArray::fromStdString(tmp["owner"]));
+            QByteArray owner = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["owner"]));
             QByteArray chatId = tmp["chatId"].c_str();
             QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
             QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
