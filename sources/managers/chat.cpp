@@ -87,10 +87,11 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     DBConnector DB("data/" + _currentActorId.toStdString() + "/private/chats");
     DB.createTable(Config::DataStorage::chatIdStorage);
 
+    auto mainActor = _accountController->getMainActor()->getKey();
     DBRow row;
     row.insert({ "chatId", _chatId.toStdString() });
-    row.insert({ "key", key.toStdString() });
-    row.insert({ "owner", _ownerId.toStdString() });
+    row.insert({ "key", mainActor->encrypt(key).toStdString() });
+    row.insert({ "owner", mainActor->encrypt(_ownerId).toStdString() });
     DB.insert(Config::DataStorage::chatIdTableName, row);
 
     _chatManager->sendEditSql(
@@ -153,8 +154,10 @@ QByteArray Chat::unloadChatKey()
         qDebug() << "[Error] Chat manager can't open file to load the key";
         return "0";
     }
-    QByteArray key = res[0]["key"].c_str();
-    this->ownerID = res[0]["owner"].c_str();
+
+    auto mainActor = _accountController->getMainActor()->getKey();
+    QByteArray key = mainActor->decrypt(QByteArray::fromStdString(res[0]["key"]));
+    this->ownerID = mainActor->decrypt(QByteArray::fromStdString(res[0]["owner"]));
     return key;
     //    if (!file.exists())
     //        return "0";
@@ -487,7 +490,7 @@ QByteArray Chat::sendMessage(QByteArray message)
     row.insert({ "messId", std::to_string(messId) });
     row.insert({ "userId", _currentActorId.toStdString() });
     row.insert({ "message", encryptMessage(message).toStdString() });
-    row.insert({ "type", "blob" });
+    row.insert({ "type", "msg" });
     row.insert({ "session", _currentSession.toByteArray().toStdString() });
     row.insert({ "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()).toStdString() });
     DB.insert(Config::DataStorage::chatMessageTableName, row);

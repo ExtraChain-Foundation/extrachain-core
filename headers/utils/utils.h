@@ -159,8 +159,8 @@ namespace DataStorage {
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
           "chatId  TEXT  PRIMARY KEY NOT NULL, "
-          "key     TEXT              NOT NULL, "
-          "owner   TEXT              NOT NULL );";
+          "key     BLOB              NOT NULL, "
+          "owner   BLOB              NOT NULL );";
 
     static const std::string chatUserTableName = "Users";
     static const std::string chatUserStorage = "CREATE TABLE IF NOT EXISTS " + chatUserTableName

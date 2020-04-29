@@ -920,7 +920,9 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
             row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
         }
 
-        if (data.indexOf("message") != -1)
+        if (data[0] == "chat")
+            db.insertModern(data[0].toStdString(), row);
+        else if (data.indexOf("message") != -1)
         {
             std::string query =
                 db.prepareInsert(data[0].toStdString(), row, dfsChanges.changeType == DfsStruct::Update);

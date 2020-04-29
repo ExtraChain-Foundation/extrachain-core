@@ -322,11 +322,11 @@ void ChatManager::sendChatFile(QString chatId, QString dfsName, QString originNa
         temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg", DfsStruct::Type::Chat,
         DfsStruct::ChangeType::Insert,
         { Config::DataStorage::chatMessageTableName.c_str(), "messId", QByteArray::number(messId), "userId",
-          _currentActorId, "message", temp.encryptMessage(message), "type", "blob", "session",
+          _currentActorId, "message", temp.encryptMessage(message), "type", "file", "session",
           temp.getSession().toByteArray(), "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
 }
 
-void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
+void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString type)
 {
     Chat temp(this, chatId, _actorIndex, _accController);
     qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
@@ -334,7 +334,7 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message)
     sendEditSql(temp.getOwner(), chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
                 DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
                 { Config::DataStorage::chatMessageTableName.c_str(), "messId", QByteArray::number(messId),
-                  "userId", _currentActorId, "message", temp.encryptMessage(message), "type", "blob",
+                  "userId", _currentActorId, "message", temp.encryptMessage(message), "type", type.toLatin1(),
                   "session", temp.getSession().toByteArray(), "date",
                   QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
 }
@@ -504,10 +504,11 @@ void ChatManager::initChat(bool status, int type)
 
         DBConnector DB(filePath.toStdString());
         std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
+        auto mainActor = _accController->getMainActor()->getKey();
 
         for (DBRow &tmp : chats)
         {
-            QByteArray owner = tmp["owner"].c_str();
+            QByteArray owner = mainActor->decrypt(QByteArray::fromStdString(tmp["owner"]));
             QByteArray chatId = tmp["chatId"].c_str();
             QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
             QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
