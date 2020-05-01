@@ -46,7 +46,7 @@ public:
 public:
     bool open(const std::string &name);
     bool close();
-    std::vector<DBRow> select(std::string query);
+    std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
     bool insert(const std::string &tableName, const DBRow &data);
     bool replace(const std::string &tableName, const DBRow &data);
@@ -62,12 +62,14 @@ public:
     std::vector<std::string> tableNames();
     std::vector<DBColumn> tableColumns(const std::string &table);
 
-    bool insertModern(const std::string &tableName, const DBRow &data, bool isReplace);
-
 public:
     bool query(std::string query);
 
 public:
     sqlite3 *getDb() const;
+
+private:
+    bool implementationPrepare(const std::string &tableName, const DBRow &data, sqlite3_stmt *stmt);
+    bool implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace);
 };
 #endif // DB_CONNECTOR_H

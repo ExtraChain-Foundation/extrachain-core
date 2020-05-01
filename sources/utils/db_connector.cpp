@@ -59,12 +59,24 @@ bool DBConnector::close()
     }
 }
 
-std::vector<DBRow> DBConnector::select(std::string query) // std::pair with status
-{
+std::vector<DBRow> DBConnector::select(std::string query, std::string tableName, DBRow binds)
+{ // std::pair with status?
     dbmutex.lock();
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+
+    if (!binds.empty())
+    {
+        dbmutex.unlock();
+        if (!implementationPrepare(tableName, binds, stmt))
+        {
+            qDebug() << "select bind error";
+            return {};
+        }
+        dbmutex.lock();
+    }
+
     int rs = sqlite3_step(stmt);
 
     while (rs != SQLITE_DONE)
@@ -119,6 +131,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
     if (rs != SQLITE_DONE)
     {
         qDebug() << file().c_str() << "error: " << sqlite3_errmsg(db);
+        sqlite3_finalize(stmt);
         return {};
     }
 
@@ -134,24 +147,12 @@ std::vector<DBRow> DBConnector::selectAll(std::string table, int limit)
 
 bool DBConnector::insert(const std::string &tableName, const DBRow &data)
 {
-    if (data.size() == 0)
-    {
-        qDebug() << file().c_str() << "(false): Insert: DBRow is empty";
-        return false;
-    }
-
-    return this->insertModern(tableName, data, false);
+    return this->implementationInsert(tableName, data, false);
 }
 
 bool DBConnector::replace(const std::string &tableName, const DBRow &data)
 {
-    if (data.size() == 0)
-    {
-        qDebug() << file().c_str() << "(false): Replace: DBRow is empty";
-        return false;
-    }
-
-    return this->insertModern(tableName, data, true);
+    return this->implementationInsert(tableName, data, true);
 }
 
 bool DBConnector::update(const std::string &query)
@@ -265,8 +266,64 @@ sqlite3 *DBConnector::getDb() const
     return db;
 }
 
-bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, bool isReplace)
+bool DBConnector::implementationPrepare(const std::string &tableName, const DBRow &data, sqlite3_stmt *stmt)
 {
+    int rc;
+    auto columns = tableColumns(tableName);
+    int fieldNum = 1;
+
+    for (auto &el : data)
+    {
+        std::string toFind = el.first;
+        auto it = std::find_if(columns.begin(), columns.end(),
+                               [&toFind](const DBColumn &column) { return column.name == toFind; });
+        if (it == columns.end())
+        {
+            qDebug() << "[ImplementationPrepare] Insert error";
+            sqlite3_finalize(stmt);
+            return false;
+        }
+
+        int indx = std::distance(columns.begin(), it);
+        auto column = columns[indx].type;
+        // qDebug() << "[ImplementationInsert] Finded" << column.c_str();
+
+        if (column == "BLOB")
+            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        else if (column == "TEXT")
+            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        else if (column == "INT")
+            rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
+        else if (column == "INTEGER")
+            rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
+        else if (column == "REAL" || column == "NUMERIC")
+            rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
+        else
+        {
+            qDebug() << "[ImplementationPrepare] Column type not supported";
+            sqlite3_finalize(stmt);
+            return false;
+        }
+        fieldNum++;
+
+        if (rc != SQLITE_OK)
+        {
+            sqlite3_finalize(stmt);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool DBConnector::implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace)
+{
+    if (data.size() == 0)
+    {
+        qDebug() << file().c_str() << "(false): [ImplementationInsert] DBRow is empty";
+        return false;
+    }
+
     std::string queryType = isReplace ? "REPLACE" : "IGNORE";
     std::string query = "INSERT OR " + queryType + " INTO " + tableName + " ";
     std::string fields;
@@ -282,61 +339,36 @@ bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, 
     values.erase(values.size() - 2, 2);
     query += "(" + fields + ") VALUES (" + values + ")";
 
-    auto columns = tableColumns(tableName);
-
+    dbmutex.lock();
     sqlite3_stmt *stmt = NULL;
     int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
-    if (rc != SQLITE_OK)
+
+    dbmutex.unlock();
+    if (!implementationPrepare(tableName, data, stmt))
     {
-        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
-        qDebug() << "prepare failed:" << sqlite3_errmsg(db);
+        qDebug() << "[ImplementationInsert] Bind failed:" << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
         return false;
     }
 
-    int fieldNum = 1;
-
-    for (auto &el : data)
+    dbmutex.lock();
+    if (rc != SQLITE_OK)
     {
-        std::string toFind = el.first;
-        auto it = std::find_if(columns.begin(), columns.end(),
-                               [&toFind](const DBColumn &column) { return column.name == toFind; });
-        if (it == columns.end())
-        {
-            qDebug() << "Insert error";
-            std::exit(-1);
-            return false;
-        }
-
-        int indx = std::distance(columns.begin(), it);
-        auto column = columns[indx].type;
-        qDebug() << "Finded" << column.c_str();
-
-        if (column == "BLOB")
-            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
-        else if (column == "TEXT")
-            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
-        else if (column == "INT")
-            rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
-        else if (column == "INTEGER")
-            rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
-        else
-            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
-        fieldNum++;
-
-        if (rc != SQLITE_OK)
-        {
-            qDebug() << "bind failed:" << sqlite3_errmsg(db);
-            qDebug() << file().c_str() << "(false):" << query.c_str() << el.first.c_str()
-                     << el.second.c_str();
-            return false;
-        }
+        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
+        qDebug() << "[ImplementationInsert] prepare failed:" << sqlite3_errmsg(db);
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
     }
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE)
     {
-        qDebug() << "execution failed: " << sqlite3_errmsg(db);
+        qDebug() << "[ImplementationInsert] Execution failed: " << sqlite3_errmsg(db);
         qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
         return false;
     }
 
@@ -344,5 +376,6 @@ bool DBConnector::insertModern(const std::string &tableName, const DBRow &data, 
     qDebug() << file().c_str() << "(true):" << query.c_str();
 #endif
     sqlite3_finalize(stmt);
+    dbmutex.unlock();
     return true;
 }
