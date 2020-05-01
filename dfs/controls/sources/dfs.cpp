@@ -531,7 +531,7 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
         if (!itemFuture.empty())
         {
-            rootFuture.deleteRow("Items", "id", fileId.toStdString());
+            rootFuture.deleteRow("Items", { { "id", fileId.toStdString() } });
             rootFuture.close();
             int version = QString::fromStdString(itemFuture[0]["version"]).toInt();
             if (version == 0)
@@ -903,13 +903,17 @@ bool Dfs::applyChangesSql(const DistFileSystem::DfsChanges &dfsChanges)
 
     if (dfsChanges.changeType == DfsStruct::Delete)
     {
-        QByteArray query = "DELETE FROM " + data[0] + " WHERE " + data[1] + " = '" + data[2] + "'";
+        DBRow row;
+        if (data.length() < 3)
+        {
+            qDebug() << "[applyChangesSql] Delete error. Length < 3:" << data.length();
+        }
 
-        if (data.length() > 3)
-            query += " AND " + data[3] + " = '" + data[4] + "'";
-        // for (int i = 3; i != data.length(); i += 2)
-        //    query += " AND " + data[1] + " = '" + data[2] + "'";
-        return db.query(query.toStdString());
+        for (int i = 1; i != data.length(); i += 2)
+            row.insert({ data[i].toStdString(), data[i + 1].toStdString() });
+
+        std::string tableName = data[0].toStdString();
+        return db.deleteRow(tableName, row);
     }
     else if (dfsChanges.changeType == DfsStruct::Insert || dfsChanges.changeType == DfsStruct::Update)
     {

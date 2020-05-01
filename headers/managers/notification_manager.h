@@ -8,6 +8,7 @@
 #include "ui/notificationclient.h"
 #include "datastorage/index/actorindex.h"
 #include "dfs/types/headers/dfstruct.h"
+#include "managers/account_controller.h"
 
 class NotificationManager : public QObject
 {
@@ -20,13 +21,14 @@ private:
     NotificationClient *notifyClient = nullptr;
 
     ActorIndex *actorIndex = nullptr;
+    AccountController *accController = nullptr;
 
 public:
     NotificationManager(QObject *parent = nullptr);
 
     void setNotifyClient(NotificationClient *newNtfCl);
-
     void setActorIndex(ActorIndex *_actorIndex);
+    void setAccController(AccountController *value);
 
 private:
     void loadNotificationFromDB();

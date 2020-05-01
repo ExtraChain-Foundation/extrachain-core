@@ -125,7 +125,7 @@ public:
     ChatManager *getChatManager() const;
 
 private:
-    Actor<KeyPrivate> CreateExtracoin();
+    Actor<KeyPrivate> CreateExtracoin(QByteArray consoleHash);
     void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetManager and Blockchain

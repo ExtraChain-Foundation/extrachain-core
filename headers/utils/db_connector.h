@@ -52,7 +52,7 @@ public:
     bool replace(const std::string &tableName, const DBRow &data);
     bool update(const std::string &query);
     bool createTable(const std::string &query);
-    bool deleteRow(const std::string &tableName, const std::string &nameColumn, const std::string &query);
+    bool deleteRow(const std::string &tableName, const DBRow &data);
     bool deleteTable(const std::string &name);
     bool tableExists(const std::string &table);
     bool dropTable(const std::string &table);

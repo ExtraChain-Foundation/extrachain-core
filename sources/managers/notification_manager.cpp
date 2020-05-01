@@ -1,5 +1,6 @@
 #include "headers/managers/notification_manager.h"
 #ifdef ETALONIUM_CLIENT
+
 NotificationManager::NotificationManager(QObject *parent)
     : QObject(parent)
 {
@@ -13,6 +14,11 @@ void NotificationManager::setNotifyClient(NotificationClient *newNtfCl)
 void NotificationManager::setActorIndex(ActorIndex *_actorIndex)
 {
     actorIndex = _actorIndex;
+}
+
+void NotificationManager::setAccController(AccountController *value)
+{
+    accController = value;
 }
 
 void NotificationManager::loadNotificationFromDB()
@@ -30,15 +36,16 @@ void NotificationManager::loadNotificationFromDB()
         return;
     }
 
+    auto mainActor = accController->getMainActor()->getKey();
     DBConnector db(dbPath.toStdString());
     std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::notificationTable);
     QList<Notification> list;
     for (const auto &temp : res)
     {
-        std::string time = temp.at("time");
-        std::string type = temp.at("type");
-        std::string data = temp.at("data");
-        Notification tmp { std::stoll(time), Notification::NotifyType(std::stoi(type)), data.c_str() };
+        QByteArray time = mainActor->decryptSymmetric(QByteArray::fromStdString(temp.at("time")));
+        QByteArray type = mainActor->decryptSymmetric(QByteArray::fromStdString(temp.at("type")));
+        QByteArray data = mainActor->decryptSymmetric(QByteArray::fromStdString(temp.at("data")));
+        Notification tmp { time.toLongLong(), Notification::NotifyType(type.toInt()), data };
         list.append(tmp);
     }
     qDebug() << list.size() << "notify loaded";
@@ -47,9 +54,12 @@ void NotificationManager::loadNotificationFromDB()
 
 void NotificationManager::addNotify(const Notification newNtf)
 {
+    auto mainActor = accController->getMainActor()->getKey();
     sendEditSql(_currentActorId, "notifications", DfsStruct::Type::Private, DfsStruct::Insert,
-                { Config::DataStorage::notificationTable.c_str(), "time", QByteArray::number(newNtf.time),
-                  "type", QByteArray::number(newNtf.type), "data", newNtf.data });
+                { Config::DataStorage::notificationTable.c_str(), "time",
+                  mainActor->encryptSymmetric(QByteArray::number(newNtf.time)), "type",
+                  mainActor->encryptSymmetric(QByteArray::number(newNtf.type)), "data",
+                  mainActor->encryptSymmetric(newNtf.data) });
 
     emit newNotifyToUI(newNtf);
     sendToNotify(newNtf);

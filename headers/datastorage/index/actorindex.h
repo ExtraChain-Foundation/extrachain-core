@@ -160,7 +160,7 @@ signals:
                        const SocketPair &receiver);
 
     void sendProfileToUi(QString userID, QByteArrayList profile);
-    void PrivateActorIsVerified(Actor<KeyPrivate> actor);
+    // void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
 
     void initDfs(BigNumber userId);
