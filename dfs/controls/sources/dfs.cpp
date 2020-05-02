@@ -787,8 +787,10 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
         QByteArray::number(QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
     dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
 
-    if (applyChanges(dfsChanges)) { }
-    sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
+    if (applyChanges(dfsChanges))
+    {
+        sender->sendDfsMessage(dfsChanges, Messages::DFSMessage::changesMessage);
+    }
 }
 
 bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
@@ -1380,7 +1382,7 @@ void Dfs::updateFromNewStored(QString filePath)
         {
             int type = std::stoi(stored.at("type"));
 
-            if (type == 3)
+            if (type == 3) // TODO: type for file
             {
                 QFile file(notStoredNew);
 
@@ -1391,7 +1393,14 @@ void Dfs::updateFromNewStored(QString filePath)
                 }
 
                 // qDebug() << QByteArray::fromStdString(stored.at("data")) << stored.size();
-                file.write(QByteArray::fromStdString(stored.at("data")));
+                QByteArray data = QByteArray::fromStdString(stored.at("data"));
+                QByteArrayList datas = Serialization::universalDeserialize(data, 8);
+                if (datas.isEmpty())
+                {
+                    qDebug() << "updateFromNewStored error";
+                    return;
+                }
+                file.write(datas[0]);
                 file.close();
                 continue;
             }

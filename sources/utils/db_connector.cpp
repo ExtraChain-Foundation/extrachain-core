@@ -36,6 +36,7 @@ bool DBConnector::open(const std::string &name)
     }
     else
     {
+        m_file = name;
         m_open = true;
         return true;
     }

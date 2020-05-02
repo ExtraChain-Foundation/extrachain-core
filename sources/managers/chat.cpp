@@ -42,7 +42,7 @@ Chat::Chat(const Chat& tempChat)
     this->_chatManager = tempChat._chatManager;
     this->_chatId = tempChat.getChatId();
     this->_encryptionKey = tempChat.getEncryptionKey();
-    this->_currentSession = tempChat.getSession();
+    this->_currentSession = tempChat.getSessionConst();
     this->_accountController = tempChat.getAccountController();
     this->_currentActorId = tempChat.getCurrentActorId();
     this->_actorIndex = tempChat.getActorIndex();
@@ -132,8 +132,15 @@ void Chat::saveChatsId(const QByteArray& chatId)
     }
 }
 
+BigNumber Chat::getSessionConst() const
+{
+    return _currentSession;
+}
+
 QByteArray Chat::unloadChatKey()
 {
+    if (_encryptionKey != "0")
+        return _encryptionKey;
     QString filePath = "data/" + _currentActorId + "/private/chats";
 
     if (!QFile::exists(filePath))
@@ -151,9 +158,9 @@ QByteArray Chat::unloadChatKey()
         return "0";
     }
 
-    QByteArray key = mainActor->decryptSymmetric(QByteArray::fromStdString(res[0]["key"]));
+    _encryptionKey = mainActor->decryptSymmetric(QByteArray::fromStdString(res[0]["key"]));
     this->ownerID = mainActor->decryptSymmetric(QByteArray::fromStdString(res[0]["owner"]));
-    return key;
+    return _encryptionKey;
     //    if (!file.exists())
     //        return "0";
     //    if (file.open(QIODevice::ReadOnly))
@@ -239,7 +246,7 @@ QList<QByteArray> Chat::getAllUsers()
 QList<UIMessage> Chat::getAllMessages()
 {
     QList<UIMessage> result;
-    static QString dbPath = ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
+    QString dbPath = ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
         + _currentSession.toByteArray() + "/msg";
 
     if (!QFile::exists(dbPath))
@@ -256,10 +263,10 @@ QList<UIMessage> Chat::getAllMessages()
     for (DBRow tmp : row)
     {
         UIMessage ui;
-        ui.messId = tmp["messId"].c_str();
-        ui.userId = tmp["userId"].c_str();
+        ui.messId = decryptMessage(QByteArray::fromStdString(tmp["messId"]));
+        ui.userId = decryptMessage(QByteArray::fromStdString(tmp["userId"]));
         ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
-        QByteArray date = tmp["date"].c_str();
+        QByteArray date = QByteArray::fromStdString(tmp["date"]);
         ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
         result.append(ui);
     }
@@ -307,8 +314,8 @@ UIMessage Chat::getLastMessage()
     {
         return {};
     }
-    message.userId = row[0]["userId"].c_str();
-    message.messId = row[0]["messId"].c_str();
+    message.userId = decryptMessage(QByteArray::fromStdString(row[0]["userId"]));
+    message.messId = decryptMessage(QByteArray::fromStdString(row[0]["messId"]));
     if (row[0]["message"].size() == 0)
         message.message = "";
     else
@@ -359,7 +366,11 @@ BigNumber Chat::findCurrentSession()
             currentSession = BigNumber(temp.toUtf8());
     }
     if (currentSession == -1)
+    {
+        if (ownerID != "-1" && _chatId != "0")
+            _currentSession = BigNumber("0");
         qDebug() << "[Warning] Chat. find Current Session. There no any session in file.";
+    }
     return currentSession;
     //    QFile file;
     //    do
@@ -372,7 +383,7 @@ BigNumber Chat::findCurrentSession()
 
 void Chat::InitializeAllPaths()
 {
-    if (_currentSession != -1)
+    if (_currentSession != -1 && ownerID != "-1")
         QDir().mkpath(getPathToUsers());
 
     //    QDir().mkpath(pathToSession(_currentSession));
@@ -473,19 +484,21 @@ bool Chat::isUserExist(QByteArray actorId, QList<QByteArray> userList)
 QByteArray Chat::sendMessage(QByteArray message)
 {
     //    DataBase
+    if (_currentSession != BigNumber("0"))
+        _currentSession = BigNumber("0");
     DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
 
     DBRow row;
     qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
-    row.insert({ "messId", std::to_string(messId) });
-    row.insert({ "userId", _currentActorId.toStdString() });
+    row.insert({ "messId", encryptMessage(QByteArray::number(messId)).toStdString() });
+    row.insert({ "userId", encryptMessage(_currentActorId).toStdString() });
     row.insert({ "message", encryptMessage(message).toStdString() });
-    row.insert({ "type", "msg" });
-    row.insert({ "session", _currentSession.toByteArray().toStdString() });
+    row.insert({ "type", encryptMessage("msg").toStdString() });
+    row.insert({ "session", encryptMessage(_currentSession.toByteArray()).toStdString() });
     row.insert({ "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()).toStdString() });
     DB.insert(Config::DataStorage::chatMessageTableName, row);
-    //        return currentMessageByteArray;
+    // return currentMessageByteArray;
 
     return "";
 }
@@ -500,8 +513,10 @@ QByteArray Chat::getEncryptionKey() const
     return this->_encryptionKey;
 }
 
-BigNumber Chat::getSession() const
+BigNumber Chat::getSession()
 {
+    if (this->_currentSession != 0) // temp
+        this->_currentSession = BigNumber(0);
     return this->_currentSession;
 }
 

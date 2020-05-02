@@ -73,6 +73,7 @@ public slots:
     void process();
     void fileLoaded(const QString &path);
     void initChat(bool status, int type);
+    Chat *getChatMemory(QByteArray chatId);
 
 signals:
     void newNotify(const Notification ntf);

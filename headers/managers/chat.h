@@ -42,7 +42,7 @@ private:
     QByteArray ownerID = "-1";
     QByteArray _chatId = "0";
     QByteArray _encryptionKey = "0";
-    BigNumber _currentSession = -1;
+    BigNumber _currentSession = 0; // temp
     QByteArray _currentActorId = "-1";
     AccountController* _accountController;
     ActorIndex* _actorIndex;
@@ -81,7 +81,7 @@ public:
     // getters setters
     QByteArray getChatId() const;                    //+
     QByteArray getEncryptionKey() const;             //+
-    BigNumber getSession() const;                    //+
+    BigNumber getSession();                          //+
     AccountController* getAccountController() const; //+
     void InviteNewUser(QByteArray actorId);          //+-
     bool isUserVerify(QByteArray actorId);           //?-
@@ -99,6 +99,7 @@ public:
     QByteArray decryptMessage(QByteArray message);
     void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
     void saveChatsId(const QByteArray& chatId);
+    BigNumber getSessionConst() const;
 
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager
