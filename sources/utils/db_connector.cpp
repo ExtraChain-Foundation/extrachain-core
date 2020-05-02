@@ -181,10 +181,10 @@ bool DBConnector::deleteRow(const std::string &tableName, const DBRow &data)
 
     for (auto &el : data)
     {
-        where += el.first + "= ?, ";
+        where += el.first + "= ? AND ";
     }
 
-    where.erase(where.size() - 2, 2);
+    where.erase(where.size() - 5, 5);
     query += where;
 
     dbmutex.lock();
