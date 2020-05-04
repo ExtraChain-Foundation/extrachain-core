@@ -77,7 +77,7 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
     bool created = false;
     if (QDir("keystore/profile").isEmpty())
     {
-        company = CreateExtracoin();
+        company = CreateExtracoin(consoleHash);
         emit savePrivateProfile(consoleHash, company.getId().toActorId());
         created = true;
     }
@@ -133,9 +133,9 @@ void NodeManager::initConsoleToken(Transaction tx)
 #endif
 }
 
-Actor<KeyPrivate> NodeManager::CreateExtracoin()
+Actor<KeyPrivate> NodeManager::CreateExtracoin(QByteArray consoleHash)
 {
-    accController->createActor(actorType::COMPANY);
+    accController->createActor(actorType::COMPANY, consoleHash);
 
     return *accController->getMainActor();
 }
@@ -232,6 +232,7 @@ void NodeManager::setNotificationClient(NotificationClient *newNtfCl)
 {
     notifyM->setNotifyClient(newNtfCl);
     notifyM->setActorIndex(actorIndex);
+    notifyM->setAccController(accController);
 }
 
 #endif
@@ -685,7 +686,7 @@ void NodeManager::connectUi()
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
             [=](QByteArray hash, const bool account) {
                 setHashLoginPrivateProfile(hash);
-                accController->createActor(1);
+                accController->createActor(1, hash);
             });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
@@ -727,7 +728,8 @@ void NodeManager::connectUi()
 
 void NodeManager::addNewWallet()
 {
-    auto future = QtConcurrent::run(accController, &AccountController::createActor, 0);
+    auto future =
+        QtConcurrent::run(accController, &AccountController::createActor, 0, hashLoginPrivateProfile);
 
     AsyncFuture::observe(future).subscribe([this, future]() {
         auto walletId = future.result().getId().toActorId();

@@ -158,9 +158,9 @@ namespace DataStorage {
     static const std::string chatIdTableName = "ChatId";
     static const std::string chatIdStorage = "CREATE TABLE IF NOT EXISTS " + chatIdTableName
         + " ("
-          "chatId  TEXT  PRIMARY KEY NOT NULL, "
-          "key     TEXT              NOT NULL, "
-          "owner   TEXT              NOT NULL );";
+          "chatId  BLOB  PRIMARY KEY NOT NULL, "
+          "key     BLOB              NOT NULL, "
+          "owner   BLOB              NOT NULL );";
 
     static const std::string chatUserTableName = "Users";
     static const std::string chatUserStorage = "CREATE TABLE IF NOT EXISTS " + chatUserTableName
@@ -170,12 +170,12 @@ namespace DataStorage {
     static const std::string chatMessageTableName = "Chat";
     static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
         + " ("
-          "messId   TEXT PRIMARY KEY NOT NULL, "
-          "userId   TEXT             NOT NULL, "
+          "messId   BLOB PRIMARY KEY NOT NULL, "
+          "userId   BLOB             NOT NULL, "
           "message  BLOB             NOT NULL, "
-          "type     TEXT             NOT NULL, "
-          "session  TEXT             NOT NULL, "
-          "date     TEXT             NOT NULL );";
+          "type     BLOB             NOT NULL, "
+          "session  BLOB             NOT NULL, "
+          "date     INTEGER          NOT NULL );";
 
     static const std::string storedTableName = "Stored";
     static const std::string storedTableCreation = "CREATE TABLE IF NOT EXISTS " + storedTableName
@@ -187,7 +187,7 @@ namespace DataStorage {
           "userId    TEXT             NOT NULL, "
           "version   INT              NOT NULL, "
           "prevHash  TEXT             NOT NULL,"
-          "sign      BLOB             NOT NULL"
+          "sign      TEXT             NOT NULL"
           ");";
 
     static const std::string subscribeFollowerTableName = "Subscribers";
@@ -205,16 +205,16 @@ namespace DataStorage {
     static const std::string chatInviteTableName = "Invite";
     static const std::string chatInviteCreation = "CREATE TABLE IF NOT EXISTS " + chatInviteTableName
         + " ("
-          "chatId  TEXT PRIMARY KEY NOT NULL, "
+          "chatId  BLOB PRIMARY KEY NOT NULL, "
           "message BLOB             NOT NULL, "
-          "owner   TEXT             NOT NULL  );";
+          "owner   BLOB             NOT NULL  );";
 
     static const std::string notificationTable = "Notification";
     static const std::string notificationTableCreation = "CREATE TABLE IF NOT EXISTS " + notificationTable
         + " ("
-          "time  INTEGER PRIMARY KEY NOT NULL, "
-          "type  INT                 NOT NULL, "
-          "data  TEXT                NOT NULL  );";
+          "time  BLOB PRIMARY KEY NOT NULL, "
+          "type  BLOB                 NOT NULL, "
+          "data  BLOB                NOT NULL  );";
 
     static const std::string propertiesTableName = "Properties";
     static const std::string usersDBAddition = ".users";
@@ -233,8 +233,8 @@ namespace DataStorage {
                                                 "sender     TEXT    NOT NULL,"
                                                 "dateCreate INTEGER NOT NULL,"
                                                 "dateModify INTEGER NOT NULL,"
-                                                "latitude   NUMERIC NOT NULL,"
-                                                "longitude  NUMERIC NOT NULL,";
+                                                "latitude   REAL NOT NULL,"
+                                                "longitude  REAL NOT NULL,";
 
     static const std::string postPropertiesTableCreation = "CREATE TABLE IF NOT EXISTS " + propertiesTableName
         + propertiesFields
@@ -312,23 +312,23 @@ namespace DataStorage {
 
     static const std::string savedPostsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedPostsTableName
         + " ("
-          "user TEXT NOT NULL,"
-          "post TEXT NOT NULL,"
+          "user BLOB NOT NULL,"
+          "post BLOB NOT NULL,"
           "PRIMARY KEY (user, post)"
           ");";
     static const std::string likedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
         + " ("
-          "user  TEXT NOT NULL,"
-          "event TEXT NOT NULL,"
+          "user  BLOB NOT NULL,"
+          "event BLOB NOT NULL,"
           "PRIMARY KEY (user, event)"
           ");";
     static const std::string savedEventsTableCreation = "CREATE TABLE IF NOT EXISTS " + savedEventsTableName
         + " ("
-          "user       TEXT NOT NULL,"
-          "event      TEXT NOT NULL,"
-          "name       TEXT NOT NULL,"
-          "start      TEXT NOT NULL,"
-          "end        TEXT NOT NULL,"
+          "user       BLOB NOT NULL,"
+          "event      BLOB NOT NULL,"
+          "name       BLOB NOT NULL,"
+          "start      BLOB NOT NULL,"
+          "end        BLOB NOT NULL,"
           "PRIMARY KEY (user, event)"
           ");";
 

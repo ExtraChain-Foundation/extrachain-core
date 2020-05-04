@@ -21,26 +21,6 @@
 class NetManager;
 #include "network/network_manager.h"
 #endif
-struct InviteChatMessages
-{
-    QByteArray id;
-    QByteArray owner;
-    QByteArray key;
-    const QByteArray serialize();
-    InviteChatMessages();
-    InviteChatMessages(const QByteArray &serialized);
-};
-
-struct ChatMessage
-{
-    QByteArray id;
-    QByteArray senderMsg;
-    QByteArray message;
-    QByteArray salt;
-    const QByteArray serialize();
-    ChatMessage();
-    ChatMessage(const QByteArray &serialized);
-};
 
 class ChatManager : public QObject
 {
@@ -83,16 +63,17 @@ public slots:
     QByteArray CreateNewChat();                                       //+
 
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
-    void sendChatFile(QString chatId, QString dfsName, QString originName, std::pair<QString, int> mimesize);
-    void SendMessage(QByteArray chatId, QByteArray message); //+
-    void createDialogue(QByteArray actorId);                 //+
-    void requestChatList();                                  //+
-    void requestChat(QByteArray chatId);                     //-
+    void sendChatFile(ChatFileSender chatFile);
+    void SendMessage(QByteArray chatId, QByteArray message, QString type); //+
+    void createDialogue(QByteArray actorId);                               //+
+    void requestChatList();                                                //+
+    void requestChat(QByteArray chatId);                                   //-
     void chatRemoved(QByteArray chatId);
     void changes(QString path);
     void process();
     void fileLoaded(const QString &path);
     void initChat(bool status, int type);
+    Chat *getChatMemory(QByteArray chatId);
 
 signals:
     void newNotify(const Notification ntf);

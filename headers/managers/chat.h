@@ -24,6 +24,15 @@ struct UIChat
     UIMessage lastMessage;
 };
 
+struct ChatFileSender
+{
+    QString chatId;
+    QString dfsName;
+    QString originName;
+    QString mime;
+    int size;
+};
+
 class ChatManager;
 
 class Chat : public QObject
@@ -33,7 +42,7 @@ private:
     QByteArray ownerID = "-1";
     QByteArray _chatId = "0";
     QByteArray _encryptionKey = "0";
-    BigNumber _currentSession = -1;
+    BigNumber _currentSession = 0; // temp
     QByteArray _currentActorId = "-1";
     AccountController* _accountController;
     ActorIndex* _actorIndex;
@@ -45,11 +54,11 @@ private:
     QByteArray getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
     QByteArray pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
     // paths end
-    BigNumber findCurrentSession();                                              //+
-    void InitializeAllPaths();                                                   //+
-                                                                                 //+
-    void loadUsers(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
-    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);            //+
+    BigNumber findCurrentSession();                                                     //+
+    void InitializeAllPaths();                                                          //+
+                                                                                        //+
+    void createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
+    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);                   //+
 
 public:
     Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
@@ -72,7 +81,7 @@ public:
     // getters setters
     QByteArray getChatId() const;                    //+
     QByteArray getEncryptionKey() const;             //+
-    BigNumber getSession() const;                    //+
+    BigNumber getSession();                          //+
     AccountController* getAccountController() const; //+
     void InviteNewUser(QByteArray actorId);          //+-
     bool isUserVerify(QByteArray actorId);           //?-
@@ -90,6 +99,7 @@ public:
     QByteArray decryptMessage(QByteArray message);
     void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
     void saveChatsId(const QByteArray& chatId);
+    BigNumber getSessionConst() const;
 
 signals:
     void sendDataToBlockchain(const QString& path); // send to blockchain. Connect with ChatManager

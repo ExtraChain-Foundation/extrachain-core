@@ -461,9 +461,10 @@ void ActorIndex::profileToSearch(SearchFilters filters)
     for (const QString &section : sectionList)
     {
         QString profileFolderPath = folderPath + +"/" + section + "/" + section + ".profile";
-        QStringList profilePathList =
+        QStringList profilePathList = // TODO: NOT ENTRY LIST
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
-
+        if (section.length() != 20)
+            continue;
         Profile profile = getProfile(section);
 
         if (profile.at(2) == "")

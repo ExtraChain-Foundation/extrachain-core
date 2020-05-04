@@ -36,6 +36,7 @@ bool DBConnector::open(const std::string &name)
     }
     else
     {
+        m_file = name;
         m_open = true;
         return true;
     }
@@ -59,12 +60,24 @@ bool DBConnector::close()
     }
 }
 
-std::vector<DBRow> DBConnector::select(std::string query) // std::pair with status
-{
+std::vector<DBRow> DBConnector::select(std::string query, std::string tableName, DBRow binds)
+{ // std::pair with status?
     dbmutex.lock();
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+
+    if (!binds.empty())
+    {
+        dbmutex.unlock();
+        if (!implementationPrepare(tableName, binds, stmt))
+        {
+            qDebug() << "select bind error";
+            return {};
+        }
+        dbmutex.lock();
+    }
+
     int rs = sqlite3_step(stmt);
 
     while (rs != SQLITE_DONE)
@@ -83,23 +96,25 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
             std::string t;
             switch (sqlite3_column_type(stmt, i))
             {
-            case (SQLITE_BLOB): {
+            case SQLITE_BLOB: {
                 int size = sqlite3_column_bytes(stmt, i);
                 t = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
                 break;
             }
-            case (SQLITE3_TEXT):
+            case SQLITE3_TEXT: {
                 t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
                 break;
-            case (SQLITE_INTEGER):
+            }
+            case SQLITE_INTEGER:
                 t = std::to_string(sqlite3_column_int64(stmt, i));
                 break;
-            case (SQLITE_FLOAT):
+            case SQLITE_FLOAT:
                 t = std::to_string(sqlite3_column_double(stmt, i));
                 break;
             default:
                 break;
             }
+
             row.insert({ n, t });
         }
 
@@ -118,6 +133,7 @@ std::vector<DBRow> DBConnector::select(std::string query) // std::pair with stat
     if (rs != SQLITE_DONE)
     {
         qDebug() << file().c_str() << "error: " << sqlite3_errmsg(db);
+        sqlite3_finalize(stmt);
         return {};
     }
 
@@ -133,67 +149,12 @@ std::vector<DBRow> DBConnector::selectAll(std::string table, int limit)
 
 bool DBConnector::insert(const std::string &tableName, const DBRow &data)
 {
-    if (data.size() == 0)
-    {
-        qDebug() << file().c_str() << "(false): Insert: DBRow is empty";
-        return false;
-    }
-    std::string query = prepareInsert(tableName, data, false);
-    return this->query(query);
+    return this->implementationInsert(tableName, data, false);
 }
 
 bool DBConnector::replace(const std::string &tableName, const DBRow &data)
 {
-    if (data.size() == 0)
-    {
-        qDebug() << file().c_str() << "(false): Replace: DBRow is empty";
-        return false;
-    }
-
-    std::string query = prepareInsert(tableName, data, true);
-    return this->query(query);
-}
-
-std::string DBConnector::prepareInsert(const std::string &tableName, const DBRow &data, bool isReplace)
-{
-    std::string type = isReplace ? "REPLACE" : "IGNORE";
-    std::string query = "INSERT OR " + type + " INTO ";
-    query.append(tableName + " (");
-    std::string f;
-    std::string v;
-    // for(auto [column, value] : data)
-    for (auto it = data.cbegin(); it != data.cend(); ++it)
-    {
-        std::string s = it->first;
-        s.insert(0, "'");
-        s.append("', ");
-        f.append(s);
-
-        if (it->first == "message")
-            s = "?, ";
-        else
-        {
-            s = it->second; // ReplaceAll(it->second, "'", "''");
-            if (it->second == "auto_max")
-            {
-                s = "(SELECT IFNULL(MAX(" + it->first + "), 0) + 1 FROM " + tableName + "), ";
-            }
-            else
-            {
-                s.insert(0, "'");
-                s.append("', ");
-            }
-        }
-        v.append(s);
-    }
-    f.erase(f.size() - 2, 2);
-    v.erase(v.size() - 2, 2);
-    query.append(f);
-    query.append(" ) VALUES (");
-    query.append(v);
-    // if (!noEnd)
-    query.append(" );");
-    return query;
+    return this->implementationInsert(tableName, data, true);
 }
 
 bool DBConnector::update(const std::string &query)
@@ -203,15 +164,68 @@ bool DBConnector::update(const std::string &query)
 
 bool DBConnector::createTable(const std::string &query)
 {
-    return this->query(query);
+    QString queryTemp = QString::fromStdString(query).replace(QRegExp("\\s+"), " "); // temp
+    return this->query(queryTemp.toStdString());
 }
 
-bool DBConnector::deleteRow(const std::string &tableName, const std::string &nameColumn,
-                            const std::string &query)
+bool DBConnector::deleteRow(const std::string &tableName, const DBRow &data)
 {
-    std::string _query = "DELETE FROM " + tableName;
-    _query.append(" WHERE " + nameColumn + " = '" + query + "'");
-    return this->query(_query);
+    if (data.size() == 0)
+    {
+        qDebug() << file().c_str() << "(false): [ImplementationInsert] DBRow is empty";
+        return false;
+    }
+
+    std::string query = "DELETE FROM " + tableName + " WHERE ";
+    std::string where;
+
+    for (auto &el : data)
+    {
+        where += el.first + "= ? AND ";
+    }
+
+    where.erase(where.size() - 5, 5);
+    query += where;
+
+    dbmutex.lock();
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+
+    dbmutex.unlock();
+    if (!implementationPrepare(tableName, data, stmt))
+    {
+        qDebug() << "[DeleteRow] Bind failed:" << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
+        return false;
+    }
+
+    dbmutex.lock();
+    if (rc != SQLITE_OK)
+    {
+        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
+        qDebug() << "[DeleteRow] prepare failed:" << sqlite3_errmsg(db);
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE)
+    {
+        qDebug() << "[DeleteRow] Execution failed: " << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+#ifdef ENABLE_SQLITE_TRUE_LOGS
+    qDebug() << file().c_str() << "(true):" << query.c_str();
+#endif
+    sqlite3_finalize(stmt);
+    dbmutex.unlock();
+    return true;
 }
 
 bool DBConnector::deleteTable(const std::string &name)
@@ -243,48 +257,6 @@ int DBConnector::count(const std::string &table, const std::string &where)
     return std::stoi(res[0]["COUNT(*)"]);
 }
 
-bool DBConnector::insertWithData(const std::string &query, const QByteArray &data)
-{
-    int rc;
-    sqlite3_stmt *stmt = NULL;
-    dbmutex.lock();
-    rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
-    if (rc != SQLITE_OK)
-    {
-        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
-        qDebug() << "prepare failed:" << sqlite3_errmsg(db);
-    }
-    else
-    {
-        // SQLITE_STATIC because the statement is finalized
-        // before the buffer is freed:
-        rc = sqlite3_bind_blob(stmt, 1, data.data(), data.size(), SQLITE_STATIC);
-        if (rc != SQLITE_OK)
-        {
-            qDebug() << "bind failed:" << sqlite3_errmsg(db);
-            qDebug() << file().c_str() << "(false):" << query.c_str();
-            dbmutex.unlock();
-            return false;
-        }
-        else
-        {
-            rc = sqlite3_step(stmt);
-            if (rc != SQLITE_DONE)
-            {
-                qDebug() << "execution failed: " << sqlite3_errmsg(db);
-                qDebug() << file().c_str() << "(false):" << query.c_str();
-                dbmutex.unlock();
-                return false;
-            }
-        }
-    }
-
-    qDebug() << file().c_str() << "(true):" << query.c_str();
-    sqlite3_finalize(stmt);
-    dbmutex.unlock();
-    return true;
-}
-
 std::string DBConnector::file() const
 {
     // QString dbFile = sqlite3_db_filename(db, nullptr);
@@ -310,6 +282,19 @@ std::vector<std::string> DBConnector::tableNames()
     return res;
 }
 
+std::vector<DBColumn> DBConnector::tableColumns(const std::string &table)
+{
+    auto sel = select("PRAGMA table_info('" + table + "')");
+    if (sel.size() == 0)
+        return {};
+
+    std::vector<DBColumn> columns;
+    for (auto &el : sel)
+        columns.push_back(DBColumn { .name = el["name"], .type = el["type"] });
+
+    return columns;
+}
+
 bool DBConnector::query(std::string query)
 {
     dbmutex.lock();
@@ -333,4 +318,118 @@ bool DBConnector::query(std::string query)
 sqlite3 *DBConnector::getDb() const
 {
     return db;
+}
+
+bool DBConnector::implementationPrepare(const std::string &tableName, const DBRow &data, sqlite3_stmt *stmt)
+{
+    int rc;
+    auto columns = tableColumns(tableName);
+    int fieldNum = 1;
+
+    for (auto &el : data)
+    {
+        std::string toFind = el.first;
+        auto it = std::find_if(columns.begin(), columns.end(),
+                               [&toFind](const DBColumn &column) { return column.name == toFind; });
+        if (it == columns.end())
+        {
+            qDebug() << "[ImplementationPrepare] Column find error";
+            sqlite3_finalize(stmt);
+            return false;
+        }
+
+        int indx = std::distance(columns.begin(), it);
+        auto column = columns[indx].type;
+        // qDebug() << "[ImplementationPrepare] Finded" << column.c_str();
+
+        if (column == "BLOB")
+            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        else if (column == "TEXT")
+            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+        else if (column == "INT")
+            rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
+        else if (column == "INTEGER")
+            rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
+        else if (column == "REAL" || column == "NUMERIC")
+            rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
+        else
+        {
+            qDebug() << "[ImplementationPrepare] Column type not supported";
+            sqlite3_finalize(stmt);
+            return false;
+        }
+        fieldNum++;
+
+        if (rc != SQLITE_OK)
+        {
+            sqlite3_finalize(stmt);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool DBConnector::implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace)
+{
+    if (data.size() == 0)
+    {
+        qDebug() << file().c_str() << "(false): [ImplementationInsert] DBRow is empty";
+        return false;
+    }
+
+    std::string queryType = isReplace ? "REPLACE" : "IGNORE";
+    std::string query = "INSERT OR " + queryType + " INTO " + tableName + " ";
+    std::string fields;
+    std::string values;
+
+    for (auto &el : data)
+    {
+        fields += "'" + el.first + "', ";
+        values += "?, ";
+    }
+
+    fields.erase(fields.size() - 2, 2);
+    values.erase(values.size() - 2, 2);
+    query += "(" + fields + ") VALUES (" + values + ")";
+
+    dbmutex.lock();
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+
+    dbmutex.unlock();
+    if (!implementationPrepare(tableName, data, stmt))
+    {
+        qDebug() << "[ImplementationInsert] Bind failed:" << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
+        return false;
+    }
+
+    dbmutex.lock();
+    if (rc != SQLITE_OK)
+    {
+        qDebug().nospace() << file().c_str() << "(false):" << query.c_str();
+        qDebug() << "[ImplementationInsert] prepare failed:" << sqlite3_errmsg(db);
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE)
+    {
+        qDebug() << "[ImplementationInsert] Execution failed: " << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+#ifdef ENABLE_SQLITE_TRUE_LOGS
+    qDebug() << file().c_str() << "(true):" << query.c_str();
+#endif
+    sqlite3_finalize(stmt);
+    dbmutex.unlock();
+    return true;
 }

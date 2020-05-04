@@ -766,5 +766,5 @@ QString Utils::dataName()
     else if (serverIp == "51.68.181.52")
         return "/etalonium-test";
     else
-        return "/etalonium-private-" + serverIp.replace(".", "");
+        return "/etalonium-private-" + serverIp.replace(".", "-");
 }

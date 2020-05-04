@@ -140,7 +140,7 @@ void PrivateProfile::profile(const QByteArray &hash)
                 QList<QByteArray> idList = get(map, "wallet").split('|');
                 emit setIdProfile(idList.first());
                 qDebug() << "Load private profile with id" << idList.first();
-                acContorller->loadActors(idList.first(), idList);
+                acContorller->loadActors(idList.first(), idList, hash);
                 if (acContorller->getMainActor() != nullptr)
                     dfs->initMyLocalStorage();
                 emit initActorChatM();

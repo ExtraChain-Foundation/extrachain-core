@@ -55,7 +55,7 @@ AccountController::AccountController(ActorIndex *actorIndex)
 {
     this->actorIndex = actorIndex;
     // when private actor is verified by actor index -> save it locally
-    connect(actorIndex, &ActorIndex::PrivateActorIsVerified, this, &AccountController::savePrivateActor);
+    // connect(actorIndex, &ActorIndex::PrivateActorIsVerified, this, &AccountController::savePrivateActor);
     //    if (!QFile(KeyStore::user_actor_state).exists())
     //    {
     //        QFile file(KeyStore::user_actor_state);
@@ -63,7 +63,7 @@ AccountController::AccountController(ActorIndex *actorIndex)
     //        file.flush();
     //        file.close();
     //    }
-    loadActors();
+    // loadActors();
 }
 
 QList<QByteArray> AccountController::getAccountID()
@@ -74,7 +74,7 @@ QList<QByteArray> AccountController::getAccountID()
     return list;
 }
 
-Actor<KeyPrivate> AccountController::createActor(int account)
+Actor<KeyPrivate> AccountController::createActor(int account, QByteArray hashLogin)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
     actor->init(account);
@@ -84,7 +84,7 @@ Actor<KeyPrivate> AccountController::createActor(int account)
     emit verifyActor(actor->convertToPublic());
 
     actorIndex->addActor(actor->convertToPublic());
-    savePrivateActor(*actor);
+    savePrivateActor(*actor, hashLogin);
     accounts.append(actor);
     if (accounts.size() - 1 == 0)
         emit savePrivateProfile(actor->getId().toActorId());
@@ -153,10 +153,14 @@ Actor<KeyPrivate> AccountController::getCurrentActor()
     return getActor(this->userNum);
 }
 
-void AccountController::loadActors(QByteArray id, QByteArrayList idList)
+void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteArray hashLogin)
 {
-    if (id.isEmpty())
+    if (id.isEmpty() || hashLogin.isEmpty())
+    {
+        qDebug() << "[loadActors] id or hashLogin is empty";
+        std::exit(-1);
         return;
+    }
 
     accounts.clear();
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
@@ -167,8 +171,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList)
         QFile file(path + "/" + fileName + ".key");
         if (file.exists() && file.open(QIODevice::ReadOnly))
         {
-            QByteArray serialized;
-            serialized = file.readAll();
+            QByteArray serialized = blowFish_crypt().DecryptBlowFish(file.readAll(), hashLogin);
             qDebug() << serialized;
             file.close();
             if (!serialized.isEmpty())
@@ -212,7 +215,7 @@ void AccountController::setUserNum(int value)
     userNum = value;
 }
 
-void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
+void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin)
 {
     qDebug() << "Attempting to save Private Actor" << actor.getId();
     if (!accounts.isEmpty())
@@ -235,7 +238,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
         else
         {
             qDebug() << "actor serialized: ---- " << actor.serialize();
-            file->write(actor.serialize());
+            file->write(blowFish_crypt().EncryptBlowFish(actor.serialize(), hashLogin));
             file->flush();
             qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
         }

@@ -40,6 +40,8 @@ public:
 public: // Cryptor interface
     QByteArray encrypt(const QByteArray &data);
     QByteArray decrypt(const QByteArray &data);
+    QByteArray encryptSymmetric(const QByteArray &data);
+    QByteArray decryptSymmetric(const QByteArray &data);
 
 public: // Signer interface
     QByteArray sign(const QByteArray &data);

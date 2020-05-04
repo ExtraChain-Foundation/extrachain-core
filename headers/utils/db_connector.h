@@ -14,7 +14,22 @@
 static QMutex dbmutex;
 typedef std::unordered_map<std::string, std::string> DBRow;
 
-// TODO: while select, open check in query, normal insert, std::vector<DBColumn>
+struct DBColumn
+{
+    std::string name;
+    std::string type;
+    // bool notNull = false;
+    // std::string defaultValue;
+    // int primaryKey = -1;
+
+    operator QString() const
+    {
+        return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type)
+            + ")";
+    }
+};
+
+// TODO: while select, open check in query, std::vector<DBColumn>
 
 class DBConnector
 {
@@ -31,27 +46,30 @@ public:
 public:
     bool open(const std::string &name);
     bool close();
-    std::vector<DBRow> select(std::string query);
+    std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
     bool insert(const std::string &tableName, const DBRow &data);
     bool replace(const std::string &tableName, const DBRow &data);
-    std::string prepareInsert(const std::string &tableName, const DBRow &data, bool isReplace);
     bool update(const std::string &query);
     bool createTable(const std::string &query);
-    bool deleteRow(const std::string &tableName, const std::string &nameColumn, const std::string &query);
+    bool deleteRow(const std::string &tableName, const DBRow &data);
     bool deleteTable(const std::string &name);
     bool tableExists(const std::string &table);
     bool dropTable(const std::string &table);
     int count(const std::string &table, const std::string &where = "");
-    bool insertWithData(const std::string &query, const QByteArray &data);
     std::string file() const;
     bool isOpen() const;
     std::vector<std::string> tableNames();
+    std::vector<DBColumn> tableColumns(const std::string &table);
 
 public:
     bool query(std::string query);
 
 public:
     sqlite3 *getDb() const;
+
+private:
+    bool implementationPrepare(const std::string &tableName, const DBRow &data, sqlite3_stmt *stmt);
+    bool implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace);
 };
 #endif // DB_CONNECTOR_H
