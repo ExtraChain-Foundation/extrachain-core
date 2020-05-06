@@ -331,7 +331,7 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
         QByteArray part = orig.read(blockSize);
         QByteArray encrypted = blowFish_crypt().EncryptBlowFish(part, key);
         encrypt.write(encrypted);
-        qDebug() << "encrypted" << part.size() << encrypted.size();
+        // qDebug() << "encrypted" << part.size() << encrypted.size();
     }
 
     qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" << orig.size()

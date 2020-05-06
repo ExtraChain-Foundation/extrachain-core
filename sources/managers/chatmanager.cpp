@@ -301,8 +301,6 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 
 void ChatManager::sendChatFile(ChatFileSender chatFile)
 {
-    Chat temp(this, chatFile.chatId.toLatin1(), _actorIndex, _accController);
-
     QJsonObject dataObj;
     dataObj["name"] = chatFile.originName;
     dataObj["size"] = chatFile.size;
@@ -314,14 +312,7 @@ void ChatManager::sendChatFile(ChatFileSender chatFile)
     jsonObj["data"] = QString(QJsonDocument(dataObj).toJson(QJsonDocument::Compact));
 
     QByteArray message = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
-    qDebug() << "message:" << message;
-    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
-    emit sendEditSql(
-        temp.getOwner(), chatFile.chatId + "/" + temp.getSession().toByteArray() + "/" + "msg",
-        DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
-        { Config::DataStorage::chatMessageTableName.c_str(), "messId", QByteArray::number(messId), "userId",
-          _currentActorId, "message", temp.encryptMessage(message), "type", "file", "session",
-          temp.getSession().toByteArray(), "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
+    SendMessage(chatFile.chatId.toLatin1(), message, "file");
 }
 
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString type)
