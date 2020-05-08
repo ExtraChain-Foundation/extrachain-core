@@ -583,9 +583,9 @@ void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
     // qDebug() << "fileResponse";
     sender->sendFile(filePath, type, receiver);
 
-    QString storedPath = filePath + DfsStruct::STORED_EXT;
-    if (QFile::exists(storedPath))
-        sender->sendFile(storedPath, DfsStruct::Type::Stored, receiver);
+    // QString storedPath = filePath + DfsStruct::STORED_EXT;
+    // if (QFile::exists(storedPath))
+    //     sender->sendFile(storedPath, DfsStruct::Type::Stored, receiver);
 
     /*
     QFile file(path);
