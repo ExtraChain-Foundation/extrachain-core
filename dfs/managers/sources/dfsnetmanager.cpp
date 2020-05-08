@@ -151,7 +151,7 @@ void DFSNetManager::titleArrived(Network::DataStruct ds)
     }
 }
 
-void DFSNetManager::removeResolver()
+void DFSNetManager::removeResolver(bool reset)
 {
     DFSResolverService *resolver = qobject_cast<DFSResolverService *>(QObject::sender());
     if (resolver == nullptr)
@@ -159,6 +159,7 @@ void DFSNetManager::removeResolver()
         qDebug() << "WAT";
         return;
     }
+    QString filePath = resolver->getTitle().filePath;
     disconnectResolver(resolver);
     if (resolver->getType() == Resolver::Type::DFS)
     {
@@ -172,6 +173,9 @@ void DFSNetManager::removeResolver()
         titleVector.pop();
         createDFSResolver(ds);
     }
+
+    if (reset)
+        dfs->requestFile(filePath);
 }
 
 void DFSNetManager::removeConnection()

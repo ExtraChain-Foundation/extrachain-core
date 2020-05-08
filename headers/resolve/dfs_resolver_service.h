@@ -64,7 +64,7 @@ public:
     ~DFSResolverService() override;
 
 private:
-    void finishWork();
+    void finishWork(bool reset = false);
     QByteArray checkFragStatus(unsigned long from, unsigned long to);
 private slots:
     void checkStatus();
@@ -154,7 +154,7 @@ signals:
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me
      */
-    void TaskFinished();
+    void TaskFinished(bool reset);
     /**
      * @brief responseReady to network manager
      * @param data

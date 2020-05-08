@@ -70,7 +70,7 @@ public slots:
     void startDFSNetwork();
     void uiReconnect();
     void titleArrived(Network::DataStruct ds);
-    void removeResolver();
+    void removeResolver(bool reset);
 
 private slots:
     void removeConnection();

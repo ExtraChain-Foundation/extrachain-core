@@ -28,10 +28,10 @@ DFSResolverService::~DFSResolverService()
     //    emit finished();
 }
 
-void DFSResolverService::finishWork()
+void DFSResolverService::finishWork(bool reset)
 {
     active = false;
-    emit TaskFinished();
+    emit TaskFinished(reset);
 }
 
 QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long to)
@@ -350,7 +350,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 }
                 if (message.dataHash != title.dataHash)
                 {
-                    active = false;
+                    finishWork(true);
                     return;
                 }
                 if (dataChecker[std::size_t(message.pckgNumber)])
