@@ -186,7 +186,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
     QString filePath = QString::fromStdString(CardManager::buildPathForFile(
         cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type), false));
 
-    if (QFile::exists(filePath))
+    if (QFile::exists(filePath)) // TODO: root check
         return;
 
     if (cfc.isEmpty())
@@ -583,9 +583,9 @@ void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
     // qDebug() << "fileResponse";
     sender->sendFile(filePath, type, receiver);
 
-    QString storedPath = filePath + DfsStruct::STORED_EXT;
-    if (QFile::exists(storedPath))
-        sender->sendFile(storedPath, DfsStruct::Type::Stored, receiver);
+    // QString storedPath = filePath + DfsStruct::STORED_EXT;
+    // if (QFile::exists(storedPath))
+    //     sender->sendFile(storedPath, DfsStruct::Type::Stored, receiver);
 
     /*
     QFile file(path);
@@ -1009,6 +1009,7 @@ void Dfs::dfsSyncT()
 {
     if (accountControler->getMainActor() == nullptr)
         return;
+
     dfsValidateAll();
     QByteArray mainActor = accountControler->getMainActor()->getId().toActorId();
     QString myCardFile = "data/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
@@ -1057,6 +1058,12 @@ void Dfs::dfsSync(const SocketPair &receiver)
 
 bool Dfs::dfsValidate(QByteArray userID)
 {
+    if (ignoredIds.contains(userID))
+    {
+        // qDebug() << "dfsValidate ignore" << userID;
+        return true;
+    }
+
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/" + DfsStruct::ACTOR_CARD_FILE;
     QString profile =
         DfsStruct::ROOT_FOOLDER_NAME + "/" + userID + "/profile/" + userID + DfsStruct::PROFILE_EXT;
@@ -1183,7 +1190,17 @@ void Dfs::startDFS()
 {
     QByteArrayList actors = actorIndex->allActors();
     for (const QByteArray &actor : actors)
+    {
+        auto actorAccount = actorIndex->getActor(actor).getAccount();
+        if (actorAccount == 0)
+        {
+            // qDebug() << "add to ignored" << actor;
+            ignoredIds << actor;
+            continue;
+        }
+
         initDFS(actor);
+    }
 
     initDFSNetManager();
     if (sender == nullptr)
@@ -1537,10 +1554,10 @@ void Dfs::initMyLocalStorage()
 void Dfs::initUser(BigNumber userId)
 {
     initDFS(userId.toActorId());
-    QString cPath =
-        DfsStruct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/' + DfsStruct::ACTOR_CARD_FILE;
-    if (accountControler->getMainActor() == nullptr)
-        return;
+    // QString cPath =
+    //     DfsStruct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/' + DfsStruct::ACTOR_CARD_FILE;
+    // if (accountControler->getMainActor() == nullptr)
+    //     return;
     //    DFSMessage::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
     //    dfsNetManager->send(rqst.serialize());
 }
@@ -1581,6 +1598,12 @@ void Dfs::searchTmp()
 
     for (const QString &id : dataIds)
     {
+        if (ignoredIds.contains(id))
+        {
+            // qDebug() << "searchTmp ignore" << id;
+            continue;
+        }
+
         QString rootPath = "data/" + id + "/root";
         QFileInfo root(rootPath);
         // QFileInfo rootTmp(rootPath + ".tmp");
@@ -1598,7 +1621,7 @@ void Dfs::searchTmp()
 
         if (!root.exists() || root.size() == 0)
         {
-            requestFile(rootPath);
+            requestCardById(id.toLatin1());
         }
     }
 
@@ -1637,6 +1660,12 @@ void Dfs::searchTmp()
 
 void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 {
+    if (ignoredIds.contains(userId))
+    {
+        // qDebug() << "requestCardById ignore" << userId;
+        return;
+    }
+
     if (dfsNetManager == nullptr || sender == nullptr)
     {
         qDebug().nospace() << "What's up, Doc? " << (dfsNetManager == nullptr ? "dfsNetManager" : "sender")

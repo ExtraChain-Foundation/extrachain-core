@@ -28,10 +28,10 @@ DFSResolverService::~DFSResolverService()
     //    emit finished();
 }
 
-void DFSResolverService::finishWork()
+void DFSResolverService::finishWork(bool reset)
 {
     active = false;
-    emit TaskFinished();
+    emit TaskFinished(reset);
 }
 
 QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long to)
@@ -350,6 +350,12 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 }
                 if (message.dataHash != title.dataHash)
                 {
+                    QString pathFile = path.chopped(4);
+                    if (message.path == pathFile)
+                    {
+                        finishWork(true);
+                        return;
+                    }
                     active = false;
                     return;
                 }
@@ -387,6 +393,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     QDir dir;
     dir.mkpath(dirPath);
     file.setFileName(path);
+    this->path = path;
     if (!file.open(QIODevice::ReadWrite | QIODevice::Truncate))
     {
         // Take actorid of file owner

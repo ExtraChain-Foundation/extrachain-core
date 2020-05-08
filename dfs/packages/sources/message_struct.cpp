@@ -3,7 +3,7 @@
 const QList<QByteArray> DistFileSystem::DfsMessage::serializedParams() const
 {
     QList<QByteArray> list;
-    list << dataHash << QByteArray::number(static_cast<long long>(pckgNumber)) << data;
+    list << dataHash << QByteArray::number(static_cast<long long>(pckgNumber)) << data << path.toUtf8();
     return list;
 }
 
@@ -30,10 +30,11 @@ QByteArray DistFileSystem::DfsMessage::serialize() const
 void DistFileSystem::DfsMessage::deserialize(const QByteArray &serialized)
 {
     QList<QByteArray> l = Serialization::universalDeserialize(serialized);
-    if (l.size() == 3)
+    if (l.size() == DfsMessage::FIELDS_COUNT)
     {
         dataHash = l.takeFirst();
         pckgNumber = l.takeFirst().toInt();
         data = l.takeFirst();
+        path = l.takeFirst();
     }
 }

@@ -10,11 +10,12 @@ namespace DistFileSystem {
 struct DfsMessage : Messages::ISmallMessage
 {
 
-    const short FIELDS_COUNT = 3;
+    const short FIELDS_COUNT = 4;
 
     QByteArray dataHash;
     long long pckgNumber = ULONG_MAX;
     QByteArray data;
+    QString path;
 
 public:
     const QList<QByteArray> serializedParams() const;

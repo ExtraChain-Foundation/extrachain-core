@@ -41,7 +41,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
             }
             // fragsID.push_back(b.toLongLong());
         }
-        int p = 0;
+        //        int p = 0;
         for (unsigned int i = 0; i < fragsID.size(); i++)
         {
             file.seek(fragsID[i] * data_offset);
@@ -50,15 +50,16 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
             pck.dataHash = title.dataHash;
             pck.pckgNumber = fragsID[i];
             pck.data = data;
-            if (p >= 20)
-            {
-                p = 0;
-                QThread::currentThread()->msleep(50);
-            }
-            else
-            {
-                p++;
-            }
+            pck.path = path;
+            //            if (p >= 20)
+            //            {
+            //                p = 0;
+            //                QThread::currentThread()->msleep(50);
+            //            }
+            //            else
+            //            {
+            //                p++;
+            //            }
             sendDfsMessage(pck, Messages::DFSMessage::fileDataMessage, receiver);
         }
     }

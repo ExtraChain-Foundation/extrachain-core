@@ -686,7 +686,9 @@ void NodeManager::connectUi()
     connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
             [=](QByteArray hash, const bool account) {
                 setHashLoginPrivateProfile(hash);
-                accController->createActor(1, hash);
+
+                auto future = QtConcurrent::run(accController, &AccountController::createActor, 1, hash);
+                AsyncFuture::observe(future).subscribe([]() { qDebug() << "Actor created"; });
             });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,

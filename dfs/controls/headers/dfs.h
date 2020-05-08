@@ -118,6 +118,7 @@ private:
     DfsStruct::Type getFileType(const QString &filePath);
     bool isHaveStoredType(int type);
 
+    QSet<QString> ignoredIds;
     QTimer *timerTmpFiles;
     QStringList m_tmpFiles;
     QVector<std::pair<qint64, QString>> m_reqFiles;
