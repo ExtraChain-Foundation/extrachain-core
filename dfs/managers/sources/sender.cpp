@@ -50,6 +50,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
             pck.dataHash = title.dataHash;
             pck.pckgNumber = fragsID[i];
             pck.data = data;
+            pck.path = path;
             if (p >= 20)
             {
                 p = 0;

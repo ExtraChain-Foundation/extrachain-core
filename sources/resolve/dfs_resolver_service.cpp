@@ -350,7 +350,13 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 }
                 if (message.dataHash != title.dataHash)
                 {
-                    finishWork(true);
+                    QString pathFile = path.chopped(4);
+                    if (message.path == pathFile)
+                    {
+                        finishWork(true);
+                        return;
+                    }
+                    active = false;
                     return;
                 }
                 if (dataChecker[std::size_t(message.pckgNumber)])
@@ -387,6 +393,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     QDir dir;
     dir.mkpath(dirPath);
     file.setFileName(path);
+    this->path = path;
     if (!file.open(QIODevice::ReadWrite | QIODevice::Truncate))
     {
         // Take actorid of file owner

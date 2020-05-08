@@ -186,7 +186,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
     QString filePath = QString::fromStdString(CardManager::buildPathForFile(
         cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type), false));
 
-    if (QFile::exists(filePath))
+    if (QFile::exists(filePath)) // TODO: root check
         return;
 
     if (cfc.isEmpty())
@@ -1662,7 +1662,7 @@ void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 {
     if (ignoredIds.contains(userId))
     {
-        qDebug() << "requestCardById ignore" << userId;
+        // qDebug() << "requestCardById ignore" << userId;
         return;
     }
 

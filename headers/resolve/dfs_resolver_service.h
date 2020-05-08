@@ -50,6 +50,7 @@ private:
     QByteArray msg;
     QByteArray hash;
     SocketPair receiver;
+    QString path;
 
 public:
     /**
