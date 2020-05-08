@@ -756,6 +756,9 @@ qint64 Utils::checkMemoryTotal()
 
 QString Utils::dataName()
 {
+#ifdef ETALONIUM_CONSOLE
+    return "etalonium-console";
+#endif
     QSettings settings;
     if (!settings.value("network/serverIp").isValid())
         settings.setValue("network/serverIp", Network::serverIp);
