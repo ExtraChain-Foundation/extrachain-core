@@ -311,7 +311,7 @@ public:
         return account;
     }
 
-    void setAccount(bool value)
+    void setAccount(actorType value)
     {
         account = value;
     }

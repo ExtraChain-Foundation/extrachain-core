@@ -264,7 +264,6 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
 
     QByteArray userId = accountControler->getMainActor()->getId().toActorId();
     QByteArray dfsPath;
-    bool stored = false;
     bool exists = false;
 
     if (data.left(13) == "encryptfile::")
@@ -339,7 +338,10 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         return;
 
     if (!appendToCard(dfsPath, userId, type, true))
+    {
+        qDebug() << "Dfs::saveToDFS: Can't append to card file";
         return;
+    }
 
     if (isHaveStoredType(type))
     {
@@ -349,8 +351,6 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         }
         else
         {
-            stored = true;
-
             QByteArray d = data;
             if (data.isEmpty())
             {
@@ -374,7 +374,12 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
             dfsChanges.sign = accountControler->getMainActor()->getKey()->sign(dfsChanges.prepareSign());
 
-            appendToStored(dfsChanges, true);
+            bool stored = appendToStored(dfsChanges, true);
+            if (!stored)
+            {
+                qDebug() << "Dfs::saveToDFS: Can't append to stored";
+                return;
+            }
         }
     }
 
@@ -643,7 +648,6 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
     if (!QFile::exists(dfsPath)) // and no stored
         return;
 
-    bool stored = false;
     if (needStored && isHaveStoredType(type))
     {
         if (!createStored(dfsPath, userId, type))
@@ -652,8 +656,6 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
         }
         else
         {
-            stored = true;
-
             QFile file(dfsPath);
             file.open(QFile::ReadOnly);
             QByteArray data = file.readAll();
@@ -679,9 +681,15 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             bool stored = appendToStored(dfsChanges, true);
 
             if (!card)
+            {
+                qDebug() << "Dfs::saveStaticFile: Can't append to card file";
                 return;
+            }
             if (!stored)
+            {
+                qDebug() << "Dfs::saveStaticFile: Can't append to stored";
                 return;
+            }
         }
     }
 
@@ -1148,7 +1156,7 @@ bool Dfs::dfsValidate(QByteArray userID)
                 QFileInfo file(QString::fromStdString(fPath + ".stored"));
                 if (!file.exists() || file.size() == 0)
                 {
-                    requestFile(QString::fromStdString(fPath));
+                    requestFile(QString::fromStdString(fPath + ".stored"));
                     flag = false;
                 }
             }
