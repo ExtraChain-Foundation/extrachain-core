@@ -7,13 +7,11 @@ BlockIndex::BlockIndex()
     firstSavedId = loadFirstId();
     lastSavedId = loadLastId();
     QDir dir(DataStorage::BLOCKCHAIN_INDEX + '/' + folderName);
-    QFileInfoList sectionList =
-        dir.entryInfoList(QDir::Filter::Dirs | QDir::Filter::NoDot | QDir::Filter::NoDotDot);
+    QFileInfoList sectionList = dir.entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
     int count = 0;
     for (auto &el : sectionList)
     {
-        QFileInfoList files =
-            el.dir().entryInfoList(QDir::Filter::Dirs | QDir::Filter::NoDot | QDir::Filter::NoDotDot);
+        QFileInfoList files = el.dir().entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
         count += files.size();
     }
     records = count;

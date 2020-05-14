@@ -350,7 +350,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 }
                 if (message.dataHash != title.dataHash)
                 {
-                    QString pathFile = path.chopped(4);
+                    QString pathFile = path.isEmpty() ? "" : path.chopped(4);
                     if (message.path == pathFile)
                     {
                         finishWork(true);

@@ -316,6 +316,7 @@ std::vector<char> blowFish_crypt::Decrypt(const std::vector<char> &src, const st
 
 QByteArray blowFish_crypt::EncryptBlowFish(QByteArray message, QByteArray key)
 {
+    Q_ASSERT(!key.isEmpty());
     std::vector<char> messageByte(message.begin(), message.end());
     std::vector<char> keyByte(key.begin(), key.end());
     std::vector<char> result = Encrypt(messageByte, keyByte);
@@ -324,6 +325,7 @@ QByteArray blowFish_crypt::EncryptBlowFish(QByteArray message, QByteArray key)
 
 QByteArray blowFish_crypt::DecryptBlowFish(QByteArray message, QByteArray key)
 {
+    Q_ASSERT(!key.isEmpty());
     std::vector<char> messageByte(message.begin(), message.end());
     std::vector<char> keyByte(key.begin(), key.end());
     std::vector<char> result = Decrypt(messageByte, keyByte);
