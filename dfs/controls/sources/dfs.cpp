@@ -573,7 +573,11 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     this->dfsValidate(userId);
 
 #ifdef ETALONIUM_CLIENT
-    emit fileAdded(path.toUtf8(), "network", type, pathList.at(PathStruct::aId));
+    bool haveStored = isHaveStoredType(type);
+    if (haveStored && path.right(7) == ".stored")
+        emit fileAdded(path.mid(0, path.length() - 7), "network", type, pathList.at(PathStruct::aId));
+    if (!haveStored)
+        emit fileAdded(path, "network", type, pathList.at(PathStruct::aId));
 #endif
 }
 
