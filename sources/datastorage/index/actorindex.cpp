@@ -41,15 +41,8 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
 
 bool ActorIndex::hasActor(const BigNumber &id)
 {
-    QByteArray serializedActor = this->getById(id);
-    if (!serializedActor.isEmpty())
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
+    return QFileInfo(filePath).size() > 0;
 }
 
 void ActorIndex::removeActor(const BigNumber &id, bool resend)
@@ -407,11 +400,8 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
         resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
         //        emit sendMessage(actor.serialize(), classType);
 
-        if (actor.getAccount() > 0)
-        {
-            qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
-            emit initDfs(actor.getId());
-        }
+        qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
+        emit initDfs(actor.getId());
     }
     return result;
 }
@@ -456,13 +446,13 @@ void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
     QString folderPath = "data";
-    QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDot | QDir::NoDotDot);
+    QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDotAndDotDot);
 
     for (const QString &section : sectionList)
     {
         QString profileFolderPath = folderPath + +"/" + section + "/" + section + ".profile";
         QStringList profilePathList = // TODO: NOT ENTRY LIST
-            QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::QDir::NoDot | QDir::QDir::NoDotDot);
+            QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::NoDotAndDotDot);
         if (section.length() != 20)
             continue;
         Profile profile = getProfile(section);

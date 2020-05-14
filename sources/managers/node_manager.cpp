@@ -548,6 +548,8 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::ready, this, &NodeManager::ready);
     connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
     connect(uiController, &UiController::connectToServer, dfs, &Dfs::connectToServer);
+    connect(uiController, &UiController::iWantMyServiceAndPrivateQuickly, dfs, &Dfs::enableMyQuickMode);
+    connect(uiController, &UiController::noMoreServiceAndPrivate, dfs, &Dfs::disableMyQuickMode);
     connect(uiController, &UiController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 

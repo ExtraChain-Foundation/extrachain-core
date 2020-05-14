@@ -31,13 +31,14 @@ private:
     ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
+    bool myQuickMode = false;
     // DFSResolver *resolver;
 public slots:
     /*DFS 1.5*/
     void dfsSyncUsers(QList<QString> userID, const SocketPair &receiver = SocketPair());
     void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
-    bool dfsValidate(QByteArray userID);
+    bool dfsValidate(QByteArray userId);
     QList<QByteArray> dfsValidateAll();
     /*DFS 1.5*/
 private:
@@ -107,6 +108,8 @@ public slots:
     void searchTmp();
     void requestCardById(QByteArray userId, const SocketPair &receiver = SocketPair());
     void requestAllCards();
+    void enableMyQuickMode();
+    void disableMyQuickMode();
 
 private:
     QByteArray buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type);
