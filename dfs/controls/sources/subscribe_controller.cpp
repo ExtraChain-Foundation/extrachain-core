@@ -18,11 +18,12 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 {
     QByteArray currentId = nodeManager->getIdPrivateProfile();
     sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
-                isRemove ? DfsStruct::Delete : DfsStruct::Insert,
+                isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
                 { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
 
     sendEditSql(
-        id, "follower", DfsStruct::Type::Service, isRemove ? DfsStruct::Delete : DfsStruct::Insert,
+        id, "follower", DfsStruct::Type::Service,
+        isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
         { Config::DataStorage::subscribeFollowerTableName.c_str(), "subscriber", currentId, "sign", "TODO" });
 }
 

@@ -672,6 +672,7 @@ void NodeManager::connectUi()
     connect(dfs, &Dfs::fileChanged, uiResolver, &UiResolver::fileChanged);
     connect(dfs, &Dfs::fileDuplicated, uiResolver, &UiResolver::fileDuplicated);
     connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
+    connect(dfs, &Dfs::fileNetworkCompleted, uiResolver, &UiResolver::fileNetworkCompleted);
     connect(uiController, &UiController::newNotify, notifyM, &NotificationManager::addNotify);
     connect(blockchain, &Blockchain::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::newNotify, notifyM, &NotificationManager::addNotify);

@@ -17,6 +17,11 @@ void DFSResolverService::setActorIndex(ActorIndex *value)
     actorIndex = value;
 }
 
+SocketPair DFSResolverService::getReceiver() const
+{
+    return receiver;
+}
+
 DFSResolverService::DFSResolverService(Lifetime lifetime, QObject *parent)
     : QObject(parent)
 {
@@ -28,10 +33,10 @@ DFSResolverService::~DFSResolverService()
     //    emit finished();
 }
 
-void DFSResolverService::finishWork(bool reset)
+void DFSResolverService::finishWork(DFSResolverService::FinishStatus status)
 {
     active = false;
-    emit TaskFinished(reset);
+    emit TaskFinished(status);
 }
 
 QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long to)
@@ -77,25 +82,23 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 
 void DFSResolverService::checkStatus()
 {
-    if (title.filePath.indexOf("root") != -1)
-    {
-        qDebug() << "root";
-    }
+    if (title.filePath.contains("root"))
+        qDebug() << "[DFSResolver] root" << title.filePath.mid(5, 20);
 
     QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
     {
         file.close();
-        dfs->save(DfsStruct::DfsSave::Network, title.filePath, "", (DfsStruct::Type)title.f_type);
-
-        qDebug() << "[&DFSResolver][file succed written to tmp]";
+        qDebug() << "[DFSResolver] File" << title.filePath << "succed written to tmp";
+        dfs->save(DfsStruct::DfsSave::Network, title.filePath, "", DfsStruct::Type(title.f_type));
 
         if (reloadTimer != nullptr)
         {
             disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
             reloadTimer->deleteLater();
         }
-        finishWork();
+
+        finishWork(FinishStatus::FileFinished);
     }
     else
     {
@@ -201,7 +204,8 @@ void DFSResolverService::resolveDfsTask()
 }
 void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int &msgType)
 {
-    //    qDebug() << "[dfs resolve message] msg type:" << mType;
+    // qDebug() << "[dfs resolve message] msg type:" << msgType;
+
     if (Messages::isDFSMessage(msgType))
     {
         using namespace Messages;
@@ -236,6 +240,12 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
 
                 dfs->fileResponse(message.filePath, receiver);
 
+                break;
+            }
+            case DFSMessage::fileCompleted: {
+                DistFileSystem::DfsRequestFinished message;
+                message = data;
+                dfs->fileNetworkCompleted(message.filePath, receiver);
                 break;
             }
             case DFSMessage::responseMessage: {
@@ -318,10 +328,10 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
 
                     dfs->titleReceived(message.filePath);
                     QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
-                    if (QFile::exists(message.filePath)
+                    if (QFile::exists(message.filePath) && QFileInfo(message.filePath).size() != 0
                         && (message.filePath.right(7) != ".stored" && message.filePath.right(5) != "/root"))
                     {
-                        finishWork();
+                        finishWork(FinishStatus::FileExists);
                         return;
                     }
                     if (!registerTitle(path, message))
@@ -353,7 +363,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                     QString pathFile = path.isEmpty() ? "" : path.chopped(4);
                     if (message.path == pathFile)
                     {
-                        finishWork(true);
+                        finishWork(FinishStatus::FileReset);
                         return;
                     }
                     active = false;

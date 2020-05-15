@@ -159,7 +159,7 @@ signals:
     void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
                        const SocketPair &receiver);
 
-    void sendProfileToUi(QString userID, QByteArrayList profile);
+    void sendProfileToUi(QString userId, QByteArrayList profile);
     // void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
 

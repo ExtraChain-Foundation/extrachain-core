@@ -226,7 +226,8 @@ public slots:
 
 public:
     virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver);
+                             const SocketPair &receiver,
+                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
     void distMessage(const QByteArray &data, const SocketPair &socketData);
     virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 

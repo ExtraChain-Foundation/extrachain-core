@@ -35,7 +35,7 @@ private:
     // DFSResolver *resolver;
 public slots:
     /*DFS 1.5*/
-    void dfsSyncUsers(QList<QString> userID, const SocketPair &receiver = SocketPair());
+    void dfsSyncUsers(QList<QString> userId, const SocketPair &receiver = SocketPair());
     void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
     bool dfsValidate(QByteArray userId);
@@ -83,6 +83,7 @@ signals:
     void fileAdded(QString path, QString original, DfsStruct::Type type, QByteArray actorId);
     void fileChanged(QString path);
     void fileDuplicated(QString path, QString original, DfsStruct::Type type);
+    void fileNetworkCompleted(QString filePath, SocketPair pair);
     void sendFromNetwork(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void connectToServer();
     void networkCreated();
@@ -93,6 +94,7 @@ public slots:
     void initMyLocalStorage();
     void initUser(BigNumber userId);
 
+    void reportFileCompleted(QString filePath, SocketPair receiver);
     void save(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data);
     void editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
@@ -112,7 +114,7 @@ public slots:
     void disableMyQuickMode();
 
 private:
-    QByteArray buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type);
+    QByteArray buildDfsPath(QString originalFile, QByteArray hash, QByteArray userId, DfsStruct::Type type);
     bool createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type);
     bool appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init);
     void updateFromNewStored(QString filePath);

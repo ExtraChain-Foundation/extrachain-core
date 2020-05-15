@@ -50,7 +50,8 @@ public:
     NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
     void send(const QByteArray &message, const unsigned int &msgType,
-              const SocketPair &receiver = SocketPair());
+              const SocketPair &receiver = SocketPair(),
+              Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
 
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
@@ -70,7 +71,7 @@ public slots:
     void startDFSNetwork();
     void uiReconnect();
     void titleArrived(Network::DataStruct ds);
-    void removeResolver(bool reset);
+    void removeResolver(DFSResolverService::FinishStatus status);
 
 private slots:
     void removeConnection();

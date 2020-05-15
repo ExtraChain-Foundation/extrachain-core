@@ -1007,9 +1007,9 @@ QStringList Dfs::tmpFiles() const
     return m_tmpFiles;
 }
 
-void Dfs::dfsSyncUsers(QList<QString> userID, const SocketPair &receiver)
+void Dfs::dfsSyncUsers(QList<QString> userId, const SocketPair &receiver)
 {
-    for (QString s : userID)
+    for (QString s : userId)
     {
         //        if (dfsValidate(s.toUtf8()))
         //        {
@@ -1072,7 +1072,7 @@ bool Dfs::dfsValidate(QByteArray userId)
 {
     if (ignoredIds.contains(userId))
     {
-        // qDebug() << "dfsValidate ignore" << userID;
+        // qDebug() << "dfsValidate ignore" << userId;
         return true;
     }
     if (!actorIndex->hasActor(BigNumber(userId)))
@@ -1275,10 +1275,10 @@ void Dfs::titleReceivedHandle(QString filePath)
     //    qDebug() << "m_reqFiles" << m_reqFiles.length();
 }
 
-QByteArray Dfs::buildDfsPath(QString originalFile, QByteArray hash, QByteArray userID, DfsStruct::Type type)
+QByteArray Dfs::buildDfsPath(QString originalFile, QByteArray hash, QByteArray userId, DfsStruct::Type type)
 {
     QByteArray sType = DfsStruct::toByteArray(type);
-    QByteArray dfsPath = "data/" + userID + "/" + sType + "/";
+    QByteArray dfsPath = "data/" + userId + "/" + sType + "/";
 
     QByteArray fileHash = hash.isEmpty() ? Utils::calcKeccakForFile(originalFile) : hash;
     dfsPath += fileHash.right(2);
@@ -1561,6 +1561,15 @@ void Dfs::initUser(BigNumber userId)
     //     return;
     //    DFSMessage::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
     //    dfsNetManager->send(rqst.serialize());
+}
+
+void Dfs::reportFileCompleted(QString filePath, SocketPair receiver)
+{
+    qDebug() << "File" << filePath << "loaded from" << receiver;
+    DistFileSystem::DfsRequestFinished fileCompleted;
+    fileCompleted.filePath = filePath;
+    sender->sendDfsMessage(fileCompleted, Messages::DFSMessage::fileCompleted, receiver,
+                           Config::Net::TypeSend::Focused);
 }
 
 void Dfs::save(int saveType, QString file, QByteArray data, const DfsStruct::Type type)

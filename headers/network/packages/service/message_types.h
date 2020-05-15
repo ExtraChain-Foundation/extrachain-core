@@ -68,6 +68,8 @@ enum DFSMessage
     requestCardPath = 412,
     responseCardPath = 413,
 
+    fileCompleted = 414,
+
     none = 499
 };
 static bool isDFSMessage(unsigned int value)
@@ -85,7 +87,7 @@ static bool isVerifyRequest(unsigned int value)
 {
     if (value >= 500 && value <= 599)
         return true;
-     return false;
+    return false;
 }
 }
 #endif // MESSAGE_TYPES_H
