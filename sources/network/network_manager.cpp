@@ -424,7 +424,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
     }
 
     if (connections.isEmpty()) // TODO: write type send
-        saveToCache(message, msgType, receiver);
+        saveToCache(message, msgType, receiver, send);
 
     for (const auto &tmp : connections)
     {
@@ -449,8 +449,8 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
             continue;
         if (tmp->getActive())
             tmp->distMsg(message, receiver);
-        else
-            saveToCache(message, msgType, receiver);
+        // else
+        //     saveToCache(message, msgType, receiver, send);
     }
 
     //    if (checkMsgCount(message, handler, connections))
@@ -482,12 +482,16 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
 }
 
 void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver)
+                             const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
-    QFile file("network_cache");
+    QFile file("tmp/network.cache");
     file.open(QFile::Append);
-    QByteArrayList list = { message, QByteArray::fromStdString(receiver.ip),
-                            QByteArray::number(receiver.port), receiver.iden, QByteArray::number(msgType) };
+    QByteArrayList list = { message,
+                            QByteArray::fromStdString(receiver.ip),
+                            QByteArray::number(receiver.port),
+                            receiver.iden,
+                            QByteArray::number(msgType),
+                            QByteArray::number(typeSend) };
     QByteArray package = Serialization::universalSerialize(list, 8);
     file.write(Utils::intToByteArray(package.length(), 8) + package);
     file.close();
@@ -495,7 +499,7 @@ void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgT
 
 void NetManager::sendFromCache()
 {
-    QFile file("network_cache");
+    QFile file("tmp/network.cache");
     if (!file.exists())
         return;
     if (!file.open(QFile::ReadOnly))
@@ -507,7 +511,7 @@ void NetManager::sendFromCache()
     for (QByteArray packageData : allPackages)
     {
         QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
-        if (package.length() != 5)
+        if (package.length() != 6)
             return;
 
         QByteArray data = package[0];
@@ -515,8 +519,9 @@ void NetManager::sendFromCache()
         socketData.ip = package[1].toStdString();
         socketData.port = package[2].toShort();
         socketData.iden = package[3];
-        unsigned int type = package[4].toUInt();
-        sendMessage(data, type, socketData);
+        auto msgType = package[4].toUInt();
+        Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());
+        sendMessage(data, msgType, socketData, typeSend);
     }
 }
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)

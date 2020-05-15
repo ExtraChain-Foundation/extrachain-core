@@ -168,7 +168,8 @@ protected:
      */
     bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
                        const QList<SocketService *> list);
-    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver);
+    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
+                     Config::Net::TypeSend typeSend);
     void sendFromCache();
 private slots:
     /**
