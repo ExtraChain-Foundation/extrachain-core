@@ -186,9 +186,9 @@ unsigned long GCD(unsigned long larger, unsigned long smaller)
     return gcd;
 }
 
-size_t PKCS5PaddingLength(const std::vector<char> &data)
+size_t PKCS5PaddingLength(const QByteArray &data)
 {
-    if (data.empty())
+    if (data.isEmpty())
         return 0;
     char length = data[data.size() - 1];
     if (length > 0 && length <= 8)
@@ -267,11 +267,11 @@ void BlowFish::SetKey(const char *key, size_t byte_length, uint32_t (&pary)[18],
     }
 }
 
-std::vector<char> BlowFish::Encrypt(const std::vector<char> &src, const std::vector<char> &key,
-                                    uint32_t (&pary)[18], uint32_t (&sbox)[4][256])
+QByteArray BlowFish::Encrypt(const QByteArray &src, const QByteArray &key, uint32_t (&pary)[18],
+                             uint32_t (&sbox)[4][256])
 {
     SetKey(key.data(), key.size(), pary, sbox);
-    std::vector<char> dst = src;
+    QByteArray dst = src;
 
     size_t padding_length = dst.size() % sizeof(uint64_t);
     if (padding_length == 0)
@@ -298,11 +298,11 @@ std::vector<char> BlowFish::Encrypt(const std::vector<char> &src, const std::vec
     return dst;
 }
 
-std::vector<char> BlowFish::Decrypt(const std::vector<char> &src, const std::vector<char> &key,
-                                    uint32_t (&pary)[18], uint32_t (&sbox)[4][256])
+QByteArray BlowFish::Decrypt(const QByteArray &src, const QByteArray &key, uint32_t (&pary)[18],
+                             uint32_t (&sbox)[4][256])
 {
     SetKey(key.data(), key.size(), pary, sbox);
-    std::vector<char> dst = src;
+    QByteArray dst = src;
 
     for (uint32_t i = 0; i < dst.size() / sizeof(uint64_t); ++i)
     {
@@ -316,26 +316,22 @@ std::vector<char> BlowFish::Decrypt(const std::vector<char> &src, const std::vec
     return dst;
 }
 
-QByteArray BlowFish::encrypt(QByteArray message, QByteArray key)
+QByteArray BlowFish::encrypt(const QByteArray &message, const QByteArray &key)
 {
     Q_ASSERT(!key.isEmpty());
     uint32_t pary[18];
     uint32_t sbox[4][256];
-    std::vector<char> messageByte(message.begin(), message.end());
-    std::vector<char> keyByte(key.begin(), key.end());
-    std::vector<char> result = Encrypt(messageByte, keyByte, pary, sbox);
-    return QByteArray(reinterpret_cast<char *>(result.data()), result.size());
+    QByteArray result = Encrypt(message, key, pary, sbox);
+    return result;
 }
 
-QByteArray BlowFish::decrypt(QByteArray message, QByteArray key)
+QByteArray BlowFish::decrypt(const QByteArray &message, const QByteArray &key)
 {
     Q_ASSERT(!key.isEmpty());
     uint32_t pary[18];
     uint32_t sbox[4][256];
-    std::vector<char> messageByte(message.begin(), message.end());
-    std::vector<char> keyByte(key.begin(), key.end());
-    std::vector<char> result = Decrypt(messageByte, keyByte, pary, sbox);
-    return QByteArray(reinterpret_cast<char *>(result.data()), result.size());
+    QByteArray result = Decrypt(message, key, pary, sbox);
+    return result;
 }
 
 void BlowFish::EncryptBlock(uint32_t *left, uint32_t *right, uint32_t (&pary)[18], uint32_t (&sbox)[4][256])
