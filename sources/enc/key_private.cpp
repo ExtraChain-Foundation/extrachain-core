@@ -53,7 +53,7 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data)
         r = BigNumber::random(64, curve.p, false);
         R = ECC::multiply(secpCurve, r, secpCurve.g);
         S = ECC::multiply(secpCurve, r, this->pbkey);
-        res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));
+        res.append(BlowFish::encrypt(data, S.X().toByteArray() + S.Y().toByteArray()));
         res.append(R.X().toByteArray());
         res.append(R.Y().toByteArray());
         result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
@@ -77,17 +77,17 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data)
     QByteArray s = res.at(0);
     EllipticPoint R(res.at(1), res.at(2));
     EllipticPoint S2 = ECC::multiply(secpCurve, this->prkey, R);
-    return blowFish_crypt().DecryptBlowFish(s, S2.X().toByteArray() + S2.Y().toByteArray());
+    return BlowFish::decrypt(s, S2.X().toByteArray() + S2.Y().toByteArray());
 }
 
 QByteArray KeyPrivate::encryptSymmetric(const QByteArray &data)
 {
-    return blowFish_crypt().EncryptBlowFish(data, this->prkey.toByteArray());
+    return BlowFish::encrypt(data, this->prkey.toByteArray());
 }
 
 QByteArray KeyPrivate::decryptSymmetric(const QByteArray &data)
 {
-    return blowFish_crypt().DecryptBlowFish(data, this->prkey.toByteArray());
+    return BlowFish::decrypt(data, this->prkey.toByteArray());
 }
 
 QByteArray KeyPrivate::sign(const QByteArray &data)

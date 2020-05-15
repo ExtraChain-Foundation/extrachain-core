@@ -329,7 +329,7 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
     while (!orig.atEnd())
     {
         QByteArray part = orig.read(blockSize);
-        QByteArray encrypted = blowFish_crypt().EncryptBlowFish(part, key);
+        QByteArray encrypted = BlowFish::encrypt(part, key);
         encrypt.write(encrypted);
         // qDebug() << "encrypted" << part.size() << encrypted.size();
     }
@@ -361,7 +361,7 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
     while (!encrypt.atEnd())
     {
         QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted = blowFish_crypt().DecryptBlowFish(part, key);
+        QByteArray decrypted = BlowFish::decrypt(part, key);
         decrypt.write(decrypted);
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }
