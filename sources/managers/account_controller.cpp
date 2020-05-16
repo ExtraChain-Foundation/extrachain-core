@@ -158,7 +158,8 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
     if (id.isEmpty() || hashLogin.isEmpty())
     {
         qDebug() << "[loadActors] id or hashLogin is empty";
-        std::exit(-1);
+        Q_ASSERT(!id.isEmpty());
+        Q_ASSERT(!hashLogin.isEmpty());
         return;
     }
 

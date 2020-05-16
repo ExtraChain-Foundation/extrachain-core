@@ -38,6 +38,8 @@ void Dfs::responseRequestLast(const DistFileSystem::requestLast &request, Socket
         }
     }
 
+    if (res.isEmpty())
+        return;
     DistFileSystem::responseLast responseLast;
     responseLast.lasts = res;
 
