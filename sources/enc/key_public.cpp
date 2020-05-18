@@ -32,7 +32,7 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
         r = BigNumber::random(64, curve.p, false);
         R = ECC::multiply(secpCurve, r, secpCurve.g);
         S = ECC::multiply(secpCurve, r, this->pbkey);
-        res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));
+        res.append(BlowFish::encrypt(data, S.X().toByteArray() + S.Y().toByteArray()));
         res.append(R.X().toByteArray());
         res.append(R.Y().toByteArray());
         result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);

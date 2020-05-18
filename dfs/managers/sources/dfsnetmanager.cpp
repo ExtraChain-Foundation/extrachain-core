@@ -103,14 +103,15 @@ void DFSNetManager::appendSocket(SocketService *socket)
     socketConnection();
 }
 
-void DFSNetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver)
+void DFSNetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
+                         Config::Net::TypeSend typeSend)
 {
     Messages::BaseMessage msg;
     //    msg.setMsgData(data);
     msg.type = msgType;
     msg.data = data;
     QByteArray message = msg.serialize();
-    sendMessage(message, msgType, receiver);
+    sendMessage(message, msgType, receiver, typeSend);
     //    std::for_each(connections.begin(), connections.end(),
     //                  [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
 }
@@ -151,22 +152,28 @@ void DFSNetManager::titleArrived(Network::DataStruct ds)
     }
 }
 
-void DFSNetManager::removeResolver(bool reset)
+void DFSNetManager::removeResolver(DFSResolverService::FinishStatus status)
 {
     DFSResolverService *resolver = qobject_cast<DFSResolverService *>(QObject::sender());
+
     if (resolver == nullptr)
     {
         qDebug() << "WAT";
         return;
     }
+
     QString filePath = resolver->getTitle().filePath;
+    auto pair = resolver->getReceiver();
     disconnectResolver(resolver);
+
     if (resolver->getType() == Resolver::Type::DFS)
     {
         dfsResolvers.removeOne(resolver);
     }
+
     if (resolver != nullptr)
         emit resolver->finished();
+
     if (titleVector.size() > 0)
     {
         Network::DataStruct ds = titleVector.front();
@@ -174,8 +181,17 @@ void DFSNetManager::removeResolver(bool reset)
         createDFSResolver(ds);
     }
 
-    if (reset)
+    switch (status)
+    {
+    case DFSResolverService::FinishStatus::FileReset:
         dfs->requestFile(filePath);
+        break;
+    case DFSResolverService::FinishStatus::FileFinished:
+        dfs->reportFileCompleted(filePath, pair);
+        break;
+    case DFSResolverService::FinishStatus::FileExists:
+        break;
+    }
 }
 
 void DFSNetManager::removeConnection()

@@ -20,5 +20,20 @@ public:
     QByteArray serialize() const override;
     void deserialize(const QByteArray &serialized) override;
 };
+
+struct DfsRequestFinished : Messages::ISmallMessage
+{
+    const short FIELDS_COUNT = 1;
+    QString filePath;
+
+    const QList<QByteArray> serializedParams() const;
+
+public:
+    void operator=(QByteArray &serialized) override;
+    bool isEmpty() const override;
+    short getFieldsCount() const override;
+    QByteArray serialize() const override;
+    void deserialize(const QByteArray &serialized) override;
+};
 }
 #endif // DFS_REUEST_H

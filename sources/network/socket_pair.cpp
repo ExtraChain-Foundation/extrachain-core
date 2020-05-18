@@ -63,3 +63,10 @@ bool SocketPair::isEmpty() const
     else
         return false;
 }
+
+QDebug operator<<(QDebug d, const SocketPair &pair)
+{
+    d.noquote().nospace() << "Pair(ip: " << QString::fromStdString(pair.ip) << ", port: " << pair.port
+                          << ", identificator: " << pair.iden << ")";
+    return d;
+}

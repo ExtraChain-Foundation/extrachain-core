@@ -26,4 +26,6 @@ inline uint qHash(const SocketPair &v)
     return qHash(v.serialize());
 }
 
+QDebug operator<<(QDebug d, const SocketPair &pair);
+
 #endif // SOCKET_PAIR_H

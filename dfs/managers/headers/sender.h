@@ -39,7 +39,8 @@ public:
      */
     template <typename T>
     void sendDfsMessage(const T &dfsMessage, const unsigned int &type,
-                        const SocketPair &receiver = SocketPair())
+                        const SocketPair &receiver = SocketPair(),
+                        Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default)
     {
         static_assert(std::is_base_of<Messages::ISmallMessage, T>::value,
                       "Derived not derived from Messages::ISmallMessage");
@@ -52,7 +53,7 @@ public:
 
         if (NetManager != nullptr)
         {
-            NetManager->send(dfsMessage.serialize(), type, receiver);
+            NetManager->send(dfsMessage.serialize(), type, receiver, typeSend);
         }
     }
 

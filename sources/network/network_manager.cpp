@@ -139,11 +139,10 @@ SocketService NetManager::getConnectionByAddress(const QByteArray address) const
 {
     for (const auto currentConnection : connections)
     {
-        if(currentConnection==nullptr)
+        if (currentConnection == nullptr)
             continue;
-       if(currentConnection->getAddress()==address)
-           return *currentConnection;
-
+        if (currentConnection->getAddress() == address)
+            return *currentConnection;
     }
     return SocketService();
 }
@@ -327,11 +326,12 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     for (auto ip : ipList)
     {
         idIpPair = Serialization::universalDeserialize(ip);
-         currentId=(getConnectionByAddress(idIpPair[1])).getID().toByteArray();
-         connectionIsActive=(getConnectionByAddress(idIpPair[1])).isActive();
+        currentId = (getConnectionByAddress(idIpPair[1])).getID().toByteArray();
+        connectionIsActive = (getConnectionByAddress(idIpPair[1])).isActive();
 
-         if(!connectionIsActive || currentId=="0" || currentId==idIpPair[0] || currentId==net::readNetManagerIdentificator())
-             continue;
+        if (!connectionIsActive || currentId == "0" || currentId == idIpPair[0]
+            || currentId == net::readNetManagerIdentificator())
+            continue;
 
         if (idIpPair.size() != 2)
         {
@@ -404,18 +404,27 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 }
 
 void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver)
+                             const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
     Config::Net::TypeSend send;
-    if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
-        || msgType == 402)
-        send = Config::Net::TypeSend::ALL;
-    else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
-        send = Config::Net::TypeSend::FOCUSED;
+
+    if (typeSend == Config::Net::TypeSend::Default)
+    {
+        if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
+            || msgType == 402)
+            send = Config::Net::TypeSend::All;
+        else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
+            send = Config::Net::TypeSend::Focused;
+        else
+            send = Config::Net::TypeSend::Except;
+    }
     else
-        send = Config::Net::TypeSend::EXCEPT;
-    if (connections.isEmpty())
-        saveToCache(message, msgType, receiver);
+    {
+        send = typeSend;
+    }
+
+    if (connections.isEmpty()) // TODO: write type send
+        saveToCache(message, msgType, receiver, send);
 
     for (const auto &tmp : connections)
     {
@@ -423,14 +432,16 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
 
         switch (send)
         {
-        case Config::Net::TypeSend::EXCEPT:
+        case Config::Net::TypeSend::Except:
             isSend = tmp->getAddress().toStdString() != receiver.ip && tmp->getPort() != receiver.port;
             break;
-        case Config::Net::TypeSend::FOCUSED:
+        case Config::Net::TypeSend::Focused:
             isSend = tmp->getAddress().toStdString() == receiver.ip && tmp->getPort() == receiver.port;
             break;
-        case Config::Net::TypeSend::ALL:
+        case Config::Net::TypeSend::All:
             isSend = true;
+            break;
+        default:
             break;
         }
 
@@ -438,8 +449,8 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
             continue;
         if (tmp->getActive())
             tmp->distMsg(message, receiver);
-        else
-            saveToCache(message, msgType, receiver);
+        // else
+        //     saveToCache(message, msgType, receiver, send);
     }
 
     //    if (checkMsgCount(message, handler, connections))
@@ -471,12 +482,16 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
 }
 
 void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver)
+                             const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
-    QFile file("network_cache");
+    QFile file("tmp/network.cache");
     file.open(QFile::Append);
-    QByteArrayList list = { message, QByteArray::fromStdString(receiver.ip),
-                            QByteArray::number(receiver.port), receiver.iden, QByteArray::number(msgType) };
+    QByteArrayList list = { message,
+                            QByteArray::fromStdString(receiver.ip),
+                            QByteArray::number(receiver.port),
+                            receiver.iden,
+                            QByteArray::number(msgType),
+                            QByteArray::number(typeSend) };
     QByteArray package = Serialization::universalSerialize(list, 8);
     file.write(Utils::intToByteArray(package.length(), 8) + package);
     file.close();
@@ -484,7 +499,7 @@ void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgT
 
 void NetManager::sendFromCache()
 {
-    QFile file("network_cache");
+    QFile file("tmp/network.cache");
     if (!file.exists())
         return;
     if (!file.open(QFile::ReadOnly))
@@ -496,7 +511,7 @@ void NetManager::sendFromCache()
     for (QByteArray packageData : allPackages)
     {
         QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
-        if (package.length() != 5)
+        if (package.length() != 6)
             return;
 
         QByteArray data = package[0];
@@ -504,8 +519,9 @@ void NetManager::sendFromCache()
         socketData.ip = package[1].toStdString();
         socketData.port = package[2].toShort();
         socketData.iden = package[3];
-        unsigned int type = package[4].toUInt();
-        sendMessage(data, type, socketData);
+        auto msgType = package[4].toUInt();
+        Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());
+        sendMessage(data, msgType, socketData, typeSend);
     }
 }
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
@@ -651,9 +667,10 @@ QByteArray NetManager::getSerializedConnectionList() const
     {
         if (!i->getActive())
             continue;
-        if (net::readNetManagerIdentificator() == i->getIdentificator().toByteArray())//if it equivalent to my indetificator
+        if (net::readNetManagerIdentificator()
+            == i->getIdentificator().toByteArray()) // if it equivalent to my indetificator
             continue;
-        if(i->getAddress()==this->getLocal()->ip().toString().toLocal8Bit())    //if it's my ip address
+        if (i->getAddress() == this->getLocal()->ip().toString().toLocal8Bit()) // if it's my ip address
             continue;
 
         connectionsList.append(

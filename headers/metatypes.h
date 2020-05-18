@@ -48,7 +48,7 @@ Q_DECLARE_METATYPE(SubscribeController)
 Q_DECLARE_METATYPE(Notification)
 Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ChatFileSender)
-
+Q_DECLARE_METATYPE(DFSResolverService::FinishStatus)
 #ifdef ETALONIUM_CLIENT
 Q_DECLARE_METATYPE(UiController*)
 #endif
@@ -82,6 +82,7 @@ void registerMetaTypes()
     qRegisterMetaType<Notification>();
     qRegisterMetaType<QList<Notification>>();
     qRegisterMetaType<ChatFileSender>();
+    qRegisterMetaType<DFSResolverService::FinishStatus>();
 #ifdef ETALONIUM_CLIENT
     qRegisterMetaType<UiController*>();
 #endif

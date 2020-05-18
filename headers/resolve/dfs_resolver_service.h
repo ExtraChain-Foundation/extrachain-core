@@ -26,6 +26,15 @@ using namespace Resolver;
 class DFSResolverService : public QObject
 {
     Q_OBJECT
+
+public:
+    enum class FinishStatus
+    {
+        FileReset,
+        FileExists,
+        FileFinished
+    };
+
 private:
     ActorIndex *actorIndex;
     Dfs *dfs;
@@ -65,7 +74,7 @@ public:
     ~DFSResolverService() override;
 
 private:
-    void finishWork(bool reset = false);
+    void finishWork(FinishStatus status);
     QByteArray checkFragStatus(unsigned long from, unsigned long to);
 private slots:
     void checkStatus();
@@ -140,6 +149,8 @@ public:
 
     void setActorIndex(ActorIndex *value);
 
+    SocketPair getReceiver() const;
+
 public slots:
     /**
      * @brief process
@@ -155,7 +166,7 @@ signals:
      * @brief TaskFinished signal to resolver manager
      * the work have been finished you could kill me
      */
-    void TaskFinished(bool reset);
+    void TaskFinished(DFSResolverService::FinishStatus status);
     /**
      * @brief responseReady to network manager
      * @param data

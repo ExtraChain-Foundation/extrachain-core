@@ -158,7 +158,8 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
     if (id.isEmpty() || hashLogin.isEmpty())
     {
         qDebug() << "[loadActors] id or hashLogin is empty";
-        std::exit(-1);
+        Q_ASSERT(!id.isEmpty());
+        Q_ASSERT(!hashLogin.isEmpty());
         return;
     }
 
@@ -171,7 +172,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
         QFile file(path + "/" + fileName + ".key");
         if (file.exists() && file.open(QIODevice::ReadOnly))
         {
-            QByteArray serialized = blowFish_crypt().DecryptBlowFish(file.readAll(), hashLogin);
+            QByteArray serialized = BlowFish::decrypt(file.readAll(), hashLogin);
             qDebug() << serialized;
             file.close();
             if (!serialized.isEmpty())
@@ -238,7 +239,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
         else
         {
             qDebug() << "actor serialized: ---- " << actor.serialize();
-            file->write(blowFish_crypt().EncryptBlowFish(actor.serialize(), hashLogin));
+            file->write(BlowFish::encrypt(actor.serialize(), hashLogin));
             file->flush();
             qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
         }

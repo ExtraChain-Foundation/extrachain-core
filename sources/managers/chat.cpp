@@ -450,11 +450,11 @@ BigNumber Chat::getActualCurrentSession()
 }
 QByteArray Chat::encryptMessage(QByteArray message)
 {
-    return blowFish_crypt().EncryptBlowFish(message, unloadChatKey());
+    return BlowFish::encrypt(message, unloadChatKey());
 }
 QByteArray Chat::decryptMessage(QByteArray message)
 {
-    return blowFish_crypt().DecryptBlowFish(message, unloadChatKey());
+    return BlowFish::decrypt(message, unloadChatKey());
 }
 
 void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userData)

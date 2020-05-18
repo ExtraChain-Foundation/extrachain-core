@@ -186,14 +186,14 @@ unsigned long GCD(unsigned long larger, unsigned long smaller)
     return gcd;
 }
 
-size_t PKCS5PaddingLength(const std::vector<char> &data)
+size_t PKCS5PaddingLength(const QByteArray &data)
 {
-    if (data.empty())
+    if (data.isEmpty())
         return 0;
     char length = data[data.size() - 1];
     if (length > 0 && length <= 8)
     {
-        for (size_t i = 0; i < length; ++i)
+        for (char i = 0; i < length; ++i)
         {
             if (length != data[data.size() - i - 1])
             {
@@ -210,17 +210,17 @@ size_t PKCS5PaddingLength(const std::vector<char> &data)
 
 }; // anonymous namespace
 
-blowFish_crypt::blowFish_crypt()
+BlowFish::BlowFish()
 {
 }
 
-void blowFish_crypt::SetKey(const char *key, size_t byte_length)
+void BlowFish::SetKey(const char *key, size_t byte_length, uint32_t (&pary)[18], uint32_t (&sbox)[4][256])
 {
-    std::memcpy(pary_, initial_pary, sizeof(initial_pary));
-    std::memcpy(sbox_, initial_sbox, sizeof(initial_sbox));
+    std::memcpy(pary, initial_pary, sizeof(initial_pary));
+    std::memcpy(sbox, initial_sbox, sizeof(initial_sbox));
 
-    static const int pary_length = sizeof(pary_) / sizeof(uint32_t);
-    static const int sbox_length = sizeof(sbox_) / sizeof(uint32_t);
+    static const int parylength = sizeof(pary) / sizeof(uint32_t);
+    static const int sboxlength = sizeof(sbox) / sizeof(uint32_t);
 
     {
         unsigned long buffer_length = byte_length / GCD(byte_length, sizeof(uint32_t));
@@ -238,10 +238,10 @@ void blowFish_crypt::SetKey(const char *key, size_t byte_length)
             key_buffer[i] = converter.bit_32;
         }
 
-        for (int i = 0; i < pary_length; ++i)
+        for (int i = 0; i < parylength; ++i)
         {
             uint32_t key_uint32 = key_buffer[i % buffer_length];
-            pary_[i] ^= key_uint32;
+            pary[i] ^= key_uint32;
         }
 
         delete[] key_buffer;
@@ -250,27 +250,28 @@ void blowFish_crypt::SetKey(const char *key, size_t byte_length)
     uint32_t left = 0x00000000;
     uint32_t right = 0x00000000;
 
-    for (int i = 0; i < (pary_length / 2); ++i)
+    for (int i = 0; i < (parylength / 2); ++i)
     {
-        EncryptBlock(&left, &right);
+        EncryptBlock(&left, &right, pary, sbox);
 
-        pary_[i * 2] = left;
-        pary_[i * 2 + 1] = right;
+        pary[i * 2] = left;
+        pary[i * 2 + 1] = right;
     }
 
-    for (int i = 0; i < (sbox_length / 2); ++i)
+    for (int i = 0; i < (sboxlength / 2); ++i)
     {
-        EncryptBlock(&left, &right);
+        EncryptBlock(&left, &right, pary, sbox);
 
-        reinterpret_cast<uint32_t *>(sbox_)[i * 2] = left;
-        reinterpret_cast<uint32_t *>(sbox_)[i * 2 + 1] = right;
+        reinterpret_cast<uint32_t *>(sbox)[i * 2] = left;
+        reinterpret_cast<uint32_t *>(sbox)[i * 2 + 1] = right;
     }
 }
 
-std::vector<char> blowFish_crypt::Encrypt(const std::vector<char> &src, const std::vector<char> &key)
+QByteArray BlowFish::Encrypt(const QByteArray &src, const QByteArray &key, uint32_t (&pary)[18],
+                             uint32_t (&sbox)[4][256])
 {
-    SetKey(key.data(), key.size());
-    std::vector<char> dst = src;
+    SetKey(key.data(), key.size(), pary, sbox);
+    QByteArray dst = src;
 
     size_t padding_length = dst.size() % sizeof(uint64_t);
     if (padding_length == 0)
@@ -287,26 +288,27 @@ std::vector<char> blowFish_crypt::Encrypt(const std::vector<char> &src, const st
         dst.push_back(static_cast<char>(padding_length));
     }
 
-    for (int i = 0; i < dst.size() / sizeof(uint64_t); ++i)
+    for (uint32_t i = 0; i < dst.size() / sizeof(uint64_t); ++i)
     {
         uint32_t *left = &reinterpret_cast<uint32_t *>(dst.data())[i * 2];
         uint32_t *right = &reinterpret_cast<uint32_t *>(dst.data())[i * 2 + 1];
-        EncryptBlock(left, right);
+        EncryptBlock(left, right, pary, sbox);
     }
 
     return dst;
 }
 
-std::vector<char> blowFish_crypt::Decrypt(const std::vector<char> &src, const std::vector<char> &key)
+QByteArray BlowFish::Decrypt(const QByteArray &src, const QByteArray &key, uint32_t (&pary)[18],
+                             uint32_t (&sbox)[4][256])
 {
-    SetKey(key.data(), key.size());
-    std::vector<char> dst = src;
+    SetKey(key.data(), key.size(), pary, sbox);
+    QByteArray dst = src;
 
-    for (int i = 0; i < dst.size() / sizeof(uint64_t); ++i)
+    for (uint32_t i = 0; i < dst.size() / sizeof(uint64_t); ++i)
     {
         uint32_t *left = &reinterpret_cast<uint32_t *>(dst.data())[i * 2];
         uint32_t *right = &reinterpret_cast<uint32_t *>(dst.data())[i * 2 + 1];
-        DecryptBlock(left, right);
+        DecryptBlock(left, right, pary, sbox);
     }
 
     size_t padding_length = PKCS5PaddingLength(dst);
@@ -314,53 +316,55 @@ std::vector<char> blowFish_crypt::Decrypt(const std::vector<char> &src, const st
     return dst;
 }
 
-QByteArray blowFish_crypt::EncryptBlowFish(QByteArray message, QByteArray key)
+QByteArray BlowFish::encrypt(const QByteArray &message, const QByteArray &key)
 {
-    std::vector<char> messageByte(message.begin(), message.end());
-    std::vector<char> keyByte(key.begin(), key.end());
-    std::vector<char> result = Encrypt(messageByte, keyByte);
-    return QByteArray(reinterpret_cast<char *>(result.data()), result.size());
+    Q_ASSERT(!key.isEmpty());
+    uint32_t pary[18];
+    uint32_t sbox[4][256];
+    QByteArray result = Encrypt(message, key, pary, sbox);
+    return result;
 }
 
-QByteArray blowFish_crypt::DecryptBlowFish(QByteArray message, QByteArray key)
+QByteArray BlowFish::decrypt(const QByteArray &message, const QByteArray &key)
 {
-    std::vector<char> messageByte(message.begin(), message.end());
-    std::vector<char> keyByte(key.begin(), key.end());
-    std::vector<char> result = Decrypt(messageByte, keyByte);
-    return QByteArray(reinterpret_cast<char *>(result.data()), result.size());
+    Q_ASSERT(!key.isEmpty());
+    uint32_t pary[18];
+    uint32_t sbox[4][256];
+    QByteArray result = Decrypt(message, key, pary, sbox);
+    return result;
 }
 
-void blowFish_crypt::EncryptBlock(uint32_t *left, uint32_t *right) const
+void BlowFish::EncryptBlock(uint32_t *left, uint32_t *right, uint32_t (&pary)[18], uint32_t (&sbox)[4][256])
 {
     for (int i = 0; i < 16; ++i)
     {
-        *left ^= pary_[i];
-        *right ^= Feistel(*left);
+        *left ^= pary[i];
+        *right ^= Feistel(*left, sbox);
         std::swap(*left, *right);
     }
 
     std::swap(*left, *right);
 
-    *right ^= pary_[16];
-    *left ^= pary_[17];
+    *right ^= pary[16];
+    *left ^= pary[17];
 }
 
-void blowFish_crypt::DecryptBlock(uint32_t *left, uint32_t *right) const
+void BlowFish::DecryptBlock(uint32_t *left, uint32_t *right, uint32_t (&pary)[18], uint32_t (&sbox)[4][256])
 {
     for (int i = 0; i < 16; ++i)
     {
-        *left ^= pary_[17 - i];
-        *right ^= Feistel(*left);
+        *left ^= pary[17 - i];
+        *right ^= Feistel(*left, sbox);
         std::swap(*left, *right);
     }
 
     std::swap(*left, *right);
 
-    *right ^= pary_[1];
-    *left ^= pary_[0];
+    *right ^= pary[1];
+    *left ^= pary[0];
 }
 
-uint32_t blowFish_crypt::Feistel(uint32_t value) const
+uint32_t BlowFish::Feistel(uint32_t value, uint32_t (&sbox)[4][256])
 {
     Converter32 converter;
     converter.bit_32 = value;
@@ -370,5 +374,5 @@ uint32_t blowFish_crypt::Feistel(uint32_t value) const
     uint8_t c = converter.bit_8.byte2;
     uint8_t d = converter.bit_8.byte3;
 
-    return ((sbox_[0][a] + sbox_[1][b]) ^ sbox_[2][c]) + sbox_[3][d];
+    return ((sbox[0][a] + sbox[1][b]) ^ sbox[2][c]) + sbox[3][d];
 }
