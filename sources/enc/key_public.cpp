@@ -7,7 +7,7 @@ KeyPublic::KeyPublic(EllipticPoint pbKey)
 
 KeyPublic::KeyPublic(const QJsonObject &json)
 {
-    auto publicKey = json["public_key"].toObject();
+    auto publicKey = json["publicKey"].toObject();
     BigNumber x = publicKey["x"].toString().toLatin1();
     BigNumber y = publicKey["y"].toString().toLatin1();
 

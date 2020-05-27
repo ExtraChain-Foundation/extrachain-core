@@ -8,8 +8,8 @@ KeyPrivate::KeyPrivate()
 
 KeyPrivate::KeyPrivate(const QJsonObject &json)
 {
-    BigNumber privateKey = json["private_key"].toString().toLatin1();
-    auto publicKey = json["public_key"].toObject();
+    BigNumber privateKey = json["privateKey"].toString().toLatin1();
+    auto publicKey = json["publicKey"].toObject();
     BigNumber x = publicKey["x"].toString().toLatin1();
     BigNumber y = publicKey["y"].toString().toLatin1();
 

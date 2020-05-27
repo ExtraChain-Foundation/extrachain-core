@@ -97,6 +97,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor)
     // move to another place
     FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTSTORE);
 
+    // TODO: encrypt
     if (file.open(QIODevice::ReadWrite))
     {
         QByteArray old;

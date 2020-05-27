@@ -1,28 +1,32 @@
 #ifndef ACTOR_H
 #define ACTOR_H
+
 #include <QDebug>
+#include <utility>
+#include <type_traits>
 
 #include "utils/bignumber.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
-
-#include <utility>
-#include <type_traits>
 #include "profile/profile.h"
 #include "profile/public_profile.h"
+
 /**
  * Acting entity.
  * Users, Smart-contracts
  */
+
 namespace Trash {
 static const QByteArray NullActor = "0";
 };
+
 enum class ActorType
 {
     Wallet = 0,
     Account = 1,
     Company = 2
 };
+
 template <typename T>
 class Actor
 {
@@ -255,13 +259,13 @@ public:
 
         QJsonObject json = { { "id", actorId },
                              { "account", type },
-                             { "public_key", QJsonObject { { "x", x }, { "y", y } } } };
+                             { "publicKey", QJsonObject { { "x", x }, { "y", y } } } };
 
         if (isPrivate())
         {
             KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(key);
             QString privateKey = keyPrivate->getPrivateKey().toByteArray();
-            json["private_key"] = privateKey;
+            json["privateKey"] = privateKey;
         }
 
         QByteArray result = QJsonDocument(json).toJson(QJsonDocument::Compact);
@@ -303,11 +307,6 @@ public:
     ActorType getAccount() const
     {
         return account;
-    }
-
-    void setAccount(ActorType value)
-    {
-        account = value;
     }
 
     Actor<KeyPublic> convertToPublic() const

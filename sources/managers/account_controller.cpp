@@ -119,7 +119,7 @@ Actor<KeyPrivate> AccountController::getActor(BigNumber id)
 
 Actor<KeyPrivate> AccountController::getActorByPublicKey(QByteArray pubkey)
 {
-    qDebug() << "DEPRECATED";
+    qDebug() << "Warning! DEPRECATED";
     return Actor<KeyPrivate>();
     //    for (Actor<KeyPrivate> *actor : accounts)
     //    {
