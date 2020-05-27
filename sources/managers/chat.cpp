@@ -141,7 +141,7 @@ QByteArray Chat::unloadChatKey()
 {
     if (_encryptionKey != "0")
         return _encryptionKey;
-    QString filePath = "data/" + _currentActorId + "/private/chats";
+    QString filePath = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/private/chats";
 
     if (!QFile::exists(filePath))
         return "";
@@ -216,7 +216,7 @@ QByteArray Chat::getCurrentActorId() const
 QList<QByteArray> Chat::getAllUsers()
 {
     QList<QByteArray> result;
-    QByteArray pathToUsers = ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/users";
+    QString pathToUsers = DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/users";
 
     if (!QFile::exists(pathToUsers))
     {
@@ -246,7 +246,7 @@ QList<QByteArray> Chat::getAllUsers()
 QList<UIMessage> Chat::getAllMessages()
 {
     QList<UIMessage> result;
-    QString dbPath = ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
+    QString dbPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
         + _currentSession.toByteArray() + "/msg";
 
     if (!QFile::exists(dbPath))
@@ -297,14 +297,14 @@ QByteArray Chat::decryptByChatKey(QByteArray data)
 UIMessage Chat::getLastMessage()
 {
     UIMessage message;
-    if (!QFile::exists(ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/"
+    if (!QFile::exists(DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
                        + _currentSession.toByteArray() + "/msg"))
     {
         qDebug() << "[Error] File with session doesn't open. getAllMessagesByteArray Chat";
         return {};
     }
 
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
+    DBConnector DB(DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
 
     std::vector<DBRow> row;
@@ -340,9 +340,9 @@ void Chat::removeAllChatData()
     QDir(getPathCurrentChat()).removeRecursively();
 }
 
-QByteArray Chat::getPathCurrentChat()
+QString Chat::getPathCurrentChat()
 {
-    return ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/";
+    return DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/";
 }
 
 // QByteArray Chat::getPathMyChatsKeyStore()
@@ -350,10 +350,10 @@ QByteArray Chat::getPathCurrentChat()
 //    return getPathMyChatsCurrentChat() + "keystore/";
 //}
 
-QByteArray Chat::getPathToUsers()
+QString Chat::getPathToUsers()
 {
-    return ChatStorage::STORED_CHATS + ownerID + "/chats/" + _chatId + "/" + _currentSession.toByteArray()
-        + "/";
+    return DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
+        + _currentSession.toByteArray() + "/";
 }
 
 BigNumber Chat::findCurrentSession()
@@ -411,7 +411,7 @@ bool Chat::createNewSession(QByteArray key, QList<QByteArray> users, QByteArray 
     //    data.flush();
     //    data.close();
 
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + _ownerId.toStdString() + "/chats/"
+    DBConnector DB(DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + _ownerId.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
     DB.createTable(Config::DataStorage::sessionChatMessageStorage);
     return true;
@@ -459,7 +459,7 @@ QByteArray Chat::decryptMessage(QByteArray message)
 
 void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userData)
 {
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + userList[0].toStdString() + "/chats/"
+    DBConnector DB(DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userList[0].toStdString() + "/chats/"
                    + _chatId.toStdString() + "/users");
     DB.createTable(Config::DataStorage::chatUserStorage);
 
@@ -486,7 +486,7 @@ QByteArray Chat::sendMessage(QByteArray message)
     //    DataBase
     if (_currentSession != BigNumber("0"))
         _currentSession = BigNumber("0");
-    DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
+    DBConnector DB(DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + ownerID.toStdString() + "/chats/"
                    + _chatId.toStdString() + "/" + _currentSession.toStdString() + "/msg");
 
     DBRow row;
@@ -530,7 +530,7 @@ void Chat::InviteNewUser(QByteArray actorId)
     QList<QByteArray> users = getAllUsers();
     if (!isUserExist(actorId, users))
     {
-        DBConnector DB(ChatStorage::STORED_CHATS.toStdString() + ownerID.toStdString() + "/chats/"
+        DBConnector DB(DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + ownerID.toStdString() + "/chats/"
                        + _chatId.toStdString() + "/users");
         DBRow row;
         row.insert({ "userId", actorId.toStdString() });
@@ -618,9 +618,10 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
     return true;
 }
 
-QByteArray Chat::pathToSession(BigNumber sessionNumber)
+QString Chat::pathToSession(BigNumber sessionNumber)
 {
-    return ChatStorage::STORED_CHATS + ownerID + "/" + _chatId + "/" + sessionNumber.toByteArray() + "/";
+    return DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/" + _chatId + "/" + sessionNumber.toByteArray()
+        + "/";
 }
 
 Chat::~Chat()

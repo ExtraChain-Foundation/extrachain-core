@@ -1,6 +1,6 @@
 #include "profile/public_profile.h"
 
-PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QByteArray path, QByteArray _id)
+PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id)
 {
     sign = _sign;
     id = _id;
@@ -14,7 +14,7 @@ PublicProfile::PublicProfile()
     id = "";
 }
 
-PublicProfile::PublicProfile(QByteArray _id, QByteArray _path)
+PublicProfile::PublicProfile(QByteArray _id, QString _path)
 {
     id = _id;
     idPath = _path + id + ".profile";
@@ -49,14 +49,14 @@ QByteArray PublicProfile::serialize() const
 {
     QFile profile(idPath);
     profile.open(QIODevice::ReadOnly);
-    QByteArray data = profile.readAll() + idPath + Utils::intToByteArray(idPath.size(), 4) + sign
+    QByteArray data = profile.readAll() + idPath.toLatin1() + Utils::intToByteArray(idPath.size(), 4) + sign
         + Utils::intToByteArray(sign.size(), 4) + id + Utils::intToByteArray(id.size(), 4);
     profile.flush();
     profile.close();
     return data;
 }
 
-void PublicProfile::setProfile(QByteArrayList profile, QByteArray path)
+void PublicProfile::setProfile(QByteArrayList profile, QString path)
 {
     idPath = path;
     QFile file(path);
@@ -88,7 +88,7 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
 
 void PublicProfile::saveProfileFromNet(QByteArray newProfile)
 {
-    QDir().mkdir(ChatStorage::STORED_CHATS + id + "/profile/");
+    QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/");
     QFile profile(idPath);
     if (profile.exists())
     {

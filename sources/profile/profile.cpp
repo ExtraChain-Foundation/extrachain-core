@@ -545,12 +545,12 @@ void Profile::setFashion(QList<int> fashion)
 bool Profile::isServiceExists()
 {
     static QStringList files = { "chatinvite", "follower", "subscribe" };
-    QString servicePath = QString("data/%1/services/").arg(userId());
+    QString servicePath = QString("%1/%2/services/").arg(DfsStruct::ROOT_FOOLDER_NAME, userId());
 
     for (const QString &file : files)
     {
         QString original = servicePath + file;
-        QString stored = original + ".stored";
+        QString stored = original + DfsStruct::STORED_EXT;
         if (!QFile::exists(original) || !QFile::exists(stored))
             return false;
     }

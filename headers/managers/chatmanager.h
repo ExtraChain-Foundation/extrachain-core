@@ -39,7 +39,7 @@ private:
     void InitializeConnectSignalSlot(); //-
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
-    QByteArray getPathToMyChats();      //+ keystore/chats/
+    QString getPathToMyChats();         //+ keystore/chats/
     void parseInvite();
     // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
@@ -90,7 +90,7 @@ signals:
     void finished();
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
-    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
+    void send(DfsStruct::DfsSave saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
 };
 

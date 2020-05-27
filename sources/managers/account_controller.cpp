@@ -74,7 +74,7 @@ QList<QByteArray> AccountController::getAccountID()
     return list;
 }
 
-Actor<KeyPrivate> AccountController::createActor(int account, QByteArray hashLogin)
+Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray hashLogin)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
     actor->init(account);
@@ -91,13 +91,13 @@ Actor<KeyPrivate> AccountController::createActor(int account, QByteArray hashLog
 
     userNum = accounts.size() - 1;
 
-    qDebug() << "create actor finished" << account;
-    if (account == 1)
+    qDebug() << "create actor finished";
+    if (account == ActorType::Account)
     {
         qDebug() << "Dfs hash init for me";
         emit initDfs(); //
     }
-    emit newActorIsCreated(this->getMainActor()->getId(), account);
+    emit newActorIsCreated(this->getMainActor()->getId(), account == ActorType::Account); // TODO: send type
 
     if (!accounts.isEmpty())
         blockchain->getBlockZero();
@@ -117,18 +117,20 @@ Actor<KeyPrivate> AccountController::getActor(BigNumber id)
     return Actor<KeyPrivate>();
 }
 
-Actor<KeyPrivate> AccountController::getActor(QByteArray pubkey)
+Actor<KeyPrivate> AccountController::getActorByPublicKey(QByteArray pubkey)
 {
-    for (Actor<KeyPrivate> *actor : accounts)
-    {
-        if (actor->getKey()->extractPublicKey() == pubkey)
-        {
-            qDebug() << "ACCOUNT CONTROLLER: currentActor: " << actor->getId();
-            return *actor;
-        }
-    }
-    qDebug() << "Can't find actor with pubkey:" << QString(pubkey);
+    qDebug() << "DEPRECATED";
     return Actor<KeyPrivate>();
+    //    for (Actor<KeyPrivate> *actor : accounts)
+    //    {
+    //        if (actor->getKey()->extractPublicKey() == pubkey)
+    //        {
+    //            qDebug() << "ACCOUNT CONTROLLER: currentActor:" << actor->getId();
+    //            return *actor;
+    //        }
+    //    }
+    //    qDebug() << "Can't find actor with pubkey:" << QString(pubkey);
+    //    return Actor<KeyPrivate>();
 }
 
 Actor<KeyPrivate> AccountController::getActor(int number)

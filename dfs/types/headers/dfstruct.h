@@ -9,10 +9,8 @@
 #include <unordered_map>
 #include <tuple>
 #include "utils/bignumber.h"
-#include "utils/utils.h"
 
 namespace PathStruct {
-//"data/actorId/section/fileName"
 static const short rFolder = 0;
 static const short aId = 1;
 static const short section = 2;
@@ -21,14 +19,15 @@ static const short name = 3;
 
 namespace DfsStruct {
 static const QString ROOT_FOOLDER_NAME = "data";
+static const int ROOT_FOOLDER_NAME_SIZE = ROOT_FOOLDER_NAME.length();
+static const int ROOT_FOOLDER_NAME_MID = ROOT_FOOLDER_NAME.length() + 1;
+static const std::string ROOT_FOOLDER_NAME_STD = ROOT_FOOLDER_NAME.toStdString();
 static const QString STORED_EXT = ".stored";
-static const QString MINI_IMAGES = "/mini";
+static const int STORED_EXT_SIZE = STORED_EXT.length();
 static const QString FILE_IDENTIFICATOR = ".tmp";
 static const QString ACTOR_CARD_FILE = "root";
-static const QString PROFILE_EXT = ".profile";
-static const QString CHATINVITE = "chatinvite";
-static const QString FOLLOWER = "follower";
-static const QString SUBSCRIBE = "subscribe";
+static const QString ACTOR_CARD_LAST = "root.last";
+static const QString ACTOR_CARD_FUTURE = ".future";
 
 enum Type
 {
@@ -50,7 +49,7 @@ Type toDfsType(QByteArray);
 QByteArray toByteArray(Type);
 QString toString(Type);
 
-enum DfsSave
+enum class DfsSave
 {
     File,
     Static,

@@ -29,7 +29,7 @@ void NotificationManager::loadNotificationFromDB()
         return;
     }
 
-    QString dbPath = "data/" + _currentActorId + "/private/notifications";
+    QString dbPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/private/notifications";
     if (!QFile::exists(dbPath))
     {
         qDebug() << "Error load notifications: no file exists";

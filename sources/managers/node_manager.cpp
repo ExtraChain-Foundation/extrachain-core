@@ -110,12 +110,16 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
                     .toStdString());
             dbc.createTable(Config::DataStorage::cardTableCreation);
             dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
-            QString usernamesPath = QString("data/%1/services/usernames").arg(companyId);
+            QString usernamesPath =
+                QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(companyId);
             DBConnector usernamesDB(usernamesPath.toStdString());
             usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
             dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
         }
     }
+#else
+    Q_UNUSED(email)
+    Q_UNUSED(password)
 #endif
 }
 
@@ -135,7 +139,7 @@ void NodeManager::initConsoleToken(Transaction tx)
 
 Actor<KeyPrivate> NodeManager::CreateExtracoin(QByteArray consoleHash)
 {
-    accController->createActor(actorType::COMPANY, consoleHash);
+    accController->createActor(ActorType::Company, consoleHash);
 
     return *accController->getMainActor();
 }
@@ -566,6 +570,7 @@ void NodeManager::connectUi()
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
     connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
     connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
+    connect(netManager, &NetManager::localIpFounded, uiController, &UiController::localIpFounded);
     connect(netManager, &NetManager::buildError, uiController, &UiController::buildError);
 
     connect(uiController, &UiController::subscribe, subscribeController,
@@ -631,6 +636,8 @@ void NodeManager::connectUi()
             &PrivateProfile::loadInfoFromPrivateProfile);
     connect(prProfile, &PrivateProfile::infoToUi, uiController, &UiController::loadInfo);
     connect(prProfile, &PrivateProfile::infoToUi, this, [=](const QByteArray &info, const QString &type) {
+        Q_UNUSED(info)
+        Q_UNUSED(type)
         emit setCurrentIdNotifyM(getIdPrivateProfile());
     });
     connect(prProfile, &PrivateProfile::initActorChatM,
@@ -681,18 +688,17 @@ void NodeManager::connectUi()
     connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFileUiHandle);
     connect(uiController, &UiController::authEnded, chatManager, &ChatManager::initChat);
 
-    connect(subscribeController, &SubscribeController::send, dfs, &Dfs::save);
     connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
 
     //=============================================LOGIN & REG================================
-    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController,
-            [=](QByteArray hash, const bool account) {
-                setHashLoginPrivateProfile(hash);
+    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController, [=](QByteArray hash) {
+        setHashLoginPrivateProfile(hash);
 
-                auto future = QtConcurrent::run(accController, &AccountController::createActor, 1, hash);
-                AsyncFuture::observe(future).subscribe([]() { qDebug() << "Actor created"; });
-            });
+        auto future =
+            QtConcurrent::run(accController, &AccountController::createActor, ActorType::Account, hash);
+        AsyncFuture::observe(future).subscribe([]() { qDebug() << "Actor created"; });
+    });
     //    connect(uiController->getWelcomePage(),
     //    &WelcomePage::autoLogInStarted, netManager,
     //            &NetManager::connectToServer);
@@ -733,8 +739,8 @@ void NodeManager::connectUi()
 
 void NodeManager::addNewWallet()
 {
-    auto future =
-        QtConcurrent::run(accController, &AccountController::createActor, 0, hashLoginPrivateProfile);
+    auto future = QtConcurrent::run(accController, &AccountController::createActor, ActorType::Wallet,
+                                    hashLoginPrivateProfile);
 
     AsyncFuture::observe(future).subscribe([this, future]() {
         auto walletId = future.result().getId().toActorId();
@@ -799,7 +805,7 @@ void NodeManager::connectSignals()
 void NodeManager::prepareFolders()
 {
     qDebug() << "Preparing folders";
-    qDebug() << "Working directory : " << QDir::currentPath();
+    qDebug() << "Working directory:" << QDir::currentPath();
 
     FileSystem::createFolderIfNotExist(KeyStore::USER_KEYSTORE);
     FileSystem::createFolderIfNotExist(DataStorage::TMP_FOLDER);
@@ -892,6 +898,10 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber p
         qInfo() << "Send? (y/n)";
         m_listenCoinRequest = true;
     }
+#else
+    Q_UNUSED(receiver)
+    Q_UNUSED(amount)
+    Q_UNUSED(plsr)
 #endif
 }
 

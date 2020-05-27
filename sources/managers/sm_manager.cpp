@@ -75,7 +75,7 @@ Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName)
 {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
 
-    actor->init(false);
+    actor->init(ActorType::Wallet);
 
     emit verifyActor(actor->convertToPublic());
     actorIndex->addActor(actor->convertToPublic());

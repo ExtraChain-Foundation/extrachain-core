@@ -102,9 +102,9 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         if (!actor.profile().getProfile().isEmpty())
             resolveManager->registrateMsg(actor.profile().serialize(),
                                           Messages::ChainMessage::profileMessage);
-        else if (actor.getAccount() != 0 && actor.getAccount() != 2)
+        else if (actor.getAccount() != ActorType::Wallet && actor.getAccount() != ActorType::Company)
         {
-            qDebug() << "NO PROFILE >>>>>>>>>>>>" << actorId;
+            qDebug() << "NO PROFILE >" << actorId;
             Messages::GetActorMessage msg;
             msg.actorId = actorId;
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
@@ -150,17 +150,17 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
 {
-    //    qDebug() << "adfklsfkl;adskl;afsdl;afsdl;";
     switch (addActor(actor))
     {
     case 0:
-        qDebug() << QString("New actor [%1] is successfully saved").arg(actor.toString());
+        qDebug() << QString("New actor [%1] is successfully saved").arg(QString(actor.serialize()));
         break;
     case Errors::FILE_ALREADY_EXISTS:
-        qDebug() << QString("New actor [%1] can't be added: it is already in storage").arg(actor.toString());
+        qDebug() << QString("New actor [%1] can't be added: it is already in storage")
+                        .arg(QString(actor.serialize()));
         break;
     case Errors::FILE_IS_NOT_OPENED:
-        qWarning() << QString("Error: new actor [%1] is not saved").arg(actor.toString());
+        qWarning() << QString("Error: new actor [%1] is not saved").arg(QString(actor.serialize()));
         break;
     default:
         qWarning() << "Error: unexpected return type";
@@ -269,7 +269,8 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != 0 && actor.getAccount() != 2 && resolveManager != nullptr)
+        if (actor.getAccount() != ActorType::Wallet && actor.getAccount() != ActorType::Company
+            && resolveManager != nullptr)
         {
             Messages::GetActorMessage msg;
             msg.actorId = BigNumber(id.toLocal8Bit());
@@ -322,7 +323,7 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const
 
 QString ActorIndex::buildPathPubProfile(const QByteArray &id)
 {
-    QString pathToFolder = ChatStorage::STORED_CHATS + id + "/profile/";
+    QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/";
 
     QDir dir(pathToFolder);
     if (!dir.exists())
@@ -385,21 +386,20 @@ QByteArray ActorIndex::getById(const BigNumber &id) const
     file.close();
     return data;
 }
+
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
     int result = this->add(actor.getId(), actor.serialize());
-    if (actor.getAccount() == 2 && companyId == nullptr)
+    if (actor.getAccount() == ActorType::Company && companyId == nullptr)
     {
         qDebug() << "Save company ID->" << actor.getId().toByteArray();
         companyId = new QByteArray(actor.getId().toActorId());
     }
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
-        qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
-                 << "lsd: ";
+        qDebug() << "ActorIndex: actor - " << actor.getId() << " was added";
         resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
-        //        emit sendMessage(actor.serialize(), classType);
-
+        // emit sendMessage(actor.serialize(), classType);
         qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
         emit initDfs(actor.getId());
     }
@@ -429,7 +429,7 @@ QByteArrayList ActorIndex::allActors()
 
 void ActorIndex::removeAll()
 {
-    qDebug() << "Clearing file index: " << folderPath;
+    qDebug() << "Clearing file index:" << folderPath;
 
     QDir folder(folderPath);
     for (const QString &section :
@@ -445,12 +445,12 @@ void ActorIndex::removeAll()
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
-    QString folderPath = "data";
-    QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDotAndDotDot);
+    QStringList sectionList =
+        QDir(DfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::QDir::Dirs | QDir::NoDotAndDotDot);
 
     for (const QString &section : sectionList)
     {
-        QString profileFolderPath = folderPath + +"/" + section + "/" + section + ".profile";
+        QString profileFolderPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + section + "/" + section + ".profile";
         QStringList profilePathList = // TODO: NOT ENTRY LIST
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::NoDotAndDotDot);
         if (section.length() != 20)

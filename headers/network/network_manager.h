@@ -253,6 +253,7 @@ signals:
     void qmlNetworkStatus(bool status);
     void qmlNetworkSockets(int socketsCount);
     void qmlServerError(bool serverError);
+    void localIpFounded(QString localIp);
     void buildError();
 };
 

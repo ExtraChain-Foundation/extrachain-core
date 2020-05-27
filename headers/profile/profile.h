@@ -5,6 +5,8 @@
 #include <QDebug>
 #include <QFile>
 
+#include "dfs/types/headers/dfstruct.h"
+
 class Profile
 {
     Q_GADGET

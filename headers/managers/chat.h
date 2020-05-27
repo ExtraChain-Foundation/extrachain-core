@@ -50,9 +50,9 @@ private:
 
 private:
     // paths getters:
-    QByteArray getPathCurrentChat();                   //+ keystore/chats/[chatId]/
-    QByteArray getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
-    QByteArray pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
+    QString getPathCurrentChat();                   //+ keystore/chats/[chatId]/
+    QString getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
+    QString pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
     // paths end
     BigNumber findCurrentSession();                                                     //+
     void InitializeAllPaths();                                                          //+

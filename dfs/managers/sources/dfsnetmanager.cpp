@@ -265,7 +265,8 @@ SocketService *DFSNetManager::addConnectionFromPair(QHostAddress address, quint1
     connections.append(socket);
     connections.last()->setNetManager(this);
     socketConnection();
-    qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
+    qDebug().noquote().noquote() << "NET MANAGER: New connection is established: "
+                                 << address.toString() + ":" + port;
 
     ThreadPool::addThread(connections.last());
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));

@@ -63,15 +63,15 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
 
 DfsStruct::Type CardManager::getTypeByName(const QString &fullPath)
 {
-    QString userId = fullPath.mid(5, 20);
+    QString userId = fullPath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
     bool hasSection = false;
     // int fromType = fullPath.indexOf("/", 26);
-    int from = fullPath.indexOf("/", 27) + 1;
+    int from = fullPath.indexOf("/", 20 + DfsStruct::ROOT_FOOLDER_NAME_MID + 2) + 1;
     // int fromSection = fullPath.indexOf("/", from) + 1;
     hasSection = fullPath[from + 2] == "/";
     // qDebug() << fullPath << fullPath[from + 2] << hasSection << fullPath.mid(hasSection ? fromSection :
     // from);
-    QString type = fullPath.mid(26);
+    QString type = fullPath.mid(20 + DfsStruct::ROOT_FOOLDER_NAME_MID + 1);
     type = type.left(type.indexOf("/"));
     // qDebug() << type;
 
@@ -141,7 +141,7 @@ std::vector<std::string> CardManager::buildPathForFiles(const std::string &userI
 
 QString CardManager::cutPath(QString fullPath)
 {
-    QString userId = fullPath.mid(5, 20);
+    QString userId = fullPath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
     bool hasSection = false;
     // int fromType = fullPath.indexOf("/", 26);
     int from = fullPath.indexOf("/", 27) + 1;
@@ -149,7 +149,7 @@ QString CardManager::cutPath(QString fullPath)
     hasSection = fullPath[from + 2] == "/";
     // qDebug() << fullPath << fullPath[from + 2] << hasSection << fullPath.mid(hasSection ? fromSection :
     // from);
-    QString type = fullPath.mid(26);
+    QString type = fullPath.mid(20 + DfsStruct::ROOT_FOOLDER_NAME_MID + 1);
     type = type.left(type.indexOf("/"));
     // qDebug() << type;
 

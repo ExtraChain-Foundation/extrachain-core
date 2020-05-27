@@ -50,11 +50,11 @@ void ChatManager::AddChat(QByteArray chatId, QByteArray key, QByteArray owner)
     _chatList.push_front(new Chat(this, chatId, key, 0, _actorIndex, _accController,
                                   QList<QByteArray> { owner, _currentActorId }, owner));
     return;
-    QString path(ChatStorage::STORED_CHATS + owner + "/chats/" + chatId);
+    QString path(DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId);
     emit requestFile(path + "/0/msg");
     emit requestFile(path + "/users");
-    emit requestFile(path + "/0/msg.stored");
-    emit requestFile(path + "/users.stored");
+    emit requestFile(path + "/0/msg" + DfsStruct::STORED_EXT);
+    emit requestFile(path + "/users" + DfsStruct::STORED_EXT);
     //    QString pathUser = chatId + "/users";
     //    QString pathMsg = chatId + "/0/msg";
     //    emit send(DfsStruct::DfsSave::Static, pathUser, "", DfsStruct::chat, DfsStruct::SubType::undef);
@@ -65,7 +65,7 @@ void ChatManager::InitializeChatList()
 {
     //    QStringList chatList = QDir(getPathToMyChats()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     // _chatList.clear();
-    QString filePath = "data/" + _currentActorId + "/private/chats";
+    QString filePath = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/private/chats";
 
     if (!QFile::exists(filePath))
         return;
@@ -114,14 +114,14 @@ QByteArray ChatManager::generateChatId()
     return generateChatKey();
 }
 
-QByteArray ChatManager::getPathToMyChats()
+QString ChatManager::getPathToMyChats()
 {
-    return ChatStorage::STORED_CHATS + _currentActorId + "/chats/";
+    return DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/chats/";
 }
 
 void ChatManager::parseInvite()
 {
-    QByteArray path = "data/" + _currentActorId + "/services/chatinvite";
+    QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/services/chatinvite";
     if (!QFile::exists(path))
         return;
 
@@ -156,12 +156,16 @@ void ChatManager::parseInvite()
         // emit chatCreated(
         //    UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
 
-        //        QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId +
-        //        "/users"; QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId
+        //        QByteArray pathToUsersFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId
+        //        +
+        //        "/users"; QByteArray pathToMsgFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/"
+        //        + chatId
         //        + "/0/msg"; QByteArray pathToUsersFileStored =
-        //            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
+        //            DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/users" +
+        //            DfsStruct::STORED_EXT;
         //        QByteArray pathToMsgFileStored =
-        //            ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+        //            DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/0/msg" +
+        //            DfsStruct::STORED_EXT;
 
         //        emit requestFile(pathToUsersFile);
         //        emit requestFile(pathToMsgFile);
@@ -392,7 +396,7 @@ void ChatManager::chatRemoved(QByteArray chatId)
 
 void ChatManager::changes(QString path)
 {
-    if (path.contains(".stored"))
+    if (path.contains(DfsStruct::STORED_EXT))
         return;
     if (path.contains("chatinvite"))
     {
@@ -494,7 +498,7 @@ void ChatManager::fileLoaded(const QString &path)
         */
         requestChatList();
     }
-    if (path.indexOf("chatinvite") != -1 && path.indexOf(".stored") == -1)
+    if (path.indexOf("chatinvite") != -1 && path.indexOf(DfsStruct::STORED_EXT) == -1)
         parseInvite();
 }
 
@@ -506,7 +510,7 @@ void ChatManager::initChat(bool status, int type)
         return;
 
     /*
-    QString pathToChatInvite = ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite";
+    QString pathToChatInvite = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/services/chatinvite";
     if (QFile::exists(pathToChatInvite))
         parseInvite();
     return;
@@ -514,10 +518,10 @@ void ChatManager::initChat(bool status, int type)
 
     QTimer::singleShot(5000, [&]() {
         parseInvite();
-        QByteArray pathToChatInvite =
-            ChatStorage::STORED_CHATS + _currentActorId + "/services/chatinvite.stored";
+        QString pathToChatInvite = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId
+            + "/services/chatinvite" + DfsStruct::STORED_EXT;
         emit requestFile(pathToChatInvite);
-        QString filePath = "data/" + _currentActorId + "/private/chats";
+        QString filePath = DfsStruct::ROOT_FOOLDER_NAME + "/" + _currentActorId + "/private/chats";
 
         if (!QFile::exists(filePath))
             return;
@@ -528,14 +532,16 @@ void ChatManager::initChat(bool status, int type)
 
         for (DBRow &tmp : chats)
         {
-            QByteArray owner = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["owner"]));
-            QByteArray chatId = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["chatId"]));
-            QByteArray pathToUsersFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users";
-            QByteArray pathToMsgFile = ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg";
-            QByteArray pathToUsersFileStored =
-                ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/users.stored";
-            QByteArray pathToMsgFileStored =
-                ChatStorage::STORED_CHATS + owner + "/chats/" + chatId + "/0/msg.stored";
+            QString owner = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["owner"]));
+            QString chatId = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["chatId"]));
+            QString pathToUsersFile =
+                DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/users";
+            QString pathToMsgFile =
+                DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/0/msg";
+            QString pathToUsersFileStored = DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId
+                + "/users" + DfsStruct::STORED_EXT;
+            QString pathToMsgFileStored = DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId
+                + "/0/msg" + DfsStruct::STORED_EXT;
 
             emit requestFile(pathToUsersFile);
             emit requestFile(pathToMsgFile);

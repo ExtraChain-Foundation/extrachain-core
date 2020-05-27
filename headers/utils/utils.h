@@ -17,6 +17,7 @@
 #include <sstream>
 #include <string>
 
+#include "dfs/types/headers/dfstruct.h"
 #include "network/socket_pair.h"
 #include "utils/Keccak256.h"
 #include "utils/bignumber.h"
@@ -548,11 +549,7 @@ QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 void softWipe(const QString &currentId);
 } // namespace Utils
-namespace ChatStorage {
-// keystore/chats/[chat ID]/[sessionID]/ users,key etc.
-static const QByteArray STORED_CHATS = "data/";
-// static const QByteArray SESSIONS = "/sessions/";
-} // namespace ChatStorage
+
 namespace DataStorage {
 // Main blockchain folder
 static const QString BLOCKCHAIN = "blockchain";
