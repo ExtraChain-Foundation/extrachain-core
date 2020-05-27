@@ -37,7 +37,6 @@ class Actor
 private:
     BigNumber id = -1;
     T *key;
-    QByteArray hash;
     ActorType account;
 
 public:
@@ -45,7 +44,6 @@ public:
     {
         id = 0;
         key = nullptr;
-        hash = "";
         account = ActorType::Wallet;
     }
 
@@ -53,7 +51,6 @@ public:
     {
         id = copyActor.getId();
         key = new T(*(copyActor.getKey()));
-        hash = copyActor.getHash();
         account = ActorType(copyActor.getAccount());
     }
 
@@ -76,14 +73,8 @@ public:
     {
         id = copyActor.getId();
         key = new T(*(copyActor.getKey()));
-        hash = copyActor.getHash();
         account = ActorType(copyActor.getAccount());
         return *this;
-    }
-
-    bool checkSumValid(QByteArray checkSum)
-    {
-        return checkSum == getChecksumPubKey();
     }
 
     inline void setHash(QByteArray hash)
@@ -96,35 +87,9 @@ public:
         return this->hash;
     }
 
-private:
     bool isPrivate() const
     {
         return std::is_same<T, KeyPrivate>::value;
-    }
-
-    QByteArray getChecksumPubKey()
-    {
-        if (key == nullptr)
-            return "0";
-
-        QByteArray localPublicKey = "0";
-
-        auto point = key->getPublicKey();
-        QByteArray x = point.x().toByteArray();
-        QByteArray y = point.y().toByteArray();
-        localPublicKey = Serialization::universalSerialize({ x, y }, 2);
-
-        QString hash = Utils::calcKeccak(localPublicKey);
-        while (hash.size() < localPublicKey.size())
-            hash = hash.append(hash);
-        for (int i = 0; i < localPublicKey.size(); i++)
-        {
-            if (QString(hash[i]).toInt(nullptr, 16) >= 8)
-            {
-                localPublicKey[i] = localPublicKey.toUpper()[i];
-            }
-        }
-        return localPublicKey;
     }
 
 public:
@@ -170,8 +135,6 @@ public:
             return false;
         }
 
-        QByteArray hashData(serialize());
-        hash = Utils::calcKeccak(hashData);
         return true;
     }
     /**
@@ -206,7 +169,6 @@ public:
 
         this->account = account;
         QByteArray hashData(serialize());
-        hash = Utils::calcKeccak(hashData);
         return true;
     }
 
@@ -227,12 +189,14 @@ public:
     {
         if (key == nullptr)
             return true;
+
         if (!isPrivate())
         {
             KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(key);
             return pbKey->isEmpty();
         }
-        return id == BigNumber(-1) || key == nullptr;
+
+        return id == BigNumber(-1);
     }
 
     /**
@@ -311,7 +275,6 @@ public:
 
     Actor<KeyPublic> convertToPublic() const
     {
-        //
         return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->getPublicKey(), getAccount())
                            : Actor<KeyPublic>();
     }
@@ -321,6 +284,7 @@ inline bool operator<(const Actor<KeyPublic> &l, const Actor<KeyPublic> &r)
 {
     return l.getId() < r.getId();
 }
+
 inline bool operator<(const Actor<KeyPrivate> &l, const Actor<KeyPrivate> &r)
 {
     return l.getId() < r.getId();
