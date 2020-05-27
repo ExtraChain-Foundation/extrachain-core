@@ -1,4 +1,4 @@
-#ifndef ACTOR_H
+﻿#ifndef ACTOR_H
 #define ACTOR_H
 
 #include <QDebug>
@@ -28,63 +28,48 @@ enum class ActorType
 };
 
 template <typename T>
-class Actor
+class Actor final
 {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
                   "Your type is not supported. Only Keys are supported");
     const int FIELDS_SIZE = 4;
 
-private:
-    BigNumber id = -1;
-    T *key;
-    ActorType account;
+protected:
+    BigNumber m_id = -1;
+    T *m_key;
+    ActorType m_account;
 
 public:
     Actor()
     {
-        id = 0;
-        key = nullptr;
-        account = ActorType::Wallet;
+        m_id = 0;
+        m_key = nullptr;
+        m_account = ActorType::Wallet;
     }
 
     Actor(const Actor<T> &copyActor)
     {
-        id = copyActor.getId();
-        key = new T(*(copyActor.getKey()));
-        account = ActorType(copyActor.getAccount());
+        m_id = copyActor.id();
+        m_key = new T(*(copyActor.key()));
+        m_account = ActorType(copyActor.account());
     }
 
     Actor(const QByteArray &serialized)
     {
-        this->init(serialized);
-    }
-
-    Actor(const BigNumber &id, const EllipticPoint &publicKey, ActorType account)
-    {
-        this->init(id, publicKey, account);
+        this->deserialize(serialized);
     }
 
     ~Actor()
     {
-        // delete key;
+        delete m_key;
     }
 
     Actor operator=(const Actor<T> &copyActor)
     {
-        id = copyActor.getId();
-        key = new T(*(copyActor.getKey()));
-        account = ActorType(copyActor.getAccount());
+        m_id = copyActor.id();
+        m_key = new T(*(copyActor.key()));
+        m_account = ActorType(copyActor.account());
         return *this;
-    }
-
-    inline void setHash(QByteArray hash)
-    {
-        this->hash = hash;
-    }
-
-    inline QByteArray getHash() const
-    {
-        return this->hash;
     }
 
     bool isPrivate() const
@@ -97,7 +82,7 @@ public:
      * @brief initial construction
      * @param serialized
      */
-    bool init(const QByteArray &serialized)
+    bool deserialize(const QByteArray &serialized)
     {
         auto json = QJsonDocument::fromJson(serialized).object();
 
@@ -125,11 +110,11 @@ public:
             }
         }
 
-        this->id = BigNumber(json["id"].toString().toLatin1());
-        this->key = new T(json);
-        this->account = ActorType(json["account"].toInt());
+        this->m_id = BigNumber(json["id"].toString().toLatin1());
+        this->m_key = new T(json);
+        this->m_account = ActorType(json["account"].toInt());
 
-        if (isEmpty())
+        if (empty())
         {
             qDebug() << "Incorrect actor init";
             return false;
@@ -137,29 +122,30 @@ public:
 
         return true;
     }
+
     /**
      * @brief initial construction of new Actor
      * @param id
      */
-    bool init(ActorType account)
+    bool create(ActorType account)
     {
         if (!isPrivate())
             return false;
 
-        key = new T();
+        m_key = new T();
 
         if (typeid(T) == typeid(KeyPrivate))
         {
-            KeyPrivate *k = reinterpret_cast<KeyPrivate *>(key);
+            KeyPrivate *k = reinterpret_cast<KeyPrivate *>(m_key);
             k->generate();
             auto publicKey = k->getPublicKey();
             QByteArray x = publicKey.x().toByteArray();
             QByteArray y = publicKey.y().toByteArray();
-            QByteArray hashPubKey = Utils::calcKeccak(Serialization::universalSerialize({ x, y }, 2));
+            QByteArray keccakPublicKey = Utils::calcKeccak(x + y);
 
-            if (hashPubKey.size() >= 20)
+            if (keccakPublicKey.size() >= 20)
             {
-                id = BigNumber(hashPubKey.mid(hashPubKey.size() - 20));
+                m_id = BigNumber(keccakPublicKey.right(20));
             }
             else
             {
@@ -167,36 +153,22 @@ public:
             }
         }
 
-        this->account = account;
-        QByteArray hashData(serialize());
+        this->m_account = account;
         return true;
     }
 
-    /**
-     * @brief initial construction. Can be used to create public actor.
-     * @param id
-     * @param keydata - (private/public key)
-     */
-    bool init(const BigNumber &id, const EllipticPoint &publicKey, ActorType account)
+    bool empty() const
     {
-        this->id = id;
-        this->key = new T(publicKey);
-        this->account = ActorType(account);
-        return true;
-    }
-
-    bool isEmpty() const
-    {
-        if (key == nullptr)
+        if (m_key == nullptr)
             return true;
 
         if (!isPrivate())
         {
-            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(key);
+            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(m_key);
             return pbKey->isEmpty();
         }
 
-        return id == BigNumber(-1);
+        return m_id == BigNumber(-1);
     }
 
     /**
@@ -207,17 +179,17 @@ public:
      */
     QByteArray serialize() const
     {
-        QString actorId = QString(this->id.toActorId());
-        int type = static_cast<uint32_t>(account);
+        QString actorId = QString(this->m_id.toActorId());
+        int type = static_cast<uint32_t>(m_account);
 
-        if (key == nullptr || isEmpty())
+        if (m_key == nullptr || empty())
         {
-            QList<QByteArray> list = { id.toActorId() };
+            QList<QByteArray> list = { m_id.toActorId() };
             QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
             return serialized;
         }
 
-        EllipticPoint publicKey = key->getPublicKey();
+        EllipticPoint publicKey = m_key->getPublicKey();
         QString x = publicKey.x().toByteArray();
         QString y = publicKey.y().toByteArray();
 
@@ -227,7 +199,7 @@ public:
 
         if (isPrivate())
         {
-            KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(key);
+            KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(m_key);
             QString privateKey = keyPrivate->getPrivateKey().toByteArray();
             json["privateKey"] = privateKey;
         }
@@ -238,56 +210,58 @@ public:
 
     PublicProfile profile()
     {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + id.toActorId() + "/profile/";
-        return PublicProfile(id.toActorId(), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toActorId() + "/profile/";
+        return PublicProfile(m_id.toActorId(), pathToFolder);
     }
 
 public:
     bool operator==(const Actor<T> &other)
     {
-        T *otherKey = other.getKey();
-        return this->getId() == other.getId() && *key == *otherKey;
+        T *otherKey = other.key();
+        return this->id() == other.id() && *m_key == *otherKey;
     }
 
-    bool operator<(const Actor<T> other)
+    BigNumber id() const
     {
-        if (id < other.getId())
-        {
-            return true;
-        }
-        return false;
+        return m_id;
     }
 
-    BigNumber getId() const
+    T *key() const
     {
-        return id;
+        return m_key;
     }
 
-    T *getKey() const
+    ActorType account() const
     {
-        return key;
+        return m_account;
     }
 
-    ActorType getAccount() const
+    Actor<KeyPublic> convertToPublic()
     {
-        return account;
+        Actor<KeyPublic> actor;
+
+        actor.setId(m_id);
+        actor.setPublicKey(m_key->getPublicKey());
+        actor.setAccount(ActorType(m_account));
+
+        return actor;
     }
 
-    Actor<KeyPublic> convertToPublic() const
+    void setId(const BigNumber &id)
     {
-        return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->getPublicKey(), getAccount())
-                           : Actor<KeyPublic>();
+        m_id = id;
+    }
+
+    void setPublicKey(EllipticPoint point)
+    {
+        Q_ASSERT(!isPrivate());
+        m_key = new T(point);
+    }
+
+    void setAccount(const ActorType &account)
+    {
+        m_account = account;
     }
 };
-
-inline bool operator<(const Actor<KeyPublic> &l, const Actor<KeyPublic> &r)
-{
-    return l.getId() < r.getId();
-}
-
-inline bool operator<(const Actor<KeyPrivate> &l, const Actor<KeyPrivate> &r)
-{
-    return l.getId() < r.getId();
-}
 
 #endif // ACTOR_H

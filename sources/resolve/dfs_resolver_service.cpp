@@ -140,7 +140,7 @@ bool DFSResolverService::validate(const Messages::BaseMessage &message)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
-    if (!actor.isEmpty())
+    if (!actor.empty())
     {
         return message.verifyDigSig(actor);
     }
@@ -414,9 +414,9 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
         qDebug() << "Create temp file: actor - " << BigNumber(pathList.at(PathStruct::aId));
         Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(pathList.at(PathStruct::aId)));
 
-        if (!actor.isEmpty())
+        if (!actor.empty())
         {
-            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
+            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.id().toActorId()).exists())
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {

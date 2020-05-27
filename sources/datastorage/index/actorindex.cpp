@@ -62,7 +62,7 @@ void ActorIndex::removeActor(const BigNumber &id, bool resend)
 bool ActorIndex::validateBlock(const Block &block)
 {
     Actor<KeyPublic> actor = this->getActor(block.getApprover());
-    if (actor.isEmpty())
+    if (actor.empty())
     {
         qWarning() << "Can not validate block" << block.getIndex() << ": There no actor"
                    << block.getApprover() << " in local storage";
@@ -74,7 +74,7 @@ bool ActorIndex::validateBlock(const Block &block)
 bool ActorIndex::validateTx(const Transaction &tx)
 {
     Actor<KeyPublic> actor = this->getActor(tx.getApprover());
-    if (actor.isEmpty())
+    if (actor.empty())
     {
         qWarning() << "Can not validate tx" << tx.getHash() << ": There no actor" << tx.getApprover()
                    << " in local storage";
@@ -92,7 +92,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
-    if (!actor.isEmpty())
+    if (!actor.empty())
     {
         resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse,
                                             reqHash, receiver);
@@ -102,7 +102,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         if (!actor.profile().getProfile().isEmpty())
             resolveManager->registrateMsg(actor.profile().serialize(),
                                           Messages::ChainMessage::profileMessage);
-        else if (actor.getAccount() != ActorType::Wallet && actor.getAccount() != ActorType::Company)
+        else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company)
         {
             qDebug() << "NO PROFILE >" << actorId;
             Messages::GetActorMessage msg;
@@ -175,7 +175,7 @@ void ActorIndex::handleNewAllActors(QByteArrayList actors)
 
 void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
 {
-    if (getActor(actor.getId()).isEmpty())
+    if (getActor(actor.id()).empty())
     {
         handleNewActor(actor);
         emit ActorIsMissing(actor);
@@ -204,12 +204,12 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     if (profile.sign == "")
         return;
     Actor<KeyPublic> key = getActor(profile.id);
-    if (key.isEmpty())
+    if (key.empty())
     {
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
-    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+    if (key.key()->verify(key.profile().getProfile(), key.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
         emit sendProfileToUi(profile.id, key.profile().getListProfile());
@@ -222,12 +222,14 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
 
 void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
 {
-    if (key->getHash().isEmpty())
+    if (key->empty())
         return;
+
     qDebug() << "Save PublicProfile with id" << newProfile.at(2);
     QByteArray path = buildPathPubProfile(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
-    QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
+    QByteArray sign = key->key()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
+
     if (pubProfile.sign == "")
     {
         qDebug() << "saveProfile: incorrect profile" << newProfile.at(2);
@@ -236,14 +238,14 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     else
     {
         resolveManager->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::profileMessage);
-        //        emit sendMessage(pubProfile.serialize(), profileType);
+        // emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
 
 void ActorIndex::requestProfile(QString id)
 {
     Actor<KeyPublic> actor = getActor(id.toUtf8());
-    if (actor.getKey() == nullptr || actor.getHash().isEmpty())
+    if (actor.empty())
         return;
     if (actor.profile().getProfile() == "")
         return;
@@ -269,7 +271,7 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != ActorType::Wallet && actor.getAccount() != ActorType::Company
+        if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company
             && resolveManager != nullptr)
         {
             Messages::GetActorMessage msg;
@@ -389,19 +391,19 @@ QByteArray ActorIndex::getById(const BigNumber &id) const
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
-    int result = this->add(actor.getId(), actor.serialize());
-    if (actor.getAccount() == ActorType::Company && companyId == nullptr)
+    int result = this->add(actor.id(), actor.serialize());
+    if (actor.account() == ActorType::Company && companyId == nullptr)
     {
-        qDebug() << "Save company ID->" << actor.getId().toByteArray();
-        companyId = new QByteArray(actor.getId().toActorId());
+        qDebug() << "Save company ID->" << actor.id().toByteArray();
+        companyId = new QByteArray(actor.id().toActorId());
     }
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
-        qDebug() << "ActorIndex: actor - " << actor.getId() << " was added";
+        qDebug() << "ActorIndex: actor - " << actor.id() << " was added";
         resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
         // emit sendMessage(actor.serialize(), classType);
-        qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
-        emit initDfs(actor.getId());
+        qDebug() << "emit signal for init dfs for user" << actor.id().toActorId();
+        emit initDfs(actor.id());
     }
     return result;
 }

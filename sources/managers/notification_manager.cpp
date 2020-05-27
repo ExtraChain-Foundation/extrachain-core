@@ -36,7 +36,7 @@ void NotificationManager::loadNotificationFromDB()
         return;
     }
 
-    auto mainActor = accController->getMainActor()->getKey();
+    auto mainActor = accController->getMainActor()->key();
     DBConnector db(dbPath.toStdString());
     std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::notificationTable);
     QList<Notification> list;
@@ -54,7 +54,7 @@ void NotificationManager::loadNotificationFromDB()
 
 void NotificationManager::addNotify(const Notification newNtf)
 {
-    auto mainActor = accController->getMainActor()->getKey();
+    auto mainActor = accController->getMainActor()->key();
     sendEditSql(_currentActorId, "notifications", DfsStruct::Type::Private, DfsStruct::Insert,
                 { Config::DataStorage::notificationTable.c_str(), "time",
                   mainActor->encryptSymmetric(QByteArray::number(newNtf.time)), "type",

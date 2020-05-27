@@ -14,13 +14,13 @@ public:
     Test(NodeManager *node, QObject *p = nullptr)
         : QObject(p)
     {
-        Transaction tr(node->getAccController()->getCurrentActor().getId(), BigNumber("ddddaaaa332232"),
+        Transaction tr(node->getAccController()->getCurrentActor().id(), BigNumber("ddddaaaa332232"),
                        BigNumber(124));
-        Transaction tr1(node->getAccController()->getCurrentActor().getId(), BigNumber("322323dddaa"),
+        Transaction tr1(node->getAccController()->getCurrentActor().id(), BigNumber("322323dddaa"),
                         BigNumber(23));
-        Transaction tr2(node->getAccController()->getCurrentActor().getId(), BigNumber("234234aaaa"),
+        Transaction tr2(node->getAccController()->getCurrentActor().id(), BigNumber("234234aaaa"),
                         BigNumber(45));
-        Transaction tr3(node->getAccController()->getCurrentActor().getId(), BigNumber("23aaaaaaaaaa"),
+        Transaction tr3(node->getAccController()->getCurrentActor().id(), BigNumber("23aaaaaaaaaa"),
                         BigNumber(4));
         QList<QByteArray> list;
         list << tr2.serialize() << tr3.serialize();

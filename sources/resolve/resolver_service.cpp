@@ -93,7 +93,7 @@ bool ResolverService::validate(const Messages::BaseMessage &message)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
-    if (!actor.isEmpty())
+    if (!actor.empty())
     {
         return message.verifyDigSig(actor);
     }
@@ -471,7 +471,7 @@ bool ResolverService::validate(const Transaction &tx)
              << "validate(Transaction):";
     if (tx.getSender() == 0 && tx.getData().contains(Fee::STAKING_REWARD))
         return true;
-    if (actorIndex->getActor(tx.getSender()).isEmpty())
+    if (actorIndex->getActor(tx.getSender()).empty())
     {
         this->thread()->sleep(5);
         return validate(tx);

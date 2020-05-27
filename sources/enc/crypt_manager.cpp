@@ -13,29 +13,29 @@ CryptManager::~CryptManager()
 
 QByteArray CryptManager::encrypt(const QByteArray &data, const BigNumber &actorId)
 {
-    return accountControler->getActorIndex()->getActor(actorId).getKey()->encrypt(data);
+    return accountControler->getActorIndex()->getActor(actorId).key()->encrypt(data);
 }
 
 QByteArray CryptManager::decrypt(const QByteArray &data)
 {
-    return accountControler->getMainActor()->getKey()->decrypt(data);
+    return accountControler->getMainActor()->key()->decrypt(data);
 }
 
 QByteArray CryptManager::decrypt(const QByteArray &data, const QByteArray &key)
 {
     Actor<KeyPrivate> actor(key);
-    return actor.getKey()->decrypt(data);
+    return actor.key()->decrypt(data);
 }
 
 QByteArray CryptManager::encrypt(const QByteArray &data, const QByteArray &key)
 {
     Actor<KeyPublic> key_t(key);
-    return key_t.getKey()->encrypt(data);
+    return key_t.key()->encrypt(data);
 }
 
 QByteArray CryptManager::decrypt(const QByteArray &data, const BigNumber &actorId)
 {
-    return accountControler->getActor(actorId).getKey()->decrypt(data);
+    return accountControler->getActor(actorId).key()->decrypt(data);
 }
 
 void CryptManager::process()

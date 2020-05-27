@@ -74,7 +74,7 @@ void ChatManager::InitializeChatList()
     std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
     for (DBRow temp : chats)
     {
-        QByteArray chatId = _accController->getMainActor()->getKey()->decryptSymmetric(
+        QByteArray chatId = _accController->getMainActor()->key()->decryptSymmetric(
             QByteArray::fromStdString(temp["chatId"]));
 
         Chat *chat = getChatMemory(chatId);
@@ -125,7 +125,7 @@ void ChatManager::parseInvite()
     if (!QFile::exists(path))
         return;
 
-    auto mainActor = _accController->getMainActor()->getKey();
+    auto mainActor = _accController->getMainActor()->key();
     DBConnector db;
     db.open(path.toStdString());
     std::vector<DBRow> invites = db.select("SELECT * from " + Config::DataStorage::chatInviteTableName);
@@ -248,7 +248,7 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
         return;
     }
 
-    if (temp.createNewSession(_accController->getMainActor()->getKey()->encrypt(generateChatKey()),
+    if (temp.createNewSession(_accController->getMainActor()->key()->encrypt(generateChatKey()),
                               temp.getAllUsers(), temp.getOwner()))
     {
         //        QFile file(getPathToMyChats() + chatId  + newSession);
@@ -283,7 +283,7 @@ QByteArray ChatManager::CreateNewChat()
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
-    auto actor = _actorIndex->getActor(BigNumber(actorId)).getKey();
+    auto actor = _actorIndex->getActor(BigNumber(actorId)).key();
 
     Chat *chat = getChatMemory(chatId);
     if (chat == nullptr)
@@ -528,7 +528,7 @@ void ChatManager::initChat(bool status, int type)
 
         DBConnector DB(filePath.toStdString());
         std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
-        auto mainActor = _accController->getMainActor()->getKey();
+        auto mainActor = _accController->getMainActor()->key();
 
         for (DBRow &tmp : chats)
         {
@@ -572,7 +572,7 @@ ChatManager::~ChatManager()
 
 void ChatManager::ActorInit()
 {
-    this->_currentActorId = this->_accController->getMainActor()->getId().toActorId();
+    this->_currentActorId = this->_accController->getMainActor()->id().toActorId();
     /*
     QFile file("keystore/personal/currentID");
     file.open(QIODevice::ReadWrite);

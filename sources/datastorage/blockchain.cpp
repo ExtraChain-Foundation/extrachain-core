@@ -531,10 +531,10 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->getId().toActorId();
+            QByteArray id = accountController->getMainActor()->id().toActorId();
             if (!list.contains(id))
             {
-                QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
+                QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -589,10 +589,10 @@ bool Blockchain::signCheckAdd(Block &block)
             }
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->getId().toActorId();
+            QByteArray id = accountController->getMainActor()->id().toActorId();
             if (!list.contains(id))
             {
-                QByteArray sign = accountController->getMainActor()->getKey()->sign(block.getHash());
+                QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -618,7 +618,7 @@ void Blockchain::sendUnFee(Block &block)
             continue;
         BigNumber fee = tmpTx.getAmount() / 100;
         Actor<KeyPrivate> actor = accountController->getCurrentActor();
-        BigNumber producer = actor.getId();
+        BigNumber producer = actor.id();
         if (producer == approver /* || producer == sender*/)
             continue;
         Transaction tx(sender, sender, fee);
@@ -665,7 +665,7 @@ void Blockchain::sendFeeUnfreeze(Block &block)
             continue;
         BigNumber fee = tmpTx.getAmount() / 100 / 10;
         Actor<KeyPrivate> actor = accountController->getCurrentActor();
-        BigNumber producer = actor.getId();
+        BigNumber producer = actor.id();
         if (producer == approver /*producer == sender || */)
             continue;
         Transaction tx(sender, approver, fee);
@@ -1528,7 +1528,7 @@ void Blockchain::addBlockToBlockchain(Block block)
     {
         QList<BigNumber> list;
         for (auto tmp : accountController->getAccounts())
-            list.append(tmp->getId());
+            list.append(tmp->id());
         QByteArray data = tmp.getData();
         if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
             && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
@@ -1680,7 +1680,7 @@ void Blockchain::proveTx(Transaction *tx)
                 }
             }
         }
-        if (actorIndex->getActor(tx->getProducer()).getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
+        if (actorIndex->getActor(tx->getProducer()).key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
             tx->setAmount(fee);
             tx->sign(accountController->getCurrentActor());
@@ -1739,7 +1739,7 @@ void Blockchain::proveTx(Transaction *tx)
                         if (signs[index + 2] == "1")
                         {
                             if (actorIndex->getActor(tx->getProducer())
-                                    .getKey()
+                                    .key()
                                     ->verify(tx->getDataForDigSig(), tx->getDigSig()))
                             {
                                 if (checkHaveUNFreezeTx(tx, indexApBlock))
@@ -1830,7 +1830,7 @@ void Blockchain::proveTx(Transaction *tx)
 
     // if receiver is not exist
 
-    if ((receiverActor.isEmpty() && targetReceiver != 0) || (senderActor.isEmpty() && targetSender != 0))
+    if ((receiverActor.empty() && targetReceiver != 0) || (senderActor.empty() && targetSender != 0))
     {
         emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: receiver or sender is not exist";
@@ -1848,7 +1848,7 @@ void Blockchain::proveTx(Transaction *tx)
             emit tx->NotApproved(tx);
             return;
         }
-        if (!producerActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
+        if (!producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
             qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
             emit tx->NotApproved(tx);
@@ -1865,7 +1865,7 @@ void Blockchain::proveTx(Transaction *tx)
     }
 
     // if !sig
-    if (!senderActor.getKey()->verify(tx->getDataForDigSig(), tx->getDigSig()))
+    if (!senderActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
     {
         qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
         emit tx->NotApproved(tx);
