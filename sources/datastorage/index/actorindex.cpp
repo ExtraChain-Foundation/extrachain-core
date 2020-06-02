@@ -203,16 +203,16 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     PublicProfile profile(newProfile);
     if (profile.sign == "")
         return;
-    Actor<KeyPublic> key = getActor(profile.id);
-    if (key.empty())
+    Actor<KeyPublic> actor = getActor(profile.id);
+    if (actor.empty())
     {
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
-    if (key.key()->verify(key.profile().getProfile(), key.profile().sign))
+    if (actor.key()->verify(actor.profile().getProfile(), actor.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        emit sendProfileToUi(profile.id, key.profile().getListProfile());
+        emit sendProfileToUi(profile.id, actor.profile().getListProfile());
         resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
         // emit sendMessage(profile.serialize(), profileType)
     }
@@ -220,14 +220,14 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
 }
 
-void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
+void ActorIndex::saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile)
 {
-    if (key->empty())
+    if (actor->empty())
         return;
 
     qDebug() << "Save PublicProfile with id" << newProfile.at(2);
     QByteArray path = buildPathPubProfile(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
-    QByteArray sign = key->key()->sign(PublicProfile::serialize(newProfile));
+    QByteArray sign = actor->key()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
 
     if (pubProfile.sign == "")
@@ -350,6 +350,8 @@ BigNumber ActorIndex::getRecords() const
 
 int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 {
+    if (id <= 1000)
+        qFatal("Try to add actor with id %s", id.toByteArray().data());
     QString path = buildFilePath(id.toActorId());
     QFile file(path);
     qDebug() << "Saving the file:" << path;

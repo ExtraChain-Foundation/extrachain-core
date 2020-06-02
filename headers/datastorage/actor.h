@@ -87,10 +87,8 @@ public:
         auto json = QJsonDocument::fromJson(serialized).object();
 
         if (serialized.isEmpty())
-
         {
-            qDebug() << "Error! Actor::init(QByteArray): serialized is empty!";
-            return false;
+            qFatal("Error! Actor::init(QByteArray): serialized is empty");
         }
 
         if (isPrivate())
@@ -184,9 +182,8 @@ public:
 
         if (m_key == nullptr || empty())
         {
-            QList<QByteArray> list = { m_id.toActorId() };
-            QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
-            return serialized;
+            qDebug() << "Serialize empty actor";
+            Q_ASSERT(!empty());
         }
 
         EllipticPoint publicKey = m_key->getPublicKey();

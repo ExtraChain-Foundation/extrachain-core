@@ -1680,7 +1680,9 @@ void Blockchain::proveTx(Transaction *tx)
                 }
             }
         }
-        if (actorIndex->getActor(tx->getProducer()).key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
+
+        auto producerActor = actorIndex->getActor(tx->getProducer());
+        if (producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
         {
             tx->setAmount(fee);
             tx->sign(accountController->getCurrentActor());
@@ -1738,9 +1740,8 @@ void Blockchain::proveTx(Transaction *tx)
                         int index = signs.indexOf(tx->getReceiver().toActorId());
                         if (signs[index + 2] == "1")
                         {
-                            if (actorIndex->getActor(tx->getProducer())
-                                    .key()
-                                    ->verify(tx->getDataForDigSig(), tx->getDigSig()))
+                            auto producerActor = actorIndex->getActor(tx->getProducer());
+                            if (producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
                             {
                                 if (checkHaveUNFreezeTx(tx, indexApBlock))
                                 {

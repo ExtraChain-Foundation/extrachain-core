@@ -35,7 +35,6 @@ NodeManager::NodeManager()
     notifyM = new NotificationManager();
     ThreadPool::addThread(notifyM);
 #endif
-    cryptManager = new CryptManager(accController);
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
     resolveManager->setNode(this);
     resolveManager->setChatManager(chatManager);
@@ -54,7 +53,6 @@ NodeManager::NodeManager()
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
     // ThreadPool::addThread(contractManager);
-    ThreadPool::addThread(cryptManager);
     ThreadPool::addThread(dfs);
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);

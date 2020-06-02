@@ -815,9 +815,8 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
 {
     if (dfsChanges.userId != accountControler->getMainActor()->id().toActorId())
     {
-        bool verify = actorIndex->getActor(dfsChanges.userId)
-                          .key()
-                          ->verify(dfsChanges.prepareSign(), dfsChanges.sign);
+        auto actor = actorIndex->getActor(dfsChanges.userId);
+        bool verify = actor.key()->verify(dfsChanges.prepareSign(), dfsChanges.sign);
         qDebug() << "DfsChanges Verify applyChanges:" << verify << dfsChanges.prepareSign()
                  << dfsChanges.sign;
     }

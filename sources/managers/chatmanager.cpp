@@ -283,7 +283,8 @@ QByteArray ChatManager::CreateNewChat()
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
-    auto actor = _actorIndex->getActor(BigNumber(actorId)).key();
+    auto actor = _actorIndex->getActor(BigNumber(actorId));
+    auto key = actor.key();
 
     Chat *chat = getChatMemory(chatId);
     if (chat == nullptr)
@@ -295,11 +296,11 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 
     QByteArrayList query = { Config::DataStorage::chatInviteTableName.c_str(),
                              "chatId",
-                             actor->encrypt(chatId),
+                             key->encrypt(chatId),
                              "message",
-                             actor->encrypt(chat->unloadChatKey()),
+                             key->encrypt(chat->unloadChatKey()),
                              "owner",
-                             actor->encrypt(_currentActorId) };
+                             key->encrypt(_currentActorId) };
     sendEditSql(actorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Insert, query);
 }
 

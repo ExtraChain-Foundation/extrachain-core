@@ -131,7 +131,7 @@ public slots:
     void handleNewActorCheck(Actor<KeyPublic> actor);
     void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
 
-    void saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile);
+    void saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile);
     void saveProfileFromNetwork(const QByteArray &newProfile);
     void requestProfile(QString id);
     QByteArrayList getProfile(QString id);
