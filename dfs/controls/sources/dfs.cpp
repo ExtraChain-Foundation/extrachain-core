@@ -813,9 +813,13 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
 
 bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
 {
+    if (!QFile::exists(dfsChanges.filePath))
+        return false;
     if (dfsChanges.userId != accountControler->getMainActor()->id().toActorId())
     {
         auto actor = actorIndex->getActor(dfsChanges.userId);
+        if (actor.empty())
+            return false;
         bool verify = actor.key()->verify(dfsChanges.prepareSign(), dfsChanges.sign);
         qDebug() << "DfsChanges Verify applyChanges:" << verify << dfsChanges.prepareSign()
                  << dfsChanges.sign;
