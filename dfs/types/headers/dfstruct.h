@@ -18,7 +18,7 @@ static const short name = 3;
 }
 
 namespace DfsStruct {
-static const QString ROOT_FOOLDER_NAME = "data";
+static const QString ROOT_FOOLDER_NAME = "edfs";
 static const int ROOT_FOOLDER_NAME_SIZE = ROOT_FOOLDER_NAME.length();
 static const int ROOT_FOOLDER_NAME_MID = ROOT_FOOLDER_NAME.length() + 1;
 static const std::string ROOT_FOOLDER_NAME_STD = ROOT_FOOLDER_NAME.toStdString();
