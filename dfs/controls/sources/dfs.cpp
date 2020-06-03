@@ -859,7 +859,7 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
     {
         if (appendToStored(dfsChanges, false))
         {
-            emit fileChanged(dfsChanges.filePath);
+            emit fileChanged(dfsChanges.filePath, DfsStruct::ChangeType(dfsChanges.changeType));
             return true;
         }
     }
@@ -1481,7 +1481,7 @@ void Dfs::updateFromNewStored(QString filePath)
         QFile::remove(notStored);
         QFile::rename(newStoredPath, filePath);
         QFile::rename(notStoredNew, notStored);
-        emit fileChanged(notStored);
+        emit fileChanged(notStored, DfsStruct::Global);
     }
 
     /*
@@ -1575,7 +1575,7 @@ void Dfs::initUser(BigNumber userId)
 
 void Dfs::reportFileCompleted(QString filePath, SocketPair receiver)
 {
-    qDebug() << "File" << filePath << "loaded from" << receiver;
+    qDebug() << "[DFS] File" << filePath << "loaded from" << receiver;
     DistFileSystem::DfsRequestFinished fileCompleted;
     fileCompleted.filePath = filePath;
     sender->sendDfsMessage(fileCompleted, Messages::DFSMessage::fileCompleted, receiver,

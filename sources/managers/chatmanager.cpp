@@ -322,17 +322,36 @@ void ChatManager::sendChatFile(ChatFileSender chatFile)
 
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString type)
 {
-    Chat *chat = getChatMemory(chatId);
-    qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
+    auto chat = getChatMemory(chatId);
+    auto messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
+    auto owner = chat->getOwner();
+    auto session = chat->getSession().toByteArray();
+    auto date = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
 
-    sendEditSql(chat->getOwner(), chatId + "/" + chat->getSession().toByteArray() + "/" + "msg",
-                DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId",
-                  chat->encryptMessage(QByteArray::number(messId)), "userId",
-                  chat->encryptMessage(_currentActorId), "message", chat->encryptMessage(message), "type",
-                  chat->encryptMessage(type.toLatin1()), "session",
-                  chat->encryptMessage(chat->getSession().toByteArray()), "date",
-                  QByteArray::number(QDateTime::currentMSecsSinceEpoch()) });
+    auto encryptedMessageId = chat->encryptMessage(QByteArray::number(messId));
+    auto encryptedActorId = chat->encryptMessage(_currentActorId);
+    auto encryptedMessage = chat->encryptMessage(message);
+    auto encryptedType = chat->encryptMessage(type.toLatin1());
+    auto encryptedSession = chat->encryptMessage(chat->getSession().toByteArray());
+
+    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
+                DfsStruct::ChangeType::Insert,
+                { Config::DataStorage::chatMessageTableName.c_str(), "messId", encryptedMessageId, "userId",
+                  encryptedActorId, "message", encryptedMessage, "type", encryptedType, "session",
+                  encryptedSession, "date", date });
+}
+
+void ChatManager::removeChatMessage(QString chatId, QString messId)
+{
+    Chat *chat = getChatMemory(chatId.toLatin1());
+    auto owner = chat->getOwner();
+    auto session = chat->getSession().toByteArray();
+    auto encryptedMessageId = chat->encryptMessage(messId.toLatin1());
+    qDebug() << "CR123" << chatId << owner << session << encryptedMessageId;
+
+    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
+                DfsStruct::ChangeType::Delete,
+                { Config::DataStorage::chatMessageTableName.c_str(), "messId", encryptedMessageId });
 }
 
 void ChatManager::createDialogue(QByteArray actorId)
@@ -395,7 +414,7 @@ void ChatManager::chatRemoved(QByteArray chatId)
     }
 }
 
-void ChatManager::changes(QString path)
+void ChatManager::changes(QString path, DfsStruct::ChangeType changeType)
 {
     if (path.contains(DfsStruct::STORED_EXT))
         return;
@@ -431,8 +450,8 @@ void ChatManager::changes(QString path)
         if (res.size() != 1)
             return;
 
-        QString chatID = path.mid(32, 64);
-        Chat *chat = getChatMemory(chatID.toLatin1());
+        QString chatId = path.mid(32, 64);
+        Chat *chat = getChatMemory(chatId.toLatin1());
         QByteArray userId = chat->decryptMessage(QByteArray::fromStdString(res[0]["userId"]));
 
         /*
@@ -445,7 +464,7 @@ void ChatManager::changes(QString path)
         bool myChat = false;
         for (auto chat : _chatList)
         {
-            if (chat->getChatId() == chatID.toLatin1())
+            if (chat->getChatId() == chatId.toLatin1())
             {
                 myChat = true;
                 break;
@@ -454,19 +473,23 @@ void ChatManager::changes(QString path)
         if (!myChat)
             return;
 
-        Chat *tmp = getChatMemory(chatID.toLatin1());
+        Chat *tmp = getChatMemory(chatId.toLatin1());
         if (tmp == nullptr)
             return;
-        if (userId != _currentActorId)
+        if (userId != _currentActorId && changeType == DfsStruct::ChangeType::Insert)
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::ChatMsg,
-                             userId + " " + chatID.toUtf8() });
+                             userId + " " + chatId.toUtf8() });
 
         auto allMessage = tmp->getAllMessages();
         if (allMessage.length() > 0)
-            emit sendLastMessage(chatID.toUtf8(), allMessage.takeLast());
-        // emit chatSend(chatID.toUtf8(), tmp.getAllMessages());
+        {
+            if (changeType == DfsStruct::ChangeType::Insert)
+                emit sendLastMessage(chatId.toUtf8(), allMessage.takeLast());
+            else if (changeType == DfsStruct::ChangeType::Delete)
+                emit chatSend(chatId.toUtf8(), tmp->getAllMessages());
+        }
     }
-    //    QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
+    // QDateTime currentDate = QDateTime::fromMSecsSinceEpoch(std::stol(res[0]["date"]));
 }
 
 void ChatManager::process()

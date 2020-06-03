@@ -50,6 +50,7 @@ Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ChatFileSender)
 Q_DECLARE_METATYPE(DFSResolverService::FinishStatus)
 Q_DECLARE_METATYPE(DfsStruct::DfsSave)
+Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
 #ifdef ETALONIUM_CLIENT
 Q_DECLARE_METATYPE(UiController*)
@@ -86,6 +87,7 @@ void registerMetaTypes()
     qRegisterMetaType<ChatFileSender>();
     qRegisterMetaType<DFSResolverService::FinishStatus>();
     qRegisterMetaType<DfsStruct::DfsSave>();
+    qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
 #ifdef ETALONIUM_CLIENT
     qRegisterMetaType<UiController*>();

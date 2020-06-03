@@ -81,7 +81,7 @@ signals:
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
     void fileAdded(QString path, QString original, DfsStruct::Type type, QByteArray actorId);
-    void fileChanged(QString path);
+    void fileChanged(QString path, DfsStruct::ChangeType changeType);
     void fileDuplicated(QString path, QString original, DfsStruct::Type type);
     void fileNetworkCompleted(QString filePath, SocketPair pair);
     void connectToServer();

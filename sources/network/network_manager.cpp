@@ -585,8 +585,8 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
-    qDebug().noquote().noquote() << "NET MANAGER: New connection is established: "
-                                 << address.toString() + ":" + port;
+    qDebug().noquote().nospace() << "NET MANAGER: New connection is established: " << address.toString()
+                                 << ":" << port;
 
     ThreadPool::addThread(connections.last());
     //    connections.last()->process();

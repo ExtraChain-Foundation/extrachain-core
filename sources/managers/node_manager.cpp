@@ -715,6 +715,7 @@ void NodeManager::connectUi()
 
     connect(uiController, &UiController::sendChatFile, chatManager, &ChatManager::sendChatFile);
     connect(uiController, &UiController::sendMessage, chatManager, &ChatManager::SendMessage);
+    connect(uiController, &UiController::removeChatMessage, chatManager, &ChatManager::removeChatMessage);
     connect(chatManager, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
 
     connect(uiController, &UiController::requestChatList, chatManager, &ChatManager::requestChatList);

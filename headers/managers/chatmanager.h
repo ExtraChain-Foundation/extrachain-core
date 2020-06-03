@@ -65,11 +65,12 @@ public slots:
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void sendChatFile(ChatFileSender chatFile);
     void SendMessage(QByteArray chatId, QByteArray message, QString type); //+
-    void createDialogue(QByteArray actorId);                               //+
-    void requestChatList();                                                //+
-    void requestChat(QByteArray chatId);                                   //-
+    void removeChatMessage(QString chatId, QString messId);
+    void createDialogue(QByteArray actorId); //+
+    void requestChatList();                  //+
+    void requestChat(QByteArray chatId);     //-
     void chatRemoved(QByteArray chatId);
-    void changes(QString path);
+    void changes(QString path, DfsStruct::ChangeType changeType);
     void process();
     void fileLoaded(const QString &path);
     void initChat(bool status, int type);

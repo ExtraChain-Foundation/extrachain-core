@@ -67,7 +67,8 @@ enum ChangeType
     RemoveColumn,
     CreateTable,
     RenameTable,
-    DropTable
+    DropTable,
+    Global
 };
 
 enum DfsVersionType
