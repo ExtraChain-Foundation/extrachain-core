@@ -70,6 +70,7 @@ void DFSNetManager::createDFSResolver(Network::DataStruct ds)
     resolver->setDfs(dfs);
     resolver->setActorIndex(actorIndex);
     resolver->setTask(ds.msg, ds.receiver);
+    resolver->setLongReceiver(ds.receiver);
     dfsResolvers.append(resolver);
     connectResolver(dfsResolvers.last());
     ThreadPool::addThread(dfsResolvers.last());
@@ -163,7 +164,7 @@ void DFSNetManager::removeResolver(DFSResolverService::FinishStatus status)
     }
 
     QString filePath = resolver->getTitle().filePath;
-    auto pair = resolver->getReceiver();
+    auto pair = resolver->getLongReceiver();
     disconnectResolver(resolver);
 
     if (resolver->getType() == Resolver::Type::DFS)

@@ -17,9 +17,14 @@ void DFSResolverService::setActorIndex(ActorIndex *value)
     actorIndex = value;
 }
 
-SocketPair DFSResolverService::getReceiver() const
+SocketPair DFSResolverService::getLongReceiver() const
 {
-    return receiver;
+    return longReceiver;
+}
+
+void DFSResolverService::setLongReceiver(const SocketPair &value)
+{
+    longReceiver = value;
 }
 
 DFSResolverService::DFSResolverService(Lifetime lifetime, QObject *parent)
@@ -30,7 +35,7 @@ DFSResolverService::DFSResolverService(Lifetime lifetime, QObject *parent)
 
 DFSResolverService::~DFSResolverService()
 {
-    //    emit finished();
+    // emit finished();
 }
 
 void DFSResolverService::finishWork(DFSResolverService::FinishStatus status)
@@ -96,9 +101,11 @@ void DFSResolverService::checkStatus()
         {
             disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
             reloadTimer->deleteLater();
+            finishWork(FinishStatus::FileFinished);
+            return;
         }
 
-        finishWork(FinishStatus::FileFinished);
+        finishWork(FinishStatus::FileEmpty);
     }
     else
     {
