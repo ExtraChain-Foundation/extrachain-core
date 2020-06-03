@@ -101,11 +101,9 @@ void DFSResolverService::checkStatus()
         {
             disconnect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus);
             reloadTimer->deleteLater();
-            finishWork(FinishStatus::FileFinished);
-            return;
         }
 
-        finishWork(FinishStatus::FileEmpty);
+        finishWork(FinishStatus::FileFinished);
     }
     else
     {
