@@ -49,7 +49,7 @@ int ServerService::process()
     //        //        if (newSocket->peerAddress() != QHostAddress(""))
     //        //        {
     //        //            emit newConnection(newSocket);
-    //        //            qDebug() << "SERVER SERVICE: new connection, socket address: "
+    //        //            qDebug() << "SERVER SERVICE: new connection, socket address:"
     //        //                     << newSocket->peerAddress() << ":" <<
     //        newSocket->peerPort();
     //        //        }
@@ -76,7 +76,7 @@ void ServerService::incomingConnection(qintptr socketDescriptor)
 //    QHostAddress peerAddress = QHostAddress(sock->peerAddress().toIPv4Address());
 //    QByteArray msgs = sock->readAll();
 //    qDebug() << "SERVER SERVICE: socketMsg: from - " << sock;
-//    // qDebug() << "SERVER SERVICE: Received messages: " << msgs << " from " +
+//    // qDebug() << "SERVER SERVICE: Received messages:" << msgs << " from " +
 //    //             peerAddress.toString();
 //    if (msgs.isEmpty())
 //    {
@@ -92,7 +92,7 @@ void ServerService::incomingConnection(qintptr socketDescriptor)
 //            qDebug() << ";adfkslj";
 //            continue;
 //        }
-//        // qDebug() << "SERVER SERVICE: Received message: " << msg;
+//        // qDebug() << "SERVER SERVICE: Received message:" << msg;
 //        emit MessageReceived(msg, peerAddress);
 //    }
 //}

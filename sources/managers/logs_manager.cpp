@@ -12,7 +12,7 @@ bool LogsManager::toQml =
 #ifdef QT_DEBUG
     true;
 #else
-    false;
+    true;
 #endif
 
 #ifdef ETALONIUM_CLIENT
@@ -46,11 +46,11 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
 {
-    // static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")  +
-    // ".log");
+    static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
+                         + ".log");
 
-    // if (LogsManager::toFile && !logFile.isOpen())
-    //     logFile.open(QFile::Append | QFile::Text);
+    if (LogsManager::toFile && !logFile.isOpen())
+        logFile.open(QFile::Append | QFile::Text);
 
     QString message = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
@@ -139,26 +139,29 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef ETALONIUM_CLIENT
     if (LogsManager::toQml)
     {
-        // static QMutex mutex;
-        // mutex.lock();
-        // logs.append({ { "text", msg },
-        //               { "date", currentDateTime.toMSecsSinceEpoch() }
+        static QMutex mutex;
+        mutex.lock();
+        logs.append({ { "text", msg },
+                      { "date", currentDateTime.toMSecsSinceEpoch() }
 #ifdef QT_DEBUG
-        //              ,
-        //              { "file", file },
-        //              { "line", line },
-        //              { "func", function }
+                      ,
+                      { "file", file },
+                      { "line", line },
+                      { "func", function }
 #endif
-        // });
-        // mutex.unlock();
+        });
+        mutex.unlock();
     }
 #endif
 
-    // if (LogsManager::toFile && logFile.isWritable())
-    // {
-    //     logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd "), logStr).toUtf8());
-    //     logFile.flush();
-    // }
+    if (LogsManager::toFile && logFile.isWritable())
+    {
+        static QMutex mutex;
+        mutex.lock();
+        logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd"), logStr).toUtf8());
+        logFile.flush();
+        mutex.unlock();
+    }
 }
 
 void LogsManager::on()

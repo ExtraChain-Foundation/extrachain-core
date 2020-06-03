@@ -62,7 +62,7 @@ void ActorIndex::removeActor(const BigNumber &id, bool resend)
 bool ActorIndex::validateBlock(const Block &block)
 {
     Actor<KeyPublic> actor = this->getActor(block.getApprover());
-    if (actor.isEmpty())
+    if (actor.empty())
     {
         qWarning() << "Can not validate block" << block.getIndex() << ": There no actor"
                    << block.getApprover() << " in local storage";
@@ -74,7 +74,7 @@ bool ActorIndex::validateBlock(const Block &block)
 bool ActorIndex::validateTx(const Transaction &tx)
 {
     Actor<KeyPublic> actor = this->getActor(tx.getApprover());
-    if (actor.isEmpty())
+    if (actor.empty())
     {
         qWarning() << "Can not validate tx" << tx.getHash() << ": There no actor" << tx.getApprover()
                    << " in local storage";
@@ -92,7 +92,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);
-    if (!actor.isEmpty())
+    if (!actor.empty())
     {
         resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse,
                                             reqHash, receiver);
@@ -102,9 +102,9 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         if (!actor.profile().getProfile().isEmpty())
             resolveManager->registrateMsg(actor.profile().serialize(),
                                           Messages::ChainMessage::profileMessage);
-        else if (actor.getAccount() != 0 && actor.getAccount() != 2)
+        else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company)
         {
-            qDebug() << "NO PROFILE >>>>>>>>>>>>" << actorId;
+            qDebug() << "NO PROFILE >" << actorId;
             Messages::GetActorMessage msg;
             msg.actorId = actorId;
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
@@ -150,17 +150,17 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
 
 void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
 {
-    //    qDebug() << "adfklsfkl;adskl;afsdl;afsdl;";
     switch (addActor(actor))
     {
     case 0:
-        qDebug() << QString("New actor [%1] is successfully saved").arg(actor.toString());
+        qDebug() << QString("New actor [%1] is successfully saved").arg(QString(actor.serialize()));
         break;
     case Errors::FILE_ALREADY_EXISTS:
-        qDebug() << QString("New actor [%1] can't be added: it is already in storage").arg(actor.toString());
+        qDebug() << QString("New actor [%1] can't be added: it is already in storage")
+                        .arg(QString(actor.serialize()));
         break;
     case Errors::FILE_IS_NOT_OPENED:
-        qWarning() << QString("Error: new actor [%1] is not saved").arg(actor.toString());
+        qWarning() << QString("Error: new actor [%1] is not saved").arg(QString(actor.serialize()));
         break;
     default:
         qWarning() << "Error: unexpected return type";
@@ -175,7 +175,7 @@ void ActorIndex::handleNewAllActors(QByteArrayList actors)
 
 void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
 {
-    if (getActor(actor.getId()).isEmpty())
+    if (getActor(actor.id()).empty())
     {
         handleNewActor(actor);
         emit ActorIsMissing(actor);
@@ -203,16 +203,16 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
     PublicProfile profile(newProfile);
     if (profile.sign == "")
         return;
-    Actor<KeyPublic> key = getActor(profile.id);
-    if (key.isEmpty())
+    Actor<KeyPublic> actor = getActor(profile.id);
+    if (actor.empty())
     {
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
-    if (key.getKey()->verify(key.profile().getProfile(), key.profile().sign))
+    if (actor.key()->verify(actor.profile().getProfile(), actor.profile().sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        emit sendProfileToUi(profile.id, key.profile().getListProfile());
+        emit sendProfileToUi(profile.id, actor.profile().getListProfile());
         resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
         // emit sendMessage(profile.serialize(), profileType)
     }
@@ -220,14 +220,16 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
 }
 
-void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
+void ActorIndex::saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile)
 {
-    if (key->getHash().isEmpty())
+    if (actor->empty())
         return;
+
     qDebug() << "Save PublicProfile with id" << newProfile.at(2);
     QByteArray path = buildPathPubProfile(BigNumber(newProfile.at(2)).toActorId()).toUtf8();
-    QByteArray sign = key->getKey()->sign(PublicProfile::serialize(newProfile));
+    QByteArray sign = actor->key()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
+
     if (pubProfile.sign == "")
     {
         qDebug() << "saveProfile: incorrect profile" << newProfile.at(2);
@@ -236,14 +238,14 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *key, QByteArrayList newProfile)
     else
     {
         resolveManager->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::profileMessage);
-        //        emit sendMessage(pubProfile.serialize(), profileType);
+        // emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
 
 void ActorIndex::requestProfile(QString id)
 {
     Actor<KeyPublic> actor = getActor(id.toUtf8());
-    if (actor.getKey() == nullptr || actor.getHash().isEmpty())
+    if (actor.empty())
         return;
     if (actor.profile().getProfile() == "")
         return;
@@ -269,7 +271,8 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.getAccount() != 0 && actor.getAccount() != 2 && resolveManager != nullptr)
+        if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company
+            && resolveManager != nullptr)
         {
             Messages::GetActorMessage msg;
             msg.actorId = BigNumber(id.toLocal8Bit());
@@ -322,7 +325,7 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const
 
 QString ActorIndex::buildPathPubProfile(const QByteArray &id)
 {
-    QString pathToFolder = ChatStorage::STORED_CHATS + id + "/profile/";
+    QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/";
 
     QDir dir(pathToFolder);
     if (!dir.exists())
@@ -347,6 +350,8 @@ BigNumber ActorIndex::getRecords() const
 
 int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 {
+    if (id <= 1000)
+        qFatal("Try to add actor with id %s", id.toByteArray().data());
     QString path = buildFilePath(id.toActorId());
     QFile file(path);
     qDebug() << "Saving the file:" << path;
@@ -385,23 +390,22 @@ QByteArray ActorIndex::getById(const BigNumber &id) const
     file.close();
     return data;
 }
+
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
-    int result = this->add(actor.getId(), actor.serialize());
-    if (actor.getAccount() == 2 && companyId == nullptr)
+    int result = this->add(actor.id(), actor.serialize());
+    if (actor.account() == ActorType::Company && companyId == nullptr)
     {
-        qDebug() << "Save company ID->" << actor.getId().toByteArray();
-        companyId = new QByteArray(actor.getId().toActorId());
+        qDebug() << "Save company ID->" << actor.id().toByteArray();
+        companyId = new QByteArray(actor.id().toActorId());
     }
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
-        qDebug() << "ActorIndex: actor - " << actor.getId() << " was added "
-                 << "lsd: ";
+        qDebug() << "ActorIndex: actor - " << actor.id() << " was added";
         resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
-        //        emit sendMessage(actor.serialize(), classType);
-
-        qDebug() << "emit signal for init dfs for user" << actor.getId().toActorId();
-        emit initDfs(actor.getId());
+        // emit sendMessage(actor.serialize(), classType);
+        qDebug() << "emit signal for init dfs for user" << actor.id().toActorId();
+        emit initDfs(actor.id());
     }
     return result;
 }
@@ -429,7 +433,7 @@ QByteArrayList ActorIndex::allActors()
 
 void ActorIndex::removeAll()
 {
-    qDebug() << "Clearing file index: " << folderPath;
+    qDebug() << "Clearing file index:" << folderPath;
 
     QDir folder(folderPath);
     for (const QString &section :
@@ -445,12 +449,12 @@ void ActorIndex::removeAll()
 void ActorIndex::profileToSearch(SearchFilters filters)
 {
     QList<Profile> profiles;
-    QString folderPath = "data";
-    QStringList sectionList = QDir(folderPath).entryList(QDir::QDir::Dirs | QDir::NoDotAndDotDot);
+    QStringList sectionList =
+        QDir(DfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::QDir::Dirs | QDir::NoDotAndDotDot);
 
     for (const QString &section : sectionList)
     {
-        QString profileFolderPath = folderPath + +"/" + section + "/" + section + ".profile";
+        QString profileFolderPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + section + "/" + section + ".profile";
         QStringList profilePathList = // TODO: NOT ENTRY LIST
             QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::NoDotAndDotDot);
         if (section.length() != 20)

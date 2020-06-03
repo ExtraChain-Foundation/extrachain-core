@@ -57,7 +57,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
         bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
         upnpDis = new UPNPConnection(*local);
         upnpNet = new UPNPConnection(*local);
-        qDebug() << "Sub: " << sub;
+        qDebug() << "Sub:" << sub;
         if (sub)
         {
 
@@ -180,7 +180,7 @@ void NetManager::findLocal()
         {
             if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
             {
-                qDebug() << "NET MANAGER: local ip: " << address.ip().toString() << " " << interface;
+                qDebug() << "NET MANAGER: Find local ip candidate:" << address.ip().toString() << interface;
                 localIpNotConnect.append(address.ip());
             }
         }
@@ -200,6 +200,7 @@ void NetManager::findLocal()
             if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
+#ifdef ETALONIUM_CONSOLE
             QTcpSocket *socket = new QTcpSocket;
             socket->bind(entry.ip());
             socket->connectToHost("8.8.8.8", 53);
@@ -207,15 +208,19 @@ void NetManager::findLocal()
             socket->deleteLater();
             if (!isConnected)
                 continue;
+#endif
 
             if (localIpNotConnect.contains(entry.ip()))
             {
-                local = new QNetworkAddressEntry(entry);
-                qDebug() << "Discovered local:" << local->ip().toString();
+                QString name = interface.name();
 
-                if (interface.name().left(2) == "wl" || interface.name().left(3) == "eth")
+                if (name.left(2) == "vm")
+                    continue;
+                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(3) == "enp"
+                    || name.left(3) == "eno")
                 {
-                    qDebug() << "done";
+                    local = new QNetworkAddressEntry(entry);
+                    qDebug() << this << "Discovered local:" << local->ip().toString() << interface.name();
                     return;
                 }
             }
@@ -314,6 +319,7 @@ void NetManager::logDebug()
 
 void NetManager::reconnectUi()
 {
+    emit localIpFounded(local->ip().toString());
     connectToServer(serverPort, local);
 }
 
@@ -565,12 +571,12 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
 
 void NetManager::upnpErrDis(QString msg)
 {
-    qCritical() << "NET MANAGER: UPnP Error: " << msg;
+    qCritical() << "NET MANAGER: UPnP Error:" << msg;
 }
 
 void NetManager::upnpErrNet(QString msg)
 {
-    qCritical() << "NET MANAGER: UPnP Error: " << msg;
+    qCritical() << "NET MANAGER: UPnP Error:" << msg;
 }
 
 SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 port)
@@ -579,7 +585,8 @@ SocketService *NetManager::addConnectionFromPair(QHostAddress address, quint16 p
     socket->setNetManager(this);
     connections.append(socket);
     connectSocket();
-    qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
+    qDebug().noquote().nospace() << "NET MANAGER: New connection is established: " << address.toString()
+                                 << ":" << port;
 
     ThreadPool::addThread(connections.last());
     //    connections.last()->process();

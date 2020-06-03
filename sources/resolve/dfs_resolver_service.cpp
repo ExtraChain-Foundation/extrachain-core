@@ -17,9 +17,14 @@ void DFSResolverService::setActorIndex(ActorIndex *value)
     actorIndex = value;
 }
 
-SocketPair DFSResolverService::getReceiver() const
+SocketPair DFSResolverService::getLongReceiver() const
 {
-    return receiver;
+    return longReceiver;
+}
+
+void DFSResolverService::setLongReceiver(const SocketPair &value)
+{
+    longReceiver = value;
 }
 
 DFSResolverService::DFSResolverService(Lifetime lifetime, QObject *parent)
@@ -30,7 +35,7 @@ DFSResolverService::DFSResolverService(Lifetime lifetime, QObject *parent)
 
 DFSResolverService::~DFSResolverService()
 {
-    //    emit finished();
+    // emit finished();
 }
 
 void DFSResolverService::finishWork(DFSResolverService::FinishStatus status)
@@ -83,7 +88,7 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 void DFSResolverService::checkStatus()
 {
     if (title.filePath.contains("root"))
-        qDebug() << "[DFSResolver] root" << title.filePath.mid(5, 20);
+        qDebug() << "[DFSResolver] root" << title.filePath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
 
     QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
@@ -140,7 +145,7 @@ bool DFSResolverService::validate(const Messages::BaseMessage &message)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
-    if (!actor.isEmpty())
+    if (!actor.empty())
     {
         return message.verifyDigSig(actor);
     }
@@ -329,7 +334,8 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                     dfs->titleReceived(message.filePath);
                     QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
                     if (QFile::exists(message.filePath) && QFileInfo(message.filePath).size() != 0
-                        && (message.filePath.right(7) != ".stored" && message.filePath.right(5) != "/root"))
+                        && (message.filePath.right(DfsStruct::STORED_EXT_SIZE) != DfsStruct::STORED_EXT
+                            && message.filePath.right(5) != "/root"))
                     {
                         finishWork(FinishStatus::FileExists);
                         return;
@@ -413,9 +419,9 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
         qDebug() << "Create temp file: actor - " << BigNumber(pathList.at(PathStruct::aId));
         Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(pathList.at(PathStruct::aId)));
 
-        if (!actor.isEmpty())
+        if (!actor.empty())
         {
-            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.getId().toActorId()).exists())
+            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.id().toActorId()).exists())
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {

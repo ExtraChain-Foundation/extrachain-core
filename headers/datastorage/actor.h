@@ -1,120 +1,80 @@
-#ifndef ACTOR_H
+﻿#ifndef ACTOR_H
 #define ACTOR_H
+
 #include <QDebug>
+#include <utility>
+#include <type_traits>
 
 #include "utils/bignumber.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
-
-#include <utility>
-#include <type_traits>
 #include "profile/profile.h"
 #include "profile/public_profile.h"
+
 /**
  * Acting entity.
  * Users, Smart-contracts
  */
+
 namespace Trash {
 static const QByteArray NullActor = "0";
 };
-enum actorType
+
+enum class ActorType
 {
-    WALLET = 0,
-    ACCOUNT = 1,
-    COMPANY = 2
+    Wallet = 0,
+    Account = 1,
+    Company = 2
 };
+
 template <typename T>
-class Actor
+class Actor final
 {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
                   "Your type is not supported. Only Keys are supported");
     const int FIELDS_SIZE = 4;
 
-private:
-    BigNumber id = -1;
-    T *key;
-    QByteArray hash;
-    actorType account;
+protected:
+    BigNumber m_id = -1;
+    T *m_key;
+    ActorType m_account;
 
 public:
-    bool checkSumValid(QByteArray checkSum)
-    {
-        return checkSum == getChecksumPubKey();
-    }
-    inline void setHash(QByteArray hash)
-    {
-        this->hash = hash;
-    }
-    inline QByteArray getHash() const
-    {
-        return this->hash;
-    }
     Actor()
     {
-        id = 0;
-        key = nullptr;
-        hash = "";
-        account = WALLET;
+        m_id = 0;
+        m_key = nullptr;
+        m_account = ActorType::Wallet;
     }
+
     Actor(const Actor<T> &copyActor)
     {
-        id = copyActor.getId();
-        key = new T(*(copyActor.getKey()));
-        hash = copyActor.getHash();
-        account = static_cast<actorType>(copyActor.getAccount());
+        m_id = copyActor.id();
+        m_key = new T(*(copyActor.key()));
+        m_account = ActorType(copyActor.account());
     }
+
     Actor(const QByteArray &serialized)
     {
-        this->init(serialized);
+        this->deserialize(serialized);
     }
-    Actor(const BigNumber &id, const QByteArray &keydata, int account)
-    {
-        this->init(id, keydata, account);
-    }
+
     ~Actor()
     {
-        //        delete key;
+        delete m_key;
     }
+
     Actor operator=(const Actor<T> &copyActor)
     {
-        id = copyActor.getId();
-        key = new T(*(copyActor.getKey()));
-        hash = copyActor.getHash();
-        account = static_cast<actorType>(copyActor.getAccount());
+        m_id = copyActor.id();
+        m_key = new T(*(copyActor.key()));
+        m_account = ActorType(copyActor.account());
         return *this;
     }
 
-private:
     bool isPrivate() const
     {
         return std::is_same<T, KeyPrivate>::value;
-    }
-
-    QByteArray getChecksumPubKey()
-    {
-        QByteArray localPublicKey = "0";
-        if (typeid(T) == typeid(KeyPrivate))
-        {
-            localPublicKey = reinterpret_cast<KeyPrivate *>(key)->getPublicKey();
-        }
-        else if (typeid(T) == typeid(KeyPublic))
-        {
-            localPublicKey = reinterpret_cast<KeyPublic *>(key)->getPublicKey();
-        }
-        else
-            return "0";
-
-        QString hash = Utils::calcKeccak(localPublicKey);
-        while (hash.size() < localPublicKey.size())
-            hash = hash.append(hash);
-        for (int i = 0; i < localPublicKey.size(); i++)
-        {
-            if (QString(hash[i]).toInt(nullptr, 16) >= 8)
-            {
-                localPublicKey[i] = localPublicKey.toUpper()[i];
-            }
-        }
-        return localPublicKey;
     }
 
 public:
@@ -122,94 +82,91 @@ public:
      * @brief initial construction
      * @param serialized
      */
-    bool init(const QByteArray &serialized)
+    bool deserialize(const QByteArray &serialized)
     {
-        if (!serialized.isEmpty())
-        {
-            if (isPrivate())
-            {
-                // old method of serialize
-                //                QList<QByteArray> list = Serialization::deserialize(
-                //                    serialized, Serialization::DEFAULT_FIELD_SPLITTER);
-                QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
+        auto json = QJsonDocument::fromJson(serialized).object();
 
-                this->id = BigNumber(list.at(0));
-                this->key = new T(list.at(1));
-                account = static_cast<actorType>(list.at(2).toInt());
-            }
-            else
+        if (serialized.isEmpty())
+        {
+            qFatal("Error! Actor::init(QByteArray): serialized is empty");
+        }
+
+        if (isPrivate())
+        {
+            if (json.length() != 4)
             {
-                QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
-                if (list.length() >= 2)
-                {
-                    this->id = BigNumber(list.at(0));
-                    this->key = new T(list.at(1));
-                    this->account = static_cast<actorType>(list.at(2).toInt());
-                }
+                qDebug() << "Incorrect actor init json length for private:" << json.length();
+                return false;
             }
-            QByteArray hashData(toString().toUtf8());
-            hash = Utils::calcKeccak(hashData);
-            return true;
         }
         else
         {
-            qDebug() << "WARNING!:: Actor::init(const QByteArray &serialized) serialized IS "
-                        "EMPTY!";
+            if (json.length() != 3)
+            {
+                qDebug() << "Incorrect actor init json length for public:" << json.length();
+                return false;
+            }
+        }
+
+        this->m_id = BigNumber(json["id"].toString().toLatin1());
+        this->m_key = new T(json);
+        this->m_account = ActorType(json["account"].toInt());
+
+        if (empty())
+        {
+            qDebug() << "Incorrect actor init";
             return false;
         }
+
+        return true;
     }
+
     /**
      * @brief initial construction of new Actor
      * @param id
      */
-    bool init(int account)
+    bool create(ActorType account)
     {
-        if (isPrivate())
-        {
-            key = new T();
-            if (typeid(T) == typeid(KeyPrivate))
-            {
-                KeyPrivate *k = reinterpret_cast<KeyPrivate *>(key);
-                k->generate();
-                QByteArray hashPubKey = Utils::calcKeccak(k->getPublicKey());
-                if (hashPubKey.size() >= 20)
-                {
-                    id = BigNumber(hashPubKey.mid(hashPubKey.size() - 20));
-                }
-                else
-                    qDebug() << "[Error] Actor.h func InitNew. Error size of hashPubKey";
-            }
-            QByteArray hashData(toString().toUtf8());
-            hash = Utils::calcKeccak(hashData);
-            this->account = static_cast<actorType>(account);
-            return true;
-        }
-        else
+        if (!isPrivate())
             return false;
-    }
-    /**
-     * @brief initial construction. Can be used to create public actor.
-     * @param id
-     * @param keydata - (private/public key)
-     */
-    bool init(const BigNumber &id, const QByteArray &keydata, int account)
-    {
-        this->id = id;
-        this->key = new T(keydata);
-        this->account = static_cast<actorType>(account);
+
+        m_key = new T();
+
+        if (typeid(T) == typeid(KeyPrivate))
+        {
+            KeyPrivate *k = reinterpret_cast<KeyPrivate *>(m_key);
+            k->generate();
+            auto publicKey = k->getPublicKey();
+            QByteArray x = publicKey.x().toByteArray();
+            QByteArray y = publicKey.y().toByteArray();
+            QByteArray keccakPublicKey = Utils::calcKeccak(x + y);
+
+            if (keccakPublicKey.size() >= 20)
+            {
+                m_id = BigNumber(keccakPublicKey.right(20));
+            }
+            else
+            {
+                qDebug() << "[Error] Actor.h func InitNew. Error size of hashPubKey";
+            }
+        }
+
+        this->m_account = account;
         return true;
     }
 
-    bool isEmpty() const
+    bool empty() const
     {
-        if (key == nullptr)
+        if (m_key == nullptr)
             return true;
+
         if (!isPrivate())
         {
-            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(key);
+            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(m_key);
             return pbKey->isEmpty();
         }
-        return id == BigNumber(-1) || key == nullptr;
+
+        return m_id == BigNumber(-1);
     }
 
     /**
@@ -220,116 +177,88 @@ public:
      */
     QByteArray serialize() const
     {
-        QList<QByteArray> list;
-        if (key != nullptr)
-        {
-            QByteArray pubKey = key->extractPublicKey();
-            //  QByteArray
-            if (isPrivate())
-            {
-                // key_private
-                KeyPrivate *prKey = reinterpret_cast<KeyPrivate *>(key);
-                QList<QByteArray> list;
+        QString actorId = QString(this->m_id.toActorId());
+        int type = static_cast<uint32_t>(m_account);
 
-                qDebug() << this->id.toActorId() << prKey->serialize() << pubKey;
-
-                list << this->id.toActorId() << prKey->serialize() << QByteArray::number(account);
-                //
-                QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
-                return serialized;
-            }
-            else
-            {
-                // key_public
-                list << id.toActorId() << pubKey << QByteArray::number(account);
-            }
-        }
-        else
+        if (m_key == nullptr || empty())
         {
-            list << id.toActorId();
+            qDebug() << "Serialize empty actor";
+            Q_ASSERT(!empty());
         }
-        QByteArray serialized = Serialization::universalSerialize(list, 4);
-        return serialized;
+
+        EllipticPoint publicKey = m_key->getPublicKey();
+        QString x = publicKey.x().toByteArray();
+        QString y = publicKey.y().toByteArray();
+
+        QJsonObject json = { { "id", actorId },
+                             { "account", type },
+                             { "publicKey", QJsonObject { { "x", x }, { "y", y } } } };
+
+        if (isPrivate())
+        {
+            KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(m_key);
+            QString privateKey = keyPrivate->getPrivateKey().toByteArray();
+            json["privateKey"] = privateKey;
+        }
+
+        QByteArray result = QJsonDocument(json).toJson(QJsonDocument::Compact);
+        return result;
     }
 
-    QString toString() const
-    {
-        QList<QByteArray> list;
-        list << "id:" + id.toActorId();
-        if (key != nullptr)
-        {
-            list << "pub_key:" + key->getPublicKey();
-            if (isPrivate())
-            {
-                list << "pr_key:" + reinterpret_cast<KeyPrivate *>(key)->getPrivateKey().toByteArray();
-            }
-        }
-        else
-        {
-            list << "pub_key:";
-        }
-        list << QByteArray::number(account);
-        //        return Serialization::serializeString(list,
-        //        Serialization::ACTOR_FIELD_SPLITTER);//
-        QByteArray serialized = Serialization::universalSerialize(list, FIELDS_SIZE);
-        return QString(serialized);
-    }
     PublicProfile profile()
     {
-        QByteArray pathToFolder = ChatStorage::STORED_CHATS + id.toActorId() + "/profile/";
-        return PublicProfile(id.toActorId(), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toActorId() + "/profile/";
+        return PublicProfile(m_id.toActorId(), pathToFolder);
     }
 
 public:
     bool operator==(const Actor<T> &other)
     {
-        T *otherKey = other.getKey();
-        return this->getId() == other.getId() && *key == *otherKey;
+        T *otherKey = other.key();
+        return this->id() == other.id() && *m_key == *otherKey;
     }
 
-    bool operator<(const Actor<T> other)
+    BigNumber id() const
     {
-        if (id < other.getId())
-        {
-            return true;
-        }
-        return false;
+        return m_id;
     }
 
-    BigNumber getId() const
+    T *key() const
     {
-        return id;
+        return m_key;
     }
 
-    T *getKey() const
+    ActorType account() const
     {
-        return key;
+        return m_account;
     }
 
-    actorType getAccount() const
+    Actor<KeyPublic> convertToPublic()
     {
-        return account;
+        Actor<KeyPublic> actor;
+
+        actor.setId(m_id);
+        actor.setPublicKey(m_key->getPublicKey());
+        actor.setAccount(ActorType(m_account));
+
+        return actor;
     }
 
-    void setAccount(actorType value)
+    void setId(const BigNumber &id)
     {
-        account = value;
+        m_id = id;
     }
 
-    Actor<KeyPublic> convertToPublic() const
+    void setPublicKey(EllipticPoint point)
     {
-        return isPrivate() ? Actor<KeyPublic>(getId(), getKey()->extractPublicKey(), getAccount())
-                           : Actor<KeyPublic>();
+        Q_ASSERT(!isPrivate());
+        m_key = new T(point);
+    }
+
+    void setAccount(const ActorType &account)
+    {
+        m_account = account;
     }
 };
-
-inline bool operator<(const Actor<KeyPublic> &l, const Actor<KeyPublic> &r)
-{
-    return l.getId() < r.getId();
-}
-inline bool operator<(const Actor<KeyPrivate> &l, const Actor<KeyPrivate> &r)
-{
-    return l.getId() < r.getId();
-}
 
 #endif // ACTOR_H

@@ -6,7 +6,8 @@ CardFile::CardFile(QString userId)
 {
     m_userId = userId;
     m_fileName = QString("%1/%2/%3").arg(DfsStruct::ROOT_FOOLDER_NAME, userId, DfsStruct::ACTOR_CARD_FILE);
-    m_lastCacheName = QString("%1/%2/root.last").arg(DfsStruct::ROOT_FOOLDER_NAME, userId);
+    m_lastCacheName =
+        QString("%1/%2/%3").arg(DfsStruct::ROOT_FOOLDER_NAME, userId, DfsStruct::ACTOR_CARD_LAST);
 }
 
 QString CardFile::userId() const

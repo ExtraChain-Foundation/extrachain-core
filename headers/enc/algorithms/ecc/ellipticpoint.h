@@ -7,22 +7,18 @@
 class EllipticPoint
 {
 private:
-    BigNumber x;
-    BigNumber y;
+    BigNumber xp;
+    BigNumber yp;
 
 public:
     EllipticPoint();
-    EllipticPoint(const QByteArray &serialized);
     EllipticPoint(BigNumber x, BigNumber y);
     ~EllipticPoint();
 
 public:
-    QByteArray serialize();
-
-public:
-    BigNumber X() const;
+    BigNumber x() const;
     void setX(const BigNumber &value);
-    BigNumber Y() const;
+    BigNumber y() const;
     void setY(const BigNumber &value);
     bool isZero();
 };

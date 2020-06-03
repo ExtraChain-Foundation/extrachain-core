@@ -26,12 +26,10 @@ public:
      * @param keyPair - [prKey:pubKey]
      */
     KeyPublic(EllipticPoint pubKey);
-    KeyPublic(QByteArray pbKey);
-    KeyPublic(const KeyPublic &keyPrivate);
+    KeyPublic(const QJsonObject &json);
+    KeyPublic(const KeyPublic &keyPublic);
     KeyPublic();
-    ~KeyPublic()
-    {
-    }
+    ~KeyPublic();
 
 public: // Cryptor interface
     QByteArray encrypt(const QByteArray &data);
@@ -40,22 +38,8 @@ public: // Signer interface
     bool verify(const QByteArray &data, const QByteArray &dsignBase64);
 
 public:
-    /**
-     * @brief loadPublicKey
-     * @param key
-     */
-    bool loadPublicKey(const QByteArray &keyBase64);
-
     bool isEmpty();
-
-public:
-    /**
-     * @brief extractPublicKey
-     * @return
-     */
-    QByteArray extractPublicKey();
-    QByteArray getPublicKey();
-    QByteArray serialize();
+    EllipticPoint getPublicKey() const;
 };
 
 #endif // KEY_PUBLIC_H

@@ -423,7 +423,7 @@ QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serializ
 void Utils::wipeDataFiles()
 {
     QDir("blockchain").removeRecursively();
-    QDir("data").removeRecursively();
+    QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile("user.private").remove();
@@ -431,7 +431,6 @@ void Utils::wipeDataFiles()
     QFile(".fileList").remove();
     QFile(".settings").remove();
     QFile(".dsettings").remove();
-    QFile("network_cache").remove();
 
     QDir dir(QDir::currentPath());
     dir.cdUp();
@@ -473,7 +472,7 @@ void Utils::wipeDataFiles()
     clearDir("keystore/personal", *TMP::companyActorId + ".key");
     clearDir("keystore/profile", *TMP::companyActorId + ".private");
     QDir("tmp").removeRecursively();
-    QDir("data").removeRecursively();
+    QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
     QFile(".fileList").remove();
     QFile("blockchain/index/actors/.first").remove();
     QFile("blockchain/index/actors/.last").remove();
@@ -481,7 +480,7 @@ void Utils::wipeDataFiles()
     QFile("blockchain/index/blocks/.last").remove();
 #else
     QDir("blockchain").removeRecursively();
-    QDir("data").removeRecursively();
+    QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile("user.private").remove();
@@ -510,12 +509,11 @@ void Utils::softWipe(const QString &currentId)
     QDir("blockchain/index/blocks").removeRecursively();
     clearDir("blockchain/index/actors", currentId.right(2), false);
     clearDir("blockchain/index/actors/" + currentId.right(2), currentId, true);
-    clearDir("data", "", true);
-    clearDir("data/" + currentId, "profile", false);
-    QFile::remove("data/" + currentId + "/root");
-    QFile::remove("data/" + currentId + "/root.tmp");
+    clearDir(DfsStruct::ROOT_FOOLDER_NAME, "", true);
+    clearDir(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId, "profile", false);
+    QFile::remove(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/root");
+    QFile::remove(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/root.tmp");
     QDir("tmp").removeRecursively();
-    QFile("network_cache").remove();
     QFile(".settings").remove();
     QFile(".fileList").remove();
 }

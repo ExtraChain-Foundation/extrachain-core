@@ -195,7 +195,7 @@ void UPNPConnection::getHttp()
     QObject::disconnect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
     QObject::disconnect(http_reply, SIGNAL(error(QNetworkReply::NetworkError)), this,
                         SLOT(getHttpError(QNetworkReply::NetworkError)));
-    qDebug() << "UPnP Reply: " << reply;
+    qDebug() << "UPnP Reply:" << reply;
     if (!reply.contains("UPnPError"))
     {
         if (reply.contains("<NewExternalIPAddress>"))
@@ -205,7 +205,7 @@ void UPNPConnection::getHttp()
         if (reply.contains("AddPortMappingResponse"))
         {
             conn_state = State::Opened;
-            //udp_socket->close();
+            // udp_socket->close();
             qDebug() << "UPNP emit success() ";
             emit success();
         }

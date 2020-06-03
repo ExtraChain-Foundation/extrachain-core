@@ -29,7 +29,8 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 
 bool SubscribeController::checkSubscribe(QByteArray id)
 {
-    QByteArray path = "data/" + nodeManager->getIdPrivateProfile() + "/services/subscribe";
+    QString path =
+        DfsStruct::ROOT_FOOLDER_NAME + "/" + nodeManager->getIdPrivateProfile() + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumnTableName
@@ -39,7 +40,7 @@ bool SubscribeController::checkSubscribe(QByteArray id)
 
 int SubscribeController::checkCountSubscribe(QByteArray id)
 {
-    QByteArray path = "data/" + id + "/services/subscribe";
+    QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res =
@@ -50,7 +51,7 @@ int SubscribeController::checkCountSubscribe(QByteArray id)
 
 std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
 {
-    QByteArray path = "data/" + id + "/services/subscriber";
+    QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/services/subscriber";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumnTableName);

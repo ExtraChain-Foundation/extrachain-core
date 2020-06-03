@@ -18,7 +18,6 @@ class ResolveManager;
 #include "managers/thread_pool.h"
 #include "dfs/controls/headers/dfs.h"
 #include "managers/contract_manager.h"
-#include "enc/crypt_manager.h"
 #include "managers/sm_manager.h"
 #include "dfs/managers/headers/dfsnetmanager.h"
 #include "managers/chatmanager.h"
@@ -58,6 +57,7 @@ private:
     ResolveManager *resolveManager;
     SubscribeController *subscribeController;
     PrivateProfile *prProfile;
+    // ContractManager *contractManager;
 
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
@@ -68,8 +68,6 @@ private:
     NotificationClient *notificationClient = nullptr;
     NotificationManager *notifyM;
 #endif
-    CryptManager *cryptManager;
-    //    ContractManager *contractManager;
 
 public:
     NodeManager();

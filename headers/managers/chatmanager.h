@@ -39,7 +39,7 @@ private:
     void InitializeConnectSignalSlot(); //-
     QByteArray generateChatId();        //+
     QByteArray generateChatKey();       //+
-    QByteArray getPathToMyChats();      //+ keystore/chats/
+    QString getPathToMyChats();         //+ keystore/chats/
     void parseInvite();
     // bool isUserVerify(QByteArray chatId, QByteArray actorId);
     // void createLocalChatFile(QByteArray chatId, QByteArray pathCreate, QByteArray chatPath); //?
@@ -65,11 +65,12 @@ public slots:
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void sendChatFile(ChatFileSender chatFile);
     void SendMessage(QByteArray chatId, QByteArray message, QString type); //+
-    void createDialogue(QByteArray actorId);                               //+
-    void requestChatList();                                                //+
-    void requestChat(QByteArray chatId);                                   //-
+    void removeChatMessage(QString chatId, QString messId);
+    void createDialogue(QByteArray actorId); //+
+    void requestChatList();                  //+
+    void requestChat(QByteArray chatId);     //-
     void chatRemoved(QByteArray chatId);
-    void changes(QString path);
+    void changes(QString path, DfsStruct::ChangeType changeType);
     void process();
     void fileLoaded(const QString &path);
     void initChat(bool status, int type);
@@ -90,7 +91,7 @@ signals:
     void finished();
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
-    void send(int saveType, QString file, QByteArray data, const DfsStruct::Type type);
+    void send(DfsStruct::DfsSave saveType, QString file, QByteArray data, const DfsStruct::Type type);
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
 };
 

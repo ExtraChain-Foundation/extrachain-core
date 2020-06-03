@@ -59,6 +59,7 @@ private:
     QByteArray msg;
     QByteArray hash;
     SocketPair receiver;
+    SocketPair longReceiver;
     QString path;
 
 public:
@@ -149,7 +150,8 @@ public:
 
     void setActorIndex(ActorIndex *value);
 
-    SocketPair getReceiver() const;
+    SocketPair getLongReceiver() const;
+    void setLongReceiver(const SocketPair &value);
 
 public slots:
     /**

@@ -35,7 +35,7 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createActor(int account, QByteArray hashLogin);
+    Actor<KeyPrivate> createActor(ActorType account, QByteArray hashLogin);
     //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(BigNumber id);
     /**
@@ -43,7 +43,7 @@ public:
      * @param pubkey - serialized public key
      * @return actor
      */
-    Actor<KeyPrivate> getActor(QByteArray pubkey);
+    Actor<KeyPrivate> getActorByPublicKey(QByteArray pubkey);
     Actor<KeyPrivate> getActor(int number);
 
     Actor<KeyPrivate> *getMainActor();

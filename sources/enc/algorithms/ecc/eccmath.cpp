@@ -34,9 +34,9 @@ BigNumber ECC::inverseMod(BigNumber a, BigNumber b)
 
 bool ECC::isOnCurve(ECC::curve curve, EllipticPoint point)
 {
-    if (point.X() == BigNumber() && point.Y() == BigNumber())
+    if (point.x() == BigNumber() && point.y() == BigNumber())
         return true;
-    if ((point.Y() * point.Y() - point.X() * point.X() * point.X() - curve.a * point.X() - curve.b) % curve.p
+    if ((point.y() * point.y() - point.x() * point.x() * point.x() - curve.a * point.x() - curve.b) % curve.p
         == 0)
         return true;
     else
@@ -47,7 +47,7 @@ EllipticPoint ECC::negatePoint(ECC::curve curve, EllipticPoint point)
 {
     if (!isOnCurve(curve, point))
         return EllipticPoint();
-    EllipticPoint res(point.X(), -point.Y() % curve.p);
+    EllipticPoint res(point.x(), -point.y() % curve.p);
     assert(isOnCurve(curve, res));
     return res;
 }
@@ -55,23 +55,23 @@ EllipticPoint ECC::negatePoint(ECC::curve curve, EllipticPoint point)
 EllipticPoint ECC::add(ECC::curve curve, EllipticPoint a, EllipticPoint b)
 {
     BigNumber m(0);
-    bool aioc = isOnCurve(curve,a);
-//    assert(isOnCurve(curve, a));
+    bool aioc = isOnCurve(curve, a);
+    //    assert(isOnCurve(curve, a));
     assert(isOnCurve(curve, b));
     if (a.isZero())
         return b;
     if (b.isZero())
         return a;
-    if (a.X() == b.X())
+    if (a.x() == b.x())
     {
-        BigNumber z = BigNumber("2") * a.Y();
-        m = (BigNumber("3") * a.X() * a.X() + curve.a) * inverseMod(z, curve.p);
+        BigNumber z = BigNumber("2") * a.y();
+        m = (BigNumber("3") * a.x() * a.x() + curve.a) * inverseMod(z, curve.p);
     }
     else
-        m = (b.Y() - a.Y()) * inverseMod(b.X() - a.X(), curve.p);
+        m = (b.y() - a.y()) * inverseMod(b.x() - a.x(), curve.p);
     EllipticPoint res;
-    BigNumber x3 = m * m - a.X() - b.X();
-    BigNumber y3 = m * (a.X() - x3) - a.Y();
+    BigNumber x3 = m * m - a.x() - b.x();
+    BigNumber y3 = m * (a.x() - x3) - a.y();
     y3 = y3 % curve.p;
 
     x3 = x3 % curve.p;

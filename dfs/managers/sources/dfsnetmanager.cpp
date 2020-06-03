@@ -70,6 +70,7 @@ void DFSNetManager::createDFSResolver(Network::DataStruct ds)
     resolver->setDfs(dfs);
     resolver->setActorIndex(actorIndex);
     resolver->setTask(ds.msg, ds.receiver);
+    resolver->setLongReceiver(ds.receiver);
     dfsResolvers.append(resolver);
     connectResolver(dfsResolvers.last());
     ThreadPool::addThread(dfsResolvers.last());
@@ -163,7 +164,7 @@ void DFSNetManager::removeResolver(DFSResolverService::FinishStatus status)
     }
 
     QString filePath = resolver->getTitle().filePath;
-    auto pair = resolver->getReceiver();
+    auto pair = resolver->getLongReceiver();
     disconnectResolver(resolver);
 
     if (resolver->getType() == Resolver::Type::DFS)
@@ -265,7 +266,8 @@ SocketService *DFSNetManager::addConnectionFromPair(QHostAddress address, quint1
     connections.append(socket);
     connections.last()->setNetManager(this);
     socketConnection();
-    qDebug() << "NET MANAGER: New connection is established : " << address << ":" << port;
+    qDebug().noquote().nospace() << "DFS NET MANAGER: New connection is established: " << address.toString()
+                                 << ":" << port;
 
     ThreadPool::addThread(connections.last());
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));

@@ -11,7 +11,7 @@ FileUpdaterManager::~FileUpdaterManager()
 
 void FileUpdaterManager::checkAllFiles()
 {
-    QDir dir("data");
+    QDir dir(DfsStruct::ROOT_FOOLDER_NAME);
     QStringList listUsers = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (const auto &userId : listUsers)
     {
@@ -23,7 +23,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
 {
     // Chats
     {
-        QString folder = "data/" + userId + "/chats/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/chats/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const auto tmpUserFolder : listDataUser)
@@ -36,7 +36,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
     }
     // Events
     {
-        QString folder = "data/" + userId + "/events/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/events/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const auto tmpUserFolder : listDataUser)
@@ -82,7 +82,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
     }
     // Posts
     {
-        QString folder = "data/" + userId + "/posts/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/posts/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const auto tmpUserFolder : listDataUser)
@@ -124,7 +124,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
     }
     // Private
     {
-        QString folder = "data/" + userId + "/private/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/private/";
         QDir folderUser(folder);
 
         QString nameFile(folder + "chats");
@@ -143,7 +143,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
     }
     // Root
     {
-        QString folder = "data/" + userId + "/root";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/root";
         sendEditDB(folder.toUtf8(), "Items", userId, "root", DfsStruct::Type::Private,
                    cardFile); // TODO : DfsStruct::Type Root ?
         sendEditDB(folder.toUtf8(), "ItemsDeleted", userId, "root", DfsStruct::Type::Private, cardFile);
@@ -154,7 +154,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
 {
     // Chats
     {
-        QString folder = "data/" + userId + "/chats/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/chats/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const auto tmpUserFolder : listDataUser)
@@ -167,7 +167,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
     }
     // Events
     {
-        QString folder = "data/" + userId + "/events/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/events/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const auto tmpUserFolder : listDataUser)
@@ -207,7 +207,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
     }
     // Posts
     {
-        QString folder = "data/" + userId + "/posts/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/posts/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const auto tmpUserFolder : listDataUser)
@@ -243,7 +243,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
     }
     // Private
     {
-        QString folder = "data/" + userId + "/private/";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/private/";
         QDir folderUser(folder);
 
         QString nameFile(folder + "chats");
@@ -261,7 +261,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
     }
     // Root
     {
-        QString folder = "data/" + userId + "/root";
+        QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/root";
         checkVersionFile(folder.toUtf8(), "Items", cardFile);
         checkVersionFile(folder.toUtf8(), "ItemsDeleted", cardFile);
     }
@@ -330,7 +330,7 @@ void FileUpdaterManager::checkVersionFile(const QByteArray &filePath, const QByt
 void FileUpdaterManager::checkRoot(const QString &userId, const QString &ver)
 {
 
-    QString folder = "data/" + userId + "/root";
+    QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/root";
     DBConnector db(folder.toStdString());
     if (db.open("Items"))
     {

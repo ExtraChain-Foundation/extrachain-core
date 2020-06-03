@@ -21,10 +21,8 @@ SOURCES += \
     $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
     $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
     $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
-    $$PWD/sources/enc/crypt_manager.cpp \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
-    $$PWD/sources/enc/algorithms/xor_encrypt.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/memindex.cpp \
@@ -89,11 +87,8 @@ HEADERS += \
     $$PWD/headers/enc/algorithms/ecc/curves.h \
     $$PWD/headers/enc/algorithms/ecc/eccmath.h \
     $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
-    $$PWD/headers/enc/algorithms/xor_encrypt.h \
-    $$PWD/headers/enc/crypt_manager.h \
     $$PWD/headers/enc/key_private.h \
     $$PWD/headers/enc/key_public.h \
-    $$PWD/headers/enc/crypt_interface.h \
     $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_changes.h \

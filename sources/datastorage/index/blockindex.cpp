@@ -588,7 +588,7 @@ int BlockIndex::removeById(const BigNumber &id)
     while (currentIdToRemove <= lastSavedId)
     {
         QString pathToFile = buildFilePath(currentIdToRemove);
-        qDebug() << "To remove: " << pathToFile;
+        qDebug() << "To remove:" << pathToFile;
         QFile file(pathToFile);
         if (file.exists() && !file.isOpen())
         {
@@ -608,7 +608,7 @@ int BlockIndex::removeById(const BigNumber &id)
 void BlockIndex::removeAll()
 {
     QString folderPath = this->getFolderPath();
-    qDebug() << "Clearing file index: " << folderPath;
+    qDebug() << "Clearing file index:" << folderPath;
 
     QDir folder(folderPath);
     for (const QString &section :
@@ -787,13 +787,13 @@ BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringLis
     QDir folder(getFolderPath());
 
     // sections
-    qDebug() << "FILE INDEX: "
-             << "loadFileFromSection(): " << folder.path();
+    qDebug() << "FILE INDEX:"
+             << "loadFileFromSection():" << folder.path();
     QStringList list = folder.entryList(QDir::Filter::Dirs | QDir::Filter::NoDotAndDotDot);
     if (list.isEmpty())
     {
-        qDebug() << "FILE INDEX: "
-                 << "loadFileFromSection(): "
+        qDebug() << "FILE INDEX:"
+                 << "loadFileFromSection():"
                  << "folder.entryList: empty";
         return BigNumber();
     }
@@ -801,20 +801,20 @@ BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringLis
     folder.cd(getFolder(list)); // go to section
 
     // files in sections
-    qDebug() << "FILE INDEX: "
-             << "loadFileFromSection(): " << folder.path();
+    qDebug() << "FILE INDEX:"
+             << "loadFileFromSection():" << folder.path();
     list = folder.entryList(QDir::Filter::Files | QDir::Filter::NoDotAndDotDot);
     if (list.isEmpty())
     {
-        qDebug() << "FILE INDEX: "
-                 << "loadFileFromSection(): "
+        qDebug() << "FILE INDEX:"
+                 << "loadFileFromSection():"
                  << "folder.entryList->folder.entryList: empty";
         return BigNumber();
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
 
-    qDebug() << "FILE INDEX: "
-             << "loadFileFromSection(): lastId - "
+    qDebug() << "FILE INDEX:"
+             << "loadFileFromSection(): lastId -"
              << (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLocal8Bit()));
     return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLocal8Bit());
 }

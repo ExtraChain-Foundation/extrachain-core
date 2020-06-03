@@ -103,13 +103,13 @@ QByteArray Block::getDataForDigSig() const
 void Block::sign(const Actor<KeyPrivate> &actor)
 {
     calcHash();
-    QByteArray sign = actor.getKey()->sign(getDataForDigSig());
-    this->signatures.append({ actor.getId().toActorId(), sign, true });
+    QByteArray sign = actor.key()->sign(getDataForDigSig());
+    this->signatures.append({ actor.id().toActorId(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const
 {
-    bool res = actor.getKey()->verify(getDataForDigSig(), getDigSig());
+    bool res = actor.key()->verify(getDataForDigSig(), getDigSig());
     return signatures.isEmpty() ? false : res;
 }
 

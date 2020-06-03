@@ -10,9 +10,6 @@
 #include <QRandomGenerator>
 #include <QDebug>
 
-#include <iostream>
-//#include "utils/utils.h"
-
 #include "gmpxx.h"
 
 #ifdef QT_DEBUG
@@ -59,7 +56,7 @@ public:
     BigNumber operator+(long long);
     BigNumber operator-(const BigNumber &);
     BigNumber operator-(long long);
-    BigNumber operator*(const BigNumber &)const;
+    BigNumber operator*(const BigNumber &) const;
     BigNumber operator*(long long);
     BigNumber operator/(const BigNumber &);
     BigNumber operator/(long long);
