@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCborStreamWriter>
+#include <QCborStreamReader>
 #include <QList>
 #include <QSettings>
 #include <QStorageInfo>
@@ -507,6 +509,14 @@ QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_si
 QList<QByteArray> universalDeserialize(const QByteArray &serialized,
                                        const int &fiels_size = DEFAULT_FIELD_SIZE);
 } // namespace Serialization
+
+namespace ModernSerialize {
+QByteArray fromMap(const QMap<QString, QByteArray> &map);
+QByteArray fromList(const QByteArrayList &list);
+QByteArrayList toList(const QByteArray &data);
+QMap<QString, QByteArray> toMap(const QByteArray &data);
+int length(const QByteArray &data);
+} // namespace ModernSerialize
 
 namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);

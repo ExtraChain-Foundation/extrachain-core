@@ -769,3 +769,91 @@ QString Utils::dataName()
     else
         return "/etalonium-private-" + serverIp.replace(".", "-");
 }
+
+QByteArray ModernSerialize::fromMap(const QMap<QString, QByteArray> &map)
+{
+    QByteArray cbor;
+    QCborStreamWriter writer(&cbor);
+
+    writer.startMap(map.count());
+    for (auto it = map.begin(); it != map.end(); ++it)
+    {
+        writer.append(it.key());
+        writer.append(it.value());
+    }
+    writer.endMap();
+
+    return cbor;
+}
+
+QByteArray ModernSerialize::fromList(const QByteArrayList &list)
+{
+    QByteArray cbor;
+    QCborStreamWriter writer(&cbor);
+
+    writer.startArray(list.count());
+    for (const QByteArray &el : list)
+        writer.append(el);
+    writer.endArray();
+
+    return cbor;
+}
+
+QByteArrayList ModernSerialize::toList(const QByteArray &data)
+{
+    QByteArrayList list;
+
+    QCborStreamReader reader(data);
+    if (!reader.isArray())
+        return {};
+    if (reader.isLengthKnown())
+        list.reserve(reader.length());
+
+    reader.enterContainer();
+    while (reader.lastError() == QCborError::NoError && reader.hasNext())
+    {
+        list << reader.readByteArray().data;
+        reader.next();
+    }
+    if (reader.lastError() == QCborError::NoError)
+        reader.leaveContainer();
+
+    return list;
+}
+
+QMap<QString, QByteArray> ModernSerialize::toMap(const QByteArray &data)
+{
+    QMap<QString, QByteArray> map;
+
+    QCborStreamReader reader(data);
+    if (!reader.isMap())
+        return {};
+
+    reader.enterContainer();
+
+    while (reader.lastError() == QCborError::NoError && reader.hasNext())
+    {
+        QString key = reader.readString().data;
+        if (key.isEmpty())
+            break;
+        reader.next();
+        QByteArray value = reader.readByteArray().data;
+        map.insert(key, value);
+    }
+
+    if (reader.lastError() == QCborError::NoError)
+        reader.leaveContainer();
+
+    return map;
+}
+
+int ModernSerialize::length(const QByteArray &data)
+{
+    QByteArrayList list;
+
+    QCborStreamReader reader(data);
+    if (reader.isLengthKnown())
+        return reader.length();
+
+    return -1;
+}
