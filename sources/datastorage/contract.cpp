@@ -1,3 +1,4 @@
+/*
 #include "datastorage/contract.h"
 //#include "utils/utils.h"
 Token::Token(QObject *parent)
@@ -105,9 +106,9 @@ BigNumber Token::getAmount(QList<Block> list, BigNumber userId)
     return amount;
 }
 
-/**
+/ **
  * @brief Contract
- */
+ * /
 
 Contract::performer_status Contract::fromInt(const int &s) const
 {
@@ -232,3 +233,4 @@ const QList<QByteArray> Contract::deserialize(const QByteArray &serialized) cons
 {
     return Serialization::universalDeserialize(serialized, CONTRACT_FIELDS_SIZE);
 }
+*/

@@ -517,8 +517,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     if (indx != -1)
         m_tmpFiles.removeAt(indx);
 
-    QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
-
     if (path.right(DfsStruct::STORED_EXT_SIZE) != DfsStruct::STORED_EXT)
     {
         // TODO: check types
@@ -581,9 +579,10 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 #ifdef ETALONIUM_CLIENT
     bool haveStored = isHaveStoredType(type);
     if (haveStored && path.right(DfsStruct::STORED_EXT_SIZE) == DfsStruct::STORED_EXT)
-        emit fileAdded(path.mid(0, path.length() - 7), "network", type, pathList.at(PathStruct::aId));
+        emit fileAdded(path.mid(0, path.length() - 7), "network", type,
+                       path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20));
     if (!haveStored)
-        emit fileAdded(path, "network", type, pathList.at(PathStruct::aId));
+        emit fileAdded(path, "network", type, path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20));
 #endif
 }
 

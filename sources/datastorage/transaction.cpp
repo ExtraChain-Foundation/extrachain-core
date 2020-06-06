@@ -332,13 +332,11 @@ void Transaction::operator=(const Transaction &other)
 
 QString Transaction::toString() const
 {
-    QStringList list;
-    list << "sender:" + sender.toActorId() << "receiver:" + receiver.toActorId()
-         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromMSecsSinceEpoch(date).toString()
-         << "data:" + data << "token:" + token.toActorId() << "prevBlock:" + prevBlock.toByteArray()
-         << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
-         << "approver:" + approver.toActorId() << "digitalSignature:" + digSig;
-    return Serialization::serializeString(list, Serialization::TX_FIELD_SPLITTER);
+    return "sender:" + sender.toActorId() + ", receiver:" + receiver.toActorId()
+        + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
+        + ", data:" + data + ", token:" + token.toActorId() + ", prevBlock:" + prevBlock.toByteArray()
+        + ", gas:" + QString::number(gas) + ", hop:" + QString::number(hop) + ", hash:" + hash
+        + ", approver:" + approver.toActorId() + ", digitalSignature:" + digSig;
 }
 
 QByteArray Transaction::serialize() const

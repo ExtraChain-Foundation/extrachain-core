@@ -2,20 +2,19 @@
 
 const QStringList DistFileSystem::Status::deserializeState(const QByteArray &serialized)
 {
-    QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
+    // QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
     QStringList result;
-    for (const QByteArray &el : list)
-
-        result << el;
+    // for (const QByteArray &el : list)
+    //    result << el;
     return result;
 }
 
 const QByteArray DistFileSystem::Status::serializeState() const
 {
-    QList<QByteArray> list;
-    for (const QString &el : currentState)
-        list << el.toUtf8();
-    return Serialization::serialize(list, stateDelimetr);
+    // QList<QByteArray> list;
+    // for (const QString &el : currentState)
+    //    list << el.toUtf8();
+    return ""; // Serialization::serialize(list, stateDelimetr);
 }
 
 const QList<QByteArray> DistFileSystem::Status::serializedParams() const

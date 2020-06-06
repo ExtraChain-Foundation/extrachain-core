@@ -21,88 +21,6 @@ QByteArray Utils::calcKeccak(const QByteArray &b)
 
 // SERIALIZATION //
 
-QByteArray Serialization::serialize(const QList<QByteArray> &list)
-{
-    return list.join(DEFAULT_FIELD_SPLITTER) + DEFAULT_FIELD_SPLITTER;
-}
-
-QByteArray Serialization::serialize(const QList<QByteArray> &list, const QByteArray &delimiter)
-{
-    QByteArray result;
-    for (const QByteArray &v : list)
-    {
-        result.append(v).append(delimiter);
-    }
-    return result;
-}
-
-QByteArray Serialization::serialize(const QList<QByteArray> &list, char delimiter)
-{
-
-    return serialize(list, QByteArray(1, delimiter));
-}
-
-QList<QByteArray> Serialization::deserialize(const QByteArray data, const QByteArray &delim)
-{
-    if (data.isEmpty())
-    {
-        return QList<QByteArray>();
-    }
-    QList<QByteArray> resList;
-    QByteArray currentData;
-    bool temp = false;
-    currentData.clear();
-    for (int i = 0; i < data.size(); i++)
-    {
-        if (data[i] == delim[0])
-        {
-            if ((data.size() - i) < delim.size())
-            {
-                resList.append(currentData);
-                return resList;
-            }
-            for (int j = 0; j < delim.size(); j++)
-                if (data[i + j] != delim[j])
-                {
-                    temp = true;
-                    break;
-                }
-            if (!temp)
-            {
-                resList.append(currentData);
-                i = i + delim.size() - 1;
-                currentData.clear();
-                continue;
-            }
-            else
-            {
-                currentData.append(data[i]);
-                temp = false;
-                continue;
-            }
-        }
-        currentData.append(data[i]);
-    }
-    return resList;
-}
-
-QString Serialization::serializeString(const QStringList &list)
-{
-    return serializeString(list, DEFAULT_FIELD_SPLITTER);
-}
-
-QString Serialization::serializeString(const QStringList &list, const QByteArray &delimiter)
-{
-    return list.join(delimiter) + delimiter;
-}
-
-QStringList Serialization::deserializeString(const QString &serialized)
-{
-    QStringList list = serialized.split(DEFAULT_FIELD_SPLITTER);
-    list.removeLast();
-    return list;
-}
-
 std::vector<std::string> Utils::split(const std::string &s, char c)
 {
     auto end = s.cend();
@@ -126,11 +44,6 @@ std::vector<std::string> Utils::split(const std::string &s, char c)
     if (start != end)
         v.emplace_back(start, end);
     return v;
-}
-
-std::vector<std::string> Utils::split(const std::string &s)
-{
-    return split(s, Serialization::DEFAULT_FIELD_SPLITTER.at(0));
 }
 
 QString KeyStore::makeKeyFileName(QString name)
@@ -177,47 +90,7 @@ bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode)
     }
     return true;
 }
-QList<QString> Serialization::deserialize(const QString &serialized, char delimiter)
-{
-    QStringList list = serialized.split(delimiter);
-    //  list.removeLast();
-    QList<QString> result;
-    for (const QString &v : list)
-    {
-        result.append(v);
-    }
-    return result;
-}
 
-QByteArray Serialization::serializeStored(const QList<QByteArray> list)
-{
-    if (list.size() != 2)
-    {
-        qDebug() << "error in serializeStored, list have more or less then two elements";
-        return "Error";
-    }
-    QByteArray res = list.at(0);
-    res.append(DFS_HEADER_END_DELIMETR);
-    res.append(list.at(1));
-    return res;
-}
-
-QList<QByteArray> Serialization::desirializeStored(const QByteArray &serialize)
-{
-    QList<QByteArray> list = {};
-    int index = serialize.indexOf(DFS_HEADER_END_DELIMETR);
-    QByteArray line = serialize.mid(0, index);
-    //    list << serialize.mid(0, 19);
-    //    list << serialize.mid(19, 6);
-    //    list << serialize.mid(25, 8);
-    //    list << serialize.mid(33, 64);
-    //    list << serialize.mid(97, 64);
-    //    list << serialize.mid(161, 6);
-    //    list << serialize.mid(167, 6);
-    //    list << serialize.mid(173, 19);
-    list << line << serialize.mid(index + 1, serialize.size() - index);
-    return list;
-}
 QByteArray storedSpace::toByteArray(storedSpace::State state)
 {
     if (state == storedSpace::State::NEWSTATE)
@@ -770,7 +643,7 @@ QString Utils::dataName()
         return "/etalonium-private-" + serverIp.replace(".", "-");
 }
 
-QByteArray ModernSerialize::fromMap(const QMap<QString, QByteArray> &map)
+QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map)
 {
     QByteArray cbor;
     QCborStreamWriter writer(&cbor);
@@ -786,7 +659,7 @@ QByteArray ModernSerialize::fromMap(const QMap<QString, QByteArray> &map)
     return cbor;
 }
 
-QByteArray ModernSerialize::fromList(const QByteArrayList &list)
+QByteArray Serialization::fromList(const QByteArrayList &list)
 {
     QByteArray cbor;
     QCborStreamWriter writer(&cbor);
@@ -799,7 +672,7 @@ QByteArray ModernSerialize::fromList(const QByteArrayList &list)
     return cbor;
 }
 
-QByteArrayList ModernSerialize::toList(const QByteArray &data)
+QByteArrayList Serialization::toList(const QByteArray &data)
 {
     QByteArrayList list;
 
@@ -808,6 +681,8 @@ QByteArrayList ModernSerialize::toList(const QByteArray &data)
         return {};
     if (reader.isLengthKnown())
         list.reserve(reader.length());
+    else
+        return {};
 
     reader.enterContainer();
     while (reader.lastError() == QCborError::NoError && reader.hasNext())
@@ -821,12 +696,12 @@ QByteArrayList ModernSerialize::toList(const QByteArray &data)
     return list;
 }
 
-QMap<QString, QByteArray> ModernSerialize::toMap(const QByteArray &data)
+QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data)
 {
     QMap<QString, QByteArray> map;
 
     QCborStreamReader reader(data);
-    if (!reader.isMap())
+    if (!reader.isMap() || !reader.isLengthKnown())
         return {};
 
     reader.enterContainer();
@@ -847,7 +722,7 @@ QMap<QString, QByteArray> ModernSerialize::toMap(const QByteArray &data)
     return map;
 }
 
-int ModernSerialize::length(const QByteArray &data)
+int Serialization::length(const QByteArray &data)
 {
     QByteArrayList list;
 
@@ -856,4 +731,33 @@ int ModernSerialize::length(const QByteArray &data)
         return reader.length();
 
     return -1;
+}
+
+QByteArray Serialization::universalSerializeMap(const QMap<QString, QByteArray> &map)
+{
+    auto it = map.begin();
+    QByteArray res;
+
+    while (it != map.end())
+    {
+        res += Serialization::universalSerialize({ it.key().toUtf8(), it.value() });
+        it++;
+    }
+
+    return res;
+}
+
+QMap<QString, QByteArray> Serialization::universalDeserializeMap(const QByteArray &data)
+{
+    QMap<QString, QByteArray> map;
+    QByteArrayList res = Serialization::universalDeserialize(data);
+
+    while (res.size() != 0)
+    {
+        map.insert(res.at(0), res.at(1));
+        res.removeFirst();
+        res.removeFirst();
+    }
+
+    return map;
 }

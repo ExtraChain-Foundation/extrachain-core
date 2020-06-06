@@ -126,11 +126,6 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
-{
-    return fileMode ? blockIndex.searchPair(first, second) : memIndex.searchPair(first, second);
-}
-
 void Blockchain::saveTxInfoInEC(const QByteArray data) const
 {
     QList<QByteArray> l = Serialization::universalDeserialize(data, Serialization::TRANSACTION_FIELD_SIZE);

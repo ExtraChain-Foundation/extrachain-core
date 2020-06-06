@@ -8,10 +8,8 @@
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
-#include "datastorage/tx_pair.h"
 #include "managers/account_controller.h"
 #include "utils/bignumber.h"
-#include "utils/list_container.h"
 #include <QByteArray>
 #include <QHostAddress>
 #include <QObject>
@@ -74,7 +72,6 @@ private:
                                                                        const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
-    TxPair getTxPair(const BigNumber &first, const BigNumber second);
 
     void saveTxInfoInEC(const QByteArray data) const;
 

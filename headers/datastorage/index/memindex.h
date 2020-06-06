@@ -6,12 +6,6 @@
 #include <algorithm>
 #include "datastorage/block.h"
 #include "utils/utils.h"
-#include "datastorage/tx_pair.h"
-
-using std::begin;
-using std::end;
-using std::find_if;
-using std::remove_if;
 
 class MemIndex
 {
@@ -47,8 +41,6 @@ public:
                                                                            const QByteArray &token) const;
     std::pair<Transaction, QByteArray> getLastTxByApprover(const BigNumber &id,
                                                            const QByteArray &token) const;
-    TxPair searchPair(const BigNumber &senderId, const BigNumber &receiverId) const;
-
     void removeAll();
 
 private:

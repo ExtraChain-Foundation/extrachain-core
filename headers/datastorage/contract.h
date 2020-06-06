@@ -1,5 +1,6 @@
 ﻿#ifndef CONTRACT_H
 #define CONTRACT_H
+/*
 #include "utils/bignumber.h"
 #include "datastorage/transaction.h"
 #include "datastorage/actor.h"
@@ -99,5 +100,5 @@ public:
     const QByteArray serialize() const;
     const QList<QByteArray> deserialize(const QByteArray &serialized) const;
 };
-
+*/
 #endif // CONTRACT_H

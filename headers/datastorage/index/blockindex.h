@@ -2,7 +2,6 @@
 #define BLOCKINDEX_H
 
 #include "datastorage/block.h"
-#include "datastorage/tx_pair.h"
 #include "datastorage/genesis_block.h"
 #include "utils/db_connector.h"
 
@@ -77,8 +76,6 @@ public:
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0) const;
-
-    TxPair searchPair(const BigNumber &first, const BigNumber &second) const;
 
     void removeAll();
     BigNumber getLastSavedId() const;

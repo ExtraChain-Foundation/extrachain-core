@@ -382,42 +382,6 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
     return currentTxs;
 }
 
-TxPair BlockIndex::searchPair(const BigNumber &first, const BigNumber &second) const
-{
-    TxPair pair;
-
-    bool firstFound = false;
-    bool secondFound = false;
-
-    BigNumber records = getLastSavedId();
-    while (records > 0)
-    {
-        Block byPosition = getBlockById(records);
-        QList<Transaction> trx = byPosition.extractTransactions();
-
-        for (const Transaction &t : trx)
-        {
-            if (firstFound && secondFound)
-            {
-                records = 0;
-                break;
-            }
-            if (!firstFound && (t.getSender() == first || t.getReceiver() == first))
-            {
-                firstFound = true;
-                pair.setFirst(t);
-            }
-            if (!secondFound && (t.getSender() == second || t.getReceiver() == second))
-            {
-                secondFound = true;
-                pair.setSecond(t);
-            }
-        }
-        --records;
-    }
-    return pair;
-}
-
 QString BlockIndex::buildFilePath(const BigNumber &id) const
 {
     BigNumber section = this->calcSection(id);

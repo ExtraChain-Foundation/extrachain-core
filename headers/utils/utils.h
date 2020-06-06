@@ -460,63 +460,21 @@ namespace Serialization {
 
 // Delimiters //
 static const int TRANSACTION_FIELD_SIZE = 4;
-static const int DFS_FIELD_SIZE = 8;
 static const int DEFAULT_FIELD_SIZE = 8;
 
-static const QByteArray DEFAULT_FIELD_SPLITTER = ":";
-static const QByteArray ACTOR_FIELD_SPLITTER = ":";
-static const QByteArray BLOCK_FIELD_SPLITTER = ";";
-static const QByteArray USER_FIELD_SPLITER = "~";
-
-static const QByteArray TX_FIELD_SPLITTER = "|";
-static const QByteArray TX_PAIR_FIELD_SPLITTER = "--";
-static const QByteArray GENESIS_ROW_FIELD_SPLITTER = "->";
-
-static const QByteArray DEFAULT_LIST_SPLITTER = ",";
-
-static const QByteArray NET_MESSAGE_HEADER_FIELD_SPLITTER = "##";
-static const QByteArray NET_MESSAGE_FIELD_SPLITER = "&";
-
-static const QByteArray INFORMATION_SEPARATOR_ONE = "\u0001E\u0001F\u0001C\u0001E";
-static const QByteArray INFORMATION_SEPARATOR_TWO = "\u0001C\u0001F\u0001E\u0001C"; // used in network
-static const QByteArray INFORMATION_SEPARATOR_THREE = "\u0001E\u0001F\u000C\u0001F";
-
-static const QByteArray Coin_Price_Delimiter_2 = "coin_delimetr";
-static const QByteArray Coin_Price_Delimiter = "coin_price";
-
-static const QByteArray DFS_STORED_DELIMETR = "--";
-static const QByteArray DFS_HEADER_END_DELIMETR = "$";
-static const QByteArray DFS_DFSTRUCT_DELIMETR = "**";
-static const QByteArray DFS_ROOT_CARD_FILE_DELIMITER = "->";
-static const QByteArray DFS_ROOT_CARD_FILE_SECTION_DELIMITER = "##";
-static const QByteArray DFS_CARD_FILE_UNIVERSAL_DELIMITER = "=";
-static const QByteArray DFS_CARD_FILE_SECTION_DELIMETR = "|";
-
-QByteArray serialize(const QList<QByteArray> &list);
-// QByteArray serialize(const QList<QString> &list);
-QByteArray serialize(const QList<QByteArray> &list, const QByteArray &delimiter);
-// QByteArray serialize(const QList<QString> &list, const QByteArray
-// &delimiter);
-QByteArray serialize(const QList<QByteArray> &list, char delimiter);
-QList<QByteArray> deserialize(const QByteArray data, const QByteArray &delim);
-QString serializeString(const QStringList &list);
-QString serializeString(const QStringList &list, const QByteArray &delimiter);
-QStringList deserializeString(const QString &serialized);
-QList<QString> deserialize(const QString &serialized, char delimiter);
-QByteArray serializeStored(const QList<QByteArray> list);
-QList<QByteArray> desirializeStored(const QByteArray &serialize);
 QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
 QList<QByteArray> universalDeserialize(const QByteArray &serialized,
                                        const int &fiels_size = DEFAULT_FIELD_SIZE);
-} // namespace Serialization
 
-namespace ModernSerialize {
+QByteArray universalSerializeMap(const QMap<QString, QByteArray> &map);
+QMap<QString, QByteArray> universalDeserializeMap(const QByteArray &data);
+
 QByteArray fromMap(const QMap<QString, QByteArray> &map);
 QByteArray fromList(const QByteArrayList &list);
 QByteArrayList toList(const QByteArray &data);
 QMap<QString, QByteArray> toMap(const QByteArray &data);
 int length(const QByteArray &data);
-} // namespace ModernSerialize
+} // namespace Serialization
 
 namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
@@ -545,7 +503,6 @@ bool decryptFile(const QString &encryptName, const QString &decryptName, const Q
 QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
-std::vector<std::string> split(const std::string &s);
 
 int compare(const QByteArray &one, const QByteArray &two);
 

@@ -2,7 +2,6 @@
 #define DFS_H
 
 #include "dfs/managers/headers/card_manager.h"
-#include "dfs/packages/headers/ui_messages.h"
 #include "dfs/packages/headers/dfs_changes.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
@@ -33,6 +32,7 @@ private:
     Sender *sender = nullptr;
     bool myQuickMode = false;
     // DFSResolver *resolver;
+
 public slots:
     /*DFS 1.5*/
     void dfsSyncUsers(QList<QString> userId, const SocketPair &receiver = SocketPair());
@@ -41,6 +41,7 @@ public slots:
     bool dfsValidate(QByteArray userId);
     QList<QByteArray> dfsValidateAll();
     /*DFS 1.5*/
+
 private:
     void initDFS(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
@@ -80,7 +81,7 @@ signals:
 
     void resolveMsg(const QByteArray &msg, int dMsgType, const SocketPair &receiver);
     void sendQ(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver);
-    void fileAdded(QString path, QString original, DfsStruct::Type type, QByteArray actorId);
+    void fileAdded(QString path, QString original, DfsStruct::Type type, QString actorId);
     void fileChanged(QString path, DfsStruct::ChangeType changeType);
     void fileDuplicated(QString path, QString original, DfsStruct::Type type);
     void fileNetworkCompleted(QString filePath, SocketPair pair);
