@@ -226,11 +226,11 @@ const QByteArray Contract::serialize() const
     QList<QByteArray> list;
     list << customer.toActorId() << performersSerialize() << _location << event << _contract_dateSerialize()
          << _scope_of_workSerialize() << _agreement << _amount.toByteArray() << data;
-    return Serialization::universalSerialize(list, CONTRACT_FIELDS_SIZE);
+    return Serialization::serialize(list, CONTRACT_FIELDS_SIZE);
 }
 
 const QList<QByteArray> Contract::deserialize(const QByteArray &serialized) const
 {
-    return Serialization::universalDeserialize(serialized, CONTRACT_FIELDS_SIZE);
+    return Serialization::deserialize(serialized, CONTRACT_FIELDS_SIZE);
 }
 */

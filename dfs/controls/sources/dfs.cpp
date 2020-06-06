@@ -1516,7 +1516,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 DFSMessage::DfsChanges dfsChanges;
                 dfsChanges.changeType = std::stoi(el.at("type"));
                 dfsChanges.data =
-       Serialization::universalDeserialize(QByteArray::fromStdString(el.at("type"))); dfsChanges.range =
+       Serialization::deserialize(QByteArray::fromStdString(el.at("type"))); dfsChanges.range =
        QByteArray::fromStdString(el.at("type"));
 
                 applyChanges(dfsChanges);

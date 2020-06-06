@@ -112,7 +112,7 @@ void BaseMessage::deserialize(const QByteArray &serialized)
     {
         qDebug() << "Error: can't deserialize message:" << serialized;
     }
-    //    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    // QList<QByteArray> l = Serialization::deserialize(serialized);
     operator=(list);
 }
 

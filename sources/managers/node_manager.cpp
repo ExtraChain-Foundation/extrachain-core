@@ -125,8 +125,7 @@ void NodeManager::initConsoleToken(Transaction tx)
 {
     Q_UNUSED(tx)
 #ifdef ETALONIUM_CONSOLE
-    QByteArray data =
-        Serialization::universalSerialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
+    QByteArray data = Serialization::serialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
     Block lastBlock = blockchain->getLastBlock();
     Block block(data, lastBlock);
     blockchain->signBlock(block);

@@ -196,9 +196,8 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR
-        + Serialization::serialize({ QByteArray::number(Network::build),
-                                              net::readNetManagerIdentificator(),
-                                              netManager->getSerializedConnectionList() });
+        + Serialization::serialize({ QByteArray::number(Network::build), net::readNetManagerIdentificator(),
+                                     netManager->getSerializedConnectionList() });
     this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
 
     qDebug() << "[Socket Service] Address" << this->socket << address << port;
@@ -305,7 +304,7 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
         return;
     if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
         return;
-    //    QByteArrayList msgList = Serialization::universalDeserialize(bmsg, 8);
+    //    QByteArrayList msgList = Serialization::deserialize(bmsg, 8);
     //    QByteArray checkProtocol;
     //    if (msgList.length() > 0)
     //        checkProtocol = msgList.at(0);

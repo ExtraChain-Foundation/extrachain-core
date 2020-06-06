@@ -459,7 +459,7 @@ void ChatManager::changes(QString path, DfsStruct::ChangeType changeType)
         file.open(QIODevice::ReadOnly);
         QByteArray data = file.readAll();
         file.close();
-        QByteArrayList chatsId = Serialization::universalDeserialize(data, 4);
+        QByteArrayList chatsId = Serialization::deserialize(data, 4);
         */
         bool myChat = false;
         for (auto chat : _chatList)
