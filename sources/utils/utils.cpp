@@ -674,15 +674,12 @@ QByteArray Serialization::fromList(const QByteArrayList &list)
 
 QByteArrayList Serialization::toList(const QByteArray &data)
 {
-    QByteArrayList list;
-
     QCborStreamReader reader(data);
-    if (!reader.isArray())
+    if (!reader.isArray() || !reader.isLengthKnown())
         return {};
-    if (reader.isLengthKnown())
-        list.reserve(reader.length());
-    else
-        return {};
+
+    QByteArrayList list;
+    list.reserve(reader.length());
 
     reader.enterContainer();
     while (reader.lastError() == QCborError::NoError && reader.hasNext())
@@ -690,22 +687,22 @@ QByteArrayList Serialization::toList(const QByteArray &data)
         list << reader.readByteArray().data;
         reader.next();
     }
-    if (reader.lastError() == QCborError::NoError)
-        reader.leaveContainer();
+
+    if (reader.lastError() != QCborError::NoError)
+        return {};
 
     return list;
 }
 
 QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data)
 {
-    QMap<QString, QByteArray> map;
-
     QCborStreamReader reader(data);
     if (!reader.isMap() || !reader.isLengthKnown())
         return {};
 
-    reader.enterContainer();
+    QMap<QString, QByteArray> map;
 
+    reader.enterContainer();
     while (reader.lastError() == QCborError::NoError && reader.hasNext())
     {
         QString key = reader.readString().data;
@@ -716,8 +713,8 @@ QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data)
         map.insert(key, value);
     }
 
-    if (reader.lastError() == QCborError::NoError)
-        reader.leaveContainer();
+    if (reader.lastError() != QCborError::NoError)
+        return {};
 
     return map;
 }
