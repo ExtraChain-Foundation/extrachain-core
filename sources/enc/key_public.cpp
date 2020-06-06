@@ -47,9 +47,9 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
         res.append(BlowFish::encrypt(data, S.x().toByteArray() + S.y().toByteArray()));
         res.append(R.x().toByteArray());
         res.append(R.y().toByteArray());
-        result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
+        result = Serialization::serialize(res, Serialization::DEFAULT_FIELD_SIZE);
         res.clear();
-        res = Serialization::universalDeserialize(result, Serialization::DEFAULT_FIELD_SIZE);
+        res = Serialization::deserialize(result, Serialization::DEFAULT_FIELD_SIZE);
     } while (res.size() != 3);
 
     return result;
@@ -58,7 +58,7 @@ QByteArray KeyPublic::encrypt(const QByteArray &data)
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
 {
     BigNumber z = BigNumber(Utils::calcKeccak(data));
-    QList<QByteArray> signature = Serialization::universalDeserialize(dsignBase64, 3);
+    QList<QByteArray> signature = Serialization::deserialize(dsignBase64, 3);
     BigNumber r(signature[0]), s(signature[1]);
     BigNumber w = ECC::inverseMod(s, curve.n);
     BigNumber u1 = (z * w) % curve.n;

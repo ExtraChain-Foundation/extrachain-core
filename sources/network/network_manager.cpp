@@ -331,7 +331,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     QByteArray currentId;
     for (auto ip : ipList)
     {
-        idIpPair = Serialization::universalDeserialize(ip);
+        idIpPair = Serialization::deserialize(ip);
         currentId = (getConnectionByAddress(idIpPair[1])).getID().toByteArray();
         connectionIsActive = (getConnectionByAddress(idIpPair[1])).isActive();
 
@@ -498,7 +498,7 @@ void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgT
                             receiver.iden,
                             QByteArray::number(msgType),
                             QByteArray::number(typeSend) };
-    QByteArray package = Serialization::universalSerialize(list, 8);
+    QByteArray package = Serialization::serialize(list, 8);
     file.write(Utils::intToByteArray(package.length(), 8) + package);
     file.close();
 }
@@ -510,13 +510,13 @@ void NetManager::sendFromCache()
         return;
     if (!file.open(QFile::ReadOnly))
         return;
-    QByteArrayList allPackages = Serialization::universalDeserialize(file.readAll(), 8);
+    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
     file.close();
     file.remove();
 
     for (QByteArray packageData : allPackages)
     {
-        QByteArrayList package = Serialization::universalDeserialize(packageData, 8);
+        QByteArrayList package = Serialization::deserialize(packageData, 8);
         if (package.length() != 6)
             return;
 
@@ -550,7 +550,7 @@ void NetManager::distMessage(const QByteArray &data, const SocketPair &socketDat
         file.open(QFile::Append);
         QByteArrayList list = { data, QByteArray::fromStdString(socketData.ip),
                                 QByteArray::number(socketData.port), socketData.iden };
-        QByteArray package = Serialization::universalSerialize(list, 8);
+        QByteArray package = Serialization::serialize(list, 8);
         file.write(Utils::intToByteArray(package.length(), 8) + package);
         file.close();
     }
@@ -681,9 +681,9 @@ QByteArray NetManager::getSerializedConnectionList() const
             continue;
 
         connectionsList.append(
-            Serialization::universalSerialize({ i->getID().toByteArray(), i->getAddress().toLocal8Bit() }));
+            Serialization::serialize({ i->getID().toByteArray(), i->getAddress().toLocal8Bit() }));
     }
-    return Serialization::universalSerialize(connectionsList);
+    return Serialization::serialize(connectionsList);
 }
 
 void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
@@ -691,7 +691,7 @@ void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
     QList<QByteArray> idAddressPair;
     for (auto i : tempConnections)
     {
-        idAddressPair = Serialization::universalDeserialize(i);
+        idAddressPair = Serialization::deserialize(i);
         if (idAddressPair.size() != 2)
         {
             qDebug() << "[Error][" << __LINE__ << "][" << __FILE__ << "]" << __FUNCTION__ << "] size!=2";

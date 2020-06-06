@@ -26,9 +26,9 @@ public:
         list << tr2.serialize() << tr3.serialize();
         QList<QByteArray> list2;
         list2 << tr.serialize() << tr1.serialize() << tr3.serialize();
-        pr = Block(Serialization::universalSerialize(list), Block());
-        a = Block(Serialization::universalSerialize(list), pr);
-        b = Block(Serialization::universalSerialize(list2));
+        pr = Block(Serialization::serialize(list), Block());
+        a = Block(Serialization::serialize(list), pr);
+        b = Block(Serialization::serialize(list2));
         emit start1(a.serialize(), b.serialize());
     }
 signals:

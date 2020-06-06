@@ -19,13 +19,13 @@ short GetBlockMessage::getFieldsCount() const
 
 QByteArray GetBlockMessage::serialize() const
 {
-    return Serialization::universalSerialize({ SearchEnum::toString(param).toUtf8(), value },
+    return Serialization::serialize({ SearchEnum::toString(param).toUtf8(), value },
                                              GetBlockMessage::FIELD_SIZE);
 }
 
 void GetBlockMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, GetBlockMessage::FIELD_SIZE);
+    QList<QByteArray> list = Serialization::deserialize(serilaized, GetBlockMessage::FIELD_SIZE);
     this->param = SearchEnum::fromStringBlockParam(list.at(0));
     this->value = list.at(1);
 }

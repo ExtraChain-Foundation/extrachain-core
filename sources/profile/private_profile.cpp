@@ -176,7 +176,7 @@ void PrivateProfile::writeData(QMap<QString, QByteArray> &map, QByteArray &out)
     QByteArray res = "";
     while (it != map.end())
     {
-        res += Serialization::universalSerialize({ it.key().toUtf8(), it.value() });
+        res += Serialization::serialize({ it.key().toUtf8(), it.value() });
         it++;
     }
     out = res;
@@ -185,7 +185,7 @@ void PrivateProfile::writeData(QMap<QString, QByteArray> &map, QByteArray &out)
 void PrivateProfile::readData(QMap<QString, QByteArray> &map, QByteArray &data)
 {
     QByteArrayList res;
-    res = Serialization::universalDeserialize(data);
+    res = Serialization::deserialize(data);
     while (res.size() != 0)
     {
         map.insert(res.at(0), res.at(1));

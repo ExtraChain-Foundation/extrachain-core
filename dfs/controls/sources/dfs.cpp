@@ -1328,7 +1328,7 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
                   { "userId", dfsChanges.userId.toStdString() },
                   { "range", dfsChanges.range.toStdString() },
                   { "prevHash", dfsChanges.prevHash.toStdString() },
-                  { "data", Serialization::universalSerialize(dfsChanges.data, 8).toStdString() } };
+                  { "data", Serialization::serialize(dfsChanges.data, 8).toStdString() } };
 
     if (init)
         return dbc.insert("Stored", row);
@@ -1413,7 +1413,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
                 // qDebug() << QByteArray::fromStdString(stored.at("data")) << stored.size();
                 QByteArray data = QByteArray::fromStdString(stored.at("data"));
-                QByteArrayList datas = Serialization::universalDeserialize(data, 8);
+                QByteArrayList datas = Serialization::deserialize(data, 8);
                 if (datas.isEmpty())
                 {
                     qDebug() << "updateFromNewStored error";
@@ -1431,7 +1431,7 @@ void Dfs::updateFromNewStored(QString filePath)
             switch (type)
             {
             case DfsStruct::ChangeType::Insert: {
-                QByteArrayList list = Serialization::universalDeserialize(data, 8);
+                QByteArrayList list = Serialization::deserialize(data, 8);
                 table = list[0];
                 DBRow row;
                 for (int i = 1; i < list.length(); i += 2)
@@ -1440,7 +1440,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 break;
             }
             case DfsStruct::ChangeType::Delete: {
-                QByteArrayList list = Serialization::universalDeserialize(data, 8);
+                QByteArrayList list = Serialization::deserialize(data, 8);
                 table = list[0];
 
                 for (std::size_t i = 0; i != rows.size(); i++)

@@ -85,7 +85,7 @@ short BaseMessage::getFieldsCount() const
 QByteArray BaseMessage::serialize() const
 {
     //    QByteArray serialized = "";
-    return Serialization::universalSerialize(serializedParams(), Messages::FIELD_SIZE);
+    return Serialization::serialize(serializedParams(), Messages::FIELD_SIZE);
     //    for (const QByteArray &param : serializedParams())
     //    {
 

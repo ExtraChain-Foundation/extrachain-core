@@ -652,8 +652,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
             type = QByteArray(tmp.at("type").c_str());
-            QByteArray sign = Serialization::universalSerialize({ key, value, type }, 4);
-            signes += Serialization::universalSerialize({ sign }, 4);
+            QByteArray sign = Serialization::serialize({ key, value, type }, 4);
+            signes += Serialization::serialize({ sign }, 4);
         }
         list << signes;
         b.initFields(list);
@@ -692,8 +692,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
             type = QByteArray(tmp.at("type").c_str());
-            QByteArray sign = Serialization::universalSerialize({ key, value, type }, 4);
-            signes += Serialization::universalSerialize({ sign }, 4);
+            QByteArray sign = Serialization::serialize({ key, value, type }, 4);
+            signes += Serialization::serialize({ sign }, 4);
         }
         list << signes;
         b.initFields(list);
@@ -717,7 +717,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             QByteArray producer = tmp.at("producer").c_str();
             list << sender << receiver << amount << date << data << token << prevBlock << gas << hop << hash
                  << approver << digSig << producer;
-            b.addData(Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE));
+            b.addData(Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE));
         }
 
         return b.serialize();

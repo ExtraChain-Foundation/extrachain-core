@@ -139,7 +139,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     //    0)))
     //    {
 
-    QByteArray _wtSok = Serialization::universalSerialize({ data }, Messages::FIELD_SIZE);
+    QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE);
     socket->write(_wtSok, _wtSok.size());
     //    }
 }
@@ -196,7 +196,7 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR
-        + Serialization::universalSerialize({ QByteArray::number(Network::build),
+        + Serialization::serialize({ QByteArray::number(Network::build),
                                               net::readNetManagerIdentificator(),
                                               netManager->getSerializedConnectionList() });
     this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
@@ -248,15 +248,15 @@ void SocketService::continueDoRead()
             {
                 QByteArray b = pendMsg.mid(IDENTIFICATOR.size());
 
-                QByteArrayList bl = Serialization::universalDeserialize(b);
+                QByteArrayList bl = Serialization::deserialize(b);
                 if (bl.length() == 3)
                 {
 
                     this->processID(bl[1]);
-                    netManager->addTempConnections(Serialization::universalDeserialize(bl[2]));
+                    netManager->addTempConnections(Serialization::deserialize(bl[2]));
                     netManager->checkOnValidConnection(this->getID().toByteArray(),
                                                        this->getAddress().toLocal8Bit());
-                    netManager->connectToServerByIpList(Serialization::universalDeserialize(bl[2]));
+                    netManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
 
 #ifdef ETALONIUM_CLIENT
                     int netBuild = bl[0].toInt();

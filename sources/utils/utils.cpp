@@ -254,7 +254,7 @@ QString Utils::fileMimeType(const QString &filePath)
     return type.name();
 }
 
-QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, const int &fiels_size)
+QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fiels_size)
 {
     QByteArray serialized = "";
     for (const QByteArray &param : list)
@@ -265,7 +265,7 @@ QByteArray Serialization::universalSerialize(const QList<QByteArray> &list, cons
     return serialized;
 }
 
-QList<QByteArray> Serialization::universalDeserialize(const QByteArray &serialized, const int &fiels_size)
+QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const int &fiels_size)
 {
     if (serialized.isEmpty() || serialized.length() <= fiels_size)
     {
@@ -483,8 +483,8 @@ void FileList::add(QByteArray hash, QByteArray data)
     qDebug() << "add to fileList->" << hash;
     if (indexList.size() == 0)
     {
-        QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
-        QByteArray serialize2 = Serialization::universalSerialize({ serialize1 }, FIELD_SIZE);
+        QByteArray serialize1 = Serialization::serialize({ hash, data }, FIELD_SIZE);
+        QByteArray serialize2 = Serialization::serialize({ serialize1 }, FIELD_SIZE);
         indexList.append(indexRow(serialize2.mid(FIELD_SIZE * 2, 64).toStdString(), 0, 1));
         fileList.write(serialize2);
     }
@@ -494,8 +494,8 @@ void FileList::add(QByteArray hash, QByteArray data)
         if (it != indexList.end() && !it->used)
         {
             fileList.seek(find(data.mid(0, FIELD_SIZE))->currentPosition);
-            QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
-            QByteArray serialize2 = Serialization::universalSerialize({ serialize1 }, FIELD_SIZE);
+            QByteArray serialize1 = Serialization::serialize({ hash, data }, FIELD_SIZE);
+            QByteArray serialize2 = Serialization::serialize({ serialize1 }, FIELD_SIZE);
             fileList.write(serialize2);
             find(serialize2.mid(0, FIELD_SIZE))->used = 1;
             find(serialize2.mid(0, FIELD_SIZE))->hash = data.mid(FIELD_SIZE * 2, 64).toStdString();
@@ -503,8 +503,8 @@ void FileList::add(QByteArray hash, QByteArray data)
         else
         {
             fileList.seek(fileList.size());
-            QByteArray serialize1 = Serialization::universalSerialize({ hash, data }, FIELD_SIZE);
-            QByteArray serialize2 = Serialization::universalSerialize({ serialize1 }, FIELD_SIZE);
+            QByteArray serialize1 = Serialization::serialize({ hash, data }, FIELD_SIZE);
+            QByteArray serialize2 = Serialization::serialize({ serialize1 }, FIELD_SIZE);
             indexList.append(indexRow(serialize2.mid(FIELD_SIZE * 2, 64).toStdString(), fileList.pos(), 1));
             fileList.write(serialize2);
         }
@@ -733,24 +733,24 @@ int Serialization::length(const QByteArray &data)
     return -1;
 }
 
-QByteArray Serialization::universalSerializeMap(const QMap<QString, QByteArray> &map)
+QByteArray Serialization::serializeMap(const QMap<QString, QByteArray> &map)
 {
     auto it = map.begin();
     QByteArray res;
 
     while (it != map.end())
     {
-        res += Serialization::universalSerialize({ it.key().toUtf8(), it.value() });
+        res += Serialization::serialize({ it.key().toUtf8(), it.value() });
         it++;
     }
 
     return res;
 }
 
-QMap<QString, QByteArray> Serialization::universalDeserializeMap(const QByteArray &data)
+QMap<QString, QByteArray> Serialization::deserializeMap(const QByteArray &data)
 {
     QMap<QString, QByteArray> map;
-    QByteArrayList res = Serialization::universalDeserialize(data);
+    QByteArrayList res = Serialization::deserialize(data);
 
     while (res.size() != 0)
     {

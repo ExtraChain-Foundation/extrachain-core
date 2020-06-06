@@ -295,7 +295,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
                     txFee.setAmount(amountTemp);
                     txFee.setReceiver(actor.id()); // send fee to my freezeFee
                     // ENUM | Tx hash that fee refer
-                    txFee.setData(Serialization::universalSerialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
+                    txFee.setData(Serialization::serialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
                     txFee.sign(actor);
                 }
 

@@ -462,12 +462,10 @@ namespace Serialization {
 static const int TRANSACTION_FIELD_SIZE = 4;
 static const int DEFAULT_FIELD_SIZE = 8;
 
-QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
-QList<QByteArray> universalDeserialize(const QByteArray &serialized,
-                                       const int &fiels_size = DEFAULT_FIELD_SIZE);
-
-QByteArray universalSerializeMap(const QMap<QString, QByteArray> &map);
-QMap<QString, QByteArray> universalDeserializeMap(const QByteArray &data);
+QByteArray serialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
+QList<QByteArray> deserialize(const QByteArray &serialized, const int &fiels_size = DEFAULT_FIELD_SIZE);
+QByteArray serializeMap(const QMap<QString, QByteArray> &map);
+QMap<QString, QByteArray> deserializeMap(const QByteArray &data);
 
 QByteArray fromMap(const QMap<QString, QByteArray> &map);
 QByteArray fromList(const QByteArrayList &list);
