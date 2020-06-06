@@ -41,42 +41,7 @@ namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
 };
 
-struct indexRow
-{
-    indexRow(std::string _hash, long long pos, short use);
-    std::string hash = "";
-    long long currentPosition;
-    bool used;
-};
-class FileList
-{
-public:
-    FileList();
-    ~FileList();
-    void add(QByteArray hash, QByteArray data);
-    void remove(QByteArray element);
-    QByteArray operator[](int value);
-    QByteArray at(QByteArray hash);
-    QByteArray at(int value);
-    int getIndexSize();
-    QByteArray getHash(int value);
-
-    void setFileList(const QFile &value);
-
-private:
-    QList<indexRow>::iterator find(QByteArray key);
-    QList<indexRow> indexList;
-    QFile fileList;
-
-    void init();
-    void checkForDelete();
-    bool check(QByteArray hash); // IF HASH HAVE -> END
-    const QByteArray DATA_EMPTY = "null";
-    const int FIELD_SIZE = 4;
-};
-
 namespace net {
-
 static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
