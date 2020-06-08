@@ -63,7 +63,7 @@ void TransactionManager::addProvedTransaction(Transaction *tx)
 {
     qDebug() << "addProvedTransaction";
     if (tx->getData().contains(Fee::UNFEE))
-        if (!blockchain->checkHaveUNFreezeTx(tx, Serialization::universalDeserialize(tx->getData()).at(0)))
+        if (!blockchain->checkHaveUNFreezeTx(tx, Serialization::deserialize(tx->getData()).at(0)))
         {
             receivedTxList.removeOne(tx);
             return;
@@ -84,7 +84,7 @@ void TransactionManager::addPendingForFeeTxs(Transaction *transaction)
 {
     for (const auto i : pendingFeeTxs)
     {
-        if (transaction->getHash() == Serialization::universalDeserialize(i->getData())[1])
+        if (transaction->getHash() == Serialization::deserialize(i->getData())[1])
         {
             if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount())
             {
@@ -107,7 +107,7 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
     // sender == 0  receive ==actor id
     // IF it's fee transaction
     // WAIT FOR 3 SEC
-    QList<QByteArray> tempData = Serialization::universalDeserialize(tx->getData());
+    QList<QByteArray> tempData = Serialization::deserialize(tx->getData());
 
     Block block = blockchain->getBlockByHash(tempData[1]);
     if (block.isEmpty())
@@ -148,7 +148,7 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
 void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
 {
     // sender actor  receiver 0
-    QByteArray hashTx = Serialization::universalDeserialize(tx->getData())[1];
+    QByteArray hashTx = Serialization::deserialize(tx->getData())[1];
     for (const auto &i : pendingForFeeTxs)
     {
         if (i->getHash() == hashTx)
@@ -240,7 +240,7 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
     {
         l << tx.serialize();
     }
-    return Serialization::universalSerialize(l, Serialization::TRANSACTION_FIELD_SIZE);
+    return Serialization::serialize(l, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
 BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)

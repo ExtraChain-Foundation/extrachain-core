@@ -127,10 +127,10 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
     QByteArrayList result = allActors();
     if (!result.isEmpty())
     {
-        QByteArray data = Serialization::universalSerialize(result, 4);
+        QByteArray data = Serialization::serialize(result, 4);
         resolveManager->sendMessageResponse(data, Messages::GeneralResponse::getAllActorsResponse, reqHash,
                                             receiver);
-        //        emit responseReady(Serialization::universalSerialize(result, 4),
+        //        emit responseReady(Serialization::serialize(result, 4),
         //                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
     }
     return;

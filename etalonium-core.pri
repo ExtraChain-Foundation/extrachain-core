@@ -14,7 +14,6 @@ SOURCES += \
     $$PWD/dfs/packages/sources/message_struct.cpp \
     $$PWD/dfs/packages/sources/req_frags_message.cpp \
     $$PWD/dfs/packages/sources/title_message.cpp \
-    $$PWD/dfs/packages/sources/ui_messages.cpp \
     $$PWD/dfs/types/sources/cardfile.cpp \
     $$PWD/sources/managers/chat.cpp \
     $$PWD/sources/managers/chatmanager.cpp \
@@ -31,7 +30,6 @@ SOURCES += \
     $$PWD/sources/datastorage/contract.cpp \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
-    $$PWD/sources/datastorage/tx_pair.cpp \
     $$PWD/sources/managers/file_updater_manager.cpp \
     $$PWD/sources/managers/notification_manager.cpp \
     $$PWD/sources/network/packages/service/connections_message.cpp \
@@ -57,7 +55,6 @@ SOURCES += \
     $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
-    $$PWD/dfs/types/sources/coin_price.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
     $$PWD/sources/managers/node_manager.cpp \
     $$PWD/sources/network/discovery_service.cpp \
@@ -99,8 +96,6 @@ HEADERS += \
     $$PWD/headers/managers/notification_manager.h \
     $$PWD/headers/metatypes.h \
     $$PWD/dfs/packages/headers/dfs_request.h \
-    $$PWD/dfs/packages/headers/ui_messages.h \
-    $$PWD/dfs/packages/headers/ui_messages.h \
     $$PWD/headers/datastorage/index/actorindex.h \
     $$PWD/headers/datastorage/index/blockindex.h \
     $$PWD/headers/datastorage/index/memindex.h \
@@ -110,7 +105,6 @@ HEADERS += \
     $$PWD/headers/datastorage/contract.h \
     $$PWD/headers/datastorage/genesis_block.h \
     $$PWD/headers/datastorage/transaction.h \
-    $$PWD/headers/datastorage/tx_pair.h \
     $$PWD/headers/network/packages/service/connections_message.h \
     $$PWD/headers/network/packages/service/message_types.h \
     $$PWD/headers/profile/profile.h \
@@ -134,10 +128,8 @@ HEADERS += \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/coinprocess.h \
     $$PWD/headers/utils/db_connector.h \
-    $$PWD/headers/utils/list_container.h \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \
-    $$PWD/dfs/types/headers/coin_price.h \
     $$PWD/dfs/types/headers/dfstruct.h \
     $$PWD/headers/managers/node_manager.h \
     $$PWD/headers/network/discovery_service.h \

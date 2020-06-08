@@ -70,12 +70,12 @@ short DistFileSystem::titleMessage::getFieldsCount() const
 
 QByteArray DistFileSystem::titleMessage::serialize() const
 {
-    return Serialization::universalSerialize(serializedParams(), DistFileSystem::fieldsSize);
+    return Serialization::serialize(serializedParams(), DistFileSystem::fieldsSize);
 }
 
 void DistFileSystem::titleMessage::deserialize(const QByteArray &serialized)
 {
-    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    QList<QByteArray> l = Serialization::deserialize(serialized);
 
     if (l.size() != FIELDS_COUNT)
         return;

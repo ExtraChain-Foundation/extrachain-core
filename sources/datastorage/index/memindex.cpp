@@ -1,5 +1,7 @@
 #include "datastorage/index/memindex.h"
 
+using std::begin, std::end, std::find_if, std::remove_if;
+
 MemIndex::MemIndex()
 {
     //
@@ -253,41 +255,4 @@ std::pair<Transaction, QByteArray> MemIndex::getLastTxByParam(const BigNumber &i
     */
 
     return { Transaction(), "-1" };
-}
-
-TxPair MemIndex::searchPair(const BigNumber &first, const BigNumber &second) const
-{
-    TxPair pair;
-
-    bool firstFound = false;
-    bool secondFound = false;
-
-    int records = getRecords();
-    int index = records - 1;
-    while (index >= 0)
-    {
-        Block byPosition = getByPosition(index);
-        QList<Transaction> trx = byPosition.extractTransactions();
-
-        for (const Transaction &t : trx)
-        {
-            if (firstFound && secondFound)
-            {
-                records = 0;
-                break;
-            }
-            if (!firstFound && (t.getSender() == first || t.getReceiver() == first))
-            {
-                firstFound = true;
-                pair.setFirst(t);
-            }
-            if (!secondFound && (t.getSender() == second || t.getReceiver() == second))
-            {
-                secondFound = true;
-                pair.setSecond(t);
-            }
-        }
-        --index;
-    }
-    return pair;
 }

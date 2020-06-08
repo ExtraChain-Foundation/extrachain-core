@@ -24,12 +24,12 @@ short DistFileSystem::DfsMessage::getFieldsCount() const
 
 QByteArray DistFileSystem::DfsMessage::serialize() const
 {
-    return Serialization::universalSerialize(serializedParams());
+    return Serialization::serialize(serializedParams());
 }
 
 void DistFileSystem::DfsMessage::deserialize(const QByteArray &serialized)
 {
-    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    QList<QByteArray> l = Serialization::deserialize(serialized);
     if (l.size() == DfsMessage::FIELDS_COUNT)
     {
         dataHash = l.takeFirst();

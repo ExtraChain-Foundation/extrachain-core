@@ -259,8 +259,8 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
             }
             case DFSMessage::statusMessage: {
                 qDebug() << "[statusMessage:]";
-                DistFileSystem::Status message;
-                message = data;
+                // DistFileSystem::Status message;
+                // message = data;
                 break;
             }
             case DFSMessage::storageMessage: {
@@ -412,12 +412,13 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
     this->path = path;
     if (!file.open(QIODevice::ReadWrite | QIODevice::Truncate))
     {
-        // Take actorid of file owner
-        QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
-        if (pathList.length() < 2)
+        // Take actor id of file owner
+        if (path.length() < 25)
             return false;
-        qDebug() << "Create temp file: actor - " << BigNumber(pathList.at(PathStruct::aId));
-        Actor<KeyPublic> actor = actorIndex->getActor(BigNumber(pathList.at(PathStruct::aId)));
+
+        QByteArray actorId = path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20).toLatin1();
+        qDebug() << "Create temp file: actor -" << actorId;
+        Actor<KeyPublic> actor = actorIndex->getActor(actorId);
 
         if (!actor.empty())
         {

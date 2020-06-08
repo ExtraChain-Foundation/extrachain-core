@@ -85,7 +85,7 @@ short BaseMessage::getFieldsCount() const
 QByteArray BaseMessage::serialize() const
 {
     //    QByteArray serialized = "";
-    return Serialization::universalSerialize(serializedParams(), Messages::FIELD_SIZE);
+    return Serialization::serialize(serializedParams(), Messages::FIELD_SIZE);
     //    for (const QByteArray &param : serializedParams())
     //    {
 
@@ -112,7 +112,7 @@ void BaseMessage::deserialize(const QByteArray &serialized)
     {
         qDebug() << "Error: can't deserialize message:" << serialized;
     }
-    //    QList<QByteArray> l = Serialization::universalDeserialize(serialized);
+    // QList<QByteArray> l = Serialization::deserialize(serialized);
     operator=(list);
 }
 

@@ -19,13 +19,13 @@ short GetAllActorMessage::getFieldsCount() const
 
 QByteArray GetAllActorMessage::serialize() const
 {
-    return Serialization::universalSerialize({ actorId }, GetAllActorMessage::FIELD_SIZE);
+    return Serialization::serialize({ actorId }, GetAllActorMessage::FIELD_SIZE);
 }
 
 void GetAllActorMessage::deserialize(const QByteArray &serilaized)
 {
     QList<QByteArray> list =
-        Serialization::universalDeserialize({ serilaized }, GetAllActorMessage::FIELD_SIZE);
+        Serialization::deserialize({ serilaized }, GetAllActorMessage::FIELD_SIZE);
     if (list.size() > 0)
     {
         actorId = list.at(0);

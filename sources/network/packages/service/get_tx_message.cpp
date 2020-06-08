@@ -19,13 +19,13 @@ short Messages::GetTxMessage::getFieldsCount() const
 
 QByteArray GetTxMessage::serialize() const
 {
-    return Serialization::universalSerialize({ SearchEnum::toString(param).toUtf8(), value },
+    return Serialization::serialize({ SearchEnum::toString(param).toUtf8(), value },
                                              GetTxMessage::FIELD_SIZE);
 }
 
 void GetTxMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, GetTxMessage::FIELD_SIZE);
+    QList<QByteArray> list = Serialization::deserialize(serilaized, GetTxMessage::FIELD_SIZE);
     this->param = SearchEnum::fromStringTxParam(list.at(0));
     this->value = list.at(1);
 }

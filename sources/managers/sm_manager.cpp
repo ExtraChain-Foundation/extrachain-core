@@ -27,7 +27,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.append(relAddress);
     profileList.append(color);
     actorIndex->saveProfile(actor, profileList);
-    profileList.insert(2, actor->key()->sign(Serialization::universalSerialize(profileList, 4)));
+    profileList.insert(2, actor->key()->sign(Serialization::serialize(profileList, 4)));
 
     QFile file(SmartContractStorage::CONTRACTPROFILE + actor->id().toActorId() + ".profile");
     if (file.exists())
@@ -37,7 +37,7 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     }
     if (file.open(QIODevice::WriteOnly))
     {
-        file.write(Serialization::universalSerialize(profileList, 4));
+        file.write(Serialization::serialize(profileList, 4));
         file.close();
     }
     else
@@ -133,7 +133,7 @@ void SmartContractManager::initializeTokenArray()
         if (file.open(QIODevice::ReadOnly))
         {
             QByteArray data = file.readLine();
-            QList<QByteArray> list = Serialization::universalDeserialize(data, 4);
+            QList<QByteArray> list = Serialization::deserialize(data, 4);
             if (list.size() != 7)
             {
                 qDebug() << "[smm_manager][initializeTokenArray] Error when open file " << file.fileName()

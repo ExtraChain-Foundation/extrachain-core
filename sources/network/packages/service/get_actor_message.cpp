@@ -22,12 +22,12 @@ short GetActorMessage::getFieldsCount() const
 
 QByteArray GetActorMessage::serialize() const
 {
-    return Serialization::universalSerialize({ actorId.toActorId() }, GetActorMessage::FIELD_SIZE);
+    return Serialization::serialize({ actorId.toActorId() }, GetActorMessage::FIELD_SIZE);
 }
 
 void GetActorMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serilaized, GetActorMessage::FIELD_SIZE);
+    QList<QByteArray> list = Serialization::deserialize(serilaized, GetActorMessage::FIELD_SIZE);
     if (list.isEmpty())
         qDebug() << "get actor message error";
     this->actorId = BigNumber(list.at(0));

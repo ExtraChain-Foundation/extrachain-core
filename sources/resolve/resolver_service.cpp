@@ -192,7 +192,7 @@ void ResolverService::resolveTask()
 
 void ResolverService::resolveGeneralTask()
 {
-    QList<QByteArray> res = Serialization::universalDeserialize(msg);
+    QList<QByteArray> res = Serialization::deserialize(msg);
     using namespace Messages;
     BaseMessage message;
     message = msg;
@@ -249,7 +249,7 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        actorIndex->handleNewAllActors(Serialization::universalDeserialize(responseMessage.data, 4));
+        actorIndex->handleNewAllActors(Serialization::deserialize(responseMessage.data, 4));
         finishWork();
         break;
     }

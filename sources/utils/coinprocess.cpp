@@ -29,7 +29,7 @@ QList<Transaction> CoinProcess::blockDataToFeeTxs(QList<Transaction> pendingTxs,
         temp.setReceiver(myActorId);
         temp.setAmount(i.getAmount() / fee);
         // ENUM | Block hash | Tx hash
-        temp.setData(Serialization::universalSerialize(
+        temp.setData(Serialization::serialize(
             { QByteArray::number(Fee::TypeRevert::ApproverRevert), blockHash, i.getHash() }));
         feeTxs.append(temp);
     }

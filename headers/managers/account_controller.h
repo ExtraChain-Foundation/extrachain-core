@@ -28,7 +28,6 @@ private:
 public:
     AccountController(ActorIndex *actorIndex);
     QList<QByteArray> getAccountID();
-    FileList sentTxList;
 
 public:
     /**

@@ -109,7 +109,7 @@ void Chat::saveChatsId(const QByteArray& chatId)
         QFile file(pathR + "fileChatsId");
         file.open(QIODevice::ReadWrite);
         QByteArray dataFromFile = file.readAll();
-        QByteArrayList listChats = Serialization::universalDeserialize(dataFromFile, 4);
+        QByteArrayList listChats = Serialization::deserialize(dataFromFile, 4);
         if (!listChats.contains(chatId))
         {
             listChats.append(chatId);
@@ -119,14 +119,14 @@ void Chat::saveChatsId(const QByteArray& chatId)
             file.close();
         }
         file.resize(0);
-        file.write(Serialization::universalSerialize(listChats, 4));
+        file.write(Serialization::serialize(listChats, 4));
         file.close();
     }
     else
     {
         QFile file(pathR + "fileChatsId");
         file.open(QIODevice::ReadWrite);
-        QByteArray listChats = Serialization::universalSerialize({ chatId }, 4);
+        QByteArray listChats = Serialization::serialize({ chatId }, 4);
         file.write(listChats);
         file.close();
     }
@@ -327,7 +327,7 @@ UIMessage Chat::getLastMessage()
     //    if (file.open(QIODevice::ReadOnly))
     //    {
 
-    //        list = Serialization::universalDeserialize(file.readAll());
+    //        list = Serialization::deserialize(file.readAll());
     //        file.close();
     //        return list;
     //    }
@@ -588,7 +588,7 @@ void Chat::InviteNewUser(QByteArray actorId)
     //    file.setFileName(getPathToUsers() + actorId);
     //    if (file.open(QIODevice::WriteOnly))
     //    {
-    //        file.write(Serialization::universalSerialize(signData));
+    //        file.write(Serialization::serialize(signData));
     //        file.close();
     //        emit sendDataToBlockchain(getPathToUsers() + actorId);
     //        return;
@@ -606,7 +606,7 @@ bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?
     //        QByteArray data = file.readLine();
     //        if (data == "owner" || data == "owner\n")
     //            return true;
-    //        QList<QByteArray> list = Serialization::universalDeserialize(data);
+    //        QList<QByteArray> list = Serialization::deserialize(data);
     //        if (list.size() != 2)
     //            return false;
     //        if (!_actorIndex->getActor(BigNumber(list.at(0))).getKey()->verify(list.at(0), list.at(1)))

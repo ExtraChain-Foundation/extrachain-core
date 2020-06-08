@@ -36,12 +36,12 @@ public:
     {
         QList<QByteArray> l;
         l << actorId.toActorId() << state.toByteArray() << token.toActorId() << QByteArray::number(type);
-        return Serialization::universalSerialize(l, Serialization::DEFAULT_FIELD_SIZE);
+        return Serialization::serialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
     void deserialize(const QByteArray &serialized)
     {
         QList<QByteArray> l =
-            Serialization::universalDeserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
+            Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4)
         {
             actorId = BigNumber(l.at(0));

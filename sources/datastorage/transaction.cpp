@@ -24,7 +24,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
     QList<QByteArray> list =
-        Serialization::universalDeserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
+        Serialization::deserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
     if (list.size() == 13)
     {
         this->sender = BigNumber(list.at(0));
@@ -332,13 +332,11 @@ void Transaction::operator=(const Transaction &other)
 
 QString Transaction::toString() const
 {
-    QStringList list;
-    list << "sender:" + sender.toActorId() << "receiver:" + receiver.toActorId()
-         << "amount:" + amount.toByteArray() << "date:" << QDateTime::fromMSecsSinceEpoch(date).toString()
-         << "data:" + data << "token:" + token.toActorId() << "prevBlock:" + prevBlock.toByteArray()
-         << "gas:" + QString::number(gas) << "hop:" + QString::number(hop) << "hash:" + hash
-         << "approver:" + approver.toActorId() << "digitalSignature:" + digSig;
-    return Serialization::serializeString(list, Serialization::TX_FIELD_SPLITTER);
+    return "sender:" + sender.toActorId() + ", receiver:" + receiver.toActorId()
+        + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
+        + ", data:" + data + ", token:" + token.toActorId() + ", prevBlock:" + prevBlock.toByteArray()
+        + ", gas:" + QString::number(gas) + ", hop:" + QString::number(hop) + ", hash:" + hash
+        + ", approver:" + approver.toActorId() + ", digitalSignature:" + digSig;
 }
 
 QByteArray Transaction::serialize() const
@@ -350,7 +348,7 @@ QByteArray Transaction::serialize() const
          << producer.toActorId();
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 
-    return Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE);
+    return Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
 BigNumber Transaction::visibleToAmount(QByteArray amount)

@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCborStreamWriter>
+#include <QCborStreamReader>
 #include <QList>
 #include <QSettings>
 #include <QStorageInfo>
@@ -39,42 +41,7 @@ namespace TMP {
 static QByteArray *companyActorId = new QByteArray("0");
 };
 
-struct indexRow
-{
-    indexRow(std::string _hash, long long pos, short use);
-    std::string hash = "";
-    long long currentPosition;
-    bool used;
-};
-class FileList
-{
-public:
-    FileList();
-    ~FileList();
-    void add(QByteArray hash, QByteArray data);
-    void remove(QByteArray element);
-    QByteArray operator[](int value);
-    QByteArray at(QByteArray hash);
-    QByteArray at(int value);
-    int getIndexSize();
-    QByteArray getHash(int value);
-
-    void setFileList(const QFile &value);
-
-private:
-    QList<indexRow>::iterator find(QByteArray key);
-    QList<indexRow> indexList;
-    QFile fileList;
-
-    void init();
-    void checkForDelete();
-    bool check(QByteArray hash); // IF HASH HAVE -> END
-    const QByteArray DATA_EMPTY = "null";
-    const int FIELD_SIZE = 4;
-};
-
 namespace net {
-
 static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
@@ -458,54 +425,18 @@ namespace Serialization {
 
 // Delimiters //
 static const int TRANSACTION_FIELD_SIZE = 4;
-static const int DFS_FIELD_SIZE = 8;
 static const int DEFAULT_FIELD_SIZE = 8;
 
-static const QByteArray DEFAULT_FIELD_SPLITTER = ":";
-static const QByteArray ACTOR_FIELD_SPLITTER = ":";
-static const QByteArray BLOCK_FIELD_SPLITTER = ";";
-static const QByteArray USER_FIELD_SPLITER = "~";
+QByteArray serialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
+QList<QByteArray> deserialize(const QByteArray &serialized, const int &fiels_size = DEFAULT_FIELD_SIZE);
+QByteArray serializeMap(const QMap<QString, QByteArray> &map);
+QMap<QString, QByteArray> deserializeMap(const QByteArray &data);
 
-static const QByteArray TX_FIELD_SPLITTER = "|";
-static const QByteArray TX_PAIR_FIELD_SPLITTER = "--";
-static const QByteArray GENESIS_ROW_FIELD_SPLITTER = "->";
-
-static const QByteArray DEFAULT_LIST_SPLITTER = ",";
-
-static const QByteArray NET_MESSAGE_HEADER_FIELD_SPLITTER = "##";
-static const QByteArray NET_MESSAGE_FIELD_SPLITER = "&";
-
-static const QByteArray INFORMATION_SEPARATOR_ONE = "\u0001E\u0001F\u0001C\u0001E";
-static const QByteArray INFORMATION_SEPARATOR_TWO = "\u0001C\u0001F\u0001E\u0001C"; // used in network
-static const QByteArray INFORMATION_SEPARATOR_THREE = "\u0001E\u0001F\u000C\u0001F";
-
-static const QByteArray Coin_Price_Delimiter_2 = "coin_delimetr";
-static const QByteArray Coin_Price_Delimiter = "coin_price";
-
-static const QByteArray DFS_STORED_DELIMETR = "--";
-static const QByteArray DFS_HEADER_END_DELIMETR = "$";
-static const QByteArray DFS_DFSTRUCT_DELIMETR = "**";
-static const QByteArray DFS_ROOT_CARD_FILE_DELIMITER = "->";
-static const QByteArray DFS_ROOT_CARD_FILE_SECTION_DELIMITER = "##";
-static const QByteArray DFS_CARD_FILE_UNIVERSAL_DELIMITER = "=";
-static const QByteArray DFS_CARD_FILE_SECTION_DELIMETR = "|";
-
-QByteArray serialize(const QList<QByteArray> &list);
-// QByteArray serialize(const QList<QString> &list);
-QByteArray serialize(const QList<QByteArray> &list, const QByteArray &delimiter);
-// QByteArray serialize(const QList<QString> &list, const QByteArray
-// &delimiter);
-QByteArray serialize(const QList<QByteArray> &list, char delimiter);
-QList<QByteArray> deserialize(const QByteArray data, const QByteArray &delim);
-QString serializeString(const QStringList &list);
-QString serializeString(const QStringList &list, const QByteArray &delimiter);
-QStringList deserializeString(const QString &serialized);
-QList<QString> deserialize(const QString &serialized, char delimiter);
-QByteArray serializeStored(const QList<QByteArray> list);
-QList<QByteArray> desirializeStored(const QByteArray &serialize);
-QByteArray universalSerialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
-QList<QByteArray> universalDeserialize(const QByteArray &serialized,
-                                       const int &fiels_size = DEFAULT_FIELD_SIZE);
+QByteArray fromMap(const QMap<QString, QByteArray> &map);
+QByteArray fromList(const QByteArrayList &list);
+QByteArrayList toList(const QByteArray &data);
+QMap<QString, QByteArray> toMap(const QByteArray &data);
+int length(const QByteArray &data);
 } // namespace Serialization
 
 namespace Utils {
@@ -535,7 +466,6 @@ bool decryptFile(const QString &encryptName, const QString &decryptName, const Q
 QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
-std::vector<std::string> split(const std::string &s);
 
 int compare(const QByteArray &one, const QByteArray &two);
 

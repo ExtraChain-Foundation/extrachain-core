@@ -126,14 +126,9 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-TxPair Blockchain::getTxPair(const BigNumber &first, const BigNumber second)
-{
-    return fileMode ? blockIndex.searchPair(first, second) : memIndex.searchPair(first, second);
-}
-
 void Blockchain::saveTxInfoInEC(const QByteArray data) const
 {
-    QList<QByteArray> l = Serialization::universalDeserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
+    QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
     QList<QByteArray> temp;
 
     std::vector<DBRow> extractData;
@@ -152,7 +147,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 
     for (auto i : l)
     {
-        temp = Serialization::universalDeserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
+        temp = Serialization::deserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
         if (temp.size() != 13)
         {
             qDebug() << "[Error][" << __FILE__ << __FUNCTION__ << __LINE__ << "]Transaction size !=12";
@@ -362,9 +357,9 @@ void Blockchain::stakingReward(const Block &block)
                 Transaction rtx(Trash::NullActor, i.key(), StakingReward);
                 rtx.setToken(tx.getToken());
                 auto [hash, blockId] = getLastTxForStaking(tmp, tx.getToken());
-                rtx.setData(Serialization::universalSerialize({ hash.toByteArray(), blockId.toByteArray(),
-                                                                tx.getHash(), block.getIndex().toByteArray(),
-                                                                Fee::STAKING_REWARD }));
+                rtx.setData(
+                    Serialization::serialize({ hash.toByteArray(), blockId.toByteArray(), tx.getHash(),
+                                               block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(tmp);
                 rtx.sign(accountController->getActor(tmp));
                 emit sendMessage(rtx.serialize(), Messages::ChainMessage::txMessage);
@@ -638,8 +633,7 @@ void Blockchain::sendUnFee(Block &block)
                 if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
                     && tmp.getData().contains(tmpTx.getHash()))
                 {
-                    dataForTxFee =
-                        Serialization::universalSerialize({ i.toByteArray(), tmpTx.getHash(), Fee::UNFEE });
+                    dataForTxFee = Serialization::serialize({ i.toByteArray(), tmpTx.getHash(), Fee::UNFEE });
                     break;
                 }
             }
@@ -685,7 +679,7 @@ void Blockchain::sendFeeUnfreeze(Block &block)
                 if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
                     && tmp.getData().contains(tmpTx.getHash()))
                 {
-                    dataForTxFee = Serialization::universalSerialize(
+                    dataForTxFee = Serialization::serialize(
                         { block.getIndex().toByteArray(), tmpTx.getHash(), Fee::FEE_UNFREEZE_TX });
                     break;
                 }
@@ -1153,7 +1147,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
         QList<QByteArray> list;
         for (const Transaction &tx : resultList)
             list << tx.serialize();
-        QByteArray dataBlock = Serialization::universalSerialize(list);
+        QByteArray dataBlock = Serialization::serialize(list);
         Block mergedBlock(dataBlock, prev);
         signBlock(mergedBlock);
         return mergedBlock;
@@ -1205,7 +1199,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
             return GenesisBlock();
         for (const GenesisDataRow &gn : resultList)
             list << gn.serialize();
-        QByteArray genData = Serialization::universalSerialize(list);
+        QByteArray genData = Serialization::serialize(list);
         GenesisBlock mergedBlock(genData, prev, blockA.getPrevGenHash());
         signBlock(mergedBlock);
         return mergedBlock;
@@ -1653,7 +1647,7 @@ void Blockchain::proveTx(Transaction *tx)
     if (tx->getData().contains(Fee::UNFEE))
     {
         BigNumber fee = tx->getAmount();
-        QByteArrayList dataList = Serialization::universalDeserialize(tx->getData());
+        QByteArrayList dataList = Serialization::deserialize(tx->getData());
         if (dataList.size() != 3)
         {
             qDebug() << "TX prove: incorrect data for unfreeze fee";
@@ -1716,7 +1710,7 @@ void Blockchain::proveTx(Transaction *tx)
     }
     else if (tx->getData().contains(Fee::FEE_UNFREEZE_TX))
     {
-        QByteArrayList dataList = Serialization::universalDeserialize(tx->getData());
+        QByteArrayList dataList = Serialization::deserialize(tx->getData());
         if (dataList.size() != 3)
         {
             qDebug() << "TX prove: incorrect data for unfreeze fee";
@@ -1875,7 +1869,7 @@ void Blockchain::proveTx(Transaction *tx)
 
     if (targetReceiver == BigNumber(Trash::NullActor))
     {
-        if (Serialization::universalDeserialize(tx->getData()).size() != 2)
+        if (Serialization::deserialize(tx->getData()).size() != 2)
         {
             qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
             emit tx->NotApproved(tx);

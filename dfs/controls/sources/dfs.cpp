@@ -517,8 +517,6 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
     if (indx != -1)
         m_tmpFiles.removeAt(indx);
 
-    QList<QByteArray> pathList = Serialization::deserialize(path.toUtf8() + '/', "/");
-
     if (path.right(DfsStruct::STORED_EXT_SIZE) != DfsStruct::STORED_EXT)
     {
         // TODO: check types
@@ -581,9 +579,10 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 #ifdef ETALONIUM_CLIENT
     bool haveStored = isHaveStoredType(type);
     if (haveStored && path.right(DfsStruct::STORED_EXT_SIZE) == DfsStruct::STORED_EXT)
-        emit fileAdded(path.mid(0, path.length() - 7), "network", type, pathList.at(PathStruct::aId));
+        emit fileAdded(path.mid(0, path.length() - 7), "network", type,
+                       path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20));
     if (!haveStored)
-        emit fileAdded(path, "network", type, pathList.at(PathStruct::aId));
+        emit fileAdded(path, "network", type, path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20));
 #endif
 }
 
@@ -1329,7 +1328,7 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
                   { "userId", dfsChanges.userId.toStdString() },
                   { "range", dfsChanges.range.toStdString() },
                   { "prevHash", dfsChanges.prevHash.toStdString() },
-                  { "data", Serialization::universalSerialize(dfsChanges.data, 8).toStdString() } };
+                  { "data", Serialization::serialize(dfsChanges.data, 8).toStdString() } };
 
     if (init)
         return dbc.insert("Stored", row);
@@ -1414,7 +1413,7 @@ void Dfs::updateFromNewStored(QString filePath)
 
                 // qDebug() << QByteArray::fromStdString(stored.at("data")) << stored.size();
                 QByteArray data = QByteArray::fromStdString(stored.at("data"));
-                QByteArrayList datas = Serialization::universalDeserialize(data, 8);
+                QByteArrayList datas = Serialization::deserialize(data, 8);
                 if (datas.isEmpty())
                 {
                     qDebug() << "updateFromNewStored error";
@@ -1432,7 +1431,7 @@ void Dfs::updateFromNewStored(QString filePath)
             switch (type)
             {
             case DfsStruct::ChangeType::Insert: {
-                QByteArrayList list = Serialization::universalDeserialize(data, 8);
+                QByteArrayList list = Serialization::deserialize(data, 8);
                 table = list[0];
                 DBRow row;
                 for (int i = 1; i < list.length(); i += 2)
@@ -1441,7 +1440,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 break;
             }
             case DfsStruct::ChangeType::Delete: {
-                QByteArrayList list = Serialization::universalDeserialize(data, 8);
+                QByteArrayList list = Serialization::deserialize(data, 8);
                 table = list[0];
 
                 for (std::size_t i = 0; i != rows.size(); i++)
@@ -1517,7 +1516,7 @@ void Dfs::updateFromNewStored(QString filePath)
                 DFSMessage::DfsChanges dfsChanges;
                 dfsChanges.changeType = std::stoi(el.at("type"));
                 dfsChanges.data =
-       Serialization::universalDeserialize(QByteArray::fromStdString(el.at("type"))); dfsChanges.range =
+       Serialization::deserialize(QByteArray::fromStdString(el.at("type"))); dfsChanges.range =
        QByteArray::fromStdString(el.at("type"));
 
                 applyChanges(dfsChanges);

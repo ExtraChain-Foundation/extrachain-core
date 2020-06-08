@@ -2,20 +2,19 @@
 
 const QStringList DistFileSystem::Status::deserializeState(const QByteArray &serialized)
 {
-    QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
+    // QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
     QStringList result;
-    for (const QByteArray &el : list)
-
-        result << el;
+    // for (const QByteArray &el : list)
+    //    result << el;
     return result;
 }
 
 const QByteArray DistFileSystem::Status::serializeState() const
 {
-    QList<QByteArray> list;
-    for (const QString &el : currentState)
-        list << el.toUtf8();
-    return Serialization::serialize(list, stateDelimetr);
+    // QList<QByteArray> list;
+    // for (const QString &el : currentState)
+    //    list << el.toUtf8();
+    return ""; // Serialization::serialize(list, stateDelimetr);
 }
 
 const QList<QByteArray> DistFileSystem::Status::serializedParams() const
@@ -32,7 +31,7 @@ void DistFileSystem::Status::calcHash()
     {
         lt.append(s.toUtf8());
     }
-    hash = Utils::calcKeccak(Serialization::universalSerialize(lt));
+    hash = Utils::calcKeccak(Serialization::serialize(lt));
 }
 
 void DistFileSystem::Status::operator=(QByteArray &serialized)
@@ -52,12 +51,12 @@ short DistFileSystem::Status::getFieldsCount() const
 
 QByteArray DistFileSystem::Status::serialize() const
 {
-    return Serialization::universalSerialize(serializedParams(), DistFileSystem::fieldsSize);
+    return Serialization::serialize(serializedParams(), DistFileSystem::fieldsSize);
 }
 
 void DistFileSystem::Status::deserialize(const QByteArray &serialized)
 {
-    QList<QByteArray> l = Serialization::universalDeserialize(serialized, DistFileSystem::fieldsSize);
+    QList<QByteArray> l = Serialization::deserialize(serialized, DistFileSystem::fieldsSize);
     hash = l.takeFirst();
     dirOwner = l.takeFirst();
     currentState = deserializeState(l.takeFirst());

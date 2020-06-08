@@ -125,8 +125,7 @@ void NodeManager::initConsoleToken(Transaction tx)
 {
     Q_UNUSED(tx)
 #ifdef ETALONIUM_CONSOLE
-    QByteArray data =
-        Serialization::universalSerialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
+    QByteArray data = Serialization::serialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
     Block lastBlock = blockchain->getLastBlock();
     Block block(data, lastBlock);
     blockchain->signBlock(block);
@@ -295,7 +294,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
                     txFee.setAmount(amountTemp);
                     txFee.setReceiver(actor.id()); // send fee to my freezeFee
                     // ENUM | Tx hash that fee refer
-                    txFee.setData(Serialization::universalSerialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
+                    txFee.setData(Serialization::serialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
                     txFee.sign(actor);
                 }
 

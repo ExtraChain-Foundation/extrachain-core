@@ -382,42 +382,6 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
     return currentTxs;
 }
 
-TxPair BlockIndex::searchPair(const BigNumber &first, const BigNumber &second) const
-{
-    TxPair pair;
-
-    bool firstFound = false;
-    bool secondFound = false;
-
-    BigNumber records = getLastSavedId();
-    while (records > 0)
-    {
-        Block byPosition = getBlockById(records);
-        QList<Transaction> trx = byPosition.extractTransactions();
-
-        for (const Transaction &t : trx)
-        {
-            if (firstFound && secondFound)
-            {
-                records = 0;
-                break;
-            }
-            if (!firstFound && (t.getSender() == first || t.getReceiver() == first))
-            {
-                firstFound = true;
-                pair.setFirst(t);
-            }
-            if (!secondFound && (t.getSender() == second || t.getReceiver() == second))
-            {
-                secondFound = true;
-                pair.setSecond(t);
-            }
-        }
-        --records;
-    }
-    return pair;
-}
-
 QString BlockIndex::buildFilePath(const BigNumber &id) const
 {
     BigNumber section = this->calcSection(id);
@@ -688,8 +652,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
             type = QByteArray(tmp.at("type").c_str());
-            QByteArray sign = Serialization::universalSerialize({ key, value, type }, 4);
-            signes += Serialization::universalSerialize({ sign }, 4);
+            QByteArray sign = Serialization::serialize({ key, value, type }, 4);
+            signes += Serialization::serialize({ sign }, 4);
         }
         list << signes;
         b.initFields(list);
@@ -728,8 +692,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
             type = QByteArray(tmp.at("type").c_str());
-            QByteArray sign = Serialization::universalSerialize({ key, value, type }, 4);
-            signes += Serialization::universalSerialize({ sign }, 4);
+            QByteArray sign = Serialization::serialize({ key, value, type }, 4);
+            signes += Serialization::serialize({ sign }, 4);
         }
         list << signes;
         b.initFields(list);
@@ -753,7 +717,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             QByteArray producer = tmp.at("producer").c_str();
             list << sender << receiver << amount << date << data << token << prevBlock << gas << hop << hash
                  << approver << digSig << producer;
-            b.addData(Serialization::universalSerialize(list, Serialization::TRANSACTION_FIELD_SIZE));
+            b.addData(Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE));
         }
 
         return b.serialize();

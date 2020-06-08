@@ -115,7 +115,7 @@ bool Block::verify(const Actor<KeyPublic> &actor) const
 
 bool Block::deserialize(const QByteArray &serialized)
 {
-    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
+    QList<QByteArray> list = Serialization::deserialize(serialized, FIELDS_SIZE);
 
     if (list.length() == 7)
     {
@@ -127,11 +127,11 @@ bool Block::deserialize(const QByteArray &serialized)
         prevHash = list.at(4);
         hash = list.at(5);
         QByteArray signs = list.at(6);
-        QByteArrayList lists = Serialization::universalDeserialize(signs, FIELDS_SIZE);
+        QByteArrayList lists = Serialization::deserialize(signs, FIELDS_SIZE);
 
         for (const auto &tmp : lists)
         {
-            QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
+            QByteArrayList tmps = Serialization::deserialize(tmp, FIELDS_SIZE);
             if (tmps.length() == 3)
                 signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
         }
@@ -166,7 +166,7 @@ BlockCompare Block::compareBlock(const Block &b) const
 
 void Block::addData(const QByteArray &data)
 {
-    this->data = this->data + Serialization::universalSerialize({ data }, FIELDS_SIZE);
+    this->data = this->data + Serialization::serialize({ data }, FIELDS_SIZE);
 }
 
 QList<Transaction> Block::extractTransactions() const
@@ -174,7 +174,7 @@ QList<Transaction> Block::extractTransactions() const
     if (type != Config::DATA_BLOCK_TYPE)
         return QList<Transaction>();
 
-    QList<QByteArray> txsData = Serialization::universalDeserialize(data, FIELDS_SIZE);
+    QList<QByteArray> txsData = Serialization::deserialize(data, FIELDS_SIZE);
     QList<Transaction> transactions;
     for (const QByteArray &trData : txsData)
     {
@@ -213,7 +213,7 @@ QByteArray Block::serialize() const
     list << getType() << getIndex().toByteArray() << QByteArray::number(date) << getData() << getPrevHash()
          << getHash() << getSignatures();
     //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
-    return Serialization::universalSerialize(list, FIELDS_SIZE);
+    return Serialization::serialize(list, FIELDS_SIZE);
 }
 
 QString Block::toString() const
@@ -223,7 +223,7 @@ QString Block::toString() const
     list << getType() << getIndex().toByteArray() << getApprover().toActorId() << QByteArray::number(date)
          << getData() << getPrevHash() << getHash() << getDigSig();
     //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
-    return Serialization::universalSerialize(list, FIELDS_SIZE);
+    return Serialization::serialize(list, FIELDS_SIZE);
 }
 
 bool Block::isEmpty() const
@@ -248,9 +248,9 @@ QByteArray Block::getSignatures() const
 
     for (auto it = signatures.begin(); it != signatures.end(); it++)
     {
-        QByteArray data = Serialization::universalSerialize(
+        QByteArray data = Serialization::serialize(
             { it->actorId, it->sign, it->isApprove ? "1" : "0" }, FIELDS_SIZE);
-        res += Serialization::universalSerialize({ data }, FIELDS_SIZE);
+        res += Serialization::serialize({ data }, FIELDS_SIZE);
     }
 
     return res;
@@ -347,10 +347,10 @@ void Block::initFields(QList<QByteArray> &list)
     prevHash = list.takeFirst();
     hash = list.takeFirst();
     QByteArray signs = list.takeFirst();
-    QByteArrayList lists = Serialization::universalDeserialize(signs, FIELDS_SIZE);
+    QByteArrayList lists = Serialization::deserialize(signs, FIELDS_SIZE);
     for (const auto &tmp : lists)
     {
-        QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
+        QByteArrayList tmps = Serialization::deserialize(tmp, FIELDS_SIZE);
         if (tmps.length() == 3)
             signatures.append({ tmps.at(0), tmps.at(1), bool(tmps.at(2).toInt()) });
     }
