@@ -1,4 +1,4 @@
-﻿#include "network/network_manager.h"
+#include "network/network_manager.h"
 #include "resolve/resolve_manager.h"
 
 using namespace Messages;
@@ -216,8 +216,7 @@ void NetManager::findLocal()
 
                 if (name.left(2) == "vm")
                     continue;
-                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(3) == "enp"
-                    || name.left(3) == "eno")
+                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en")
                 {
                     local = new QNetworkAddressEntry(entry);
                     qDebug() << this << "Discovered local:" << local->ip().toString() << interface.name();
@@ -319,7 +318,8 @@ void NetManager::logDebug()
 
 void NetManager::reconnectUi()
 {
-    emit localIpFounded(local->ip().toString());
+    if (local != nullptr)
+        emit localIpFounded(local->ip().toString());
     connectToServer(serverPort, local);
 }
 
