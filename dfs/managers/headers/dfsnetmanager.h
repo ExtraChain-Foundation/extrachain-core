@@ -49,10 +49,6 @@ private:
 public:
     NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
-    void send(const QByteArray &message, const unsigned int &msgType,
-              const SocketPair &receiver = SocketPair(),
-              Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
 

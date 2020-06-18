@@ -637,6 +637,9 @@ void NodeManager::connectUi()
         Q_UNUSED(type)
         emit setCurrentIdNotifyM(getIdPrivateProfile());
     });
+
+    connect(uiController, &UiController::sendNotificationToken, this, &NodeManager::notificationToken);
+
     connect(prProfile, &PrivateProfile::initActorChatM,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
     connect(prProfile, &PrivateProfile::loginError, uiController, &UiController::loginError);
@@ -746,6 +749,25 @@ void NodeManager::addNewWallet()
         uiWallet->setCurrentWallets(wallets << walletId);
         createWalletInUi();
     });
+}
+
+void NodeManager::notificationToken(QString os, QString actorId, QString token)
+{
+    if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
+        return;
+    auto companyId = actorIndex->companyId;
+    if (companyId == nullptr)
+        return;
+    auto company = actorIndex->getActor(*companyId);
+    if (company.empty())
+        return;
+    auto key = company.key();
+
+    QMap<QString, QByteArray> map = { { "actor", key->encrypt(actorId.toLatin1()) },
+                                      { "token", key->encrypt(token.toLatin1()) },
+                                      { "os", key->encrypt(os.toLatin1()) } };
+
+    sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
 #elif ETALONIUM_CONSOLE

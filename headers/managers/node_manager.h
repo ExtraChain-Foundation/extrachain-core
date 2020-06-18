@@ -1,4 +1,4 @@
-﻿#ifndef NODE_MANAGER_H
+#ifndef NODE_MANAGER_H
 #define NODE_MANAGER_H
 #ifndef RESOLVE_MANAGER_DEF
 #define RESOLVE_MANAGER_DEF
@@ -200,11 +200,19 @@ private slots:
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
     void addNewWallet();
-
+    void notificationToken(QString os, QString actorId, QString token);
 #endif
 
 #ifdef ETALONIUM_CONSOLE
+signals:
+    void pushNotification(QString actorId, Notification notification);
+
 public: // TODO
+    auto getConsoleManager()
+    {
+        return consoleManager;
+    }
+
     void setConsoleManager(ConsoleManager *consoleManager)
     {
         this->consoleManager = consoleManager;

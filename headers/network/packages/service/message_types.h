@@ -25,7 +25,8 @@ enum GeneralRequest
     GetBlock = 203,
     GetTx = 204,
     GetTxPair = 205,
-    GetAllActors = 206
+    GetAllActors = 206,
+    Notification = 270
 };
 static bool isGeneralRequest(unsigned int value)
 {

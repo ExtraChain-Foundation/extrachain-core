@@ -8,6 +8,10 @@
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
 
+#ifdef ETALONIUM_CONSOLE
+#include "managers/console_manager.h"
+#endif
+
 void ResolverService::setNode(NodeManager *value)
 {
     node = value;
@@ -447,6 +451,17 @@ void ResolverService::resolveGeneralTask()
         qDebug() << "RESOLVER SERVICE: "
                  << "recieveMsg(): type: "
                  << "GET_ACTOR_COUNT_RESPONSE_MESSAGE";
+        finishWork();
+        break;
+    }
+    case Messages::GeneralRequest::Notification: {
+#ifdef ETALONIUM_CONSOLE
+        BaseMessageResponse responseMessage;
+        responseMessage = msg;
+        auto map = Serialization::deserializeMap(responseMessage.data);
+        node->getConsoleManager()->saveNotificationToken(map["os"], map["actor"], map["token"]);
+#endif
+
         finishWork();
         break;
     }
