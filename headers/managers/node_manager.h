@@ -208,14 +208,14 @@ signals:
     void pushNotification(QString actorId, Notification notification);
 
 public: // TODO
-    auto getConsoleManager()
+    ConsoleManager *consoleManager()
     {
-        return consoleManager;
+        return m_consoleManager;
     }
 
     void setConsoleManager(ConsoleManager *consoleManager)
     {
-        this->consoleManager = consoleManager;
+        this->m_consoleManager = consoleManager;
     }
 
     auto &requestCoinQueue()
@@ -241,7 +241,7 @@ public: // TODO
     }
 
 private:
-    ConsoleManager *consoleManager;
+    ConsoleManager *m_consoleManager;
     QList<std::tuple<BigNumber, BigNumber, BigNumber>> m_requestCoinQueue;
     bool m_listenCoinRequest = false;
 #endif

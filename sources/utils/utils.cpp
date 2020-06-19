@@ -534,3 +534,10 @@ QMap<QString, QByteArray> Serialization::deserializeMap(const QByteArray &data)
 
     return map;
 }
+
+QDebug operator<<(QDebug d, const Notification &n)
+{
+    d.noquote().nospace() << "Notification(time: " << QString::number(n.time)
+                          << ", type: " << QString::number(n.type) << ", data: \"" << n.data << "\")";
+    return d;
+}
