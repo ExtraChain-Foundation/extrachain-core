@@ -329,6 +329,13 @@ void BigNumber::setInfinity(bool value)
         m_data = 0;
 }
 
+BigNumber BigNumber::nextPrime()
+{
+    mpz_class prime;
+    mpz_nextprime(prime.get_mpz_t(), m_data.get_mpz_t());
+    return prime;
+}
+
 bool BigNumber::isValid(const QByteArray &bigNumber, int base)
 {
     if (bigNumber.isEmpty())
