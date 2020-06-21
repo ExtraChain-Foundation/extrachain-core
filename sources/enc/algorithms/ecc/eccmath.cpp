@@ -2,34 +2,9 @@
 
 BigNumber ECC::inverseMod(BigNumber a, BigNumber b)
 {
-    BigNumber an = a;
-    BigNumber bn = b;
-    if (a < 0)
-        return b - inverseMod(-a, b);
-    if (a < 0)
-        return b - inverseMod(-a, b);
-    assert(a != 0);
-    BigNumber b0 = b, t, q;
-
-    BigNumber x0 = 0, x1 = 1;
-    if (b == 1)
-        return 1;
-
-    while (a > 1)
-    {
-        q = a / b;
-        t = b;
-        b = a % b;
-        a = t;
-        t = x0;
-        x0 = x1 - q * x0;
-        x1 = t;
-    }
-    if (x1 < 0)
-        x1 += b0;
-
-    assert((an * x1) % bn == 1);
-    return x1;
+    mpz_class res;
+    mpz_invert(res.get_mpz_t(), a.data().get_mpz_t(), b.data().get_mpz_t());
+    return res;
 }
 
 bool ECC::isOnCurve(ECC::curve curve, EllipticPoint point)
@@ -87,8 +62,8 @@ EllipticPoint ECC::multiply(ECC::curve curve, BigNumber k, EllipticPoint point)
     assert(isOnCurve(curve, point));
     if (k % curve.n == 0)
         return EllipticPoint();
-    if (k < 0)
 
+    if (k < 0)
         return multiply(curve, -k, negatePoint(curve, point));
 
     EllipticPoint res;

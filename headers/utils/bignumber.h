@@ -93,6 +93,7 @@ public:
     BigNumber abs() const;
     bool getInfinity() const;
     void setInfinity(bool value);
+    BigNumber nextPrime();
 
     static bool isValid(const QByteArray &bigNumber, int base = 16);
     static BigNumber factorial(unsigned long number);
