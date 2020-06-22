@@ -104,19 +104,6 @@ void DFSNetManager::appendSocket(SocketService *socket)
     socketConnection();
 }
 
-void DFSNetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
-                         Config::Net::TypeSend typeSend)
-{
-    Messages::BaseMessage msg;
-    //    msg.setMsgData(data);
-    msg.type = msgType;
-    msg.data = data;
-    QByteArray message = msg.serialize();
-    sendMessage(message, msgType, receiver, typeSend);
-    //    std::for_each(connections.begin(), connections.end(),
-    //                  [&message, &receiver](SocketService *socket) { socket->distMsg(message, receiver); });
-}
-
 void DFSNetManager::process()
 {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);

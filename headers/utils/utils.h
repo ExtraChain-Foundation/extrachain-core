@@ -636,4 +636,6 @@ struct Notification
     QByteArray data = "";
 };
 
+QDebug operator<<(QDebug d, const Notification &n);
+
 #endif // UTILS_H

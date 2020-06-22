@@ -1,4 +1,4 @@
-﻿#ifndef NODE_MANAGER_H
+#ifndef NODE_MANAGER_H
 #define NODE_MANAGER_H
 #ifndef RESOLVE_MANAGER_DEF
 #define RESOLVE_MANAGER_DEF
@@ -122,6 +122,8 @@ public:
 
     ChatManager *getChatManager() const;
 
+    Dfs *getDfs() const;
+
 private:
     Actor<KeyPrivate> CreateExtracoin(QByteArray consoleHash);
     void showMessage(QString from, QString message);
@@ -200,14 +202,22 @@ private slots:
     void updateRecentActivities();
     void changeWalletIdUi(BigNumber walletId);
     void addNewWallet();
-
+    void notificationToken(QString os, QString actorId, QString token);
 #endif
 
 #ifdef ETALONIUM_CONSOLE
+signals:
+    void pushNotification(QString actorId, Notification notification);
+
 public: // TODO
+    ConsoleManager *consoleManager()
+    {
+        return m_consoleManager;
+    }
+
     void setConsoleManager(ConsoleManager *consoleManager)
     {
-        this->consoleManager = consoleManager;
+        this->m_consoleManager = consoleManager;
     }
 
     auto &requestCoinQueue()
@@ -233,7 +243,7 @@ public: // TODO
     }
 
 private:
-    ConsoleManager *consoleManager;
+    ConsoleManager *m_consoleManager;
     QList<std::tuple<BigNumber, BigNumber, BigNumber>> m_requestCoinQueue;
     bool m_listenCoinRequest = false;
 #endif

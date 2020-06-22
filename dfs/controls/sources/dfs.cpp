@@ -190,7 +190,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
 #endif
 
     QString filePath = QString::fromStdString(CardManager::buildPathForFile(
-        cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type), false));
+        cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type)));
 
     if (QFile::exists(filePath)) // TODO: root check
         return;
@@ -217,7 +217,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
     qDebug() << "Save to future" << res;
 
     std::string file =
-        CardManager::buildPathForFile(cfc.actorId.toStdString(), row["id"], DfsStruct::Type(cfc.type), false);
+        CardManager::buildPathForFile(cfc.actorId.toStdString(), row["id"], DfsStruct::Type(cfc.type));
     requestFile(QString::fromStdString(file), receiver);
 
     //    auto type = DfsStruct::Type(cardFileChange.type);
@@ -433,9 +433,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
     sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
     qDebug() << "Send root change" << cardFileChange.fileId << cardFileChange.type;
 
-#ifdef ETALONIUM_CLIENT
     emit fileAdded(dfsPath, path, type, userId);
-#endif
 }
 
 bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
@@ -449,8 +447,8 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
         return false;
 
     QString fileId = isFilePath ? CardManager::cutPath(path) : path;
-    QString filePath = QString::fromStdString(CardManager::buildPathForFile(
-        userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type), false));
+    QString filePath = QString::fromStdString(
+        CardManager::buildPathForFile(userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type)));
     int version = CardManager::dfsVersion(filePath);
 
     bool result = cardFile.append(path.toUtf8(), type, version, sign, isFilePath);
@@ -576,14 +574,12 @@ void Dfs::saveFN(const QString tmpPath, const QString &path, const DfsStruct::Ty
 
     this->dfsValidate(userId);
 
-#ifdef ETALONIUM_CLIENT
     bool haveStored = isHaveStoredType(type);
     if (haveStored && path.right(DfsStruct::STORED_EXT_SIZE) == DfsStruct::STORED_EXT)
         emit fileAdded(path.mid(0, path.length() - 7), "network", type,
                        path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20));
     if (!haveStored)
         emit fileAdded(path, "network", type, path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20));
-#endif
 }
 
 void Dfs::fileResponse(const QString filePath, const SocketPair &receiver)
@@ -727,9 +723,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
     if (sender != nullptr)
         sender->sendDfsMessage(cardFileChange, Messages::DFSMessage::cardFileChange);
 
-#ifdef ETALONIUM_CLIENT
     emit fileAdded(dfsPath.toLatin1(), fileName, type, userId);
-#endif
 }
 
 void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data)
@@ -859,6 +853,10 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
         if (appendToStored(dfsChanges, false))
         {
             emit fileChanged(dfsChanges.filePath, DfsStruct::ChangeType(dfsChanges.changeType));
+
+            if (dfsChanges.filePath.contains("chats") && dfsChanges.filePath.contains("msg"))
+                emit chatMessage(dfsChanges.userId, dfsChanges.filePath);
+
             return true;
         }
     }
@@ -1131,7 +1129,7 @@ bool Dfs::dfsValidate(QByteArray userId)
         if (item["id"] == "avatar")
             type = 106;
 
-        fPath = CardManager::buildPathForFile(userId.toStdString(), item["id"], DfsStruct::Type(type), false);
+        fPath = CardManager::buildPathForFile(userId.toStdString(), item["id"], DfsStruct::Type(type));
         QFileInfo file(QString::fromStdString(fPath));
         if (!file.exists() || file.size() == 0)
         {
@@ -1480,7 +1478,7 @@ void Dfs::updateFromNewStored(QString filePath)
         QFile::remove(notStored);
         QFile::rename(newStoredPath, filePath);
         QFile::rename(notStoredNew, notStored);
-        emit fileChanged(notStored, DfsStruct::Global);
+        emit fileChanged(notStored, DfsStruct::Global); // TODO: push
     }
 
     /*

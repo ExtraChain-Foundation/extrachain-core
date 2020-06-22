@@ -21,7 +21,7 @@ std::vector<std::string> CardManager::getFilesByType(const std::string &userId, 
     std::vector<std::string> listData;
 
     for (DBRow &temp : data)
-        listData.push_back(CardManager::buildPathForFile(userId, temp["id"], type, false));
+        listData.push_back(CardManager::buildPathForFile(userId, temp["id"], type));
 
     return listData;
 }
@@ -54,7 +54,7 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     for (DBRow &temp : data)
     {
         std::string path = CardManager::buildPathForFile(userId.toStdString(), temp["id"],
-                                                         DfsStruct::Type(std::stoi(temp["type"])), false);
+                                                         DfsStruct::Type(std::stoi(temp["type"])));
         listData.append(QByteArray::fromStdString(path));
     }
 
@@ -101,24 +101,28 @@ std::vector<std::string> CardManager::getAll(DfsStruct::Type type)
 }
 
 std::string CardManager::buildPathForFile(const std::string &userId, const std::string &file,
-                                          DfsStruct::Type type, bool localFormat)
+                                          DfsStruct::Type type, PathStyle pathFormat)
 {
     if (file.empty())
         return "";
 
     const std::string currentPath =
-        (localFormat ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/" : "")
+        (pathFormat == PathStyle::FullLocal
+             ? QUrl::fromLocalFile(QDir::currentPath()).toString().toStdString() + "/"
+             : "")
         + DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userId;
 
     QString fileStr = QString::fromStdString(file);
     std::string section = fileStr.contains(".")
         ? fileStr.mid(fileStr.indexOf(".") - 2, 2).toStdString() + "/"
         : QByteArray::fromStdString(file).right(2).toStdString() + "/";
+
     if (int(type) > 100)
     {
         type = DfsStruct::Type(static_cast<int>(type) - 100);
         section = "";
     }
+
     std::string typeName = DfsStruct::toString(type).toStdString();
     std::string path = currentPath + "/" + typeName + "/" + section + file;
 
@@ -127,14 +131,12 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
 
 std::vector<std::string> CardManager::buildPathForFiles(const std::string &userId,
                                                         const std::vector<std::string> &files,
-                                                        DfsStruct::Type type, bool localFormat)
+                                                        DfsStruct::Type type, PathStyle pathFormat)
 {
     std::vector<std::string> result;
 
     for (const std::string &file : files)
-    {
-        result.push_back(buildPathForFile(userId, file, type, localFormat));
-    }
+        result.push_back(buildPathForFile(userId, file, type, pathFormat));
 
     return result;
 }

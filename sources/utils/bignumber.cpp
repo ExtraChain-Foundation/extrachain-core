@@ -246,7 +246,6 @@ BigNumber BigNumber::operator-() const
 
 mpz_class BigNumber::data() const
 {
-
     return m_data;
 }
 

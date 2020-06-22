@@ -530,6 +530,7 @@ void NetManager::sendFromCache()
         sendMessage(data, msgType, socketData, typeSend);
     }
 }
+
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
 #ifdef ETALONIUM_CLIENT
@@ -618,6 +619,16 @@ void NetManager::removeConnection()
     connections.removeAt(connections.indexOf(connection));
     connection->finished();
     checkConnectionsStatus();
+}
+
+void NetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
+                      Config::Net::TypeSend typeSend)
+{
+    Messages::BaseMessage msg;
+    msg.type = msgType;
+    msg.data = data;
+    QByteArray message = msg.serialize();
+    sendMessage(message, msgType, receiver, typeSend);
 }
 
 void NetManager::signMessage(BaseMessage &message) const
