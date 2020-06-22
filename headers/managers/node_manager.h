@@ -122,6 +122,8 @@ public:
 
     ChatManager *getChatManager() const;
 
+    Dfs *getDfs() const;
+
 private:
     Actor<KeyPrivate> CreateExtracoin(QByteArray consoleHash);
     void showMessage(QString from, QString message);

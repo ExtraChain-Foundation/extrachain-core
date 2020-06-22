@@ -949,3 +949,9 @@ ChatManager *NodeManager::getChatManager() const
 {
     return chatManager;
 }
+
+Dfs *NodeManager::getDfs() const
+{
+    return dfs;
+}
+

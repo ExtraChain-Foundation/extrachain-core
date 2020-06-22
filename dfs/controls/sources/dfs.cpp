@@ -190,7 +190,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
 #endif
 
     QString filePath = QString::fromStdString(CardManager::buildPathForFile(
-        cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type), false));
+        cfc.actorId.toStdString(), cfc.fileId.toStdString(), DfsStruct::Type(cfc.type)));
 
     if (QFile::exists(filePath)) // TODO: root check
         return;
@@ -217,7 +217,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
     qDebug() << "Save to future" << res;
 
     std::string file =
-        CardManager::buildPathForFile(cfc.actorId.toStdString(), row["id"], DfsStruct::Type(cfc.type), false);
+        CardManager::buildPathForFile(cfc.actorId.toStdString(), row["id"], DfsStruct::Type(cfc.type));
     requestFile(QString::fromStdString(file), receiver);
 
     //    auto type = DfsStruct::Type(cardFileChange.type);
@@ -449,8 +449,8 @@ bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsS
         return false;
 
     QString fileId = isFilePath ? CardManager::cutPath(path) : path;
-    QString filePath = QString::fromStdString(CardManager::buildPathForFile(
-        userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type), false));
+    QString filePath = QString::fromStdString(
+        CardManager::buildPathForFile(userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type)));
     int version = CardManager::dfsVersion(filePath);
 
     bool result = cardFile.append(path.toUtf8(), type, version, sign, isFilePath);
@@ -859,6 +859,10 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
         if (appendToStored(dfsChanges, false))
         {
             emit fileChanged(dfsChanges.filePath, DfsStruct::ChangeType(dfsChanges.changeType));
+
+            if (dfsChanges.filePath.contains("chats") && dfsChanges.filePath.contains("msg"))
+                emit chatMessage(dfsChanges.userId, dfsChanges.filePath);
+
             return true;
         }
     }
@@ -1131,7 +1135,7 @@ bool Dfs::dfsValidate(QByteArray userId)
         if (item["id"] == "avatar")
             type = 106;
 
-        fPath = CardManager::buildPathForFile(userId.toStdString(), item["id"], DfsStruct::Type(type), false);
+        fPath = CardManager::buildPathForFile(userId.toStdString(), item["id"], DfsStruct::Type(type));
         QFileInfo file(QString::fromStdString(fPath));
         if (!file.exists() || file.size() == 0)
         {
@@ -1480,7 +1484,7 @@ void Dfs::updateFromNewStored(QString filePath)
         QFile::remove(notStored);
         QFile::rename(newStoredPath, filePath);
         QFile::rename(notStoredNew, notStored);
-        emit fileChanged(notStored, DfsStruct::Global);
+        emit fileChanged(notStored, DfsStruct::Global); //
     }
 
     /*

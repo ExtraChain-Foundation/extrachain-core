@@ -89,6 +89,7 @@ signals:
     void networkCreated();
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
     void titleReceived(QString filePath);
+    void chatMessage(QString sender, QString msgPath);
 
 public slots:
     void initMyLocalStorage();
