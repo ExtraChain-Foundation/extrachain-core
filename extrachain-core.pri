@@ -1,4 +1,5 @@
 QT += concurrent
+VERSION = 0.7.28
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
@@ -153,7 +154,7 @@ HEADERS += \
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android {
-!android!ios: DESTDIR = ExtraChain
+!android!ios: DESTDIR = Build
 android: DESTDIR = android-build
 OBJECTS_DIR = .obj
 MOC_DIR = .moc
