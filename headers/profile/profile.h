@@ -55,6 +55,23 @@ public:
     Profile(const QByteArray& serialize); // needs for entity
     Profile(const Profile& profile);
 
+    enum class Type
+    {
+        TypeWallet,
+        TypeCustomer,
+        TypeModel,
+        TypeAgent,
+        TypeAgency,
+        TypeFashion,
+        TypeContract
+    };
+
+    enum class ServiceCheckType
+    {
+        Full,
+        ChatOnly
+    };
+
     QByteArray serialize() const;
 
     operator QString() const;
@@ -141,18 +158,7 @@ public:
     void setWorkStyle(QList<int> workStyle);
     void setFashion(QList<int> fashion);
 
-    bool isServiceExists();
-
-    enum Type
-    {
-        TypeWallet,
-        TypeCustomer,
-        TypeModel,
-        TypeAgent,
-        TypeAgency,
-        TypeFashion,
-        TypeContract
-    };
+    bool isServiceExists(ServiceCheckType checkType = ServiceCheckType::Full);
 
     friend bool operator==(Profile& lhs, Profile& rhs)
     {

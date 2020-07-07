@@ -96,6 +96,7 @@ void PrivateProfile::loadPrivateProfile(const QByteArray &login, const QByteArra
     QByteArray secureLogin = Utils::calcKeccak(data);
     profile(secureLogin);
 }
+
 void PrivateProfile::loadProfileForAutoLogin(const QByteArray &hash)
 {
     profile(hash);

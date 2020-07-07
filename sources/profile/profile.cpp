@@ -542,9 +542,16 @@ void Profile::setFashion(QList<int> fashion)
     setValue("fashion", fromListInt(fashion).toUtf8());
 }
 
-bool Profile::isServiceExists()
+bool Profile::isServiceExists(ServiceCheckType checkType)
 {
-    static QStringList files = { "chatinvite", "follower", "subscribe" };
+    static QStringList files = { "chatinvite" };
+
+    if (checkType == ServiceCheckType::Full && files.length() == 1)
+    {
+        files << "follower"
+              << "subscribe";
+    }
+
     QString servicePath = QString("%1/%2/services/").arg(DfsStruct::ROOT_FOOLDER_NAME, userId());
 
     for (const QString &file : files)
