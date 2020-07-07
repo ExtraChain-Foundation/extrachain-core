@@ -74,10 +74,10 @@ private:
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
     QList<QByteArray> tempConnections;
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     const int SIZE_OF_CONNECTIONS = 100;
 #endif
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     const int SIZE_OF_CONNECTIONS = 5;
 #endif
 protected:

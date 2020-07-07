@@ -172,7 +172,7 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
 
     dfsValidate(response.actorId);
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     // sender->sendDfsMessage(response, Messages::DFSMessage::responseCardPath, receiver);
 #endif
 }
@@ -185,7 +185,7 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
 // QByteArray sign;
 void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair receiver)
 { //
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     sender->sendDfsMessage(cfc, Messages::DFSMessage::cardFileChange);
 #endif
 
@@ -313,7 +313,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         {
             bool needCopy = false;
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
             if (type == DfsStruct::Type::Image)
             {
                 QImageReader imageReader(path);
@@ -1118,7 +1118,7 @@ bool Dfs::dfsValidate(QByteArray userId)
             typeStr = "0";
         int type = std::stoi(typeStr);
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
         if (type == DfsStruct::Type::Files)
             continue;
 #endif

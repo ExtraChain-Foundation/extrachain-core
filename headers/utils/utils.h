@@ -385,7 +385,7 @@ namespace DataStorage {
 namespace Net {
 
     // Type of Protocol. Should be changed according to client in use.
-    static const QByteArray PROTOCOL_VERSION = "ExtraCoin_v4";
+    static const QByteArray PROTOCOL_VERSION = "ExtraChain_v5";
 
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;

@@ -8,7 +8,7 @@
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
 #include "managers/console_manager.h"
 #endif
 
@@ -455,7 +455,7 @@ void ResolverService::resolveGeneralTask()
         break;
     }
     case Messages::GeneralRequest::Notification: {
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         auto map = Serialization::deserializeMap(responseMessage.data);

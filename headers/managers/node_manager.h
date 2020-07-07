@@ -29,13 +29,13 @@ class ResolveManager;
 #include "asyncfuture.h"
 #include <QtConcurrent>
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 #include "ui/ui_controller.h"
 #include "headers/ui/notificationclient.h"
 #include "managers/notification_manager.h"
 #endif
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
 #include "managers/console_manager.h"
 #endif
 
@@ -62,7 +62,7 @@ private:
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     UiController *uiController;
     WalletController *uiWallet;
     NotificationClient *notificationClient = nullptr;
@@ -112,7 +112,7 @@ public:
 public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     UiController *getUiController() const;
     void setNotificationClient(NotificationClient *newNtfCl);
 #endif
@@ -125,7 +125,7 @@ public:
     Dfs *getDfs() const;
 
 private:
-    Actor<KeyPrivate> CreateExtracoin(QByteArray consoleHash);
+    Actor<KeyPrivate> CreateCompany(QByteArray consoleHash);
     void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetManager and Blockchain
@@ -191,7 +191,7 @@ public slots:
     //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
     void dfscreateNetManagerIdentificator();
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
 
 private slots:
@@ -205,7 +205,7 @@ private slots:
     void notificationToken(QString os, QString actorId, QString token);
 #endif
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
 signals:
     void pushNotification(QString actorId, Notification notification);
 

@@ -1,5 +1,5 @@
 #include "managers/sm_manager.h"
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 #include "ui/wallet/walletcontroller.h"
 #endif
 
@@ -63,10 +63,10 @@ void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QBy
     tx.setToken(sender->id());
     tx.sign(*sender);
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::contractMessage);
 #endif
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     emit initConsoleToken(tx);
 #endif
 }

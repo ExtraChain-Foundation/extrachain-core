@@ -7,7 +7,7 @@
 #include <QDir>
 #include <QDateTime>
 #include <iostream>
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 #include "ui/model/abstractmodel.h"
 #endif
 
@@ -37,7 +37,7 @@ public:
     static bool toQml;
     static bool antiFilter;
     static bool debugLogs;
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     static AbstractModel logs;
 #endif
 

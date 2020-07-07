@@ -4,7 +4,7 @@
 #include "utils/utils.h"
 #include <QDateTime>
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 #include "ui/notificationclient.h"
 #include "datastorage/index/actorindex.h"
 #include "dfs/types/headers/dfstruct.h"

@@ -11,11 +11,11 @@ class SocketService;
 #include "resolve/dfs_resolver_service.h"
 #include "utils/utils.h"
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
 static const short DFS_RESOLVERS_POOL_SIZE = 10;
 #endif
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 static const short DFS_RESOLVERS_POOL_SIZE = 5;
 #endif
 

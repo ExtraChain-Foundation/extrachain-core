@@ -15,7 +15,7 @@ void ServerService::startListen()
 
     if (!status)
     {
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
         if (serverError() == QAbstractSocket::AddressInUseError)
         {
             qInfo().nospace().noquote() << "---> [Error] Address " << localAddress->ip().toString() << ":"

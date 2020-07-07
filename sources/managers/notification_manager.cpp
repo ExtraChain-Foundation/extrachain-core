@@ -1,5 +1,5 @@
 #include "headers/managers/notification_manager.h"
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 
 NotificationManager::NotificationManager(QObject *parent)
     : QObject(parent)

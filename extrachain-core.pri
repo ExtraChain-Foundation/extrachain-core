@@ -153,7 +153,7 @@ HEADERS += \
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android {
-!android!ios: DESTDIR = Etalonium
+!android!ios: DESTDIR = ExtraChain
 android: DESTDIR = android-build
 OBJECTS_DIR = .obj
 MOC_DIR = .moc

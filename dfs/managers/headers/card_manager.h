@@ -11,7 +11,7 @@ public:
     enum class PathStyle
     {
         FullLocal,
-        ExtraCoinRoot
+        Root
     };
 
     static std::vector<std::string> getAll(DfsStruct::Type type);
@@ -22,10 +22,11 @@ public:
     static std::string pathToRoot(std::string userId);
     static std::string buildPathForFile(const std::string &userId, const std::string &file,
                                         DfsStruct::Type type,
-                                        PathStyle pathFormat = CardManager::PathStyle::ExtraCoinRoot);
-    static std::vector<std::string>
-    buildPathForFiles(const std::string &userId, const std::vector<std::string> &files, DfsStruct::Type type,
-                      PathStyle pathFormat = CardManager::PathStyle::ExtraCoinRoot);
+                                        PathStyle pathFormat = CardManager::PathStyle::Root);
+    static std::vector<std::string> buildPathForFiles(const std::string &userId,
+                                                      const std::vector<std::string> &files,
+                                                      DfsStruct::Type type,
+                                                      PathStyle pathFormat = CardManager::PathStyle::Root);
 
     static QString cutPath(QString fullPath);
 

@@ -313,11 +313,11 @@ void Utils::wipeDataFiles()
     QDir().mkdir(dataName);
 
     QString shareFolder =
-        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/EtaloniumShare";
+        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
     QDir(shareFolder).removeRecursively();
 
     /*
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
         QDir dirToClear(dir);
         auto filesList = dirToClear.entryInfoList(QDir::Files);
@@ -357,7 +357,7 @@ void Utils::wipeDataFiles()
     QFile("user.private").remove();
     QFile("user.private.login").remove();
 #endif
-    QFile(".etalonium.lock").remove();
+    QFile(".extrachain.lock").remove();
     QFile(".settings").remove();
     */
 }
@@ -403,8 +403,8 @@ qint64 Utils::checkMemoryTotal()
 
 QString Utils::dataName()
 {
-#ifdef ETALONIUM_CONSOLE
-    return "etalonium-console";
+#ifdef ECONSOLE
+    return "console-data";
 #endif
     QSettings settings;
     if (!settings.value("network/serverIp").isValid())
@@ -412,11 +412,11 @@ QString Utils::dataName()
     QString serverIp = settings.value("network/serverIp").toString();
 
     if (serverIp == "51.68.181.53")
-        return "/etalonium-public";
+        return "/public-data";
     else if (serverIp == "51.68.181.52")
-        return "/etalonium-test";
+        return "/test-data";
     else
-        return "/etalonium-private-" + serverIp.replace(".", "-");
+        return "/private-" + serverIp.replace(".", "-") + "-data";
 }
 
 QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map)

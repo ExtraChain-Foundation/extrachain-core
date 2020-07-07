@@ -257,7 +257,7 @@ void SocketService::continueDoRead()
                                                        this->getAddress().toLocal8Bit());
                     netManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
                     int netBuild = bl[0].toInt();
                     if (netBuild != Network::build)
                     {

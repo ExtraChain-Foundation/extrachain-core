@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QDirIterator>
 #include <iterator>
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 #include <QImage>
 #include <QImageReader>
 #endif

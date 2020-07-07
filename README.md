@@ -1,2 +1,1 @@
-# etalonium-core
-
+# extrachain-core
