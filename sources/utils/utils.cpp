@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "utils/utils.h"
 
 #include <QMimeDatabase>
@@ -313,11 +332,11 @@ void Utils::wipeDataFiles()
     QDir().mkdir(dataName);
 
     QString shareFolder =
-        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/EtaloniumShare";
+        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
     QDir(shareFolder).removeRecursively();
 
     /*
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
         QDir dirToClear(dir);
         auto filesList = dirToClear.entryInfoList(QDir::Files);
@@ -357,7 +376,7 @@ void Utils::wipeDataFiles()
     QFile("user.private").remove();
     QFile("user.private.login").remove();
 #endif
-    QFile(".etalonium.lock").remove();
+    QFile(".extrachain.lock").remove();
     QFile(".settings").remove();
     */
 }
@@ -403,8 +422,8 @@ qint64 Utils::checkMemoryTotal()
 
 QString Utils::dataName()
 {
-#ifdef ETALONIUM_CONSOLE
-    return "etalonium-console";
+#ifdef ECONSOLE
+    return "console-data";
 #endif
     QSettings settings;
     if (!settings.value("network/serverIp").isValid())
@@ -412,11 +431,11 @@ QString Utils::dataName()
     QString serverIp = settings.value("network/serverIp").toString();
 
     if (serverIp == "51.68.181.53")
-        return "/etalonium-public";
+        return "/public-data";
     else if (serverIp == "51.68.181.52")
-        return "/etalonium-test";
+        return "/test-data";
     else
-        return "/etalonium-private-" + serverIp.replace(".", "-");
+        return "/private-" + serverIp.replace(".", "-") + "-data";
 }
 
 QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map)

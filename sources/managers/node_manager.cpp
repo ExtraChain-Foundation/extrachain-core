@@ -1,4 +1,23 @@
-﻿#include "managers/node_manager.h"
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#include "managers/node_manager.h"
 
 NodeManager::NodeManager()
 {
@@ -26,7 +45,7 @@ NodeManager::NodeManager()
     //    contractManager = new ContractManager(accController, blockchain);
     dfs = new Dfs(actorIndex, accController);
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     uiController = new UiController(this);
     uiController->setSubscribeController(subscribeController);
     uiWallet = uiController->getWallet();
@@ -58,7 +77,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     Utils::checkMemoryFree();
 #endif
     // FileUpdaterManager fl;
@@ -67,7 +86,7 @@ NodeManager::NodeManager()
 
 void NodeManager::createCompanyActor(const QString &email, const QString &password)
 {
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     // accController->loadActors("-1");
     Actor<KeyPrivate> company;
     QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
@@ -75,7 +94,7 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
     bool created = false;
     if (QDir("keystore/profile").isEmpty())
     {
-        company = CreateExtracoin(consoleHash);
+        company = CreateCompany(consoleHash);
         emit savePrivateProfile(consoleHash, company.id().toActorId());
         created = true;
     }
@@ -100,7 +119,7 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
         // TODO: as console argument
         if (created)
         {
-            emit generateSmartContract("1000", "Etalonium Coin", company.id().toActorId(), "#fa4868");
+            emit generateSmartContract("1000", "Default Coin", company.id().toActorId(), "#fa4868");
 
             QString companyId = *TMP::companyActorId;
             DBConnector dbc(
@@ -124,7 +143,7 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
 void NodeManager::initConsoleToken(Transaction tx)
 {
     Q_UNUSED(tx)
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     QByteArray data = Serialization::serialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
     Block lastBlock = blockchain->getLastBlock();
     Block block(data, lastBlock);
@@ -134,7 +153,7 @@ void NodeManager::initConsoleToken(Transaction tx)
 #endif
 }
 
-Actor<KeyPrivate> NodeManager::CreateExtracoin(QByteArray consoleHash)
+Actor<KeyPrivate> NodeManager::CreateCompany(QByteArray consoleHash)
 {
     accController->createActor(ActorType::Company, consoleHash);
 
@@ -182,7 +201,7 @@ void NodeManager::connectSmContractManager()
             &ResolveManager::registrateMsg);
     connect(smContractController, &SmartContractManager::initConsoleToken, this,
             &NodeManager::initConsoleToken);
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     connect(uiController, &UiController::generateSmartContract, this, &NodeManager::generateSmartContract);
 #endif
 
@@ -223,7 +242,7 @@ NetManager *NodeManager::getNetManager()
     return netManager;
 }
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 UiController *NodeManager::getUiController() const
 {
     return uiController;
@@ -416,12 +435,12 @@ void NodeManager::getAllActors()
 }
 void NodeManager::getAllActorsTimerCall()
 {
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     QByteArray res = getIdPrivateProfile();
     if (!res.isEmpty())
         emit getAllActorsNode(res, true);
 #endif
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     QByteArray res2 = accController->getMainActor()->id().toActorId();
     if (!res2.isEmpty())
         emit getAllActorsNode(res2, true);
@@ -444,7 +463,7 @@ void NodeManager::dfscreateNetManagerIdentificator()
     file.flush();
     file.close();
 }
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
 {
     Transaction tx = this->createTransaction(receiver, amount, token);
@@ -770,7 +789,7 @@ void NodeManager::notificationToken(QString os, QString actorId, QString token)
     sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
-#elif ETALONIUM_CONSOLE
+#elif ECONSOLE
 void NodeManager::connectConsole()
 {
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
@@ -806,9 +825,9 @@ void NodeManager::connectSignals()
 {
     connect(this, &NodeManager::ready, []() { qInfo() << "Ready"; });
     connectTxManager();
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     connectUi();
-#elif ETALONIUM_CONSOLE
+#elif ECONSOLE
     connectConsole();
 #endif
     connectResolveManager();
@@ -876,7 +895,7 @@ void NodeManager::tempareSlotForActors()
 
 void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
 {
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     auto mainActor = accController->getMainActor();
 
     if (mainActor == nullptr)
@@ -954,4 +973,3 @@ Dfs *NodeManager::getDfs() const
 {
     return dfs;
 }
-

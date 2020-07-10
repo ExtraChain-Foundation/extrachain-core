@@ -1,4 +1,23 @@
-﻿#ifndef NETWORK_MANAGER_H
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 // FORWARD DECLARATION FOR CALLBACK INTEGRATION
 #ifndef SERVER_SERVICE_DEF
@@ -74,10 +93,10 @@ private:
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
     QList<QByteArray> tempConnections;
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     const int SIZE_OF_CONNECTIONS = 100;
 #endif
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     const int SIZE_OF_CONNECTIONS = 5;
 #endif
 protected:

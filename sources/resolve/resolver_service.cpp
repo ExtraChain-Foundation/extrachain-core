@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "resolve/resolver_service.h"
 #include "resolve/resolve_manager.h"
 #include "managers/node_manager.h"
@@ -8,7 +27,7 @@
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
 #include "managers/console_manager.h"
 #endif
 
@@ -455,7 +474,7 @@ void ResolverService::resolveGeneralTask()
         break;
     }
     case Messages::GeneralRequest::Notification: {
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         auto map = Serialization::deserializeMap(responseMessage.data);

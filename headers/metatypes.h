@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef METATYPES_H
 #define METATYPES_H
 
@@ -16,7 +35,7 @@
 #include "profile/private_profile.h"
 #include "managers/chat.h"
 #include "dfs/controls/headers/subscribe_controller.h"
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 #include "ui/ui_controller.h"
 #endif
 
@@ -52,7 +71,7 @@ Q_DECLARE_METATYPE(DFSResolverService::FinishStatus)
 Q_DECLARE_METATYPE(DfsStruct::DfsSave)
 Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 Q_DECLARE_METATYPE(UiController*)
 #endif
 
@@ -89,7 +108,7 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::DfsSave>();
     qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     qRegisterMetaType<UiController*>();
 #endif
 }

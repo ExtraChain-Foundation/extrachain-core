@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "managers/logs_manager.h"
 
 #include <QMutex>
@@ -15,7 +34,7 @@ bool LogsManager::toQml =
     true;
 #endif
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
 AbstractModel LogsManager::logs = AbstractModel(nullptr, { "text", "date", "file", "line", "func" });
 #endif
 
@@ -46,7 +65,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
 {
-    static QFile logFile("logs/etalonium" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
+    static QFile logFile("logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
                          + ".log");
 
     if (LogsManager::toFile && !logFile.isOpen())
@@ -111,7 +130,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     QString fileNameStd;
     if (fileName != "global")
         fileNameStd =
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
             "file:/" +
 #endif
             fileName;
@@ -136,7 +155,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
             logPrint(logStr.toStdString());
     }
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     if (LogsManager::toQml)
     {
         static QMutex mutex;
@@ -145,7 +164,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
                       { "date", currentDateTime.toMSecsSinceEpoch() }
 #ifdef QT_DEBUG
                       ,
-                      { "file", file },
+                      { "file", fileName },
                       { "line", line },
                       { "func", function }
 #endif
@@ -234,7 +253,7 @@ void LogsManager::emptyHandler()
 void LogsManager::logPrint(const std::string& log)
 {
 #ifdef Q_OS_ANDROID
-    __android_log_print(ANDROID_LOG_DEBUG, "Etalonium", "%s", log.c_str());
+    __android_log_print(ANDROID_LOG_DEBUG, "ExtraChain", "%s", log.c_str());
 #else
     std::cout << log << std::endl;
 #endif

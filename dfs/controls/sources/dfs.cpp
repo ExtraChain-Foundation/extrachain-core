@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "dfs/controls/headers/dfs.h"
 
 DFSNetManager *Dfs::getDfsNetManager() const
@@ -172,7 +191,7 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
 
     dfsValidate(response.actorId);
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     // sender->sendDfsMessage(response, Messages::DFSMessage::responseCardPath, receiver);
 #endif
 }
@@ -185,7 +204,7 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
 // QByteArray sign;
 void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair receiver)
 { //
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     sender->sendDfsMessage(cfc, Messages::DFSMessage::cardFileChange);
 #endif
 
@@ -313,7 +332,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         {
             bool needCopy = false;
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
             if (type == DfsStruct::Type::Image)
             {
                 QImageReader imageReader(path);
@@ -1118,7 +1137,7 @@ bool Dfs::dfsValidate(QByteArray userId)
             typeStr = "0";
         int type = std::stoi(typeStr);
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
         if (type == DfsStruct::Type::Files)
             continue;
 #endif

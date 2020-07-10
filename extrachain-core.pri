@@ -1,4 +1,5 @@
 QT += concurrent
+VERSION = 0.7.28
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
@@ -153,7 +154,7 @@ HEADERS += \
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android {
-!android!ios: DESTDIR = Etalonium
+!android!ios: DESTDIR = Build
 android: DESTDIR = android-build
 OBJECTS_DIR = .obj
 MOC_DIR = .moc
@@ -172,7 +173,7 @@ GIT_COMMIT_CORE = $$system(git --git-dir .git --work-tree $$PWD describe --alway
 GIT_BRANCH_CORE = $$system(git --git-dir .git --work-tree $$PWD symbolic-ref --short HEAD)
 QMAKE_SUBSTITUTES += preconfig.h.in
 
-include(../etalonium-libs/etalonium-libs.pri)
+include(../extrachain-3rdparty/extrachain-3rdparty.pri)
 
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.14+")
 lessThan(QT_MINOR_VERSION, 14): error("requires Qt 5.14+")

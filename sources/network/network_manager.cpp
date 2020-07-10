@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "network/network_manager.h"
 #include "resolve/resolve_manager.h"
 
@@ -26,7 +45,7 @@ void NetManager::addTempConnections(const QList<QByteArray> &value)
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
 {
     requestResponseMap = new QMap<QByteArray, int>();
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     QSettings settings;
 
     if (!settings.value("network/serverIp").isValid())
@@ -70,9 +89,9 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
             //            SIGNAL(upnp_error(QString)), this,
             //            SLOT(upnpErrDis(QString))); qDebug() << "Tunnel creation
             //            started!"; upnpDis->makeTunnel(extPort, extPort, "UDP",
-            //                                "Discovery tunnel of ExtraCoin ");
+            //                                "Discovery tunnel of ExtraChain ");
             //            upnpNet->makeTunnel(netPort, netPort, "TCP",
-            //                                "Network tunnel of ExtraCoin ");
+            //                                "Network tunnel of ExtraChain ");
         }
         else
         {
@@ -200,7 +219,7 @@ void NetManager::findLocal()
             if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
             QTcpSocket *socket = new QTcpSocket;
             socket->bind(entry.ip());
             socket->connectToHost("8.8.8.8", 53);
@@ -235,7 +254,7 @@ void NetManager::checkConnectionsStatus()
     emit qmlNetworkStatus(flag);
     emit qmlNetworkSockets(connections.length());
 
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     if (flag)
         sendFromCache();
 #endif
@@ -351,7 +370,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
 
 void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local)
 {
-#ifdef ETALONIUM_CONSOLE
+#ifdef ECONSOLE
     return;
 #endif
     qDebug() << "void NetManager::connectToServer()";
@@ -390,7 +409,7 @@ void NetManager::setupServerServiceConnections()
 {
     connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection,
             Qt::UniqueConnection);
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     connect(serverService, &ServerService::serverStatus, this, &NetManager::qmlServerError);
 #endif
 }
@@ -533,7 +552,7 @@ void NetManager::sendFromCache()
 
 void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
 {
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     bool flag = false;
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
@@ -543,7 +562,7 @@ void NetManager::distMessage(const QByteArray &data, const SocketPair &socketDat
 #endif
         for (int i = 0; i < connections.size(); i++)
             connections[i]->distMsg(data, socketData);
-#ifdef ETALONIUM_CLIENT
+#ifdef ECLIENT
     }
     else
     {
