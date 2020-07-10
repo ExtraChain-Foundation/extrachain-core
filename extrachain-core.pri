@@ -173,7 +173,7 @@ GIT_COMMIT_CORE = $$system(git --git-dir .git --work-tree $$PWD describe --alway
 GIT_BRANCH_CORE = $$system(git --git-dir .git --work-tree $$PWD symbolic-ref --short HEAD)
 QMAKE_SUBSTITUTES += preconfig.h.in
 
-include(../etalonium-libs/etalonium-libs.pri)
+include(../extrachain-3rdparty/extrachain-3rdparty.pri)
 
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.14+")
 lessThan(QT_MINOR_VERSION, 14): error("requires Qt 5.14+")
