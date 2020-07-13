@@ -497,6 +497,9 @@ int compare(const QByteArray &one, const QByteArray &two);
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 void softWipe(const QString &currentId);
+
+QString detectCompiler();
+
 } // namespace Utils
 
 namespace DataStorage {
