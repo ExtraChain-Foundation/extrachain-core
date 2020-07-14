@@ -17,6 +17,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 #include "managers/logs_manager.h"
 
 #include <QMutex>
@@ -234,6 +238,10 @@ void LogsManager::etHandler()
 
     QDir().mkdir("logs");
     qInstallMessageHandler(LogsManager::messageHandler);
+
+#ifdef Q_OS_WIN
+    SetConsoleOutputCP(CP_UTF8);
+#endif
 }
 
 void LogsManager::qtHandler()
