@@ -37,7 +37,7 @@
 #include <QTemporaryFile>
 #include <cassert>
 // database
-#include "headers/utils/db_connector.h"
+#include "utils/db_connector.h"
 class TransactionManager;
 /*
  * Main database class

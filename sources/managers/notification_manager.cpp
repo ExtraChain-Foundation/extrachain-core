@@ -17,9 +17,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "headers/managers/notification_manager.h"
-#ifdef ECLIENT
+#include "managers/notification_manager.h"
 
+#ifdef ECLIENT
 NotificationManager::NotificationManager(QObject *parent)
     : QObject(parent)
 {

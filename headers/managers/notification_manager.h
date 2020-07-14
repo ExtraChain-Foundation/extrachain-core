@@ -66,5 +66,10 @@ signals:
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
 };
+#else
+class NotificationManager : public QObject
+{
+    Q_OBJECT
+};
 #endif
 #endif // NOTIFICATION_MANAGER_H

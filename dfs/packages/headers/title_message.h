@@ -21,7 +21,7 @@
 #define TITLE_MESSAGE_H
 
 #include "dfs/packages/headers/dfs_message_interface.h"
-#include "headers/network/packages/message_interface.h"
+#include "network/packages/message_interface.h"
 
 #include <QFile>
 

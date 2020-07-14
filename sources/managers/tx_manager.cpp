@@ -19,6 +19,8 @@
 
 #include "managers/tx_manager.h"
 
+#include "managers/node_manager.h"
+
 QList<Transaction *> TransactionManager::getReceivedTxList() const
 {
     return receivedTxList;
