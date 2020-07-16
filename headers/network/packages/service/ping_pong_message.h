@@ -28,7 +28,7 @@ namespace Messages {
 static const QByteArray PING_MESSAGE = "ping ExtraNet";
 static const QByteArray PONG_MESSAGE = "pong ExtraNet";
 
-static QByteArray createPingMessage()
+[[maybe_unused]] static QByteArray createPingMessage()
 {
     QByteArray msg("{");
     msg.append("\"proto\":\"")
@@ -42,7 +42,7 @@ static QByteArray createPingMessage()
     return msg;
 }
 
-static QByteArray createPongMessage(const quint16 port)
+[[maybe_unused]] static QByteArray createPongMessage(const quint16 port)
 {
     QByteArray msg("{");
     msg.append("\"proto\":\"")
@@ -68,17 +68,16 @@ static QByteArray createPongMessage(const quint16 port)
 static bool checkType(const QByteArray &msg, const QString &type)
 {
     QJsonDocument doc = QJsonDocument::fromJson(msg);
-    return !doc.isNull()
-        && doc.object().value("proto").toString() == Config::Net::PROTOCOL_VERSION
+    return !doc.isNull() && doc.object().value("proto").toString() == Config::Net::PROTOCOL_VERSION
         && doc.object().value("type").toString() == type;
 }
 
-static bool isPing(const QByteArray &msg)
+[[maybe_unused]] static bool isPing(const QByteArray &msg)
 {
     return Messages::checkType(msg, PING_MESSAGE);
 }
 
-static bool isPong(const QByteArray &msg)
+[[maybe_unused]] static bool isPong(const QByteArray &msg)
 {
     return Messages::checkType(msg, PONG_MESSAGE);
 }

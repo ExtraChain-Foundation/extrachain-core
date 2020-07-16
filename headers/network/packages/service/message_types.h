@@ -30,7 +30,7 @@ enum ChainMessage
     profileMessage = 198,
     coinRequest = 199,
 };
-static bool isChainMessage(unsigned int value)
+[[maybe_unused]] static bool isChainMessage(unsigned int value)
 {
     if (value >= 100 && value <= 199)
         return true;
@@ -47,7 +47,7 @@ enum GeneralRequest
     GetAllActors = 206,
     Notification = 270
 };
-static bool isGeneralRequest(unsigned int value)
+[[maybe_unused]] static bool isGeneralRequest(unsigned int value)
 {
     if (value >= 200 && value <= 299)
         return true;
@@ -63,7 +63,7 @@ enum GeneralResponse
     getTxPairResponse = 305,
     getAllActorsResponse = 306
 };
-static bool isGeneralResponse(unsigned int value)
+[[maybe_unused]] static bool isGeneralResponse(unsigned int value)
 {
     if (value >= 300 && value <= 399)
         return true;
@@ -92,7 +92,7 @@ enum DFSMessage
 
     none = 499
 };
-static bool isDFSMessage(unsigned int value)
+[[maybe_unused]] static bool isDFSMessage(unsigned int value)
 {
     if (value >= 400 && value <= 499)
         return true;
@@ -103,7 +103,7 @@ enum VerifyRequest
     verifyActor = 501,
     verifyActorResponse = 502
 };
-static bool isVerifyRequest(unsigned int value)
+[[maybe_unused]] static bool isVerifyRequest(unsigned int value)
 {
     if (value >= 500 && value <= 599)
         return true;
