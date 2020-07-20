@@ -116,6 +116,7 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     Network::DataStruct task;
     task.msg = msg;
     task.receiver = receiver;
+    QMutex mutex;
     mutex.lock();
     this->unprocessed.push(task);
     bool lockRes = popUnprocces();
@@ -201,6 +202,7 @@ void ResolveManager::taskFinished()
             emit resolver->finished();
         if (unprocessed.size() != 0)
         {
+            QMutex mutex;
             mutex.lock();
             popUnprocces();
             mutex.unlock();

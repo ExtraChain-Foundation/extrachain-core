@@ -61,9 +61,9 @@ void NotificationManager::loadNotificationFromDB()
     QList<Notification> list;
     for (const auto &temp : res)
     {
-        QByteArray time = mainActor->decryptSymmetric(QByteArray::fromStdString(temp.at("time")));
-        QByteArray type = mainActor->decryptSymmetric(QByteArray::fromStdString(temp.at("type")));
-        QByteArray data = mainActor->decryptSymmetric(QByteArray::fromStdString(temp.at("data")));
+        QByteArray time = mainActor->decryptSelf(QByteArray::fromStdString(temp.at("time")));
+        QByteArray type = mainActor->decryptSelf(QByteArray::fromStdString(temp.at("type")));
+        QByteArray data = mainActor->decryptSelf(QByteArray::fromStdString(temp.at("data")));
         Notification tmp { time.toLongLong(), Notification::NotifyType(type.toInt()), data };
         list.append(tmp);
     }
@@ -76,9 +76,9 @@ void NotificationManager::addNotify(const Notification newNtf)
     auto mainActor = accController->getMainActor()->key();
     sendEditSql(_currentActorId, "notifications", DfsStruct::Type::Private, DfsStruct::Insert,
                 { Config::DataStorage::notificationTable.c_str(), "time",
-                  mainActor->encryptSymmetric(QByteArray::number(newNtf.time)), "type",
-                  mainActor->encryptSymmetric(QByteArray::number(newNtf.type)), "data",
-                  mainActor->encryptSymmetric(newNtf.data) });
+                  mainActor->encryptSelf(QByteArray::number(newNtf.time)), "type",
+                  mainActor->encryptSelf(QByteArray::number(newNtf.type)), "data",
+                  mainActor->encryptSelf(newNtf.data) });
 
     emit newNotifyToUI(newNtf);
     sendToNotify(newNtf);

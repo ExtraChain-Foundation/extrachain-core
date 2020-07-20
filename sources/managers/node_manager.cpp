@@ -782,9 +782,11 @@ void NodeManager::notificationToken(QString os, QString actorId, QString token)
         return;
     auto key = company.key();
 
-    QMap<QString, QByteArray> map = { { "actor", key->encrypt(actorId.toLatin1()) },
-                                      { "token", key->encrypt(token.toLatin1()) },
-                                      { "os", key->encrypt(os.toLatin1()) } };
+    QMap<QString, QByteArray> map = {
+        { "actor", actorId.toLatin1() },
+        { "token", key->encrypt(token.toLatin1(), accController->getMainActor()->key()->getSecKey()) },
+        { "os", key->encrypt(os.toLatin1(), accController->getMainActor()->key()->getSecKey()) }
+    };
 
     sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }

@@ -24,7 +24,7 @@
 #include <QByteArray>
 
 #include "utils/db_connector.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include "dfs/types/headers/dfstruct.h"
 
 class NodeManager;

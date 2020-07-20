@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 #include <QMimeDatabase>
 #include <QStandardPaths>
@@ -217,11 +217,11 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
     }
-
+    string rkey = SecretKey::getKeyFromPass(key.toStdString());
     while (!orig.atEnd())
     {
         QByteArray part = orig.read(blockSize);
-        QByteArray encrypted = BlowFish::encrypt(part, key);
+        QByteArray encrypted = QByteArray::fromStdString(SecretKey::encrypt(part.toStdString(), rkey));
         encrypt.write(encrypted);
         // qDebug() << "encrypted" << part.size() << encrypted.size();
     }
@@ -249,11 +249,11 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
         qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
         return false;
     }
-
+    string rkey = SecretKey::getKeyFromPass(key.toStdString());
     while (!encrypt.atEnd())
     {
         QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted = BlowFish::decrypt(part, key);
+        QByteArray decrypted = QByteArray::fromStdString(SecretKey::decrypt(part.toStdString(), rkey));
         decrypt.write(decrypted);
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }
@@ -559,4 +559,35 @@ QDebug operator<<(QDebug d, const Notification &n)
     d.noquote().nospace() << "Notification(time: " << QString::number(n.time)
                           << ", type: " << QString::number(n.type) << ", data: \"" << n.data << "\")";
     return d;
+}
+
+std::string Utils::byteToHexString(std::vector<unsigned char> &data)
+{
+    int psize = data.size() * 2 + 1;
+    std::vector<char> p(psize);
+    sodium_bin2hex(p.data(), psize, data.data(), data.size());
+    std::string s(p.begin(), p.end());
+    return s;
+}
+
+std::string Utils::byteToHexString(std::string data)
+{
+    std::vector<unsigned char> v(data.begin(), data.end());
+    return byteToHexString(v);
+}
+
+std::string Utils::hexStringToByte(std::string data)
+{
+    std::vector<unsigned char> p;
+    p.resize(data.length() / 2 + 1);
+    const char *end;
+    size_t size;
+    int r = sodium_hex2bin(p.data(), p.size(), data.c_str(), data.length(), NULL, &size, &end);
+    std::string res;
+    if (r == 0)
+    {
+        res = std::string(p.begin(), p.end());
+        res.resize(res.size() - 1);
+    }
+    return res;
 }

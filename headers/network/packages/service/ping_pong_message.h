@@ -22,7 +22,7 @@
 
 #include <QByteArray>
 #include <QJsonDocument>
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 namespace Messages {
 static const QByteArray PING_MESSAGE = "ping ExtraNet";

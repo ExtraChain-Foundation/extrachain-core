@@ -20,7 +20,7 @@
 #ifndef NOTIFICATION_MANAGER_H
 #define NOTIFICATION_MANAGER_H
 #include "utils/db_connector.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include <QDateTime>
 
 #ifdef ECLIENT

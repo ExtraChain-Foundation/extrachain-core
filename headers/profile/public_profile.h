@@ -21,7 +21,7 @@
 #define PUBLIC_PROFILE_H
 
 #include "profile/profile.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include "utils/db_connector.h"
 
 struct indexList

@@ -193,14 +193,16 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
         QFile file(path + "/" + fileName + ".key");
         if (file.exists() && file.open(QIODevice::ReadOnly))
         {
-            QByteArray serialized = BlowFish::decrypt(file.readAll(), hashLogin);
+            string hl = hashLogin.toStdString();
+            QByteArray serialized =
+                QByteArray::fromStdString(SecretKey::decryptWithPassword(file.readAll().toStdString(), hl));
             qDebug() << serialized;
             file.close();
             if (!serialized.isEmpty())
             {
                 Actor<KeyPrivate> *actor = new Actor<KeyPrivate>(serialized);
 
-                qDebug() << "Actor" << actor->id() << "found locally -" << actor->key()->getPrivateKey();
+                qDebug() << "Actor" << actor->id() << "found locally -" << actor->key()->getSecKey().c_str();
                 this->accounts.append(actor);
                 loaded++;
             }
@@ -257,7 +259,9 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
         else
         {
             qDebug() << "actor serialized: ---- " << actor.serialize();
-            file->write(BlowFish::encrypt(actor.serialize(), hashLogin));
+            string hl = hashLogin.toStdString();
+            file->write(QByteArray::fromStdString(
+                SecretKey::encryptWithPassword(actor.serialize().toStdString(), hl)));
             file->flush();
             qDebug() << "Private Actor" << actor.id() << "is successfully saved";
         }

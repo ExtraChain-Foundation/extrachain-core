@@ -18,9 +18,6 @@ SOURCES += \
     $$PWD/dfs/types/sources/cardfile.cpp \
     $$PWD/sources/managers/chat.cpp \
     $$PWD/sources/managers/chatmanager.cpp \
-    $$PWD/sources/enc/algorithms/ecc/eccmath.cpp \
-    $$PWD/sources/enc/algorithms/ecc/ellipticpoint.cpp \
-    $$PWD/sources/enc/algorithms/blowfish_crypt.cpp \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
@@ -53,7 +50,6 @@ SOURCES += \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/coinprocess.cpp \
     $$PWD/sources/utils/db_connector.cpp \
-    $$PWD/sources/utils/utils.cpp \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
@@ -67,7 +63,8 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
-    $$PWD/sources/network/upnpconnection.cpp
+    $$PWD/sources/network/upnpconnection.cpp \
+    $$PWD/sources/utils/exc_utils.cpp
 
 HEADERS += \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
@@ -80,11 +77,7 @@ HEADERS += \
     $$PWD/dfs/packages/headers/req_frags_message.h \
     $$PWD/dfs/packages/headers/status.h \
     $$PWD/dfs/packages/headers/title_message.h \
-    $$PWD/headers/enc/algorithms/aes.h \
-    $$PWD/headers/enc/algorithms/blowfish_crypt.h \
-    $$PWD/headers/enc/algorithms/ecc/curves.h \
-    $$PWD/headers/enc/algorithms/ecc/eccmath.h \
-    $$PWD/headers/enc/algorithms/ecc/ellipticpoint.h \
+    $$PWD/headers/enc/enc_tools.h \
     $$PWD/headers/enc/key_private.h \
     $$PWD/headers/enc/key_public.h \
     $$PWD/headers/enc/sign_interface.h \
@@ -148,7 +141,7 @@ HEADERS += \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/utils/utils.h \
+    $$PWD/headers/utils/exc_utils.h \
     $$PWD/test.h
 
 linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable

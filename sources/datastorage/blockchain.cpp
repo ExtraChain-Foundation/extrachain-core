@@ -1560,6 +1560,7 @@ void Blockchain::addBlockToBlockchain(Block block)
 
 void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
 {
+    QMutex mutex;
     if (block.getIndex() == 0)
     {
         mutex.lock();

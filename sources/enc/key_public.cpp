@@ -19,81 +19,77 @@
 
 #include "enc/key_public.h"
 
-KeyPublic::KeyPublic(EllipticPoint pbKey)
+KeyPublic::KeyPublic(const string &publicKey)
 {
-    this->pbkey = pbKey;
+    pubKey = publicKey;
 }
 
 KeyPublic::KeyPublic(const QJsonObject &json)
 {
-    auto publicKey = json["publicKey"].toObject();
-    BigNumber x = publicKey["x"].toString().toLatin1();
-    BigNumber y = publicKey["y"].toString().toLatin1();
-
-    this->pbkey = EllipticPoint(x, y);
+    pubKey = json["publicKey"].toString().toStdString();
 }
 
 KeyPublic::KeyPublic(const KeyPublic &keyPublic)
 {
-    pbkey = keyPublic.pbkey;
-}
-
-KeyPublic::KeyPublic()
-{
-    pbkey = EllipticPoint();
+    pubKey = keyPublic.getPubKey();
 }
 
 KeyPublic::~KeyPublic()
 {
 }
 
-QByteArray KeyPublic::encrypt(const QByteArray &data)
+QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySender)
 {
-    QList<QByteArray> res;
-    QByteArray result;
-    BigNumber r;
-    EllipticPoint R;
-    EllipticPoint S;
-    ECC::curve secpCurve;
+    string sdata = data.toStdString();
+    unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
 
-    do
+    vector<unsigned char> pkr(this->pubKey.begin(), this->pubKey.end());
+    vector<unsigned char> sks(privateKeySender.begin(), privateKeySender.end());
+
+    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
+    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
+
+    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
+    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
+    //    if (conv_res)
+    vector<unsigned char> enc_msg(enc_size);
+    vector<unsigned char> dec_msg(sdata.begin(), sdata.end());
+    vector<unsigned char> nonce;
+    nonce.resize(crypto_box_NONCEBYTES);
+    randombytes_buf(nonce.data(), nonce.size());
+    int r = crypto_box_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), nonce.data(), xpkr.data(),
+                            xsks.data());
+    string res;
+    if (r == 0)
     {
-        res.clear();
-
-        r = BigNumber::random(64, curve.p, false).nextPrime();
-        R = ECC::multiply(secpCurve, r, secpCurve.g);
-        S = ECC::multiply(secpCurve, r, this->pbkey);
-        res.append(BlowFish::encrypt(data, S.x().toByteArray() + S.y().toByteArray()));
-        res.append(R.x().toByteArray());
-        res.append(R.y().toByteArray());
-        result = Serialization::serialize(res, Serialization::DEFAULT_FIELD_SIZE);
-        res.clear();
-        res = Serialization::deserialize(result, Serialization::DEFAULT_FIELD_SIZE);
-    } while (res.size() != 3);
-
-    return result;
+        enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
+        res = Utils::byteToHexString(enc_msg);
+    }
+    return QByteArray::fromStdString(res);
 }
 
-bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
+bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex)
 {
-    BigNumber z = BigNumber(Utils::calcKeccak(data));
-    QList<QByteArray> signature = Serialization::deserialize(dsignBase64, 3);
-    BigNumber r(signature[0]), s(signature[1]);
-    BigNumber w = ECC::inverseMod(s, curve.n);
-    BigNumber u1 = (z * w) % curve.n;
-    BigNumber u2 = (r * w) % curve.n;
-    EllipticPoint p1 = ECC::multiply(curve, u1, curve.g);
-    EllipticPoint p2 = ECC::multiply(curve, u2, pbkey);
-    EllipticPoint point = ECC::add(curve, p1, p2);
-    return r % curve.n == point.x() % curve.n;
-}
-
-EllipticPoint KeyPublic::getPublicKey() const
-{
-    return pbkey;
+    string signature = Utils::hexStringToByte(dsignHex.toStdString());
+    vector<unsigned char> pk(this->pubKey.begin(), this->pubKey.end());
+    vector<unsigned char> vmsg(data.begin(), data.end());
+    vector<unsigned char> vsig(signature.begin(), signature.end());
+    if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 bool KeyPublic::isEmpty()
 {
-    return pbkey.isZero();
+    return pubKey.empty();
+}
+
+string KeyPublic::getPubKey() const
+{
+    return pubKey;
 }

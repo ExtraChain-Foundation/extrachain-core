@@ -38,11 +38,14 @@
 #include <sstream>
 #include <string>
 
+#include "enc/enc_tools.h"
+
 #include "dfs/types/headers/dfstruct.h"
 #include "network/socket_pair.h"
 #include "utils/Keccak256.h"
 #include "utils/bignumber.h"
-#include "enc/algorithms/blowfish_crypt.h"
+
+#include "sodium.h"
 
 namespace Network {
 static QString serverIp = "51.68.181.52";
@@ -478,6 +481,11 @@ int qByteArrayToInt(const QByteArray &number);
 
 QByteArray calcKeccak(const QByteArray &data);
 QByteArray calcKeccakForFile(const QString &path);
+
+std::string byteToHexString(std::vector<unsigned char> &data);
+std::string byteToHexString(std::string data);
+std::string hexStringToByte(std::string data);
+
 bool encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
                  int blockSize = 60007);
 bool decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
