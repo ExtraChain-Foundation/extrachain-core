@@ -16,6 +16,7 @@ SOURCES += \
     $$PWD/dfs/packages/sources/req_frags_message.cpp \
     $$PWD/dfs/packages/sources/title_message.cpp \
     $$PWD/dfs/types/sources/cardfile.cpp \
+    $$PWD/sources/enc/enc_tools.cpp \
     $$PWD/sources/managers/chat.cpp \
     $$PWD/sources/managers/chatmanager.cpp \
     $$PWD/sources/enc/key_private.cpp \
@@ -144,7 +145,7 @@ HEADERS += \
     $$PWD/headers/utils/exc_utils.h \
     $$PWD/test.h
 
-gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
+gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function  -Wno-deprecated # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android {
 !android!ios: DESTDIR = Build
