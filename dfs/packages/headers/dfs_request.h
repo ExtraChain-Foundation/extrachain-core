@@ -21,7 +21,7 @@
 #define DFS_REUEST_H
 
 #include "dfs/packages/headers/dfs_message_interface.h"
-#include "headers/network/packages/message_interface.h"
+#include "network/packages/message_interface.h"
 
 namespace DistFileSystem {
 struct DfsRequest : Messages::ISmallMessage

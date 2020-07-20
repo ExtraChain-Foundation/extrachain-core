@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "headers/resolve/dfs_resolver_service.h"
+#include "resolve/dfs_resolver_service.h"
 #include "managers/node_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/blockchain.h"

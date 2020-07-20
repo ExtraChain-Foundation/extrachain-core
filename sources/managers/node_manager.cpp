@@ -19,6 +19,8 @@
 
 #include "managers/node_manager.h"
 
+#include "resolve/resolve_manager.h"
+
 NodeManager::NodeManager()
 {
     prepareFolders();

@@ -478,7 +478,7 @@ void ResolverService::resolveGeneralTask()
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         auto map = Serialization::deserializeMap(responseMessage.data);
-        node->consoleManager()->pushManager()->saveNotificationToken(map["os"], map["actor"], map["token"]);
+        node->consoleManager()->saveNotificationToken(map["os"], map["actor"], map["token"]);
 #endif
 
         finishWork();

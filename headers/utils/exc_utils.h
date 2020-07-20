@@ -64,7 +64,7 @@ static QByteArray *companyActorId = new QByteArray("0");
 };
 
 namespace net {
-static QByteArray readNetManagerIdentificator()
+[[maybe_unused]] static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
     file.open(QIODevice::ReadOnly);
@@ -72,7 +72,7 @@ static QByteArray readNetManagerIdentificator()
     file.close();
     return id;
 }
-static QByteArray dfsreadNetManagerIdentificator()
+[[maybe_unused]] static QByteArray dfsreadNetManagerIdentificator()
 {
     QFile file(".dsettings");
     file.open(QIODevice::ReadOnly);
@@ -505,6 +505,9 @@ int compare(const QByteArray &one, const QByteArray &two);
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 void softWipe(const QString &currentId);
+
+QString detectCompiler();
+
 } // namespace Utils
 
 namespace DataStorage {
@@ -577,7 +580,7 @@ enum class TxParam
     Null
 };
 
-static QString toString(BlockParam param)
+[[maybe_unused]] static QString toString(BlockParam param)
 {
     switch (param)
     {
@@ -594,7 +597,7 @@ static QString toString(BlockParam param)
     }
 }
 
-static BlockParam fromStringBlockParam(QByteArray s)
+[[maybe_unused]] static BlockParam fromStringBlockParam(QByteArray s)
 {
     if (s == "Id")
         return BlockParam::Id;
@@ -607,7 +610,7 @@ static BlockParam fromStringBlockParam(QByteArray s)
     return BlockParam::Null;
 }
 
-static QString toString(TxParam param)
+[[maybe_unused]] static QString toString(TxParam param)
 {
     switch (param)
     {
@@ -628,7 +631,7 @@ static QString toString(TxParam param)
     }
 }
 
-static TxParam fromStringTxParam(QByteArray s)
+[[maybe_unused]] static TxParam fromStringTxParam(QByteArray s)
 {
     if (s == "User")
         return TxParam::User;

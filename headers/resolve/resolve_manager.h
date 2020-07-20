@@ -20,27 +20,12 @@
 #ifndef RESOLVE_MANAGER_H
 #define RESOLVE_MANAGER_H
 
-#ifndef NETWORK_MANAGER_DEF
-#define NETWORK_MANAGER_DEF
 class NetManager;
-#include "network/network_manager.h"
-#endif
-#ifndef RESOLVER_SERVICE_DEF
-#define RESOLVER_SERVICE_DEF
 class ResolverService;
-#include "resolve/resolver_service.h"
-#endif
-#ifndef NODE_MANAGER_DEF
-#define NODE_MANAGER_DEF
 class NodeManager;
-#include "managers/node_manager.h"
-#endif
-
-#include "managers/chatmanager.h"
 class ChatManager;
 
 #include <QObject>
-//#include <QQueue>
 #include <queue>
 #include <vector>
 #include "datastorage/blockchain.h"

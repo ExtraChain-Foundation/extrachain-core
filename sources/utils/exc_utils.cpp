@@ -591,3 +591,18 @@ std::string Utils::hexStringToByte(std::string data)
     }
     return res;
 }
+
+QString Utils::detectCompiler()
+{
+    QString compiler = "unknown";
+
+#ifdef __GNUC__
+    compiler = QString("GCC %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__);
+#endif
+
+#ifdef __clang__
+    compiler = QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
+#endif
+
+    return compiler;
+}

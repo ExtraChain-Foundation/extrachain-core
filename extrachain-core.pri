@@ -144,7 +144,7 @@ HEADERS += \
     $$PWD/headers/utils/exc_utils.h \
     $$PWD/test.h
 
-linux: QMAKE_CXXFLAGS += -Wall -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
+gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
 !android {
 !android!ios: DESTDIR = Build

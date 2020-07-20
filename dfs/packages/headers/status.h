@@ -23,7 +23,7 @@
 #include <QObject>
 #include "utils/exc_utils.h"
 #include "dfs/packages/headers/dfs_message_interface.h"
-#include "headers/network/packages/message_interface.h"
+#include "network/packages/message_interface.h"
 
 namespace DistFileSystem {
 

@@ -19,6 +19,12 @@
 
 #include "resolve/resolve_manager.h"
 
+#include "datastorage/blockchain.h"
+#include "network/network_manager.h"
+#include "resolve/resolver_service.h"
+#include "managers/node_manager.h"
+#include "managers/chatmanager.h"
+
 void ResolveManager::setNode(NodeManager *value)
 {
     node = value;
