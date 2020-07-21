@@ -21,7 +21,7 @@
 #define PUBLIC_PROFILE_H
 
 #include "profile/profile.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include "utils/db_connector.h"
 
 struct indexList
@@ -45,10 +45,13 @@ public:
     QByteArray getProfile();
     static QByteArray serialize(QByteArrayList profileList);
     static QByteArrayList deserialize(QByteArray serializeData);
+    static QByteArray getProfileDataFromNetwork(const QByteArray &withSignData);
     QByteArrayList getQuickProfile(QByteArray _data);
     QByteArray sign = "";
     QString idPath;
     QByteArray id;
+    QByteArray data;
+    QByteArray dataToProfile;
 
 signals:
     //

@@ -39,7 +39,8 @@ void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray
     QByteArray data = "";
     writeData(map, data);
     data = hash + data;
-    data = BlowFish::encrypt(data, hash);
+    string h = hash.toStdString();
+    data = QByteArray::fromStdString(SecretKey::encryptWithPassword(data.toStdString(), h));
     QFile file(PathProfile + "/" + id + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
@@ -62,7 +63,8 @@ void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, c
     }
     file.open(QIODevice::ReadWrite);
     QByteArray data = file.readAll();
-    data = BlowFish::decrypt(data, hashLogin);
+    string hl = hashLogin.toStdString();
+    data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), hl));
     if (data.mid(0, 64) == hashLogin)
     {
         data = data.mid(64);
@@ -75,7 +77,8 @@ void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, c
         data.clear();
         writeData(map, data);
         data = hashLogin + data;
-        data = BlowFish::encrypt(data, hashLogin);
+        string hll = hashLogin.toStdString();
+        data = QByteArray::fromStdString(SecretKey::encryptWithPassword(data.toStdString(), hll));
         file.resize(0);
         file.write(data);
     }
@@ -93,7 +96,8 @@ void PrivateProfile::loadInfoFromPrivateProfile(const QByteArray &hash, const QB
     QByteArray data = file.readAll();
     file.flush();
     file.close();
-    data = BlowFish::decrypt(data, hash);
+    string h = hash.toStdString();
+    data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
     QByteArray secureLoginFile = data.mid(0, 64);
     if (secureLoginFile == hash)
     {
@@ -145,7 +149,8 @@ void PrivateProfile::profile(const QByteArray &hash)
             QByteArray data = file.readAll();
             file.flush();
             file.close();
-            data = BlowFish::decrypt(data, hash);
+            string h = hash.toStdString();
+            data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
             QByteArray secureLoginFile = data.mid(0, 64);
             if (secureLoginFile == hash)
             {

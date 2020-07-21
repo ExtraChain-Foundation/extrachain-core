@@ -93,8 +93,8 @@ void ChatManager::InitializeChatList()
     std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
     for (DBRow temp : chats)
     {
-        QByteArray chatId = _accController->getMainActor()->key()->decryptSymmetric(
-            QByteArray::fromStdString(temp["chatId"]));
+        QByteArray chatId =
+            _accController->getMainActor()->key()->decryptSelf(QByteArray::fromStdString(temp["chatId"]));
 
         Chat *chat = getChatMemory(chatId);
         if (chat == nullptr)
@@ -151,10 +151,11 @@ void ChatManager::parseInvite()
 
     for (const auto &invite : invites)
     {
-        QByteArray owner = mainActor->decrypt(QByteArray::fromStdString(invite.at("owner")));
+        QByteArray owner = QByteArray::fromStdString(invite.at("owner"));
+        string ownerPK = _actorIndex->getActor(BigNumber(owner)).key()->getPubKey();
         QByteArray chatIdEncrypted = QByteArray::fromStdString(invite.at("chatId"));
-        QByteArray chatId = mainActor->decrypt(chatIdEncrypted);
-        QByteArray key = mainActor->decrypt(QByteArray::fromStdString(invite.at("message")));
+        QByteArray chatId = mainActor->decrypt(chatIdEncrypted, ownerPK);
+        QByteArray key = mainActor->decrypt(QByteArray::fromStdString(invite.at("message")), ownerPK);
 
         if (owner.length() != 20 || !BigNumber::isValid(owner))
             continue;
@@ -162,35 +163,6 @@ void ChatManager::parseInvite()
         qDebug() << "invite" << owner << chatId << key;
         Chat temp(this, chatId, _actorIndex, _accController);
         temp.saveChatKey(key, BigNumber(0), owner);
-        // temp.sendMessage("{ \"type\": \"first\" }");
-
-        // AddChat(chatId, _accController->getMainActor()->getKey()->decrypt(key), owner);
-        //        QList<QByteArray> allUsers = temp.getAllUsers();
-        //        QStringList tempusersList;
-
-        // for (auto user : allUsers)
-        //      tempusersList.append(user);
-        //        tempusersList.append(_currentActorId);
-        //        tempusersList.append(owner);
-        // emit chatCreated(
-        //    UIChat { tempusersList, chatId, Chat(chatId, _actorIndex, _accController).getLastMessage() });
-
-        //        QByteArray pathToUsersFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId
-        //        +
-        //        "/users"; QByteArray pathToMsgFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/"
-        //        + chatId
-        //        + "/0/msg"; QByteArray pathToUsersFileStored =
-        //            DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/users" +
-        //            DfsStruct::STORED_EXT;
-        //        QByteArray pathToMsgFileStored =
-        //            DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/0/msg" +
-        //            DfsStruct::STORED_EXT;
-
-        //        emit requestFile(pathToUsersFile);
-        //        emit requestFile(pathToMsgFile);
-        //        emit requestFile(pathToUsersFileStored);
-        //        emit requestFile(pathToMsgFileStored);
-
         sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Delete,
                     { Config::DataStorage::chatInviteTableName.c_str(), "chatId", chatIdEncrypted });
     }
@@ -206,7 +178,7 @@ QMap<QByteArray, QByteArray> ChatManager::extractChatKey()
 
 QByteArray ChatManager::generateChatKey()
 {
-    return Utils::calcKeccak(BigNumber::random(65).toByteArray());
+    return QByteArray::fromStdString(SecretKey::keygen());
 }
 
 ChatManager::ChatManager(AccountController *accController, ActorIndex *actorIndex)
@@ -267,15 +239,8 @@ void ChatManager::removeMemberFromChat(QByteArray chatId, QByteArray actorId)
         return;
     }
 
-    if (temp.createNewSession(_accController->getMainActor()->key()->encrypt(generateChatKey()),
-                              temp.getAllUsers(), temp.getOwner()))
+    if (temp.createNewSession(generateChatKey(), temp.getAllUsers(), temp.getOwner()))
     {
-        //        QFile file(getPathToMyChats() + chatId  + newSession);
-        //        file.open(QIODevice::WriteOnly);
-        //        file.close();
-
-        // getSignalFromChats(convertChatIdToFullPath(chatId) + "sessions/" + newSession);
-
         QList<QByteArray> users = temp.getAllUsers();
         foreach (QByteArray currentUser, users)
         {
@@ -315,11 +280,12 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 
     QByteArrayList query = { Config::DataStorage::chatInviteTableName.c_str(),
                              "chatId",
-                             key->encrypt(chatId),
+                             key->encrypt(chatId, _accController->getMainActor()->key()->getSecKey()),
                              "message",
-                             key->encrypt(chat->unloadChatKey()),
+                             key->encrypt(chat->getChatKey(),
+                                          _accController->getMainActor()->key()->getSecKey()),
                              "owner",
-                             key->encrypt(_currentActorId) };
+                             _currentActorId };
     sendEditSql(actorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Insert, query);
 }
 
@@ -575,8 +541,8 @@ void ChatManager::initChat(bool status, int type)
 
         for (DBRow &tmp : chats)
         {
-            QString owner = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["owner"]));
-            QString chatId = mainActor->decryptSymmetric(QByteArray::fromStdString(tmp["chatId"]));
+            QString owner = mainActor->decryptSelf(QByteArray::fromStdString(tmp["owner"]));
+            QString chatId = mainActor->decryptSelf(QByteArray::fromStdString(tmp["chatId"]));
             QString pathToUsersFile =
                 DfsStruct::ROOT_FOOLDER_NAME + "/" + owner + "/chats/" + chatId + "/users";
             QString pathToMsgFile =

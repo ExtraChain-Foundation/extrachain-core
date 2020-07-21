@@ -20,25 +20,18 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
-//#include <string>
-//#include <sstream>
-//#include <iostream>
-//#include <cstring>
-//#include <QDir>
-
+#include <string>
+#include "headers/utils/exc_utils.h"
+#include <sodium.h>
 #include <QDebug>
-#include "utils/bignumber.h"
-#include "enc/algorithms/blowfish_crypt.h"
-#include "enc/algorithms/ecc/ellipticpoint.h"
-#include "enc/algorithms/ecc/curves.h"
-#include "enc/algorithms/ecc/eccmath.h"
+
+using namespace std;
 
 class KeyPrivate
 {
 private:
-    ECC::curve curve;
-    BigNumber prkey;
-    EllipticPoint pbkey;
+    string secKey;
+    string pubKey;
 
 public:
     /**
@@ -54,21 +47,21 @@ public:
     ~KeyPrivate();
 
 public:
-    EllipticPoint generate();
-
-public: // Cryptor interface
-    QByteArray encrypt(const QByteArray &data);
-    QByteArray decrypt(const QByteArray &data);
-    QByteArray encryptSymmetric(const QByteArray &data);
-    QByteArray decryptSymmetric(const QByteArray &data);
-
-public: // Signer interface
-    QByteArray sign(const QByteArray &data);
-    bool verify(const QByteArray &data, const QByteArray &dsignBase64);
+    void generate();
 
 public:
-    BigNumber getPrivateKey() const;
-    EllipticPoint getPublicKey() const;
+    QByteArray encrypt(const QByteArray &data, const string &publicKeyReceiver);
+    QByteArray decrypt(const QByteArray &data, const string &publicKeySender);
+    QByteArray encryptSelf(const QByteArray &data);
+    QByteArray decryptSelf(const QByteArray &data);
+
+public:
+    QByteArray sign(const QByteArray &data);
+    bool verify(const QByteArray &data, const QByteArray &dsignHex);
+
+public:
+    std::string getSecKey() const;
+    std::string getPubKey() const;
 };
 
 #endif // KEY_PRIVATE_H

@@ -29,7 +29,7 @@
 //#include "resolver_service.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 /**
  * @brief ServerService is responsible for handling incoming sockets connections.

@@ -68,7 +68,7 @@ inline uint64_t rotateLeft(uint64_t x, uint8_t numBits)
 }
 
 /// convert litte vs big endian
-inline uint64_t swap(uint64_t x)
+[[maybe_unused]] inline uint64_t swap(uint64_t x)
 {
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_bswap64(x);
@@ -293,7 +293,7 @@ QByteArray Keccak::getHash()
     // number of significant elements in hash (uint64_t)
     unsigned int hashLength = m_bits / 64;
 
-    //std::string result;
+    // std::string result;
     QByteArray result;
     for (unsigned int i = 0; i < hashLength; i++)
         for (unsigned int j = 0; j < 8; j++) // 64 bits => 8 bytes

@@ -32,7 +32,7 @@
 #include <chrono>
 #include <thread>
 
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include "network/packages/service/ping_pong_message.h"
 
 class DiscoveryService : public QObject

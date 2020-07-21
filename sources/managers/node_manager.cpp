@@ -19,8 +19,15 @@
 
 #include "managers/node_manager.h"
 
+#include "resolve/resolve_manager.h"
+
 NodeManager::NodeManager()
 {
+    if (sodium_init() != 0)
+    {
+        qDebug() << "Encryption init error!!!";
+        QCoreApplication::exit(-1);
+    }
     prepareFolders();
     if (!QFile(".settings").exists())
         createNetManagerIdentificator();
@@ -782,9 +789,11 @@ void NodeManager::notificationToken(QString os, QString actorId, QString token)
         return;
     auto key = company.key();
 
-    QMap<QString, QByteArray> map = { { "actor", key->encrypt(actorId.toLatin1()) },
-                                      { "token", key->encrypt(token.toLatin1()) },
-                                      { "os", key->encrypt(os.toLatin1()) } };
+    QMap<QString, QByteArray> map = {
+        { "actor", actorId.toLatin1() },
+        { "token", key->encrypt(token.toLatin1(), accController->getMainActor()->key()->getSecKey()) },
+        { "os", key->encrypt(os.toLatin1(), accController->getMainActor()->key()->getSecKey()) }
+    };
 
     sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }

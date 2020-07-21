@@ -579,6 +579,7 @@ void NetManager::distMessage(const QByteArray &data, const SocketPair &socketDat
 
 void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
+    QMutex mutex;
     mutex.lock();
     if (checkMsgCount(msg, handler, connections))
         resolveManager->setTask(msg, receiver);

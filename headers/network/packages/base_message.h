@@ -24,7 +24,7 @@
 
 #include "network/packages/message_interface.h"
 #include "utils/bignumber.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 namespace Messages {
 /**

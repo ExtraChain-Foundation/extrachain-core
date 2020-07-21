@@ -38,11 +38,14 @@
 #include <sstream>
 #include <string>
 
+#include "enc/enc_tools.h"
+
 #include "dfs/types/headers/dfstruct.h"
 #include "network/socket_pair.h"
 #include "utils/Keccak256.h"
 #include "utils/bignumber.h"
-#include "enc/algorithms/blowfish_crypt.h"
+
+#include "sodium.h"
 
 namespace Network {
 static QString serverIp = "51.68.181.52";
@@ -61,7 +64,7 @@ static QByteArray *companyActorId = new QByteArray("0");
 };
 
 namespace net {
-static QByteArray readNetManagerIdentificator()
+[[maybe_unused]] static QByteArray readNetManagerIdentificator()
 {
     QFile file(".settings");
     file.open(QIODevice::ReadOnly);
@@ -69,7 +72,7 @@ static QByteArray readNetManagerIdentificator()
     file.close();
     return id;
 }
-static QByteArray dfsreadNetManagerIdentificator()
+[[maybe_unused]] static QByteArray dfsreadNetManagerIdentificator()
 {
     QFile file(".dsettings");
     file.open(QIODevice::ReadOnly);
@@ -478,6 +481,11 @@ int qByteArrayToInt(const QByteArray &number);
 
 QByteArray calcKeccak(const QByteArray &data);
 QByteArray calcKeccakForFile(const QString &path);
+
+std::string byteToHexString(std::vector<unsigned char> &data);
+std::string byteToHexString(std::string data);
+std::string hexStringToByte(std::string data);
+
 bool encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
                  int blockSize = 60007);
 bool decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
@@ -497,6 +505,9 @@ int compare(const QByteArray &one, const QByteArray &two);
 QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 void softWipe(const QString &currentId);
+
+QString detectCompiler();
+
 } // namespace Utils
 
 namespace DataStorage {
@@ -569,7 +580,7 @@ enum class TxParam
     Null
 };
 
-static QString toString(BlockParam param)
+[[maybe_unused]] static QString toString(BlockParam param)
 {
     switch (param)
     {
@@ -586,7 +597,7 @@ static QString toString(BlockParam param)
     }
 }
 
-static BlockParam fromStringBlockParam(QByteArray s)
+[[maybe_unused]] static BlockParam fromStringBlockParam(QByteArray s)
 {
     if (s == "Id")
         return BlockParam::Id;
@@ -599,7 +610,7 @@ static BlockParam fromStringBlockParam(QByteArray s)
     return BlockParam::Null;
 }
 
-static QString toString(TxParam param)
+[[maybe_unused]] static QString toString(TxParam param)
 {
     switch (param)
     {
@@ -620,7 +631,7 @@ static QString toString(TxParam param)
     }
 }
 
-static TxParam fromStringTxParam(QByteArray s)
+[[maybe_unused]] static TxParam fromStringTxParam(QByteArray s)
 {
     if (s == "User")
         return TxParam::User;

@@ -21,8 +21,7 @@
 #define PRIVATE_PROFILE_H
 
 #include <QByteArray>
-#include "enc/algorithms/blowfish_crypt.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 class AccountController;
 class Dfs;

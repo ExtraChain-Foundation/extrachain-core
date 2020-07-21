@@ -26,7 +26,7 @@
 #include "datastorage/actor.h"
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 class Transaction : public QObject
 {

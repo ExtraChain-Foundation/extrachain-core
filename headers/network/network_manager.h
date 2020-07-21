@@ -54,7 +54,7 @@ class ResolveManager;
 #include <QtNetwork/QNetworkAddressEntry>
 #include <algorithm>
 
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"

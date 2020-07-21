@@ -26,6 +26,8 @@
 #include <QTimer>
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
+#include "enc/enc_tools.h"
+
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
 // path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current
 // session for this chat blockhain/index/actor/[myId]/myChats/[chatId]   /keystore/key[SessionNumb]   //

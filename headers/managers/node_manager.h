@@ -19,11 +19,7 @@
 
 #ifndef NODE_MANAGER_H
 #define NODE_MANAGER_H
-#ifndef RESOLVE_MANAGER_DEF
-#define RESOLVE_MANAGER_DEF
-class ResolveManager;
-#include "resolve/resolve_manager.h"
-#endif
+
 #include <QObject>
 #include <QMap>
 #include "network/network_manager.h"
@@ -42,15 +38,16 @@ class ResolveManager;
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
-#include "headers/network/packages/service/message_types.h"
+#include "network/packages/service/message_types.h"
 #include "managers/file_updater_manager.h"
 
 #include "asyncfuture.h"
 #include <QtConcurrent>
+#include <QCoreApplication>
 
 #ifdef ECLIENT
 #include "ui/ui_controller.h"
-#include "headers/ui/notificationclient.h"
+#include "ui/notificationclient.h"
 #include "managers/notification_manager.h"
 #endif
 
@@ -58,7 +55,9 @@ class ResolveManager;
 #include "managers/console_manager.h"
 #endif
 
+class ResolveManager;
 using namespace DfsStruct;
+
 class NodeManager : public QObject
 {
     Q_OBJECT

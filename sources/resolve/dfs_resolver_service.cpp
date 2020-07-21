@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "headers/resolve/dfs_resolver_service.h"
+#include "resolve/dfs_resolver_service.h"
 #include "managers/node_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/blockchain.h"
@@ -106,8 +106,8 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 
 void DFSResolverService::checkStatus()
 {
-    if (title.filePath.contains("root"))
-        qDebug() << "[DFSResolver] root" << title.filePath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
+    // if (title.filePath.contains("root"))
+    //     qDebug() << "[DFSResolver] root" << title.filePath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
 
     QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())

@@ -24,12 +24,12 @@
 #include <QDebug>
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include "datastorage/transaction.h"
 #include "actor.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 #include <QDateTime>
-#include "headers/utils/db_connector.h"
+#include "utils/db_connector.h"
 
 // Block comparison result
 struct forApprovers

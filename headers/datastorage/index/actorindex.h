@@ -29,7 +29,7 @@
 #include "network/socket_pair.h"
 #include "network/packages/base_message_response.h"
 #include "network/packages/service/all_messages.h"
-#include "headers/network/packages/service/message_types.h"
+#include "network/packages/service/message_types.h"
 /**
  * @brief Actors that stored in blockchain
  */

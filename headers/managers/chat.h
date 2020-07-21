@@ -21,7 +21,6 @@
 #define CHAT_H
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "enc/algorithms/blowfish_crypt.h"
 #include "utils/db_connector.h"
 #include "dfs/types/headers/dfstruct.h"
 #include <QDir>
@@ -90,7 +89,7 @@ public:
     ~Chat();
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-
-    QByteArray unloadChatKey();                                   //+
+    QByteArray getChatKey();                                      //+
     // QByteArray getChatPrivateKey();                               //+
     BigNumber getActualCurrentSession(); //+
     // BigNumber getMyCurrentSession();                              //

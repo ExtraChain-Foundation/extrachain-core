@@ -28,7 +28,7 @@ class SocketService;
 #include "network/network_manager.h"
 #include "dfs/packages/headers/all.h"
 #include "resolve/dfs_resolver_service.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 #ifdef ECONSOLE
 static const short DFS_RESOLVERS_POOL_SIZE = 10;

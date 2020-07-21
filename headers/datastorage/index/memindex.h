@@ -24,7 +24,7 @@
 #include <QDebug>
 #include <algorithm>
 #include "datastorage/block.h"
-#include "utils/utils.h"
+#include "utils/exc_utils.h"
 
 class MemIndex
 {

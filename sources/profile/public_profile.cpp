@@ -57,11 +57,11 @@ PublicProfile::PublicProfile(const QByteArray &serialize)
     QByteArray serializeData = serialize.mid(0, serialize.size() - signSize - 4);
     signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
     sign = serializeData.mid(serializeData.size() - signSize - 4, signSize);
-    QByteArray data = serializeData.mid(0, serializeData.size() - signSize - 4);
+    data = serializeData.mid(0, serializeData.size() - signSize - 4);
     int pathSize = Utils::qByteArrayToInt(data.mid(data.size() - 4, 4));
     idPath = data.mid(data.size() - 4 - pathSize, pathSize);
-    QByteArray dataToProfile = data.mid(0, data.size() - 4 - pathSize);
-    saveProfileFromNet(dataToProfile);
+    dataToProfile = data.mid(0, data.size() - 4 - pathSize);
+    //    saveProfileFromNet(dataToProfile);
 }
 
 QByteArray PublicProfile::serialize() const
@@ -240,6 +240,24 @@ QByteArrayList PublicProfile::deserialize(QByteArray serializeData)
     }
 
     return profileData;
+}
+
+QByteArray PublicProfile::getProfileDataFromNetwork(const QByteArray &withSignData)
+{
+    qDebug() << withSignData;
+    int actorSize = Utils::qByteArrayToInt(withSignData.mid(withSignData.size() - 4, 4));
+    QByteArray withActor = withSignData.left(withSignData.size() - 4 - actorSize);
+
+    int signSize = Utils::qByteArrayToInt(withActor.mid(withActor.size() - 4, 4));
+    QByteArray data1 = withActor.mid(0, withActor.size() - signSize - 4);
+
+    int pathSize = Utils::qByteArrayToInt(data1.mid(data1.size() - 4, 4));
+    QByteArray data2 = data1.mid(0, data1.size() - pathSize - 4);
+
+    int signSize2 = Utils::qByteArrayToInt(data2.mid(data2.size() - 4, 4));
+    QByteArray serializeData = data2.mid(0, data2.size() - signSize2 - 4);
+
+    return serializeData;
 }
 
 QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)

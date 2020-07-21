@@ -20,6 +20,8 @@
 #ifndef ACCOUNT_CONTROLLER_H
 #define ACCOUNT_CONTROLLER_H
 
+#include "enc/enc_tools.h"
+
 #include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"

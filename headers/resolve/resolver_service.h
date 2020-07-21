@@ -39,7 +39,7 @@
 #include "network/socket_pair.h"
 #include "datastorage/genesis_block.h"
 #include "dfs/packages/headers/all.h"
-#include "headers/network/packages/service/message_types.h"
+#include "network/packages/service/message_types.h"
 
 #include <cassert>
 static QMutex handlerFileMutex;

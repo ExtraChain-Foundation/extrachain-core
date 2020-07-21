@@ -155,14 +155,11 @@ public:
         {
             KeyPrivate *k = reinterpret_cast<KeyPrivate *>(m_key);
             k->generate();
-            auto publicKey = k->getPublicKey();
-            QByteArray x = publicKey.x().toByteArray();
-            QByteArray y = publicKey.y().toByteArray();
-            QByteArray keccakPublicKey = Utils::calcKeccak(x + y);
-
-            if (keccakPublicKey.size() >= 20)
+            auto publicKey = k->getPubKey();
+            QByteArray pk = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
+            if (pk.size() >= 20)
             {
-                m_id = BigNumber(keccakPublicKey.right(20));
+                m_id = BigNumber(pk.left(20));
             }
             else
             {
@@ -205,18 +202,14 @@ public:
             Q_ASSERT(!empty());
         }
 
-        EllipticPoint publicKey = m_key->getPublicKey();
-        QString x = publicKey.x().toByteArray();
-        QString y = publicKey.y().toByteArray();
+        QString publicKey = QString::fromStdString(m_key->getPubKey());
 
-        QJsonObject json = { { "id", actorId },
-                             { "account", type },
-                             { "publicKey", QJsonObject { { "x", x }, { "y", y } } } };
+        QJsonObject json = { { "id", actorId }, { "account", type }, { "publicKey", publicKey } };
 
         if (isPrivate())
         {
             KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(m_key);
-            QString privateKey = keyPrivate->getPrivateKey().toByteArray();
+            QString privateKey = QString::fromStdString(keyPrivate->getSecKey());
             json["privateKey"] = privateKey;
         }
 
@@ -257,7 +250,7 @@ public:
         Actor<KeyPublic> actor;
 
         actor.setId(m_id);
-        actor.setPublicKey(m_key->getPublicKey());
+        actor.setPublicKey(m_key->getPubKey());
         actor.setAccount(ActorType(m_account));
 
         return actor;
@@ -268,10 +261,10 @@ public:
         m_id = id;
     }
 
-    void setPublicKey(EllipticPoint point)
+    void setPublicKey(std::string key)
     {
         Q_ASSERT(!isPrivate());
-        m_key = new T(point);
+        m_key = new KeyPublic(key);
     }
 
     void setAccount(const ActorType &account)
