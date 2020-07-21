@@ -50,6 +50,7 @@ public:
     QByteArray sign = "";
     QString idPath;
     QByteArray id;
+    QByteArray dataToProfile;
 
 signals:
     //
