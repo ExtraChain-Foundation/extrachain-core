@@ -43,6 +43,7 @@
 
 #include "asyncfuture.h"
 #include <QtConcurrent>
+#include <QApplication>
 
 #ifdef ECLIENT
 #include "ui/ui_controller.h"

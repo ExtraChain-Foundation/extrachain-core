@@ -42,9 +42,10 @@ QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySe
 {
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-
-    vector<unsigned char> pkr(this->pubKey.begin(), this->pubKey.end());
-    vector<unsigned char> sks(privateKeySender.begin(), privateKeySender.end());
+    string pkrs = Utils::hexStringToByte(pubKey);
+    vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
+    string sk = Utils::hexStringToByte(privateKeySender);
+    vector<unsigned char> sks(sk.begin(), sk.end());
 
     vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
     crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
@@ -70,8 +71,9 @@ QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySe
 
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex)
 {
+    string pks = Utils::hexStringToByte(this->pubKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
-    vector<unsigned char> pk(this->pubKey.begin(), this->pubKey.end());
+    vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
     if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)

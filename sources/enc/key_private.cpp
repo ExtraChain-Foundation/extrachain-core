@@ -46,17 +46,18 @@ void KeyPrivate::generate()
     vector<unsigned char> sk(crypto_sign_SECRETKEYBYTES);
     vector<unsigned char> pk(crypto_sign_PUBLICKEYBYTES);
     crypto_sign_keypair(pk.data(), sk.data());
-    secKey = string(sk.begin(), sk.end());
-    pubKey = string(pk.begin(), pk.end());
+    secKey = Utils::byteToHexString(sk);
+    pubKey = Utils::byteToHexString(pk);
 }
 
 QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver)
 {
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-
-    vector<unsigned char> pkr(publicKeyReceiver.begin(), publicKeyReceiver.end());
-    vector<unsigned char> sks(this->secKey.begin(), this->secKey.end());
+    string pkrs = Utils::hexStringToByte(publicKeyReceiver);
+    vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
+    string sk = Utils::hexStringToByte(secKey);
+    vector<unsigned char> sks(sk.begin(), sk.end());
 
     vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
     crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
@@ -83,12 +84,14 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
 QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender)
 {
     string sdata = Utils::hexStringToByte(data.toStdString());
+    string pksr = Utils::hexStringToByte(publicKeySender);
+    string sk = Utils::hexStringToByte(secKey);
     string s_nonce = sdata.substr(0, crypto_box_NONCEBYTES);
     sdata.erase(0, crypto_box_NONCEBYTES);
     vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
 
-    vector<unsigned char> skr(this->secKey.begin(), this->secKey.end());
-    vector<unsigned char> pks(publicKeySender.begin(), publicKeySender.end());
+    vector<unsigned char> skr(sk.begin(), sk.end());
+    vector<unsigned char> pks(pksr.begin(), pksr.end());
 
     vector<unsigned char> xskr(crypto_scalarmult_curve25519_BYTES);
     crypto_sign_ed25519_sk_to_curve25519(xskr.data(), skr.data());
@@ -121,7 +124,8 @@ QByteArray KeyPrivate::decryptSelf(const QByteArray &data)
 
 QByteArray KeyPrivate::sign(const QByteArray &data)
 {
-    vector<unsigned char> sk(secKey.begin(), secKey.end());
+    string sks = Utils::hexStringToByte(secKey);
+    vector<unsigned char> sk(sks.begin(), sks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(crypto_sign_BYTES);
     crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
@@ -131,8 +135,9 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
 
 bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex)
 {
+    string pks = Utils::hexStringToByte(this->pubKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
-    vector<unsigned char> pk(this->pubKey.begin(), this->pubKey.end());
+    vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
     if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)
@@ -153,14 +158,4 @@ std::string KeyPrivate::getSecKey() const
 std::string KeyPrivate::getPubKey() const
 {
     return pubKey;
-}
-
-string KeyPrivate::getSecHexKey() const
-{
-    return Utils::byteToHexString(secKey);
-}
-
-string KeyPrivate::getPubHexKey() const
-{
-    return Utils::byteToHexString(pubKey);
 }

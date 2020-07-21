@@ -62,8 +62,6 @@ public:
 public:
     std::string getSecKey() const;
     std::string getPubKey() const;
-    std::string getSecHexKey() const;
-    std::string getPubHexKey() const;
 };
 
 #endif // KEY_PRIVATE_H

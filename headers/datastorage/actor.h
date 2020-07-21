@@ -155,7 +155,7 @@ public:
         {
             KeyPrivate *k = reinterpret_cast<KeyPrivate *>(m_key);
             k->generate();
-            auto publicKey = k->getPubHexKey();
+            auto publicKey = k->getPubKey();
             QByteArray pk = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
             if (pk.size() >= 20)
             {

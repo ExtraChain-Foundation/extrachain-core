@@ -4,6 +4,7 @@
 #include <sodium.h>
 #include <vector>
 #include <string>
+#include <utils/exc_utils.h>
 
 using namespace std;
 namespace SecretKey {

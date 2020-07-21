@@ -4,7 +4,7 @@ string SecretKey::keygen()
 {
     vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
     crypto_secretbox_keygen(sk.data());
-    string skey(sk.begin(), sk.end());
+    string skey = Utils::byteToHexString(sk);
     return skey;
 }
 
@@ -23,15 +23,15 @@ string SecretKey::getKeyFromPass(string pass, string salt)
     int rst1 = crypto_pwhash(key.data(), key.size(), pass.data(), pass.size(), vsalt.data(),
                              crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                              crypto_pwhash_ALG_DEFAULT);
-    string skey(key.begin(), key.end());
+    string skey = Utils::byteToHexString(key);
     return skey;
 }
 
 string SecretKey::encrypt(string msg, string &secret_key)
 {
     unsigned long long enc_size = crypto_secretbox_MACBYTES + msg.length();
-
-    vector<unsigned char> sk(secret_key.begin(), secret_key.end());
+    string sks = Utils::hexStringToByte(secret_key);
+    vector<unsigned char> sk(sks.begin(), sks.end());
 
     vector<unsigned char> enc_msg(enc_size);
     vector<unsigned char> dec_msg(msg.begin(), msg.end());
@@ -42,20 +42,21 @@ string SecretKey::encrypt(string msg, string &secret_key)
     string res;
     if (r == 0)
     {
-        res = string(enc_msg.begin(), enc_msg.end());
-        res.insert(res.begin(), nonce.begin(), nonce.end());
+        enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
+        res = Utils::byteToHexString(enc_msg);
     }
     return res;
 }
 
 string SecretKey::decrypt(string msg, string &secret_key)
 {
-    string s_nonce = msg.substr(0, crypto_secretbox_NONCEBYTES);
-    msg.erase(0, crypto_secretbox_NONCEBYTES);
+    string sdata = Utils::hexStringToByte(msg);
+    string s_nonce = sdata.substr(0, crypto_secretbox_NONCEBYTES);
+    sdata.erase(0, crypto_secretbox_NONCEBYTES);
     vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
-
-    vector<unsigned char> sk(secret_key.begin(), secret_key.end());
-    vector<unsigned char> enc_msg(msg.begin(), msg.end());
+    string sks = Utils::hexStringToByte(secret_key);
+    vector<unsigned char> sk(sks.begin(), sks.end());
+    vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
     vector<unsigned char> dec_msg(enc_msg.size() - crypto_secretbox_MACBYTES);
 
     int r =
