@@ -57,7 +57,7 @@ PublicProfile::PublicProfile(const QByteArray &serialize)
     QByteArray serializeData = serialize.mid(0, serialize.size() - signSize - 4);
     signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
     sign = serializeData.mid(serializeData.size() - signSize - 4, signSize);
-    QByteArray data = serializeData.mid(0, serializeData.size() - signSize - 4);
+    data = serializeData.mid(0, serializeData.size() - signSize - 4);
     int pathSize = Utils::qByteArrayToInt(data.mid(data.size() - 4, 4));
     idPath = data.mid(data.size() - 4 - pathSize, pathSize);
     dataToProfile = data.mid(0, data.size() - 4 - pathSize);
