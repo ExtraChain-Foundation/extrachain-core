@@ -228,7 +228,11 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
-    if (actor.key()->verify(profile.data, profile.sign))
+
+    QByteArray pizda = PublicProfile::getProfileDataFromNetwork(newProfile);
+    qDebug() << "Pizda" << pizda;
+
+    if (actor.key()->verify(pizda, profile.sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
         actor.profile().saveProfileFromNet(profile.dataToProfile);

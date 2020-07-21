@@ -242,14 +242,22 @@ QByteArrayList PublicProfile::deserialize(QByteArray serializeData)
     return profileData;
 }
 
-QByteArrayList PublicProfile::getListProfileNotFromFile(const QByteArray &withSignData)
+QByteArray PublicProfile::getProfileDataFromNetwork(const QByteArray &withSignData)
 {
-    int signSize = Utils::qByteArrayToInt(withSignData.mid(withSignData.size() - 4, 4));
-    QByteArray sign = withSignData.mid(withSignData.size() - 4 - signSize, signSize);
-    QByteArray serializeData = withSignData.mid(0, withSignData.size() - 4 - signSize);
+    qDebug() << withSignData;
+    int actorSize = Utils::qByteArrayToInt(withSignData.mid(withSignData.size() - 4, 4));
+    QByteArray withActor = withSignData.left(withSignData.size() - 4 - actorSize);
 
-    QByteArrayList listProfile = deserialize(serializeData);
-    return listProfile;
+    int signSize = Utils::qByteArrayToInt(withActor.mid(withActor.size() - 4, 4));
+    QByteArray data1 = withActor.mid(0, withActor.size() - signSize - 4);
+
+    int pathSize = Utils::qByteArrayToInt(data1.mid(data1.size() - 4, 4));
+    QByteArray data2 = data1.mid(0, data1.size() - pathSize - 4);
+
+    int signSize2 = Utils::qByteArrayToInt(data2.mid(data2.size() - 4, 4));
+    QByteArray serializeData = data2.mid(0, data2.size() - signSize2 - 4);
+
+    return serializeData;
 }
 
 QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)

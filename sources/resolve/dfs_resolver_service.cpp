@@ -106,8 +106,8 @@ QByteArray DFSResolverService::checkFragStatus(unsigned long from, unsigned long
 
 void DFSResolverService::checkStatus()
 {
-    if (title.filePath.contains("root"))
-        qDebug() << "[DFSResolver] root" << title.filePath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
+    // if (title.filePath.contains("root"))
+    //     qDebug() << "[DFSResolver] root" << title.filePath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
 
     QByteArray emptyFrags = checkFragStatus(reqStart, reqFin);
     if (emptyFrags.isEmpty() && reqStart >= dataChecker.size())
