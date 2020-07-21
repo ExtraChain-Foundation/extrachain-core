@@ -61,7 +61,7 @@ PublicProfile::PublicProfile(const QByteArray &serialize)
     int pathSize = Utils::qByteArrayToInt(data.mid(data.size() - 4, 4));
     idPath = data.mid(data.size() - 4 - pathSize, pathSize);
     QByteArray dataToProfile = data.mid(0, data.size() - 4 - pathSize);
-    saveProfileFromNet(dataToProfile);
+    //    saveProfileFromNet(dataToProfile);
 }
 
 QByteArray PublicProfile::serialize() const
