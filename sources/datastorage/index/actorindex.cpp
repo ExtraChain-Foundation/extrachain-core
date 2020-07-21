@@ -228,10 +228,10 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
         return;
     }
-    if (actor.key()->verify(profile.getProfile(), profile.sign))
+    if (actor.key()->verify(profile.serialize(), profile.sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        actor.profile().saveProfileFromNet(profile.getProfile());
+        actor.profile().saveProfileFromNet(profile.serialize());
         emit sendProfileToUi(profile.id, actor.profile().getListProfile());
         resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
         // emit sendMessage(profile.serialize(), profileType)
