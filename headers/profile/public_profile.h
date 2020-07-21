@@ -45,6 +45,7 @@ public:
     QByteArray getProfile();
     static QByteArray serialize(QByteArrayList profileList);
     static QByteArrayList deserialize(QByteArray serializeData);
+    static QByteArrayList getListProfileNotFromFile(const QByteArray &withSignData);
     QByteArrayList getQuickProfile(QByteArray _data);
     QByteArray sign = "";
     QString idPath;

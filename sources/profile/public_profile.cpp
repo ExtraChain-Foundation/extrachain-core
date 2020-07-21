@@ -242,6 +242,16 @@ QByteArrayList PublicProfile::deserialize(QByteArray serializeData)
     return profileData;
 }
 
+QByteArrayList PublicProfile::getListProfileNotFromFile(const QByteArray &withSignData)
+{
+    int signSize = Utils::qByteArrayToInt(withSignData.mid(withSignData.size() - 4, 4));
+    QByteArray sign = withSignData.mid(withSignData.size() - 4 - signSize, signSize);
+    QByteArray serializeData = withSignData.mid(0, withSignData.size() - 4 - signSize);
+
+    QByteArrayList listProfile = deserialize(serializeData);
+    return listProfile;
+}
+
 QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)
 {
     //    QString pathProfile = idPath;
