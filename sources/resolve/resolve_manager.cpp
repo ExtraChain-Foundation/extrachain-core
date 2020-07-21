@@ -122,11 +122,11 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
     Network::DataStruct task;
     task.msg = msg;
     task.receiver = receiver;
-    QMutex mutex;
+    static QMutex mutex;
     mutex.lock();
     this->unprocessed.push(task);
-    bool lockRes = popUnprocces();
     mutex.unlock();
+    bool lockRes = popUnprocces();
     return lockRes;
 }
 
@@ -208,10 +208,7 @@ void ResolveManager::taskFinished()
             emit resolver->finished();
         if (unprocessed.size() != 0)
         {
-            QMutex mutex;
-            mutex.lock();
             popUnprocces();
-            mutex.unlock();
         }
         return;
     }
@@ -244,6 +241,8 @@ QList<ResolverService *> ResolveManager::getFinished()
 
 bool ResolveManager::popUnprocces()
 {
+    static QMutex mutex;
+    mutex.lock();
     bool res = false;
     while (l1Res.size() < ResolverServicePoolMaxSize && !unprocessed.empty())
     {
@@ -251,5 +250,6 @@ bool ResolveManager::popUnprocces()
         unprocessed.pop();
         res = true;
     }
+    mutex.unlock();
     return res;
 }
