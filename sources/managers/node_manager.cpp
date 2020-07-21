@@ -26,7 +26,7 @@ NodeManager::NodeManager()
     if (sodium_init() != 0)
     {
         qDebug() << "Encryption init error!!!";
-        QApplication::exit(-1);
+        QCoreApplication::exit(-1);
     }
     prepareFolders();
     if (!QFile(".settings").exists())
