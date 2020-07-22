@@ -324,17 +324,16 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString typ
     auto session = chat->getSession().toByteArray();
     auto date = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
 
-    auto encryptedMessageId = chat->encryptMessage(QByteArray::number(messId));
+    auto messageId = QByteArray::number(messId);
     auto encryptedActorId = chat->encryptMessage(_currentActorId);
     auto encryptedMessage = chat->encryptMessage(message);
     auto encryptedType = chat->encryptMessage(type.toLatin1());
     auto encryptedSession = chat->encryptMessage(chat->getSession().toByteArray());
 
-    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
-                DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId", encryptedMessageId, "userId",
-                  encryptedActorId, "message", encryptedMessage, "type", encryptedType, "session",
-                  encryptedSession, "date", date });
+    sendEditSql(
+        owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
+        { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId, "userId", encryptedActorId,
+          "message", encryptedMessage, "type", encryptedType, "session", encryptedSession, "date", date });
 }
 
 void ChatManager::removeChatMessage(QString chatId, QString messId)
@@ -342,12 +341,12 @@ void ChatManager::removeChatMessage(QString chatId, QString messId)
     Chat *chat = getChatMemory(chatId.toLatin1());
     auto owner = chat->getOwner();
     auto session = chat->getSession().toByteArray();
-    auto encryptedMessageId = chat->encryptMessage(messId.toLatin1());
-    qDebug() << "CR123" << chatId << owner << session << encryptedMessageId;
+    auto messageId = messId.toLatin1();
+    qDebug() << "CR123" << chatId << owner << session << messageId;
 
     sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
                 DfsStruct::ChangeType::Delete,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId", encryptedMessageId });
+                { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId });
 }
 
 void ChatManager::createDialogue(QByteArray actorId)
