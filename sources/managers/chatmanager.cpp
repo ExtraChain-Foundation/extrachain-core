@@ -103,8 +103,8 @@ void ChatManager::InitializeChatList()
                 _accController->getMainActor()->key()->decryptSelf(QByteArray::fromStdString(temp["owner"]));
             QByteArray key =
                 _accController->getMainActor()->key()->decryptSelf(QByteArray::fromStdString(temp["key"]));
-            Chat *temp_ = new Chat(this, chatId, key, BigNumber("0"), _actorIndex, _accController,
-                                   QList<QByteArray> {}, ownerId, false);
+            Chat *temp_ =
+                new Chat(this, chatId, key, BigNumber("0"), _actorIndex, _accController, {}, ownerId, false);
 
             _chatList.push_front(temp_);
         }
