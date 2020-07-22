@@ -567,6 +567,7 @@ std::string Utils::byteToHexString(std::vector<unsigned char> &data)
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
     std::string s(p.begin(), p.end());
+    //    s.erase(--s.end());
     return s;
 }
 
