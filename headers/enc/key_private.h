@@ -50,8 +50,8 @@ public:
     void generate();
 
 public:
-    QByteArray encrypt(const QByteArray &data, const string &publicKeyReceiver);
-    QByteArray decrypt(const QByteArray &data, const string &publicKeySender);
+    QByteArray encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce = "");
+    QByteArray decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce = "");
     QByteArray encryptSelf(const QByteArray &data);
     QByteArray decryptSelf(const QByteArray &data);
 

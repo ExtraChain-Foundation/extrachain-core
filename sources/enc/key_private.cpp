@@ -52,7 +52,7 @@ void KeyPrivate::generate()
     pubKey.erase(--pubKey.end());
 }
 
-QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver)
+QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce)
 {
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
@@ -69,10 +69,17 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
     //    if (conv_res)
     vector<unsigned char> enc_msg(enc_size);
     vector<unsigned char> dec_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> nonce;
-    nonce.resize(crypto_box_NONCEBYTES);
-    randombytes_buf(nonce.data(), nonce.size());
-    int r = crypto_box_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), nonce.data(), xpkr.data(),
+    vector<unsigned char> vnonce;
+    vnonce.resize(crypto_box_NONCEBYTES);
+    if (nonce.size() == crypto_box_NONCEBYTES)
+    {
+        vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
+    }
+    else
+    {
+        randombytes_buf(vnonce.data(), vnonce.size());
+    }
+    int r = crypto_box_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), vnonce.data(), xpkr.data(),
                             xsks.data());
     string res;
     if (r == 0)
@@ -84,14 +91,22 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
     return QByteArray::fromStdString(res);
 }
 
-QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender)
+QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce)
 {
     string sdata = Utils::hexStringToByte(data.toStdString());
     string pksr = Utils::hexStringToByte(publicKeySender);
     string sk = Utils::hexStringToByte(secKey);
-    string s_nonce = sdata.substr(0, crypto_box_NONCEBYTES);
-    sdata.erase(0, crypto_box_NONCEBYTES);
-    vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
+    vector<unsigned char> vnonce;
+    if (nonce.size() == crypto_box_NONCEBYTES)
+    {
+        vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
+    }
+    else
+    {
+        string s_nonce = sdata.substr(0, crypto_box_NONCEBYTES);
+        sdata.erase(0, crypto_box_NONCEBYTES);
+        vnonce = vector<unsigned char>(s_nonce.begin(), s_nonce.end());
+    }
 
     vector<unsigned char> skr(sk.begin(), sk.end());
     vector<unsigned char> pks(pksr.begin(), pksr.end());
@@ -105,7 +120,7 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
     vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
     vector<unsigned char> dec_msg(enc_msg.size() - crypto_box_MACBYTES);
 
-    int r = crypto_box_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), nonce.data(), xpks.data(),
+    int r = crypto_box_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), vnonce.data(), xpks.data(),
                                  xskr.data());
     string res;
     if (r == 0)
@@ -117,12 +132,16 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
 
 QByteArray KeyPrivate::encryptSelf(const QByteArray &data)
 {
-    return this->encrypt(data, this->pubKey);
+    string sk = Utils::hexStringToByte(secKey);
+    string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
+    return this->encrypt(data, this->pubKey, pnonce);
 }
 
 QByteArray KeyPrivate::decryptSelf(const QByteArray &data)
 {
-    return this->decrypt(data, this->pubKey);
+    string sk = Utils::hexStringToByte(secKey);
+    string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
+    return this->decrypt(data, this->pubKey, pnonce);
 }
 
 QByteArray KeyPrivate::sign(const QByteArray &data)
