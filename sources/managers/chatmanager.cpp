@@ -130,7 +130,11 @@ void ChatManager::InitializeConnectSignalSlot()
 
 QByteArray ChatManager::generateChatId()
 {
-    return generateChatKey();
+    vector<unsigned char> id(32);
+    randombytes_buf(id.data(), id.size());
+    string s = Utils::byteToHexString(id);
+    s.erase(--s.end());
+    return QByteArray::fromStdString(s);
 }
 
 QString ChatManager::getPathToMyChats()
@@ -256,7 +260,8 @@ QByteArray ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
-    Chat *chat = new Chat(this, chatId, generateChatKey(), 0, _actorIndex, _accController,
+    QByteArray key = generateChatKey();
+    Chat *chat = new Chat(this, chatId, key, BigNumber(0), _actorIndex, _accController,
                           QList<QByteArray> { _currentActorId }, _currentActorId);
     _chatList.push_front(chat);
     // Chat initialize

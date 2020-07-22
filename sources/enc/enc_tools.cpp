@@ -5,6 +5,7 @@ string SecretKey::keygen()
     vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
     crypto_secretbox_keygen(sk.data());
     string skey = Utils::byteToHexString(sk);
+    skey.erase(--skey.end());
     return skey;
 }
 
@@ -24,6 +25,7 @@ string SecretKey::getKeyFromPass(string pass, string salt)
                              crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                              crypto_pwhash_ALG_DEFAULT);
     string skey = Utils::byteToHexString(key);
+    skey.erase(--skey.end());
     return skey;
 }
 
@@ -44,6 +46,7 @@ string SecretKey::encrypt(string msg, string &secret_key)
     {
         enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
         res = Utils::byteToHexString(enc_msg);
+        res.erase(--res.end());
     }
     return res;
 }

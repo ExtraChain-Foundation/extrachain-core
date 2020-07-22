@@ -65,6 +65,7 @@ QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySe
     {
         enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
         res = Utils::byteToHexString(enc_msg);
+        res.erase(--res.end());
     }
     return QByteArray::fromStdString(res);
 }

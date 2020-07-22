@@ -37,9 +37,9 @@ Chat::Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
     InitializeAllPaths();
 }
 
-Chat::Chat(ChatManager* chatManager, QByteArray chatId, QByteArray key, BigNumber currentSession,
-           ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
-           QByteArray _ownerId)
+Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key,
+           BigNumber currentSession, ActorIndex* actorIndex, AccountController* accountController,
+           QList<QByteArray> users, QByteArray _ownerId)
 {
     this->_chatManager = chatManager;
     this->_chatId = chatId;

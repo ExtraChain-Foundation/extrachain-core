@@ -82,7 +82,7 @@ public:
     Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
          AccountController* accountController,
          BigNumber sessionNumb = -1); //+
-    Chat(ChatManager* chatManager, QByteArray chatId, QByteArray key, BigNumber currentSession,
+    Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key, BigNumber currentSession,
          ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
          QByteArray _ownerId = "-1"); //+
     Chat(const Chat& tempChat);       //+

@@ -47,7 +47,9 @@ void KeyPrivate::generate()
     vector<unsigned char> pk(crypto_sign_PUBLICKEYBYTES);
     crypto_sign_keypair(pk.data(), sk.data());
     secKey = Utils::byteToHexString(sk);
+    secKey.erase(--secKey.end());
     pubKey = Utils::byteToHexString(pk);
+    pubKey.erase(--pubKey.end());
 }
 
 QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver)
@@ -77,6 +79,7 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
     {
         enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
         res = Utils::byteToHexString(enc_msg);
+        res.erase(--res.end());
     }
     return QByteArray::fromStdString(res);
 }
@@ -130,6 +133,7 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
     vector<unsigned char> vsig(crypto_sign_BYTES);
     crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
     string sig = Utils::byteToHexString(vsig);
+    sig.erase(--sig.end());
     return QByteArray::fromStdString(sig);
 }
 
