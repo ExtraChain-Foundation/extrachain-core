@@ -483,8 +483,8 @@ QByteArray calcKeccak(const QByteArray &data);
 QByteArray calcKeccakForFile(const QString &path);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
-std::string byteToHexString(std::string data);
-std::string hexStringToByte(std::string data);
+std::string byteToHexString(const std::string &data);
+std::string hexStringToByte(const std::string &data);
 
 bool encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
                  int blockSize = 60007);

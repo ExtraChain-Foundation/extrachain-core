@@ -99,7 +99,13 @@ void ChatManager::InitializeChatList()
         Chat *chat = getChatMemory(chatId);
         if (chat == nullptr)
         {
-            Chat *temp_ = new Chat(this, chatId, _actorIndex, _accController);
+            QByteArray ownerId =
+                _accController->getMainActor()->key()->decryptSelf(QByteArray::fromStdString(temp["owner"]));
+            QByteArray key =
+                _accController->getMainActor()->key()->decryptSelf(QByteArray::fromStdString(temp["key"]));
+            Chat *temp_ =
+                new Chat(this, chatId, key, BigNumber("0"), _actorIndex, _accController, {}, ownerId, false);
+
             _chatList.push_front(temp_);
         }
     }
@@ -130,7 +136,11 @@ void ChatManager::InitializeConnectSignalSlot()
 
 QByteArray ChatManager::generateChatId()
 {
-    return generateChatKey();
+    vector<unsigned char> id(32);
+    randombytes_buf(id.data(), id.size());
+    string s = Utils::byteToHexString(id);
+    s.erase(--s.end());
+    return QByteArray::fromStdString(s);
 }
 
 QString ChatManager::getPathToMyChats()
@@ -256,7 +266,8 @@ QByteArray ChatManager::CreateNewChat()
 {
     QByteArray chatId = generateChatId();
     QDir().mkpath(getPathToMyChats() + chatId + "/");
-    Chat *chat = new Chat(this, chatId, generateChatKey(), 0, _actorIndex, _accController,
+    QByteArray key = generateChatKey();
+    Chat *chat = new Chat(this, chatId, key, BigNumber(0), _actorIndex, _accController,
                           QList<QByteArray> { _currentActorId }, _currentActorId);
     _chatList.push_front(chat);
     // Chat initialize
@@ -313,17 +324,16 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString typ
     auto session = chat->getSession().toByteArray();
     auto date = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
 
-    auto encryptedMessageId = chat->encryptMessage(QByteArray::number(messId));
+    auto messageId = QByteArray::number(messId);
     auto encryptedActorId = chat->encryptMessage(_currentActorId);
     auto encryptedMessage = chat->encryptMessage(message);
     auto encryptedType = chat->encryptMessage(type.toLatin1());
     auto encryptedSession = chat->encryptMessage(chat->getSession().toByteArray());
 
-    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
-                DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId", encryptedMessageId, "userId",
-                  encryptedActorId, "message", encryptedMessage, "type", encryptedType, "session",
-                  encryptedSession, "date", date });
+    sendEditSql(
+        owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
+        { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId, "userId", encryptedActorId,
+          "message", encryptedMessage, "type", encryptedType, "session", encryptedSession, "date", date });
 }
 
 void ChatManager::removeChatMessage(QString chatId, QString messId)
@@ -331,12 +341,12 @@ void ChatManager::removeChatMessage(QString chatId, QString messId)
     Chat *chat = getChatMemory(chatId.toLatin1());
     auto owner = chat->getOwner();
     auto session = chat->getSession().toByteArray();
-    auto encryptedMessageId = chat->encryptMessage(messId.toLatin1());
-    qDebug() << "CR123" << chatId << owner << session << encryptedMessageId;
+    auto messageId = messId.toLatin1();
+    qDebug() << "CR123" << chatId << owner << session << messageId;
 
     sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
                 DfsStruct::ChangeType::Delete,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId", encryptedMessageId });
+                { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId });
 }
 
 void ChatManager::createDialogue(QByteArray actorId)

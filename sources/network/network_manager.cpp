@@ -219,16 +219,6 @@ void NetManager::findLocal()
             if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
-#ifdef ECONSOLE
-            QTcpSocket *socket = new QTcpSocket;
-            socket->bind(entry.ip());
-            socket->connectToHost("8.8.8.8", 53);
-            bool isConnected = socket->waitForConnected(1000);
-            socket->deleteLater();
-            if (!isConnected)
-                continue;
-#endif
-
             if (localIpNotConnect.contains(entry.ip()))
             {
                 QString name = interface.name();

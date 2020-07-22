@@ -567,16 +567,17 @@ std::string Utils::byteToHexString(std::vector<unsigned char> &data)
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
     std::string s(p.begin(), p.end());
+    //    s.erase(--s.end());
     return s;
 }
 
-std::string Utils::byteToHexString(std::string data)
+std::string Utils::byteToHexString(const std::string &data)
 {
     std::vector<unsigned char> v(data.begin(), data.end());
     return byteToHexString(v);
 }
 
-std::string Utils::hexStringToByte(std::string data)
+std::string Utils::hexStringToByte(const std::string &data)
 {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);

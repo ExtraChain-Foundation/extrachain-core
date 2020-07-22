@@ -37,9 +37,9 @@ Chat::Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
     InitializeAllPaths();
 }
 
-Chat::Chat(ChatManager* chatManager, QByteArray chatId, QByteArray key, BigNumber currentSession,
-           ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
-           QByteArray _ownerId)
+Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key,
+           BigNumber currentSession, ActorIndex* actorIndex, AccountController* accountController,
+           QList<QByteArray> users, QByteArray _ownerId, bool isCreateNewSession)
 {
     this->_chatManager = chatManager;
     this->_chatId = chatId;
@@ -53,7 +53,8 @@ Chat::Chat(ChatManager* chatManager, QByteArray chatId, QByteArray key, BigNumbe
     this->_actorIndex = actorIndex;
     this->ownerID = _ownerId;
     InitializeAllPaths();
-    createNewSession(key, users, _ownerId);
+    if (isCreateNewSession)
+        createNewSession(key, users, _ownerId);
 }
 
 Chat::Chat(const Chat& tempChat)
@@ -237,7 +238,7 @@ QList<UIMessage> Chat::getAllMessages()
     for (DBRow tmp : row)
     {
         UIMessage ui;
-        ui.messId = decryptMessage(QByteArray::fromStdString(tmp["messId"]));
+        ui.messId = QByteArray::fromStdString(tmp["messId"]);
         ui.userId = decryptMessage(QByteArray::fromStdString(tmp["userId"]));
         ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
         QByteArray date = QByteArray::fromStdString(tmp["date"]);
@@ -289,7 +290,7 @@ UIMessage Chat::getLastMessage()
         return {};
     }
     message.userId = decryptMessage(QByteArray::fromStdString(row[0]["userId"]));
-    message.messId = decryptMessage(QByteArray::fromStdString(row[0]["messId"]));
+    message.messId = QByteArray::fromStdString(row[0]["messId"]);
     if (row[0]["message"].size() == 0)
         message.message = "";
     else
@@ -408,7 +409,7 @@ QByteArray Chat::sendMessage(QByteArray message)
 
     DBRow row;
     qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
-    row.insert({ "messId", encryptMessage(QByteArray::number(messId)).toStdString() });
+    row.insert({ "messId", QByteArray::number(messId).toStdString() });
     row.insert({ "userId", encryptMessage(_currentActorId).toStdString() });
     row.insert({ "message", encryptMessage(message).toStdString() });
     row.insert({ "type", encryptMessage("msg").toStdString() });
