@@ -1,5 +1,5 @@
 QT += concurrent
-VERSION = 0.7.28
+VERSION = 0.8.1
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
