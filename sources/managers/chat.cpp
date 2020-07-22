@@ -39,7 +39,7 @@ Chat::Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
 
 Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key,
            BigNumber currentSession, ActorIndex* actorIndex, AccountController* accountController,
-           QList<QByteArray> users, QByteArray _ownerId)
+           QList<QByteArray> users, QByteArray _ownerId, bool isCreateNewSession)
 {
     this->_chatManager = chatManager;
     this->_chatId = chatId;
@@ -53,7 +53,8 @@ Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray&
     this->_actorIndex = actorIndex;
     this->ownerID = _ownerId;
     InitializeAllPaths();
-    createNewSession(key, users, _ownerId);
+    if (isCreateNewSession)
+        createNewSession(key, users, _ownerId);
 }
 
 Chat::Chat(const Chat& tempChat)

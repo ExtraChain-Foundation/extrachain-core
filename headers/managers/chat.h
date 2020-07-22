@@ -84,8 +84,8 @@ public:
          BigNumber sessionNumb = -1); //+
     Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key, BigNumber currentSession,
          ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
-         QByteArray _ownerId = "-1"); //+
-    Chat(const Chat& tempChat);       //+
+         QByteArray _ownerId = "-1", bool isCreateNewSession = true); //+
+    Chat(const Chat& tempChat);                                       //+
     ~Chat();
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-
