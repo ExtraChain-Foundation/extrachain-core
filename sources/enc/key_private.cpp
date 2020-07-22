@@ -84,7 +84,7 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
     string res;
     if (r == 0)
     {
-        enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
+        enc_msg.insert(enc_msg.begin(), vnonce.begin(), vnonce.end());
         res = Utils::byteToHexString(enc_msg);
         res.erase(--res.end());
     }
