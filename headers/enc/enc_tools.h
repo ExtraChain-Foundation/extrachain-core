@@ -9,10 +9,10 @@
 using namespace std;
 namespace SecretKey {
 string keygen();
-string getKeyFromPass(string pass, string salt = "");
-string encrypt(string msg, string &secret_key);
-string decrypt(string msg, string &secret_key);
-string encryptWithPassword(string data, string password);
-string decryptWithPassword(string data, string password);
+string getKeyFromPass(const string &pass, const string &salt = "");
+string encrypt(const string &msg, const string &secret_key);
+string decrypt(const string &msg, const string &secret_key);
+string encryptWithPassword(const string &data, const string &password);
+string decryptWithPassword(const string &data, const string &password);
 }
 #endif // ENC_TOOLS_H

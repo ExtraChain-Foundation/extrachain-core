@@ -54,6 +54,10 @@ void KeyPrivate::generate()
 
 QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce)
 {
+    if (data.isEmpty() || publicKeyReceiver.empty() || nonce.empty())
+        qFatal("[KeyPrivate::encrypt] msg or secret is empty. msg: %s, secret: %s, nonce: %s", data.data(),
+               publicKeyReceiver.data(), nonce.data());
+
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
     string pkrs = Utils::hexStringToByte(publicKeyReceiver);
@@ -66,7 +70,8 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
 
     vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
     int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
-    //    if (conv_res)
+    (void)conv_res;
+
     vector<unsigned char> enc_msg(enc_size);
     vector<unsigned char> dec_msg(sdata.begin(), sdata.end());
     vector<unsigned char> vnonce;
@@ -91,11 +96,18 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
         res = Utils::byteToHexString(enc_msg);
         res.erase(--res.end());
     }
+    if (res.empty())
+        qFatal("[KeyPrivate::encrypt] res is empty. msg: %s, secret: %s, nonce: %s", data.data(),
+               publicKeyReceiver.data(), nonce.data());
     return QByteArray::fromStdString(res);
 }
 
 QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce)
 {
+    if (data.isEmpty() || publicKeySender.empty() || nonce.empty())
+        qFatal("[KeyPrivate::decrypt] msg or secret is empty. msg: %s, secret: %s, nonce: %s", data.data(),
+               publicKeySender.data(), nonce.data());
+
     string sdata = Utils::hexStringToByte(data.toStdString());
     string pksr = Utils::hexStringToByte(publicKeySender);
     string sk = Utils::hexStringToByte(secKey);
@@ -110,6 +122,9 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
         sdata.erase(0, crypto_box_NONCEBYTES);
         vnonce = vector<unsigned char>(s_nonce.begin(), s_nonce.end());
     }
+
+    if (sdata.size() < crypto_secretbox_MACBYTES)
+        qFatal("[KeyPrivate::decrypt] Incorrect msg: %s", data.data());
 
     vector<unsigned char> skr(sk.begin(), sk.end());
     vector<unsigned char> pks(pksr.begin(), pksr.end());
@@ -130,6 +145,9 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
     {
         res = string(dec_msg.begin(), dec_msg.end());
     }
+    if (res.empty())
+        qFatal("[KeyPrivate::decrypt] res is empty. msg: %s, secret: %s, nonce: %s", data.data(),
+               publicKeySender.data(), nonce.data());
     return QByteArray::fromStdString(res);
 }
 
