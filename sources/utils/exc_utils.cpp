@@ -595,14 +595,15 @@ std::string Utils::hexStringToByte(const std::string &data)
 
 QString Utils::detectCompiler()
 {
-#ifdef __GNUC__
-#if __GNUC__ < 9
-#error "GCC must be version 9 or higher"
-#endif
-#elif __clang__
+#ifdef __clang__
 #if __clang_major__ < 9
 #error "Clang must be version 9 or higher"
 #endif
+#elif __GNUC__
+#if __GNUC__ < 9
+#error "GCC must be version 9 or higher"
+#endif
+
 #else
 #error "Compiler not supported"
 #endif
