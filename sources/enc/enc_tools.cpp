@@ -54,7 +54,8 @@ string SecretKey::encrypt(const string &msg, const string &secret_key)
     }
 
     if (res.empty())
-        qFatal("[SecretKey::encrypt] res is empty. msg: %s, secret: %s", msg.data(), secret_key.data());
+        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << msg.data() << "| secret: %s"
+                 << secret_key.data();
     return res;
 }
 
@@ -87,7 +88,8 @@ string SecretKey::decrypt(const string &msg, const string &secret_key)
     }
 
     if (res.empty())
-        qFatal("[SecretKey::decrypt] res is empty. msg: %s, secret: %s", msg.data(), secret_key.data());
+        qDebug() << "[SecretKey::decrypt] res is empty. msg:" << msg.data() << "| secret: %s"
+                 << secret_key.data();
     return res;
 }
 

@@ -97,8 +97,8 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
         res.erase(--res.end());
     }
     if (res.empty())
-        qFatal("[KeyPrivate::encrypt] res is empty. msg: %s, secret: %s, nonce: %s", data.data(),
-               publicKeyReceiver.data(), nonce.data());
+        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data() << "| secret: %s"
+                 << publicKeyReceiver.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }
 
@@ -146,8 +146,8 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
         res = string(dec_msg.begin(), dec_msg.end());
     }
     if (res.empty())
-        qFatal("[KeyPrivate::decrypt] res is empty. msg: %s, secret: %s, nonce: %s", data.data(),
-               publicKeySender.data(), nonce.data());
+        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data() << "| secret: %s"
+                 << publicKeySender.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }
 
