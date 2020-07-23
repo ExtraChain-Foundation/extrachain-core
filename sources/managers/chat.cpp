@@ -239,7 +239,8 @@ QList<UIMessage> Chat::getAllMessages()
     {
         UIMessage ui;
         ui.messId = QByteArray::fromStdString(tmp["messId"]);
-        ui.userId = decryptMessage(QByteArray::fromStdString(tmp["userId"]));
+        ui.userId = QByteArray::fromStdString(tmp["userId"]);
+        ui.type = QByteArray::fromStdString(tmp["type"]);
         ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
         QByteArray date = QByteArray::fromStdString(tmp["date"]);
         ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
@@ -289,8 +290,9 @@ UIMessage Chat::getLastMessage()
     {
         return {};
     }
-    message.userId = decryptMessage(QByteArray::fromStdString(row[0]["userId"]));
+    message.userId = QByteArray::fromStdString(row[0]["userId"]);
     message.messId = QByteArray::fromStdString(row[0]["messId"]);
+    message.type = QByteArray::fromStdString(row[0]["type"]);
     if (row[0]["message"].size() == 0)
         message.message = "";
     else
@@ -412,8 +414,7 @@ QByteArray Chat::sendMessage(QByteArray message)
     row.insert({ "messId", QByteArray::number(messId).toStdString() });
     row.insert({ "userId", _currentActorId.toStdString() });
     row.insert({ "message", encryptMessage(message).toStdString() });
-    row.insert({ "type", encryptMessage("msg").toStdString() });
-    row.insert({ "session", encryptMessage(_currentSession.toByteArray()).toStdString() });
+    row.insert({ "type", "msg" });
     row.insert({ "date", QByteArray::number(QDateTime::currentMSecsSinceEpoch()).toStdString() });
     DB.insert(Config::DataStorage::chatMessageTableName, row);
     // return currentMessageByteArray;

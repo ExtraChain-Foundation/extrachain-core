@@ -164,7 +164,6 @@ namespace DataStorage {
           "userId   BLOB             NOT NULL, "
           "message  BLOB             NOT NULL, "
           "type     BLOB             NOT NULL, "
-          "session  BLOB             NOT NULL, "
           "date     INTEGER          NOT NULL );";
 
     static const std::string storedTableName = "Stored";

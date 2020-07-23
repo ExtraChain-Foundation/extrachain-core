@@ -32,6 +32,7 @@ struct UIMessage
     QString messId;
     QString userId;
     QString message;
+    QString type;
     QDateTime date;
 };
 
