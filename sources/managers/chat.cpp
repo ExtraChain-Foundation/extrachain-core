@@ -410,7 +410,7 @@ QByteArray Chat::sendMessage(QByteArray message)
     DBRow row;
     qint64 messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
     row.insert({ "messId", QByteArray::number(messId).toStdString() });
-    row.insert({ "userId", encryptMessage(_currentActorId).toStdString() });
+    row.insert({ "userId", _currentActorId.toStdString() });
     row.insert({ "message", encryptMessage(message).toStdString() });
     row.insert({ "type", encryptMessage("msg").toStdString() });
     row.insert({ "session", encryptMessage(_currentSession.toByteArray()).toStdString() });
