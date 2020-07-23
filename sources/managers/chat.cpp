@@ -20,7 +20,7 @@
 #include "managers/chat.h"
 #include "managers/chatmanager.h"
 
-Chat::Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
+Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, ActorIndex* actorIndex,
            AccountController* accountController, BigNumber sessionNumb)
 {
     this->_chatManager = chatManager;
