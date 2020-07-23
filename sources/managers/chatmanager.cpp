@@ -446,8 +446,7 @@ void ChatManager::changes(QString path, DfsStruct::ChangeType changeType)
             return;
 
         QString chatId = path.mid(32, 64);
-        Chat *chat = getChatMemory(chatId.toLatin1());
-        QByteArray userId = chat->decryptMessage(QByteArray::fromStdString(res[0]["userId"]));
+        QByteArray userId = QByteArray::fromStdString(res[0]["userId"]);
 
         /*
         QFile file("keystore/chats/" + _currentActorId + "/fileChatsId");
