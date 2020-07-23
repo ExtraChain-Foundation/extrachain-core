@@ -54,9 +54,9 @@ void KeyPrivate::generate()
 
 QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce)
 {
-    if (data.isEmpty() || publicKeyReceiver.empty() || nonce.empty())
-        qFatal("[KeyPrivate::encrypt] msg or secret is empty. msg: %s, secret: %s, nonce: %s", data.data(),
-               publicKeyReceiver.data(), nonce.data());
+    if (data.isEmpty() || publicKeyReceiver.empty())
+        qFatal("[KeyPrivate::encrypt] msg or secret is empty. msg: %s, secret: %s", data.data(),
+               publicKeyReceiver.data());
 
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
@@ -97,16 +97,16 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
         res.erase(--res.end());
     }
     if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data() << "| secret: %s"
-                 << publicKeyReceiver.data() << "| nonce:" << nonce.data();
+        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data()
+                 << "| secret:" << publicKeyReceiver.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }
 
 QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce)
 {
-    if (data.isEmpty() || publicKeySender.empty() || nonce.empty())
-        qFatal("[KeyPrivate::decrypt] msg or secret is empty. msg: %s, secret: %s, nonce: %s", data.data(),
-               publicKeySender.data(), nonce.data());
+    if (data.isEmpty() || publicKeySender.empty())
+        qFatal("[KeyPrivate::decrypt] msg or secret is empty. msg: %s, secret: %s", data.data(),
+               publicKeySender.data());
 
     string sdata = Utils::hexStringToByte(data.toStdString());
     string pksr = Utils::hexStringToByte(publicKeySender);
@@ -146,8 +146,8 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
         res = string(dec_msg.begin(), dec_msg.end());
     }
     if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data() << "| secret: %s"
-                 << publicKeySender.data() << "| nonce:" << nonce.data();
+        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data()
+                 << "| secret:" << publicKeySender.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }
 
