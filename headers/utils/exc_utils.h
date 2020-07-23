@@ -160,10 +160,10 @@ namespace DataStorage {
     static const std::string chatMessageTableName = "Chat";
     static const std::string sessionChatMessageStorage = "CREATE TABLE IF NOT EXISTS " + chatMessageTableName
         + " ("
-          "messId   BLOB PRIMARY KEY NOT NULL, "
-          "userId   BLOB             NOT NULL, "
+          "messId   TEXT PRIMARY KEY NOT NULL, "
+          "userId   TEXT             NOT NULL, "
           "message  BLOB             NOT NULL, "
-          "type     BLOB             NOT NULL, "
+          "type     TEXT             NOT NULL, "
           "date     INTEGER          NOT NULL );";
 
     static const std::string storedTableName = "Stored";

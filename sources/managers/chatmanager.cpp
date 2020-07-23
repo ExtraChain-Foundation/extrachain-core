@@ -319,7 +319,7 @@ void ChatManager::sendChatFile(ChatFileSender chatFile)
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString type)
 {
     auto chat = getChatMemory(chatId);
-    auto messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
+    auto messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(1000);
     auto owner = chat->getOwner();
     auto session = chat->getSession().toByteArray();
     auto date = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
