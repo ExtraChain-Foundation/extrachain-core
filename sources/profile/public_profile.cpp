@@ -105,7 +105,7 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
                 { "canStaking", "1" } }); // TODO
 }
 
-void PublicProfile::saveProfileFromNet(QByteArray newProfile)
+bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
 {
     QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/");
     QFile profile(idPath);
@@ -119,7 +119,7 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
         {
             qDebug() << "profile exist";
             sign = "";
-            return;
+            return false;
         }
         else
             profile.resize(0);
@@ -137,6 +137,7 @@ void PublicProfile::saveProfileFromNet(QByteArray newProfile)
         QByteArrayList list = deserialize(serializeData);
         saveTokenNames(list.at(2), list.at(3), list.at(6));
     }
+    return true;
 }
 
 QByteArrayList PublicProfile::getListProfile()

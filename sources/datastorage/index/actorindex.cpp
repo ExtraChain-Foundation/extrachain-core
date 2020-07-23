@@ -229,16 +229,16 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         return;
     }
 
-    QByteArray pizda = PublicProfile::getProfileDataFromNetwork(newProfile);
-    qDebug() << "Pizda" << pizda;
+    QByteArray profileData = PublicProfile::getProfileDataFromNetwork(newProfile);
 
-    if (actor.key()->verify(pizda, profile.sign))
+    if (actor.key()->verify(profileData, profile.sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        actor.profile().saveProfileFromNet(profile.dataToProfile);
-        emit sendProfileToUi(profile.id, actor.profile().getListProfile());
-        resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
-        // emit sendMessage(profile.serialize(), profileType)
+        if (actor.profile().saveProfileFromNet(profile.dataToProfile))
+        {
+            emit sendProfileToUi(profile.id, actor.profile().getListProfile());
+            resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
+        }
     }
     else
         qDebug() << "saveProfileFromNetwork: incorrect profile verify" << profile.id;
