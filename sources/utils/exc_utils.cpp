@@ -22,15 +22,6 @@
 #include <QMimeDatabase>
 #include <QStandardPaths>
 
-template <typename T>
-
-std::string to_string(T value)
-{
-    std::ostringstream os;
-    os << value;
-    return os.str();
-}
-
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
     Keccak keccak;
@@ -217,7 +208,7 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
     }
-    string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
     while (!orig.atEnd())
     {
         QByteArray part = orig.read(blockSize);
@@ -249,7 +240,7 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
         qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
         return false;
     }
-    string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
     while (!encrypt.atEnd())
     {
         QByteArray part = encrypt.read(blockSize);

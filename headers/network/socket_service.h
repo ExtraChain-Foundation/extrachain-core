@@ -51,7 +51,6 @@ class NetManager;
 #include "network/socket_pair.h"
 class DFSNetManager;
 class SocketWorker;
-using namespace SearchEnum;
 
 /**
  * @brief SocketService is responsible for message delivery

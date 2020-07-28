@@ -19,6 +19,8 @@
 
 #include "enc/key_public.h"
 
+using std::string, std::vector;
+
 KeyPublic::KeyPublic(const string &publicKey)
 {
     pubKey = publicKey;

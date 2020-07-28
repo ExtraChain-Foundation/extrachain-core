@@ -1,5 +1,7 @@
 #include "enc/enc_tools.h"
 
+using std::string, std::vector;
+
 string SecretKey::keygen()
 {
     vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
@@ -24,6 +26,7 @@ string SecretKey::getKeyFromPass(const string &pass, const string &salt)
     int rst1 = crypto_pwhash(key.data(), key.size(), pass.data(), pass.size(), vsalt.data(),
                              crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                              crypto_pwhash_ALG_DEFAULT);
+    (void)rst1; // unused warning
     string skey = Utils::byteToHexString(key);
     skey.erase(--skey.end());
     return skey;

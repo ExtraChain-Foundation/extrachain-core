@@ -82,7 +82,6 @@ namespace net {
 }
 } // namespace net
 class Transaction;
-// using namespace CryptoPP;
 namespace storedSpace {
 
 enum State

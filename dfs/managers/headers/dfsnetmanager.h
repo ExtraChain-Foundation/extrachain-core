@@ -30,12 +30,10 @@ class SocketService;
 #include "resolve/dfs_resolver_service.h"
 #include "utils/exc_utils.h"
 
-#ifdef ECONSOLE
-static const short DFS_RESOLVERS_POOL_SIZE = 10;
-#endif
-
 #ifdef ECLIENT
 static const short DFS_RESOLVERS_POOL_SIZE = 5;
+#else
+static const short DFS_RESOLVERS_POOL_SIZE = 10;
 #endif
 
 class Dfs;

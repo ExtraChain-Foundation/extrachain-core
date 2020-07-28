@@ -19,6 +19,8 @@
 
 #include "enc/key_private.h"
 
+using std::string, std::vector;
+
 KeyPrivate::KeyPrivate()
 {
     secKey = string();

@@ -26,6 +26,8 @@
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
 
+using namespace Resolver;
+
 void DFSResolverService::setTitle(const DistFileSystem::TitleMessage &value)
 {
     title = value;

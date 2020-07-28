@@ -40,7 +40,6 @@
 class AccountController;
 class ActorIndex;
 class Dfs;
-using namespace Resolver;
 
 class DFSResolverService : public QObject
 {
@@ -158,10 +157,10 @@ public:
     Resolver::Type getType() const;
     void setType(const Resolver::Type &value);
 
-    Lifetime getLifetime() const;
+    Resolver::Lifetime getLifetime() const;
 
     DistFileSystem::TitleMessage getTitle() const;
-    void setLifetime(const Lifetime &value);
+    void setLifetime(const Resolver::Lifetime &value);
 
     void setTitle(const DistFileSystem::TitleMessage &value);
 

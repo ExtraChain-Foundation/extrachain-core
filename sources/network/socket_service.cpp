@@ -181,19 +181,18 @@ void SocketService::process()
     if (socket == nullptr)
     {
         this->socket = new QTcpSocket(this);
+        connect(this, &SocketService::msgReady, this, &SocketService::sendMsg, Qt::QueuedConnection);
         connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
         connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
         connect(socket, &QTcpSocket::readyRead, this, &SocketService::doRead, Qt::QueuedConnection);
         connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
-        connect(this, &SocketService::msgReady, this, &SocketService::sendMsg, Qt::QueuedConnection);
-        connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this,
-                [this](QAbstractSocket::SocketError socketError) {
-                    Q_UNUSED(socketError)
-                    qDebug().nospace().noquote() << "[Socket Service] Socket error " << socketError << " for "
-                                                 << address << ":" << port;
-                    if (this->socket->state() != QTcpSocket::ConnectedState)
-                        this->reconnect();
-                });
+        connect(socket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
+            Q_UNUSED(socketError)
+            qDebug().nospace().noquote()
+                << "[Socket Service] Socket error " << socketError << " for " << address << ":" << port;
+            if (this->socket->state() != QTcpSocket::ConnectedState)
+                this->reconnect();
+        });
         connect(this, &SocketService::setActiveSignal, this, &SocketService::setActive);
     }
 

@@ -56,7 +56,6 @@
 #endif
 
 class ResolveManager;
-using namespace DfsStruct;
 
 class NodeManager : public QObject
 {

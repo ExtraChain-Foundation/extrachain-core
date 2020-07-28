@@ -63,7 +63,6 @@ Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
 Q_DECLARE_METATYPE(Network::DataStruct)
-Q_DECLARE_METATYPE(SubscribeController)
 Q_DECLARE_METATYPE(Notification)
 Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ChatFileSender)
@@ -100,7 +99,6 @@ void registerMetaTypes()
     qRegisterMetaType<UIMessage>();
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
-    qRegisterMetaType<SubscribeController>();
     qRegisterMetaType<Notification>();
     qRegisterMetaType<QList<Notification>>();
     qRegisterMetaType<ChatFileSender>();

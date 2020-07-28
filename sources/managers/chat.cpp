@@ -20,6 +20,8 @@
 #include "managers/chat.h"
 #include "managers/chatmanager.h"
 
+using std::string, std::vector;
+
 Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, ActorIndex* actorIndex,
            AccountController* accountController, BigNumber sessionNumb)
 {

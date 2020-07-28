@@ -33,12 +33,10 @@ class ChatManager;
 #include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
 
-#ifdef ECONSOLE
-static const short ResolverServicePoolMaxSize = 100;
-#endif
-
 #ifdef ECLIENT
 static const short ResolverServicePoolMaxSize = 5;
+#else
+static const short ResolverServicePoolMaxSize = 100;
 #endif
 
 class ResolveManager : public QObject
