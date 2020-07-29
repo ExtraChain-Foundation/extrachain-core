@@ -135,7 +135,8 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
     crypto_sign_ed25519_sk_to_curve25519(xskr.data(), skr.data());
 
     vector<unsigned char> xpks(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_pk_to_curve25519(xpks.data(), pks.data());
+    int res_ed_to_curve = crypto_sign_ed25519_pk_to_curve25519(xpks.data(), pks.data());
+    (void)res_ed_to_curve; // unused
 
     vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
     vector<unsigned char> dec_msg(enc_msg.size() - crypto_box_MACBYTES);

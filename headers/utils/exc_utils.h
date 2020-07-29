@@ -495,12 +495,8 @@ std::vector<std::string> split(const std::string &s, char c);
 int compare(const QByteArray &one, const QByteArray &two);
 
 /**
- * @brief Get param from message using JsonDocument
- * @param field
- * @param jsonDocuments
- * @return value
+ * @brief Remove data and cache files
  */
-QByteArray getParam(const QString &param, const QByteArray &jsonDocument);
 void wipeDataFiles();
 void softWipe(const QString &currentId);
 

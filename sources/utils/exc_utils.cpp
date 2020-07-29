@@ -85,12 +85,6 @@ int Utils::compare(const QByteArray &one, const QByteArray &two)
         return two.size() - one.size();
 }
 
-QByteArray Utils::getParam(const QString &param, const QByteArray &jsonDocument)
-{
-    QJsonDocument doc = QJsonDocument::fromBinaryData(jsonDocument);
-    return doc.object().value(param).toString().toLocal8Bit();
-}
-
 bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode)
 {
     if (!file.open(mode))
