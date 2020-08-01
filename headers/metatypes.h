@@ -36,7 +36,7 @@
 #include "managers/chat.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #ifdef ECLIENT
-#include "ui/ui_controller.h"
+#include "ui/client_controller.h"
 #endif
 
 Q_DECLARE_METATYPE(BigNumber)
@@ -71,7 +71,7 @@ Q_DECLARE_METATYPE(DfsStruct::DfsSave)
 Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
 #ifdef ECLIENT
-Q_DECLARE_METATYPE(UiController*)
+Q_DECLARE_METATYPE(ClientController*)
 #endif
 
 void registerMetaTypes()
@@ -107,7 +107,7 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
 #ifdef ECLIENT
-    qRegisterMetaType<UiController*>();
+    qRegisterMetaType<ClientController*>();
 #endif
 }
 
