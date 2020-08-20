@@ -31,6 +31,8 @@
 #include "managers/console_manager.h"
 #endif
 
+using namespace Resolver;
+
 void ResolverService::setNode(NodeManager *value)
 {
     node = value;

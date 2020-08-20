@@ -36,7 +36,7 @@
 #include "managers/chat.h"
 #include "dfs/controls/headers/subscribe_controller.h"
 #ifdef ECLIENT
-#include "ui/ui_controller.h"
+#include "ui/client_controller.h"
 #endif
 
 Q_DECLARE_METATYPE(BigNumber)
@@ -63,7 +63,6 @@ Q_DECLARE_METATYPE(QList<UIChat>)
 Q_DECLARE_METATYPE(UIMessage)
 Q_DECLARE_METATYPE(QList<UIMessage>)
 Q_DECLARE_METATYPE(Network::DataStruct)
-Q_DECLARE_METATYPE(SubscribeController)
 Q_DECLARE_METATYPE(Notification)
 Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ChatFileSender)
@@ -72,7 +71,7 @@ Q_DECLARE_METATYPE(DfsStruct::DfsSave)
 Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
 #ifdef ECLIENT
-Q_DECLARE_METATYPE(UiController*)
+Q_DECLARE_METATYPE(ClientController*)
 #endif
 
 void registerMetaTypes()
@@ -100,7 +99,6 @@ void registerMetaTypes()
     qRegisterMetaType<UIMessage>();
     qRegisterMetaType<QList<UIMessage>>();
     qRegisterMetaType<Network::DataStruct>();
-    qRegisterMetaType<SubscribeController>();
     qRegisterMetaType<Notification>();
     qRegisterMetaType<QList<Notification>>();
     qRegisterMetaType<ChatFileSender>();
@@ -109,7 +107,7 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
 #ifdef ECLIENT
-    qRegisterMetaType<UiController*>();
+    qRegisterMetaType<ClientController*>();
 #endif
 }
 

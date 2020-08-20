@@ -18,6 +18,8 @@
  */
 
 #include "managers/chatmanager.h"
+using std::string, std::vector;
+
 /////////////////////////////////////////////////
 ///      D   E   S   C   R   I   B   E    ///////
 /////////////////////////////////////////////////
@@ -319,21 +321,19 @@ void ChatManager::sendChatFile(ChatFileSender chatFile)
 void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString type)
 {
     auto chat = getChatMemory(chatId);
-    auto messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(100);
+    auto messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(1000);
     auto owner = chat->getOwner();
     auto session = chat->getSession().toByteArray();
     auto date = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
 
     auto messageId = QByteArray::number(messId);
-    auto encryptedActorId = chat->encryptMessage(_currentActorId);
+    auto encryptedActorId = _currentActorId;
     auto encryptedMessage = chat->encryptMessage(message);
-    auto encryptedType = chat->encryptMessage(type.toLatin1());
-    auto encryptedSession = chat->encryptMessage(chat->getSession().toByteArray());
 
-    sendEditSql(
-        owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
-        { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId, "userId", encryptedActorId,
-          "message", encryptedMessage, "type", encryptedType, "session", encryptedSession, "date", date });
+    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
+                DfsStruct::ChangeType::Insert,
+                { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId, "userId",
+                  encryptedActorId, "message", encryptedMessage, "type", type.toLatin1(), "date", date });
 }
 
 void ChatManager::removeChatMessage(QString chatId, QString messId)
@@ -438,15 +438,8 @@ void ChatManager::changes(QString path, DfsStruct::ChangeType changeType)
     }
     else if (path.contains("chats") && path.contains("msg"))
     {
-        DBConnector db(path.toStdString());
-
-        std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
-                                           + " ORDER BY date DESC LIMIT 1");
-        if (res.size() != 1)
-            return;
 
         QString chatId = path.mid(32, 64);
-        QByteArray userId = QByteArray::fromStdString(res[0]["userId"]);
 
         /*
         QFile file("keystore/chats/" + _currentActorId + "/fileChatsId");
@@ -466,6 +459,15 @@ void ChatManager::changes(QString path, DfsStruct::ChangeType changeType)
         }
         if (!myChat)
             return;
+
+        DBConnector db(path.toStdString());
+
+        std::vector<DBRow> res = db.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName
+                                           + " ORDER BY date DESC LIMIT 1");
+        if (res.size() != 1)
+            return;
+
+        QByteArray userId = QByteArray::fromStdString(res[0]["userId"]);
 
         Chat *tmp = getChatMemory(chatId.toLatin1());
         if (tmp == nullptr)

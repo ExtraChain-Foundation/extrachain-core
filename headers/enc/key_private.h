@@ -20,18 +20,15 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
-#include <string>
-#include "headers/utils/exc_utils.h"
-#include <sodium.h>
 #include <QDebug>
-
-using namespace std;
+#include <sodium.h>
+#include "headers/utils/exc_utils.h"
 
 class KeyPrivate
 {
 private:
-    string secKey;
-    string pubKey;
+    std::string secKey;
+    std::string pubKey;
 
 public:
     /**
@@ -50,8 +47,10 @@ public:
     void generate();
 
 public:
-    QByteArray encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce = "");
-    QByteArray decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce = "");
+    QByteArray encrypt(const QByteArray &data, const std::string &publicKeyReceiver,
+                       const std::string &nonce = "");
+    QByteArray decrypt(const QByteArray &data, const std::string &publicKeySender,
+                       const std::string &nonce = "");
     QByteArray encryptSelf(const QByteArray &data);
     QByteArray decryptSelf(const QByteArray &data);
 

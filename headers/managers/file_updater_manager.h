@@ -63,7 +63,7 @@ private:
     const QByteArrayList userNamesCompany { "actorId", "username", "sign" };
     // Chat Files
     const QByteArrayList chatUser { "userId" };
-    const QByteArrayList chatMessage { "messId", "userId", "message", "type", "session", "date" };
+    const QByteArrayList chatMessage { "messId", "userId", "message", "type", "date" };
     // Stored Files
     const QByteArrayList stored { "hash", "data", "range", "type", "userId", "sign", "prevHash" };
     // Service Files

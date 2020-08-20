@@ -1,5 +1,7 @@
 #include "enc/enc_tools.h"
 
+using std::string, std::vector;
+
 string SecretKey::keygen()
 {
     vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
@@ -9,7 +11,7 @@ string SecretKey::keygen()
     return skey;
 }
 
-string SecretKey::getKeyFromPass(string pass, string salt)
+string SecretKey::getKeyFromPass(const string &pass, const string &salt)
 {
     vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
     if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES)
@@ -24,13 +26,18 @@ string SecretKey::getKeyFromPass(string pass, string salt)
     int rst1 = crypto_pwhash(key.data(), key.size(), pass.data(), pass.size(), vsalt.data(),
                              crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                              crypto_pwhash_ALG_DEFAULT);
+    (void)rst1; // unused warning
     string skey = Utils::byteToHexString(key);
     skey.erase(--skey.end());
     return skey;
 }
 
-string SecretKey::encrypt(string msg, string &secret_key)
+string SecretKey::encrypt(const string &msg, const string &secret_key)
 {
+    if (msg.empty() || secret_key.empty())
+        qFatal("[SecretKey::encrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
+               secret_key.data());
+
     unsigned long long enc_size = crypto_secretbox_MACBYTES + msg.length();
     string sks = Utils::hexStringToByte(secret_key);
     vector<unsigned char> sk(sks.begin(), sks.end());
@@ -48,14 +55,27 @@ string SecretKey::encrypt(string msg, string &secret_key)
         res = Utils::byteToHexString(enc_msg);
         res.erase(--res.end());
     }
+
+    if (res.empty())
+        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << msg.data()
+                 << "| secret:" << secret_key.data();
     return res;
 }
 
-string SecretKey::decrypt(string msg, string &secret_key)
+string SecretKey::decrypt(const string &msg, const string &secret_key)
 {
+    if (msg.empty() || secret_key.empty())
+        qFatal("[SecretKey::decrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
+               secret_key.data());
+
     string sdata = Utils::hexStringToByte(msg);
+
     string s_nonce = sdata.substr(0, crypto_secretbox_NONCEBYTES);
     sdata.erase(0, crypto_secretbox_NONCEBYTES);
+
+    if (sdata.size() < crypto_secretbox_MACBYTES)
+        qFatal("[SecretKey::decrypt] Incorrect msg: %s", msg.data());
+
     vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
     string sks = Utils::hexStringToByte(secret_key);
     vector<unsigned char> sk(sks.begin(), sks.end());
@@ -69,16 +89,20 @@ string SecretKey::decrypt(string msg, string &secret_key)
     {
         res = string(dec_msg.begin(), dec_msg.end());
     }
+
+    if (res.empty())
+        qDebug() << "[SecretKey::decrypt] res is empty. msg:" << msg.data()
+                 << "| secret:" << secret_key.data();
     return res;
 }
 
-string SecretKey::encryptWithPassword(string data, string password)
+string SecretKey::encryptWithPassword(const string &data, const string &password)
 {
     string key = getKeyFromPass(password);
     return encrypt(data, key);
 }
 
-string SecretKey::decryptWithPassword(string data, string password)
+string SecretKey::decryptWithPassword(const string &data, const string &password)
 {
     string key = getKeyFromPass(password);
     return decrypt(data, key);

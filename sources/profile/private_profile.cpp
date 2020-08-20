@@ -21,6 +21,8 @@
 #include "managers/account_controller.h"
 #include "dfs/controls/headers/dfs.h"
 
+using std::string;
+
 void PrivateProfile::setAccountController(AccountController *value)
 {
     acContorller = value;
@@ -142,6 +144,8 @@ void PrivateProfile::profile(const QByteArray &hash)
     }
     else
     {
+        bool success = false;
+
         for (QString &fileName : users)
         {
             QFile file(PathProfile + "/" + fileName);
@@ -152,6 +156,7 @@ void PrivateProfile::profile(const QByteArray &hash)
             string h = hash.toStdString();
             data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
             QByteArray secureLoginFile = data.mid(0, 64);
+
             if (secureLoginFile == hash)
             {
                 data = data.mid(64);
@@ -165,16 +170,19 @@ void PrivateProfile::profile(const QByteArray &hash)
                 if (acContorller->getMainActor() != nullptr)
                     dfs->initMyLocalStorage();
                 emit initActorChatM();
+                success = true;
+                break;
             }
-            else
-            {
-                emit loginError(2);
+        }
+
+        if (!success)
+        {
 #ifdef ECONSOLE
-                qInfo() << "---> Incorrect email or password";
-                std::exit(0);
+            qInfo() << "---> Incorrect email or password";
+            std::exit(0);
 #endif
-                continue;
-            }
+
+            emit loginError(2);
         }
     }
     return;

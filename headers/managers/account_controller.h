@@ -63,7 +63,6 @@ public:
      * @param pubkey - serialized public key
      * @return actor
      */
-    Actor<KeyPrivate> getActorByPublicKey(QByteArray pubkey);
     Actor<KeyPrivate> getActor(int number);
 
     Actor<KeyPrivate> *getMainActor();

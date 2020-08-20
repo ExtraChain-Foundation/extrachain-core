@@ -93,11 +93,11 @@ private:
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
     QList<QByteArray> tempConnections;
-#ifdef ECONSOLE
-    const int SIZE_OF_CONNECTIONS = 100;
-#endif
+
 #ifdef ECLIENT
     const int SIZE_OF_CONNECTIONS = 5;
+#else
+    const int SIZE_OF_CONNECTIONS = 100;
 #endif
 protected:
     bool isDebug =

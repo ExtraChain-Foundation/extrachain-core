@@ -25,10 +25,6 @@ SubscribeController::SubscribeController(QObject *parent)
 {
 }
 
-SubscribeController::SubscribeController(const SubscribeController &)
-{
-}
-
 SubscribeController::~SubscribeController()
 {
 }

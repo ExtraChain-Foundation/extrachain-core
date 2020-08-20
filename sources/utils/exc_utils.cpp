@@ -22,15 +22,6 @@
 #include <QMimeDatabase>
 #include <QStandardPaths>
 
-template <typename T>
-
-std::string to_string(T value)
-{
-    std::ostringstream os;
-    os << value;
-    return os.str();
-}
-
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
     Keccak keccak;
@@ -92,12 +83,6 @@ int Utils::compare(const QByteArray &one, const QByteArray &two)
     }
     else
         return two.size() - one.size();
-}
-
-QByteArray Utils::getParam(const QString &param, const QByteArray &jsonDocument)
-{
-    QJsonDocument doc = QJsonDocument::fromBinaryData(jsonDocument);
-    return doc.object().value(param).toString().toLocal8Bit();
 }
 
 bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode)
@@ -217,7 +202,7 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
     }
-    string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
     while (!orig.atEnd())
     {
         QByteArray part = orig.read(blockSize);
@@ -249,7 +234,7 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
         qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
         return false;
     }
-    string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
     while (!encrypt.atEnd())
     {
         QByteArray part = encrypt.read(blockSize);
@@ -595,6 +580,19 @@ std::string Utils::hexStringToByte(const std::string &data)
 
 QString Utils::detectCompiler()
 {
+#ifdef __clang__
+#if __clang_major__ < 9
+#error "Clang must be version 9 or higher"
+#endif
+#elif __GNUC__
+#if __GNUC__ < 9
+#error "GCC must be version 9 or higher"
+#endif
+
+#else
+#error "Compiler not supported"
+#endif
+
     QString compiler = "unknown";
 
 #ifdef __GNUC__

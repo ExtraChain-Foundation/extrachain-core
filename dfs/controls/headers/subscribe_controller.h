@@ -35,7 +35,6 @@ class SubscribeController : public QObject
 
 public:
     SubscribeController(QObject *parent = nullptr);
-    SubscribeController(const SubscribeController &);
     ~SubscribeController();
 
 signals:

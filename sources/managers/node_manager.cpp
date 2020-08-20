@@ -53,7 +53,7 @@ NodeManager::NodeManager()
     dfs = new Dfs(actorIndex, accController);
 
 #ifdef ECLIENT
-    uiController = new UiController(this);
+    uiController = new ClientController(this);
     uiController->setSubscribeController(subscribeController);
     uiWallet = uiController->getWallet();
     qDebug() << "========" << uiController;
@@ -209,7 +209,7 @@ void NodeManager::connectSmContractManager()
     connect(smContractController, &SmartContractManager::initConsoleToken, this,
             &NodeManager::initConsoleToken);
 #ifdef ECLIENT
-    connect(uiController, &UiController::generateSmartContract, this, &NodeManager::generateSmartContract);
+    connect(uiController, &ClientController::generateSmartContract, this, &NodeManager::generateSmartContract);
 #endif
 
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
@@ -250,7 +250,7 @@ NetManager *NodeManager::getNetManager()
 }
 
 #ifdef ECLIENT
-UiController *NodeManager::getUiController() const
+ClientController *NodeManager::getUiController() const
 {
     return uiController;
 }
@@ -572,31 +572,31 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
 
 void NodeManager::connectUi()
 {
-    connect(uiController, &UiController::ready, this, &NodeManager::ready);
-    connect(uiController, &UiController::connectToServer, netManager, &NetManager::reconnectUi);
-    connect(uiController, &UiController::connectToServer, dfs, &Dfs::connectToServer);
-    connect(uiController, &UiController::iWantMyServiceAndPrivateQuickly, dfs, &Dfs::enableMyQuickMode);
-    connect(uiController, &UiController::noMoreServiceAndPrivate, dfs, &Dfs::disableMyQuickMode);
-    connect(uiController, &UiController::updateNetworkDeviceId, this,
+    connect(uiController, &ClientController::ready, this, &NodeManager::ready);
+    connect(uiController, &ClientController::connectToServer, netManager, &NetManager::reconnectUi);
+    connect(uiController, &ClientController::connectToServer, dfs, &Dfs::connectToServer);
+    connect(uiController, &ClientController::iWantMyServiceAndPrivateQuickly, dfs, &Dfs::enableMyQuickMode);
+    connect(uiController, &ClientController::noMoreServiceAndPrivate, dfs, &Dfs::disableMyQuickMode);
+    connect(uiController, &ClientController::updateNetworkDeviceId, this,
             &NodeManager::createNetManagerIdentificator);
 
-    connect(uiController, &UiController::requestProfile, actorIndex, &ActorIndex::requestProfile);
+    connect(uiController, &ClientController::requestProfile, actorIndex, &ActorIndex::requestProfile);
     connect(actorIndex, &ActorIndex::sendProfileToUi, this,
             [this](QString userId, QByteArrayList profile) { emit profileToUi(userId, Profile(profile)); });
 
-    connect(this, &NodeManager::profileToUi, uiController, &UiController::profileUpdated);
-    connect(uiController, &UiController::saveProfile, this, [this](QByteArrayList profile) {
+    connect(this, &NodeManager::profileToUi, uiController, &ClientController::profileUpdated);
+    connect(uiController, &ClientController::saveProfile, this, [this](QByteArrayList profile) {
         Actor<KeyPrivate> *key = accController->getMainActor();
         actorIndex->saveProfile(key, profile);
         // emit saveProfile(key, profile);
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
-    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &UiController::setNetworkStatus);
-    connect(netManager, &NetManager::qmlNetworkSockets, uiController, &UiController::setNetworkSockets);
-    connect(netManager, &NetManager::localIpFounded, uiController, &UiController::localIpFounded);
-    connect(netManager, &NetManager::buildError, uiController, &UiController::buildError);
+    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &ClientController::setNetworkStatus);
+    connect(netManager, &NetManager::qmlNetworkSockets, uiController, &ClientController::setNetworkSockets);
+    connect(netManager, &NetManager::localIpFounded, uiController, &ClientController::localIpFounded);
+    connect(netManager, &NetManager::buildError, uiController, &ClientController::buildError);
 
-    connect(uiController, &UiController::subscribe, subscribeController,
+    connect(uiController, &ClientController::subscribe, subscribeController,
             &SubscribeController::editMySubscribe);
 
     // Search (temp)
@@ -642,44 +642,44 @@ void NodeManager::connectUi()
     */
 
     //==========================================DFS=========================================
-    connect(uiController, &UiController::send, dfs, &Dfs::save);
+    connect(uiController, &ClientController::send, dfs, &Dfs::save);
     connect(chatManager, &ChatManager::send, dfs, &Dfs::save);
-    connect(uiController, &UiController::sendEdit, dfs, &Dfs::editData);
-    connect(uiController, &UiController::sendEditSql, dfs, &Dfs::editSqlDatabase);
-    connect(uiController, &UiController::sendReplace, dfs, &Dfs::applyReplace);
-    connect(uiController, &UiController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
+    connect(uiController, &ClientController::sendEdit, dfs, &Dfs::editData);
+    connect(uiController, &ClientController::sendEditSql, dfs, &Dfs::editSqlDatabase);
+    connect(uiController, &ClientController::sendReplace, dfs, &Dfs::applyReplace);
+    connect(uiController, &ClientController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
         emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, value, data,
                                     rewrite);
         qDebug() << "222222222222";
     });
-    connect(uiController, &UiController::getInfoFromPrProfile, [this](const QString &type) {
+    connect(uiController, &ClientController::getInfoFromPrProfile, [this](const QString &type) {
         emit loadInfoFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type);
     });
     connect(this, &NodeManager::loadInfoFromPrProfile, prProfile,
             &PrivateProfile::loadInfoFromPrivateProfile);
-    connect(prProfile, &PrivateProfile::infoToUi, uiController, &UiController::loadInfo);
+    connect(prProfile, &PrivateProfile::infoToUi, uiController, &ClientController::loadInfo);
     connect(prProfile, &PrivateProfile::infoToUi, this, [=](const QByteArray &info, const QString &type) {
         Q_UNUSED(info)
         Q_UNUSED(type)
         emit setCurrentIdNotifyM(getIdPrivateProfile());
     });
 
-    connect(uiController, &UiController::sendNotificationToken, this, &NodeManager::notificationToken);
+    connect(uiController, &ClientController::sendNotificationToken, this, &NodeManager::notificationToken);
 
     connect(prProfile, &PrivateProfile::initActorChatM,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
-    connect(prProfile, &PrivateProfile::loginError, uiController, &UiController::loginError);
+    connect(prProfile, &PrivateProfile::loginError, uiController, &ClientController::loginError);
     connect(this, &NodeManager::setCurrentIdNotifyM, notifyM, &NotificationManager::setCurrentID);
     connect(notifyM, &NotificationManager::getCurrentID, this,
             [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
     //    connect(accController, &AccountController::addActorInActorIndex, this,
     //            &NodeManager::addActorInActorIndex);
     //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
-    connect(uiController, &UiController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
-    connect(uiController, &UiController::loadProfileForAutologin, prProfile,
+    connect(uiController, &ClientController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
+    connect(uiController, &ClientController::loadProfileForAutologin, prProfile,
             &PrivateProfile::loadProfileForAutoLogin);
-    connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &UiController::allNotification);
-    connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &UiController::newNotification);
+    connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &ClientController::allNotification);
+    connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &ClientController::newNotification);
     connect(notifyM, &NotificationManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
     //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
@@ -694,25 +694,25 @@ void NodeManager::connectUi()
     });
     connect(accController, &AccountController::savePrivateProfile, chatManager, &ChatManager::ActorInit);
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
-    connect(accController, &AccountController::loadWallets, uiController, &UiController::loginPrivateProfile);
-    connect(uiController, &UiController::logout, accController, &AccountController::clearAcc);
+    connect(accController, &AccountController::loadWallets, uiController, &ClientController::loginPrivateProfile);
+    connect(uiController, &ClientController::logout, accController, &AccountController::clearAcc);
     // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
     // connect(uiController, &UiController::profileById, dfs,
     // &Dfs::profileRequest);
     // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
     auto uiResolver = uiController->getUiResolver();
-    connect(dfs, &Dfs::fileAdded, uiResolver, &UiResolver::fileAdded);
-    connect(dfs, &Dfs::fileChanged, uiResolver, &UiResolver::fileChanged);
-    connect(dfs, &Dfs::fileDuplicated, uiResolver, &UiResolver::fileDuplicated);
+    connect(dfs, &Dfs::fileAdded, uiResolver, &ClientResolver::fileAdded);
+    connect(dfs, &Dfs::fileChanged, uiResolver, &ClientResolver::fileChanged);
+    connect(dfs, &Dfs::fileDuplicated, uiResolver, &ClientResolver::fileDuplicated);
     connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
-    connect(dfs, &Dfs::fileNetworkCompleted, uiResolver, &UiResolver::fileNetworkCompleted);
-    connect(uiController, &UiController::newNotify, notifyM, &NotificationManager::addNotify);
+    connect(dfs, &Dfs::fileNetworkCompleted, uiResolver, &ClientResolver::fileNetworkCompleted);
+    connect(uiController, &ClientController::newNotify, notifyM, &NotificationManager::addNotify);
     connect(blockchain, &Blockchain::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::newNotify, notifyM, &NotificationManager::addNotify);
     connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);
-    connect(uiController->getUiResolver(), &UiResolver::loadChat, chatManager, &ChatManager::fileLoaded);
-    connect(uiController, &UiController::requestFile, dfs, &Dfs::requestFileUiHandle);
-    connect(uiController, &UiController::authEnded, chatManager, &ChatManager::initChat);
+    connect(uiController->getUiResolver(), &ClientResolver::loadChat, chatManager, &ChatManager::fileLoaded);
+    connect(uiController, &ClientController::requestFile, dfs, &Dfs::requestFileUiHandle);
+    connect(uiController, &ClientController::authEnded, chatManager, &ChatManager::initChat);
 
     connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
     connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
@@ -731,26 +731,26 @@ void NodeManager::connectUi()
 
     //=======================================ACCOUNT_CONTROLLER===============================
     connect(accController, &AccountController::newActorIsCreated, uiController,
-            &UiController::userRegistrationCompletion);
+            &ClientController::userRegistrationCompletion);
     connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
     connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
     // connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
 
     //=============================================CHAT=======================================
-    connect(uiController, &UiController::createChat, chatManager, &ChatManager::CreateNewChat);
-    connect(uiController, &UiController::inviteToChat, chatManager, &ChatManager::InviteToChat);
-    connect(uiController, &UiController::createDialogue, chatManager, &ChatManager::createDialogue);
+    connect(uiController, &ClientController::createChat, chatManager, &ChatManager::CreateNewChat);
+    connect(uiController, &ClientController::inviteToChat, chatManager, &ChatManager::InviteToChat);
+    connect(uiController, &ClientController::createDialogue, chatManager, &ChatManager::createDialogue);
 
-    connect(uiController, &UiController::sendChatFile, chatManager, &ChatManager::sendChatFile);
-    connect(uiController, &UiController::sendMessage, chatManager, &ChatManager::SendMessage);
-    connect(uiController, &UiController::removeChatMessage, chatManager, &ChatManager::removeChatMessage);
+    connect(uiController, &ClientController::sendChatFile, chatManager, &ChatManager::sendChatFile);
+    connect(uiController, &ClientController::sendMessage, chatManager, &ChatManager::SendMessage);
+    connect(uiController, &ClientController::removeChatMessage, chatManager, &ChatManager::removeChatMessage);
     connect(chatManager, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
 
-    connect(uiController, &UiController::requestChatList, chatManager, &ChatManager::requestChatList);
-    connect(uiController, &UiController::requestChat, chatManager, &ChatManager::requestChat);
+    connect(uiController, &ClientController::requestChatList, chatManager, &ChatManager::requestChatList);
+    connect(uiController, &ClientController::requestChat, chatManager, &ChatManager::requestChat);
 
-    connect(chatManager, &ChatManager::chatListSend, uiController, &UiController::chatListReceived);
-    connect(chatManager, &ChatManager::chatSend, uiController, &UiController::chatReceived);
+    connect(chatManager, &ChatManager::chatListSend, uiController, &ClientController::chatListReceived);
+    connect(chatManager, &ChatManager::chatSend, uiController, &ClientController::chatReceived);
     connect(chatManager, &ChatManager::chatCreated, uiController->getChatListModel(),
             &ChatListModel::chatAdded);
     connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatModel(),
@@ -758,7 +758,7 @@ void NodeManager::connectUi()
     connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatListModel(),
             &ChatListModel::messageReceived);
 
-    connect(uiController, &UiController::removeChat, chatManager, &ChatManager::chatRemoved);
+    connect(uiController, &ClientController::removeChat, chatManager, &ChatManager::chatRemoved);
 
     //
     uiController->startThreads();

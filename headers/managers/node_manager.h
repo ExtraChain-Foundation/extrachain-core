@@ -46,7 +46,7 @@
 #include <QCoreApplication>
 
 #ifdef ECLIENT
-#include "ui/ui_controller.h"
+#include "ui/client_controller.h"
 #include "ui/notificationclient.h"
 #include "managers/notification_manager.h"
 #endif
@@ -56,7 +56,6 @@
 #endif
 
 class ResolveManager;
-using namespace DfsStruct;
 
 class NodeManager : public QObject
 {
@@ -81,7 +80,7 @@ private:
     QByteArray hashLoginPrivateProfile;
 
 #ifdef ECLIENT
-    UiController *uiController;
+    ClientController *uiController;
     WalletController *uiWallet;
     NotificationClient *notificationClient = nullptr;
     NotificationManager *notifyM;
@@ -131,7 +130,7 @@ public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
 
 #ifdef ECLIENT
-    UiController *getUiController() const;
+    ClientController *getUiController() const;
     void setNotificationClient(NotificationClient *newNtfCl);
 #endif
 

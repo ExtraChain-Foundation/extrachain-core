@@ -19,6 +19,8 @@
 
 #include "enc/key_public.h"
 
+using std::string, std::vector;
+
 KeyPublic::KeyPublic(const string &publicKey)
 {
     pubKey = publicKey;
@@ -52,6 +54,7 @@ QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySe
 
     vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
     int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
+    (void)conv_res; // unused
     //    if (conv_res)
     vector<unsigned char> enc_msg(enc_size);
     vector<unsigned char> dec_msg(sdata.begin(), sdata.end());

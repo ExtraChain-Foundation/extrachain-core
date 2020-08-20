@@ -44,12 +44,6 @@
 #include <cassert>
 static QMutex handlerFileMutex;
 
-/**
- * @brief The ResolverService class - the interlayer between Network packages
- * and system objects logic. The main idea of ResolverService is to detect message
- * type and deserialize it. There are package definition methods, and signals to
- * ResolveManager.
- */
 class AccountController;
 class ResolveManager;
 class NodeManager;
@@ -57,10 +51,17 @@ class ActorIndex;
 class Blockchain;
 class TransactionManager;
 class ChatManager;
-using namespace Resolver;
+
+/**
+ * @brief The ResolverService class - the interlayer between Network packages
+ * and system objects logic. The main idea of ResolverService is to detect message
+ * type and deserialize it. There are package definition methods, and signals to
+ * ResolveManager.
+ */
 class ResolverService : public QObject
 {
     Q_OBJECT
+
 private:
     NodeManager *node;
     ActorIndex *actorIndex;
@@ -69,7 +70,7 @@ private:
 
 private:
     Resolver::Type type = Resolver::Type::GENERAL;
-    Lifetime lifetime = Lifetime::SHORT;
+    Resolver::Lifetime lifetime = Resolver::Lifetime::SHORT;
 
 private:
     QTimer *reloadTimer = nullptr;
@@ -94,8 +95,8 @@ public:
      * @param actorIndex
      * @param parent
      */
-    ResolverService(Type type, Lifetime lifetime, ActorIndex *actorIndex, ResolveManager *resolveManager,
-                    QObject *parent = nullptr);
+    ResolverService(Resolver::Type type, Resolver::Lifetime lifetime, ActorIndex *actorIndex,
+                    ResolveManager *resolveManager, QObject *parent = nullptr);
     /**
      * @brief ResolverService
      */
@@ -128,7 +129,7 @@ public:
     Resolver::Type getType() const;
     void setType(const Resolver::Type &value);
 
-    Lifetime getLifetime() const;
+    Resolver::Lifetime getLifetime() const;
 
     //    DFS::titleMessage getTitle() const;
 

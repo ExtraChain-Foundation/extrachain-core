@@ -136,22 +136,6 @@ Actor<KeyPrivate> AccountController::getActor(BigNumber id)
     return Actor<KeyPrivate>();
 }
 
-Actor<KeyPrivate> AccountController::getActorByPublicKey(QByteArray pubkey)
-{
-    qDebug() << "Warning! DEPRECATED";
-    return Actor<KeyPrivate>();
-    //    for (Actor<KeyPrivate> *actor : accounts)
-    //    {
-    //        if (actor->getKey()->extractPublicKey() == pubkey)
-    //        {
-    //            qDebug() << "ACCOUNT CONTROLLER: currentActor:" << actor->getId();
-    //            return *actor;
-    //        }
-    //    }
-    //    qDebug() << "Can't find actor with pubkey:" << QString(pubkey);
-    //    return Actor<KeyPrivate>();
-}
-
 Actor<KeyPrivate> AccountController::getActor(int number)
 {
     //    return actorIndex->getActor(BigNumber(number));
@@ -193,7 +177,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
         QFile file(path + "/" + fileName + ".key");
         if (file.exists() && file.open(QIODevice::ReadOnly))
         {
-            string hl = hashLogin.toStdString();
+            std::string hl = hashLogin.toStdString();
             QByteArray serialized =
                 QByteArray::fromStdString(SecretKey::decryptWithPassword(file.readAll().toStdString(), hl));
             qDebug() << serialized;
@@ -259,7 +243,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
         else
         {
             qDebug() << "actor serialized: ---- " << actor.serialize();
-            string hl = hashLogin.toStdString();
+            std::string hl = hashLogin.toStdString();
             file->write(QByteArray::fromStdString(
                 SecretKey::encryptWithPassword(actor.serialize().toStdString(), hl)));
             file->flush();

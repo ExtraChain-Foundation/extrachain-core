@@ -25,28 +25,26 @@
 #include <sodium.h>
 #include <QDebug>
 
-using namespace std;
-
 class KeyPublic
 {
 private:
-    string pubKey;
+    std::string pubKey;
 
 public:
-    KeyPublic(const string &publicKey);
+    KeyPublic(const std::string &publicKey);
     KeyPublic(const QJsonObject &json);
     KeyPublic(const KeyPublic &keyPublic);
     ~KeyPublic();
 
 public:
-    QByteArray encrypt(const QByteArray &data, const string &privateKeySender);
+    QByteArray encrypt(const QByteArray &data, const std::string &privateKeySender);
 
 public:
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
 public:
     bool isEmpty();
-    string getPubKey() const;
+    std::string getPubKey() const;
 };
 
 #endif // KEY_PUBLIC_H

@@ -40,7 +40,7 @@ public:
     PublicProfile();
     QByteArray serialize() const;
     void setProfile(QByteArrayList profile, QString path);
-    void saveProfileFromNet(QByteArray newProfile);
+    bool saveProfileFromNet(QByteArray newProfile);
     QByteArrayList getListProfile();
     QByteArray getProfile();
     static QByteArray serialize(QByteArrayList profileList);

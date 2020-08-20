@@ -32,6 +32,7 @@ struct UIMessage
     QString messId;
     QString userId;
     QString message;
+    QString type;
     QDateTime date;
 };
 
@@ -79,7 +80,7 @@ private:
     bool isUserExist(QByteArray actorId, QList<QByteArray> userList);                   //+
 
 public:
-    Chat(ChatManager* chatManager, QByteArray chatId, ActorIndex* actorIndex,
+    Chat(ChatManager* chatManager, const QByteArray& chatId, ActorIndex* actorIndex,
          AccountController* accountController,
          BigNumber sessionNumb = -1); //+
     Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key, BigNumber currentSession,

@@ -6,13 +6,12 @@
 #include <string>
 #include <utils/exc_utils.h>
 
-using namespace std;
 namespace SecretKey {
-string keygen();
-string getKeyFromPass(string pass, string salt = "");
-string encrypt(string msg, string &secret_key);
-string decrypt(string msg, string &secret_key);
-string encryptWithPassword(string data, string password);
-string decryptWithPassword(string data, string password);
+std::string keygen();
+std::string getKeyFromPass(const std::string &pass, const std::string &salt = "");
+std::string encrypt(const std::string &msg, const std::string &secret_key);
+std::string decrypt(const std::string &msg, const std::string &secret_key);
+std::string encryptWithPassword(const std::string &data, const std::string &password);
+std::string decryptWithPassword(const std::string &data, const std::string &password);
 }
 #endif // ENC_TOOLS_H
