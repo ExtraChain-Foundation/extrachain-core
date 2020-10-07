@@ -184,10 +184,17 @@ inline bool operator!=(const BigNumber &l, const int &r)
     return l.data() != r;
 }
 
+#if QT_VERSION_MAJOR == 6
 inline size_t qHash(const BigNumber &key, size_t seed)
 {
     return qHash(key.toStdString(), seed);
 }
+#else
+inline uint qHash(const BigNumber &key, uint seed)
+{
+    return qHash(key.toByteArray(), seed);
+}
+#endif
 
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
 QDebug operator<<(QDebug debug, const mpz_class &bigNumber);
