@@ -593,26 +593,34 @@ QString Utils::detectCompiler()
 #error "Compiler not supported"
 #endif
 
-    QString compiler = "unknown";
-
 #ifdef __GNUC__
 #ifdef __MINGW32__
     QString gcc = "MinGW";
 #else
     QString gcc = "GCC";
 #endif
-    compiler = QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
-#endif
-
-#ifdef __clang__
-    compiler = QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
+    return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
 #endif
 
 #if _MSC_VER && !__INTEL_COMPILER
-    compiler = "MSVC " + QString::number(_MSC_FULL_VER);
-    compiler.insert(7, ".");
-    compiler.insert(10, ".");
+    QString msvcVersion;
+    msvcVersion = "MSVC " + QString::number(_MSC_FULL_VER);
+    msvcVersion.insert(7, ".");
+    msvcVersion.insert(10, ".");
 #endif
 
+#ifdef __clang__
+    QString compiler =
+        QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
+#if _MSC_VER && !__INTEL_COMPILER
+    compiler += " (" + msvcVersion + ")";
+#endif
     return compiler;
+#endif
+
+#if _MSC_VER && !__INTEL_COMPILER
+    return msvcVersion;
+#else
+    return "unknown";
+#endif
 }
