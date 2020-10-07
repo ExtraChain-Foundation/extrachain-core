@@ -401,7 +401,7 @@ QString Transaction::amountToVisible(BigNumber number)
 
     QString second = numberArr.right(18); //
     second = QString("0").repeated(18 - second.length()).toLatin1() + second;
-    second = second.remove(QRegExp("[0]*$"));
+    second = second.remove(QRegularExpression("[0]*$"));
     QByteArray first = numberArr.left(numberArr.length() - 18);
 
     QString numberDec =

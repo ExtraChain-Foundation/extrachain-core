@@ -20,8 +20,6 @@
 #ifndef BASEMESSAGE_H
 #define BASEMESSAGE_H
 
-#include <QLinkedList>
-
 #include "network/packages/message_interface.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"

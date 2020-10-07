@@ -585,10 +585,9 @@ QString Utils::detectCompiler()
 #error "Clang must be version 9 or higher"
 #endif
 #elif __GNUC__
-#if __GNUC__ < 9
-#error "GCC must be version 9 or higher"
+#if __GNUC__ < 8
+#error "GCC must be version 8 or higher"
 #endif
-
 #else
 #error "Compiler not supported"
 #endif

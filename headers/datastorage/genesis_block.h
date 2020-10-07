@@ -57,6 +57,7 @@ public:
         l << actorId.toActorId() << state.toByteArray() << token.toActorId() << QByteArray::number(type);
         return Serialization::serialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
+
     void deserialize(const QByteArray &serialized)
     {
         QList<QByteArray> l =
@@ -70,7 +71,7 @@ public:
         }
     }
 
-    bool operator==(const GenesisDataRow &other)
+    bool operator==(const GenesisDataRow &other) const
     {
         return this->actorId == other.actorId && this->state == other.state && this->token == other.token
             && this->type == other.type;

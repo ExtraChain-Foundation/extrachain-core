@@ -69,7 +69,6 @@ class ResolveManager;
 
 #include "network/packages/service/connections_message.h"
 
-#include <QNetworkConfigurationManager>
 #include <QRandomGenerator>
 #include <QSettings>
 #include <QMutex>
