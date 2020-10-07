@@ -184,9 +184,9 @@ inline bool operator!=(const BigNumber &l, const int &r)
     return l.data() != r;
 }
 
-inline uint qHash(const BigNumber &key, uint seed)
+inline size_t qHash(const BigNumber &key, size_t seed)
 {
-    return qHash(key.toByteArray(), seed);
+    return qHash(key.toStdString(), seed);
 }
 
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);

@@ -40,9 +40,9 @@ public:
     bool isEmpty() const;
 };
 
-inline uint qHash(const SocketPair &v)
+inline size_t qHash(const SocketPair &key, size_t seed = 0)
 {
-    return qHash(v.serialize());
+    return qHash(key.serialize(), seed);
 }
 
 QDebug operator<<(QDebug d, const SocketPair &pair);
