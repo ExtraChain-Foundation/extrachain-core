@@ -109,8 +109,8 @@ void ActorIndex::process()
 void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver)
 {
 #ifdef QT_DEBUG
-        if (actorId.toByteArray().size() < 18)
-            qFatal("handleGetActor, size < 18");
+    if (actorId.toByteArray().size() < 18)
+        qFatal("handleGetActor, size < 18");
 #endif
     // receive id
     // create response message
@@ -161,6 +161,8 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
 
 void ActorIndex::getAllActors(BigNumber id, bool isUser)
 {
+    Q_UNUSED(isUser)
+
     if (accController->getAccountCount() > 0)
     {
         Messages::GetAllActorMessage msg;

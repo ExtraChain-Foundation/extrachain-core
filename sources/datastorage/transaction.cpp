@@ -20,6 +20,7 @@
 #include "datastorage/transaction.h"
 
 Transaction::Transaction(QObject *parent)
+    : QObject(parent)
 {
     this->sender = BigNumber(0);
     this->receiver = BigNumber(0);
@@ -38,12 +39,11 @@ Transaction::Transaction(QObject *parent)
 }
 
 Transaction::Transaction(const QByteArray &serialized, QObject *parent)
-    : Transaction()
+    : QObject(parent)
 {
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
-    QList<QByteArray> list =
-        Serialization::deserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
+    QList<QByteArray> list = Serialization::deserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
     if (list.size() == 13)
     {
         this->sender = BigNumber(list.at(0));
@@ -95,7 +95,7 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     calcHash();
 }
 
-Transaction::Transaction(const Transaction &other, QObject *parent)
+Transaction::Transaction(const Transaction &other)
 {
     this->sender = other.sender;
     this->receiver = other.receiver;
@@ -399,15 +399,16 @@ QString Transaction::amountToVisible(BigNumber number)
         minus = true;
     }
 
-    QString second = numberArr.right(18); //
+    QString second = numberArr.right(18); // TODO
     second = QString("0").repeated(18 - second.length()).toLatin1() + second;
     second = second.remove(QRegularExpression("[0]*$"));
     QByteArray first = numberArr.left(numberArr.length() - 18);
 
-    QString numberDec =
-        (first.isEmpty() ? "0" : first) + (second == "0" || second.isEmpty() ? "" : "." + second);
+    QByteArray numberDec = (first.isEmpty() ? QByteArray("0") : first)
+        + (second.toLatin1() == QByteArray("0") || second.isEmpty() ? QByteArray("")
+                                                                    : QByteArray(".") + second.toLatin1());
 
-    return (minus ? "-" : "") + numberDec.toLatin1();
+    return (minus ? "-" : "") + numberDec;
 }
 
 BigNumber Transaction::amountNormalizeMul(BigNumber number)

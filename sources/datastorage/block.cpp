@@ -207,7 +207,7 @@ QList<Transaction> Block::extractTransactions() const
 Transaction Block::getTransactionByHash(QByteArray hash) const
 {
     QList<Transaction> txList = extractTransactions();
-    for (const auto i : txList)
+    for (const auto &i : txList)
         if (i.getHash() == hash)
             return i;
     return Transaction();
@@ -217,7 +217,7 @@ bool Block::contain(Block &from) const
 {
     QList<Transaction> ourTx = this->extractTransactions();
     QList<Transaction> fromTx = from.extractTransactions();
-    for (auto i : fromTx)
+    for (const auto &i : fromTx)
     {
         if (!ourTx.contains(i))
             return false;
@@ -257,18 +257,17 @@ QByteArray Block::getType() const
 
 QByteArray Block::getDigSig() const
 {
-
-    return signatures.isEmpty() ? "" : this->signatures.begin()->sign;
+    return signatures.isEmpty() ? QByteArray() : this->signatures.begin()->sign;
 }
 
 QByteArray Block::getSignatures() const
 {
     QByteArray res = "";
 
-    for (auto it = signatures.begin(); it != signatures.end(); it++)
+    for (const auto &signature : signatures)
     {
         QByteArray data = Serialization::serialize(
-            { it->actorId, it->sign, it->isApprove ? "1" : "0" }, FIELDS_SIZE);
+            { signature.actorId, signature.sign, signature.isApprove ? "1" : "0" }, FIELDS_SIZE);
         res += Serialization::serialize({ data }, FIELDS_SIZE);
     }
 
@@ -279,8 +278,10 @@ QByteArrayList Block::getListSignatures() const
 {
     QByteArrayList res;
 
-    for (auto it = signatures.begin(); it != signatures.end(); it++)
-        res << it->actorId << it->sign << QByteArray::number(int(it->isApprove));
+    for (auto const &signature : signatures)
+    {
+        res << signature.actorId << signature.sign << (signature.isApprove ? "1" : "0");
+    }
 
     return res;
 }

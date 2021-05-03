@@ -204,6 +204,7 @@ ChatManager::ChatManager(AccountController *accController, ActorIndex *actorInde
 
 void ChatManager::msgReceiver(const Messages::BaseMessage &msg)
 {
+    Q_UNUSED(msg)
     return;
     //
     //    if (msg.getMsgType() == Messages::INVITE_CHAT_MESSAGE)

@@ -242,6 +242,7 @@ void UPNPConnection::getHttp()
 
 void UPNPConnection::getHttpError(QNetworkReply::NetworkError err)
 {
+    Q_UNUSED(err)
     emit upnp_error(http_reply->errorString());
 }
 

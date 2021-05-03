@@ -1452,6 +1452,7 @@ void Blockchain::process()
 
 void Blockchain::updateBlockchain(BigNumber id, bool isUser)
 {
+    Q_UNUSED(isUser)
     Messages::BlockCount request;
     emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
 }
@@ -1924,7 +1925,7 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        QByteArray companyId = actorIndex->companyId != nullptr ? *actorIndex->companyId : "";
+        QByteArray companyId = actorIndex->companyId != nullptr ? *actorIndex->companyId : QByteArray();
 
         if (targetSender.toActorId() != companyId)
         {
