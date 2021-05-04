@@ -45,7 +45,7 @@
 #include <QCoreApplication>
 
 #ifdef ECLIENT
-#include "ui/client_controller.h"
+#include "ui/wallet/walletcontroller.h"
 #include "ui/notificationclient.h"
 #include "managers/notification_manager.h"
 #include "asyncfuture.h"
@@ -80,9 +80,9 @@ private:
     QByteArray hashLoginPrivateProfile;
 
 #ifdef ECLIENT
-    ClientController *uiController;
-    WalletController *uiWallet;
-    NotificationClient *notificationClient = nullptr;
+    WalletController *uiWallet;                       //
+    NotificationClient *notificationClient = nullptr; //
+public:
     NotificationManager *notifyM;
 #endif
 
@@ -95,6 +95,10 @@ public:
     Blockchain *getBlockchain();
     NetManager *getNetManager();
     AccountController *getAccController() const;
+    ActorIndex *getActorIndex() const;
+    ResolveManager *getResolveManager() const;
+    PrivateProfile *getPrivateProfile() const;
+    SubscribeController *getSubscribeController() const;
 
     void getBlockchainFile();
 
@@ -130,7 +134,6 @@ public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
 
 #ifdef ECLIENT
-    ClientController *getUiController() const;
     void setNotificationClient(NotificationClient *newNtfCl);
 #endif
 
@@ -150,7 +153,6 @@ private:
     void connectResolveManager();
     void connectSmContractManager();
     void connectTxManager();
-    void connectUi();
     void connectConsole();
     void connectContractManager();
     void connectBlockchain();
@@ -193,25 +195,22 @@ private slots:
     void initConsoleToken(Transaction tx);
     void getAllActors();
     void getAllActorsTimerCall();
-    void setIdPrivateProfile(QByteArray id);
-    void setHashLoginPrivateProfile(QByteArray hash);
     void logOut();
 
     //    void makeContractFirstTransaction(Contract &contract);
     //    void makeContractFinalTransaction(Contract &contract);
 public slots:
+    void setIdPrivateProfile(QByteArray id);          //
+    void setHashLoginPrivateProfile(QByteArray hash); //
     void tempareSlotForActors();
 
     // test net & blockchain
-
     //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
     void dfscreateNetManagerIdentificator();
 #ifdef ECLIENT
     void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
-
-private slots:
     void createWalletInUi();
     void updateWalletInUi();
     void updateWalletList();

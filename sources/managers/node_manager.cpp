@@ -25,7 +25,7 @@ NodeManager::NodeManager()
 {
     if (sodium_init() != 0)
     {
-        qDebug() << "Encryption init error!!!";
+        qDebug() << "Encryption init error";
         QCoreApplication::exit(-1);
     }
     prepareFolders();
@@ -53,11 +53,6 @@ NodeManager::NodeManager()
     dfs = new Dfs(actorIndex, accController);
 
 #ifdef ECLIENT
-    uiController = new ClientController(this);
-    uiController->setSubscribeController(subscribeController);
-    uiWallet = uiController->getWallet();
-    qDebug() << "========" << uiController;
-    uiController->setDfs(dfs);
     notifyM = new NotificationManager();
     ThreadPool::addThread(notifyM);
 #endif
@@ -84,9 +79,7 @@ NodeManager::NodeManager()
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
-#ifdef ECLIENT
-    Utils::checkMemoryFree();
-#endif
+
     // FileUpdaterManager fl;
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
@@ -208,9 +201,6 @@ void NodeManager::connectSmContractManager()
             &ResolveManager::registrateMsg);
     connect(smContractController, &SmartContractManager::initConsoleToken, this,
             &NodeManager::initConsoleToken);
-#ifdef ECLIENT
-    connect(uiController, &ClientController::generateSmartContract, this, &NodeManager::generateSmartContract);
-#endif
 
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
     // &NetManager::NewActor);
@@ -250,18 +240,12 @@ NetManager *NodeManager::getNetManager()
 }
 
 #ifdef ECLIENT
-ClientController *NodeManager::getUiController() const
-{
-    return uiController;
-}
-
 void NodeManager::setNotificationClient(NotificationClient *newNtfCl)
 {
     notifyM->setNotifyClient(newNtfCl);
     notifyM->setActorIndex(actorIndex);
     notifyM->setAccController(accController);
 }
-
 #endif
 
 Transaction NodeManager::createTransaction(Transaction tx)
@@ -477,6 +461,7 @@ void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, Bi
 }
 void NodeManager::createWalletInUi()
 {
+    return;
     // accController->loadActors();
     uiWallet->setCurrentWalletId(accController->getCurrentActor().id().toActorId());
     uiWallet->setCurrentWalletBalance(
@@ -490,7 +475,8 @@ void NodeManager::createWalletInUi()
 
 void NodeManager::updateWalletInUi()
 {
-    uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().id().toActorId());
+    return;
+    // uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().id().toActorId());
     uiWallet->setCurrentWalletBalance(
         blockchain->getUserBalance(accController->getCurrentActor().id(), uiWallet->getCurrentToken()));
 
@@ -502,6 +488,7 @@ void NodeManager::updateWalletInUi()
 
 void NodeManager::updateWalletList()
 {
+    return;
     QByteArrayList walletList;
     QByteArrayList currentWallets = uiWallet->getCurrentWallets();
 
@@ -527,6 +514,7 @@ void NodeManager::updateWalletList()
 
 void NodeManager::updateAvailableWalletList()
 {
+    return;
     QByteArray currentId = uiWallet->getCurrentWalletId().toActorId();
     QStringList actors = uiWallet->getAllActor(currentId);
 
@@ -550,6 +538,7 @@ void NodeManager::updateAvailableWalletList()
 
 void NodeManager::updateRecentActivities()
 {
+    return;
     QList<Transaction> recentTransactionList;
 
     recentTransactionList = blockchain->getTxsBySenderOrReceiverInRow(accController->getCurrentActor().id(),
@@ -560,6 +549,7 @@ void NodeManager::updateRecentActivities()
 
 void NodeManager::changeWalletIdUi(BigNumber walletId)
 {
+    return;
     // qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
     // accController->loadActors();
     accController->changeUserNum(walletId.toActorId());
@@ -570,202 +560,9 @@ void NodeManager::changeWalletIdUi(BigNumber walletId)
     updateRecentActivities();
 }
 
-void NodeManager::connectUi()
-{
-    connect(uiController, &ClientController::ready, this, &NodeManager::ready);
-    connect(uiController, &ClientController::connectToServer, netManager, &NetManager::reconnectUi);
-    connect(uiController, &ClientController::connectToServer, dfs, &Dfs::connectToServer);
-    connect(uiController, &ClientController::iWantMyServiceAndPrivateQuickly, dfs, &Dfs::enableMyQuickMode);
-    connect(uiController, &ClientController::noMoreServiceAndPrivate, dfs, &Dfs::disableMyQuickMode);
-    connect(uiController, &ClientController::updateNetworkDeviceId, this,
-            &NodeManager::createNetManagerIdentificator);
-
-    connect(uiController, &ClientController::requestProfile, actorIndex, &ActorIndex::requestProfile);
-    connect(actorIndex, &ActorIndex::sendProfileToUi, this,
-            [this](QString userId, QByteArrayList profile) { emit profileToUi(userId, Profile(profile)); });
-
-    connect(this, &NodeManager::profileToUi, uiController, &ClientController::profileUpdated);
-    connect(uiController, &ClientController::saveProfile, this, [this](QByteArrayList profile) {
-        Actor<KeyPrivate> *key = accController->getMainActor();
-        actorIndex->saveProfile(key, profile);
-        // emit saveProfile(key, profile);
-    });
-    connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
-    connect(netManager, &NetManager::networkStatusChanged, uiController, &ClientController::setNetworkStatus);
-    connect(netManager, &NetManager::networkSocketsCountChanged, uiController, &ClientController::setNetworkSockets);
-    connect(netManager, &NetManager::localIpFounded, uiController, &ClientController::localIpFounded);
-    connect(netManager, &NetManager::buildError, uiController, &ClientController::buildError);
-
-    connect(uiController, &ClientController::subscribe, subscribeController,
-            &SubscribeController::editMySubscribe);
-
-    // Search (temp)
-    connect(uiController->getSearch(), &SearchModel::requestProfiles, actorIndex,
-            &ActorIndex::profileToSearch);
-    connect(actorIndex, &ActorIndex::sendProfileToSearchToUi, uiController->getSearch(),
-            &SearchModel::fromActorIndex);
-
-    //=======================================WALLET=========================================
-    connect(uiWallet, &WalletController::sendNewTransaction, this, &NodeManager::sendTransactionFromUi);
-    connect(uiWallet, &WalletController::sendNewTransactionFreeze, this,
-            &NodeManager::createFreezeTransaction);
-    connect(uiWallet, &WalletController::updateWalletToNode, this, &NodeManager::updateWalletInUi);
-    //    connect(uiWallet, &WalletController::createWalletToNode, this, &NodeManager::createWalletInUi);
-    connect(uiWallet, &WalletController::changeWalletData, this, &NodeManager::changeWalletIdUi);
-    connect(uiWallet->getWalletListModel(), &WalletListModel::changeWalletIdInAccountController,
-            accController, &AccountController::changeUserNum);
-
-    connect(uiWallet, &WalletController::sendCoinRequestFromUi, resolveManager,
-            &ResolveManager::registrateMsg);
-    connect(uiWallet, &WalletController::addNewWallet, this, &NodeManager::addNewWallet);
-
-    connect(accController, &AccountController::editPrivateProfile, [this](QByteArray id) {
-        emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, "wallet", id,
-                                    false);
-        qDebug() << "1111111111111111111";
-    });
-    connect(blockchain, &Blockchain::updateLastTransactionList, this, &NodeManager::updateWalletInUi);
-
-    //======================================CONTRACT===========================================
-    /*
-    auto contractsModel = uiController->getContractsModel();
-    connect(contractsModel, &ContractsModel::loadContractst, contractManager,
-            &ContractManager::loadContractsFrom);
-    connect(contractsModel, &ContractsModel::approveByPerformer, contractManager,
-            &ContractManager::approveContractByPerformer);
-    connect(contractsModel, &ContractsModel::completeByCustomer, contractManager,
-            &ContractManager::completeContractByCustomer);
-    connect(contractsModel, &ContractsModel::completeByPerformer, contractManager,
-            &ContractManager::completeContractByPerformer);
-    connect(contractsModel, &ContractsModel::newContractToNode, contractManager,
-            &ContractManager::createContract);
-    */
-
-    //==========================================DFS=========================================
-    connect(uiController, &ClientController::send, dfs, &Dfs::save);
-    connect(chatManager, &ChatManager::send, dfs, &Dfs::save);
-    connect(uiController, &ClientController::sendEdit, dfs, &Dfs::editData);
-    connect(uiController, &ClientController::sendEditSql, dfs, &Dfs::editSqlDatabase);
-    connect(uiController, &ClientController::sendReplace, dfs, &Dfs::applyReplace);
-    connect(uiController, &ClientController::editInfo, [this](QString value, QByteArray data, bool rewrite) {
-        emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, value, data,
-                                    rewrite);
-        qDebug() << "222222222222";
-    });
-    connect(uiController, &ClientController::getInfoFromPrProfile, [this](const QString &type) {
-        emit loadInfoFromPrProfile(getHashLoginPrivateProfile(), getIdPrivateProfile(), type);
-    });
-    connect(this, &NodeManager::loadInfoFromPrProfile, prProfile,
-            &PrivateProfile::loadInfoFromPrivateProfile);
-    connect(prProfile, &PrivateProfile::infoToUi, uiController, &ClientController::loadInfo);
-    connect(prProfile, &PrivateProfile::infoToUi, this, [=](const QByteArray &info, const QString &type) {
-        Q_UNUSED(info)
-        Q_UNUSED(type)
-        emit setCurrentIdNotifyM(getIdPrivateProfile());
-    });
-
-    connect(uiController, &ClientController::sendNotificationToken, this, &NodeManager::notificationToken);
-
-    connect(prProfile, &PrivateProfile::initActorChatM,
-            [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
-    connect(prProfile, &PrivateProfile::loginError, uiController, &ClientController::loginError);
-    connect(this, &NodeManager::setCurrentIdNotifyM, notifyM, &NotificationManager::setCurrentID);
-    connect(notifyM, &NotificationManager::getCurrentID, this,
-            [=]() { emit setCurrentIdNotifyM(getIdPrivateProfile()); });
-    //    connect(accController, &AccountController::addActorInActorIndex, this,
-    //            &NodeManager::addActorInActorIndex);
-    //    connect(this, &NodeManager::addActorInActorIndex, actorIndex, &ActorIndex::addActor);
-    connect(uiController, &ClientController::loadPrivateProfile, prProfile, &PrivateProfile::loadPrivateProfile);
-    connect(uiController, &ClientController::loadProfileForAutologin, prProfile,
-            &PrivateProfile::loadProfileForAutoLogin);
-    connect(notifyM, &NotificationManager::allNotifyToUI, uiController, &ClientController::allNotification);
-    connect(notifyM, &NotificationManager::newNotifyToUI, uiController, &ClientController::newNotification);
-    connect(notifyM, &NotificationManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
-    connect(prProfile, &PrivateProfile::initActorChatM, chatManager, &ChatManager::ActorInit);
-    //    connect(prProfile, &PrivateProfile::initActorChatM, this, &NodeManager::getAllActors);
-    //            [this]() { emit getAllActorsNode(getIdPrivateProfile(), true); });
-
-    connect(accController, &AccountController::loadWallets, blockchain,
-            &Blockchain::updateBlockchainForSignIn);
-    connect(accController, &AccountController::savePrivateProfile, this, [=](QByteArray id) {
-        setIdPrivateProfile(id);
-        emit savePrivateProfile(getHashLoginPrivateProfile(), getIdPrivateProfile());
-        emit setCurrentIdNotifyM(getIdPrivateProfile());
-    });
-    connect(accController, &AccountController::savePrivateProfile, chatManager, &ChatManager::ActorInit);
-    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
-    connect(accController, &AccountController::loadWallets, uiController, &ClientController::loginPrivateProfile);
-    connect(uiController, &ClientController::logout, accController, &AccountController::clearAcc);
-    // connect(dfs, &Dfs::requestData, netManager, &NetManager::requestDfsData);
-    // connect(uiController, &UiController::profileById, dfs,
-    // &Dfs::profileRequest);
-    // connect(uiController, &UiController::initDfs, dfs, &Dfs::init);
-    auto uiResolver = uiController->getUiResolver();
-    connect(dfs, &Dfs::fileAdded, uiResolver, &ClientResolver::fileAdded);
-    connect(dfs, &Dfs::fileChanged, uiResolver, &ClientResolver::fileChanged);
-    connect(dfs, &Dfs::fileDuplicated, uiResolver, &ClientResolver::fileDuplicated);
-    connect(dfs, &Dfs::fileChanged, chatManager, &ChatManager::changes);
-    connect(dfs, &Dfs::fileNetworkCompleted, uiResolver, &ClientResolver::fileNetworkCompleted);
-    connect(uiController, &ClientController::newNotify, notifyM, &NotificationManager::addNotify);
-    connect(blockchain, &Blockchain::newNotify, notifyM, &NotificationManager::addNotify);
-    connect(chatManager, &ChatManager::newNotify, notifyM, &NotificationManager::addNotify);
-    connect(chatManager, &ChatManager::requestFile, dfs, &Dfs::requestFile);
-    connect(uiController->getUiResolver(), &ClientResolver::loadChat, chatManager, &ChatManager::fileLoaded);
-    connect(uiController, &ClientController::requestFile, dfs, &Dfs::requestFileUiHandle);
-    connect(uiController, &ClientController::authEnded, chatManager, &ChatManager::initChat);
-
-    connect(subscribeController, &SubscribeController::sendEditSql, dfs, &Dfs::editSqlDatabase);
-    connect(chatManager, &ChatManager::sendEditSql, dfs, &Dfs::editSqlDatabase);
-
-    //=============================================LOGIN & REG================================
-    connect(uiController->getWelcomePage(), &WelcomePage::regStarted, accController, [=](QByteArray hash) {
-        setHashLoginPrivateProfile(hash);
-
-        auto future =
-            QtConcurrent::run(accController, &AccountController::createActor, ActorType::Account, hash);
-        AsyncFuture::observe(future).subscribe([]() { qDebug() << "Actor created"; });
-    });
-    //    connect(uiController->getWelcomePage(),
-    //    &WelcomePage::autoLogInStarted, netManager,
-    //            &NetManager::connectToServer);
-
-    //=======================================ACCOUNT_CONTROLLER===============================
-    connect(accController, &AccountController::newActorIsCreated, uiController,
-            &ClientController::userRegistrationCompletion);
-    connect(accController, &AccountController::newActorIsCreated, this, &NodeManager::updateWalletInUi);
-    connect(accController, &AccountController::newActorIsCreated, blockchain, &Blockchain::updateBlockchain);
-    // connect(accController, &AccountController::newActorIsCreated, actorIndex, &ActorIndex::getAllActors);
-
-    //=============================================CHAT=======================================
-    connect(uiController, &ClientController::createChat, chatManager, &ChatManager::CreateNewChat);
-    connect(uiController, &ClientController::inviteToChat, chatManager, &ChatManager::InviteToChat);
-    connect(uiController, &ClientController::createDialogue, chatManager, &ChatManager::createDialogue);
-
-    connect(uiController, &ClientController::sendChatFile, chatManager, &ChatManager::sendChatFile);
-    connect(uiController, &ClientController::sendMessage, chatManager, &ChatManager::SendMessage);
-    connect(uiController, &ClientController::removeChatMessage, chatManager, &ChatManager::removeChatMessage);
-    connect(chatManager, &ChatManager::sendMessage, resolveManager, &ResolveManager::registrateMsg);
-
-    connect(uiController, &ClientController::requestChatList, chatManager, &ChatManager::requestChatList);
-    connect(uiController, &ClientController::requestChat, chatManager, &ChatManager::requestChat);
-
-    connect(chatManager, &ChatManager::chatListSend, uiController, &ClientController::chatListReceived);
-    connect(chatManager, &ChatManager::chatSend, uiController, &ClientController::chatReceived);
-    connect(chatManager, &ChatManager::chatCreated, uiController->getChatListModel(),
-            &ChatListModel::chatAdded);
-    connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatModel(),
-            &ChatModel::messageReceived);
-    connect(chatManager, &ChatManager::sendLastMessage, uiController->getChatListModel(),
-            &ChatListModel::messageReceived);
-
-    connect(uiController, &ClientController::removeChat, chatManager, &ChatManager::chatRemoved);
-
-    //
-    uiController->startThreads();
-}
-
 void NodeManager::addNewWallet()
 {
+    return;
     auto future = QtConcurrent::run(accController, &AccountController::createActor, ActorType::Wallet,
                                     hashLoginPrivateProfile);
 
@@ -834,9 +631,7 @@ void NodeManager::connectSignals()
 {
     connect(this, &NodeManager::ready, []() { qInfo() << "Ready"; });
     connectTxManager();
-#ifdef ECLIENT
-    connectUi();
-#elif ECONSOLE
+#ifdef ECONSOLE
     connectConsole();
 #endif
     connectResolveManager();
@@ -871,6 +666,26 @@ int NodeManager::getClientList()
 AccountController *NodeManager::getAccController() const
 {
     return accController;
+}
+
+ActorIndex *NodeManager::getActorIndex() const
+{
+    return actorIndex;
+}
+
+ResolveManager *NodeManager::getResolveManager() const
+{
+    return resolveManager;
+}
+
+PrivateProfile *NodeManager::getPrivateProfile() const
+{
+    return prProfile;
+}
+
+SubscribeController *NodeManager::getSubscribeController() const
+{
+    return subscribeController;
 }
 
 void NodeManager::logOut()
