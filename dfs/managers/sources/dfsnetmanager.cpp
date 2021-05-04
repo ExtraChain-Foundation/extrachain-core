@@ -256,7 +256,7 @@ void DFSNetManager::checkConnectionsStatus()
     bool flag = false;
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
-    emit qmlNetworkStatus(flag);
+    emit networkStatusChanged(flag);
 
     if (flag == true)
     {

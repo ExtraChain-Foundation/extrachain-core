@@ -591,8 +591,8 @@ void NodeManager::connectUi()
         // emit saveProfile(key, profile);
     });
     connect(this, &NodeManager::saveProfile, actorIndex, &ActorIndex::saveProfile);
-    connect(netManager, &NetManager::qmlNetworkStatus, uiController, &ClientController::setNetworkStatus);
-    connect(netManager, &NetManager::qmlNetworkSockets, uiController, &ClientController::setNetworkSockets);
+    connect(netManager, &NetManager::networkStatusChanged, uiController, &ClientController::setNetworkStatus);
+    connect(netManager, &NetManager::networkSocketsCountChanged, uiController, &ClientController::setNetworkSockets);
     connect(netManager, &NetManager::localIpFounded, uiController, &ClientController::localIpFounded);
     connect(netManager, &NetManager::buildError, uiController, &ClientController::buildError);
 

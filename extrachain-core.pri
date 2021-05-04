@@ -65,7 +65,8 @@ SOURCES += \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
-    $$PWD/sources/utils/exc_utils.cpp
+    $$PWD/sources/utils/exc_utils.cpp \
+    $$PWD/sources/utils/variant_model.cpp
 
 HEADERS += \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
@@ -143,6 +144,7 @@ HEADERS += \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
+    $$PWD/headers/utils/variant_model.h \
     $$PWD/test.h
 
 gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function  -Wno-deprecated # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable

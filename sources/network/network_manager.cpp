@@ -242,8 +242,8 @@ void NetManager::checkConnectionsStatus()
     bool flag = false;
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
-    emit qmlNetworkStatus(flag);
-    emit qmlNetworkSockets(connections.length());
+    emit networkStatusChanged(flag);
+    emit networkSocketsCountChanged(connections.length());
 
 #ifdef ECLIENT
     if (flag)
@@ -400,9 +400,7 @@ void NetManager::setupServerServiceConnections()
 {
     connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection,
             Qt::UniqueConnection);
-#ifdef ECLIENT
-    connect(serverService, &ServerService::serverStatus, this, &NetManager::qmlServerError);
-#endif
+    connect(serverService, &ServerService::serverStatus, this, &NetManager::networkErrorChanged);
 }
 
 void NetManager::setupDiscoveryServiceConnections()

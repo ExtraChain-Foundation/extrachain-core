@@ -31,17 +31,14 @@
 
 bool LogsManager::toConsole = true;
 bool LogsManager::toFile = true;
-bool LogsManager::toQml =
+bool LogsManager::toModel =
 #ifdef QT_DEBUG
     true;
 #else
     true;
 #endif
 
-#ifdef ECLIENT
-AbstractModel LogsManager::logs = AbstractModel(nullptr, { "text", "date", "file", "line", "func" });
-#endif
-
+VariantModel LogsManager::logs = VariantModel(nullptr, { "text", "date", "file", "line", "func" });
 QStringList LogsManager::filesFilter;
 bool LogsManager::antiFilter = false;
 bool LogsManager::debugLogs = false;
@@ -159,8 +156,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
             logPrint(logStr.toStdString());
     }
 
-#ifdef ECLIENT
-    if (LogsManager::toQml)
+    if (LogsManager::toModel)
     {
         static QMutex mutex;
         mutex.lock();
@@ -175,7 +171,6 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         });
         mutex.unlock();
     }
-#endif
 
     if (LogsManager::toFile && logFile.isWritable())
     {
@@ -191,14 +186,14 @@ void LogsManager::on()
 {
     LogsManager::toConsole = true;
     LogsManager::toFile = true;
-    LogsManager::toQml = true;
+    LogsManager::toModel = true;
 }
 
 void LogsManager::off()
 {
     LogsManager::toConsole = false;
     LogsManager::toFile = false;
-    LogsManager::toQml = false;
+    LogsManager::toModel = false;
 }
 
 void LogsManager::onConsole()
@@ -224,12 +219,12 @@ void LogsManager::offFile()
 
 void LogsManager::onQml()
 {
-    LogsManager::toQml = true;
+    LogsManager::toModel = true;
 }
 
 void LogsManager::offQml()
 {
-    LogsManager::toQml = false;
+    LogsManager::toModel = false;
 }
 
 void LogsManager::etHandler()

@@ -272,9 +272,9 @@ signals:
     //    void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
     //    void sendMsg(const QByteArray &data, const SocketPair &socketData);
     void newSocket();
-    void qmlNetworkStatus(bool status);
-    void qmlNetworkSockets(int socketsCount);
-    void qmlServerError(bool serverError);
+    void networkStatusChanged(bool status);
+    void networkSocketsCountChanged(int socketsCount);
+    void networkErrorChanged(bool serverError);
     void localIpFounded(QString localIp);
     void buildError();
 };
