@@ -45,7 +45,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/chats/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto tmpUserFolder : listDataUser)
+        for (const auto &tmpUserFolder : listDataUser)
         {
             QString nameFile(folder + tmpUserFolder + "/users");
             sendEditDB(nameFile.toUtf8(), "Users", userId, "users", DfsStruct::Type::Chat, chatUser);
@@ -58,7 +58,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/events/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto tmpUserFolder : listDataUser)
+        for (const auto &tmpUserFolder : listDataUser)
         {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
@@ -104,7 +104,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/posts/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto tmpUserFolder : listDataUser)
+        for (const auto &tmpUserFolder : listDataUser)
         {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
@@ -176,7 +176,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/chats/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto tmpUserFolder : listDataUser)
+        for (const auto &tmpUserFolder : listDataUser)
         {
             QString nameFile(folder + tmpUserFolder + "/users");
             checkVersionFile(nameFile.toUtf8(), "Users", chatUser);
@@ -189,7 +189,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/events/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto tmpUserFolder : listDataUser)
+        for (const auto &tmpUserFolder : listDataUser)
         {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
@@ -229,7 +229,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/posts/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto tmpUserFolder : listDataUser)
+        for (const auto &tmpUserFolder : listDataUser)
         {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);

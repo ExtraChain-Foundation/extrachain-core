@@ -170,5 +170,5 @@ QMAKE_SUBSTITUTES += preconfig.h.in
 include(../extrachain-3rdparty/extrachain-3rdparty.pri)
 
 lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.15+")
-lessThan(QT_MINOR_VERSION, 15): error("requires Qt 5.15+")
+equals(QT_MAJOR_VERSION, 5): lessThan(QT_MINOR_VERSION, 15): error("requires Qt 5.15+")
 # lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.15+")

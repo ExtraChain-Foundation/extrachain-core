@@ -548,11 +548,11 @@ QDebug operator<<(QDebug d, const Notification &n)
 
 std::string Utils::byteToHexString(std::vector<unsigned char> &data)
 {
-    int psize = data.size() * 2 + 1;
+    size_t psize = data.size() * 2 + 1;
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
     std::string s(p.begin(), p.end());
-    //    s.erase(--s.end());
+    // s.erase(--s.end());
     return s;
 }
 
@@ -585,23 +585,42 @@ QString Utils::detectCompiler()
 #error "Clang must be version 9 or higher"
 #endif
 #elif __GNUC__
-#if __GNUC__ < 9
-#error "GCC must be version 9 or higher"
+#if __GNUC__ < 8
+#error "GCC must be version 8 or higher"
 #endif
-
+#elif _MSC_VER && !__INTEL_COMPILER
 #else
 #error "Compiler not supported"
 #endif
 
-    QString compiler = "unknown";
-
 #ifdef __GNUC__
-    compiler = QString("GCC %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__);
+#ifdef __MINGW32__
+    QString gcc = "MinGW";
+#else
+    QString gcc = "GCC";
+#endif
+    return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
+#endif
+
+#if _MSC_VER && !__INTEL_COMPILER
+    QString msvcVersion;
+    msvcVersion = "MSVC " + QString::number(_MSC_FULL_VER);
+    msvcVersion.insert(7, ".");
+    msvcVersion.insert(10, ".");
 #endif
 
 #ifdef __clang__
-    compiler = QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
+    QString compiler =
+        QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
+#if _MSC_VER && !__INTEL_COMPILER
+    compiler += " (" + msvcVersion + ")";
+#endif
+    return compiler;
 #endif
 
-    return compiler;
+#if _MSC_VER && !__INTEL_COMPILER
+    return msvcVersion;
+#else
+    return "unknown";
+#endif
 }

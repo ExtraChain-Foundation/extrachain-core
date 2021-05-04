@@ -20,6 +20,7 @@
 #include "utils/db_connector.h"
 
 #include <QDir>
+#include <QRegularExpression>
 #include <iostream>
 
 // #define ENABLE_SQLITE_TRUE_LOGS
@@ -183,7 +184,7 @@ bool DBConnector::update(const std::string &query)
 
 bool DBConnector::createTable(const std::string &query)
 {
-    QString queryTemp = QString::fromStdString(query).replace(QRegExp("\\s+"), " "); // temp
+    QString queryTemp = QString::fromStdString(query).replace(QRegularExpression("\\s+"), " "); // temp
     return this->query(queryTemp.toStdString());
 }
 

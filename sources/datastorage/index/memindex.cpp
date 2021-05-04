@@ -199,6 +199,9 @@ void MemIndex::removeAll()
 std::pair<Transaction, QByteArray> MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
                                                               const QByteArray &token) const
 {
+    Q_UNUSED(id)
+    Q_UNUSED(param)
+    Q_UNUSED(token)
     /*
     int records = getRecords();
 

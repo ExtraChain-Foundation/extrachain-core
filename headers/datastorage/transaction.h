@@ -47,7 +47,7 @@ public:
     Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
                 const QByteArray &data, QObject *parent = nullptr);
 
-    Transaction(const Transaction &other, QObject *parent = nullptr);
+    Transaction(const Transaction &other);
 
 private:
     BigNumber sender;

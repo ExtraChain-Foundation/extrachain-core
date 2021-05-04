@@ -41,7 +41,6 @@
 #include "network/packages/service/message_types.h"
 #include "managers/file_updater_manager.h"
 
-#include "asyncfuture.h"
 #include <QtConcurrent>
 #include <QCoreApplication>
 
@@ -49,6 +48,7 @@
 #include "ui/client_controller.h"
 #include "ui/notificationclient.h"
 #include "managers/notification_manager.h"
+#include "asyncfuture.h"
 #endif
 
 #ifdef ECONSOLE

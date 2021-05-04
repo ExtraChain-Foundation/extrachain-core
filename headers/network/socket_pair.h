@@ -40,10 +40,17 @@ public:
     bool isEmpty() const;
 };
 
-inline uint qHash(const SocketPair &v)
+#if QT_VERSION_MAJOR == 6
+inline size_t qHash(const SocketPair &key, size_t seed = 0)
 {
-    return qHash(v.serialize());
+    return qHash(key.serialize(), seed);
 }
+#else
+inline uint qHash(const SocketPair &key, uint seed = 0)
+{
+    return qHash(key.serialize(), seed);
+}
+#endif
 
 QDebug operator<<(QDebug d, const SocketPair &pair);
 

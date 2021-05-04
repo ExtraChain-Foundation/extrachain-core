@@ -80,6 +80,8 @@ bool Chat::isOwner()
 
 bool Chat::isUserActual(QByteArray actorId, BigNumber sessionNumb)
 {
+    Q_UNUSED(actorId)
+    Q_UNUSED(sessionNumb)
     //    QFile file(_actorPath + actorId + "/myChats/" + _chatId + "/currentSession");
     //    if (!file.exists())
     //        return false;
@@ -100,6 +102,7 @@ bool Chat::isUserActual(QByteArray actorId, BigNumber sessionNumb)
 
 void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId)
 {
+    Q_UNUSED(sessionNumb)
     if (this->ownerID == "-1")
     {
         // _ownerId = _currentActorId;
@@ -381,6 +384,7 @@ QByteArray Chat::decryptMessage(QByteArray message)
 
 void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userData)
 {
+    Q_UNUSED(userData)
     DBConnector DB(DfsStruct::ROOT_FOOLDER_NAME.toStdString() + "/" + userList[0].toStdString() + "/chats/"
                    + _chatId.toStdString() + "/users");
     DB.createTable(Config::DataStorage::chatUserStorage);
@@ -519,6 +523,7 @@ void Chat::InviteNewUser(QByteArray actorId)
 }
 bool Chat::isUserVerify(QByteArray actorId) // CYCLE instead of recursive?!?!?!?!?!?!?!?!
 {
+    Q_UNUSED(actorId)
     //    QFile file(getPathToUsers() + actorId);
     //    if (!file.exists())
     //        return false;

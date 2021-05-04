@@ -69,54 +69,52 @@ private:
 
 private:
     // paths getters:
-    QString getPathCurrentChat();                   //+ keystore/chats/[chatId]/
-    QString getPathToUsers();                       //+  keystore/chats/[chatId]/[sessionId]/users/
-    QString pathToSession(BigNumber sessionNumber); //+  keystore/chats/[chatId]/[sessionId]
+    QString getPathCurrentChat();
+    QString getPathToUsers();
+    QString pathToSession(BigNumber sessionNumber);
     // paths end
-    BigNumber findCurrentSession();                                                     //+
-    void InitializeAllPaths();                                                          //+
-                                                                                        //+
-    void createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userData = {}); //+
-    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);                   //+
+    BigNumber findCurrentSession();
+    void InitializeAllPaths();
+
+    void createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userData = {});
+    bool isUserExist(QByteArray actorId, QList<QByteArray> userList);
 
 public:
     Chat(ChatManager* chatManager, const QByteArray& chatId, ActorIndex* actorIndex,
-         AccountController* accountController,
-         BigNumber sessionNumb = -1); //+
+         AccountController* accountController, BigNumber sessionNumb = -1);
     Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray& key, BigNumber currentSession,
          ActorIndex* actorIndex, AccountController* accountController, QList<QByteArray> users,
-         QByteArray _ownerId = "-1", bool isCreateNewSession = true); //+
-    Chat(const Chat& tempChat);                                       //+
+         QByteArray _ownerId = "-1", bool isCreateNewSession = true);
+    Chat(const Chat& tempChat);
     ~Chat();
     bool isOwner();                                               //-
     bool isUserActual(QByteArray actorId, BigNumber sessionNumb); //-
-    QByteArray getChatKey();                                      //+
-    // QByteArray getChatPrivateKey();                               //+
-    BigNumber getActualCurrentSession(); //+
+    QByteArray getChatKey();
+    // QByteArray getChatPrivateKey();
+    BigNumber getActualCurrentSession();
     // BigNumber getMyCurrentSession();                              //
-    bool createNewSession(QByteArray key, QList<QByteArray> users = {},
-                          QByteArray _ownerId = "-1"); //+
-    QByteArray sendMessage(QByteArray message);        //+
+    bool createNewSession(QByteArray key, QList<QByteArray> users = {}, QByteArray _ownerId = "-1");
+    QByteArray sendMessage(QByteArray message);
     // getters setters
-    QByteArray getChatId() const;                    //+
-    QByteArray getEncryptionKey() const;             //+
-    BigNumber getSession();                          //+
-    AccountController* getAccountController() const; //+
-    void InviteNewUser(QByteArray actorId);          //+-
-    bool isUserVerify(QByteArray actorId);           //?-
+    QByteArray getChatId() const;
+    QByteArray getEncryptionKey() const;
+    BigNumber getSession();
+    AccountController* getAccountController() const;
+    void InviteNewUser(QByteArray actorId); //-
+    bool isUserVerify(QByteArray actorId);  //?-
 
-    QByteArray getCurrentActorId() const; //+
-    QList<QByteArray> getAllUsers();      //+
-    QList<UIMessage> getAllMessages();    //-
-    ActorIndex* getActorIndex() const;    //+
-    QByteArray getOwner();                //-
+    QByteArray getCurrentActorId() const;
+    QList<QByteArray> getAllUsers();
+    QList<UIMessage> getAllMessages();
+    ActorIndex* getActorIndex() const;
+    QByteArray getOwner();
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
     UIMessage getLastMessage();
     void removeAllChatData();
-    QByteArray encryptMessage(QByteArray message); //+
+    QByteArray encryptMessage(QByteArray message);
     QByteArray decryptMessage(QByteArray message);
-    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId); //+
+    void saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _ownerId);
     void saveChatsId(const QByteArray& chatId);
     BigNumber getSessionConst() const;
 

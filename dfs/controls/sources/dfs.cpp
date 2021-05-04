@@ -1057,6 +1057,7 @@ void Dfs::dfsSyncT()
 
 void Dfs::dfsSync(const SocketPair &receiver)
 {
+    Q_UNUSED(receiver)
     //    // request other roots
 
     //    //    QByteArrayList aList = actorIndex->allActors();
@@ -1313,6 +1314,8 @@ QString Dfs::buildDfsPath(QString originalFile, QByteArray hash, QByteArray user
 
 bool Dfs::createStored(QString filePath, const QByteArray &userId, const DfsStruct::Type &type)
 {
+    Q_UNUSED(userId)
+    Q_UNUSED(type)
     QString dfsPath = filePath + DfsStruct::STORED_EXT;
     DBConnector dbc;
 
@@ -1733,8 +1736,8 @@ void Dfs::requestAllCards()
 
     const QByteArrayList allUserIds = actorIndex->allActors();
 
-    for (const QString &id : allUserIds)
-        requestCardById(id.toLatin1());
+    for (const QByteArray &id : allUserIds)
+        requestCardById(id);
 }
 
 void Dfs::enableMyQuickMode()

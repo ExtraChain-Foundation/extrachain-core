@@ -159,7 +159,7 @@ QString CardManager::cutPath(QString fullPath)
     // int fromType = fullPath.indexOf("/", 26);
     int from = fullPath.indexOf("/", 27) + 1;
     int fromSection = fullPath.indexOf("/", from) + 1;
-    hasSection = fullPath[from + 2] == "/";
+    hasSection = fullPath[from + 2] == '/';
     // qDebug() << fullPath << fullPath[from + 2] << hasSection << fullPath.mid(hasSection ? fromSection :
     // from);
     QString type = fullPath.mid(20 + DfsStruct::ROOT_FOOLDER_NAME_MID + 1);

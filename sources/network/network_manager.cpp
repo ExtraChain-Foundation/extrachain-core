@@ -72,7 +72,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
     qDebug() << "NET MANAGER: init net fun start" << (local != nullptr);
     if (local != nullptr)
     {
-        qDebug() << "LOCAL ::::::::::::::::" << local->ip();
+        // qDebug() << "LOCAL ::::::::::::::::" << local->ip();
         bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
         upnpDis = new UPNPConnection(*local);
         upnpNet = new UPNPConnection(*local);
@@ -225,7 +225,8 @@ void NetManager::findLocal()
 
                 if (name.left(2) == "vm")
                     continue;
-                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en")
+                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
+                    || name.left(8) == "wireless")
                 {
                     local = new QNetworkAddressEntry(entry);
                     qDebug() << this << "Discovered local:" << local->ip().toString() << interface.name();

@@ -21,6 +21,7 @@
 
 const QStringList DistFileSystem::Status::deserializeState(const QByteArray &serialized)
 {
+    Q_UNUSED(serialized)
     // QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
     QStringList result;
     // for (const QByteArray &el : list)
