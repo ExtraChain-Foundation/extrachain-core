@@ -110,10 +110,10 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     }
 
     auto mainActor = _accountController->getMainActor()->key();
-    _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
-                              { Config::DataStorage::chatIdTableName.c_str(), "chatId",
-                                mainActor->encryptSelf(_chatId), "key", mainActor->encryptSelf(key), "owner",
-                                mainActor->encryptSelf(_ownerId) });
+    emit _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
+                                   { Config::DataStorage::chatIdTableName.c_str(), "chatId",
+                                     mainActor->encryptSelf(_chatId), "key", mainActor->encryptSelf(key),
+                                     "owner", mainActor->encryptSelf(_ownerId) });
 
     saveChatsId(_chatId);
 }
@@ -329,7 +329,7 @@ BigNumber Chat::findCurrentSession()
 {
     BigNumber currentSession("-1");
     QStringList allSessions = QDir(getPathCurrentChat()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (QString temp : allSessions)
+    for (const QString& temp : allSessions)
     {
         if (BigNumber(temp.toUtf8()) > currentSession)
             currentSession = BigNumber(temp.toUtf8());
@@ -389,7 +389,7 @@ void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userDa
                    + _chatId.toStdString() + "/users");
     DB.createTable(Config::DataStorage::chatUserStorage);
 
-    for (QByteArray user : userList)
+    for (const QByteArray& user : qAsConst(userList))
     {
         DBRow row;
         row.insert({ "userId", user.toStdString() });
@@ -399,7 +399,7 @@ void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userDa
 
 bool Chat::isUserExist(QByteArray actorId, QList<QByteArray> userList)
 {
-    for (QByteArray user : userList)
+    for (const QByteArray& user : userList)
 
         if (user == actorId)
             return true;

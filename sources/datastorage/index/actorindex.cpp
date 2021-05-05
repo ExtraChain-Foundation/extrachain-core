@@ -381,11 +381,11 @@ BigNumber ActorIndex::getRecords() const
 int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 {
     if (id <= 1000)
-        qFatal("Try to add actor with id %s", id.toByteArray().data());
+        qFatal("Try to add actor with id %s", id.toByteArray().constData());
     QString path = buildFilePath(id.toActorId());
     QFile file(path);
     qDebug() << "Saving the file:" << path;
-    QString profilePath = buildPathPubProfile(id.toActorId());
+    // QString profilePath = buildPathPubProfile(id.toActorId());
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
@@ -499,8 +499,8 @@ void ActorIndex::profileToSearch(SearchFilters filters)
         if (type == 0 || type == 6)
             continue;
 
-        QString firstName = profile.firstName().toLower();
-        QString lastName = profile.lastName().toLower();
+        // QString firstName = profile.firstName().toLower();
+        // QString lastName = profile.lastName().toLower();
 
         if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
               || profile.lastName().toLower().startsWith(filters.name.toLower())))

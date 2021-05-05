@@ -47,7 +47,7 @@ const QList<QByteArray> DistFileSystem::Status::serializedParams() const
 void DistFileSystem::Status::calcHash()
 {
     QList<QByteArray> lt;
-    for (QString s : currentState)
+    for (const auto &s : qAsConst(currentState))
     {
         lt.append(s.toUtf8());
     }

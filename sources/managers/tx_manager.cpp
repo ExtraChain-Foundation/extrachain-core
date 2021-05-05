@@ -103,7 +103,7 @@ void TransactionManager::removeUnApprovedTransaction(Transaction *tx)
 
 void TransactionManager::addPendingForFeeTxs(Transaction *transaction)
 {
-    for (const auto i : pendingFeeTxs)
+    for (const auto i : qAsConst(pendingFeeTxs))
     {
         if (transaction->getHash() == Serialization::deserialize(i->getData())[1])
         {
@@ -162,7 +162,7 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx)
     else
     {
         qDebug() << "Current actor is not tx approver and don't get fee";
-        tx->NotApproved(tx);
+        emit tx->NotApproved(tx);
     }
 }
 
@@ -170,7 +170,7 @@ void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
 {
     // sender actor  receiver 0
     QByteArray hashTx = Serialization::deserialize(tx->getData())[1];
-    for (const auto &i : pendingForFeeTxs)
+    for (const auto &i : qAsConst(pendingForFeeTxs))
     {
         if (i->getHash() == hashTx)
         {
@@ -269,7 +269,7 @@ BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)
     BigNumber res = 0;
     if (!pendingTxs.isEmpty())
     {
-        for (const Transaction &tmp : pendingTxs)
+        for (const Transaction &tmp : qAsConst(pendingTxs))
         {
             if (tmp.getSender() == sender)
             {

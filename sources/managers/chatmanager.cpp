@@ -175,8 +175,9 @@ void ChatManager::parseInvite()
         qDebug() << "invite" << owner << chatId << key;
         Chat temp(this, chatId, _actorIndex, _accController);
         temp.saveChatKey(key, BigNumber(0), owner);
-        sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Delete,
-                    { Config::DataStorage::chatInviteTableName.c_str(), "chatId", chatIdEncrypted });
+        emit sendEditSql(_currentActorId, "chatinvite", DfsStruct::Type::Service,
+                         DfsStruct::ChangeType::Delete,
+                         { Config::DataStorage::chatInviteTableName.c_str(), "chatId", chatIdEncrypted });
     }
 }
 
@@ -274,7 +275,7 @@ QByteArray ChatManager::CreateNewChat()
                           QList<QByteArray> { _currentActorId }, _currentActorId);
     _chatList.push_front(chat);
     // Chat initialize
-    QList<QByteArray> allUsers = chat->getAllUsers();
+    // QList<QByteArray> allUsers = chat->getAllUsers();
 
     return chatId;
 }
@@ -300,7 +301,7 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
                                           _accController->getMainActor()->key()->getSecKey()),
                              "owner",
                              _currentActorId };
-    sendEditSql(actorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Insert, query);
+    emit sendEditSql(actorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Insert, query);
 }
 
 void ChatManager::sendChatFile(ChatFileSender chatFile)
@@ -331,10 +332,10 @@ void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString typ
     auto encryptedActorId = _currentActorId;
     auto encryptedMessage = chat->encryptMessage(message);
 
-    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
-                DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId, "userId",
-                  encryptedActorId, "message", encryptedMessage, "type", type.toLatin1(), "date", date });
+    emit sendEditSql(
+        owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat, DfsStruct::ChangeType::Insert,
+        { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId, "userId", encryptedActorId,
+          "message", encryptedMessage, "type", type.toLatin1(), "date", date });
 }
 
 void ChatManager::removeChatMessage(QString chatId, QString messId)
@@ -345,14 +346,14 @@ void ChatManager::removeChatMessage(QString chatId, QString messId)
     auto messageId = messId.toLatin1();
     qDebug() << "CR123" << chatId << owner << session << messageId;
 
-    sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
-                DfsStruct::ChangeType::Delete,
-                { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId });
+    emit sendEditSql(owner, chatId + "/" + session + "/" + "msg", DfsStruct::Type::Chat,
+                     DfsStruct::ChangeType::Delete,
+                     { Config::DataStorage::chatMessageTableName.c_str(), "messId", messageId });
 }
 
 void ChatManager::createDialogue(QByteArray actorId)
 {
-    QList<UIChat> chats;
+    // QList<UIChat> chats;
     QByteArray chatId = CreateNewChat();
     InviteToChat(chatId, actorId);
 
@@ -385,7 +386,7 @@ void ChatManager::requestChatList()
     {
         tempusersList.clear();
         tempUsers = currentChat->getAllUsers();
-        for (auto user : tempUsers)
+        for (auto user : qAsConst(tempUsers))
             tempusersList.append(user);
 
         chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
@@ -402,7 +403,7 @@ void ChatManager::chatRemoved(QByteArray chatId)
 {
     Chat(this, chatId, _actorIndex, _accController).removeAllChatData();
     int i = 0;
-    for (auto currentchat : _chatList)
+    for (auto currentchat : qAsConst(_chatList))
     {
         if (currentchat->getChatId() == chatId)
             _chatList.removeAt(i);
@@ -450,7 +451,7 @@ void ChatManager::changes(QString path, DfsStruct::ChangeType changeType)
         QByteArrayList chatsId = Serialization::deserialize(data, 4);
         */
         bool myChat = false;
-        for (auto chat : _chatList)
+        for (auto chat : qAsConst(_chatList))
         {
             if (chat->getChatId() == chatId.toLatin1())
             {

@@ -42,7 +42,7 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
         std::vector<long long> fragsID;
         QByteArrayList frags = frag.split(' ');
 
-        for (QByteArray b : frags)
+        for (const QByteArray &b : frags)
         {
             if (b.indexOf(":") == -1)
             {

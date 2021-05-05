@@ -74,11 +74,11 @@ void NotificationManager::loadNotificationFromDB()
 void NotificationManager::addNotify(const Notification newNtf)
 {
     auto mainActor = accController->getMainActor()->key();
-    sendEditSql(_currentActorId, "notifications", DfsStruct::Type::Private, DfsStruct::Insert,
-                { Config::DataStorage::notificationTable.c_str(), "time",
-                  mainActor->encryptSelf(QByteArray::number(newNtf.time)), "type",
-                  mainActor->encryptSelf(QByteArray::number(newNtf.type)), "data",
-                  mainActor->encryptSelf(newNtf.data) });
+    emit sendEditSql(_currentActorId, "notifications", DfsStruct::Type::Private, DfsStruct::Insert,
+                     { Config::DataStorage::notificationTable.c_str(), "time",
+                       mainActor->encryptSelf(QByteArray::number(newNtf.time)), "type",
+                       mainActor->encryptSelf(QByteArray::number(newNtf.type)), "data",
+                       mainActor->encryptSelf(newNtf.data) });
 
     emit newNotifyToUI(newNtf);
     sendToNotify(newNtf);

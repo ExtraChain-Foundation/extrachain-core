@@ -398,7 +398,7 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
 
 void NetManager::setupServerServiceConnections()
 {
-    connect(serverService, &ServerService::newConnection, this, &NetManager::addConnection,
+    connect(serverService, &ServerService::newServerConnection, this, &NetManager::addConnection,
             Qt::UniqueConnection);
     connect(serverService, &ServerService::serverStatus, this, &NetManager::networkErrorChanged);
 }

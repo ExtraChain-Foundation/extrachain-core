@@ -32,11 +32,11 @@ SubscribeController::~SubscribeController()
 void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 {
     QByteArray currentId = extraChainNode->getIdPrivateProfile();
-    sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
-                isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
+    emit sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
+                     isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
+                     { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
 
-    sendEditSql(
+    emit sendEditSql(
         id, "follower", DfsStruct::Type::Service,
         isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
         { Config::DataStorage::subscribeFollowerTableName.c_str(), "subscriber", currentId, "sign", "TODO" });

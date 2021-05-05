@@ -88,8 +88,9 @@ bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bo
     }
     */
 
-    QString filePath = QString::fromStdString(
-        CardManager::buildPathForFile(m_userId.toStdString(), fileId.toStdString(), DfsStruct::Type(type)));
+    // QString filePath = QString::fromStdString(
+    //     CardManager::buildPathForFile(m_userId.toStdString(), fileId.toStdString(),
+    //     DfsStruct::Type(type)));
 
     std::string prevId = "-";
     auto lastRes = last();

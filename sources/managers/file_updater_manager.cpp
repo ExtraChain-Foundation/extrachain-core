@@ -144,7 +144,7 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
     // Private
     {
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/private/";
-        QDir folderUser(folder);
+        // QDir folderUser(folder);
 
         QString nameFile(folder + "chats");
         sendEditDB(nameFile.toUtf8(), "ChatId", userId, "chats", DfsStruct::Type::Private, chatId);
@@ -263,7 +263,7 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
     // Private
     {
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/private/";
-        QDir folderUser(folder);
+        // QDir folderUser(folder);
 
         QString nameFile(folder + "chats");
         checkVersionFile(nameFile.toUtf8(), "ChatId", chatId);

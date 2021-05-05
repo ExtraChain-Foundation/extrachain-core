@@ -67,7 +67,7 @@ int ServerService::process()
     //        //        QTcpSocket *newSocket = server->nextPendingConnection();
     //        //        if (newSocket->peerAddress() != QHostAddress(""))
     //        //        {
-    //        //            emit newConnection(newSocket);
+    //        //            emit newServerConnection(newSocket);
     //        //            qDebug() << "SERVER SERVICE: new connection, socket address:"
     //        //                     << newSocket->peerAddress() << ":" <<
     //        newSocket->peerPort();
@@ -86,7 +86,7 @@ int ServerService::process()
 
 void ServerService::incomingConnection(qintptr socketDescriptor)
 {
-    emit newConnection(socketDescriptor);
+    emit newServerConnection(socketDescriptor);
 }
 
 // void ServerService::socketMsg()
