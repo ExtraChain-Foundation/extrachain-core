@@ -17,11 +17,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 
 #include "resolve/resolve_manager.h"
 
-NodeManager::NodeManager()
+ExtraChainNode::ExtraChainNode()
 {
     if (sodium_init() != 0)
     {
@@ -39,7 +39,7 @@ NodeManager::NodeManager()
     accController = new AccountController(actorIndex);
     netManager = new NetManager(accController, actorIndex);
     subscribeController = new SubscribeController();
-    subscribeController->setNodeManager(this);
+    subscribeController->setExtraChainNode(this);
     actorIndex->setAccController(accController);
     ThreadPool::addThread(netManager);
     //    this->thread()->sleep(1);
@@ -53,8 +53,8 @@ NodeManager::NodeManager()
     dfs = new Dfs(actorIndex, accController);
 
 #ifdef ECLIENT
-    notifyManager = new NotificationManager();
-    ThreadPool::addThread(notifyManager);
+    notificationManager = new NotificationManager();
+    ThreadPool::addThread(notificationManager);
 #endif
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
     resolveManager->setNode(this);
@@ -67,7 +67,7 @@ NodeManager::NodeManager()
     connectSignals();
 
     static QTimer getAllActorsTimer;
-    connect(&getAllActorsTimer, &QTimer::timeout, this, &NodeManager::getAllActorsTimerCall);
+    connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     // getAllActorsTimer.start(30000);
 
     ThreadPool::addThread(blockchain);
@@ -84,7 +84,7 @@ NodeManager::NodeManager()
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
 
-void NodeManager::createCompanyActor(const QString &email, const QString &password)
+void ExtraChainNode::createCompanyActor(const QString &email, const QString &password)
 {
 #ifdef ECONSOLE
     // accController->loadActors("-1");
@@ -140,7 +140,7 @@ void NodeManager::createCompanyActor(const QString &email, const QString &passwo
 #endif
 }
 
-void NodeManager::initConsoleToken(Transaction tx)
+void ExtraChainNode::initConsoleToken(Transaction tx)
 {
     Q_UNUSED(tx)
 #ifdef ECONSOLE
@@ -153,39 +153,39 @@ void NodeManager::initConsoleToken(Transaction tx)
 #endif
 }
 
-Actor<KeyPrivate> NodeManager::CreateCompany(QByteArray consoleHash)
+Actor<KeyPrivate> ExtraChainNode::CreateCompany(QByteArray consoleHash)
 {
     accController->createActor(ActorType::Company, consoleHash);
 
     return *accController->getMainActor();
 }
 
-void NodeManager::showMessage(QString from, QString message)
+void ExtraChainNode::showMessage(QString from, QString message)
 {
     qDebug() << from << " " << message;
 }
 
-void NodeManager::connectResolveManager()
+void ExtraChainNode::connectResolveManager()
 {
     //    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
-    //    connect(resolveManager, &ResolveManager::coinRequest, this, &NodeManager::coinResponse);
+    //    connect(resolveManager, &ResolveManager::coinRequest, this, &ExtraChainNode::coinResponse);
     //    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
     //            &ResolveManager::resolveMessage);
     // TODO: move
     //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
 
-    connect(this, &NodeManager::sendMsg, resolveManager, &ResolveManager::registrateMsg);
+    connect(this, &ExtraChainNode::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
     connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
-void NodeManager::connectSmContractManager()
+void ExtraChainNode::connectSmContractManager()
 {
     //    connect(smContractController, &SmartContractManager::verifyActor, netManager,
     //    &NetManager::NewActor); TODO!!!
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
-    //            &NodeManager::addActorInActorIndex);
+    //            &ExtraChainNode::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
             [this](const QByteArray &id, const QString &type, const bool &rewrite) {
                 emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, type, id,
@@ -193,26 +193,26 @@ void NodeManager::connectSmContractManager()
             });
 
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
-    connect(this, &NodeManager::nodeEditPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
+    connect(this, &ExtraChainNode::nodeEditPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
 
-    connect(this, &NodeManager::generateSmartContract, smContractController,
+    connect(this, &ExtraChainNode::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
     connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
             &ResolveManager::registrateMsg);
     connect(smContractController, &SmartContractManager::initConsoleToken, this,
-            &NodeManager::initConsoleToken);
+            &ExtraChainNode::initConsoleToken);
 
     // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
     // &NetManager::NewActor);
 }
 
-void NodeManager::connectTxManager()
+void ExtraChainNode::connectTxManager()
 {
     // TODOD delete later (s)
-    connect(this, &NodeManager::NewTx, txManager, &TransactionManager::addTransaction);
+    connect(this, &ExtraChainNode::NewTx, txManager, &TransactionManager::addTransaction);
 }
 
-NodeManager::~NodeManager()
+ExtraChainNode::~ExtraChainNode()
 {
     //    netManager->quit();
     //    uiController->quit();
@@ -225,30 +225,30 @@ NodeManager::~NodeManager()
     // delete actorIndex;
 }
 
-// DFSIndex *NodeManager::getDFSIndex(){
+// DFSIndex *ExtraChainNode::getDFSIndex(){
 //    return dfsIndex;
 //}
 
-Blockchain *NodeManager::getBlockchain()
+Blockchain *ExtraChainNode::getBlockchain()
 {
     return blockchain;
 }
 
-NetManager *NodeManager::getNetManager()
+NetManager *ExtraChainNode::getNetManager()
 {
     return netManager;
 }
 
 #ifdef ECLIENT
-void NodeManager::setNotificationClient(NotificationClient *newNtfCl)
+void ExtraChainNode::setNotificationClient(NotificationClient *newNtfCl)
 {
-    notifyManager->setNotifyClient(newNtfCl);
-    notifyManager->setActorIndex(actorIndex);
-    notifyManager->setAccController(accController);
+    notificationManager->setNotifyClient(newNtfCl);
+    notificationManager->setActorIndex(actorIndex);
+    notificationManager->setAccController(accController);
 }
 #endif
 
-Transaction NodeManager::createTransaction(Transaction tx)
+Transaction ExtraChainNode::createTransaction(Transaction tx)
 {
     if (tx.isEmpty())
     {
@@ -328,7 +328,7 @@ Transaction NodeManager::createTransaction(Transaction tx)
     return Transaction();
 }
 
-Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount, BigNumber token)
+Transaction ExtraChainNode::createTransaction(BigNumber receiver, BigNumber amount, BigNumber token)
 {
 
     if (receiver.isEmpty() || amount.isEmpty())
@@ -356,8 +356,8 @@ Transaction NodeManager::createTransaction(BigNumber receiver, BigNumber amount,
     return Transaction();
 }
 
-Transaction NodeManager::createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
-                                                 BigNumber token)
+Transaction ExtraChainNode::createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
+                                                    BigNumber token)
 {
 
     Actor<KeyPrivate> actor = accController->getCurrentActor();
@@ -387,8 +387,8 @@ Transaction NodeManager::createFreezeTransaction(BigNumber receiver, BigNumber a
     return Transaction();
 }
 
-Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                               BigNumber token)
+Transaction ExtraChainNode::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
+                                                  BigNumber token)
 {
     if (receiver.isEmpty() || amount.isEmpty())
     {
@@ -418,13 +418,13 @@ Transaction NodeManager::createTransactionFrom(BigNumber sender, BigNumber recei
     return Transaction();
 }
 
-void NodeManager::getAllActors()
+void ExtraChainNode::getAllActors()
 {
     //    QByteArray res = getIdPrivateProfile();
     //    if (!res.isEmpty())
     //        emit getAllActorsNode(res, true);
 }
-void NodeManager::getAllActorsTimerCall()
+void ExtraChainNode::getAllActorsTimerCall()
 {
 #ifdef ECLIENT
     QByteArray res = getIdPrivateProfile();
@@ -438,7 +438,7 @@ void NodeManager::getAllActorsTimerCall()
 #endif
 }
 
-void NodeManager::createNetManagerIdentificator()
+void ExtraChainNode::createNetManagerIdentificator()
 {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -446,7 +446,7 @@ void NodeManager::createNetManagerIdentificator()
     file.flush();
     file.close();
 }
-void NodeManager::dfscreateNetManagerIdentificator()
+void ExtraChainNode::dfscreateNetManagerIdentificator()
 {
     QFile file(".dsettings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -455,7 +455,7 @@ void NodeManager::dfscreateNetManagerIdentificator()
     file.close();
 }
 
-void NodeManager::notificationToken(QString os, QString actorId, QString token)
+void ExtraChainNode::notificationToken(QString os, QString actorId, QString token)
 {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
@@ -477,40 +477,41 @@ void NodeManager::notificationToken(QString os, QString actorId, QString token)
 }
 
 #ifdef ECONSOLE
-void NodeManager::connectConsole()
+void ExtraChainNode::connectConsole()
 {
-    connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
-    connect(this, &NodeManager::loadProfileForConsoleLogin, prProfile, &PrivateProfile::loadPrivateProfile);
+    connect(this, &ExtraChainNode::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
+    connect(this, &ExtraChainNode::loadProfileForConsoleLogin, prProfile,
+            &PrivateProfile::loadPrivateProfile);
 }
 #endif
 
-void NodeManager::connectContractManager()
+void ExtraChainNode::connectContractManager()
 {
 }
 
-void NodeManager::connectActorIndex()
+void ExtraChainNode::connectActorIndex()
 {
     connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
     // this connect with service message
 
-    connect(prProfile, &PrivateProfile::setIdProfile, this, &NodeManager::setIdPrivateProfile);
-    connect(prProfile, &PrivateProfile::setHashProfile, this, &NodeManager::setHashLoginPrivateProfile);
+    connect(prProfile, &PrivateProfile::setIdProfile, this, &ExtraChainNode::setIdPrivateProfile);
+    connect(prProfile, &PrivateProfile::setHashProfile, this, &ExtraChainNode::setHashLoginPrivateProfile);
 }
 
-void NodeManager::dfsConnection()
+void ExtraChainNode::dfsConnection()
 {
     // init dfs for user
-    // connect(this, &NodeManager::ready, netManager, &NetManager::startNetwork);
-    connect(this, &NodeManager::ready, dfs, &Dfs::startDFS);
+    // connect(this, &ExtraChainNode::ready, netManager, &NetManager::startNetwork);
+    connect(this, &ExtraChainNode::ready, dfs, &Dfs::startDFS);
     connect(accController, &AccountController::initDfs, dfs, &Dfs::initMyLocalStorage);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
 }
 
-void NodeManager::connectSignals()
+void ExtraChainNode::connectSignals()
 {
-    connect(this, &NodeManager::ready, []() { qInfo() << "Ready"; });
+    connect(this, &ExtraChainNode::ready, []() { qInfo() << "Ready"; });
     connectTxManager();
 #ifdef ECONSOLE
     connectConsole();
@@ -522,11 +523,11 @@ void NodeManager::connectSignals()
     connectSmContractManager();
     dfsConnection();
 
-    connect(netManager, &NetManager::newSocket, this, &NodeManager::getAllActorsTimerCall);
-    connect(this, &NodeManager::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
+    connect(netManager, &NetManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(this, &ExtraChainNode::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
 }
 
-void NodeManager::prepareFolders()
+void ExtraChainNode::prepareFolders()
 {
     qDebug() << "Preparing folders";
     qDebug() << "Working directory:" << QDir::currentPath();
@@ -539,51 +540,56 @@ void NodeManager::prepareFolders()
                                        + DataStorage::BLOCK_INDEX_FOLDER_NAME);
 }
 
-int NodeManager::getClientList()
+int ExtraChainNode::getClientList()
 {
     return netManager->getConnections().size();
 }
 
-AccountController *NodeManager::getAccController() const
+AccountController *ExtraChainNode::getAccountController() const
 {
     return accController;
 }
 
-ActorIndex *NodeManager::getActorIndex() const
+ActorIndex *ExtraChainNode::getActorIndex() const
 {
     return actorIndex;
 }
 
-ResolveManager *NodeManager::getResolveManager() const
+ResolveManager *ExtraChainNode::getResolveManager() const
 {
     return resolveManager;
 }
 
-PrivateProfile *NodeManager::getPrivateProfile() const
+PrivateProfile *ExtraChainNode::getPrivateProfile() const
 {
     return prProfile;
 }
 
-SubscribeController *NodeManager::getSubscribeController() const
+SubscribeController *ExtraChainNode::getSubscribeController() const
 {
     return subscribeController;
 }
 
-void NodeManager::logOut()
+NotificationManager *ExtraChainNode::getNotificationManager() const
+{
+    return notificationManager;
+}
+
+void ExtraChainNode::logOut()
 {
 }
 
-// void NodeManager::createActorWith
+// void ExtraChainNode::createActorWith
 
-// void NodeManager::makeContractFirstTransaction(Contract &contract)
+// void ExtraChainNode::makeContractFirstTransaction(Contract &contract)
 //{
-//    qDebug() << "NodeManager::makeContractFirstTransaction";
+//    qDebug() << "ExtraChainNode::makeContractFirstTransaction";
 //    //    contract.setFirst_transaction_hash(
 //    //        createTransaction(BigNumber(0), contract.getAmount()).getHash());
 //    netManager->shareContract(contract);
 //}
 
-// void NodeManager::makeContractFinalTransaction(Contract &contract)
+// void ExtraChainNode::makeContractFinalTransaction(Contract &contract)
 //{
 //    contract.setFinal_transaction_hash(
 //        createTransaction(contract.getPerformer(), contract.getAmount()).getHash());
@@ -592,13 +598,13 @@ void NodeManager::logOut()
 //    netManager->shareContract(contract);
 //}
 
-void NodeManager::tempareSlotForActors()
+void ExtraChainNode::tempareSlotForActors()
 {
     emit sendActorStateList(accController->getCurrentState());
     emit sendActorToWallet(accController->getAccountID());
 }
 
-void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
+void ExtraChainNode::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
 {
 #ifdef ECONSOLE
     auto mainActor = accController->getMainActor();
@@ -649,32 +655,32 @@ void NodeManager::coinResponse(BigNumber receiver, BigNumber amount, BigNumber p
 #endif
 }
 
-QByteArray NodeManager::getIdPrivateProfile() const
+QByteArray ExtraChainNode::getIdPrivateProfile() const
 {
     return idPrivateProfile;
 }
 
-void NodeManager::setIdPrivateProfile(QByteArray id)
+void ExtraChainNode::setIdPrivateProfile(QByteArray id)
 {
     idPrivateProfile = id;
 }
 
-QByteArray NodeManager::getHashLoginPrivateProfile() const
+QByteArray ExtraChainNode::getHashLoginPrivateProfile() const
 {
     return hashLoginPrivateProfile;
 }
 
-void NodeManager::setHashLoginPrivateProfile(QByteArray hash)
+void ExtraChainNode::setHashLoginPrivateProfile(QByteArray hash)
 {
     hashLoginPrivateProfile = hash;
 }
 
-ChatManager *NodeManager::getChatManager() const
+ChatManager *ExtraChainNode::getChatManager() const
 {
     return chatManager;
 }
 
-Dfs *NodeManager::getDfs() const
+Dfs *ExtraChainNode::getDfs() const
 {
     return dfs;
 }

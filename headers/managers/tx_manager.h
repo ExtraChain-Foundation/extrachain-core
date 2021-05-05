@@ -34,7 +34,7 @@
 #include "network/packages/service/message_types.h"
 #include "utils/coinprocess.h"
 
-class NodeManager;
+class ExtraChainNode;
 
 /**
  * @brief Process all incoming transactions
@@ -66,7 +66,7 @@ private:
     //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
 
-    NodeManager *nodeManager;
+    ExtraChainNode *extraChainNode;
 
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
@@ -74,7 +74,7 @@ private:
 public:
     // todo: add ref to blockchain
     TransactionManager(AccountController *accountController, Blockchain *blockchain,
-                       NodeManager *nodeManager);
+                       ExtraChainNode *extraChainNode);
 
 private:
     void removeTransaction(int i);

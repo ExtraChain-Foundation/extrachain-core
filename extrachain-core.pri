@@ -29,6 +29,7 @@ SOURCES += \
     $$PWD/sources/datastorage/contract.cpp \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
+    $$PWD/sources/managers/extrachain_node.cpp \
     $$PWD/sources/managers/file_updater_manager.cpp \
     $$PWD/sources/managers/notification_manager.cpp \
     $$PWD/sources/network/packages/service/connections_message.cpp \
@@ -54,7 +55,6 @@ SOURCES += \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
-    $$PWD/sources/managers/node_manager.cpp \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
     $$PWD/sources/network/packages/base_message.cpp \
@@ -88,6 +88,7 @@ HEADERS += \
     $$PWD/dfs/types/headers/cardfile.h \
     $$PWD/headers/managers/chat.h \
     $$PWD/headers/managers/chatmanager.h \
+    $$PWD/headers/managers/extrachain_node.h \
     $$PWD/headers/managers/file_updater_manager.h \
     $$PWD/headers/managers/notification_manager.h \
     $$PWD/headers/metatypes.h \
@@ -127,7 +128,6 @@ HEADERS += \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \
     $$PWD/dfs/types/headers/dfstruct.h \
-    $$PWD/headers/managers/node_manager.h \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
     $$PWD/headers/network/packages/base_message.h \

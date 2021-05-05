@@ -19,7 +19,7 @@
 
 #include "resolve/resolver_service.h"
 #include "resolve/resolve_manager.h"
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
@@ -33,7 +33,7 @@
 
 using namespace Resolver;
 
-void ResolverService::setNode(NodeManager *value)
+void ResolverService::setNode(ExtraChainNode *value)
 {
     node = value;
 }

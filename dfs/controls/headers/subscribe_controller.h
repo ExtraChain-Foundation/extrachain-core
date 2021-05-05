@@ -27,7 +27,7 @@
 #include "utils/exc_utils.h"
 #include "dfs/types/headers/dfstruct.h"
 
-class NodeManager;
+class ExtraChainNode;
 
 class SubscribeController : public QObject
 {
@@ -48,10 +48,10 @@ public slots:
 
 public:
     bool checkSubscribe(QByteArray id);
-    void setNodeManager(NodeManager *value);
+    void setExtraChainNode(ExtraChainNode *value);
 
 private:
-    NodeManager *nodeManager;
+    ExtraChainNode *extraChainNode;
 
     // get all (offset, count)
 };

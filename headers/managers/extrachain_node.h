@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef NODE_MANAGER_H
-#define NODE_MANAGER_H
+#ifndef EXTRACHAIN_NODE_H
+#define EXTRACHAIN_NODE_H
 
 #include <QObject>
 #include <QMap>
@@ -55,9 +55,10 @@
 
 class ResolveManager;
 
-class NodeManager : public QObject
+class ExtraChainNode : public QObject
 {
     Q_OBJECT
+
 private:
     // common object for
     bool fileMode = true;
@@ -84,8 +85,8 @@ public:
 #endif
 
 public:
-    NodeManager();
-    ~NodeManager();
+    ExtraChainNode();
+    ~ExtraChainNode();
 
 public:
     void createCompanyActor(const QString &email, const QString &password);
@@ -96,6 +97,7 @@ public:
     ResolveManager *getResolveManager() const;
     PrivateProfile *getPrivateProfile() const;
     SubscribeController *getSubscribeController() const;
+    NotificationManager *getNotificationManager() const;
 
     void getBlockchainFile();
 
@@ -182,7 +184,7 @@ signals:
                                 const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
-    void setCurrentIdNotifyM(const QByteArray id);
+    void setCurrentIdNotificationManager(const QByteArray id);
     void getAllActorsNode(QByteArray id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
@@ -253,4 +255,4 @@ private:
     bool m_listenCoinRequest = false;
 #endif
 };
-#endif // NODE_MANAGER_H
+#endif // EXTRACHAIN_NODE_H

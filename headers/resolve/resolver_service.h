@@ -46,7 +46,7 @@ static QMutex handlerFileMutex;
 
 class AccountController;
 class ResolveManager;
-class NodeManager;
+class ExtraChainNode;
 class ActorIndex;
 class Blockchain;
 class TransactionManager;
@@ -63,7 +63,7 @@ class ResolverService : public QObject
     Q_OBJECT
 
 private:
-    NodeManager *node;
+    ExtraChainNode *node;
     ActorIndex *actorIndex;
     Blockchain *blockchain;
     ChatManager *chatManager;
@@ -118,7 +118,7 @@ public:
      */
     void setTask(QByteArray msg, SocketPair receiver);
 
-    void setNode(NodeManager *value);
+    void setNode(ExtraChainNode *value);
 
     void setBlockchain(Blockchain *value);
 

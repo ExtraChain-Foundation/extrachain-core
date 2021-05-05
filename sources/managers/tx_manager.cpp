@@ -19,7 +19,7 @@
 
 #include "managers/tx_manager.h"
 
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 
 QList<Transaction *> TransactionManager::getReceivedTxList() const
 {
@@ -32,11 +32,11 @@ QList<Transaction> TransactionManager::getPendingTxs() const
 }
 
 TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain,
-                                       NodeManager *nodeManager)
+                                       ExtraChainNode *extraChainNode)
 {
     this->accountController = accountController;
     this->blockchain = blockchain;
-    this->nodeManager = nodeManager;
+    this->extraChainNode = extraChainNode;
 
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
@@ -248,7 +248,7 @@ Block TransactionManager::makeBlock()
     //                                                               accountController->getMainActor()->getId(),
     //                                                               accountController->getActorIndex()->companyId);
     //    for (const auto &i : feeTxs)
-    //        nodeManager->createTransaction(i);
+    //        extraChainNode->createTransaction(i);
     // fee section end
     this->pendingTxs.clear();
     return block;

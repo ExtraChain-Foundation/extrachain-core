@@ -20,7 +20,7 @@
 #ifndef TEST_H
 #define TEST_H
 
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 
 class Test : public QObject
 {
@@ -30,7 +30,7 @@ class Test : public QObject
     Block pr;
 
 public:
-    Test(NodeManager *node, QObject *p = nullptr)
+    Test(ExtraChainNode *node, QObject *p = nullptr)
         : QObject(p)
     {
         Transaction tr(node->getAccountController()->getCurrentActor().id(), BigNumber("ddddaaaa332232"),
