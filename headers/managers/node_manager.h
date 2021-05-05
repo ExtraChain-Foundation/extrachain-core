@@ -45,10 +45,8 @@
 #include <QCoreApplication>
 
 #ifdef ECLIENT
-#include "ui/wallet/walletcontroller.h"
 #include "ui/notificationclient.h"
 #include "managers/notification_manager.h"
-#include "asyncfuture.h"
 #endif
 
 #ifdef ECONSOLE
@@ -80,10 +78,9 @@ private:
     QByteArray hashLoginPrivateProfile;
 
 #ifdef ECLIENT
-    WalletController *uiWallet;                       //
-    NotificationClient *notificationClient = nullptr; //
+    NotificationClient *notificationClient = nullptr; // TODO: move to client
 public:
-    NotificationManager *notifyM;
+    NotificationManager *notificationManager; // TODO: make for core
 #endif
 
 public:
@@ -94,7 +91,7 @@ public:
     void createCompanyActor(const QString &email, const QString &password);
     Blockchain *getBlockchain();
     NetManager *getNetManager();
-    AccountController *getAccController() const;
+    AccountController *getAccountController() const;
     ActorIndex *getActorIndex() const;
     ResolveManager *getResolveManager() const;
     PrivateProfile *getPrivateProfile() const;
@@ -210,14 +207,6 @@ public slots:
     void createNetManagerIdentificator();
     void dfscreateNetManagerIdentificator();
 #ifdef ECLIENT
-    void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
-    void createWalletInUi();
-    void updateWalletInUi();
-    void updateWalletList();
-    void updateAvailableWalletList();
-    void updateRecentActivities();
-    void changeWalletIdUi(BigNumber walletId);
-    void addNewWallet();
     void notificationToken(QString os, QString actorId, QString token);
 #endif
 

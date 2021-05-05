@@ -53,8 +53,8 @@ NodeManager::NodeManager()
     dfs = new Dfs(actorIndex, accController);
 
 #ifdef ECLIENT
-    notifyM = new NotificationManager();
-    ThreadPool::addThread(notifyM);
+    notifyManager = new NotificationManager();
+    ThreadPool::addThread(notifyManager);
 #endif
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
     resolveManager->setNode(this);
@@ -242,9 +242,9 @@ NetManager *NodeManager::getNetManager()
 #ifdef ECLIENT
 void NodeManager::setNotificationClient(NotificationClient *newNtfCl)
 {
-    notifyM->setNotifyClient(newNtfCl);
-    notifyM->setActorIndex(actorIndex);
-    notifyM->setAccController(accController);
+    notifyManager->setNotifyClient(newNtfCl);
+    notifyManager->setActorIndex(actorIndex);
+    notifyManager->setAccController(accController);
 }
 #endif
 
@@ -454,125 +454,6 @@ void NodeManager::dfscreateNetManagerIdentificator()
     file.flush();
     file.close();
 }
-#ifdef ECLIENT
-void NodeManager::sendTransactionFromUi(BigNumber receiver, BigNumber amount, BigNumber token)
-{
-    Transaction tx = this->createTransaction(receiver, amount, token);
-}
-void NodeManager::createWalletInUi()
-{
-    return;
-    // accController->loadActors();
-    uiWallet->setCurrentWalletId(accController->getCurrentActor().id().toActorId());
-    uiWallet->setCurrentWalletBalance(
-        blockchain->getUserBalance(accController->getCurrentActor().id(), uiWallet->getCurrentToken()));
-
-    updateWalletList();
-    updateAvailableWalletList();
-    updateRecentActivities();
-    uiWallet->walletsUpdated();
-}
-
-void NodeManager::updateWalletInUi()
-{
-    return;
-    // uiController->getWallet()->setCurrentWalletId(accController->getCurrentActor().id().toActorId());
-    uiWallet->setCurrentWalletBalance(
-        blockchain->getUserBalance(accController->getCurrentActor().id(), uiWallet->getCurrentToken()));
-
-    updateWalletList();
-    updateAvailableWalletList();
-    updateRecentActivities();
-    uiWallet->walletsUpdated();
-}
-
-void NodeManager::updateWalletList()
-{
-    return;
-    QByteArrayList walletList;
-    QByteArrayList currentWallets = uiWallet->getCurrentWallets();
-
-    for (const QByteArray &currentId : currentWallets)
-    {
-        if (actorIndex->getActor(currentId).empty())
-            break;
-
-        walletList.append(currentId);
-
-        QByteArray amount = blockchain->getUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        QByteArray stakingMy =
-            blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken()).toByteArray();
-        QByteArray stakingOther =
-            blockchain->getFreezeUserBalance(currentId, uiWallet->getCurrentToken(), -2).toByteArray();
-        walletList << Transaction::amountToVisible(amount).toLatin1()
-                   << Transaction::amountToVisible(stakingMy).toLatin1()
-                   << Transaction::amountToVisible(stakingOther).toLatin1();
-    }
-
-    uiWallet->updateWalletListModel(&walletList);
-}
-
-void NodeManager::updateAvailableWalletList()
-{
-    return;
-    QByteArray currentId = uiWallet->getCurrentWalletId().toActorId();
-    QStringList actors = uiWallet->getAllActor(currentId);
-
-    /*
-    QList<QByteArray> walletList;
-    Subscribtion sub;
-    QList<BigNumber> subActorsList = sub.getAll();
-
-    for (const BigNumber &actor : subActorsList)
-    {
-        Actor<KeyPublic> curActor = actorIndex->getActor(actor);
-        if (curActor.isEmpty() || currentId == curActor.getId()
-            || accController->getCurrentActor().getId() == 0)
-            continue;
-        walletList.append(curActor.getId().toActorId());
-    }
-    */
-
-    uiWallet->updateAvailableListModel(&actors);
-}
-
-void NodeManager::updateRecentActivities()
-{
-    return;
-    QList<Transaction> recentTransactionList;
-
-    recentTransactionList = blockchain->getTxsBySenderOrReceiverInRow(accController->getCurrentActor().id(),
-                                                                      -1, 100, uiWallet->getCurrentToken());
-
-    uiWallet->updateRecentActivitiesModel(&recentTransactionList);
-}
-
-void NodeManager::changeWalletIdUi(BigNumber walletId)
-{
-    return;
-    // qDebug() << "NODE MANAGER: changeWalletIdUi, id = " << walletId;
-    // accController->loadActors();
-    accController->changeUserNum(walletId.toActorId());
-    uiWallet->setCurrentWalletBalance(blockchain->getUserBalance(walletId, uiWallet->getCurrentToken()));
-
-    // updateWalletList();
-    updateAvailableWalletList();
-    updateRecentActivities();
-}
-
-void NodeManager::addNewWallet()
-{
-    return;
-    auto future = QtConcurrent::run(accController, &AccountController::createActor, ActorType::Wallet,
-                                    hashLoginPrivateProfile);
-
-    AsyncFuture::observe(future).subscribe([this, future]() {
-        auto walletId = future.result().id().toActorId();
-        auto wallets = uiWallet->getCurrentWallets();
-        uiWallet->setCurrentWallets(wallets << walletId);
-        createWalletInUi();
-    });
-}
 
 void NodeManager::notificationToken(QString os, QString actorId, QString token)
 {
@@ -592,10 +473,10 @@ void NodeManager::notificationToken(QString os, QString actorId, QString token)
         { "os", key->encrypt(os.toLatin1(), accController->getMainActor()->key()->getSecKey()) }
     };
 
-    sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
+    emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
-#elif ECONSOLE
+#ifdef ECONSOLE
 void NodeManager::connectConsole()
 {
     connect(this, &NodeManager::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);

@@ -30,7 +30,7 @@ class PrivateProfile : public QObject
 {
     Q_OBJECT
 private:
-    AccountController *acContorller;
+    AccountController *accController;
     Dfs *dfs;
 public slots:
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
