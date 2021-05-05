@@ -97,7 +97,9 @@ public:
     ResolveManager *getResolveManager() const;
     PrivateProfile *getPrivateProfile() const;
     SubscribeController *getSubscribeController() const;
+#ifdef ECLIENT
     NotificationManager *getNotificationManager() const;
+#endif
 
     void getBlockchainFile();
 

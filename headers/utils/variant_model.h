@@ -2,14 +2,10 @@
 #define VARIANT_MODEL_H
 
 #include <QAbstractListModel>
-#include <QList>
 #include <QVariant>
 #include <QModelIndex>
-#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
-#include <QTextStream>
-#include <QTextCodec>
 
 class VariantModel : public QAbstractListModel
 {
@@ -50,7 +46,7 @@ signals:
 
 private:
     QHash<int, QByteArray> roles;
-    QList<QByteArray> modelRoles;
+    QByteArrayList modelRoles;
     QList<QVariantMap> datas;
     int m_count = 0;
 };

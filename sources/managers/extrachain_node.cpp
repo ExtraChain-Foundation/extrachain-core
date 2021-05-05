@@ -455,6 +455,7 @@ void ExtraChainNode::dfscreateNetManagerIdentificator()
     file.close();
 }
 
+#ifdef ECLIENT
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token)
 {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
@@ -475,6 +476,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
 
     emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
+#endif
 
 #ifdef ECONSOLE
 void ExtraChainNode::connectConsole()
@@ -570,10 +572,12 @@ SubscribeController *ExtraChainNode::getSubscribeController() const
     return subscribeController;
 }
 
+#ifdef ECLIENT
 NotificationManager *ExtraChainNode::getNotificationManager() const
 {
     return notificationManager;
 }
+#endif
 
 void ExtraChainNode::logOut()
 {
