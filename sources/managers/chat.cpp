@@ -223,9 +223,9 @@ QList<QByteArray> Chat::getAllUsers()
     return result;
 }
 
-QList<UIMessage> Chat::getAllMessages()
+QList<ChatMessageInfo> Chat::getAllMessages()
 {
-    QList<UIMessage> result;
+    QList<ChatMessageInfo> result;
     QString dbPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
         + _currentSession.toByteArray() + "/msg";
 
@@ -242,7 +242,7 @@ QList<UIMessage> Chat::getAllMessages()
     }
     for (DBRow tmp : row)
     {
-        UIMessage ui;
+        ChatMessageInfo ui;
         ui.messId = QByteArray::fromStdString(tmp["messId"]);
         ui.userId = QByteArray::fromStdString(tmp["userId"]);
         ui.type = QByteArray::fromStdString(tmp["type"]);
@@ -275,9 +275,9 @@ QByteArray Chat::decryptByChatKey(QByteArray data)
     return decryptMessage(data);
 }
 
-UIMessage Chat::getLastMessage()
+ChatMessageInfo Chat::getLastMessage()
 {
-    UIMessage message;
+    ChatMessageInfo message;
     if (!QFile::exists(DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
                        + _currentSession.toByteArray() + "/msg"))
     {

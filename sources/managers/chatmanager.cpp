@@ -379,7 +379,7 @@ void ChatManager::createDialogue(QByteArray actorId)
 void ChatManager::requestChatList()
 {
     InitializeChatList();
-    QList<UIChat> chats;
+    QList<ChatInfo> chats;
     QList<QByteArray> tempUsers;
     QStringList tempusersList;
     foreach (Chat *currentChat, _chatList)
@@ -389,7 +389,7 @@ void ChatManager::requestChatList()
         for (auto user : qAsConst(tempUsers))
             tempusersList.append(user);
 
-        chats.append(UIChat { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
+        chats.append(ChatInfo { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
     }
     emit chatListSend(chats);
 }

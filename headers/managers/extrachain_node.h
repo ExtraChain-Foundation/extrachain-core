@@ -179,7 +179,6 @@ signals:
     void sendActorToWallet(QList<QByteArray> list);
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
-    void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
     void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,

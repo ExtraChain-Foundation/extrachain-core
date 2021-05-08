@@ -30,14 +30,17 @@
 #include "network/packages/base_message_response.h"
 #include "network/packages/service/all_messages.h"
 #include "network/packages/service/message_types.h"
+
+class ResolveManager;
+class AccountController;
+
 /**
  * @brief Actors that stored in blockchain
  */
-class ResolveManager;
-class AccountController;
 class ActorIndex : public QObject
 {
     Q_OBJECT
+
 private:
     AccountController *accController;
     ResolveManager *resolveManager = nullptr;
@@ -154,7 +157,6 @@ public slots:
     void saveProfileFromNetwork(const QByteArray &newProfile);
     void requestProfile(QString id);
     QByteArrayList getProfile(QString id);
-    void profileToSearch(SearchFilters filters);
 
     /**
      * @brief
@@ -190,7 +192,6 @@ signals:
      */
     void ActorIsMissing(Actor<KeyPublic> actor);
     void finished();
-    void sendProfileToSearchToUi(QList<Profile> profiles);
 };
 
 #endif // ACTORINDEX_H

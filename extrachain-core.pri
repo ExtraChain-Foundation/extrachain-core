@@ -33,7 +33,6 @@ SOURCES += \
     $$PWD/sources/managers/file_updater_manager.cpp \
     $$PWD/sources/managers/notification_manager.cpp \
     $$PWD/sources/network/packages/service/connections_message.cpp \
-    $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/coin_service.cpp \
@@ -104,8 +103,6 @@ HEADERS += \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/network/packages/service/connections_message.h \
     $$PWD/headers/network/packages/service/message_types.h \
-    $$PWD/headers/profile/profile.h \
-    $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \
     $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/coin_service.h \

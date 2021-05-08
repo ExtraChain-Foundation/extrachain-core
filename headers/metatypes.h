@@ -28,8 +28,6 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/contract.h"
 #include "network/socket_pair.h"
-#include "profile/profile.h"
-#include "profile/quickprofile.h"
 #include "datastorage/searchfilters.h"
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
@@ -49,16 +47,13 @@ Q_DECLARE_METATYPE(DfsStruct::Type)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
-Q_DECLARE_METATYPE(Profile)
-Q_DECLARE_METATYPE(QuickProfile)
-Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
-Q_DECLARE_METATYPE(UIChat)
-Q_DECLARE_METATYPE(QList<UIChat>)
-Q_DECLARE_METATYPE(UIMessage)
-Q_DECLARE_METATYPE(QList<UIMessage>)
+Q_DECLARE_METATYPE(ChatInfo)
+Q_DECLARE_METATYPE(QList<ChatInfo>)
+Q_DECLARE_METATYPE(ChatMessageInfo)
+Q_DECLARE_METATYPE(QList<ChatMessageInfo>)
 Q_DECLARE_METATYPE(Network::DataStruct)
 Q_DECLARE_METATYPE(Notification)
 Q_DECLARE_METATYPE(QList<Notification>)
@@ -83,15 +78,12 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::Type>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
-    qRegisterMetaType<Profile>();
-    qRegisterMetaType<QuickProfile>();
-    qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
-    qRegisterMetaType<UIChat>();
-    qRegisterMetaType<QList<UIChat>>();
-    qRegisterMetaType<UIMessage>();
-    qRegisterMetaType<QList<UIMessage>>();
+    qRegisterMetaType<ChatInfo>();
+    qRegisterMetaType<QList<ChatInfo>>();
+    qRegisterMetaType<ChatMessageInfo>();
+    qRegisterMetaType<QList<ChatMessageInfo>>();
     qRegisterMetaType<Network::DataStruct>();
     qRegisterMetaType<Notification>();
     qRegisterMetaType<QList<Notification>>();

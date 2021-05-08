@@ -27,7 +27,7 @@
 #include <QDirIterator>
 #include <QObject>
 
-struct UIMessage
+struct ChatMessageInfo
 {
     QString messId;
     QString userId;
@@ -36,11 +36,11 @@ struct UIMessage
     QDateTime date;
 };
 
-struct UIChat
+struct ChatInfo
 {
     QStringList users;
     QString chatId;
-    UIMessage lastMessage;
+    ChatMessageInfo lastMessage;
 };
 
 struct ChatFileSender
@@ -105,12 +105,12 @@ public:
 
     QByteArray getCurrentActorId() const;
     QList<QByteArray> getAllUsers();
-    QList<UIMessage> getAllMessages();
+    QList<ChatMessageInfo> getAllMessages();
     ActorIndex* getActorIndex() const;
     QByteArray getOwner();
     QByteArray encryptByChatKey(QByteArray data);
     QByteArray decryptByChatKey(QByteArray data);
-    UIMessage getLastMessage();
+    ChatMessageInfo getLastMessage();
     void removeAllChatData();
     QByteArray encryptMessage(QByteArray message);
     QByteArray decryptMessage(QByteArray message);

@@ -103,12 +103,12 @@ signals:
     void sendDataToBlockhainFromChatManager(const QString &path,
                                             const DfsStruct::Type &type); //----- connet with dfs
 
-    void chatListSend(QList<UIChat> chats);
-    void chatSend(QByteArray chatId, QList<UIMessage> messages);
+    void chatListSend(QList<ChatInfo> chats);
+    void chatSend(QByteArray chatId, QList<ChatMessageInfo> messages);
     void sendMessage(const QByteArray &data, const unsigned int &type);
 
-    void sendLastMessage(QByteArray chatId, UIMessage); // from network & local send
-    void chatCreated(UIChat);
+    void sendLastMessage(QByteArray chatId, ChatMessageInfo); // from network & local send
+    void chatCreated(ChatInfo);
     void finished();
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
                      QByteArrayList sqlChanges);
