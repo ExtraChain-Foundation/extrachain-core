@@ -242,7 +242,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "Save publicProfile with id:" << profile.id;
         if (actor.profile().saveProfileFromNet(profile.dataToProfile))
         {
-            emit sendProfileToUi(profile.id, actor.profile().getListProfile());
+            emit profileAvailabled(profile.id, actor.profile().getListProfile());
             resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
         }
     }
@@ -289,7 +289,7 @@ void ActorIndex::requestProfile(QString id)
     //        list.insert(15, "static/avatar");
     // for test data: remove
 
-    emit sendProfileToUi(id, list);
+    emit profileAvailabled(id, list);
     // else
     //     qDebug() << "requestProfile: incorrect profile" << id;
 }

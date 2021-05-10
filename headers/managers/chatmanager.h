@@ -99,7 +99,7 @@ public slots:
 
 signals:
     void newNotify(const Notification ntf);
-    void UIsendAllChats(QList<Chat *> chatList); // need connect to UI
+    void allChatsAvailabled(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(const QString &path,
                                             const DfsStruct::Type &type); //----- connet with dfs
 

@@ -68,7 +68,7 @@ void NotificationManager::loadNotificationFromDB()
         list.append(tmp);
     }
     qDebug() << list.size() << "notify loaded";
-    emit allNotifyToUI(list);
+    emit allNotificationsAvailabled(list);
 }
 
 void NotificationManager::addNotify(const Notification newNtf)
@@ -80,7 +80,7 @@ void NotificationManager::addNotify(const Notification newNtf)
                        mainActor->encryptSelf(QByteArray::number(newNtf.type)), "data",
                        mainActor->encryptSelf(newNtf.data) });
 
-    emit newNotifyToUI(newNtf);
+    emit newNotificationAvailabled(newNtf);
     sendToNotify(newNtf);
 }
 

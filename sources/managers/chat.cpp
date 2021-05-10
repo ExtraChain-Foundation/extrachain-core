@@ -236,20 +236,22 @@ QList<ChatMessageInfo> Chat::getAllMessages()
 
     std::vector<DBRow> row;
     row = DB.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName);
+
     if (row.size() == 0)
     {
         qDebug() << "Haven`t chat";
     }
+
     for (DBRow tmp : row)
     {
-        ChatMessageInfo ui;
-        ui.messId = QByteArray::fromStdString(tmp["messId"]);
-        ui.userId = QByteArray::fromStdString(tmp["userId"]);
-        ui.type = QByteArray::fromStdString(tmp["type"]);
-        ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
+        ChatMessageInfo messageInfo;
+        messageInfo.messId = QByteArray::fromStdString(tmp["messId"]);
+        messageInfo.userId = QByteArray::fromStdString(tmp["userId"]);
+        messageInfo.type = QByteArray::fromStdString(tmp["type"]);
+        messageInfo.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
         QByteArray date = QByteArray::fromStdString(tmp["date"]);
-        ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
-        result.append(ui);
+        messageInfo.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
+        result.append(messageInfo);
     }
 
     return result;

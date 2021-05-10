@@ -657,7 +657,7 @@ void Dfs::initDFSNetManager()
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
     dfsNetManager->setDfs(this);
-    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::uiReconnect);
+    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::reconnect);
     ThreadPool::addThread(dfsNetManager);
 }
 
@@ -1279,11 +1279,6 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
     sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage, receiver);
-}
-
-void Dfs::requestFileUiHandle(QString filePath)
-{
-    requestFile(filePath);
 }
 
 void Dfs::titleReceivedHandle(QString filePath)

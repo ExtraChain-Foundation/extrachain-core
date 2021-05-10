@@ -214,10 +214,7 @@ void ExtraChainNode::connectTxManager()
 
 ExtraChainNode::~ExtraChainNode()
 {
-    //    netManager->quit();
-    //    uiController->quit();
-
-    //    delete uiController;
+    // netManager->quit();
     // delete netManager;
     delete txManager;
     // delete blockchain;

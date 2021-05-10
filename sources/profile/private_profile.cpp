@@ -107,7 +107,7 @@ void PrivateProfile::loadInfoFromPrivateProfile(const QByteArray &hash, const QB
         QMap<QString, QByteArray> map;
         readData(map, data);
         QByteArray info = get(map, type);
-        emit infoToUi(info, type);
+        emit infoAvailabled(info, type);
         return;
     }
     else
