@@ -191,37 +191,38 @@ void NetManager::findLocal()
     const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
     QList<QHostAddress> localIpNotConnect;
 
-    for (const QNetworkInterface &interface : allInterfaces)
+    for (const QNetworkInterface &networkInterface : allInterfaces)
     {
-        const auto entries = interface.addressEntries();
+        const auto entries = networkInterface.addressEntries();
 
         for (const QNetworkAddressEntry &address : entries)
         {
             if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
             {
-                qDebug() << "NET MANAGER: Find local ip candidate:" << address.ip().toString() << interface;
+                qDebug() << "NET MANAGER: Find local ip candidate:" << address.ip().toString()
+                         << networkInterface;
                 localIpNotConnect.append(address.ip());
             }
         }
     }
 
-    for (const QNetworkInterface &interface : allInterfaces)
+    for (const QNetworkInterface &networkInterface : allInterfaces)
     {
-        const auto entries = interface.addressEntries();
+        const auto entries = networkInterface.addressEntries();
 
         for (const QNetworkAddressEntry &entry : entries)
         {
-            const auto flags = interface.flags();
+            const auto flags = networkInterface.flags();
 
             bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
             bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
             bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
-            if (!isRunning || !interface.isValid() || isLoopBack || isPointToPoint)
+            if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
             if (localIpNotConnect.contains(entry.ip()))
             {
-                QString name = interface.name();
+                QString name = networkInterface.name();
 
                 if (name.left(2) == "vm")
                     continue;
@@ -229,7 +230,8 @@ void NetManager::findLocal()
                     || name.left(8) == "wireless")
                 {
                     local = new QNetworkAddressEntry(entry);
-                    qDebug() << this << "Discovered local:" << local->ip().toString() << interface.name();
+                    qDebug() << this << "Discovered local:" << local->ip().toString()
+                             << networkInterface.name();
                     return;
                 }
             }
