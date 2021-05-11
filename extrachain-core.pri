@@ -1,5 +1,6 @@
 QT += concurrent
 VERSION = 0.8.1
+PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
@@ -68,6 +69,7 @@ SOURCES += \
     $$PWD/sources/utils/variant_model.cpp
 
 HEADERS += \
+    $$PWD/headers/precompiled.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
     $$PWD/dfs/managers/headers/dfsnetmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
