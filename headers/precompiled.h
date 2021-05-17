@@ -1,3 +1,4 @@
+#if defined __cplusplus
 #include <cstdlib>
 #include <csignal>
 #include <csetjmp>
@@ -82,3 +83,4 @@
 #include <QtCore>
 #include <QtNetwork>
 #include <QtConcurrent>
+#endif
