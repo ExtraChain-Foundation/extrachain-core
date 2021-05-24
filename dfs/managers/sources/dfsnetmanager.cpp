@@ -27,7 +27,7 @@ void DFSNetManager::setDfs(Dfs *value)
 
 bool DFSNetManager::isLoading(const QString &fileName)
 {
-    for (DFSResolverService *resolver : dfsResolvers)
+    for (DFSResolverService *resolver : qAsConst(dfsResolvers))
     {
         if (resolver->getTitle().filePath == fileName)
             return true;
@@ -141,7 +141,7 @@ void DFSNetManager::startDFSNetwork()
     // connectToServer(serverPort, local);
 }
 
-void DFSNetManager::uiReconnect()
+void DFSNetManager::reconnect()
 {
     connectToServer(serverPort, local);
 }
@@ -191,7 +191,7 @@ void DFSNetManager::removeResolver(DFSResolverService::FinishStatus status)
     switch (status)
     {
     case DFSResolverService::FinishStatus::FileReset:
-        dfs->requestFile(filePath);
+        emit dfs->requestFile(filePath);
         break;
     case DFSResolverService::FinishStatus::FileFinished:
         dfs->reportFileCompleted(filePath, pair);
@@ -211,7 +211,7 @@ void DFSNetManager::removeConnection()
     SocketService *connection = qobject_cast<SocketService *>(sender);
     socketDisconnect(connection);
     connections.removeAt(connections.indexOf(connection));
-    connection->finished();
+    emit connection->finished();
 }
 void DFSNetManager::checkMyIdentificator()
 {
@@ -222,7 +222,7 @@ void DFSNetManager::checkMyIdentificator()
         return;
 
     if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator())
-        connection->removeMe();
+        emit connection->removeMe();
 
     // short counter = 0;
     std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
@@ -256,13 +256,13 @@ void DFSNetManager::checkConnectionsStatus()
     bool flag = false;
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
-    emit qmlNetworkStatus(flag);
+    emit networkStatusChanged(flag);
 
     if (flag == true)
     {
         const auto files = dfs->tmpFiles();
         for (const QString &file : files)
-            dfs->requestFile(file);
+            emit dfs->requestFile(file);
     }
 }
 

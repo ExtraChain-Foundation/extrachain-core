@@ -70,7 +70,7 @@ signals:
     void MessageReceived(QByteArray msg, QHostAddress peerAddress);
     void finished();
     // void newSocketAdd(QTcpSocket *addSocket);
-    void newConnection(qint64 socketDescriptor);
+    void newServerConnection(qint64 socketDescriptor);
     void serverStatus(bool socketError);
 };
 #endif // SERVER_SERVICE_H

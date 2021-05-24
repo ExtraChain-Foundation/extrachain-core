@@ -41,12 +41,11 @@ void Dfs::responseRequestLast(const DistFileSystem::requestLast &request, Socket
 
     QByteArrayList res;
 
-    for (QByteArray userId : request.actors)
+    for (const QByteArray &userId : qAsConst(request.actors))
     {
-        QString lastCacheName = QString("%1/%2/%3")
-                                    .arg(DfsStruct::ROOT_FOOLDER_NAME)
-                                    .arg(QString(userId))
-                                    .arg(DfsStruct::ACTOR_CARD_LAST);
+        QString lastCacheName =
+            QString("%1/%2/%3")
+                .arg(DfsStruct::ROOT_FOOLDER_NAME, QString(userId), DfsStruct::ACTOR_CARD_LAST);
         QByteArray lastHash;
 
         QFile file(lastCacheName);
@@ -74,16 +73,15 @@ void Dfs::responseResponseLast(const DistFileSystem::responseLast &response, Soc
 
     QByteArrayList needUpdate;
 
-    for (QByteArray last : response.lasts)
+    for (const QByteArray &last : qAsConst(response.lasts))
     {
         auto l = last.split(' ');
         QByteArray userId = l[0];
         QByteArray lastHash = l[1];
 
-        QString lastCacheName = QString("%1/%2/%3")
-                                    .arg(DfsStruct::ROOT_FOOLDER_NAME)
-                                    .arg(QString(userId))
-                                    .arg(DfsStruct::ACTOR_CARD_LAST);
+        QString lastCacheName =
+            QString("%1/%2/%3")
+                .arg(DfsStruct::ROOT_FOOLDER_NAME, QString(userId), DfsStruct::ACTOR_CARD_LAST);
         QFile file(lastCacheName);
         if (!file.open(QFile::ReadOnly))
             continue;
@@ -155,7 +153,7 @@ void Dfs::responseResponseCardPath(const DistFileSystem::ResponseCardPart &respo
     std::vector<DBRow> local = cardFile.select(response.count, response.offset);
     std::vector<DBRow> network;
 
-    for (auto el : response.data)
+    for (const auto &el : qAsConst(response.data))
     {
         auto list = el.split(' ');
         int networkKey = list[0].toInt();
@@ -237,7 +235,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
 
     std::string file =
         CardManager::buildPathForFile(cfc.actorId.toStdString(), row["id"], DfsStruct::Type(cfc.type));
-    requestFile(QString::fromStdString(file), receiver);
+    emit requestFile(QString::fromStdString(file), receiver);
 
     //    auto type = DfsStruct::Type(cardFileChange.type);
 
@@ -659,7 +657,7 @@ void Dfs::initDFSNetManager()
 {
     dfsNetManager = new DFSNetManager(accountControler, actorIndex);
     dfsNetManager->setDfs(this);
-    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::uiReconnect);
+    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::reconnect);
     ThreadPool::addThread(dfsNetManager);
 }
 
@@ -1281,11 +1279,6 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
     sender->sendDfsMessage(dfsRequest, Messages::DFSMessage::requestMessage, receiver);
-}
-
-void Dfs::requestFileUiHandle(QString filePath)
-{
-    requestFile(filePath);
 }
 
 void Dfs::titleReceivedHandle(QString filePath)

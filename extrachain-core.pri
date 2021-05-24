@@ -1,5 +1,7 @@
 QT += concurrent
 VERSION = 0.8.1
+win32: CONFIG += precompile_header
+win32: PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
 INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
@@ -29,10 +31,10 @@ SOURCES += \
     $$PWD/sources/datastorage/contract.cpp \
     $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
+    $$PWD/sources/managers/extrachain_node.cpp \
     $$PWD/sources/managers/file_updater_manager.cpp \
     $$PWD/sources/managers/notification_manager.cpp \
     $$PWD/sources/network/packages/service/connections_message.cpp \
-    $$PWD/sources/profile/profile.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/coin_service.cpp \
@@ -54,7 +56,6 @@ SOURCES += \
     $$PWD/sources/utils/Keccak256.cpp \
     $$PWD/dfs/controls/sources/dfs.cpp \
     $$PWD/dfs/types/sources/dfstruct.cpp \
-    $$PWD/sources/managers/node_manager.cpp \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
     $$PWD/sources/network/packages/base_message.cpp \
@@ -65,9 +66,11 @@ SOURCES += \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
-    $$PWD/sources/utils/exc_utils.cpp
+    $$PWD/sources/utils/exc_utils.cpp \
+    $$PWD/sources/utils/variant_model.cpp
 
 HEADERS += \
+    $$PWD/headers/precompiled.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
     $$PWD/dfs/managers/headers/dfsnetmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
@@ -87,6 +90,7 @@ HEADERS += \
     $$PWD/dfs/types/headers/cardfile.h \
     $$PWD/headers/managers/chat.h \
     $$PWD/headers/managers/chatmanager.h \
+    $$PWD/headers/managers/extrachain_node.h \
     $$PWD/headers/managers/file_updater_manager.h \
     $$PWD/headers/managers/notification_manager.h \
     $$PWD/headers/metatypes.h \
@@ -102,8 +106,6 @@ HEADERS += \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/network/packages/service/connections_message.h \
     $$PWD/headers/network/packages/service/message_types.h \
-    $$PWD/headers/profile/profile.h \
-    $$PWD/headers/profile/quickprofile.h \
     $$PWD/headers/managers/account_controller.h \
     $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/coin_service.h \
@@ -126,7 +128,6 @@ HEADERS += \
     $$PWD/dfs/controls/headers/dfs.h \
     $$PWD/dfs/managers/headers/card_manager.h \
     $$PWD/dfs/types/headers/dfstruct.h \
-    $$PWD/headers/managers/node_manager.h \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
     $$PWD/headers/network/packages/base_message.h \
@@ -143,6 +144,7 @@ HEADERS += \
     $$PWD/headers/network/socket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
+    $$PWD/headers/utils/variant_model.h \
     $$PWD/test.h
 
 gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function  -Wno-deprecated # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable

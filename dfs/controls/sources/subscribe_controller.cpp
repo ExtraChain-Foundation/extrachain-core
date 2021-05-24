@@ -18,7 +18,7 @@
  */
 
 #include "dfs/controls/headers/subscribe_controller.h"
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 
 SubscribeController::SubscribeController(QObject *parent)
     : QObject(parent)
@@ -31,12 +31,12 @@ SubscribeController::~SubscribeController()
 
 void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 {
-    QByteArray currentId = nodeManager->getIdPrivateProfile();
-    sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
-                isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
-                { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
+    QByteArray currentId = extraChainNode->getIdPrivateProfile();
+    emit sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
+                     isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
+                     { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
 
-    sendEditSql(
+    emit sendEditSql(
         id, "follower", DfsStruct::Type::Service,
         isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
         { Config::DataStorage::subscribeFollowerTableName.c_str(), "subscriber", currentId, "sign", "TODO" });
@@ -45,7 +45,7 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 bool SubscribeController::checkSubscribe(QByteArray id)
 {
     QString path =
-        DfsStruct::ROOT_FOOLDER_NAME + "/" + nodeManager->getIdPrivateProfile() + "/services/subscribe";
+        DfsStruct::ROOT_FOOLDER_NAME + "/" + extraChainNode->getIdPrivateProfile() + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumnTableName
@@ -78,7 +78,7 @@ std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
     return res;
 }
 
-void SubscribeController::setNodeManager(NodeManager *value)
+void SubscribeController::setExtraChainNode(ExtraChainNode *value)
 {
-    nodeManager = value;
+    extraChainNode = value;
 }

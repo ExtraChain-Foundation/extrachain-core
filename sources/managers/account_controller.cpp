@@ -125,7 +125,7 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
 
 Actor<KeyPrivate> AccountController::getActor(BigNumber id)
 {
-    for (Actor<KeyPrivate> *actor : accounts)
+    for (Actor<KeyPrivate> *actor : qAsConst(accounts))
     {
         if (id == actor->id())
         {
@@ -276,7 +276,7 @@ void AccountController::clearAcc()
 void AccountController::changeUserNum(QByteArray wallId)
 {
     userNum = 0;
-    for (const auto &currAcc : accounts)
+    for (const auto &currAcc : qAsConst(accounts))
     {
         // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
         if (currAcc->id().toActorId() == wallId)

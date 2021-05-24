@@ -110,10 +110,10 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     }
 
     auto mainActor = _accountController->getMainActor()->key();
-    _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
-                              { Config::DataStorage::chatIdTableName.c_str(), "chatId",
-                                mainActor->encryptSelf(_chatId), "key", mainActor->encryptSelf(key), "owner",
-                                mainActor->encryptSelf(_ownerId) });
+    emit _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
+                                   { Config::DataStorage::chatIdTableName.c_str(), "chatId",
+                                     mainActor->encryptSelf(_chatId), "key", mainActor->encryptSelf(key),
+                                     "owner", mainActor->encryptSelf(_ownerId) });
 
     saveChatsId(_chatId);
 }
@@ -223,9 +223,9 @@ QList<QByteArray> Chat::getAllUsers()
     return result;
 }
 
-QList<UIMessage> Chat::getAllMessages()
+QList<ChatMessageInfo> Chat::getAllMessages()
 {
-    QList<UIMessage> result;
+    QList<ChatMessageInfo> result;
     QString dbPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
         + _currentSession.toByteArray() + "/msg";
 
@@ -236,20 +236,22 @@ QList<UIMessage> Chat::getAllMessages()
 
     std::vector<DBRow> row;
     row = DB.select("SELECT * FROM " + Config::DataStorage::chatMessageTableName);
+
     if (row.size() == 0)
     {
         qDebug() << "Haven`t chat";
     }
+
     for (DBRow tmp : row)
     {
-        UIMessage ui;
-        ui.messId = QByteArray::fromStdString(tmp["messId"]);
-        ui.userId = QByteArray::fromStdString(tmp["userId"]);
-        ui.type = QByteArray::fromStdString(tmp["type"]);
-        ui.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
+        ChatMessageInfo messageInfo;
+        messageInfo.messId = QByteArray::fromStdString(tmp["messId"]);
+        messageInfo.userId = QByteArray::fromStdString(tmp["userId"]);
+        messageInfo.type = QByteArray::fromStdString(tmp["type"]);
+        messageInfo.message = decryptMessage(QByteArray::fromStdString(tmp["message"]));
         QByteArray date = QByteArray::fromStdString(tmp["date"]);
-        ui.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
-        result.append(ui);
+        messageInfo.date = QDateTime::fromMSecsSinceEpoch(date.toLongLong());
+        result.append(messageInfo);
     }
 
     return result;
@@ -275,9 +277,9 @@ QByteArray Chat::decryptByChatKey(QByteArray data)
     return decryptMessage(data);
 }
 
-UIMessage Chat::getLastMessage()
+ChatMessageInfo Chat::getLastMessage()
 {
-    UIMessage message;
+    ChatMessageInfo message;
     if (!QFile::exists(DfsStruct::ROOT_FOOLDER_NAME + "/" + ownerID + "/chats/" + _chatId + "/"
                        + _currentSession.toByteArray() + "/msg"))
     {
@@ -329,7 +331,7 @@ BigNumber Chat::findCurrentSession()
 {
     BigNumber currentSession("-1");
     QStringList allSessions = QDir(getPathCurrentChat()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (QString temp : allSessions)
+    for (const QString& temp : allSessions)
     {
         if (BigNumber(temp.toUtf8()) > currentSession)
             currentSession = BigNumber(temp.toUtf8());
@@ -389,7 +391,7 @@ void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userDa
                    + _chatId.toStdString() + "/users");
     DB.createTable(Config::DataStorage::chatUserStorage);
 
-    for (QByteArray user : userList)
+    for (const QByteArray& user : qAsConst(userList))
     {
         DBRow row;
         row.insert({ "userId", user.toStdString() });
@@ -399,7 +401,7 @@ void Chat::createNewUsersDb(QList<QByteArray> userList, QList<QByteArray> userDa
 
 bool Chat::isUserExist(QByteArray actorId, QList<QByteArray> userList)
 {
-    for (QByteArray user : userList)
+    for (const QByteArray& user : userList)
 
         if (user == actorId)
             return true;

@@ -125,7 +125,6 @@ public slots:
     void process();
     void startDFS();
     void requestFileHandle(const QString &filePath, const SocketPair &receiver);
-    void requestFileUiHandle(QString filePath);
     void titleReceivedHandle(QString filePath);
     void searchTmp();
     void requestCardById(QByteArray userId, const SocketPair &receiver = SocketPair());

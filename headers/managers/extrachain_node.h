@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef NODE_MANAGER_H
-#define NODE_MANAGER_H
+#ifndef EXTRACHAIN_NODE_H
+#define EXTRACHAIN_NODE_H
 
 #include <QObject>
 #include <QMap>
@@ -45,10 +45,8 @@
 #include <QCoreApplication>
 
 #ifdef ECLIENT
-#include "ui/client_controller.h"
 #include "ui/notificationclient.h"
 #include "managers/notification_manager.h"
-#include "asyncfuture.h"
 #endif
 
 #ifdef ECONSOLE
@@ -57,9 +55,10 @@
 
 class ResolveManager;
 
-class NodeManager : public QObject
+class ExtraChainNode : public QObject
 {
     Q_OBJECT
+
 private:
     // common object for
     bool fileMode = true;
@@ -80,21 +79,27 @@ private:
     QByteArray hashLoginPrivateProfile;
 
 #ifdef ECLIENT
-    ClientController *uiController;
-    WalletController *uiWallet;
-    NotificationClient *notificationClient = nullptr;
-    NotificationManager *notifyM;
+    NotificationClient *notificationClient = nullptr; // TODO: move to client
+public:
+    NotificationManager *notificationManager; // TODO: make for core
 #endif
 
 public:
-    NodeManager();
-    ~NodeManager();
+    ExtraChainNode();
+    ~ExtraChainNode();
 
 public:
     void createCompanyActor(const QString &email, const QString &password);
     Blockchain *getBlockchain();
     NetManager *getNetManager();
-    AccountController *getAccController() const;
+    AccountController *getAccountController() const;
+    ActorIndex *getActorIndex() const;
+    ResolveManager *getResolveManager() const;
+    PrivateProfile *getPrivateProfile() const;
+    SubscribeController *getSubscribeController() const;
+#ifdef ECLIENT
+    NotificationManager *getNotificationManager() const;
+#endif
 
     void getBlockchainFile();
 
@@ -130,7 +135,6 @@ public:
     void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
 
 #ifdef ECLIENT
-    ClientController *getUiController() const;
     void setNotificationClient(NotificationClient *newNtfCl);
 #endif
 
@@ -150,7 +154,6 @@ private:
     void connectResolveManager();
     void connectSmContractManager();
     void connectTxManager();
-    void connectUi();
     void connectConsole();
     void connectContractManager();
     void connectBlockchain();
@@ -176,14 +179,13 @@ signals:
     void sendActorToWallet(QList<QByteArray> list);
     void sendActorStateList(QMap<QByteArray, QByteArray> map);
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
-    void profileToUi(QString actorId, Profile profile);
     void sendTransactionContract(Transaction tx);
     //    void addActorInActorIndex(Actor<KeyPublic> actor);
     void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
                                 const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
-    void setCurrentIdNotifyM(const QByteArray id);
+    void setCurrentIdNotificationManager(const QByteArray id);
     void getAllActorsNode(QByteArray id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
@@ -193,32 +195,21 @@ private slots:
     void initConsoleToken(Transaction tx);
     void getAllActors();
     void getAllActorsTimerCall();
-    void setIdPrivateProfile(QByteArray id);
-    void setHashLoginPrivateProfile(QByteArray hash);
     void logOut();
 
     //    void makeContractFirstTransaction(Contract &contract);
     //    void makeContractFinalTransaction(Contract &contract);
 public slots:
+    void setIdPrivateProfile(QByteArray id);          //
+    void setHashLoginPrivateProfile(QByteArray hash); //
     void tempareSlotForActors();
 
     // test net & blockchain
-
     //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
     void createNetManagerIdentificator();
     void dfscreateNetManagerIdentificator();
 #ifdef ECLIENT
-    void sendTransactionFromUi(BigNumber reciever, BigNumber actor, BigNumber token);
-
-private slots:
-    void createWalletInUi();
-    void updateWalletInUi();
-    void updateWalletList();
-    void updateAvailableWalletList();
-    void updateRecentActivities();
-    void changeWalletIdUi(BigNumber walletId);
-    void addNewWallet();
     void notificationToken(QString os, QString actorId, QString token);
 #endif
 
@@ -265,4 +256,4 @@ private:
     bool m_listenCoinRequest = false;
 #endif
 };
-#endif // NODE_MANAGER_H
+#endif // EXTRACHAIN_NODE_H

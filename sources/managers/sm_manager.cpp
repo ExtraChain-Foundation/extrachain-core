@@ -18,9 +18,6 @@
  */
 
 #include "managers/sm_manager.h"
-#ifdef ECLIENT
-#include "ui/wallet/walletcontroller.h"
-#endif
 
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent)

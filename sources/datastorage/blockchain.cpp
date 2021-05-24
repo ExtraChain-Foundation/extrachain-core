@@ -164,7 +164,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
                         "Token     TEXT              NOT NULL, "
                         "Type   TEXT              NOT NULL );");
 
-    for (auto i : l)
+    for (const auto &i : l)
     {
         temp = Serialization::deserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
         if (temp.size() != 13)
@@ -661,7 +661,7 @@ void Blockchain::sendUnFee(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
+        emit sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
     }
 }
 
@@ -708,7 +708,7 @@ void Blockchain::sendFeeUnfreeze(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
+        emit sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
     }
 }
 
@@ -716,7 +716,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 {
     qDebug() << "Creating genesis block";
     genBlockData.clear();
-    QByteArray previousGenHash;
+    // QByteArray previousGenHash;
     GenesisBlock nb("", Block(), "");
     if (fileMode)
     {
@@ -1156,7 +1156,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
         //        ListContainer<Transaction> txs;
         QList<Transaction> resultList = transactionsA;
 
-        for (const Transaction &tx : transactionsA)
+        for (const Transaction &tx : qAsConst(transactionsA))
         {
             if (!transactionsB.contains(tx))
             {
@@ -1204,7 +1204,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         QList<GenesisDataRow> genDataRowsB = blockB.extractDataRows();
         QList<GenesisDataRow> resultList = genDataRowsA;
         int count = 0;
-        for (const GenesisDataRow &r : genDataRowsA)
+        for (const GenesisDataRow &r : qAsConst(genDataRowsA))
         {
             if (!genDataRowsB.contains(r))
             {
@@ -1400,7 +1400,7 @@ QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(BigNumber userId, Big
         if (currentBlock.isEmpty())
             break;
 
-        QList<Transaction> txs = currentBlock.extractTransactions();
+        // QList<Transaction> txs = currentBlock.extractTransactions();
     }
     return res;
 }
@@ -1417,7 +1417,7 @@ void Blockchain::showBlockchain() const
     } while (!currentBlock.isEmpty());
     GenesisBlock genBlock = blockIndex.getLastGenesisBlock();
     qDebug() << "Genesis block: ";
-    for (auto dataGen : genBlock.extractDataRows())
+    for (const auto &dataGen : genBlock.extractDataRows())
     {
         qDebug() << &dataGen;
     }
@@ -1528,7 +1528,7 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
     QJsonObject obj;
     obj["lastId"] = QString(lastSavedId);
     obj["count"] = QString(res.toByteArray());
-    QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+    // QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
     emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
                        Messages::GeneralResponse::getBlockCountResponse, requestHash, receiver);
@@ -1541,7 +1541,7 @@ void Blockchain::addBlockToBlockchain(Block block)
     for (const auto &tmp : list)
     {
         QList<BigNumber> list;
-        for (auto tmp : accountController->getAccounts())
+        for (const auto &tmp : accountController->getAccounts())
             list.append(tmp->id());
         QByteArray data = tmp.getData();
         if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
@@ -1569,7 +1569,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
-        sendMessage(block.serialize(), Messages::ChainMessage::genesisBlockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::genesisBlockMessage);
 }
 
 // Actors //
@@ -1961,7 +1961,7 @@ void Blockchain::proveTx(Transaction *tx)
         return;
     }
     qDebug() << "Undefine behaviour blockhain.cpp proveTx";
-    tx->NotApproved(tx);
+    emit tx->NotApproved(tx);
 }
 
 // Other //

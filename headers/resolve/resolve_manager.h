@@ -22,7 +22,7 @@
 
 class NetManager;
 class ResolverService;
-class NodeManager;
+class ExtraChainNode;
 class ChatManager;
 
 #include <QObject>
@@ -55,7 +55,7 @@ private:
     NetManager *networkManager;
     TransactionManager *txManager;
     AccountController *accountControler;
-    NodeManager *node;
+    ExtraChainNode *node;
     ChatManager *chatManager;
 
 public:
@@ -64,7 +64,7 @@ public:
                    QObject *parent = nullptr);
     ~ResolveManager();
 
-    void setNode(NodeManager *value);
+    void setNode(ExtraChainNode *value);
 
 private:
     void connectSignals(ResolverService *resolver);

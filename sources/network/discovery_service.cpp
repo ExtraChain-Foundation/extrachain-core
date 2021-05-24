@@ -42,14 +42,15 @@ void DiscoveryService::process()
 {
     qDebug() << "DISCOVERY SERVICE: process start";
     active = true;
-    foreach (QNetworkInterface interface, QNetworkInterface::allInterfaces())
+    foreach (QNetworkInterface networkInterface, QNetworkInterface::allInterfaces())
     {
-        if (interface.type() != QNetworkInterface::Wifi)
+        if (networkInterface.type() != QNetworkInterface::Wifi)
         {
             continue;
         }
-        qDebug() << interface.flags() << " " << interface.name() << " " << interface.type();
-        foreach (QNetworkAddressEntry entry, interface.addressEntries())
+        qDebug() << networkInterface.flags() << " " << networkInterface.name() << " "
+                 << networkInterface.type();
+        foreach (QNetworkAddressEntry entry, networkInterface.addressEntries())
         {
             QHostAddress broadcastAddress = entry.broadcast();
             if (broadcastAddress != QHostAddress::Null
@@ -63,6 +64,7 @@ void DiscoveryService::process()
             }
         }
     }
+
     while (active)
     {
         QRandomGenerator randHost;
@@ -96,7 +98,7 @@ void DiscoveryService::recieveMsg()
     {
         qDebug() << "Pong message is received from"
                  << QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
-        QString sender = QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
+        // QString sender = QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
         QJsonDocument doc = QJsonDocument::fromJson(datagram.data());
         int prt = doc.object().value("netPort").toString().toInt();
         qDebug() << "DISCOVERY SERVICE: port" << prt;

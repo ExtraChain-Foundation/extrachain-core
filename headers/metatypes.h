@@ -28,16 +28,11 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/contract.h"
 #include "network/socket_pair.h"
-#include "profile/profile.h"
-#include "profile/quickprofile.h"
 #include "datastorage/searchfilters.h"
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
 #include "managers/chat.h"
 #include "dfs/controls/headers/subscribe_controller.h"
-#ifdef ECLIENT
-#include "ui/client_controller.h"
-#endif
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
@@ -52,16 +47,13 @@ Q_DECLARE_METATYPE(DfsStruct::Type)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
 Q_DECLARE_METATYPE(SocketPair)
-Q_DECLARE_METATYPE(Profile)
-Q_DECLARE_METATYPE(QuickProfile)
-Q_DECLARE_METATYPE(QList<Profile>)
 Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(SearchFilters)
 Q_DECLARE_METATYPE(GenesisBlock)
-Q_DECLARE_METATYPE(UIChat)
-Q_DECLARE_METATYPE(QList<UIChat>)
-Q_DECLARE_METATYPE(UIMessage)
-Q_DECLARE_METATYPE(QList<UIMessage>)
+Q_DECLARE_METATYPE(ChatInfo)
+Q_DECLARE_METATYPE(QList<ChatInfo>)
+Q_DECLARE_METATYPE(ChatMessageInfo)
+Q_DECLARE_METATYPE(QList<ChatMessageInfo>)
 Q_DECLARE_METATYPE(Network::DataStruct)
 Q_DECLARE_METATYPE(Notification)
 Q_DECLARE_METATYPE(QList<Notification>)
@@ -70,9 +62,6 @@ Q_DECLARE_METATYPE(DFSResolverService::FinishStatus)
 Q_DECLARE_METATYPE(DfsStruct::DfsSave)
 Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
-#ifdef ECLIENT
-Q_DECLARE_METATYPE(ClientController*)
-#endif
 
 void registerMetaTypes()
 {
@@ -89,15 +78,12 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::Type>();
     qRegisterMetaType<SearchEnum::BlockParam>();
     qRegisterMetaType<SocketPair>();
-    qRegisterMetaType<Profile>();
-    qRegisterMetaType<QuickProfile>();
-    qRegisterMetaType<QList<Profile>>();
     qRegisterMetaType<PublicProfile>();
     qRegisterMetaType<SearchFilters>();
-    qRegisterMetaType<UIChat>();
-    qRegisterMetaType<QList<UIChat>>();
-    qRegisterMetaType<UIMessage>();
-    qRegisterMetaType<QList<UIMessage>>();
+    qRegisterMetaType<ChatInfo>();
+    qRegisterMetaType<QList<ChatInfo>>();
+    qRegisterMetaType<ChatMessageInfo>();
+    qRegisterMetaType<QList<ChatMessageInfo>>();
     qRegisterMetaType<Network::DataStruct>();
     qRegisterMetaType<Notification>();
     qRegisterMetaType<QList<Notification>>();
@@ -106,9 +92,6 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::DfsSave>();
     qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
-#ifdef ECLIENT
-    qRegisterMetaType<ClientController*>();
-#endif
 }
 
 #endif

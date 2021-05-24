@@ -18,7 +18,7 @@
  */
 
 #include "resolve/dfs_resolver_service.h"
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"

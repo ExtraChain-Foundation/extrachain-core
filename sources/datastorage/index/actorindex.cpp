@@ -242,7 +242,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
         qDebug() << "Save publicProfile with id:" << profile.id;
         if (actor.profile().saveProfileFromNet(profile.dataToProfile))
         {
-            emit sendProfileToUi(profile.id, actor.profile().getListProfile());
+            emit profileAvailabled(profile.id, actor.profile().getListProfile());
             resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
         }
     }
@@ -289,7 +289,7 @@ void ActorIndex::requestProfile(QString id)
     //        list.insert(15, "static/avatar");
     // for test data: remove
 
-    emit sendProfileToUi(id, list);
+    emit profileAvailabled(id, list);
     // else
     //     qDebug() << "requestProfile: incorrect profile" << id;
 }
@@ -381,11 +381,11 @@ BigNumber ActorIndex::getRecords() const
 int ActorIndex::add(const BigNumber &id, const QByteArray &data)
 {
     if (id <= 1000)
-        qFatal("Try to add actor with id %s", id.toByteArray().data());
+        qFatal("Try to add actor with id %s", id.toByteArray().constData());
     QString path = buildFilePath(id.toActorId());
     QFile file(path);
     qDebug() << "Saving the file:" << path;
-    QString profilePath = buildPathPubProfile(id.toActorId());
+    // QString profilePath = buildPathPubProfile(id.toActorId());
     if (file.exists())
     {
         qDebug() << "Can't save the file" << path << "(File already exits)";
@@ -475,83 +475,4 @@ void ActorIndex::removeAll()
 
     // update state
     this->records = 0;
-}
-void ActorIndex::profileToSearch(SearchFilters filters)
-{
-    QList<Profile> profiles;
-    QStringList sectionList =
-        QDir(DfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::QDir::Dirs | QDir::NoDotAndDotDot);
-
-    for (const QString &section : sectionList)
-    {
-        QString profileFolderPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + section + "/" + section + ".profile";
-        QStringList profilePathList = // TODO: NOT ENTRY LIST
-            QDir(profileFolderPath).entryList(QDir::QDir::Files | QDir::NoDotAndDotDot);
-        if (section.length() != 20)
-            continue;
-        Profile profile = getProfile(section);
-
-        if (profile.at(2) == "")
-            continue;
-        if (profile.userId() == filters.currentId)
-            continue;
-        qint16 type = profile.type();
-        if (type == 0 || type == 6)
-            continue;
-
-        QString firstName = profile.firstName().toLower();
-        QString lastName = profile.lastName().toLower();
-
-        if (!(profile.firstName().toLower().startsWith(filters.name.toLower())
-              || profile.lastName().toLower().startsWith(filters.name.toLower())))
-            continue;
-
-        /*
-        if (profile.type() != filters.userType && filters.userType != -1)
-            continue;
-        if (profile.country() != filters.location && filters.location != -1)
-            continue;
-        if (profile.gender() != filters.gender && filters.gender != -1)
-            continue;
-        if (filters.heightMax != -1 && !(filters.heightMax > profile.sizes().at(0) > filters.heightMin))
-            continue;
-        if (filters.bustMax != -1 && !(filters.bustMax > profile.sizes().at(5) > filters.bustMin))
-            continue;
-        if (filters.waistMax != -1 && !(filters.waistMax > profile.sizes().at(4) > filters.waistMin))
-            continue;
-        if (filters.hipsMax != -1 && !(filters.hipsMax > profile.sizes().at(6) > filters.hipsMin))
-            continue;
-        if (filters.shoesMax != -1 && !(filters.shoesMax > profile.sizes().at(2) > filters.shoesMin))
-            continue;
-        if (filters.category != profile.category() && !filters.category.isEmpty())
-            continue;
-        if (filters.body != profile.body() && !filters.body.isEmpty())
-            continue;
-        if (filters.hair != profile.hair() && !filters.hair.isEmpty())
-            continue;
-        if (filters.hairLength != profile.hairLength() && !filters.hairLength.isEmpty())
-            continue;
-        if (filters.eye != profile.eye() && !filters.eye.isEmpty())
-            continue;
-        if (filters.ethnicity != profile.ethnicity() && !filters.ethnicity.isEmpty())
-            continue;
-        if (filters.style != profile.style() && !filters.style.isEmpty())
-            continue;
-        if (filters.sports != profile.sports() && !filters.sports.isEmpty())
-            continue;
-        if (filters.skin != profile.skin() && !filters.skin.isEmpty())
-            continue;
-        if (filters.scope != profile.scope() && !filters.scope.isEmpty())
-            continue;
-        if (filters.direction != profile.direction() && !filters.direction.isEmpty())
-            continue;
-        if (filters.workStyle != profile.workStyle() && !filters.workStyle.isEmpty())
-            continue;
-        if (filters.fashion != profile.fashion() && !filters.fashion.isEmpty())
-            continue;
-        */
-
-        profiles.append(profile);
-    }
-    emit sendProfileToSearchToUi(profiles);
 }

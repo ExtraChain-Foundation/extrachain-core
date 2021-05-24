@@ -82,7 +82,7 @@ public slots:
     //    void newMsg(const QByteArray &message, const SocketPafir &receiver);
     void process();
     void startDFSNetwork();
-    void uiReconnect();
+    void reconnect();
     void titleArrived(Network::DataStruct ds);
     void removeResolver(DFSResolverService::FinishStatus status);
 

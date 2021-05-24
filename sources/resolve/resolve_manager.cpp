@@ -22,10 +22,10 @@
 #include "datastorage/blockchain.h"
 #include "network/network_manager.h"
 #include "resolve/resolver_service.h"
-#include "managers/node_manager.h"
+#include "managers/extrachain_node.h"
 #include "managers/chatmanager.h"
 
-void ResolveManager::setNode(NodeManager *value)
+void ResolveManager::setNode(ExtraChainNode *value)
 {
     node = value;
 }

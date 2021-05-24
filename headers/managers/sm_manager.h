@@ -27,7 +27,6 @@
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
 #include "enc/key_private.h"
-#include "profile/profile.h"
 #include "datastorage/transaction.h"
 
 class SmartContractManager : public QObject

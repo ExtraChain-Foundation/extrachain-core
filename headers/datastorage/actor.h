@@ -27,7 +27,6 @@
 #include "utils/bignumber.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
-#include "profile/profile.h"
 #include "profile/public_profile.h"
 
 /**

@@ -26,9 +26,7 @@
 #include <QDir>
 #include <QDateTime>
 #include <iostream>
-#ifdef ECLIENT
-#include "ui/model/abstractmodel.h"
-#endif
+#include "utils/variant_model.h"
 
 class LogsManager : public QObject
 {
@@ -53,12 +51,10 @@ public:
 
     static bool toConsole;
     static bool toFile;
-    static bool toQml;
+    static bool toModel;
     static bool antiFilter;
     static bool debugLogs;
-#ifdef ECLIENT
-    static AbstractModel logs;
-#endif
+    static VariantModel logs;
 
     static QStringList filesFilter;
     static void setFilesFilter(const QStringList& value);

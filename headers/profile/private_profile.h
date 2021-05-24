@@ -30,7 +30,7 @@ class PrivateProfile : public QObject
 {
     Q_OBJECT
 private:
-    AccountController *acContorller;
+    AccountController *accController;
     Dfs *dfs;
 public slots:
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
@@ -49,7 +49,7 @@ signals:
     void setIdProfile(QByteArray id);
     void setHashProfile(QByteArray hash);
     void initActorChatM();
-    void infoToUi(const QByteArray &info, const QString &type);
+    void infoAvailabled(const QByteArray &info, const QString &type);
     void loginError(int error);
     void finished();
 

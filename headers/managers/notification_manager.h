@@ -58,9 +58,10 @@ public slots:
     void addNotify(const Notification newNtf);
     void setCurrentID(const QByteArray id);
     void process();
+
 signals:
-    void allNotifyToUI(QList<Notification> ntf);
-    void newNotifyToUI(Notification ntf);
+    void allNotificationsAvailabled(QList<Notification> ntf);
+    void newNotificationAvailabled(Notification ntf);
     void getCurrentID();
     void finished();
     void sendEditSql(QString userId, QString fileName, DfsStruct::Type type, int sqlType,
