@@ -67,8 +67,12 @@ PublicProfile::PublicProfile(const QByteArray &serialize)
 QByteArray PublicProfile::serialize() const
 {
     QFile profile(idPath);
-    profile.open(QIODevice::ReadOnly);
-    QByteArray data = profile.readAll() + idPath.toLatin1() + Utils::intToByteArray(idPath.size(), 4) + sign
+    if (!profile.open(QIODevice::ReadOnly))
+        return "";
+    auto fileData = profile.readAll();
+    if (fileData.isEmpty())
+        return "";
+    QByteArray data = fileData + idPath.toLatin1() + Utils::intToByteArray(idPath.size(), 4) + sign
         + Utils::intToByteArray(sign.size(), 4) + id + Utils::intToByteArray(id.size(), 4);
     profile.flush();
     profile.close();
@@ -107,7 +111,7 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
 
 bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
 {
-    QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/");
+    QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/");
     QFile profile(idPath);
     if (profile.exists())
     {
@@ -121,11 +125,14 @@ bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
             sign = "";
             return false;
         }
-        else
+        else {
             profile.resize(0);
+        }
     }
-    profile.open(QIODevice::WriteOnly);
-    profile.write(newProfile);
+    if (!profile.open(QIODevice::WriteOnly))
+        return false;
+    if (profile.write(newProfile) < 1)
+        return false;
     profile.flush();
     profile.close();
 

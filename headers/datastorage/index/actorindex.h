@@ -48,6 +48,7 @@ private:
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
+    QMap<QByteArray, QByteArray> profilesHandle;
 
 public:
     QByteArray *companyId = nullptr;
