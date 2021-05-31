@@ -593,13 +593,11 @@ QString Utils::detectCompiler()
 #error "Compiler not supported"
 #endif
 
+#ifndef Q_OS_ANDROID
 #ifdef __GNUC__
-#ifdef __MINGW32__
-    QString gcc = "MinGW";
-#else
     QString gcc = "GCC";
-#endif
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
+#endif
 #endif
 
 #if _MSC_VER && !__INTEL_COMPILER
