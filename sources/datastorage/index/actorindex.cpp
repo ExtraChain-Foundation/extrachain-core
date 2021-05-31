@@ -127,13 +127,12 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     {
         resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse,
                                             reqHash, receiver);
-        //        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
-        //        receiver);
+        // emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
 
         auto profileData = actor.profile().serialize();
-        if (profileData.isEmpty()) {
+        if (!profileData.isEmpty()) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
-        } else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company) {
+        } else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company) { // if profile not exist
             qDebug() << "NO PROFILE >" << actorId;
             Messages::GetActorMessage msg;
             msg.actorId = actorId;
