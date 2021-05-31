@@ -45,14 +45,22 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {
-        return Actor<KeyPublic>(serializedActor);
+        auto actor = Actor<KeyPublic>(serializedActor);
+
+        if (actor.account() == ActorType::Account && actor.profile().sign.isEmpty()) {
+            Messages::GetActorMessage msg;
+            msg.actorId = id;
+            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        }
+
+        return actor;
     }
     else
     {
         Messages::GetActorMessage msg;
         msg.actorId = id;
         resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
-        //        emit sendMessage(msg.serialize(), getActorMessage);
+        // emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "There no actor with id:" << id;
         return Actor<KeyPublic>();
     }
@@ -122,11 +130,10 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         //        emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash,
         //        receiver);
 
-        if (!actor.profile().getProfile().isEmpty())
-            resolveManager->registrateMsg(actor.profile().serialize(),
-                                          Messages::ChainMessage::profileMessage);
-        else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company)
-        {
+        auto profileData = actor.profile().serialize();
+        if (profileData.isEmpty()) {
+            resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
+        } else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company) {
             qDebug() << "NO PROFILE >" << actorId;
             Messages::GetActorMessage msg;
             msg.actorId = actorId;
@@ -179,6 +186,11 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
     {
     case 0:
         qDebug() << QString("New actor [%1] is successfully saved").arg(QString(actor.serialize()));
+
+        // TODO: remove me?
+        if (actor.account() == ActorType::Account && profilesHandle.contains(actor.id().toActorId())) {
+            saveProfileFromNetwork(profilesHandle[actor.id().toActorId()]);
+        }
         break;
     case Errors::FILE_ALREADY_EXISTS:
         qDebug() << QString("New actor [%1] can't be added: it is already in storage")
@@ -226,24 +238,34 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &
 void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
 {
     PublicProfile profile(newProfile);
-    if (profile.sign == "")
+    if (profile.sign == "" || newProfile.isEmpty())
         return;
     Actor<KeyPublic> actor = getActor(profile.id);
     if (actor.empty())
     {
         qDebug() << "ACTOR INDEX: WE DON`T HAVE ACTOR";
+        profilesHandle[profile.id] = newProfile;
         return;
     }
 
     QByteArray profileData = PublicProfile::getProfileDataFromNetwork(newProfile);
+    if (profileData.isEmpty()) {
+        return;
+    }
 
     if (actor.key()->verify(profileData, profile.sign))
     {
         qDebug() << "Save publicProfile with id:" << profile.id;
-        if (actor.profile().saveProfileFromNet(profile.dataToProfile))
+        bool isSaved = actor.profile().saveProfileFromNet(profile.dataToProfile);
+
+        if (isSaved)
         {
-            emit profileAvailabled(profile.id, actor.profile().getListProfile());
+            if (profile.serialize().isEmpty()) {
+                return;
+            }
+
             resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
+            emit profileAvailabled(profile.id, actor.profile().getListProfile());
         }
     }
     else

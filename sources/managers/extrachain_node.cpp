@@ -68,7 +68,7 @@ ExtraChainNode::ExtraChainNode()
 
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    // getAllActorsTimer.start(30000);
+    getAllActorsTimer.start(30000);
 
     ThreadPool::addThread(blockchain);
     ThreadPool::addThread(actorIndex);
@@ -429,9 +429,13 @@ void ExtraChainNode::getAllActorsTimerCall()
         emit getAllActorsNode(res, true);
 #endif
 #ifdef ECONSOLE
-    QByteArray res2 = accController->getMainActor()->id().toActorId();
-    if (!res2.isEmpty())
-        emit getAllActorsNode(res2, true);
+    if (accController->getAccountCount() > 0) {
+        QByteArray res2 = accController->getMainActor()->id().toActorId();
+
+        if (!res2.isEmpty()) {
+            emit getAllActorsNode(res2, true);
+        }
+    }
 #endif
 }
 
