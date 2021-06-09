@@ -1031,7 +1031,7 @@ QStringList Dfs::tmpFiles() const
 
 void Dfs::dfsSyncUsers(QList<QString> userId, const SocketPair &receiver)
 {
-    for (QString s : userId)
+    for (const QString &s : qAsConst(userId))
     {
         //        if (dfsValidate(s.toUtf8()))
         //        {
@@ -1182,7 +1182,7 @@ QList<QByteArray> Dfs::dfsValidateAll()
     // if (pos != -1)
     //     acList.removeAt(pos);
     QList<QByteArray> res;
-    for (QString user : acList)
+    for (const QString &user : acList)
     {
         bool validated = dfsValidate(user.toUtf8());
         if (!validated)

@@ -75,7 +75,8 @@ bool BaseMessage::isEmpty() const
 QByteArray BaseMessage::concatenateAllData() const
 {
     QByteArray concatenatedData;
-    for (QByteArray d : serializedParams())
+    const auto params = serializedParams();
+    for (const QByteArray &d : params)
     {
         // in entry data for digSig calculation we don't need digSig field
         if (d != digSig)

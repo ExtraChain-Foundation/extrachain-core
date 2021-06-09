@@ -195,7 +195,7 @@ QByteArray PublicProfile::serialize(QByteArrayList profileList)
     QByteArray actorData = "";
     int count = -1;
     QByteArray index = "";
-    for (QByteArray element : profileList)
+    for (const QByteArray &element : qAsConst(profileList))
     {
         if (count == -1)
         {

@@ -386,7 +386,7 @@ void ChatManager::requestChatList()
     {
         tempusersList.clear();
         tempUsers = currentChat->getAllUsers();
-        for (auto user : qAsConst(tempUsers))
+        for (const auto &user : qAsConst(tempUsers))
             tempusersList.append(user);
 
         chats.append(ChatInfo { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });

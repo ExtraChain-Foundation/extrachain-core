@@ -47,7 +47,7 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     {
         auto actor = Actor<KeyPublic>(serializedActor);
 
-        if (actor.account() == ActorType::Account && actor.profile().sign.isEmpty()) {
+        if (actor.account() == ActorType::Account && actor.profile().sign.isEmpty()) { //
             Messages::GetActorMessage msg;
             msg.actorId = id;
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
@@ -125,12 +125,14 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty())
     {
-        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse,
-                                            reqHash, receiver);
         // emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
-
         auto profileData = actor.profile().serialize();
-        if (!profileData.isEmpty()) {
+        bool isProfile = !profileData.isEmpty();
+
+        resolveManager->sendMessageResponse(QByteArray::number(isProfile) + actor.serialize(),
+                                            Messages::GeneralResponse::getActorResponse, reqHash, receiver);
+
+        if (isProfile) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
         } else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company) { // if profile not exist
             qDebug() << "NO PROFILE >" << actorId;
@@ -138,7 +140,8 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
             msg.actorId = actorId;
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         }
-        //            emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
+
+        // emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
     }
     else
     {
@@ -179,7 +182,7 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
     }
 }
 
-void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
+void ActorIndex::handleNewActor(Actor<KeyPublic> actor, bool profileExist)
 {
     switch (addActor(actor))
     {
@@ -207,15 +210,6 @@ void ActorIndex::handleNewAllActors(QByteArrayList actors)
 {
     for (const QByteArray &actor : actors)
         getActor(actor);
-}
-
-void ActorIndex::handleNewActorCheck(Actor<KeyPublic> actor)
-{
-    if (getActor(actor.id()).empty())
-    {
-        handleNewActor(actor);
-        emit ActorIsMissing(actor);
-    }
 }
 
 void ActorIndex::setResolveManager(ResolveManager *value)
@@ -453,7 +447,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.id() << " was added";
-        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
+        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage); //
         // emit sendMessage(actor.serialize(), classType);
         qDebug() << "emit signal for init dfs for user" << actor.id().toActorId();
         emit initDfs(actor.id());
@@ -487,8 +481,8 @@ void ActorIndex::removeAll()
     qDebug() << "Clearing file index:" << folderPath;
 
     QDir folder(folderPath);
-    for (const QString &section :
-         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name))
+    const auto folders = folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
+    for (const QString &section : qAsConst(folders))
     {
         QDir dir(folderPath + QString("/") + section);
         dir.removeRecursively();

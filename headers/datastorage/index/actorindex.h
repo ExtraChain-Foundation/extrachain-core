@@ -126,7 +126,7 @@ public:
      * @brief Attempts to save actor to local storage
      * @param actor
      */
-    void handleNewActor(Actor<KeyPublic> actor);
+    void handleNewActor(Actor<KeyPublic> actor, bool profileExist);
     /**
      * @brief Serializes an actor and make a file in fs.
      * @param actor
@@ -146,12 +146,6 @@ public slots:
     void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
     void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
     void getAllActors(BigNumber id, bool isUser);
-    /**
-     * @brief The same as handleNewActor, but emit's ActorIsMissing signal
-     * if there no such actor in storage
-     * @param actor
-     */
-    void handleNewActorCheck(Actor<KeyPublic> actor);
     void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile);
@@ -187,11 +181,6 @@ signals:
 
     void initDfs(BigNumber userId);
     void initContractList(QVariantMap map);
-    /**
-     * @brief There no such actor in the local storage
-     * @param actor
-     */
-    void ActorIsMissing(Actor<KeyPublic> actor);
     void finished();
 };
 

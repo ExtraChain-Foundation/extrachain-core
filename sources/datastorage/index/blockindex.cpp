@@ -594,8 +594,8 @@ void BlockIndex::removeAll()
     qDebug() << "Clearing file index:" << folderPath;
 
     QDir folder(folderPath);
-    for (const QString &section :
-         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name))
+    const auto folders = folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
+    for (const QString &section : qAsConst(folders))
     {
         QDir dir(folderPath + QString("/") + section);
         dir.removeRecursively();

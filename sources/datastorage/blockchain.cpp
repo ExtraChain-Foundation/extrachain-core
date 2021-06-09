@@ -476,7 +476,8 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
     }
     else if (!block.isEmpty())
     {
-        for (const Transaction &tx : block.extractTransactions())
+        const auto transactions = block.extractTransactions();
+        for (const Transaction &tx : qAsConst(transactions))
         {
             if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
                 break;
@@ -1417,7 +1418,9 @@ void Blockchain::showBlockchain() const
     } while (!currentBlock.isEmpty());
     GenesisBlock genBlock = blockIndex.getLastGenesisBlock();
     qDebug() << "Genesis block: ";
-    for (const auto &dataGen : genBlock.extractDataRows())
+
+    auto extra = genBlock.extractDataRows();
+    for (const auto &dataGen : qAsConst(extra))
     {
         qDebug() << &dataGen;
     }
@@ -1538,10 +1541,11 @@ void Blockchain::addBlockToBlockchain(Block block)
 {
     addBlock(block);
     QList<Transaction> list = block.extractTransactions();
-    for (const auto &tmp : list)
+    for (const auto &tmp : qAsConst(list))
     {
         QList<BigNumber> list;
-        for (const auto &tmp : accountController->getAccounts())
+        auto accounts = accountController->getAccounts();
+        for (const auto &tmp : qAsConst(accounts))
             list.append(tmp->id());
         QByteArray data = tmp.getData();
         if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)

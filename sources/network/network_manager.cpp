@@ -144,7 +144,7 @@ void NetManager::disconnectSocket(SocketService *connection)
 
 void NetManager::removeConnectionByAddress(QByteArray address)
 {
-    for (auto i : connections)
+    for (auto i : qAsConst(connections))
     {
         if (i->getAddress() == address)
         {
@@ -174,7 +174,7 @@ NetManager::~NetManager()
     delete local;
     delete serverService;
     //    delete discoveryService;
-    for (auto delSock : connections)
+    for (auto delSock : qAsConst(connections))
     {
         //        delSock->get
         delSock->getSocket()->disconnectFromHost();
@@ -274,7 +274,7 @@ void NetManager::checkMyIdentificator()
         connection->removeMe();
 
     // short counter = 0;
-    for (SocketService *el : connections)
+    for (SocketService *el : qAsConst(connections))
     {
         if (el->getIdentificator() == connection->getIdentificator() && el != connection)
         {
@@ -341,7 +341,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
 
     bool connectionIsActive;
     QByteArray currentId;
-    for (auto ip : ipList)
+    for (const auto &ip : qAsConst(ipList))
     {
         idIpPair = Serialization::deserialize(ip);
         currentId = (getConnectionByAddress(idIpPair[1])).getID().toByteArray();
@@ -439,10 +439,19 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
         send = typeSend;
     }
 
-    if (connections.isEmpty()) // TODO: write type send
+    auto allActive = [this] {
+        for (const auto &tmp : qAsConst(connections)) {
+            if (tmp->getActive())
+                return true;
+        }
+
+        return false;
+    };
+
+    if (connections.isEmpty() || !allActive())
         saveToCache(message, msgType, receiver, send);
 
-    for (const auto &tmp : connections)
+    for (const auto &tmp : qAsConst(connections))
     {
         bool isSend = false;
 
@@ -465,8 +474,6 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
             continue;
         if (tmp->getActive())
             tmp->distMsg(message, receiver);
-        // else
-        //     saveToCache(message, msgType, receiver, send);
     }
 
     //    if (checkMsgCount(message, handler, connections))
@@ -524,7 +531,7 @@ void NetManager::sendFromCache()
     file.close();
     file.remove();
 
-    for (QByteArray packageData : allPackages)
+    for (const QByteArray &packageData : qAsConst(allPackages))
     {
         QByteArrayList package = Serialization::deserialize(packageData, 8);
         if (package.length() != 6)
@@ -711,7 +718,7 @@ QByteArray NetManager::getSerializedConnectionList() const
 void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
 {
     QList<QByteArray> idAddressPair;
-    for (auto i : tempConnections)
+    for (const auto &i : qAsConst(tempConnections))
     {
         idAddressPair = Serialization::deserialize(i);
         if (idAddressPair.size() != 2)

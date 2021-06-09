@@ -287,7 +287,7 @@ void ResolverService::resolveGeneralTask()
     case Messages::ChainMessage::actorMessage: {
         Actor<KeyPublic> actor(message.data);
         actorIndex->handleNewActor(actor);
-        //        emit newActor(actor);
+        // emit newActor(actor);
         finishWork();
         break;
     }
@@ -395,7 +395,7 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data));
+        actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data.mid(1)), responseMessage.data.left(1).toInt());
         finishWork();
         break;
     }
