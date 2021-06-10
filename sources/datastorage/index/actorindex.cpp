@@ -46,8 +46,7 @@ Actor<KeyPublic> ActorIndex::getActor(const BigNumber &id)
     if (!serializedActor.isEmpty())
     {
         auto actor = Actor<KeyPublic>(serializedActor);
-
-        if (actor.account() == ActorType::Account && actor.profile().sign.isEmpty()) { //
+        if (actor.account() == ActorType::Account && actor.profile().sign.isEmpty()) {
             Messages::GetActorMessage msg;
             msg.actorId = id;
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
@@ -135,10 +134,19 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         if (isProfile) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
         } else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company) { // if profile not exist
+            static QMap<QByteArray, qint64> tempCheck;
             qDebug() << "NO PROFILE >" << actorId;
-            Messages::GetActorMessage msg;
-            msg.actorId = actorId;
-            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+
+            auto current = QDateTime::currentSecsSinceEpoch();
+            auto actorIdBytes = actorId.toActorId();
+            if (tempCheck[actorIdBytes] < current - 10)
+            {
+                qDebug() << "[Actor] Send get actor if no profile:" << actorId;
+                tempCheck[actorIdBytes] = current;
+                Messages::GetActorMessage msg;
+                msg.actorId = actorId;
+                resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+            }
         }
 
         // emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
@@ -182,7 +190,7 @@ void ActorIndex::getAllActors(BigNumber id, bool isUser)
     }
 }
 
-void ActorIndex::handleNewActor(Actor<KeyPublic> actor, bool profileExist)
+void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
 {
     switch (addActor(actor))
     {
@@ -447,7 +455,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
         qDebug() << "ActorIndex: actor - " << actor.id() << " was added";
-        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage); //
+        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
         // emit sendMessage(actor.serialize(), classType);
         qDebug() << "emit signal for init dfs for user" << actor.id().toActorId();
         emit initDfs(actor.id());

@@ -220,6 +220,16 @@ void NetManager::findLocal()
             if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
+#ifdef Q_OS_WINDOWS
+            QTcpSocket *socket = new QTcpSocket;
+            socket->bind(entry.ip());
+            socket->connectToHost("8.8.8.8", 53);
+            bool isConnected = socket->waitForConnected(1000);
+            socket->deleteLater();
+            if (!isConnected)
+                continue;
+#endif
+
             if (localIpNotConnect.contains(entry.ip()))
             {
                 QString name = networkInterface.name();
@@ -439,7 +449,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
         send = typeSend;
     }
 
-    auto allActive = [this] {
+    auto allActive = [this] { //
         for (const auto &tmp : qAsConst(connections)) {
             if (tmp->getActive())
                 return true;
@@ -634,8 +644,8 @@ void NetManager::removeConnection()
 
     SocketService *connection = qobject_cast<SocketService *>(sender);
     disconnectSocket(connection);
+    emit connection->finished();
     connections.removeAt(connections.indexOf(connection));
-    connection->finished();
     checkConnectionsStatus();
 }
 

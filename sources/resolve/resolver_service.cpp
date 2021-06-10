@@ -395,7 +395,8 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data.mid(1)), responseMessage.data.left(1).toInt());
+
+        actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data));
         finishWork();
         break;
     }
