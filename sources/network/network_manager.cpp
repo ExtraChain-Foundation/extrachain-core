@@ -276,12 +276,15 @@ void NetManager::checkMyIdentificator()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
+    bool removed = false;
 
     if (connection == nullptr)
         return;
 
-    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator())
-        connection->removeMe();
+    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator()) {
+        emit connection->removeMe();
+        removed = true;
+    }
 
     // short counter = 0;
     for (SocketService *el : qAsConst(connections))
@@ -292,6 +295,11 @@ void NetManager::checkMyIdentificator()
             // return;
         }
     }
+
+    if (removed) {
+        return;
+    }
+
     emit connection->setActiveSignal(true);
     emit newSocket();
     //    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {

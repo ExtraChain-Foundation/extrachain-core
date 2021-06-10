@@ -128,8 +128,7 @@ void ActorIndex::handleGetActor(const BigNumber &actorId, QByteArray reqHash, co
         auto profileData = actor.profile().serialize();
         bool isProfile = !profileData.isEmpty();
 
-        resolveManager->sendMessageResponse(QByteArray::number(isProfile) + actor.serialize(),
-                                            Messages::GeneralResponse::getActorResponse, reqHash, receiver);
+        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse, reqHash, receiver);
 
         if (isProfile) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
