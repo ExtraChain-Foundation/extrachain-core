@@ -1,5 +1,5 @@
 QT += concurrent
-VERSION = 0.8.1
+VERSION = 0.8.4
 win32: CONFIG += precompile_header
 win32: PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
 INCLUDEPATH += $$PWD/headers

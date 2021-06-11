@@ -187,6 +187,7 @@ NetManager::~NetManager()
 
 void NetManager::findLocal()
 {
+    /*
     const auto allInterfaces = QNetworkInterface::allInterfaces();
     const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
     QList<QHostAddress> localIpNotConnect;
@@ -247,6 +248,27 @@ void NetManager::findLocal()
             }
         }
     }
+    */
+
+    QHostAddress ip;
+
+    auto addresses = QNetworkInterface::allAddresses();
+    for (auto &address : addresses)
+    {
+#ifdef QT_DEBUG
+        qDebug().noquote() << "[NetworkManager] Find address" << address.toString();
+#endif
+
+        if (address != QHostAddress::LocalHost && address.toIPv4Address())
+            ip = address;
+    }
+
+    if (ip.toString().isEmpty())
+        qFatal("ip error");
+
+    local = new QNetworkAddressEntry();
+    local->setIp(ip);
+    qDebug().noquote() << "[NetworkManager] Local:" << ip.toString();
 }
 
 void NetManager::checkConnectionsStatus()
