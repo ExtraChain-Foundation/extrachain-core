@@ -187,7 +187,6 @@ NetManager::~NetManager()
 
 void NetManager::findLocal()
 {
-    /*
     const auto allInterfaces = QNetworkInterface::allInterfaces();
     const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
     QList<QHostAddress> localIpNotConnect;
@@ -200,8 +199,7 @@ void NetManager::findLocal()
         {
             if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
             {
-                qDebug() << "NET MANAGER: Find local ip candidate:" << address.ip().toString()
-                         << networkInterface;
+                qDebug() << "[NetManager] Find local ip candidate:" << networkInterface;
                 localIpNotConnect.append(address.ip());
             }
         }
@@ -241,34 +239,13 @@ void NetManager::findLocal()
                     || name.left(8) == "wireless")
                 {
                     local = new QNetworkAddressEntry(entry);
-                    qDebug() << this << "Discovered local:" << local->ip().toString()
-                             << networkInterface.name();
+                    qDebug().noquote() << "[NetManager] Discovered local:" << local->ip().toString()
+                                       << networkInterface.name();
                     return;
                 }
             }
         }
     }
-    */
-
-    QHostAddress ip;
-
-    auto addresses = QNetworkInterface::allAddresses();
-    for (auto &address : addresses)
-    {
-#ifdef QT_DEBUG
-        qDebug().noquote() << "[NetworkManager] Find address" << address.toString();
-#endif
-
-        if (address != QHostAddress::LocalHost && address.toIPv4Address())
-            ip = address;
-    }
-
-    if (ip.toString().isEmpty())
-        qFatal("ip error");
-
-    local = new QNetworkAddressEntry();
-    local->setIp(ip);
-    qDebug().noquote() << "[NetworkManager] Local:" << ip.toString();
 }
 
 void NetManager::checkConnectionsStatus()
@@ -303,7 +280,8 @@ void NetManager::checkMyIdentificator()
     if (connection == nullptr)
         return;
 
-    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator()) {
+    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator())
+    {
         emit connection->removeMe();
         removed = true;
     }
@@ -318,7 +296,8 @@ void NetManager::checkMyIdentificator()
         }
     }
 
-    if (removed) {
+    if (removed)
+    {
         return;
     }
 
@@ -480,7 +459,8 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
     }
 
     auto allActive = [this] { //
-        for (const auto &tmp : qAsConst(connections)) {
+        for (const auto &tmp : qAsConst(connections))
+        {
             if (tmp->getActive())
                 return true;
         }
