@@ -29,6 +29,7 @@ ActorIndex::ActorIndex(QObject *parent)
     : QObject(parent)
 
 {
+    DBConnector db;
     bool isDbOpen = db.open(folderPath.toStdString() + "actors");
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
@@ -432,8 +433,7 @@ int ActorIndex::add(const BigNumber &id, const QByteArray &data)
         qDebug() << "[ActorIndex] Can't save the file" << path << "(file already exits)";
         return Errors::FILE_ALREADY_EXISTS;
     }
-    if (!file.exists())
-        this->records++;
+
     if (file.open(QIODevice::WriteOnly))
     {
         file.write(data);
@@ -453,7 +453,7 @@ QByteArray ActorIndex::getById(const BigNumber &id) const
     QFile file(filePath);
     if (!file.exists())
     {
-        qCritical() << "[&ActorIndex] file with path >>> " << filePath << "not found";
+        qCritical() << "[ActorIndex] File with path" << filePath << "not found";
         return QByteArray();
     }
     file.open(QIODevice::ReadOnly);
@@ -475,6 +475,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)
     {
+        this->records++;
+        DBConnector db;
+        db.open(folderPath.toStdString() + "actors");
         bool dbInsert = db.insert(Config::DataStorage::actorsTable,
                                   { { "id", actorId.toStdString() }, { "type", actor.accountStdString() } });
         if (!dbInsert)
@@ -494,6 +497,8 @@ QByteArrayList ActorIndex::allActors()
 {
     QByteArrayList result;
 
+    DBConnector db;
+    db.open(folderPath.toStdString() + "actors");
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors)
     {

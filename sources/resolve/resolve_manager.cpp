@@ -165,13 +165,13 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     rmsg.data = data;
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
-    qDebug() << "sending" << msgType;
+    qDebug() << "[ResolveManager] Sending" << msgType;
     if (msgType != Messages::GeneralResponse::getActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetManager: send " << msgType;
-    if (msgType == Messages::GeneralResponse::getAllActorsResponse)
-        qDebug() << "306 is sending";
+    // if (msgType == Messages::GeneralResponse::getAllActorsResponse)
+    //     qDebug() << "306 is sending";
     //    sendMessage(message, msgType, receiver);
     //    networkManager->distMessage(rmsg.serialize(), receiver);
     networkManager->sendMessage(rmsg.serialize(), msgType, receiver);

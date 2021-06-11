@@ -49,7 +49,6 @@ private:
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
     QMap<QByteArray, QByteArray> profilesHandle;
-    DBConnector db;
 
 public:
     QByteArray *companyId = nullptr;
@@ -72,6 +71,13 @@ private:
      */
     QString buildFilePath(const QByteArray &id) const;
     QString buildPathPubProfile(const QByteArray &id);
+    /**
+     * @brief add
+     * @param BigNumber id actorId for add
+     * @param data
+     * @return
+     */
+    int add(const BigNumber &id, const QByteArray &data);
 
 public:
     /**
@@ -110,17 +116,9 @@ public:
      * @return
      */
     QByteArray getById(const BigNumber &id) const;
-    /**
-     * @brief add
-     * @param BigNumber id actorId for add
-     * @param data
-     * @return
-     */
-    int add(const BigNumber &id, const QByteArray &data);
+
     qint64 getRecords() const;
-
     void setCompanyId(QByteArray *value);
-
     QString getFolderPath() const;
 
     /**
