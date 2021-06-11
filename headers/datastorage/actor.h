@@ -244,6 +244,16 @@ public:
         return m_account;
     }
 
+    QString accountString() const
+    {
+        return QString::number(m_account);
+    }
+
+    std::string accountStdString() const
+    {
+        return std::to_string(int(m_account));
+    }
+
     Actor<KeyPublic> convertToPublic()
     {
         Actor<KeyPublic> actor;

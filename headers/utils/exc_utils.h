@@ -389,6 +389,13 @@ namespace DataStorage {
           "canStaking   INT              NOT NULL  "
           ");";
 
+    static const std::string actorsTable = "Actors";
+    static const std::string actorsTableCreate = "CREATE TABLE IF NOT EXISTS " + actorsTable
+        + " ("
+          "id   TEXT PRIMARY KEY NOT NULL, "
+          "type INT              NOT NULL  "
+          ");";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

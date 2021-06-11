@@ -44,11 +44,12 @@ class ActorIndex : public QObject
 private:
     AccountController *accController;
     ResolveManager *resolveManager = nullptr;
-    BigNumber records = 0;
+    qint64 records = 0;
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
     QMap<QByteArray, QByteArray> profilesHandle;
+    DBConnector db;
 
 public:
     QByteArray *companyId = nullptr;
@@ -116,7 +117,7 @@ public:
      * @return
      */
     int add(const BigNumber &id, const QByteArray &data);
-    BigNumber getRecords() const;
+    qint64 getRecords() const;
 
     void setCompanyId(QByteArray *value);
 
