@@ -21,7 +21,7 @@
 #define KEY_PUBLIC_H
 
 #include <string>
-#include "headers/utils/exc_utils.h"
+#include "utils/exc_utils.h"
 #include <sodium.h>
 #include <QDebug>
 

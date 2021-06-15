@@ -54,7 +54,7 @@ private:
 
 public slots:
     /*DFS 1.5*/
-    void dfsSyncUsers(QList<QString> userId, const SocketPair &receiver = SocketPair());
+    void dfsSyncUsers(QByteArrayList actors, const SocketPair &receiver = SocketPair());
     void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
     bool dfsValidate(QByteArray userId);

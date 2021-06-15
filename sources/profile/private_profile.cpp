@@ -35,7 +35,7 @@ void PrivateProfile::setDfs(Dfs *value)
 
 void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray &id)
 {
-    QDir().mkdir(PathProfile);
+    QDir().mkpath(PathProfile);
     QMap<QString, QByteArray> map;
     set(map, "wallet", id);
     QByteArray data = "";
@@ -56,7 +56,7 @@ void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, c
     QByteArray hashLogin = profile.first;
     QByteArray idProfile = profile.second;
 
-    QDir().mkdir(PathProfile);
+    QDir().mkpath(PathProfile);
     QFile file(PathProfile + "/" + idProfile + ".private");
     if (!file.exists())
     {

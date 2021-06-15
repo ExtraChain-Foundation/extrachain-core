@@ -208,7 +208,7 @@ void LogsManager::offConsole()
 
 void LogsManager::onFile()
 {
-    QDir().mkdir("logs");
+    QDir().mkpath("logs");
     LogsManager::toFile = true;
 }
 
@@ -231,7 +231,7 @@ void LogsManager::etHandler()
 {
     std::ios_base::sync_with_stdio(false);
 
-    QDir().mkdir("logs");
+    QDir().mkpath("logs");
     qInstallMessageHandler(LogsManager::messageHandler);
 
 #ifdef Q_OS_WIN

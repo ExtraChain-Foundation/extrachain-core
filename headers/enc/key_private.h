@@ -22,7 +22,7 @@
 
 #include <QDebug>
 #include <sodium.h>
-#include "headers/utils/exc_utils.h"
+#include "utils/exc_utils.h"
 
 class KeyPrivate
 {

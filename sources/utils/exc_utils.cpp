@@ -314,7 +314,7 @@ void Utils::wipeDataFiles()
     QString dataName = Utils::dataName().replace("/", "");
     qDebug() << "wipe dataName" << dataName;
     QDir(dataName).removeRecursively();
-    QDir().mkdir(dataName);
+    QDir().mkpath(dataName);
 
     QString shareFolder =
         QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";

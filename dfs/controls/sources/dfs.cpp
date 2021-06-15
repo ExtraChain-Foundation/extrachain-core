@@ -253,8 +253,8 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
 
 void Dfs::initDFS(const QByteArray &userId)
 {
-    QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME);
-    QDir().mkdir(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId);
+    QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME);
+    QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId);
     QList<QByteArray> subPathList = { "/images/", "/video/",    "/events/",  "/chats/",
                                       "/posts/",  "/services/", "/private/", "/files/" };
 
@@ -1029,14 +1029,12 @@ QStringList Dfs::tmpFiles() const
     return m_tmpFiles;
 }
 
-void Dfs::dfsSyncUsers(QList<QString> userId, const SocketPair &receiver)
+void Dfs::dfsSyncUsers(QByteArrayList actors, const SocketPair &receiver)
 {
-    for (const QString &s : qAsConst(userId))
+    for (const auto &s : qAsConst(actors))
     {
-        //        if (dfsValidate(s.toUtf8()))
-        //        {
-        requestCardById(s.toLatin1(), receiver);
-        //        }
+        // if (dfsValidate(s.toUtf8())) {
+        requestCardById(s, receiver);
     }
 }
 
@@ -1047,10 +1045,8 @@ void Dfs::dfsSyncT()
 
     dfsValidateAll();
     QByteArray mainActor = accountControler->getMainActor()->id().toActorId();
-    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
-    QStringList acList =
-        !myQuickMode ? acDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot) : QStringList { mainActor };
-    dfsSyncUsers(acList);
+    QByteArrayList actors = !myQuickMode ? actorIndex->allActors() : QByteArrayList { mainActor };
+    dfsSyncUsers(actors);
 }
 
 void Dfs::dfsSync(const SocketPair &receiver)
