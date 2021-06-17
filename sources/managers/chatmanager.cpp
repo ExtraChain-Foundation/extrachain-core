@@ -594,7 +594,7 @@ ChatManager::~ChatManager()
 
 void ChatManager::ActorInit()
 {
-    this->_currentActorId = this->_accController->getMainActor()->id().toActorId();
+    this->_currentActorId = this->_accController->getMainActor()->id().toByteArray();
     /*
     QFile file("keystore/personal/currentID");
     file.open(QIODevice::ReadWrite);

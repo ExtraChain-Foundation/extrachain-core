@@ -124,7 +124,7 @@ bool ResolverService::validate(const Messages::BaseMessage &message)
     }
     else
     {
-        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
+        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toByteArray()));
         //        emit SendGetActor(signer);
         //        return false;
         this->thread()->sleep(5);
@@ -146,7 +146,7 @@ bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message)
         return false;
     }
     qWarning() << QString("Message [%1] digital sign is not valid. Signer was [%2]")
-                      .arg(QString::fromLocal8Bit(message.serialize()), QString(message.signer.toActorId()));
+                      .arg(QString::fromLocal8Bit(message.serialize()), message.signer.toString());
     return true;
 }
 

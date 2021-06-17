@@ -92,7 +92,7 @@ QList<QByteArray> BaseMessage::serializedParams() const
     if (signer.isEmpty())
         signeR = "";
     else
-        signeR = signer.toActorId();
+        signeR = signer.toByteArray();
     l << protocol << QByteArray::number(type) << signeR << digSig << data;
     return l;
 }

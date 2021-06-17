@@ -33,8 +33,8 @@ short Messages::GetTxPairMessage::getFieldsCount() const
 
 QByteArray GetTxPairMessage::serialize() const
 {
-    return Serialization::serialize({ senderId.toActorId(), receiverId.toActorId() },
-                                             GetTxPairMessage::FIELD_SIZE);
+    return Serialization::serialize({ senderId.toByteArray(), receiverId.toByteArray() },
+                                    GetTxPairMessage::FIELD_SIZE);
 }
 
 void GetTxPairMessage::deserialize(const QByteArray &serilaized)

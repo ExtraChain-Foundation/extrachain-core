@@ -51,7 +51,12 @@ public:
     ActorId() = default;
     ActorId(int actorId)
     {
-        id = BigNumber(actorId).toByteArray();
+        if (actorId == -1)
+        {
+            actorId = 0;
+        }
+
+        id = QByteArray::number(actorId);
         normalize();
     }
 
@@ -74,37 +79,19 @@ public:
         return *this;
     }
 
-    //    ActorId &operator=(const BigNumber &actorId)
-    //    {
-    //        this->id = actorId.toActorId();
-    //        return *this;
-    //    }
-
-    ActorId &operator=(int actorId)
+    bool operator==(const ActorId &actorId) const
     {
-        id = BigNumber(actorId).toByteArray();
-        normalize();
-        return *this;
+        return id == actorId.id;
     }
 
-    bool operator==(const BigNumber &actorId) const
+    bool operator!=(const ActorId &actorId) const
     {
-        return id == actorId;
-    }
-
-    bool operator!=(const BigNumber &actorId) const
-    {
-        return id != actorId;
+        return id != actorId.id;
     }
 
     QByteArray toByteArray() const
     {
         return id;
-    }
-
-    QByteArray toActorId() const
-    {
-        return toByteArray();
     }
 
     BigNumber toNumber() const
@@ -124,12 +111,7 @@ public:
 
     bool isEmpty() const
     {
-        return id.isEmpty();
-    }
-
-    friend inline bool operator==(const ActorId &l, const ActorId &r)
-    {
-        return l.id == r.id;
+        return id.isEmpty() || id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId)
@@ -163,7 +145,6 @@ protected:
 public:
     Actor()
     {
-        m_id = 0;
         m_key = nullptr;
         m_account = ActorType::Wallet;
     }
@@ -284,7 +265,7 @@ public:
             return pbKey->isEmpty();
         }
 
-        return m_id == BigNumber(-1);
+        return m_id.isEmpty();
     }
 
     /**
@@ -295,7 +276,7 @@ public:
      */
     QByteArray serialize() const
     {
-        QString actorId = QString(this->m_id.toActorId());
+        QString actorId = QString(this->m_id.toByteArray());
         int type = static_cast<uint32_t>(m_account);
 
         if (m_key == nullptr || empty())
@@ -321,8 +302,8 @@ public:
 
     PublicProfile profile()
     {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toActorId() + "/profile/";
-        return PublicProfile(m_id.toActorId(), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toByteArray() + "/profile/";
+        return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
 public:

@@ -89,7 +89,7 @@ QList<QByteArray> AccountController::getAccountID()
 {
     QList<QByteArray> list;
     for (int i = 0; i < accounts.size(); i++)
-        list.append(accounts[i]->id().toActorId());
+        list.append(accounts[i]->id().toByteArray());
     return list;
 }
 
@@ -106,7 +106,7 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     savePrivateActor(*actor, hashLogin);
     accounts.append(actor);
     if (accounts.size() - 1 == 0)
-        emit savePrivateProfile(actor->id().toActorId());
+        emit savePrivateProfile(actor->id().toByteArray());
 
     userNum = accounts.size() - 1;
 
@@ -226,8 +226,8 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
 {
     qDebug() << "Attempting to save Private Actor" << actor.id();
     if (!accounts.isEmpty())
-        emit editPrivateProfile(actor.id().toActorId());
-    QString fileName = KeyStore::makeKeyFileName(actor.id().toActorId());
+        emit editPrivateProfile(actor.id().toByteArray());
+    QString fileName = KeyStore::makeKeyFileName(actor.id().toByteArray());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
     QFile *file = new QFile(path);
@@ -281,7 +281,7 @@ void AccountController::changeUserNum(QByteArray wallId)
     for (const auto &currAcc : qAsConst(accounts))
     {
         // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
-        if (currAcc->id().toActorId() == wallId)
+        if (currAcc->id().toByteArray() == wallId)
         {
             emit updateTransactionListInModel();
             break;

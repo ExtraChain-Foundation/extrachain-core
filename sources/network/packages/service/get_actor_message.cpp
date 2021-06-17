@@ -41,7 +41,7 @@ short GetActorMessage::getFieldsCount() const
 
 QByteArray GetActorMessage::serialize() const
 {
-    return Serialization::serialize({ actorId.toActorId() }, GetActorMessage::FIELD_SIZE);
+    return Serialization::serialize({ actorId.toByteArray() }, GetActorMessage::FIELD_SIZE);
 }
 
 void GetActorMessage::deserialize(const QByteArray &serilaized)

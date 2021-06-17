@@ -169,9 +169,9 @@ void Transaction::calcHash()
 
 QByteArray Transaction::getDataForHash() const
 {
-    return (sender.toActorId() + receiver.toActorId() + amount.toByteArray() + QByteArray::number(date) + data
-            + token.toActorId() + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId()
-            + producer.toActorId());
+    return (sender.toByteArray() + receiver.toByteArray() + amount.toByteArray() + QByteArray::number(date)
+            + data + token.toByteArray() + prevBlock.toByteArray() + QByteArray::number(gas)
+            + approver.toByteArray() + producer.toByteArray());
 }
 
 QByteArray Transaction::getDataForDigSig() const
@@ -181,7 +181,7 @@ QByteArray Transaction::getDataForDigSig() const
 
 void Transaction::sign(const Actor<KeyPrivate> &actor)
 {
-    this->approver = actor.id().toNumber();
+    this->approver = actor.id();
     calcHash();
     this->digSig = actor.key()->sign(getDataForDigSig());
 }
@@ -351,20 +351,20 @@ void Transaction::operator=(const Transaction &other)
 
 QString Transaction::toString() const
 {
-    return "sender:" + sender.toActorId() + ", receiver:" + receiver.toActorId()
+    return "sender:" + sender.toByteArray() + ", receiver:" + receiver.toByteArray()
         + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
-        + ", data:" + data + ", token:" + token.toActorId() + ", prevBlock:" + prevBlock.toByteArray()
+        + ", data:" + data + ", token:" + token.toByteArray() + ", prevBlock:" + prevBlock.toByteArray()
         + ", gas:" + QString::number(gas) + ", hop:" + QString::number(hop) + ", hash:" + hash
-        + ", approver:" + approver.toActorId() + ", digitalSignature:" + digSig;
+        + ", approver:" + approver.toByteArray() + ", digitalSignature:" + digSig;
 }
 
 QByteArray Transaction::serialize() const
 {
     QList<QByteArray> list;
-    list << sender.toActorId() << receiver.toActorId() << amount.toByteArray() << QByteArray::number(date)
-         << data << token.toActorId() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
-         << QString::number(hop).toLocal8Bit() << hash << approver.toActorId() << digSig
-         << producer.toActorId();
+    list << sender.toByteArray() << receiver.toByteArray() << amount.toByteArray() << QByteArray::number(date)
+         << data << token.toByteArray() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
+         << QString::number(hop).toLocal8Bit() << hash << approver.toByteArray() << digSig
+         << producer.toByteArray();
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 
     return Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE);

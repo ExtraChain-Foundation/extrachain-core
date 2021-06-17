@@ -246,7 +246,7 @@ void Blockchain::getBlockZero()
         emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     }
     else
-        actorIndex->setCompanyId(new QByteArray(zero.getApprover().toActorId()));
+        actorIndex->setCompanyId(new QByteArray(zero.getApprover().toByteArray()));
 }
 
 BigNumber Blockchain::getSupply(const QByteArray &idToken)
@@ -308,13 +308,13 @@ QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wal
                 continue;
             if (tx.getReceiver() == wallet && tx.getToken() == token && tx.getData().contains(Fee::FREEZE_TX))
             {
-                res[tx.getSender().toActorId()] += tx.getAmount();
+                res[tx.getSender().toByteArray()] += tx.getAmount();
             }
             if (tx.getSender() == wallet && tx.getToken() == token && tx.getData().contains(Fee::UNFREEZE_TX))
             {
-                res[tx.getSender().toActorId()] -= tx.getAmount();
-                if (res[tx.getSender().toActorId()] == 0)
-                    res.remove(tx.getSender().toActorId());
+                res[tx.getSender().toByteArray()] -= tx.getAmount();
+                if (res[tx.getSender().toByteArray()] == 0)
+                    res.remove(tx.getSender().toByteArray());
             }
         }
     }
@@ -343,7 +343,7 @@ void Blockchain::stakingReward(const Block &block)
 
             for (auto i = investments.begin(); i != investments.end(); i++)
             {
-                BigNumber fullSupply = getFullSupply(tx.getToken().toActorId());
+                BigNumber fullSupply = getFullSupply(tx.getToken().toByteArray());
                 BigNumber MSP = Transaction::amountDiv(myFullStaking, fullSupply) * 100;
                 BigNumber RTx = tx.getAmount() / 1000;
                 BigNumber myPercent = Transaction::amountDiv(i.value(), myFullStaking) * 100;
@@ -553,7 +553,7 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->id().toActorId();
+            QByteArray id = accountController->getMainActor()->id().toByteArray();
             if (!list.contains(id))
             {
                 QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
@@ -611,7 +611,7 @@ bool Blockchain::signCheckAdd(Block &block)
             }
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->id().toActorId();
+            QByteArray id = accountController->getMainActor()->id().toByteArray();
             if (!list.contains(id))
             {
                 QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
@@ -1027,7 +1027,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     }
     if (block.getIndex() == 0)
     {
-        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toByteArray()));
     }
     if (block.getIndex() < 0)
         return Errors::BLOCK_IS_NOT_VALID;
@@ -1576,7 +1576,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
     if (block.getIndex() == 0)
     {
         mutex.lock();
-        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toActorId()));
+        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toByteArray()));
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
@@ -1761,9 +1761,9 @@ void Blockchain::proveTx(Transaction *tx)
                 {
                     Block approverBlock = blockIndex.getBlockById(indexApBlock);
                     QByteArrayList signs = approverBlock.getListSignatures();
-                    if (signs.contains(tx->getReceiver().toActorId()))
+                    if (signs.contains(tx->getReceiver().toByteArray()))
                     {
-                        int index = signs.indexOf(tx->getReceiver().toActorId());
+                        int index = signs.indexOf(tx->getReceiver().toByteArray());
                         if (signs[index + 2] == "1")
                         {
                             auto producerActor = actorIndex->getActor(tx->getProducer());
@@ -1938,7 +1938,7 @@ void Blockchain::proveTx(Transaction *tx)
 
         QByteArray companyId = actorIndex->companyId != nullptr ? *actorIndex->companyId : QByteArray();
 
-        if (targetSender.toActorId() != companyId)
+        if (targetSender.toByteArray() != companyId)
         {
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);

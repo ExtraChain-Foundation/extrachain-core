@@ -27,7 +27,7 @@ Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, ActorIndex* actor
 {
     this->_chatManager = chatManager;
     this->_chatId = chatId;
-    this->_currentActorId = accountController->getMainActor()->id().toActorId();
+    this->_currentActorId = accountController->getMainActor()->id().toByteArray();
     this->_actorIndex = actorIndex;
     this->_accountController = accountController;
     this->_encryptionKey = getChatKey();
@@ -47,7 +47,7 @@ Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray&
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
-    this->_currentActorId = accountController->getMainActor()->id().toActorId();
+    this->_currentActorId = accountController->getMainActor()->id().toByteArray();
     //    if (currentSession == 0)
     //        this->_currentSession = getActualCurrentSession();
     //    else

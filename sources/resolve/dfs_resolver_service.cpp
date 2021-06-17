@@ -172,7 +172,7 @@ bool DFSResolverService::validate(const Messages::BaseMessage &message)
     }
     else
     {
-        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
+        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toByteArray()));
         this->thread()->sleep(5);
         return validate(message);
     }
@@ -443,7 +443,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
 
         if (!actor.empty())
         {
-            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.id().toActorId()).exists())
+            if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.id().toByteArray()).exists())
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {

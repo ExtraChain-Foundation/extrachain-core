@@ -257,7 +257,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
     if (!actor.empty())
     {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                        .arg(tx.toString(), QString(actor.id().toActorId()));
+                        .arg(tx.toString(), QString(actor.id().toByteArray()));
 
         // 1) set prev block id
         BigNumber lastBlockId = blockchain->getLastBlock().getIndex();
@@ -348,7 +348,7 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         return this->createTransaction(tx);
     }
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toActorId()));
+                    .arg(QString(receiver.toByteArray()));
     return Transaction();
 }
 
@@ -363,7 +363,7 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
         if (receiver.isEmpty())
         {
             qDebug() << "Create freeze tx to me";
-            receiver = actor.id().toNumber();
+            receiver = actor.id();
         }
         else
             qDebug() << "Create freeze tx to" << receiver;
@@ -379,7 +379,7 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
         return this->createTransaction(tx);
     }
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toActorId()));
+                    .arg(QString(receiver.toByteArray()));
     return Transaction();
 }
 
@@ -409,7 +409,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
     else
     {
         qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                        .arg(QString(receiver.toActorId()));
+                        .arg(QString(receiver.toByteArray()));
     }
     return Transaction();
 }

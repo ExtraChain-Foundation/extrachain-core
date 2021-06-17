@@ -77,15 +77,15 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id)
 
 bool ActorIndex::hasActor(const ActorId &id)
 {
-    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
+    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
     return QFileInfo(filePath).size() > 0;
 }
 
 void ActorIndex::removeActor(const ActorId &id, bool resend)
 {
-    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
+    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
     QFile::remove(filePath);
-    QFile::remove(filePath + "/profile/" + id.toActorId() + ".profile");
+    QFile::remove(filePath + "/profile/" + id.toByteArray() + ".profile");
 
     if (resend)
     {
@@ -151,7 +151,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
             qDebug() << "[ActorIndex] No profile for actor" << actorId;
 
             auto current = QDateTime::currentSecsSinceEpoch();
-            auto actorIdBytes = actorId.toActorId();
+            auto actorIdBytes = actorId.toByteArray();
             if (tempCheck[actorIdBytes] < current - 10)
             {
                 qDebug() << "[ActorIndex] Send get actor if no profile:" << actorId;
@@ -196,7 +196,7 @@ void ActorIndex::getAllActors(ActorId id, bool isUser)
     if (accController->getAccountCount() > 0)
     {
         Messages::GetAllActorMessage msg;
-        msg.actorId = id.toActorId();
+        msg.actorId = id.toByteArray();
         resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetAllActors);
         qDebug() << "[ActorIndex] Get all actors request";
         // emit sendMessage(msg.serialize(), getAllActorMessage);
@@ -212,9 +212,9 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor)
             << QString("[ActorIndex] New actor [%1] is successfully saved").arg(QString(actor.serialize()));
 
         // TODO: remove me?
-        if (actor.account() == ActorType::Account && profilesHandle.contains(actor.id().toActorId()))
+        if (actor.account() == ActorType::Account && profilesHandle.contains(actor.id().toByteArray()))
         {
-            saveProfileFromNetwork(profilesHandle[actor.id().toActorId()]);
+            saveProfileFromNetwork(profilesHandle[actor.id().toByteArray()]);
         }
         break;
     case Errors::FILE_ALREADY_EXISTS:
@@ -297,7 +297,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile
         return;
 
     qDebug() << "[ActorIndex] Save public profile with id" << newProfile.at(2);
-    QByteArray path = buildPathPubProfile(ActorId(newProfile.at(2)).toActorId()).toUtf8();
+    QByteArray path = buildPathPubProfile(ActorId(newProfile.at(2)).toByteArray()).toUtf8();
     QByteArray sign = actor->key()->sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
 
@@ -424,7 +424,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data)
     // if (id <= 1000)
     //     qFatal("Try to add actor with id %s", id.toByteArray().constData());
 
-    QString path = buildFilePath(id.toActorId());
+    QString path = buildFilePath(id.toByteArray());
     QFile file(path);
     qDebug() << "[ActorIndex] Saving the file:" << path;
     // QString profilePath = buildPathPubProfile(id.toActorId());
@@ -449,7 +449,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data)
 
 QByteArray ActorIndex::getById(const ActorId &id) const
 {
-    QString filePath = folderPath + id.toActorId().right(SECTION_NAME_SIZE) + '/' + id.toActorId();
+    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
     QFile file(filePath);
     if (!file.exists())
     {
@@ -465,7 +465,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const
 int ActorIndex::addActor(const Actor<KeyPublic> &actor)
 {
     int result = this->add(actor.id(), actor.serialize());
-    auto actorId = actor.id().toActorId();
+    auto actorId = actor.id().toByteArray();
 
     if (actor.account() == ActorType::Company && companyId == nullptr)
     {
@@ -487,7 +487,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
         resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
         // emit sendMessage(actor.serialize(), classType);
         // qDebug() << "emit signal for init dfs for user" << actorId;
-        emit initDfs(actor.id().toNumber());
+        emit initDfs(actor.id());
     }
 
     return result;

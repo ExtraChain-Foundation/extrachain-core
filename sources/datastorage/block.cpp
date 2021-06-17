@@ -123,7 +123,7 @@ void Block::sign(const Actor<KeyPrivate> &actor)
 {
     calcHash();
     QByteArray sign = actor.key()->sign(getDataForDigSig());
-    this->signatures.append({ actor.id().toActorId(), sign, true });
+    this->signatures.append({ actor.id().toByteArray(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const
@@ -315,7 +315,6 @@ ActorId Block::getApprover() const
                 return signatures[i].actorId;
         }
     }
-
 
     return ActorId();
 }
