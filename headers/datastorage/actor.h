@@ -53,7 +53,7 @@ public:
     {
         if (actorId == -1)
         {
-            actorId = 0;
+            qDebug() << "ActorId == -1";
         }
 
         id = QByteArray::number(actorId);
@@ -111,7 +111,8 @@ public:
 
     bool isEmpty() const
     {
-        return id.isEmpty() || id == "00000000000000000000";
+        return id == "000000000000000000-1" || // temp
+            id.isEmpty() || id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId)
@@ -138,7 +139,7 @@ class Actor final
     const int FIELDS_SIZE = 4;
 
 protected:
-    ActorId m_id = -1;
+    ActorId m_id;
     T *m_key;
     ActorType m_account;
 

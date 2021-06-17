@@ -130,7 +130,7 @@ public:
     int getClientList();
 
 public:
-    void coinResponse(ActorId receiver, BigNumber amount, BigNumber plsr);
+    void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
 
 #ifdef ECLIENT
     void setNotificationClient(NotificationClient *newNtfCl);
@@ -241,7 +241,7 @@ public: // TODO
         return m_listenCoinRequest;
     }
 
-    void sendCoinRequest(BigNumber receiver, BigNumber amount)
+    void sendCoinRequest(ActorId receiver, BigNumber amount)
     {
         qInfo().noquote() << "Sending" << Transaction::amountToVisible(amount) << "coins to"
                           << receiver.toByteArray();
@@ -250,7 +250,7 @@ public: // TODO
 
 private:
     ConsoleManager *m_consoleManager;
-    QList<std::tuple<BigNumber, BigNumber, BigNumber>> m_requestCoinQueue;
+    QList<std::tuple<ActorId, BigNumber, ActorId>> m_requestCoinQueue;
     bool m_listenCoinRequest = false;
 #endif
 };

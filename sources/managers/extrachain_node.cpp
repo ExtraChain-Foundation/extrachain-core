@@ -95,7 +95,7 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
     if (QDir("keystore/profile").isEmpty())
     {
         company = CreateCompany(consoleHash);
-        emit savePrivateProfile(consoleHash, company.id().toActorId());
+        emit savePrivateProfile(consoleHash, company.id().toByteArray());
         created = true;
     }
     else
@@ -108,8 +108,8 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
     {
         QByteArray td = company.key()->sign("test");
         std::cout << company.key()->verify("test", td) << std::endl;
-        TMP::companyActorId = new QByteArray(company.id().toActorId());
-        actorIndex->setCompanyId(new QByteArray(company.id().toActorId()));
+        TMP::companyActorId = new QByteArray(company.id().toByteArray());
+        actorIndex->setCompanyId(new QByteArray(company.id().toByteArray()));
 
         QMap<BigNumber, BigNumber> tm;
         tm.insert(0, 0);
@@ -119,7 +119,7 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
         // TODO: as console argument
         if (created)
         {
-            emit generateSmartContract("1000", "Default Coin", company.id().toActorId(), "#fa4868");
+            emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(), "#fa4868");
 
             QString companyId = *TMP::companyActorId;
             DBConnector dbc(
@@ -430,7 +430,7 @@ void ExtraChainNode::getAllActorsTimerCall()
 #ifdef ECONSOLE
     if (accController->getAccountCount() > 0)
     {
-        QByteArray res2 = accController->getMainActor()->id().toActorId();
+        QByteArray res2 = accController->getMainActor()->id().toByteArray();
 
         if (!res2.isEmpty())
         {
@@ -610,7 +610,7 @@ void ExtraChainNode::tempareSlotForActors()
     emit sendActorToWallet(accController->getAccountID());
 }
 
-void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, BigNumber plsr)
+void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId plsr)
 {
 #ifdef ECONSOLE
     auto mainActor = accController->getMainActor();
@@ -632,7 +632,7 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, BigNumber 
     }
     else
     {
-        if (plsr > 0 && mainActor->id() != plsr)
+        if (!plsr.isEmpty() && mainActor->id() != plsr)
         {
             return;
         }
