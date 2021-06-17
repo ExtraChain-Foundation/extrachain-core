@@ -255,7 +255,7 @@ std::pair<Transaction, QByteArray>
 BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, const QByteArray &token) const
 {
     BigNumber records = getRecords();
-    QByteArray tokenActor = BigNumber(token).toActorId();
+    QByteArray tokenActor = ActorId(token).toActorId();
 
     if (records == 0)
     {
@@ -381,7 +381,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id.toActorId() && tx.getToken() == token)
+                if (BigNumber(tx.getHash()) == id && tx.getToken() == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
@@ -510,7 +510,7 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
                 rowRow.insert({ "hash", tmp.getHash().toStdString() });
                 rowRow.insert({ "approver", tmp.getApprover().toActorId().toStdString() });
                 rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
-                if (tmp.getProducer() == 0)
+                if (tmp.getProducer().isEmpty())
                     rowRow.insert({ "producer", "0" });
                 else
                     rowRow.insert({ "producer", tmp.getProducer().toActorId().toStdString() });
@@ -559,7 +559,7 @@ bool BlockIndex::recordLimitIsReached() const
 
 int BlockIndex::removeById(const BigNumber &id)
 {
-    qDebug() << "Removing record with id" << id.toActorId();
+    qDebug() << "Removing record with id" << id.toByteArray();
     if (id < firstSavedId)
     {
         removeAll();
@@ -594,7 +594,8 @@ void BlockIndex::removeAll()
     qDebug() << "Clearing file index:" << folderPath;
 
     QDir folder(folderPath);
-    const auto folders = folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
+    const auto folders =
+        folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
     for (const QString &section : qAsConst(folders))
     {
         QDir dir(folderPath + QString("/") + section);

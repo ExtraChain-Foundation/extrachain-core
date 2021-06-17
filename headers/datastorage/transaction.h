@@ -40,29 +40,29 @@ public:
     Transaction(const QByteArray &serialized, QObject *parent = nullptr);
 
     // Construct transaction
-    Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                 QObject *parent = nullptr);
 
     // Construct transaction with data
-    Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                 const QByteArray &data, QObject *parent = nullptr);
 
     Transaction(const Transaction &other);
 
 private:
-    BigNumber sender;
-    BigNumber receiver;
+    ActorId sender;
+    ActorId receiver;
     BigNumber amount; // coin amount
     long long date;
     QByteArray data;     // additional payload field
-    BigNumber token;     // token contract address
+    ActorId token;       // token contract address
     BigNumber prevBlock; // last block id at the moment of tx creation
     int gas;             // security and reward param
     int hop;             // number of the nodes, through which the transaction will pass before
                          // aprovement
     QByteArray hash;     // hash from all fields
-    BigNumber approver;  // address of the transaction approver.
-    BigNumber producer;
+    ActorId approver;    // address of the transaction approver.
+    ActorId producer;
     QByteArray digSig;
 
 private:
@@ -92,23 +92,23 @@ public:
     void setPrevBlock(const BigNumber &value);
     void setGas(int gas);
     void setHop(int hop);
-    void setProducer(const BigNumber &value);
+    void setProducer(const ActorId &value);
     void decrementHop();
     void clear();
 
 public:
     int getGas() const;
     int getHop() const;
-    BigNumber getSender() const;
-    BigNumber getReceiver() const;
+    ActorId getSender() const;
+    ActorId getReceiver() const;
     BigNumber getAmount() const;
     BigNumber getPrevBlock() const;
     QByteArray getData() const;
     QByteArray getHash() const;
-    BigNumber getToken() const;
-    BigNumber getApprover() const;
+    ActorId getToken() const;
+    ActorId getApprover() const;
     QByteArray getDigSig() const;
-    BigNumber getProducer() const;
+    ActorId getProducer() const;
 
     bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;
@@ -122,7 +122,7 @@ public:
     long long getDate() const;
     void setDate(long long value);
 
-    void setToken(const BigNumber &value);
+    void setToken(const ActorId &value);
 
     void setData(const QByteArray &value);
 
@@ -152,32 +152,8 @@ public:
     static BigNumber amountDiv(BigNumber number1, BigNumber number2);
     static BigNumber amountPercent(BigNumber number, uint percent);
     void setAmount(const BigNumber &value);
-    void setSender(const BigNumber &value);
-    void setReceiver(const BigNumber &value);
+    void setSender(const ActorId &value);
+    void setReceiver(const ActorId &value);
 };
 
-inline bool operator<(const Transaction &l, const Transaction &r)
-{
-    if (l.getPrevBlock() < r.getPrevBlock())
-    {
-        return true;
-    }
-    else if (l.getSender() < r.getSender())
-    {
-        return true;
-    }
-    else if (l.getReceiver() < r.getReceiver())
-    {
-        return true;
-    }
-    else if (l.getData() < r.getData())
-    {
-        return true;
-    }
-    else if (l.getAmount() < r.getAmount())
-    {
-        return true;
-    }
-    return false;
-}
 #endif // TRANSACTION_H

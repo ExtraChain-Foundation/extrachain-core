@@ -66,7 +66,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     calcHash();
 }
 
-Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                          QObject *parent)
     : Transaction(parent)
 {
@@ -86,7 +86,7 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     calcHash();
 }
 
-Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                          const QByteArray &data, QObject *parent)
     : Transaction(sender, receiver, amount, parent)
 {
@@ -113,22 +113,22 @@ Transaction::Transaction(const Transaction &other)
     calcHash();
 }
 
-void Transaction::setReceiver(const BigNumber &value)
+void Transaction::setReceiver(const ActorId &value)
 {
     receiver = value;
 }
 
-void Transaction::setProducer(const BigNumber &value)
+void Transaction::setProducer(const ActorId &value)
 {
     producer = value;
 }
 
-void Transaction::setSender(const BigNumber &value)
+void Transaction::setSender(const ActorId &value)
 {
     sender = value;
 }
 
-BigNumber Transaction::getProducer() const
+ActorId Transaction::getProducer() const
 {
     return producer;
 }
@@ -143,7 +143,7 @@ void Transaction::setData(const QByteArray &value)
     data = value;
 }
 
-void Transaction::setToken(const BigNumber &value)
+void Transaction::setToken(const ActorId &value)
 {
     token = value;
 }
@@ -181,7 +181,7 @@ QByteArray Transaction::getDataForDigSig() const
 
 void Transaction::sign(const Actor<KeyPrivate> &actor)
 {
-    this->approver = actor.id();
+    this->approver = actor.id().toNumber();
     calcHash();
     this->digSig = actor.key()->sign(getDataForDigSig());
 }
@@ -247,12 +247,12 @@ int Transaction::getGas() const
     return this->gas;
 }
 
-BigNumber Transaction::getSender() const
+ActorId Transaction::getSender() const
 {
     return this->sender;
 }
 
-BigNumber Transaction::getReceiver() const
+ActorId Transaction::getReceiver() const
 {
     return this->receiver;
 }
@@ -272,12 +272,12 @@ QByteArray Transaction::getHash() const
     return this->hash;
 }
 
-BigNumber Transaction::getToken() const
+ActorId Transaction::getToken() const
 {
     return this->token;
 }
 
-BigNumber Transaction::getApprover() const
+ActorId Transaction::getApprover() const
 {
     return this->approver;
 }

@@ -296,7 +296,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     return res;
 }
 
-QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const BigNumber &wallet, const BigNumber &token)
+QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wallet, const ActorId &token)
 {
     QMap<QByteArray, BigNumber> res;
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
@@ -329,15 +329,18 @@ void Blockchain::stakingReward(const Block &block)
         if (tx.getData().contains(Fee::FREEZE_TX) || tx.getData().contains(Fee::FEE)
             || tx.getData().contains(Fee::STAKING_REWARD))
             continue;
-        QList<BigNumber> listWallet = accountController->getListAccounts();
-        for (const auto &tmp : listWallet)
-        {
-            BigNumber myFullStaking = getFreezeUserBalance(tmp, tx.getToken(), -3);
 
-            //            BigNumber myStaking = getFreezeUserBalance(tmp, tx.getToken());
-            QMap<QByteArray, BigNumber> investments = getInvestmentsStaking(tmp, tx.getToken());
+        QList<ActorId> listWallet = accountController->getListAccounts();
+
+        for (const auto &wallet : qAsConst(listWallet))
+        {
+            BigNumber myFullStaking = getFreezeUserBalance(wallet, tx.getToken(), -3);
+
+            // BigNumber myStaking = getFreezeUserBalance(wallet, tx.getToken());
+            QMap<QByteArray, BigNumber> investments = getInvestmentsStaking(wallet, tx.getToken());
             if (myFullStaking == 0 && investments.isEmpty())
                 continue;
+
             for (auto i = investments.begin(); i != investments.end(); i++)
             {
                 BigNumber fullSupply = getFullSupply(tx.getToken().toActorId());
@@ -347,11 +350,13 @@ void Blockchain::stakingReward(const Block &block)
 
                 BigNumber MSP_RTx = Transaction::amountMul(MSP, RTx);
                 BigNumber MSP_RTx_myPercent = Transaction::amountMul(MSP_RTx, myPercent);
+
                 if (MSP_RTx_myPercent == 0)
                 {
                     qDebug() << "0 on Staking (MSP_RTx_myPercent)";
                     continue;
                 }
+
                 BigNumber StakingReward = MSP_RTx_myPercent * StakingCoef / 1000;
                 //                qDebug() << "STAKING: who " << i.key() << ";\n full supply "
                 //                         << Transaction::amountToVisible(fullSupply) << ";\n MSP "
@@ -366,36 +371,38 @@ void Blockchain::stakingReward(const Block &block)
                     qDebug() << "0 on Staking";
                     continue;
                 }
+
                 if (StakingReward + fullSupply > Transaction::visibleToAmount("1000000000"))
                 {
                     qDebug() << "STAKING ENDED";
                     continue;
                 }
-                if (checkStakingReward(tx.getHash(), tx.getToken(), tmp))
+
+                if (checkStakingReward(tx.getHash(), tx.getToken(), wallet))
                     continue;
+
                 Transaction rtx(Trash::NullActor, i.key(), StakingReward);
                 rtx.setToken(tx.getToken());
-                auto [hash, blockId] = getLastTxForStaking(tmp, tx.getToken());
+                auto [hash, blockId] = getLastTxForStaking(wallet, tx.getToken());
                 rtx.setData(
                     Serialization::serialize({ hash.toByteArray(), blockId.toByteArray(), tx.getHash(),
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
-                rtx.setProducer(tmp);
-                rtx.sign(accountController->getActor(tmp));
+                rtx.setProducer(wallet);
+                rtx.sign(accountController->getActor(wallet));
                 emit sendMessage(rtx.serialize(), Messages::ChainMessage::txMessage);
             }
         }
     }
 }
 
-std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const BigNumber &receiver,
-                                                                const BigNumber &token)
+std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &receiver, const ActorId &token)
 {
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
     {
         QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
         for (const auto &tx : listTx)
         {
-            if (tx.getSender() == 0 && tx.getReceiver() == receiver && tx.getToken() == token)
+            if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token)
             {
                 return { tx.getHash(), i };
             }
@@ -404,14 +411,14 @@ std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const BigNumber 
     return { 0, 0 };
 }
 
-bool Blockchain::checkStakingReward(const QByteArray &hash, const BigNumber &token, const BigNumber receiver)
+bool Blockchain::checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver)
 {
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
     {
         QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
         for (const auto &tx : listTx)
         {
-            if (tx.getSender() == 0 && tx.getReceiver() == receiver && tx.getToken() == token
+            if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token
                 && tx.getData().contains(hash))
             {
                 return true;
@@ -627,13 +634,13 @@ void Blockchain::sendUnFee(Block &block)
     {
         if (tmpTx.getData().contains(Fee::FREEZE_TX))
             continue;
-        BigNumber sender = tmpTx.getSender();
-        BigNumber approver = block.getApprover();
-        if (approver == 0)
+        ActorId sender = tmpTx.getSender();
+        ActorId approver = block.getApprover();
+        if (approver.isEmpty())
             continue;
         BigNumber fee = tmpTx.getAmount() / 100;
         Actor<KeyPrivate> actor = accountController->getCurrentActor();
-        BigNumber producer = actor.id();
+        ActorId producer = actor.id();
         if (producer == approver /* || producer == sender*/)
             continue;
         Transaction tx(sender, sender, fee);
@@ -673,13 +680,13 @@ void Blockchain::sendFeeUnfreeze(Block &block)
     {
         if (tmpTx.getData().contains(Fee::FREEZE_TX))
             continue;
-        BigNumber sender = tmpTx.getSender();
-        BigNumber approver = block.getApprover();
-        if (approver == 0)
+        ActorId sender = tmpTx.getSender();
+        ActorId approver = block.getApprover();
+        if (approver.isEmpty())
             continue;
         BigNumber fee = tmpTx.getAmount() / 100 / 10;
         Actor<KeyPrivate> actor = accountController->getCurrentActor();
-        BigNumber producer = actor.id();
+        ActorId producer = actor.id();
         if (producer == approver /*producer == sender || */)
             continue;
         Transaction tx(sender, approver, fee);
@@ -1246,7 +1253,7 @@ BigNumber Blockchain::getRecords() const
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
+BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
 {
     BigNumber balance;
 
@@ -1291,7 +1298,7 @@ BigNumber Blockchain::getUserBalance(BigNumber userId, BigNumber tokenId) const
     return balance;
 }
 
-BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, BigNumber sender) const
+BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender) const
 {
     BigNumber balance = 0;
 
@@ -1327,7 +1334,7 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
             if (tx.getToken() != tokenId || !isStaking)
                 continue;
 
-            if (sender == -3) // all staking
+            if (sender == ActorId(-3)) // all staking
             {
                 if (tx.getData() == Fee::FREEZE_TX && tx.getReceiver() == userId)
                 {
@@ -1338,7 +1345,7 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
                     balance -= tx.getAmount();
                 }
             }
-            else if (sender == -2) // all not my staking
+            else if (sender == ActorId(-2)) // all not my staking
             {
                 if (tx.getSender() != userId && tx.getReceiver() == userId && tx.getData() == Fee::FREEZE_TX)
                 {
@@ -1350,7 +1357,7 @@ BigNumber Blockchain::getFreezeUserBalance(BigNumber userId, BigNumber tokenId, 
                     balance -= tx.getAmount();
                 }
             }
-            else if (sender != -1) // only sender
+            else if (sender != ActorId(-1)) // only sender
             {
                 if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX)
                 {
@@ -1543,7 +1550,7 @@ void Blockchain::addBlockToBlockchain(Block block)
     QList<Transaction> list = block.extractTransactions();
     for (const auto &tmp : qAsConst(list))
     {
-        QList<BigNumber> list;
+        QList<ActorId> list;
         auto accounts = accountController->getAccounts();
         for (const auto &tmp : qAsConst(accounts))
             list.append(tmp->id());
@@ -1656,8 +1663,8 @@ void Blockchain::proveTx(Transaction *tx)
 {
     qDebug() << "proveTx: started";
 
-    BigNumber targetSender = tx->getSender();
-    BigNumber targetReceiver = tx->getReceiver();
+    ActorId targetSender = tx->getSender();
+    ActorId targetReceiver = tx->getReceiver();
     Actor<KeyPublic> senderActor;
     if (targetSender != 0)
         senderActor = actorIndex->getActor(targetSender);
@@ -1827,7 +1834,7 @@ void Blockchain::proveTx(Transaction *tx)
     {
         BigNumber senderCurrentBalance =
             getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender());
-        BigNumber sender = tx->getSender();
+        ActorId sender = tx->getSender();
         if ((senderCurrentBalance - tx->getAmount()) < 0)
         {
             qDebug() << "Transaction UNFreeze "

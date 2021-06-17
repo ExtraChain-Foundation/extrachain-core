@@ -113,7 +113,7 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 
 bool ResolverService::validate(const Messages::BaseMessage &message)
 {
-    BigNumber signer = message.signer;
+    ActorId signer = message.signer;
     if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
@@ -506,7 +506,7 @@ bool ResolverService::validate(const Transaction &tx)
 {
     qDebug() << "RESOLVER SERVICE: "
              << "validate(Transaction):";
-    if (tx.getSender() == 0 && tx.getData().contains(Fee::STAKING_REWARD))
+    if (tx.getSender() == ActorId(0) && tx.getData().contains(Fee::STAKING_REWARD))
         return true;
     if (actorIndex->getActor(tx.getSender()).empty())
     {

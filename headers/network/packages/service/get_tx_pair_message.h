@@ -29,8 +29,8 @@ struct GetTxPairMessage : IMessage
     static const short FIELD_SIZE = 2;
     static const short FIELDS_COUNT = 2;
 
-    BigNumber senderId;
-    BigNumber receiverId;
+    ActorId senderId;
+    ActorId receiverId;
 
     // IMessage interface
 public:

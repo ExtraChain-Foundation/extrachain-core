@@ -264,7 +264,7 @@ QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
     return Serialization::serialize(l, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
-BigNumber TransactionManager::checkPendingTxsList(const BigNumber &sender)
+BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender)
 {
     BigNumber res = 0;
     if (!pendingTxs.isEmpty())

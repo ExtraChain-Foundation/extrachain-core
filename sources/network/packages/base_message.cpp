@@ -89,7 +89,7 @@ QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
     QByteArray signeR;
-    if (signer == 0)
+    if (signer.isEmpty())
         signeR = "";
     else
         signeR = signer.toActorId();

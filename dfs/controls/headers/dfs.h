@@ -112,7 +112,7 @@ signals:
 
 public slots:
     void initMyLocalStorage();
-    void initUser(BigNumber userId);
+    void initUser(ActorId userId);
 
     void reportFileCompleted(QString filePath, SocketPair receiver);
     void save(DfsStruct::DfsSave saveType, QString file, QByteArray data, const DfsStruct::Type type);

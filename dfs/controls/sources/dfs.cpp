@@ -1562,7 +1562,7 @@ void Dfs::initMyLocalStorage()
     //    }
 }
 
-void Dfs::initUser(BigNumber userId)
+void Dfs::initUser(ActorId userId)
 {
     auto actorAccount = actorIndex->getActor(userId).account();
     if (actorAccount == ActorType::Wallet)

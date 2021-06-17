@@ -60,9 +60,9 @@ Blockchain *AccountController::getBlockchain() const
     return blockchain;
 }
 
-QList<BigNumber> AccountController::getListAccounts() const
+QList<ActorId> AccountController::getListAccounts() const
 {
-    QList<BigNumber> res;
+    QList<ActorId> res;
     for (const auto &tmp : accounts)
     {
         res.append(tmp->id());
@@ -116,14 +116,15 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
         qDebug() << "Dfs hash init for me";
         emit initDfs(); //
     }
-    emit newActorIsCreated(this->getMainActor()->id(), account == ActorType::Account); // TODO: send type
+    emit newActorIsCreated(this->getMainActor()->id().toByteArray(),
+                           account == ActorType::Account); // TODO: send type
 
     if (!accounts.isEmpty())
         blockchain->getBlockZero();
     return *actor;
 }
 
-Actor<KeyPrivate> AccountController::getActor(BigNumber id)
+Actor<KeyPrivate> AccountController::getActor(const ActorId &id)
 {
     for (Actor<KeyPrivate> *actor : qAsConst(accounts))
     {
@@ -132,6 +133,7 @@ Actor<KeyPrivate> AccountController::getActor(BigNumber id)
             return *actor;
         }
     }
+
     qDebug() << "Can't find actor with id:" << id;
     return Actor<KeyPrivate>();
 }

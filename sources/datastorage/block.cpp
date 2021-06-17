@@ -174,7 +174,7 @@ bool Block::equals(const Block &block) const
 BlockCompare Block::compareBlock(const Block &b) const
 {
     BlockCompare temp;
-    temp.approverDiff = getApprover() - b.getApprover();
+    temp.approverDiff = getApprover().toNumber() - b.getApprover().toNumber();
     temp.indexDiff = getIndex() - b.getIndex();
     temp.dataDiff = Utils::compare(getData(), b.getData());
     temp.digitalSigDiff = getDigSig() == b.getDigSig();
@@ -239,9 +239,10 @@ QString Block::toString() const
 {
     QList<QByteArray> list;
 
-    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << QByteArray::number(date)
+    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << QByteArray::number(date)
          << getData() << getPrevHash() << getHash() << getDigSig();
-    //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
+
+    // return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
     return Serialization::serialize(list, FIELDS_SIZE);
 }
 
@@ -300,10 +301,12 @@ void Block::setPrevHash(const QByteArray &value)
     prevHash = value;
 }
 
-BigNumber Block::getApprover() const
+ActorId Block::getApprover() const
 {
     if (signatures.isEmpty())
-        return BigNumber();
+    {
+        return ActorId();
+    }
     else
     {
         for (int i = signatures.size() - 1; i >= 0; i--)
@@ -312,7 +315,9 @@ BigNumber Block::getApprover() const
                 return signatures[i].actorId;
         }
     }
-    return BigNumber();
+
+
+    return ActorId();
 }
 
 BigNumber Block::getIndex() const

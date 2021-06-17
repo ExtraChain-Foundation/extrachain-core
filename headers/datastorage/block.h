@@ -147,7 +147,7 @@ public:
     QList<Block> getDataFromAllBlocks(QList<QByteArray>);
     void setPrevHash(const QByteArray &value);
     QByteArray getType() const;
-    BigNumber getApprover() const;
+    ActorId getApprover() const;
     BigNumber getIndex() const;
     QByteArray getData() const;
     QByteArray getHash() const;

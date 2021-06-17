@@ -114,10 +114,9 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
+    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token = 0);
 
-    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                      BigNumber token = 0);
+    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount, ActorId token = 0);
     /**
      * @brief createFreezeTransaction
      * if receiver = 0 -> to me
@@ -126,13 +125,12 @@ public:
      * @param token
      * @return
      */
-    Transaction createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
-                                        BigNumber token = 0);
+    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token = 0);
 
     int getClientList();
 
 public:
-    void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
+    void coinResponse(ActorId receiver, BigNumber amount, BigNumber plsr);
 
 #ifdef ECLIENT
     void setNotificationClient(NotificationClient *newNtfCl);
@@ -186,7 +184,7 @@ signals:
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void setCurrentIdNotificationManager(const QByteArray id);
-    void getAllActorsNode(QByteArray id, bool acc);
+    void getAllActorsNode(ActorId id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
                                QByteArray color);

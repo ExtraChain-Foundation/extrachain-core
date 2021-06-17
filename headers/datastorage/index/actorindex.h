@@ -77,7 +77,7 @@ private:
      * @param data
      * @return
      */
-    int add(const BigNumber &id, const QByteArray &data);
+    int add(const ActorId &id, const QByteArray &data);
 
 public:
     /**
@@ -92,9 +92,9 @@ public:
      * @param id - actor's id
      * @return Found actor, or empty actor (if not found)
      */
-    Actor<KeyPublic> getActor(const BigNumber &id);
-    bool hasActor(const BigNumber &id);
-    void removeActor(const BigNumber &id, bool resend = false);
+    Actor<KeyPublic> getActor(const ActorId &id);
+    bool hasActor(const ActorId &id);
+    void removeActor(const ActorId &id, bool resend = false);
 
     /**
      * @brief Validates block digital signature
@@ -115,7 +115,7 @@ public:
      * @param id
      * @return
      */
-    QByteArray getById(const BigNumber &id) const;
+    QByteArray getById(const ActorId &id) const;
 
     qint64 getRecords() const;
     void setCompanyId(QByteArray *value);
@@ -142,9 +142,9 @@ public:
 
 public slots:
     void process();
-    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+    void handleGetActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver);
     void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
-    void getAllActors(BigNumber id, bool isUser);
+    void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile);
@@ -178,7 +178,7 @@ signals:
     // void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
 
-    void initDfs(BigNumber userId);
+    void initDfs(ActorId userId);
     void initContractList(QVariantMap map);
     void finished();
 };

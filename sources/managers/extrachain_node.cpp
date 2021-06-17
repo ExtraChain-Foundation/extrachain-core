@@ -325,9 +325,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
     return Transaction();
 }
 
-Transaction ExtraChainNode::createTransaction(BigNumber receiver, BigNumber amount, BigNumber token)
+Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount, ActorId token)
 {
-
     if (receiver.isEmpty() || amount.isEmpty())
     {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -353,18 +352,18 @@ Transaction ExtraChainNode::createTransaction(BigNumber receiver, BigNumber amou
     return Transaction();
 }
 
-Transaction ExtraChainNode::createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
-                                                    BigNumber token)
+Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
+                                                    ActorId token)
 {
 
     Actor<KeyPrivate> actor = accController->getCurrentActor();
 
     if (!actor.empty())
     {
-        if (receiver == 0)
+        if (receiver.isEmpty())
         {
             qDebug() << "Create freeze tx to me";
-            receiver = actor.id();
+            receiver = actor.id().toNumber();
         }
         else
             qDebug() << "Create freeze tx to" << receiver;
@@ -384,8 +383,8 @@ Transaction ExtraChainNode::createFreezeTransaction(BigNumber receiver, BigNumbe
     return Transaction();
 }
 
-Transaction ExtraChainNode::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                                  BigNumber token)
+Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+                                                  ActorId token)
 {
     if (receiver.isEmpty() || amount.isEmpty())
     {
@@ -429,10 +428,12 @@ void ExtraChainNode::getAllActorsTimerCall()
         emit getAllActorsNode(res, true);
 #endif
 #ifdef ECONSOLE
-    if (accController->getAccountCount() > 0) {
+    if (accController->getAccountCount() > 0)
+    {
         QByteArray res2 = accController->getMainActor()->id().toActorId();
 
-        if (!res2.isEmpty()) {
+        if (!res2.isEmpty())
+        {
             emit getAllActorsNode(res2, true);
         }
     }
@@ -609,7 +610,7 @@ void ExtraChainNode::tempareSlotForActors()
     emit sendActorToWallet(accController->getAccountID());
 }
 
-void ExtraChainNode::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
+void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, BigNumber plsr)
 {
 #ifdef ECONSOLE
     auto mainActor = accController->getMainActor();

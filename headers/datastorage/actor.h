@@ -45,6 +45,109 @@ enum class ActorType
     Company = 2
 };
 
+class ActorId
+{
+public:
+    ActorId() = default;
+    ActorId(int actorId)
+    {
+        id = BigNumber(actorId).toByteArray();
+        normalize();
+    }
+
+    ActorId(const QByteArray &actorId)
+    {
+        id = actorId;
+        normalize();
+    }
+
+    ActorId(const BigNumber &actorId)
+    {
+        id = actorId.toByteArray();
+        normalize();
+    }
+
+    ActorId &operator=(const QByteArray &actorId)
+    {
+        this->id = actorId;
+        normalize();
+        return *this;
+    }
+
+    //    ActorId &operator=(const BigNumber &actorId)
+    //    {
+    //        this->id = actorId.toActorId();
+    //        return *this;
+    //    }
+
+    ActorId &operator=(int actorId)
+    {
+        id = BigNumber(actorId).toByteArray();
+        normalize();
+        return *this;
+    }
+
+    bool operator==(const BigNumber &actorId) const
+    {
+        return id == actorId;
+    }
+
+    bool operator!=(const BigNumber &actorId) const
+    {
+        return id != actorId;
+    }
+
+    QByteArray toByteArray() const
+    {
+        return id;
+    }
+
+    QByteArray toActorId() const
+    {
+        return toByteArray();
+    }
+
+    BigNumber toNumber() const
+    {
+        return id;
+    }
+
+    QString toString() const
+    {
+        return toByteArray();
+    }
+
+    std::string toStdString() const
+    {
+        return toByteArray().toStdString();
+    }
+
+    bool isEmpty() const
+    {
+        return id.isEmpty();
+    }
+
+    friend inline bool operator==(const ActorId &l, const ActorId &r)
+    {
+        return l.id == r.id;
+    }
+
+    friend QDebug operator<<(QDebug d, const ActorId &actorId)
+    {
+        d.noquote().nospace() << actorId.toByteArray();
+        return d;
+    }
+
+private:
+    void normalize()
+    {
+        while (id.length() < 20)
+            id.push_front('0');
+    }
+
+    QByteArray id;
+};
+
 template <typename T>
 class Actor final
 {
@@ -53,7 +156,7 @@ class Actor final
     const int FIELDS_SIZE = 4;
 
 protected:
-    BigNumber m_id = -1;
+    ActorId m_id = -1;
     T *m_key;
     ActorType m_account;
 
@@ -229,7 +332,7 @@ public:
         return this->id() == other.id() && *m_key == *otherKey;
     }
 
-    BigNumber id() const
+    ActorId id() const
     {
         return m_id;
     }
@@ -265,7 +368,7 @@ public:
         return actor;
     }
 
-    void setId(const BigNumber &id)
+    void setId(const ActorId &id)
     {
         m_id = id;
     }
