@@ -48,9 +48,10 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id)
 {
     if (id.isEmpty())
     {
-        qDebug() << "[ActorIndex] Error: try get actor with id = 0";
+        qDebug() << "[ActorIndex] Error: try get actor with id =" << id;
         return Actor<KeyPublic>();
     }
+
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty())
     {

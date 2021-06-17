@@ -114,7 +114,7 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 bool ResolverService::validate(const Messages::BaseMessage &message)
 {
     ActorId signer = message.signer;
-    if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
+    if (signer.isEmpty())
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
@@ -124,7 +124,7 @@ bool ResolverService::validate(const Messages::BaseMessage &message)
     }
     else
     {
-        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toByteArray()));
+        qDebug() << QString("There no actor %1 locally").arg(signer.toString());
         //        emit SendGetActor(signer);
         //        return false;
         this->thread()->sleep(5);
