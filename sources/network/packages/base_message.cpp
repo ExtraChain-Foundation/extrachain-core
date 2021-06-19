@@ -58,7 +58,7 @@ void BaseMessage::operator=(QList<QByteArray> &list)
         protocol = list.takeFirst();
         type = list.takeFirst().toUInt();
         QByteArray signBytes = list.takeFirst();
-        signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
+        signer = BigNumber::isValid(signBytes) ? signBytes : ActorId();
         digSig = list.takeFirst();
         data = list.takeFirst();
     }

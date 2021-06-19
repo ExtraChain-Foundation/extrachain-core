@@ -347,7 +347,7 @@ QByteArrayList ActorIndex::getProfile(QString id)
             && resolveManager != nullptr)
         {
             Messages::GetActorMessage msg;
-            msg.actorId = BigNumber(id.toLocal8Bit());
+            msg.actorId = id.toLocal8Bit();
             resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
         }
 
@@ -363,11 +363,9 @@ QByteArrayList ActorIndex::getProfile(QString id)
     // }
 }
 
-bool ActorIndex::actorExist(BigNumber actorId)
+bool ActorIndex::actorExist(const ActorId &actorId)
 {
-    if (getById(actorId) == QByteArray())
-        return false;
-    return true;
+    return !getById(actorId).isEmpty();
 }
 
 QString ActorIndex::getFolderPath() const

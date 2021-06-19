@@ -111,7 +111,7 @@ private:
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
-                                    QMap<BigNumber, BigNumber> states = QMap<BigNumber, BigNumber>());
+                                    QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -219,13 +219,6 @@ public:
     void signBlock(Block &block) const;
 
     // - ACTORS - //
-
-    /**
-     * Gets actor from actor index
-     * @param actorId
-     * @return actor
-     */
-    Actor<KeyPublic> getActor(const BigNumber &actorId);
     /**
      * @brief remove all blocks
      */
@@ -282,7 +275,7 @@ public:
     BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
     BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender = -1) const;
 
-    QMap<QByteArray, BigNumber> getAllStakingForMe(BigNumber userId, BigNumber tokenId) const;
+    QMap<QByteArray, BigNumber> getAllStakingForMe(ActorId userId, ActorId tokenId) const;
     /**
      * @brief Show blockchain
      */

@@ -196,6 +196,7 @@ public slots:
      * ready for work
      */
     void process();
+
 signals:
     /**
      * @brief TaskFinished signal to resolver manager
@@ -223,7 +224,7 @@ signals:
     void newTx(const Transaction &tx);
 
     // request
-    void getActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+    void getActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver);
 
     void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
 

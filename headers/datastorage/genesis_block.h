@@ -65,9 +65,9 @@ public:
         QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4)
         {
-            actorId = BigNumber(l.at(0));
+            actorId = l.at(0);
             state = BigNumber(l.at(1));
-            token = BigNumber(l.at(2));
+            token = l.at(2);
             type = DataStorage::typeDataRow(l.at(3).toInt());
         }
     }

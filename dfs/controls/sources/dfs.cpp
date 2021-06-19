@@ -1093,7 +1093,7 @@ bool Dfs::dfsValidate(QByteArray userId)
         // qDebug() << "dfsValidate ignore" << userId;
         return true;
     }
-    if (!actorIndex->hasActor(BigNumber(userId)))
+    if (!actorIndex->hasActor(userId))
         return false;
 
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE;

@@ -85,7 +85,7 @@ public:
      * @param actorId
      * @return resultCode, true - exist, false - none
      */
-    bool actorExist(BigNumber actorId);
+    bool actorExist(const ActorId &actorId);
 
     /**
      * @brief Gets actor from local storage

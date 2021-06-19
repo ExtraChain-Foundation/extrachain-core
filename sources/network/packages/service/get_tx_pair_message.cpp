@@ -40,6 +40,6 @@ QByteArray GetTxPairMessage::serialize() const
 void GetTxPairMessage::deserialize(const QByteArray &serilaized)
 {
     QList<QByteArray> list = Serialization::deserialize(serilaized, GetTxPairMessage::FIELD_SIZE);
-    this->senderId = BigNumber(list.at(0));
-    this->receiverId = BigNumber(list.at(1));
+    this->senderId = list.at(0);
+    this->receiverId = list.at(1);
 }

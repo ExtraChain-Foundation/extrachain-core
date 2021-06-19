@@ -381,7 +381,7 @@ void Blockchain::stakingReward(const Block &block)
                 if (checkStakingReward(tx.getHash(), tx.getToken(), wallet))
                     continue;
 
-                Transaction rtx(Trash::NullActor, i.key(), StakingReward);
+                Transaction rtx(ActorId(), i.key(), StakingReward);
                 rtx.setToken(tx.getToken());
                 auto [hash, blockId] = getLastTxForStaking(wallet, tx.getToken());
                 rtx.setData(
@@ -486,7 +486,7 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         const auto transactions = block.extractTransactions();
         for (const Transaction &tx : qAsConst(transactions))
         {
-            if (tx.getReceiver() == BigNumber(*actorIndex->companyId))
+            if (tx.getReceiver() == *actorIndex->companyId)
                 break;
             if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
             {
@@ -720,7 +720,7 @@ void Blockchain::sendFeeUnfreeze(Block &block)
     }
 }
 
-GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<BigNumber, BigNumber> states)
+GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<ActorId, BigNumber> states)
 {
     qDebug() << "Creating genesis block";
     genBlockData.clear();
@@ -739,14 +739,14 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
             if (blockIndex.getFirstSavedId() == 0 && blockIndex.getLastSavedId() == 0)
             {
 
-                for (QMap<BigNumber, BigNumber>::iterator i = states.begin(); i != states.end(); i++)
+                for (auto i = states.begin(); i != states.end(); i++)
                 {
                     genBlockData.append(
                         GenesisDataRow(i.key(), i.value(), 0, DataStorage::typeDataRow::UNIVERSAL));
                 }
-                BigNumber comp = BigNumber(*(actorIndex->companyId));
-                //                nb.setApprover(BigNumber(*(actorIndex->companyId)));
-                nb.sign(accountController->getActor(comp));
+
+                // nb.setApprover(BigNumber(*(actorIndex->companyId)));
+                nb.sign(accountController->getActor(ActorId(*(actorIndex->companyId))));
             }
             else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
@@ -767,11 +767,10 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
             DBConnector cacheDB("blockchain/cacheEC.db");
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
-                nb.addRow(
-                    GenesisDataRow(BigNumber(QByteArray::fromStdString(i["ActorId"])),
-                                   BigNumber(QByteArray::fromStdString(i["State"])),
-                                   BigNumber(QByteArray::fromStdString(i["Token"])),
-                                   DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
+                nb.addRow(GenesisDataRow(
+                    QByteArray::fromStdString(i["ActorId"]), BigNumber(QByteArray::fromStdString(i["State"])),
+                    QByteArray::fromStdString(i["Token"]),
+                    DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
             cacheDB.query("DELETE FROM cacheData");
             cacheDB.query("VACUUM");
             nb.setPrevGenHash(blockIndex.getBlockById(i).getHash());
@@ -1384,7 +1383,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
     return balance;
 }
 
-QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(BigNumber userId, BigNumber tokenId) const
+QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(ActorId userId, ActorId tokenId) const
 {
     QMap<QByteArray, BigNumber> res;
     BigNumber balance;
@@ -1584,12 +1583,6 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
 }
 
 // Actors //
-
-Actor<KeyPublic> Blockchain::getActor(const BigNumber &actorId)
-{
-    return actorIndex->getActor(actorId);
-}
-
 Actor<KeyPrivate> Blockchain::getApprover() const
 {
     return accountController->getCurrentActor();
@@ -1864,7 +1857,7 @@ void Blockchain::proveTx(Transaction *tx)
         return;
     }
 
-    if (targetSender == BigNumber(Trash::NullActor))
+    if (targetSender.isEmpty())
     {
         Actor<KeyPublic> producerActor;
         if (tx->getProducer() != 0)
@@ -1899,7 +1892,7 @@ void Blockchain::proveTx(Transaction *tx)
         return;
     }
 
-    if (targetReceiver == BigNumber(Trash::NullActor))
+    if (targetReceiver.isEmpty())
     {
         if (Serialization::deserialize(tx->getData()).size() != 2)
         {

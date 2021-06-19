@@ -34,10 +34,6 @@
  * Users, Smart-contracts
  */
 
-namespace Trash {
-static const QByteArray NullActor = "0";
-};
-
 enum class ActorType
 {
     Wallet = 0,
@@ -48,7 +44,11 @@ enum class ActorType
 class ActorId
 {
 public:
-    ActorId() = default;
+    ActorId()
+    {
+        normalize();
+    };
+
     ActorId(int actorId)
     {
         if (actorId == -1)
@@ -56,19 +56,13 @@ public:
             qDebug() << "ActorId == -1";
         }
 
-        id = QByteArray::number(actorId);
+        id = QByteArray::number(actorId, 16);
         normalize();
     }
 
     ActorId(const QByteArray &actorId)
     {
         id = actorId;
-        normalize();
-    }
-
-    ActorId(const BigNumber &actorId)
-    {
-        id = actorId.toByteArray();
         normalize();
     }
 
@@ -89,12 +83,12 @@ public:
         return id != actorId.id;
     }
 
-    QByteArray toByteArray() const
+    bool operator<(const ActorId &actorId) const
     {
-        return id;
+        return id < actorId.id;
     }
 
-    BigNumber toNumber() const
+    QByteArray toByteArray() const
     {
         return id;
     }
@@ -211,7 +205,7 @@ public:
             }
         }
 
-        this->m_id = BigNumber(json["id"].toString().toLatin1());
+        this->m_id = json["id"].toString().toLatin1();
         this->m_key = new T(json);
         this->m_account = ActorType(json["account"].toInt());
 
@@ -243,7 +237,7 @@ public:
             QByteArray pk = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
             if (pk.size() >= 20)
             {
-                m_id = BigNumber(pk.left(20));
+                m_id = pk.left(20);
             }
             else
             {

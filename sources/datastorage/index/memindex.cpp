@@ -113,7 +113,7 @@ Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam para
         switch (param)
         {
         case SearchEnum::BlockParam::Approver: {
-            if (byPosition.getApprover() == id)
+            if (BigNumber(byPosition.getApprover().toByteArray()) == id)
                 return byPosition;
             break;
         }

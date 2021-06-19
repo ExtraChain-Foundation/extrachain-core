@@ -111,7 +111,7 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
         TMP::companyActorId = new QByteArray(company.id().toByteArray());
         actorIndex->setCompanyId(new QByteArray(company.id().toByteArray()));
 
-        QMap<BigNumber, BigNumber> tm;
+        QMap<ActorId, BigNumber> tm;
         tm.insert(0, 0);
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
@@ -276,10 +276,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
-        if (tx.getSender() == BigNumber(Trash::NullActor)
-            || tx.getSender() == BigNumber(*actorIndex->companyId)
-            || tx.getReceiver() == BigNumber(Trash::NullActor)
-            || tx.getReceiver() == BigNumber(*actorIndex->companyId))
+        if (tx.getSender().isEmpty() || tx.getSender() == *actorIndex->companyId || tx.getReceiver().isEmpty()
+            || tx.getReceiver() == *actorIndex->companyId)
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
@@ -624,7 +622,7 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId pl
     if (actorIndex->companyId == nullptr)
         return;
 
-    BigNumber companyId = BigNumber(*actorIndex->companyId);
+    ActorId companyId = *actorIndex->companyId;
     if (mainActor->id() == companyId)
     {
         qInfo().noquote() << "Company send to" << receiver << "with amount" << amount;
@@ -637,7 +635,7 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId pl
             return;
         }
 
-        if (blockchain->getUserBalance(mainActor->id(), BigNumber(0)) < amount)
+        if (blockchain->getUserBalance(mainActor->id(), ActorId(0)) < amount)
         {
             qInfo().noquote() << "Not enough coins on wallet" << mainActor;
             return;

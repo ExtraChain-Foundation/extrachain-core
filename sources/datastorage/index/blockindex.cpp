@@ -182,7 +182,7 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
         switch (param)
         {
         case SearchEnum::BlockParam::Approver: {
-            if (lastBlock.getApprover() == id)
+            if (BigNumber(lastBlock.getApprover().toByteArray()) == id)
                 return lastBlock;
             break;
         }
@@ -279,27 +279,29 @@ BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, con
             {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
 
-                if (tx.getSender() == id || tx.getReceiver() == id)
+                if (BigNumber(tx.getSender().toByteArray()) == id
+                    || BigNumber(tx.getReceiver().toByteArray()) == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSender: {
-                if (tx.getSender() == id)
+                if (BigNumber(tx.getSender().toByteArray()) == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
-                if (tx.getReceiver() == id)
+                if (BigNumber(tx.getReceiver().toByteArray()) == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if (tx.getSender() == id || tx.getReceiver() == id)
+                if (BigNumber(tx.getSender().toByteArray()) == id
+                    || BigNumber(tx.getReceiver().toByteArray()) == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
-                if (tx.getApprover() == id)
+                if (BigNumber(tx.getApprover().toByteArray()) == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
@@ -344,12 +346,13 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
 
         for (const Transaction &tx : txs)
         {
-            if (tx.getToken() != token)
+            if (BigNumber(tx.getToken().toByteArray()) != token)
                 continue;
             switch (param)
             {
             case SearchEnum::TxParam::UserSender: {
-                if (tx.getSender() == id && tx.getToken() == token)
+                if (BigNumber(tx.getSender().toByteArray()) == id
+                    && BigNumber(tx.getToken().toByteArray()) == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
@@ -357,7 +360,8 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
-                if (tx.getReceiver() == id && tx.getToken() == token)
+                if (BigNumber(tx.getReceiver().toByteArray()) == id
+                    && BigNumber(tx.getToken().toByteArray()) == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
@@ -365,7 +369,9 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if ((tx.getSender() == id || tx.getReceiver() == id) && tx.getToken() == token)
+                if ((BigNumber(tx.getSender().toByteArray()) == id
+                     || BigNumber(tx.getReceiver().toByteArray()) == id)
+                    && BigNumber(tx.getToken().toByteArray()) == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
@@ -373,7 +379,8 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
-                if (tx.getApprover() == id && tx.getToken() == token)
+                if (BigNumber(tx.getApprover().toByteArray()) == id
+                    && BigNumber(tx.getToken().toByteArray()) == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
@@ -381,7 +388,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (BigNumber(tx.getHash()) == id && tx.getToken() == token)
+                if (BigNumber(tx.getHash()) == id && BigNumber(tx.getToken().toByteArray()) == token)
                 {
                     currentTxs << tx;
                     ++currentCount;
@@ -685,8 +692,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const
             GenesisDataRow dRow;
             dRow.type = DataStorage::typeDataRow(QByteArray(tmp.at("type").c_str()).toInt());
             dRow.state = BigNumber(QByteArray(tmp.at("state").c_str()));
-            dRow.token = BigNumber(QByteArray(tmp.at("token").c_str()));
-            dRow.actorId = BigNumber(QByteArray(tmp.at("actorId").c_str()));
+            dRow.token = QByteArray::fromStdString(tmp.at("token"));
+            dRow.actorId = QByteArray::fromStdString(tmp.at("actorId"));
             b.addRow(dRow);
         }
 

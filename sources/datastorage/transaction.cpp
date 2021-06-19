@@ -22,19 +22,14 @@
 Transaction::Transaction(QObject *parent)
     : QObject(parent)
 {
-    this->sender = BigNumber(0);
-    this->receiver = BigNumber(0);
     this->amount = BigNumber(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
-    this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->approver = BigNumber(0);
     this->digSig = QByteArray();
-    this->producer = BigNumber(0);
     calcHash();
 }
 
@@ -46,19 +41,19 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     QList<QByteArray> list = Serialization::deserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
     if (list.size() == 13)
     {
-        this->sender = BigNumber(list.at(0));
-        this->receiver = BigNumber(list.at(1));
+        this->sender = list.at(0);
+        this->receiver = list.at(1);
         this->amount = BigNumber(list.at(2));
         this->date = list.at(3).toLongLong();
         this->data = list.at(4);
-        this->token = BigNumber(list.at(5));
+        this->token = list.at(5);
         this->prevBlock = BigNumber(list.at(6));
         this->gas = list.at(7).toInt();
         this->hop = list.at(8).toInt();
         this->hash = QByteArray(list.at(9));
-        this->approver = BigNumber(list.at(10));
+        this->approver = list.at(10);
         this->digSig = list.at(11);
-        this->producer = BigNumber(list.at(12));
+        this->producer = list.at(12);
     }
     else
         qDebug() << "Incorrect TX";
@@ -75,14 +70,11 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
     this->amount = amount;
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
-    this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->approver = BigNumber(0);
     this->digSig = QByteArray();
-    this->producer = BigNumber(0);
     calcHash();
 }
 
@@ -220,25 +212,24 @@ void Transaction::setHop(int hop)
 void Transaction::decrementHop()
 {
     this->hop--;
-
     calcHash();
 }
 
 void Transaction::clear()
 {
-    this->sender = BigNumber(0);
-    this->receiver = BigNumber(0);
+    this->sender = "0";
+    this->receiver = "0";
     this->amount = BigNumber(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
-    this->token = BigNumber(0);
+    this->token = "0";
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->approver = BigNumber(0);
+    this->approver = "0";
     this->digSig = QByteArray();
-    this->producer = BigNumber(0);
+    this->producer = "0";
     calcHash();
 }
 

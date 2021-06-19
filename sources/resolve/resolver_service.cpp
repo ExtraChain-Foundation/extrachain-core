@@ -217,7 +217,7 @@ void ResolverService::resolveTask()
 
 void ResolverService::resolveGeneralTask()
 {
-    QList<QByteArray> res = Serialization::deserialize(msg);
+    // QList<QByteArray> res = Serialization::deserialize(msg);
     using namespace Messages;
     BaseMessage message;
     message = msg;
@@ -235,7 +235,7 @@ void ResolverService::resolveGeneralTask()
     }
     //    if (msgType != Messages::GeneralRequest::getAllActors
     //        && msgType != Messages::GeneralResponse::getAllActorsResponse)
-    qDebug() << "Resolver: receive " << msgType;
+    qDebug() << "Resolver: receive" << msgType;
     if ((msgType != Messages::ChainMessage::actorMessage) && (Messages::isDFSMessage(msgType))
         && (msgType != Messages::GeneralRequest::GetActor)
         && (msgType != Messages::GeneralResponse::getActorResponse)
@@ -300,14 +300,14 @@ void ResolverService::resolveGeneralTask()
             return;
         }
         blockchain->addBlockToBlockchain(block);
-        //        emit newBlock(block);
+        // emit newBlock(block);
         finishWork();
         break;
     }
     case Messages::ChainMessage::genesisBlockMessage: {
         GenesisBlock block = message.data;
         blockchain->addGenBlockToBlockchain(block);
-        //        emit newGenesisBlock(block);
+        // emit newGenesisBlock(block);
         finishWork();
         break;
     }
@@ -315,11 +315,9 @@ void ResolverService::resolveGeneralTask()
         QByteArray msg = message.data;
         auto list = msg.split(' ');
         BigNumber amount(list[0]);
-        BigNumber plsr;
-        if (list.length() > 1)
-            plsr = BigNumber(list[1]);
+        auto plsr = list.length() > 1 ? list[1] : ActorId();
         node->coinResponse(message.signer, amount, plsr);
-        //        emit coinRequest(message.getSigner(), amount);
+        // emit coinRequest(message.getSigner(), amount);
         finishWork();
         break;
     }

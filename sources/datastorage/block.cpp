@@ -174,7 +174,7 @@ bool Block::equals(const Block &block) const
 BlockCompare Block::compareBlock(const Block &b) const
 {
     BlockCompare temp;
-    temp.approverDiff = getApprover().toNumber() - b.getApprover().toNumber();
+    temp.approverDiff = BigNumber(getApprover().toByteArray()) - BigNumber(b.getApprover().toByteArray());
     temp.indexDiff = getIndex() - b.getIndex();
     temp.dataDiff = Utils::compare(getData(), b.getData());
     temp.digitalSigDiff = getDigSig() == b.getDigSig();

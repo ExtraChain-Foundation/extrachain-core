@@ -39,14 +39,15 @@
 #define UPDATE_DEBUG()
 #endif
 
-/**
- * Data type for big hex numbers for addresses
- * example: ab11405c92a05c91c48
- */
 namespace BigNumberUtils {
 const static QVector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
                                      '2', '3', '4', '5', '6', '7', '8', '9' };
 }
+
+/**
+ * Data type for big hex numbers for addresses
+ * example: ab11405c92a05c91c48
+ */
 class BigNumber
 {
 public:
