@@ -140,7 +140,7 @@ public:
     QString toString() const;
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
-    bool isApprover(QByteArray) const;
+    bool isApprover(const ActorId &) const;
 
 public:
     virtual void initFields(QList<QByteArray> &list);

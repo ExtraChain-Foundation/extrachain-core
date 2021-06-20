@@ -357,7 +357,7 @@ bool Block::isBlock(const QByteArray &data)
     return data.contains(Config::DATA_BLOCK_TYPE);
 }
 
-bool Block::isApprover(QByteArray actorId) const
+bool Block::isApprover(const ActorId &actorId) const
 {
     return actorId == getApprover();
 }

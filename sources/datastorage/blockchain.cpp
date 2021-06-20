@@ -1923,7 +1923,8 @@ void Blockchain::proveTx(Transaction *tx)
         if (tx->getData() == "initcontract")
         {
             QByteArrayList profile = senderActor.profile().getListProfile();
-            if (profile[0] == "6" && profile[5] == targetReceiver && (targetSender == tx->getToken()))
+            if (profile[0] == "6" && ActorId(profile[5]) == targetReceiver
+                && (targetSender == tx->getToken()))
             {
                 qDebug() << "Contract tx proved";
                 tx->sign(accountController->getCurrentActor());
