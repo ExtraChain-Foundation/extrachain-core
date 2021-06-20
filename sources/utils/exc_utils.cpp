@@ -624,7 +624,7 @@ QString Utils::detectCompiler()
 #endif
 }
 
-QNetworkAddressEntry Utils::findLocalIp()
+QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
 {
     const auto allInterfaces = QNetworkInterface::allInterfaces();
     const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
@@ -638,7 +638,11 @@ QNetworkAddressEntry Utils::findLocalIp()
         {
             if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
             {
-                qDebug() << "[NetManager] Find local ip candidate:" << networkInterface;
+                if (debug == PrintDebug::On)
+                {
+                    qDebug() << "[FindLocalIp] Find local ip candidate:" << networkInterface;
+                }
+
                 localIpNotConnect.append(address.ip());
             }
         }
@@ -658,15 +662,11 @@ QNetworkAddressEntry Utils::findLocalIp()
             if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
-//#ifdef Q_OS_WINDOWS
-            QTcpSocket *socket = new QTcpSocket;
+            auto socket = std::make_unique<QTcpSocket>();
             socket->bind(entry.ip());
             socket->connectToHost("8.8.8.8", 53);
-            bool isConnected = socket->waitForConnected(1000);
-            socket->deleteLater();
-            if (!isConnected)
+            if (!socket->waitForConnected(1000))
                 continue;
-//#endif
 
             if (localIpNotConnect.contains(entry.ip()))
             {
@@ -686,6 +686,8 @@ QNetworkAddressEntry Utils::findLocalIp()
 #ifdef QT_DEBUG
     qFatal("Can't find local ip");
 #else
-    return "";
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress::AnyIPv4);
+    return entry;
 #endif
 }

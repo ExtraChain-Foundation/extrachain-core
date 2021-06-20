@@ -472,6 +472,12 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
+enum PrintDebug
+{
+    Off = 0,
+    On = 1
+};
+
 #ifdef Q_OS_WIN
 static QString filePrefix = "file:///";
 #else
@@ -509,7 +515,7 @@ void wipeDataFiles();
 void softWipe(const QString &currentId);
 
 QString detectCompiler();
-QNetworkAddressEntry findLocalIp();
+QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
 
 } // namespace Utils
 

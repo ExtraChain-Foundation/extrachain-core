@@ -71,7 +71,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, c
 
     if (localIp.isEmpty())
     {
-        local = new QNetworkAddressEntry(Utils::findLocalIp());
+        local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::On));
         qDebug().noquote() << "[NetManager] Found local IP:" << local->ip().toString();
     }
     else
@@ -608,7 +608,8 @@ void NetManager::removeConnection()
     checkConnectionsStatus();
 }
 
-QString NetManager::localIp() {
+QString NetManager::localIp()
+{
     return local->ip().toString();
 }
 
