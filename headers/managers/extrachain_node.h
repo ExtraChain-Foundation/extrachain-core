@@ -85,7 +85,7 @@ public:
 #endif
 
 public:
-    ExtraChainNode();
+    ExtraChainNode(const QString &localIp = "");
     ~ExtraChainNode();
 
 public:

@@ -34,6 +34,7 @@
 #include <QStorageInfo>
 #include <QString>
 #include <QStringList>
+#include <QNetworkAddressEntry>
 #include <exception>
 #include <sstream>
 #include <string>
@@ -508,6 +509,7 @@ void wipeDataFiles();
 void softWipe(const QString &currentId);
 
 QString detectCompiler();
+QNetworkAddressEntry findLocalIp();
 
 } // namespace Utils
 

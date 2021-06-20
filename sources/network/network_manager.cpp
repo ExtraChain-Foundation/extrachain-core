@@ -42,7 +42,7 @@ void NetManager::addTempConnections(const QList<QByteArray> &value)
     tempConnections += value;
 }
 
-NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
+NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp)
 {
     requestResponseMap = new QMap<QByteArray, int>();
 #ifdef ECLIENT
@@ -68,7 +68,19 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex)
     accounts = accountList;
     this->actorIndex = actorIndex;
     // setupActorIndexConnections();
-    findLocal();
+
+    if (localIp.isEmpty())
+    {
+        local = new QNetworkAddressEntry(Utils::findLocalIp());
+        qDebug().noquote() << "[NetManager] Found local IP:" << local->ip().toString();
+    }
+    else
+    {
+        qDebug().noquote() << "[NetManager] Set local IP from settings:" << localIp;
+        local = new QNetworkAddressEntry();
+        local->setIp(QHostAddress(localIp));
+    }
+
     qDebug() << "NET MANAGER: init net fun start" << (local != nullptr);
     if (local != nullptr)
     {
@@ -183,69 +195,6 @@ NetManager::~NetManager()
     if (QFile(".handlerFile").exists())
         QFile(".handlerFile").remove();
     emit finished();
-}
-
-void NetManager::findLocal()
-{
-    const auto allInterfaces = QNetworkInterface::allInterfaces();
-    const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
-    QList<QHostAddress> localIpNotConnect;
-
-    for (const QNetworkInterface &networkInterface : allInterfaces)
-    {
-        const auto entries = networkInterface.addressEntries();
-
-        for (const QNetworkAddressEntry &address : entries)
-        {
-            if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
-            {
-                qDebug() << "[NetManager] Find local ip candidate:" << networkInterface;
-                localIpNotConnect.append(address.ip());
-            }
-        }
-    }
-
-    for (const QNetworkInterface &networkInterface : allInterfaces)
-    {
-        const auto entries = networkInterface.addressEntries();
-
-        for (const QNetworkAddressEntry &entry : entries)
-        {
-            const auto flags = networkInterface.flags();
-
-            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
-            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
-            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
-            if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
-                continue;
-
-#ifdef Q_OS_WINDOWS
-            QTcpSocket *socket = new QTcpSocket;
-            socket->bind(entry.ip());
-            socket->connectToHost("8.8.8.8", 53);
-            bool isConnected = socket->waitForConnected(1000);
-            socket->deleteLater();
-            if (!isConnected)
-                continue;
-#endif
-
-            if (localIpNotConnect.contains(entry.ip()))
-            {
-                QString name = networkInterface.name();
-
-                if (name.left(2) == "vm")
-                    continue;
-                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
-                    || name.left(8) == "wireless")
-                {
-                    local = new QNetworkAddressEntry(entry);
-                    qDebug().noquote() << "[NetManager] Discovered local:" << local->ip().toString()
-                                       << networkInterface.name();
-                    return;
-                }
-            }
-        }
-    }
 }
 
 void NetManager::checkConnectionsStatus()
@@ -657,6 +606,10 @@ void NetManager::removeConnection()
     emit connection->finished();
     connections.removeAt(connections.indexOf(connection));
     checkConnectionsStatus();
+}
+
+QString NetManager::localIp() {
+    return local->ip().toString();
 }
 
 void NetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,

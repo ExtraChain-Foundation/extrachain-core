@@ -52,10 +52,10 @@ public:
     ActorId(const QByteArray &actorId)
     {
 #ifdef QT_DEBUG
-        if (!BigNumber::isValid(actorId))
+        if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
             qFatal("ActorId not valid");
 #endif
-        m_id = actorId;
+        m_id = !actorId.isEmpty() ? actorId : "00000000000000000000";
         normalize();
     }
 
@@ -324,7 +324,7 @@ public:
 
     QString accountString() const
     {
-        return QString::number(m_account);
+        return QString::number(int(m_account));
     }
 
     std::string accountStdString() const

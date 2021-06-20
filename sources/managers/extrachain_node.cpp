@@ -21,7 +21,7 @@
 
 #include "resolve/resolve_manager.h"
 
-ExtraChainNode::ExtraChainNode()
+ExtraChainNode::ExtraChainNode(const QString &localIp)
 {
     if (sodium_init() != 0)
     {
@@ -37,7 +37,7 @@ ExtraChainNode::ExtraChainNode()
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
-    netManager = new NetManager(accController, actorIndex);
+    netManager = new NetManager(accController, actorIndex, localIp);
     subscribeController = new SubscribeController();
     subscribeController->setExtraChainNode(this);
     actorIndex->setAccController(accController);
@@ -50,7 +50,7 @@ ExtraChainNode::ExtraChainNode()
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
-    dfs = new Dfs(actorIndex, accController);
+    dfs = new Dfs(actorIndex, accController, localIp);
 
 #ifdef ECLIENT
     notificationManager = new NotificationManager();

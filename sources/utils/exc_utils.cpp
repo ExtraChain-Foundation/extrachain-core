@@ -19,8 +19,11 @@
 
 #include "utils/exc_utils.h"
 
+#include <QHostAddress>
 #include <QMimeDatabase>
+#include <QNetworkInterface>
 #include <QStandardPaths>
+#include <QTcpSocket>
 
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
@@ -593,11 +596,9 @@ QString Utils::detectCompiler()
 #error "Compiler not supported"
 #endif
 
-#ifndef Q_OS_ANDROID
-#ifdef __GNUC__
+#if __GNUC__ > 4
     QString gcc = "GCC";
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
-#endif
 #endif
 
 #if _MSC_VER && !__INTEL_COMPILER
@@ -620,5 +621,71 @@ QString Utils::detectCompiler()
     return msvcVersion;
 #else
     return "unknown";
+#endif
+}
+
+QNetworkAddressEntry Utils::findLocalIp()
+{
+    const auto allInterfaces = QNetworkInterface::allInterfaces();
+    const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
+    QList<QHostAddress> localIpNotConnect;
+
+    for (const QNetworkInterface &networkInterface : allInterfaces)
+    {
+        const auto entries = networkInterface.addressEntries();
+
+        for (const QNetworkAddressEntry &address : entries)
+        {
+            if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
+            {
+                qDebug() << "[NetManager] Find local ip candidate:" << networkInterface;
+                localIpNotConnect.append(address.ip());
+            }
+        }
+    }
+
+    for (const QNetworkInterface &networkInterface : allInterfaces)
+    {
+        const auto entries = networkInterface.addressEntries();
+
+        for (const QNetworkAddressEntry &entry : entries)
+        {
+            const auto flags = networkInterface.flags();
+
+            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
+            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
+            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+            if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
+                continue;
+
+//#ifdef Q_OS_WINDOWS
+            QTcpSocket *socket = new QTcpSocket;
+            socket->bind(entry.ip());
+            socket->connectToHost("8.8.8.8", 53);
+            bool isConnected = socket->waitForConnected(1000);
+            socket->deleteLater();
+            if (!isConnected)
+                continue;
+//#endif
+
+            if (localIpNotConnect.contains(entry.ip()))
+            {
+                QString name = networkInterface.name();
+
+                if (name.left(2) == "vm")
+                    continue;
+                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
+                    || name.left(8) == "wireless")
+                {
+                    return entry;
+                }
+            }
+        }
+    }
+
+#ifdef QT_DEBUG
+    qFatal("Can't find local ip");
+#else
+    return "";
 #endif
 }

@@ -639,10 +639,11 @@ void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver)
     sender->sendFragments(path, CardManager::getTypeByName(path), frags, receiver);
 }
 
-Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent)
+Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp, QObject *parent)
     : QObject(parent)
     , accountControler(accControler)
-    , actorIndex(actorIndex)
+    , actorIndex(actorIndex),
+      dfsNetLocalIp(localIp)
 {
     connect(this, &Dfs::requestFile, this, &Dfs::requestFileHandle);
     connect(this, &Dfs::titleReceived, this, &Dfs::titleReceivedHandle);
@@ -655,7 +656,7 @@ Dfs::~Dfs()
 
 void Dfs::initDFSNetManager()
 {
-    dfsNetManager = new DFSNetManager(accountControler, actorIndex);
+    dfsNetManager = new DFSNetManager(accountControler, actorIndex, dfsNetLocalIp);
     dfsNetManager->setDfs(this);
     connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::reconnect);
     ThreadPool::addThread(dfsNetManager);

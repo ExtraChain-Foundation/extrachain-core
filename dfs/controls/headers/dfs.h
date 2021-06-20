@@ -74,7 +74,8 @@ private:
 
 public:
     DFSNetManager *dfsNetManager = nullptr;
-    Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
+    QString dfsNetLocalIp;
+    Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp = "", QObject *parent = nullptr);
     ~Dfs();
 
 public:
