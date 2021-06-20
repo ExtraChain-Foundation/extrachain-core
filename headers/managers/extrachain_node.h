@@ -114,9 +114,10 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token = 0);
+    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token = ActorId());
 
-    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount, ActorId token = 0);
+    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+                                      ActorId token = ActorId());
     /**
      * @brief createFreezeTransaction
      * if receiver = 0 -> to me
@@ -125,7 +126,8 @@ public:
      * @param token
      * @return
      */
-    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token = 0);
+    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
+                                        ActorId token = ActorId());
 
     int getClientList();
 
@@ -245,7 +247,7 @@ public: // TODO
     {
         qInfo().noquote() << "Sending" << Transaction::amountToVisible(amount) << "coins to"
                           << receiver.toByteArray();
-        createTransaction(receiver, amount, 0);
+        createTransaction(receiver, amount, ActorId());
     }
 
 private:

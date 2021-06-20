@@ -334,7 +334,8 @@ void Blockchain::stakingReward(const Block &block)
 
         for (const auto &wallet : qAsConst(listWallet))
         {
-            BigNumber myFullStaking = getFreezeUserBalance(wallet, tx.getToken(), -3);
+            BigNumber myFullStaking =
+                getFreezeUserBalance(wallet, tx.getToken(), ActorId(), FreezeBalanceSearch::AllStaking);
 
             // BigNumber myStaking = getFreezeUserBalance(wallet, tx.getToken());
             QMap<QByteArray, BigNumber> investments = getInvestmentsStaking(wallet, tx.getToken());
@@ -491,10 +492,14 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
             if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
             {
                 GenesisDataRow recSender =
-                    GenesisDataRow(tx.getSender(), getFreezeUserBalance(tx.getSender(), tx.getToken()),
+                    GenesisDataRow(tx.getSender(),
+                                   getFreezeUserBalance(tx.getSender(), tx.getToken(), ActorId(),
+                                                        FreezeBalanceSearch::OnlyMyStaking),
                                    tx.getToken(), DataStorage::typeDataRow::STAKING);
                 GenesisDataRow recReceiver =
-                    GenesisDataRow(tx.getReceiver(), getFreezeUserBalance(tx.getReceiver(), tx.getToken()),
+                    GenesisDataRow(tx.getReceiver(),
+                                   getFreezeUserBalance(tx.getReceiver(), tx.getToken(), ActorId(),
+                                                        FreezeBalanceSearch::OnlyMyStaking),
                                    tx.getToken(), DataStorage::typeDataRow::STAKING);
                 addRecordsIfNew(recReceiver, recSender);
             }
@@ -742,7 +747,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 for (auto i = states.begin(); i != states.end(); i++)
                 {
                     genBlockData.append(
-                        GenesisDataRow(i.key(), i.value(), 0, DataStorage::typeDataRow::UNIVERSAL));
+                        GenesisDataRow(i.key(), i.value(), ActorId(), DataStorage::typeDataRow::UNIVERSAL));
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->companyId)));
@@ -1297,7 +1302,8 @@ BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
     return balance;
 }
 
-BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender) const
+BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
+                                           FreezeBalanceSearch balanceSearch) const
 {
     BigNumber balance = 0;
 
@@ -1333,7 +1339,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
             if (tx.getToken() != tokenId || !isStaking)
                 continue;
 
-            if (sender == ActorId(-3)) // all staking
+            if (balanceSearch == FreezeBalanceSearch::AllStaking)
             {
                 if (tx.getData() == Fee::FREEZE_TX && tx.getReceiver() == userId)
                 {
@@ -1344,7 +1350,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
                     balance -= tx.getAmount();
                 }
             }
-            else if (sender == ActorId(-2)) // all not my staking
+            else if (balanceSearch == FreezeBalanceSearch::AllNotMyStaking)
             {
                 if (tx.getSender() != userId && tx.getReceiver() == userId && tx.getData() == Fee::FREEZE_TX)
                 {
@@ -1356,7 +1362,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
                     balance -= tx.getAmount();
                 }
             }
-            else if (sender != ActorId(-1)) // only sender
+            else if (balanceSearch == FreezeBalanceSearch::OnlySender)
             {
                 if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX)
                 {
@@ -1367,7 +1373,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
                     balance -= tx.getAmount();
                 }
             }
-            else // only my staking
+            else if (balanceSearch == FreezeBalanceSearch::OnlyMyStaking)
             {
                 if (tx.getSender() == userId && tx.getReceiver() == userId)
                 {
@@ -1659,10 +1665,10 @@ void Blockchain::proveTx(Transaction *tx)
     ActorId targetSender = tx->getSender();
     ActorId targetReceiver = tx->getReceiver();
     Actor<KeyPublic> senderActor;
-    if (targetSender != 0)
+    if (!targetSender.isEmpty())
         senderActor = actorIndex->getActor(targetSender);
     Actor<KeyPublic> receiverActor;
-    if (targetReceiver != 0)
+    if (!targetReceiver.isEmpty())
         receiverActor = actorIndex->getActor(targetReceiver);
     if (tx->getAmount() < 0)
     {
@@ -1825,8 +1831,8 @@ void Blockchain::proveTx(Transaction *tx)
     }
     else if (tx->getData() == Fee::UNFREEZE_TX)
     {
-        BigNumber senderCurrentBalance =
-            getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender());
+        BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender(),
+                                                              FreezeBalanceSearch::OnlySender);
         ActorId sender = tx->getSender();
         if ((senderCurrentBalance - tx->getAmount()) < 0)
         {
@@ -1850,7 +1856,8 @@ void Blockchain::proveTx(Transaction *tx)
 
     // if receiver is not exist
 
-    if ((receiverActor.empty() && targetReceiver != 0) || (senderActor.empty() && targetSender != 0))
+    if ((receiverActor.empty() && !targetReceiver.isEmpty())
+        || (senderActor.empty() && !targetSender.isEmpty()))
     {
         emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: receiver or sender is not exist";
@@ -1860,11 +1867,11 @@ void Blockchain::proveTx(Transaction *tx)
     if (targetSender.isEmpty())
     {
         Actor<KeyPublic> producerActor;
-        if (tx->getProducer() != 0)
+        if (!tx->getProducer().isEmpty())
             producerActor = actorIndex->getActor(tx->getProducer());
         else
         {
-            qDebug() << "Tx" << tx->getHash() << " producer 0";
+            qDebug() << "Tx" << tx->getHash() << "producer 0";
             emit tx->NotApproved(tx);
             return;
         }
@@ -1876,7 +1883,7 @@ void Blockchain::proveTx(Transaction *tx)
         }
         if (tx->getAmount() <= 0)
         {
-            qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
+            qDebug() << "Tx" << tx->getHash() << "fee amount <= 0";
             emit tx->NotApproved(tx);
             return;
         }

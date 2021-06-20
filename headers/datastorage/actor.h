@@ -46,51 +46,49 @@ class ActorId
 public:
     ActorId()
     {
-        normalize();
+        m_id = "00000000000000000000";
     };
-
-    ActorId(int actorId)
-    {
-        if (actorId == -1)
-        {
-            qDebug() << "ActorId == -1";
-        }
-
-        id = QByteArray::number(actorId, 16);
-        normalize();
-    }
 
     ActorId(const QByteArray &actorId)
     {
-        id = actorId;
+#ifdef QT_DEBUG
+        if (!BigNumber::isValid(actorId))
+            qFatal("ActorId not valid");
+#endif
+        m_id = actorId;
         normalize();
     }
 
     ActorId &operator=(const QByteArray &actorId)
     {
-        this->id = actorId;
+        this->m_id = actorId;
         normalize();
         return *this;
     }
 
     bool operator==(const ActorId &actorId) const
     {
-        return id == actorId.id;
+        return m_id == actorId.m_id;
     }
 
     bool operator!=(const ActorId &actorId) const
     {
-        return id != actorId.id;
+        return m_id != actorId.m_id;
     }
 
     bool operator<(const ActorId &actorId) const
     {
-        return id < actorId.id;
+        return m_id < actorId.m_id;
     }
 
     QByteArray toByteArray() const
     {
-        return id;
+        return m_id;
+    }
+
+    QByteArray &toByteArrayRef()
+    {
+        return m_id;
     }
 
     QString toString() const
@@ -105,8 +103,8 @@ public:
 
     bool isEmpty() const
     {
-        return id == "000000000000000000-1" || // temp
-            id.isEmpty() || id == "00000000000000000000";
+        return m_id == "000000000000000000-1" || // temp
+            m_id.isEmpty() || m_id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId)
@@ -118,11 +116,12 @@ public:
 private:
     void normalize()
     {
-        while (id.length() < 20)
-            id.push_front('0');
+        m_id = QByteArray("0").repeated(20 - m_id.length()) + m_id;
+        // while (m_id.length() < 20)
+        //     m_id.push_front('0');
     }
 
-    QByteArray id;
+    QByteArray m_id;
 };
 
 template <typename T>

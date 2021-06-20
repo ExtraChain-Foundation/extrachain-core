@@ -112,7 +112,7 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
         actorIndex->setCompanyId(new QByteArray(company.id().toByteArray()));
 
         QMap<ActorId, BigNumber> tm;
-        tm.insert(0, 0);
+        tm.insert(ActorId(), 0);
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
 

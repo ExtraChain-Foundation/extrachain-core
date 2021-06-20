@@ -38,7 +38,9 @@
 #include <cassert>
 // database
 #include "utils/db_connector.h"
+
 class TransactionManager;
+
 /*
  * Main database class
  *
@@ -49,6 +51,15 @@ class TransactionManager;
  *
  */
 static QMutex mutex;
+
+enum class FreezeBalanceSearch
+{
+    AllStaking,
+    AllNotMyStaking,
+    OnlyMyStaking,
+    OnlySender
+};
+
 class Blockchain : public QObject
 {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -273,7 +284,8 @@ public:
     BigNumber getRecords() const;
 
     BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
-    BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender = -1) const;
+    BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
+                                   FreezeBalanceSearch balanceSearch) const;
 
     QMap<QByteArray, BigNumber> getAllStakingForMe(ActorId userId, ActorId tokenId) const;
     /**
