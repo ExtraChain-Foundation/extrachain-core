@@ -55,7 +55,7 @@ public:
         if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
             qFatal("ActorId not valid");
 #endif
-        m_id = !actorId.isEmpty() ? actorId : "00000000000000000000";
+        m_id = !actorId.isEmpty() ? actorId : QByteArray("00000000000000000000");
         normalize();
     }
 
