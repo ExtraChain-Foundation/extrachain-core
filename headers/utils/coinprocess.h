@@ -32,7 +32,7 @@ public:
 
 public:
     static QList<Transaction> blockDataToFeeTxs(QList<Transaction> pendingTxs, QByteArray blockHash,
-                                                BigNumber myActorId, QByteArray* companyId);
+                                                ActorId myActorId, QByteArray* companyId);
 signals:
 };
 

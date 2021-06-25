@@ -21,7 +21,7 @@
 
 #include "resolve/resolve_manager.h"
 
-ExtraChainNode::ExtraChainNode()
+ExtraChainNode::ExtraChainNode(const QString &localIp)
 {
     if (sodium_init() != 0)
     {
@@ -37,7 +37,7 @@ ExtraChainNode::ExtraChainNode()
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
-    netManager = new NetManager(accController, actorIndex);
+    netManager = new NetManager(accController, actorIndex, localIp);
     subscribeController = new SubscribeController();
     subscribeController->setExtraChainNode(this);
     actorIndex->setAccController(accController);
@@ -50,7 +50,7 @@ ExtraChainNode::ExtraChainNode()
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetManager(netManager);
     //    contractManager = new ContractManager(accController, blockchain);
-    dfs = new Dfs(actorIndex, accController);
+    dfs = new Dfs(actorIndex, accController, localIp);
 
 #ifdef ECLIENT
     notificationManager = new NotificationManager();
@@ -95,7 +95,7 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
     if (QDir("keystore/profile").isEmpty())
     {
         company = CreateCompany(consoleHash);
-        emit savePrivateProfile(consoleHash, company.id().toActorId());
+        emit savePrivateProfile(consoleHash, company.id().toByteArray());
         created = true;
     }
     else
@@ -108,18 +108,18 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
     {
         QByteArray td = company.key()->sign("test");
         std::cout << company.key()->verify("test", td) << std::endl;
-        TMP::companyActorId = new QByteArray(company.id().toActorId());
-        actorIndex->setCompanyId(new QByteArray(company.id().toActorId()));
+        TMP::companyActorId = new QByteArray(company.id().toByteArray());
+        actorIndex->setCompanyId(new QByteArray(company.id().toByteArray()));
 
-        QMap<BigNumber, BigNumber> tm;
-        tm.insert(0, 0);
+        QMap<ActorId, BigNumber> tm;
+        tm.insert(ActorId(), 0);
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
 
         // TODO: as console argument
         if (created)
         {
-            emit generateSmartContract("1000", "Default Coin", company.id().toActorId(), "#fa4868");
+            emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(), "#fa4868");
 
             QString companyId = *TMP::companyActorId;
             DBConnector dbc(
@@ -257,7 +257,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
     if (!actor.empty())
     {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                        .arg(tx.toString(), QString(actor.id().toActorId()));
+                        .arg(tx.toString(), QString(actor.id().toByteArray()));
 
         // 1) set prev block id
         BigNumber lastBlockId = blockchain->getLastBlock().getIndex();
@@ -276,10 +276,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
-        if (tx.getSender() == BigNumber(Trash::NullActor)
-            || tx.getSender() == BigNumber(*actorIndex->companyId)
-            || tx.getReceiver() == BigNumber(Trash::NullActor)
-            || tx.getReceiver() == BigNumber(*actorIndex->companyId))
+        if (tx.getSender().isEmpty() || tx.getSender() == *actorIndex->companyId || tx.getReceiver().isEmpty()
+            || tx.getReceiver() == *actorIndex->companyId)
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
@@ -325,9 +323,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
     return Transaction();
 }
 
-Transaction ExtraChainNode::createTransaction(BigNumber receiver, BigNumber amount, BigNumber token)
+Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount, ActorId token)
 {
-
     if (receiver.isEmpty() || amount.isEmpty())
     {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -349,19 +346,19 @@ Transaction ExtraChainNode::createTransaction(BigNumber receiver, BigNumber amou
         return this->createTransaction(tx);
     }
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toActorId()));
+                    .arg(QString(receiver.toByteArray()));
     return Transaction();
 }
 
-Transaction ExtraChainNode::createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
-                                                    BigNumber token)
+Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
+                                                    ActorId token)
 {
 
     Actor<KeyPrivate> actor = accController->getCurrentActor();
 
     if (!actor.empty())
     {
-        if (receiver == 0)
+        if (receiver.isEmpty())
         {
             qDebug() << "Create freeze tx to me";
             receiver = actor.id();
@@ -380,12 +377,12 @@ Transaction ExtraChainNode::createFreezeTransaction(BigNumber receiver, BigNumbe
         return this->createTransaction(tx);
     }
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toActorId()));
+                    .arg(QString(receiver.toByteArray()));
     return Transaction();
 }
 
-Transaction ExtraChainNode::createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                                  BigNumber token)
+Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+                                                  ActorId token)
 {
     if (receiver.isEmpty() || amount.isEmpty())
     {
@@ -410,7 +407,7 @@ Transaction ExtraChainNode::createTransactionFrom(BigNumber sender, BigNumber re
     else
     {
         qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                        .arg(QString(receiver.toActorId()));
+                        .arg(QString(receiver.toByteArray()));
     }
     return Transaction();
 }
@@ -429,10 +426,12 @@ void ExtraChainNode::getAllActorsTimerCall()
         emit getAllActorsNode(res, true);
 #endif
 #ifdef ECONSOLE
-    if (accController->getAccountCount() > 0) {
-        QByteArray res2 = accController->getMainActor()->id().toActorId();
+    if (accController->getAccountCount() > 0)
+    {
+        QByteArray res2 = accController->getMainActor()->id().toByteArray();
 
-        if (!res2.isEmpty()) {
+        if (!res2.isEmpty())
+        {
             emit getAllActorsNode(res2, true);
         }
     }
@@ -609,7 +608,7 @@ void ExtraChainNode::tempareSlotForActors()
     emit sendActorToWallet(accController->getAccountID());
 }
 
-void ExtraChainNode::coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr)
+void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId plsr)
 {
 #ifdef ECONSOLE
     auto mainActor = accController->getMainActor();
@@ -623,7 +622,7 @@ void ExtraChainNode::coinResponse(BigNumber receiver, BigNumber amount, BigNumbe
     if (actorIndex->companyId == nullptr)
         return;
 
-    BigNumber companyId = BigNumber(*actorIndex->companyId);
+    ActorId companyId = *actorIndex->companyId;
     if (mainActor->id() == companyId)
     {
         qInfo().noquote() << "Company send to" << receiver << "with amount" << amount;
@@ -631,12 +630,12 @@ void ExtraChainNode::coinResponse(BigNumber receiver, BigNumber amount, BigNumbe
     }
     else
     {
-        if (plsr > 0 && mainActor->id() != plsr)
+        if (!plsr.isEmpty() && mainActor->id() != plsr)
         {
             return;
         }
 
-        if (blockchain->getUserBalance(mainActor->id(), BigNumber(0)) < amount)
+        if (blockchain->getUserBalance(mainActor->id(), ActorId(0)) < amount)
         {
             qInfo().noquote() << "Not enough coins on wallet" << mainActor;
             return;

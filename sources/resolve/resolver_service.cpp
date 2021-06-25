@@ -113,8 +113,8 @@ void ResolverService::setTask(QByteArray msg, SocketPair receiver)
 
 bool ResolverService::validate(const Messages::BaseMessage &message)
 {
-    BigNumber signer = message.signer;
-    if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
+    ActorId signer = message.signer;
+    if (signer.isEmpty())
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
@@ -124,7 +124,7 @@ bool ResolverService::validate(const Messages::BaseMessage &message)
     }
     else
     {
-        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toActorId()));
+        qDebug() << QString("There no actor %1 locally").arg(signer.toString());
         //        emit SendGetActor(signer);
         //        return false;
         this->thread()->sleep(5);
@@ -146,7 +146,7 @@ bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message)
         return false;
     }
     qWarning() << QString("Message [%1] digital sign is not valid. Signer was [%2]")
-                      .arg(QString::fromLocal8Bit(message.serialize()), QString(message.signer.toActorId()));
+                      .arg(QString::fromLocal8Bit(message.serialize()), message.signer.toString());
     return true;
 }
 
@@ -217,7 +217,7 @@ void ResolverService::resolveTask()
 
 void ResolverService::resolveGeneralTask()
 {
-    QList<QByteArray> res = Serialization::deserialize(msg);
+    // QList<QByteArray> res = Serialization::deserialize(msg);
     using namespace Messages;
     BaseMessage message;
     message = msg;
@@ -235,7 +235,7 @@ void ResolverService::resolveGeneralTask()
     }
     //    if (msgType != Messages::GeneralRequest::getAllActors
     //        && msgType != Messages::GeneralResponse::getAllActorsResponse)
-    qDebug() << "Resolver: receive " << msgType;
+    qDebug() << "Resolver: receive" << msgType;
     if ((msgType != Messages::ChainMessage::actorMessage) && (Messages::isDFSMessage(msgType))
         && (msgType != Messages::GeneralRequest::GetActor)
         && (msgType != Messages::GeneralResponse::getActorResponse)
@@ -287,7 +287,7 @@ void ResolverService::resolveGeneralTask()
     case Messages::ChainMessage::actorMessage: {
         Actor<KeyPublic> actor(message.data);
         actorIndex->handleNewActor(actor);
-        //        emit newActor(actor);
+        // emit newActor(actor);
         finishWork();
         break;
     }
@@ -300,14 +300,14 @@ void ResolverService::resolveGeneralTask()
             return;
         }
         blockchain->addBlockToBlockchain(block);
-        //        emit newBlock(block);
+        // emit newBlock(block);
         finishWork();
         break;
     }
     case Messages::ChainMessage::genesisBlockMessage: {
         GenesisBlock block = message.data;
         blockchain->addGenBlockToBlockchain(block);
-        //        emit newGenesisBlock(block);
+        // emit newGenesisBlock(block);
         finishWork();
         break;
     }
@@ -315,11 +315,9 @@ void ResolverService::resolveGeneralTask()
         QByteArray msg = message.data;
         auto list = msg.split(' ');
         BigNumber amount(list[0]);
-        BigNumber plsr;
-        if (list.length() > 1)
-            plsr = BigNumber(list[1]);
+        auto plsr = list.length() > 1 ? list[1] : ActorId();
         node->coinResponse(message.signer, amount, plsr);
-        //        emit coinRequest(message.getSigner(), amount);
+        // emit coinRequest(message.getSigner(), amount);
         finishWork();
         break;
     }
@@ -395,6 +393,7 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
+
         actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data));
         finishWork();
         break;
@@ -505,7 +504,7 @@ bool ResolverService::validate(const Transaction &tx)
 {
     qDebug() << "RESOLVER SERVICE: "
              << "validate(Transaction):";
-    if (tx.getSender() == 0 && tx.getData().contains(Fee::STAKING_REWARD))
+    if (tx.getSender() == ActorId(0) && tx.getData().contains(Fee::STAKING_REWARD))
         return true;
     if (actorIndex->getActor(tx.getSender()).empty())
     {

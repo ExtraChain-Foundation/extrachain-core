@@ -44,7 +44,7 @@ class ActorIndex : public QObject
 private:
     AccountController *accController;
     ResolveManager *resolveManager = nullptr;
-    BigNumber records = 0;
+    qint64 records = 0;
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
@@ -71,6 +71,13 @@ private:
      */
     QString buildFilePath(const QByteArray &id) const;
     QString buildPathPubProfile(const QByteArray &id);
+    /**
+     * @brief add
+     * @param BigNumber id actorId for add
+     * @param data
+     * @return
+     */
+    int add(const ActorId &id, const QByteArray &data);
 
 public:
     /**
@@ -78,16 +85,16 @@ public:
      * @param actorId
      * @return resultCode, true - exist, false - none
      */
-    bool actorExist(BigNumber actorId);
+    bool actorExist(const ActorId &actorId);
 
     /**
      * @brief Gets actor from local storage
      * @param id - actor's id
      * @return Found actor, or empty actor (if not found)
      */
-    Actor<KeyPublic> getActor(const BigNumber &id);
-    bool hasActor(const BigNumber &id);
-    void removeActor(const BigNumber &id, bool resend = false);
+    Actor<KeyPublic> getActor(const ActorId &id);
+    bool hasActor(const ActorId &id);
+    void removeActor(const ActorId &id, bool resend = false);
 
     /**
      * @brief Validates block digital signature
@@ -108,18 +115,10 @@ public:
      * @param id
      * @return
      */
-    QByteArray getById(const BigNumber &id) const;
-    /**
-     * @brief add
-     * @param BigNumber id actorId for add
-     * @param data
-     * @return
-     */
-    int add(const BigNumber &id, const QByteArray &data);
-    BigNumber getRecords() const;
+    QByteArray getById(const ActorId &id) const;
 
+    qint64 getRecords() const;
     void setCompanyId(QByteArray *value);
-
     QString getFolderPath() const;
 
     /**
@@ -143,15 +142,9 @@ public:
 
 public slots:
     void process();
-    void handleGetActor(const BigNumber &actorId, QByteArray reqHash, const SocketPair &receiver);
+    void handleGetActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver);
     void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
-    void getAllActors(BigNumber id, bool isUser);
-    /**
-     * @brief The same as handleNewActor, but emit's ActorIsMissing signal
-     * if there no such actor in storage
-     * @param actor
-     */
-    void handleNewActorCheck(Actor<KeyPublic> actor);
+    void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
 
     void saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile);
@@ -185,13 +178,8 @@ signals:
     // void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
 
-    void initDfs(BigNumber userId);
+    void initDfs(ActorId userId);
     void initContractList(QVariantMap map);
-    /**
-     * @brief There no such actor in the local storage
-     * @param actor
-     */
-    void ActorIsMissing(Actor<KeyPublic> actor);
     void finished();
 };
 

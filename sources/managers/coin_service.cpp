@@ -71,7 +71,7 @@ const BigNumber CoinService::getGenesisAddress()
 
 void CoinService::checkGenBlock(Block block)
 {
-    if (block.getApprover() == GEN_ADDR)
+    if (BigNumber(block.getApprover().toByteArray()) == GEN_ADDR)
     {
         emit GenBlock(block);
     }

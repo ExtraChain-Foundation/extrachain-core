@@ -123,7 +123,7 @@ private:
     QMap<QByteArray, int> handler = {};
 
 public:
-    NetManager(AccountController *accountList, ActorIndex *actorIndex);
+    NetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp = "");
     ~NetManager();
 
     void showMessage(const QHostAddress &from, const QString &message);
@@ -150,7 +150,6 @@ signals:
     void finished();
 
 protected:
-    void findLocal();
     /**
      * @brief startNetwork
      * @param serverPort
@@ -244,6 +243,7 @@ public slots:
     void removeConnection();
 
 public:
+    QString localIp();
     void send(const QByteArray &message, const unsigned int &msgType,
               const SocketPair &receiver = SocketPair(),
               Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);

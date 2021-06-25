@@ -19,8 +19,11 @@
 
 #include "utils/exc_utils.h"
 
+#include <QHostAddress>
 #include <QMimeDatabase>
+#include <QNetworkInterface>
 #include <QStandardPaths>
+#include <QTcpSocket>
 
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
@@ -314,7 +317,7 @@ void Utils::wipeDataFiles()
     QString dataName = Utils::dataName().replace("/", "");
     qDebug() << "wipe dataName" << dataName;
     QDir(dataName).removeRecursively();
-    QDir().mkdir(dataName);
+    QDir().mkpath(dataName);
 
     QString shareFolder =
         QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
@@ -593,11 +596,9 @@ QString Utils::detectCompiler()
 #error "Compiler not supported"
 #endif
 
-#ifndef Q_OS_ANDROID
-#ifdef __GNUC__
+#if __GNUC__ > 4
     QString gcc = "GCC";
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
-#endif
 #endif
 
 #if _MSC_VER && !__INTEL_COMPILER
@@ -620,5 +621,73 @@ QString Utils::detectCompiler()
     return msvcVersion;
 #else
     return "unknown";
+#endif
+}
+
+QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
+{
+    const auto allInterfaces = QNetworkInterface::allInterfaces();
+    const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
+    QList<QHostAddress> localIpNotConnect;
+
+    for (const QNetworkInterface &networkInterface : allInterfaces)
+    {
+        const auto entries = networkInterface.addressEntries();
+
+        for (const QNetworkAddressEntry &address : entries)
+        {
+            if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
+            {
+                if (debug == PrintDebug::On)
+                {
+                    qDebug() << "[FindLocalIp] Find local ip candidate:" << networkInterface;
+                }
+
+                localIpNotConnect.append(address.ip());
+            }
+        }
+    }
+
+    for (const QNetworkInterface &networkInterface : allInterfaces)
+    {
+        const auto entries = networkInterface.addressEntries();
+
+        for (const QNetworkAddressEntry &entry : entries)
+        {
+            const auto flags = networkInterface.flags();
+
+            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
+            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
+            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+            if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
+                continue;
+
+            auto socket = std::make_unique<QTcpSocket>();
+            socket->bind(entry.ip());
+            socket->connectToHost("8.8.8.8", 53);
+            if (!socket->waitForConnected(1000))
+                continue;
+
+            if (localIpNotConnect.contains(entry.ip()))
+            {
+                QString name = networkInterface.name();
+
+                if (name.left(2) == "vm")
+                    continue;
+                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
+                    || name.left(8) == "wireless")
+                {
+                    return entry;
+                }
+            }
+        }
+    }
+
+#ifdef QT_DEBUG
+    qFatal("Can't find local ip");
+#else
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress::AnyIPv4);
+    return entry;
 #endif
 }

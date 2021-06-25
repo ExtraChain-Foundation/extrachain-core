@@ -34,6 +34,7 @@
 #include <QStorageInfo>
 #include <QString>
 #include <QStringList>
+#include <QNetworkAddressEntry>
 #include <exception>
 #include <sstream>
 #include <string>
@@ -389,6 +390,13 @@ namespace DataStorage {
           "canStaking   INT              NOT NULL  "
           ");";
 
+    static const std::string actorsTable = "Actors";
+    static const std::string actorsTableCreate = "CREATE TABLE IF NOT EXISTS " + actorsTable
+        + " ("
+          "id   TEXT PRIMARY KEY NOT NULL, "
+          "type INT              NOT NULL  "
+          ");";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
@@ -464,6 +472,12 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 
+enum PrintDebug
+{
+    Off = 0,
+    On = 1
+};
+
 #ifdef Q_OS_WIN
 static QString filePrefix = "file:///";
 #else
@@ -501,6 +515,7 @@ void wipeDataFiles();
 void softWipe(const QString &currentId);
 
 QString detectCompiler();
+QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
 
 } // namespace Utils
 

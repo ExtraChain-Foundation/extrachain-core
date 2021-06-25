@@ -85,7 +85,7 @@ public:
 #endif
 
 public:
-    ExtraChainNode();
+    ExtraChainNode(const QString &localIp = "");
     ~ExtraChainNode();
 
 public:
@@ -114,10 +114,10 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(BigNumber receiver, BigNumber amount, BigNumber token = 0);
+    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token = ActorId());
 
-    Transaction createTransactionFrom(BigNumber sender, BigNumber receiver, BigNumber amount,
-                                      BigNumber token = 0);
+    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+                                      ActorId token = ActorId());
     /**
      * @brief createFreezeTransaction
      * if receiver = 0 -> to me
@@ -126,13 +126,13 @@ public:
      * @param token
      * @return
      */
-    Transaction createFreezeTransaction(BigNumber receiver, BigNumber amount, bool toFreeze,
-                                        BigNumber token = 0);
+    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
+                                        ActorId token = ActorId());
 
     int getClientList();
 
 public:
-    void coinResponse(BigNumber receiver, BigNumber amount, BigNumber plsr);
+    void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
 
 #ifdef ECLIENT
     void setNotificationClient(NotificationClient *newNtfCl);
@@ -186,7 +186,7 @@ signals:
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
     void setCurrentIdNotificationManager(const QByteArray id);
-    void getAllActorsNode(QByteArray id, bool acc);
+    void getAllActorsNode(ActorId id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
                                QByteArray color);
@@ -243,16 +243,16 @@ public: // TODO
         return m_listenCoinRequest;
     }
 
-    void sendCoinRequest(BigNumber receiver, BigNumber amount)
+    void sendCoinRequest(ActorId receiver, BigNumber amount)
     {
         qInfo().noquote() << "Sending" << Transaction::amountToVisible(amount) << "coins to"
                           << receiver.toByteArray();
-        createTransaction(receiver, amount, 0);
+        createTransaction(receiver, amount, ActorId());
     }
 
 private:
     ConsoleManager *m_consoleManager;
-    QList<std::tuple<BigNumber, BigNumber, BigNumber>> m_requestCoinQueue;
+    QList<std::tuple<ActorId, BigNumber, ActorId>> m_requestCoinQueue;
     bool m_listenCoinRequest = false;
 #endif
 };

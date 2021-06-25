@@ -34,15 +34,94 @@
  * Users, Smart-contracts
  */
 
-namespace Trash {
-static const QByteArray NullActor = "0";
-};
-
 enum class ActorType
 {
     Wallet = 0,
     Account = 1,
     Company = 2
+};
+
+class ActorId
+{
+public:
+    ActorId()
+    {
+        m_id = "00000000000000000000";
+    };
+
+    ActorId(const QByteArray &actorId)
+    {
+#ifdef QT_DEBUG
+        if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
+            qFatal("ActorId not valid");
+#endif
+        m_id = !actorId.isEmpty() ? actorId : "00000000000000000000";
+        normalize();
+    }
+
+    ActorId &operator=(const QByteArray &actorId)
+    {
+        this->m_id = actorId;
+        normalize();
+        return *this;
+    }
+
+    bool operator==(const ActorId &actorId) const
+    {
+        return m_id == actorId.m_id;
+    }
+
+    bool operator!=(const ActorId &actorId) const
+    {
+        return m_id != actorId.m_id;
+    }
+
+    bool operator<(const ActorId &actorId) const
+    {
+        return m_id < actorId.m_id;
+    }
+
+    QByteArray toByteArray() const
+    {
+        return m_id;
+    }
+
+    QByteArray &toByteArrayRef()
+    {
+        return m_id;
+    }
+
+    QString toString() const
+    {
+        return toByteArray();
+    }
+
+    std::string toStdString() const
+    {
+        return toByteArray().toStdString();
+    }
+
+    bool isEmpty() const
+    {
+        return m_id == "000000000000000000-1" || // temp
+            m_id.isEmpty() || m_id == "00000000000000000000";
+    }
+
+    friend QDebug operator<<(QDebug d, const ActorId &actorId)
+    {
+        d.noquote().nospace() << actorId.toByteArray();
+        return d;
+    }
+
+private:
+    void normalize()
+    {
+        m_id = QByteArray("0").repeated(20 - m_id.length()) + m_id;
+        // while (m_id.length() < 20)
+        //     m_id.push_front('0');
+    }
+
+    QByteArray m_id;
 };
 
 template <typename T>
@@ -53,14 +132,13 @@ class Actor final
     const int FIELDS_SIZE = 4;
 
 protected:
-    BigNumber m_id = -1;
+    ActorId m_id;
     T *m_key;
     ActorType m_account;
 
 public:
     Actor()
     {
-        m_id = 0;
         m_key = nullptr;
         m_account = ActorType::Wallet;
     }
@@ -126,7 +204,7 @@ public:
             }
         }
 
-        this->m_id = BigNumber(json["id"].toString().toLatin1());
+        this->m_id = json["id"].toString().toLatin1();
         this->m_key = new T(json);
         this->m_account = ActorType(json["account"].toInt());
 
@@ -158,7 +236,7 @@ public:
             QByteArray pk = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
             if (pk.size() >= 20)
             {
-                m_id = BigNumber(pk.left(20));
+                m_id = pk.left(20);
             }
             else
             {
@@ -181,7 +259,7 @@ public:
             return pbKey->isEmpty();
         }
 
-        return m_id == BigNumber(-1);
+        return m_id.isEmpty();
     }
 
     /**
@@ -192,7 +270,7 @@ public:
      */
     QByteArray serialize() const
     {
-        QString actorId = QString(this->m_id.toActorId());
+        QString actorId = QString(this->m_id.toByteArray());
         int type = static_cast<uint32_t>(m_account);
 
         if (m_key == nullptr || empty())
@@ -218,8 +296,8 @@ public:
 
     PublicProfile profile()
     {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toActorId() + "/profile/";
-        return PublicProfile(m_id.toActorId(), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toByteArray() + "/profile/";
+        return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
 public:
@@ -229,7 +307,7 @@ public:
         return this->id() == other.id() && *m_key == *otherKey;
     }
 
-    BigNumber id() const
+    ActorId id() const
     {
         return m_id;
     }
@@ -244,6 +322,16 @@ public:
         return m_account;
     }
 
+    QString accountString() const
+    {
+        return QString::number(int(m_account));
+    }
+
+    std::string accountStdString() const
+    {
+        return std::to_string(int(m_account));
+    }
+
     Actor<KeyPublic> convertToPublic()
     {
         Actor<KeyPublic> actor;
@@ -255,7 +343,7 @@ public:
         return actor;
     }
 
-    void setId(const BigNumber &id)
+    void setId(const ActorId &id)
     {
         m_id = id;
     }

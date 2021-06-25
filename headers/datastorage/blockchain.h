@@ -38,7 +38,9 @@
 #include <cassert>
 // database
 #include "utils/db_connector.h"
+
 class TransactionManager;
+
 /*
  * Main database class
  *
@@ -49,6 +51,15 @@ class TransactionManager;
  *
  */
 static QMutex mutex;
+
+enum class FreezeBalanceSearch
+{
+    AllStaking,
+    AllNotMyStaking,
+    OnlyMyStaking,
+    OnlySender
+};
+
 class Blockchain : public QObject
 {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -102,7 +113,7 @@ private:
     bool signCheckAdd(Block &block);
     void sendFeeUnfreeze(Block &block);
     void sendUnFee(Block &block);
-    QMap<QByteArray, BigNumber> getInvestmentsStaking(const BigNumber &wallet, const BigNumber &token);
+    QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
     const int COUNT_CHECKER_BLOCK = 2;
@@ -111,7 +122,7 @@ private:
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
-                                    QMap<BigNumber, BigNumber> states = QMap<BigNumber, BigNumber>());
+                                    QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -141,9 +152,9 @@ private:
     Block validateAndReturnBlock(const Block &block);
     void stakingReward(const Block &block);
 
-    std::pair<BigNumber, BigNumber> getLastTxForStaking(const BigNumber &receiver, const BigNumber &token);
+    std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
 
-    bool checkStakingReward(const QByteArray &hash, const BigNumber &token, const BigNumber receiver);
+    bool checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver);
 
 public:
     /**
@@ -219,13 +230,6 @@ public:
     void signBlock(Block &block) const;
 
     // - ACTORS - //
-
-    /**
-     * Gets actor from actor index
-     * @param actorId
-     * @return actor
-     */
-    Actor<KeyPublic> getActor(const BigNumber &actorId);
     /**
      * @brief remove all blocks
      */
@@ -279,10 +283,11 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumber getUserBalance(BigNumber userId, BigNumber tokenId) const;
-    BigNumber getFreezeUserBalance(BigNumber userId, BigNumber tokenId, BigNumber sender = -1) const;
+    BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
+    BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
+                                   FreezeBalanceSearch balanceSearch) const;
 
-    QMap<QByteArray, BigNumber> getAllStakingForMe(BigNumber userId, BigNumber tokenId) const;
+    QMap<QByteArray, BigNumber> getAllStakingForMe(ActorId userId, ActorId tokenId) const;
     /**
      * @brief Show blockchain
      */
@@ -291,8 +296,8 @@ public:
     bool isSmContractTx(const Block &block) const;
 
     void getSmContractMembers(const Block &block) const;
-signals:
 
+signals:
     void newNotify(const Notification ntf);
     void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);

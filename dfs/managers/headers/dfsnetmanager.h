@@ -49,7 +49,7 @@ private:
     ServerService *serverService;
 
 public:
-    DFSNetManager(AccountController *accountList, ActorIndex *actorIndex);
+    DFSNetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp);
     ~DFSNetManager() override;
 
 private:

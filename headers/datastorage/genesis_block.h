@@ -29,16 +29,17 @@
 class GenesisDataRow
 {
 public:
-    BigNumber actorId;
+    ActorId actorId;
     BigNumber state;
-    BigNumber token;
+    ActorId token;
     DataStorage::typeDataRow type;
 
 public:
     GenesisDataRow()
     {
     }
-    GenesisDataRow(const BigNumber &actorId, const BigNumber &state, const BigNumber &token,
+
+    GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
                    const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)
@@ -46,6 +47,7 @@ public:
         , type(type)
     {
     }
+
     GenesisDataRow(const QByteArray &serialized)
     {
         deserialize(serialized);
@@ -54,19 +56,18 @@ public:
     QByteArray serialize() const
     {
         QList<QByteArray> l;
-        l << actorId.toActorId() << state.toByteArray() << token.toActorId() << QByteArray::number(type);
+        l << actorId.toByteArray() << state.toByteArray() << token.toByteArray() << QByteArray::number(type);
         return Serialization::serialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
 
     void deserialize(const QByteArray &serialized)
     {
-        QList<QByteArray> l =
-            Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
+        QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4)
         {
-            actorId = BigNumber(l.at(0));
+            actorId = l.at(0);
             state = BigNumber(l.at(1));
-            token = BigNumber(l.at(2));
+            token = l.at(2);
             type = DataStorage::typeDataRow(l.at(3).toInt());
         }
     }

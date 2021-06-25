@@ -60,9 +60,9 @@ Blockchain *AccountController::getBlockchain() const
     return blockchain;
 }
 
-QList<BigNumber> AccountController::getListAccounts() const
+QList<ActorId> AccountController::getListAccounts() const
 {
-    QList<BigNumber> res;
+    QList<ActorId> res;
     for (const auto &tmp : accounts)
     {
         res.append(tmp->id());
@@ -89,7 +89,7 @@ QList<QByteArray> AccountController::getAccountID()
 {
     QList<QByteArray> list;
     for (int i = 0; i < accounts.size(); i++)
-        list.append(accounts[i]->id().toActorId());
+        list.append(accounts[i]->id().toByteArray());
     return list;
 }
 
@@ -106,7 +106,7 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     savePrivateActor(*actor, hashLogin);
     accounts.append(actor);
     if (accounts.size() - 1 == 0)
-        emit savePrivateProfile(actor->id().toActorId());
+        emit savePrivateProfile(actor->id().toByteArray());
 
     userNum = accounts.size() - 1;
 
@@ -116,14 +116,15 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
         qDebug() << "Dfs hash init for me";
         emit initDfs(); //
     }
-    emit newActorIsCreated(this->getMainActor()->id(), account == ActorType::Account); // TODO: send type
+    emit newActorIsCreated(this->getMainActor()->id().toByteArray(),
+                           account == ActorType::Account); // TODO: send type
 
     if (!accounts.isEmpty())
         blockchain->getBlockZero();
     return *actor;
 }
 
-Actor<KeyPrivate> AccountController::getActor(BigNumber id)
+Actor<KeyPrivate> AccountController::getActor(const ActorId &id)
 {
     for (Actor<KeyPrivate> *actor : qAsConst(accounts))
     {
@@ -132,6 +133,7 @@ Actor<KeyPrivate> AccountController::getActor(BigNumber id)
             return *actor;
         }
     }
+
     qDebug() << "Can't find actor with id:" << id;
     return Actor<KeyPrivate>();
 }
@@ -224,8 +226,8 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
 {
     qDebug() << "Attempting to save Private Actor" << actor.id();
     if (!accounts.isEmpty())
-        emit editPrivateProfile(actor.id().toActorId());
-    QString fileName = KeyStore::makeKeyFileName(actor.id().toActorId());
+        emit editPrivateProfile(actor.id().toByteArray());
+    QString fileName = KeyStore::makeKeyFileName(actor.id().toByteArray());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
     QFile *file = new QFile(path);
@@ -279,7 +281,7 @@ void AccountController::changeUserNum(QByteArray wallId)
     for (const auto &currAcc : qAsConst(accounts))
     {
         // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
-        if (currAcc->id().toActorId() == wallId)
+        if (currAcc->id().toByteArray() == wallId)
         {
             emit updateTransactionListInModel();
             break;

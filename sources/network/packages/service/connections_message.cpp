@@ -31,7 +31,7 @@ void Messages::ConnectionsMessage::operator=(QByteArray &serialized)
 
 void Messages::ConnectionsMessage::operator=(QList<QByteArray> &list)
 {
-    for (QByteArray d : list)
+    for (const QByteArray &d : qAsConst(list))
     {
         std::pair<std::string, int> p;
         QList<QByteArray> r = Serialization::deserialize(d, ConnectionsMessage::FIELD_SIZE);
@@ -49,7 +49,7 @@ bool Messages::ConnectionsMessage::isEmpty() const
 QList<QByteArray> Messages::ConnectionsMessage::serializedParams() const
 {
     QList<QByteArray> v;
-    for (std::pair<std::string, int> p : hosts)
+    for (auto& p : hosts)
     {
         QByteArray r = Serialization::serialize(
             { QByteArray::fromStdString(p.first), QByteArray::number(p.second) },

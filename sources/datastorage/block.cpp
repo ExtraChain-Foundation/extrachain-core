@@ -123,7 +123,7 @@ void Block::sign(const Actor<KeyPrivate> &actor)
 {
     calcHash();
     QByteArray sign = actor.key()->sign(getDataForDigSig());
-    this->signatures.append({ actor.id().toActorId(), sign, true });
+    this->signatures.append({ actor.id().toByteArray(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const
@@ -174,7 +174,7 @@ bool Block::equals(const Block &block) const
 BlockCompare Block::compareBlock(const Block &b) const
 {
     BlockCompare temp;
-    temp.approverDiff = getApprover() - b.getApprover();
+    temp.approverDiff = BigNumber(getApprover().toByteArray()) - BigNumber(b.getApprover().toByteArray());
     temp.indexDiff = getIndex() - b.getIndex();
     temp.dataDiff = Utils::compare(getData(), b.getData());
     temp.digitalSigDiff = getDigSig() == b.getDigSig();
@@ -239,9 +239,10 @@ QString Block::toString() const
 {
     QList<QByteArray> list;
 
-    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << QByteArray::number(date)
+    list << getType() << getIndex().toByteArray() << getApprover().toByteArray() << QByteArray::number(date)
          << getData() << getPrevHash() << getHash() << getDigSig();
-    //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
+
+    // return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
     return Serialization::serialize(list, FIELDS_SIZE);
 }
 
@@ -300,10 +301,12 @@ void Block::setPrevHash(const QByteArray &value)
     prevHash = value;
 }
 
-BigNumber Block::getApprover() const
+ActorId Block::getApprover() const
 {
     if (signatures.isEmpty())
-        return BigNumber();
+    {
+        return ActorId();
+    }
     else
     {
         for (int i = signatures.size() - 1; i >= 0; i--)
@@ -312,7 +315,8 @@ BigNumber Block::getApprover() const
                 return signatures[i].actorId;
         }
     }
-    return BigNumber();
+
+    return ActorId();
 }
 
 BigNumber Block::getIndex() const
@@ -353,7 +357,7 @@ bool Block::isBlock(const QByteArray &data)
     return data.contains(Config::DATA_BLOCK_TYPE);
 }
 
-bool Block::isApprover(QByteArray actorId) const
+bool Block::isApprover(const ActorId &actorId) const
 {
     return actorId == getApprover();
 }
