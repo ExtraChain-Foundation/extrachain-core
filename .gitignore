@@ -86,3 +86,4 @@ debug/
 release/
 *.sln
 preconfig.h
+build
