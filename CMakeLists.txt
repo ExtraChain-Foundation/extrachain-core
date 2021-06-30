@@ -11,12 +11,15 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt5 COMPONENTS Core Network Concurrent REQUIRED)
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent REQUIRED)
+find_package(unofficial-sodium CONFIG REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/headers
-)
+    )
 
 set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/headers/dfs.h
@@ -156,25 +159,23 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
-)
+    )
 
 if (EXTRACHAIN_STATIC_BUILD)
     add_library(extrachain
-      ${EXTRACHAIN_CORE_SOURCES}
-    )
+        ${EXTRACHAIN_CORE_SOURCES}
+        )
 else()
     add_library(extrachain SHARED
-      ${EXTRACHAIN_CORE_SOURCES}
-    )
+        ${EXTRACHAIN_CORE_SOURCES}
+        )
 endif()
-
-# vcpkg
-find_package(unofficial-sodium CONFIG REQUIRED)
-find_package(unofficial-sqlite3 CONFIG REQUIRED)
-#vcpkg: end
 
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers)
 target_link_libraries(extrachain Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Concurrent
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
+if (UNIX AND NOT APPLE)
+    target_link_libraries(extrachain gmp)
+endif (UNIX AND NOT APPLE)
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 message("--- ExtraChain Core ---")
