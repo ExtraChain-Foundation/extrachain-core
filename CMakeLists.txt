@@ -166,7 +166,7 @@ if (EXTRACHAIN_STATIC_BUILD)
         ${EXTRACHAIN_CORE_SOURCES}
         )
 else()
-    add_library(extrachain SHARED
+    add_library(extrachain # SHARED
         ${EXTRACHAIN_CORE_SOURCES}
         )
 endif()
@@ -179,11 +179,17 @@ string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 message("Core. Commit: " ${GIT_COMMIT_CORE} ", branch: " ${GIT_BRANCH_CORE})
 add_compile_definitions(GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
+target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers) # TODO: remove console headers
 target_link_libraries(extrachain Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Concurrent
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
+
 if (UNIX AND NOT APPLE)
     target_link_libraries(extrachain gmp)
 endif (UNIX AND NOT APPLE)
+if (WIN32) # temp
+    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
+endif(WIN32)
+
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 message("--- ExtraChain Core ---")
