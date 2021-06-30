@@ -171,7 +171,15 @@ else()
         )
 endif()
 
-target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers)
+# git
+execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
+execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
+string(STRIP "${GIT_COMMIT_CORE}" GIT_COMMIT_CORE)
+string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
+message("Core. Commit: " ${GIT_COMMIT_CORE} ", branch: " ${GIT_BRANCH_CORE})
+add_compile_definitions(GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
+
+target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers) # TODO: remove console headers
 target_link_libraries(extrachain Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Concurrent
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
 if (UNIX AND NOT APPLE)
