@@ -685,6 +685,7 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
 
 #ifdef QT_DEBUG
     qFatal("Can't find local ip");
+    return QNetworkAddressEntry();
 #else
     QNetworkAddressEntry entry;
     entry.setIp(QHostAddress::AnyIPv4);
