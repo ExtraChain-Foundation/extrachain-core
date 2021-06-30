@@ -166,7 +166,7 @@ if (EXTRACHAIN_STATIC_BUILD)
         ${EXTRACHAIN_CORE_SOURCES}
         )
 else()
-    add_library(extrachain # SHARED
+    add_library(extrachain SHARED
         ${EXTRACHAIN_CORE_SOURCES}
         )
 endif()
