@@ -176,7 +176,6 @@ execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
 string(STRIP "${GIT_COMMIT_CORE}" GIT_COMMIT_CORE)
 string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
-message("Core. Commit: " ${GIT_COMMIT_CORE} ", branch: " ${GIT_BRANCH_CORE})
 add_compile_definitions(GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
