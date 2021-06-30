@@ -68,6 +68,7 @@ ResolveManager::~ResolveManager()
 void ResolveManager::connectSignals(ResolverService *resolver)
 {
     connect(resolver, &ResolverService::TaskFinished, this, &ResolveManager::taskFinished);
+    connect(resolver, &ResolverService::saveNotificationToken, this, &ResolveManager::saveNotificationToken);
     connect(resolver, &ResolverService::newGenesisBlock, blockchain, &Blockchain::addGenBlockToBlockchain);
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);

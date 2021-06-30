@@ -240,6 +240,8 @@ signals:
 
     void getBlocksCount(const QByteArray &requestHash, const SocketPair &receiver);
 
+    void saveNotificationToken(QByteArray os, ActorId actor, ActorId token);
+
     //    void dfsMessage(const QByteArray &data, const int &msgType, const SocketPair &receiver);
     // response
     void blockCount(const BigNumber &count);
