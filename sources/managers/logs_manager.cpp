@@ -45,7 +45,7 @@ bool LogsManager::debugLogs = false;
 
 LogsManager::LogsManager()
 {
-    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
+    // connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
 }
 
 void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
