@@ -34,7 +34,7 @@ ActorIndex::ActorIndex(QObject *parent)
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal(QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
+        qFatal("%s", QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
