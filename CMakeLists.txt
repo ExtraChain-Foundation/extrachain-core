@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.19)
 
-# project(extrachain LANGUAGES CXX VERSION 0.8.5 DESCRIPTION "ExtraChain Core")
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/version" EXTRACHAIN_VERSION)
 
+if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
+    project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
+endif()
+
+set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(CMAKE_AUTOUIC ON)
@@ -10,6 +15,14 @@ set(CMAKE_AUTORCC ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+if (WIN32)
+    set(EXTRACHAIN_STATIC_BUILD true)
+endif()
+if (EXTRACHAIN_STATIC_BUILD)
+    message("Build static ExtraChain")
+endif()
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent REQUIRED)
@@ -110,7 +123,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
-
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
     # ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/contract.cpp
