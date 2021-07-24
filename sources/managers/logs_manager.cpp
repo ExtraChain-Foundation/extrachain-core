@@ -81,7 +81,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     if (fileName.isEmpty())
         fileName = "global";
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(__GNUC__)
     fileName = fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
 #else
     fileName = fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
