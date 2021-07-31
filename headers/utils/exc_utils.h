@@ -516,7 +516,7 @@ void softWipe(const QString &currentId);
 
 QString detectCompiler();
 QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
-
+QString fixFileName(const QString &fileName);
 } // namespace Utils
 
 namespace DataStorage {

@@ -692,3 +692,11 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
     return entry;
 #endif
 }
+
+QString Utils::fixFileName(const QString &fileName)
+{
+    QString newName = fileName;
+    newName = newName.replace(QRegExp("[+%@!:*?/\"<>|«»]+"), "_");
+    newName = newName.replace("\\", "_");
+    return newName;
+}
