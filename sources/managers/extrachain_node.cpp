@@ -115,17 +115,17 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
 
-        // TODO: as console arguments
-        emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(), "#fa4868"); // TODO: choose name
+        // TODO: as console arguments: isCreate, name, color
+        emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(),
+                                   "#fa4868"); // TODO: choose name
 
         QString companyId = *TMP::companyActorId;
-        DBConnector dbc(
-                    (DfsStruct::ROOT_FOOLDER_NAME + "/" + companyId + "/" + DfsStruct::ACTOR_CARD_FILE)
-                    .toStdString());
+        DBConnector dbc((DfsStruct::ROOT_FOOLDER_NAME + "/" + companyId + "/" + DfsStruct::ACTOR_CARD_FILE)
+                            .toStdString());
         dbc.createTable(Config::DataStorage::cardTableCreation);
         dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
         QString usernamesPath =
-                QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(companyId);
+            QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(companyId);
         DBConnector usernamesDB(usernamesPath.toStdString());
         usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
         dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
