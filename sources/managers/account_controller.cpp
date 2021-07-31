@@ -207,7 +207,7 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
     }
 }
 
-int AccountController::getAccountCount()
+int AccountController::getAccountCount() const
 {
     return accounts.size();
 }

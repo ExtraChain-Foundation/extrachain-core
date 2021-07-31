@@ -72,8 +72,7 @@ public:
      */
     Actor<KeyPrivate> getCurrentActor();
 
-    int getAccountCount();
-
+    int getAccountCount() const;
     int getUserNum() const;
     void setUserNum(int value);
     QMap<QByteArray, QByteArray> getCurrentState() const;
