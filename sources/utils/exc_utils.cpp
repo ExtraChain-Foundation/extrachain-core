@@ -302,6 +302,8 @@ QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const
 
 void Utils::wipeDataFiles()
 {
+    QString current = QDir::currentPath();
+
     QDir("blockchain").removeRecursively();
     QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
     QDir("keystore").removeRecursively();
@@ -315,13 +317,15 @@ void Utils::wipeDataFiles()
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
     QString dataName = Utils::dataName().replace("/", "");
-    qDebug() << "wipe dataName" << dataName;
+    // qDebug() << "wipe dataName" << dataName;
     QDir(dataName).removeRecursively();
     QDir().mkpath(dataName);
 
     QString shareFolder =
         QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
     QDir(shareFolder).removeRecursively();
+
+    QDir::setCurrent(current);
 
     /*
 #ifdef ECONSOLE
