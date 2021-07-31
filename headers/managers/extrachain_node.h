@@ -89,7 +89,8 @@ public:
     ~ExtraChainNode();
 
 public:
-    void createCompanyActor(const QString &email, const QString &password);
+    void createNewNetwork(const QString &email, const QString &password);
+    void start();
     Blockchain *getBlockchain();
     NetManager *getNetManager();
     AccountController *getAccountController() const;
@@ -146,7 +147,6 @@ public:
     Dfs *getDfs() const;
 
 private:
-    Actor<KeyPrivate> CreateCompany(QByteArray consoleHash);
     void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetManager and Blockchain

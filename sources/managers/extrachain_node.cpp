@@ -84,28 +84,27 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
 
-void ExtraChainNode::createCompanyActor(const QString &email, const QString &password)
+void ExtraChainNode::createNewNetwork(const QString &email, const QString &password)
 {
 #ifdef ECONSOLE
-    // accController->loadActors("-1");
-    Actor<KeyPrivate> company;
-    QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-
-    bool created = false;
     if (QDir("keystore/profile").isEmpty())
     {
-        company = CreateCompany(consoleHash);
+        QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
+        auto company = accController->createActor(ActorType::Company, consoleHash);
         emit savePrivateProfile(consoleHash, company.id().toByteArray());
-        created = true;
     }
     else
     {
         // company = *accController->getAccounts()[0];
-        emit loadProfileForConsoleLogin(email.toLatin1(), password.toLatin1());
+        qInfo() << "You cannot create a new network, data is not empty";
+#ifndef QT_DEBUG
+        std::exit(0);
+#endif
     }
 
     if (blockchain->getRecords() <= 0)
     {
+        auto company = *accController->getMainActor();
         QByteArray td = company.key()->sign("test");
         std::cout << company.key()->verify("test", td) << std::endl;
         TMP::companyActorId = new QByteArray(company.id().toByteArray());
@@ -116,28 +115,30 @@ void ExtraChainNode::createCompanyActor(const QString &email, const QString &pas
         GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
         blockchain->addBlock(tmp, true);
 
-        // TODO: as console argument
-        if (created)
-        {
-            emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(), "#fa4868");
+        // TODO: as console arguments
+        emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(), "#fa4868"); // TODO: choose name
 
-            QString companyId = *TMP::companyActorId;
-            DBConnector dbc(
-                (DfsStruct::ROOT_FOOLDER_NAME + "/" + companyId + "/" + DfsStruct::ACTOR_CARD_FILE)
+        QString companyId = *TMP::companyActorId;
+        DBConnector dbc(
+                    (DfsStruct::ROOT_FOOLDER_NAME + "/" + companyId + "/" + DfsStruct::ACTOR_CARD_FILE)
                     .toStdString());
-            dbc.createTable(Config::DataStorage::cardTableCreation);
-            dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
-            QString usernamesPath =
+        dbc.createTable(Config::DataStorage::cardTableCreation);
+        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
+        QString usernamesPath =
                 QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(companyId);
-            DBConnector usernamesDB(usernamesPath.toStdString());
-            usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
-            dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
-        }
+        DBConnector usernamesDB(usernamesPath.toStdString());
+        usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
+        dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
 #else
     Q_UNUSED(email)
     Q_UNUSED(password)
 #endif
+}
+
+void ExtraChainNode::start()
+{
+    QTimer::singleShot(500, this, &ExtraChainNode::ready);
 }
 
 void ExtraChainNode::initConsoleToken(Transaction tx)
@@ -151,13 +152,6 @@ void ExtraChainNode::initConsoleToken(Transaction tx)
     qDebug() << "Created block:" << block.getIndex();
     blockchain->addBlock(block);
 #endif
-}
-
-Actor<KeyPrivate> ExtraChainNode::CreateCompany(QByteArray consoleHash)
-{
-    accController->createActor(ActorType::Company, consoleHash);
-
-    return *accController->getMainActor();
 }
 
 void ExtraChainNode::showMessage(QString from, QString message)
@@ -513,7 +507,7 @@ void ExtraChainNode::dfsConnection()
 
 void ExtraChainNode::connectSignals()
 {
-    connect(this, &ExtraChainNode::ready, []() { qInfo() << "Ready"; });
+    connect(this, &ExtraChainNode::ready, []() { qInfo() << "Node: started"; });
     connectTxManager();
 #ifdef ECONSOLE
     connectConsole();
