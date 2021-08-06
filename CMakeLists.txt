@@ -6,13 +6,10 @@ if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
     project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
 endif()
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -24,10 +21,11 @@ if (EXTRACHAIN_STATIC_BUILD)
     message("Build static ExtraChain")
 endif()
 
-# c++ flags
+# c++ settings
+message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT} | build: ${CMAKE_BUILD_TYPE}")
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     message("Use flags")
-    message("id: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -Werror=implicit-fallthrough")
 endif()
 

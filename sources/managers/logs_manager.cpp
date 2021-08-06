@@ -229,6 +229,7 @@ void LogsManager::offQml()
 
 void LogsManager::etHandler()
 {
+    std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
 
     QDir().mkpath("logs");

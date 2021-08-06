@@ -89,6 +89,7 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 #ifdef ECONSOLE
     if (QDir("keystore/profile").isEmpty())
     {
+        qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
         auto company = accController->createActor(ActorType::Company, consoleHash);
         emit savePrivateProfile(consoleHash, company.id().toByteArray());
