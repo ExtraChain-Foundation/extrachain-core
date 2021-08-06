@@ -82,8 +82,13 @@ Builds/
 lib/
 .vscode/
 .vs/
+.idea/
+cmake-build-debug/
 debug/
 release/
 *.sln
 preconfig.h
-build
+build/
+target/
+Cargo.lock
+CMakeSettings.json
