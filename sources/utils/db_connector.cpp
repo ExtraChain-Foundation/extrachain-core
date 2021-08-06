@@ -369,9 +369,9 @@ bool DBConnector::implementationPrepare(const std::string &tableName, const DBRo
         // qDebug() << "[ImplementationPrepare] Finded" << column.c_str();
 
         if (column == "BLOB")
-            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
         else if (column == "TEXT")
-            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
         else if (column == "INT")
             rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
         else if (column == "INTEGER")

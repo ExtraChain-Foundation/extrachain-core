@@ -24,6 +24,13 @@ if (EXTRACHAIN_STATIC_BUILD)
     message("Build static ExtraChain")
 endif()
 
+# c++ flags
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message("Use flags")
+    message("id: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -Werror=implicit-fallthrough")
+endif()
+
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
