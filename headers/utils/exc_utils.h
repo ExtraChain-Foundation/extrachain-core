@@ -484,7 +484,7 @@ static QString filePrefix = "file:///";
 static QString filePrefix = "file://";
 #endif
 
-QString dataName();
+QString dataDir(const QString &newDir = "");
 qint64 checkMemoryFree();  // MB
 qint64 checkMemoryTotal(); // MB
 

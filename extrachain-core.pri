@@ -1,5 +1,3 @@
-warning(Build with qmake is deprecated and will be deleted later. It\'s recommended to use CMake)
-
 QT += concurrent
 VERSION = 0.8.5
 win32: CONFIG += precompile_header

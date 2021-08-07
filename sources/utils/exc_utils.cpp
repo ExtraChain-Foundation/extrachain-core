@@ -316,8 +316,8 @@ void Utils::wipeDataFiles()
     QDir dir(QDir::currentPath());
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
-    QString dataName = Utils::dataName().replace("/", "");
-    // qDebug() << "wipe dataName" << dataName;
+    QString dataName = Utils::dataDir();
+    // qDebug() << "[Wipe] Remove path:" << dataName;
     QDir(dataName).removeRecursively();
     QDir().mkpath(dataName);
 
@@ -412,22 +412,14 @@ qint64 Utils::checkMemoryTotal()
     return x.bytesTotal();
 }
 
-QString Utils::dataName()
+QString Utils::dataDir(const QString &newDir)
 {
-#ifdef ECONSOLE
-    return "console-data";
-#endif
-    QSettings settings;
-    if (!settings.value("network/serverIp").isValid())
-        settings.setValue("network/serverIp", Network::serverIp);
-    QString serverIp = settings.value("network/serverIp").toString();
+    static QString current = "extrachain-data";
 
-    if (serverIp == "51.68.181.53")
-        return "/public-data";
-    else if (serverIp == "51.68.181.52")
-        return "/test-data";
-    else
-        return "/private-" + serverIp.replace(".", "-") + "-data";
+    if (!newDir.isEmpty())
+        current = Utils::fixFileName(newDir);
+
+    return current;
 }
 
 QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map)
