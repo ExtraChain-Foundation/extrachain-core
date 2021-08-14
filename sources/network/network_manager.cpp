@@ -43,6 +43,7 @@ void NetManager::addTempConnections(const QList<QByteArray> &value)
 }
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp)
+    : wsServer(new QWebSocketServer(QStringLiteral("Echo Server"), QWebSocketServer::SslMode::NonSecureMode))
 {
     requestResponseMap = new QMap<QByteArray, int>();
 #ifdef ECLIENT
@@ -192,6 +193,7 @@ NetManager::~NetManager()
         delSock->getSocket()->disconnectFromHost();
         delete delSock;
     }
+    // qDeleteAll(wsList.begin(), wsList.end());
     if (QFile(".handlerFile").exists())
         QFile(".handlerFile").remove();
     emit finished();
@@ -273,11 +275,36 @@ void NetManager::startNetwork()
     qDebug() << "startNetwork()";
     qDebug() << "NetPort:" << this->serverPort;
 
-    if (local != nullptr)
+    if (local == nullptr)
     {
-        serverService = new ServerService(serverPort, local);
-        setupServerServiceConnections();
-        serverService->startListen();
+        qDebug() << "[Network] Cant detect local ip";
+#ifdef ECONSOLE
+        qFatal("Emptry local ip");
+#endif
+        return;
+    }
+
+    serverService = new ServerService(serverPort, local);
+    setupServerServiceConnections();
+    serverService->startListen();
+
+    if (wsPort == 2234)
+        return;
+
+    connect(wsServer, &QWebSocketServer::serverError,
+            [](QWebSocketProtocol::CloseCode closeCode) { qDebug() << "[WS]" << closeCode; });
+    connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Closed"; });
+    connect(wsServer, &QWebSocketServer::acceptError,
+            [](QAbstractSocket::SocketError socketError) { qDebug() << "[WS]" << socketError; });
+
+    connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Closed"; });
+
+    if (wsServer->listen(QHostAddress::Any, wsPort))
+    {
+        connect(wsServer, &QWebSocketServer::newConnection, this, &NetManager::onNewWSConnection);
+
+        qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
+                           << wsServer->serverPort() << wsServer->serverName();
     }
 }
 
@@ -366,6 +393,13 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
     }
 }
 
+void NetManager::connectToWs()
+{
+    auto ws = new QWebSocket("ExtraChain " + QString(EVERSION));
+    ws->open(QUrl(QString("ws://%1:%2").arg(serverIp).arg(wsPort)));
+    WebSocketService service(ws);
+}
+
 void NetManager::setupServerServiceConnections()
 {
     connect(serverService, &ServerService::newServerConnection, this, &NetManager::addConnection,
@@ -390,6 +424,12 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
                              const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
+    for (auto ws : qAsConst(wsList))
+    {
+        qDebug() << "[WS] Send";
+        ws.send(message);
+    }
+
     Config::Net::TypeSend send;
 
     if (typeSend == Config::Net::TypeSend::Default)
@@ -648,6 +688,19 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
             connectSocket();
         }
     }
+}
+
+void NetManager::onNewWSConnection()
+{
+    auto ws = wsServer->nextPendingConnection();
+    if (ws == nullptr)
+    {
+        qDebug() << "[WS] error";
+        std::exit(-1);
+    }
+
+    wsList.append(WebSocketService(ws));
+    emit webSocketsChanged(wsList.length());
 }
 
 quint16 NetManager::getServerPort() const

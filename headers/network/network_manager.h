@@ -52,6 +52,7 @@ class ResolveManager;
 #include <QObject>
 #include <QtCore/QThread>
 #include <QtNetwork/QNetworkAddressEntry>
+#include <QWebSocketServer>
 #include <algorithm>
 
 #include "utils/exc_utils.h"
@@ -64,6 +65,7 @@ class ResolveManager;
 //#include "network/resolver_service.h"
 #include "network/server_service.h"
 #include "network/socket_service.h"
+#include "network/websocket_service.h"
 #include "network/upnpconnection.h"
 #include "network/socket_pair.h"
 
@@ -117,6 +119,8 @@ private:
     QMap<QByteArray, int> *requestResponseMap;
 
     ServerService *serverService;
+    QWebSocketServer *wsServer;
+    QList<WebSocketService> wsList;
     quint16 netPort;
 
 private:
@@ -132,6 +136,7 @@ public:
     QList<SocketService *> connections;
 
     quint16 serverPort = isDebug ? 2222 : 2222;
+    quint16 wsPort = 2233;
 
 private:
     void connectSocket();
@@ -194,6 +199,7 @@ private slots:
      * @param message
      */
     void createNewConnectionsFromList(const QByteArray &message);
+    void onNewWSConnection();
 protected slots:
     /**
      * @brief addConnection
@@ -222,6 +228,7 @@ public slots:
     void reconnectUi();
     void connectToServerByIpList(QList<QByteArray> ipList);
     virtual void connectToServer(const quint16 &serverPort, QNetworkAddressEntry *local);
+    void connectToWs();
     /**
      * @brief checkMyIdentificator
      */
@@ -277,6 +284,7 @@ signals:
     void networkErrorChanged(bool serverError);
     void localIpFounded(QString localIp);
     void buildError();
+    void webSocketsChanged(int count);
 };
 
 #endif // NETWORK_MANAGER_H

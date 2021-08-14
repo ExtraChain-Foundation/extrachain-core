@@ -29,8 +29,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -Werror=implicit-fallthrough")
 endif()
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent REQUIRED)
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
@@ -116,6 +116,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/server_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/public_profile.h
@@ -164,6 +165,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/server_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/public_profile.cpp
@@ -197,7 +199,9 @@ add_compile_definitions(GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers) # TODO: remove console headers
-target_link_libraries(extrachain Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Concurrent
+target_link_libraries(extrachain
+    Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
 
 if (UNIX AND NOT APPLE)

@@ -45,6 +45,7 @@ DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd,
     : NetManager(accountList, actInd, localIp)
 {
     serverPort = isDebug ? 2225 : 2225;
+    wsPort = 2234;
 }
 
 DFSNetManager::~DFSNetManager()
