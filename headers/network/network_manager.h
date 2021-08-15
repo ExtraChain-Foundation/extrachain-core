@@ -120,7 +120,7 @@ private:
 
     ServerService *serverService;
     QWebSocketServer *wsServer;
-    QList<WebSocketService> wsList;
+    QList<WebSocketService *> wsList;
     quint16 netPort;
 
 private:

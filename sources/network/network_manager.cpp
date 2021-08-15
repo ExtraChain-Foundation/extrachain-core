@@ -43,7 +43,6 @@ void NetManager::addTempConnections(const QList<QByteArray> &value)
 }
 
 NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp)
-    : wsServer(new QWebSocketServer(QStringLiteral("Echo Server"), QWebSocketServer::SslMode::NonSecureMode))
 {
     requestResponseMap = new QMap<QByteArray, int>();
 #ifdef ECLIENT
@@ -291,6 +290,8 @@ void NetManager::startNetwork()
     if (wsPort == 2234)
         return;
 
+    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain"), QWebSocketServer::SslMode::NonSecureMode);
+
     connect(wsServer, &QWebSocketServer::serverError,
             [](QWebSocketProtocol::CloseCode closeCode) { qDebug() << "[WS]" << closeCode; });
     connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Closed"; });
@@ -424,10 +425,10 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
                              const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
-    for (auto ws : qAsConst(wsList))
+    for (auto &ws : wsList)
     {
-        qDebug() << "[WS] Send";
-        ws.send(message);
+        // qDebug() << "[WS] Send to ws" << wsList.length();
+        emit ws->send(message);
     }
 
     Config::Net::TypeSend send;
@@ -699,7 +700,21 @@ void NetManager::onNewWSConnection()
         std::exit(-1);
     }
 
-    wsList.append(WebSocketService(ws));
+    connect(ws, &QWebSocket::disconnected, [&]() {
+        QWebSocket *ws = qobject_cast<QWebSocket *>(sender());
+        qDebug() << "[WS] DISCO";
+
+        // if (ws)
+        //        {
+        //            qDebug() << "[WS] Disconnected" << ws;
+        //            wsList.removeAll(WebSocketService(ws));
+        //            ws->deleteLater();
+        //            emit webSocketsChanged(wsList.length());
+        //        }
+    });
+
+    auto service = new WebSocketService(ws);
+    wsList.append(service);
     emit webSocketsChanged(wsList.length());
 }
 

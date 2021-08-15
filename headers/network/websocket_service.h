@@ -11,16 +11,24 @@ class WebSocketService : public QObject
 public:
     explicit WebSocketService(QWebSocket *ws, QObject *parent = nullptr);
     WebSocketService(const WebSocketService &);
-    ~WebSocketService() = default;
+    ~WebSocketService();
 
     QWebSocket *ws() const;
 
-    void send(const QByteArray &data);
+    bool operator==(const WebSocketService &service);
 
 signals:
+    void send(const QByteArray &data);
+    void disconnected(WebSocketService *service); // TODO
+
+public slots:
+    void onTextMessage(const QString &message);
+    void onBinaryMessage(const QByteArray &message);
+    void onSend(const QByteArray &data);
 
 private:
     QWebSocket *m_ws;
+    bool active = false;
 };
 
 #endif // WEBSOCKETSERVICE_H
