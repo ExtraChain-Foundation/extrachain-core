@@ -324,7 +324,7 @@ void NetManager::startNetwork()
     serverService->startListen();
 
 #ifdef ECONSOLE
-    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain %1").arg(EVERSION),
+    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain %1").arg(EXTRACHAIN_VERSION),
                                     QWebSocketServer::SslMode::NonSecureMode);
 
     if (wsServer->listen(QHostAddress::Any, wsPort))

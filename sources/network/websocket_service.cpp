@@ -12,7 +12,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, QObject *parent)
 {
     if (ws == nullptr)
     {
-        m_ws = new QWebSocket("ExtraChain " + QString(EVERSION));
+        m_ws = new QWebSocket("ExtraChain " + QString(EXTRACHAIN_VERSION));
         qDebug() << "[WS] Create new ws";
     }
     else
@@ -97,7 +97,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         auto network = json["network"].toString();
         auto version = json["version"].toString();
 
-        if (network != networkName || version != EVERSION)
+        if (network != networkName || version != EXTRACHAIN_VERSION)
         {
             qDebug() << "[WS] Close, because network or version unsuitable";
             network != networkName ? sendError(1, "Not suitable version")
@@ -180,7 +180,7 @@ void WebSocketService::sendFirstMessage()
     qDebug() << "[WS] Send first message" << m_ws->localPort();
     QJsonObject json;
     json["network"] = networkName;
-    json["version"] = EVERSION;
+    json["version"] = EXTRACHAIN_VERSION;
     json["identificator"] = QString(net::readNetManagerIdentificator());
     // company id
     m_ws->sendTextMessage(QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact));
