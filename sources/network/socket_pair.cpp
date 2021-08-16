@@ -21,26 +21,25 @@
 
 SocketPair::SocketPair()
 {
-
     iden = "0";
     ip = "0.0.0.0";
     port = 0;
 }
 
-SocketPair::SocketPair(const std::string &f, const quint16 &s)
+SocketPair::SocketPair(const std::string &ip, const quint16 &port, NetworkProtocol protocol)
 {
-    ip = f;
-    port = s;
-
-    iden = "0";
+    this->ip = ip;
+    this->port = port;
+    this->protocol = protocol;
+    this->iden = "0";
 }
 
-SocketPair::SocketPair(const SocketPair &v)
+SocketPair::SocketPair(const SocketPair &pair)
 {
-    ip = v.ip;
-    port = v.port;
-
-    iden = v.iden;
+    ip = pair.ip;
+    port = pair.port;
+    protocol = pair.protocol;
+    iden = pair.iden;
 }
 
 SocketPair::~SocketPair()

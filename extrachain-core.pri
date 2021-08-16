@@ -1,4 +1,4 @@
-QT += concurrent
+QT += concurrent websockets
 VERSION = 0.8.5
 win32: CONFIG += precompile_header
 win32: PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
@@ -65,6 +65,7 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
     $$PWD/sources/network/server_service.cpp \
     $$PWD/sources/network/socket_service.cpp \
+    $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
     $$PWD/sources/utils/exc_utils.cpp \
     $$PWD/sources/utils/variant_model.cpp
@@ -142,6 +143,7 @@ HEADERS += \
     $$PWD/headers/network/packages/service/verify_messages.h \
     $$PWD/headers/network/server_service.h \
     $$PWD/headers/network/socket_service.h \
+    $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
     $$PWD/headers/utils/variant_model.h \

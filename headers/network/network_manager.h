@@ -120,7 +120,7 @@ private:
 
     ServerService *serverService;
     QWebSocketServer *wsServer;
-    QList<WebSocketService *> wsList;
+    QList<WebSocketService *> wsConnections;
     quint16 netPort;
 
 private:
@@ -141,6 +141,7 @@ public:
 private:
     void connectSocket();
     void disconnectSocket(SocketService *connection);
+    void connectWsService(WebSocketService *ws);
     void removeConnectionByAddress(QByteArray address);
     SocketService getConnectionByAddress(const QByteArray address) const;
 
@@ -200,6 +201,7 @@ private slots:
      */
     void createNewConnectionsFromList(const QByteArray &message);
     void onNewWSConnection();
+
 protected slots:
     /**
      * @brief addConnection
@@ -284,7 +286,7 @@ signals:
     void networkErrorChanged(bool serverError);
     void localIpFounded(QString localIp);
     void buildError();
-    void webSocketsChanged(int count);
+    void webSocketsCountChanged(int count);
 };
 
 #endif // NETWORK_MANAGER_H

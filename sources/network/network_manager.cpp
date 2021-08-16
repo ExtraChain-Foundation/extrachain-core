@@ -20,6 +20,10 @@
 #include "network/network_manager.h"
 #include "resolve/resolve_manager.h"
 
+#ifndef EXTRACHAIN_CMAKE
+#include "preconfig.h"
+#endif
+
 using namespace Messages;
 
 QList<SocketService *> NetManager::getConnections() const
@@ -114,6 +118,9 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, c
     {
         qDebug() << "Local not found";
     }
+
+    connect(this, &NetManager::webSocketsCountChanged,
+            [this](int count) { qDebug() << "[WS] Count:" << count << wsPort; });
 }
 
 void NetManager::process()
@@ -152,6 +159,33 @@ void NetManager::disconnectSocket(SocketService *connection)
     disconnect(connection, &SocketService::clientDisconnected, this, &NetManager::removeConnection);
     //    disconnect(connection, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(connections.last(), &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+}
+
+void NetManager::connectWsService(WebSocketService *service)
+{
+    connect(service, &WebSocketService::resolveMessage,
+            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
+    connect(service, &WebSocketService::disconnected, [this]() {
+        auto service = qobject_cast<WebSocketService *>(sender());
+        qDebug() << "[WS] Try remove service";
+
+        if (service)
+        {
+            int count = wsConnections.length();
+            wsConnections.removeAll(service);
+            if (count == wsConnections.length())
+                qFatal("[WS] Cant remove");
+            service->deleteLater();
+            qDebug() << "[WS] Removed" << service;
+            emit webSocketsCountChanged(wsConnections.length());
+        }
+    });
+
+    if (!wsConnections.contains(service))
+    {
+        wsConnections << service;
+        emit webSocketsCountChanged(wsConnections.length());
+    }
 }
 
 void NetManager::removeConnectionByAddress(QByteArray address)
@@ -203,6 +237,8 @@ void NetManager::checkConnectionsStatus()
     bool flag = false;
     std::for_each(connections.begin(), connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
+    std::for_each(wsConnections.begin(), wsConnections.end(),
+                  [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
     emit networkStatusChanged(flag);
     emit networkSocketsCountChanged(connections.length());
 
@@ -287,26 +323,25 @@ void NetManager::startNetwork()
     setupServerServiceConnections();
     serverService->startListen();
 
-    if (wsPort == 2234)
-        return;
-
-    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain"), QWebSocketServer::SslMode::NonSecureMode);
-
-    connect(wsServer, &QWebSocketServer::serverError,
-            [](QWebSocketProtocol::CloseCode closeCode) { qDebug() << "[WS]" << closeCode; });
-    connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Closed"; });
-    connect(wsServer, &QWebSocketServer::acceptError,
-            [](QAbstractSocket::SocketError socketError) { qDebug() << "[WS]" << socketError; });
-
-    connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Closed"; });
+#ifdef ECONSOLE
+    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain %1").arg(EVERSION),
+                                    QWebSocketServer::SslMode::NonSecureMode);
 
     if (wsServer->listen(QHostAddress::Any, wsPort))
     {
         connect(wsServer, &QWebSocketServer::newConnection, this, &NetManager::onNewWSConnection);
+        connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
+            qDebug() << "[WS] Server error code:" << closeCode;
+        });
+        connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Server: closed"; });
+        connect(wsServer, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
+            qDebug() << "[WS] Server socker error:" << socketError;
+        });
 
         qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
                            << wsServer->serverPort() << wsServer->serverName();
     }
+#endif
 }
 
 void NetManager::startDiscovery()
@@ -328,7 +363,8 @@ void NetManager::reconnectUi()
 {
     if (local != nullptr)
         emit localIpFounded(local->ip().toString());
-    connectToServer(serverPort, local);
+    // connectToServer(serverPort, local);
+    connectToWs();
 }
 
 void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
@@ -396,9 +432,9 @@ void NetManager::connectToServer(const quint16 &serverPort, QNetworkAddressEntry
 
 void NetManager::connectToWs()
 {
-    auto ws = new QWebSocket("ExtraChain " + QString(EVERSION));
-    ws->open(QUrl(QString("ws://%1:%2").arg(serverIp).arg(wsPort)));
-    WebSocketService service(ws);
+    auto service = new WebSocketService;
+    service->open(QUrl(QString("ws://%1:%2").arg(serverIp).arg(wsPort)));
+    connectWsService(service);
 }
 
 void NetManager::setupServerServiceConnections()
@@ -425,12 +461,6 @@ void NetManager::broadcastMsg(const QByteArray &msg)
 void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
                              const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
-    for (auto &ws : wsList)
-    {
-        // qDebug() << "[WS] Send to ws" << wsList.length();
-        emit ws->send(message);
-    }
-
     Config::Net::TypeSend send;
 
     if (typeSend == Config::Net::TypeSend::Default)
@@ -454,10 +484,16 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
             if (tmp->getActive())
                 return true;
         }
+        for (const auto &tmp : qAsConst(wsConnections))
+        {
+            if (tmp->isActive())
+                return true;
+        }
 
         return false;
     };
 
+    // TODO: protocol for receiver
     if (connections.isEmpty() || !allActive())
         saveToCache(message, msgType, receiver, send);
 
@@ -486,9 +522,40 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
             tmp->distMsg(message, receiver);
     }
 
+    for (const auto &ws : qAsConst(wsConnections))
+    {
+        //        bool isSend = false;
+        //        auto ip = ws->ws()->localAddress().toString().toStdString();
+        //        auto port = ws->ws()->localPort();
+
+        //        // if (receiver.protocol != NetworkProtocol::WebSocket)
+        //        //     qFatal("[WS] Protocol error");
+
+        //        switch (send)
+        //        {
+        //        case Config::Net::TypeSend::Except:
+        //            isSend = ip != receiver.ip && port != receiver.port;
+        //            break;
+        //        case Config::Net::TypeSend::Focused:
+        //            isSend = ip == receiver.ip && port == receiver.port;
+        //            break;
+        //        case Config::Net::TypeSend::All:
+        //            isSend = true;
+        //            break;
+        //        default:
+        //            break;
+        //        }
+
+        //        if (!isSend)
+        //            continue;
+        //        if (ws->isActive())
+        ws->send(message);
+    }
+
     //    if (checkMsgCount(message, handler, connections))
     //        broadcastMsg(message);
 }
+
 bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
                                const QList<SocketService *> list)
 {
@@ -552,6 +619,7 @@ void NetManager::sendFromCache()
         socketData.ip = package[1].toStdString();
         socketData.port = package[2].toShort();
         socketData.iden = package[3];
+        // TODO: protocol
         auto msgType = package[4].toUInt();
         Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());
         sendMessage(data, msgType, socketData, typeSend);
@@ -591,7 +659,7 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
     mutex.lock();
     if (checkMsgCount(msg, handler, connections))
         resolveManager->setTask(msg, receiver);
-    //        emit MsgReceived(msg, receiver);
+    // emit MsgReceived(msg, receiver);
     else
         qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
     mutex.unlock();
@@ -695,27 +763,11 @@ void NetManager::onNewWSConnection()
 {
     auto ws = wsServer->nextPendingConnection();
     if (ws == nullptr)
-    {
-        qDebug() << "[WS] error";
-        std::exit(-1);
-    }
-
-    connect(ws, &QWebSocket::disconnected, [&]() {
-        QWebSocket *ws = qobject_cast<QWebSocket *>(sender());
-        qDebug() << "[WS] DISCO";
-
-        // if (ws)
-        //        {
-        //            qDebug() << "[WS] Disconnected" << ws;
-        //            wsList.removeAll(WebSocketService(ws));
-        //            ws->deleteLater();
-        //            emit webSocketsChanged(wsList.length());
-        //        }
-    });
+        qFatal("[WS] error");
 
     auto service = new WebSocketService(ws);
-    wsList.append(service);
-    emit webSocketsChanged(wsList.length());
+    connectWsService(service);
+    emit webSocketsCountChanged(wsConnections.length());
 }
 
 quint16 NetManager::getServerPort() const

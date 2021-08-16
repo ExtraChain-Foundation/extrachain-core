@@ -144,7 +144,8 @@ void DFSNetManager::startDFSNetwork()
 
 void DFSNetManager::reconnect()
 {
-    connectToServer(serverPort, local);
+    // connectToServer(serverPort, local);
+    connectToWs();
 }
 
 void DFSNetManager::titleArrived(Network::DataStruct ds)
