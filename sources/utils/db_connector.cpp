@@ -21,7 +21,6 @@
 
 #include <QDir>
 #include <QRegularExpression>
-#include <iostream>
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 

@@ -55,7 +55,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     switch (type)
     {
     case QtInfoMsg:
-        logPrint(msg.toStdString());
+        print(msg.toStdString());
         break;
     default:
         if (debugLogs)
@@ -153,7 +153,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef QT_DEBUG
         if (isPrint)
 #endif
-            logPrint(logStr.toStdString());
+            print(logStr.toStdString());
     }
 
     if (LogsManager::toModel)
@@ -254,10 +254,13 @@ void LogsManager::emptyHandler()
     });
 }
 
-void LogsManager::logPrint(const std::string& log)
+void LogsManager::print(const std::string& log)
 {
 #ifdef Q_OS_ANDROID
     __android_log_print(ANDROID_LOG_DEBUG, "ExtraChain", "%s", log.c_str());
+#elif defined(Q_OS_WIN)
+    OutputDebugStringA(log.c_str());
+    OutputDebugStringA("\n");
 #else
     std::cout << log << std::endl;
 #endif

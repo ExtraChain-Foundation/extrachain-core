@@ -23,7 +23,6 @@
 #include <QByteArray>
 #include <QString>
 #include <QDebug>
-#include <iostream>
 #include <QObject>
 #include "utils/exc_utils.h"
 
