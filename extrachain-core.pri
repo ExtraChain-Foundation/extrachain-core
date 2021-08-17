@@ -1,5 +1,5 @@
 QT += concurrent
-VERSION = 0.8.5
+VERSION = "$$cat($$PWD/extrachain_version)"
 win32: CONFIG += precompile_header
 win32: PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
 INCLUDEPATH += $$PWD/headers
