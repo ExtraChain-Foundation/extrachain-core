@@ -98,7 +98,7 @@ public slots:
     Chat *getChatMemory(QByteArray chatId);
 
 signals:
-    void newNotify(const Notification ntf);
+    void newNotify(Notification ntf);
     void allChatsAvailabled(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(const QString &path,
                                             const DfsStruct::Type &type); //----- connet with dfs

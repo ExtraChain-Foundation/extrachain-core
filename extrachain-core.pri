@@ -33,7 +33,6 @@ SOURCES += \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/managers/extrachain_node.cpp \
     $$PWD/sources/managers/file_updater_manager.cpp \
-    $$PWD/sources/managers/notification_manager.cpp \
     $$PWD/sources/network/packages/service/connections_message.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
@@ -92,7 +91,6 @@ HEADERS += \
     $$PWD/headers/managers/chatmanager.h \
     $$PWD/headers/managers/extrachain_node.h \
     $$PWD/headers/managers/file_updater_manager.h \
-    $$PWD/headers/managers/notification_manager.h \
     $$PWD/headers/metatypes.h \
     $$PWD/dfs/packages/headers/dfs_request.h \
     $$PWD/headers/datastorage/index/actorindex.h \

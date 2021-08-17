@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 
-file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/version" EXTRACHAIN_VERSION)
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/extrachain_version" EXTRACHAIN_VERSION)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
     project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
@@ -95,7 +95,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_updater_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/notification_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/sm_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/tx_manager.h
@@ -150,7 +149,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_updater_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/notification_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/sm_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/tx_manager.cpp
@@ -206,6 +204,10 @@ target_link_libraries(extrachain Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJO
 if (UNIX AND NOT APPLE)
     target_link_libraries(extrachain gmp)
 endif (UNIX AND NOT APPLE)
+if (APPLE AND NOT IOS) # temp
+    target_include_directories(extrachain PUBLIC /usr/local/Cellar/gmp/6.2.1/include)
+    target_link_libraries(extrachain /usr/local/Cellar/gmp/6.2.1/lib/libgmp.a /usr/local/Cellar/gmp/6.2.1/lib/libgmpxx.a)
+endif(APPLE)
 if (WIN32) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
 endif(WIN32)

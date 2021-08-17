@@ -52,10 +52,6 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     //    contractManager = new ContractManager(accController, blockchain);
     dfs = new Dfs(actorIndex, accController, localIp);
 
-#ifdef ECLIENT
-    notificationManager = new NotificationManager();
-    ThreadPool::addThread(notificationManager);
-#endif
     resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
     resolveManager->setNode(this);
     resolveManager->setChatManager(chatManager);
@@ -231,14 +227,6 @@ NetManager *ExtraChainNode::getNetManager()
     return netManager;
 }
 
-#ifdef ECLIENT
-void ExtraChainNode::setNotificationClient(NotificationClient *newNtfCl)
-{
-    notificationManager->setNotifyClient(newNtfCl);
-    notificationManager->setActorIndex(actorIndex);
-    notificationManager->setAccController(accController);
-}
-#endif
 
 Transaction ExtraChainNode::createTransaction(Transaction tx)
 {
@@ -566,13 +554,6 @@ SubscribeController *ExtraChainNode::getSubscribeController() const
 {
     return subscribeController;
 }
-
-#ifdef ECLIENT
-NotificationManager *ExtraChainNode::getNotificationManager() const
-{
-    return notificationManager;
-}
-#endif
 
 void ExtraChainNode::logOut()
 {
