@@ -85,7 +85,7 @@ public slots:
 
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void sendChatFile(ChatFileSender chatFile);
-    void SendMessage(QByteArray chatId, QByteArray message, QString type); //+
+    void sendMessage(QByteArray chatId, QByteArray message, QString type); //+
     void removeChatMessage(QString chatId, QString messId);
     void createDialogue(QByteArray actorId); //+
     void requestChatList();                  //+
@@ -98,14 +98,14 @@ public slots:
     Chat *getChatMemory(QByteArray chatId);
 
 signals:
-    void newNotify(const Notification ntf);
+    void newNotify(Notification ntf);
     void allChatsAvailabled(QList<Chat *> chatList); // need connect to UI
     void sendDataToBlockhainFromChatManager(const QString &path,
                                             const DfsStruct::Type &type); //----- connet with dfs
 
     void chatListSend(QList<ChatInfo> chats);
     void chatSend(QByteArray chatId, QList<ChatMessageInfo> messages);
-    void sendMessage(const QByteArray &data, const unsigned int &type);
+    void sendNetworkMessage(const QByteArray &data, const unsigned int &type);
 
     void sendLastMessage(QByteArray chatId, ChatMessageInfo); // from network & local send
     void chatCreated(ChatInfo);

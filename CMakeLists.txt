@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 
-file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/version" EXTRACHAIN_VERSION)
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/extrachain_version" EXTRACHAIN_VERSION)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
     project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
@@ -27,6 +27,9 @@ message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTE
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     message("Use flags")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -Werror=implicit-fallthrough")
+    if (UNIX)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+    endif (UNIX)
 endif()
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
@@ -92,7 +95,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_updater_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/notification_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/sm_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/tx_manager.h
@@ -148,7 +150,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_updater_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/notification_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/sm_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/tx_manager.cpp
@@ -190,6 +191,19 @@ else()
         )
 endif()
 
+# link time optimization
+if (EXTRACHAIN_ENABLE_LTO)
+    set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT lto_supported OUTPUT error)
+    if (lto_supported)
+        message(STATUS "LTO enabled")
+        set_property(TARGET extrachain PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(STATUS "LTO not supported: <${error}>")
+    endif(lto_supported)
+endif(EXTRACHAIN_ENABLE_LTO)
+
 # git
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
@@ -207,6 +221,10 @@ target_link_libraries(extrachain
 if (UNIX AND NOT APPLE)
     target_link_libraries(extrachain gmp)
 endif (UNIX AND NOT APPLE)
+if (APPLE AND NOT IOS) # temp
+    target_include_directories(extrachain PUBLIC /usr/local/Cellar/gmp/6.2.1/include)
+    target_link_libraries(extrachain /usr/local/Cellar/gmp/6.2.1/lib/libgmp.a /usr/local/Cellar/gmp/6.2.1/lib/libgmpxx.a)
+endif(APPLE AND NOT IOS)
 if (WIN32) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
 endif(WIN32)

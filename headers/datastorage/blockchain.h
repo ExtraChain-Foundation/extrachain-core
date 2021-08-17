@@ -298,7 +298,7 @@ public:
     void getSmContractMembers(const Block &block) const;
 
 signals:
-    void newNotify(const Notification ntf);
+    void newNotify(Notification ntf);
     void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);
     /**

@@ -317,10 +317,10 @@ void ChatManager::sendChatFile(ChatFileSender chatFile)
     jsonObj["data"] = QString(QJsonDocument(dataObj).toJson(QJsonDocument::Compact));
 
     QByteArray message = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
-    SendMessage(chatFile.chatId.toLatin1(), message, "file");
+    sendMessage(chatFile.chatId.toLatin1(), message, "file");
 }
 
-void ChatManager::SendMessage(QByteArray chatId, QByteArray message, QString type)
+void ChatManager::sendMessage(QByteArray chatId, QByteArray message, QString type)
 {
     auto chat = getChatMemory(chatId);
     auto messId = QDateTime::currentMSecsSinceEpoch() + QRandomGenerator::global()->bounded(1000);

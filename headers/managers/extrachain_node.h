@@ -44,11 +44,6 @@
 #include <QtConcurrent>
 #include <QCoreApplication>
 
-#ifdef ECLIENT
-#include "ui/notificationclient.h"
-#include "managers/notification_manager.h"
-#endif
-
 #ifdef ECONSOLE
 #include "managers/console_manager.h"
 #endif
@@ -74,15 +69,8 @@ private:
     SubscribeController *subscribeController;
     PrivateProfile *prProfile;
     // ContractManager *contractManager;
-
     QByteArray idPrivateProfile;
     QByteArray hashLoginPrivateProfile;
-
-#ifdef ECLIENT
-    NotificationClient *notificationClient = nullptr; // TODO: move to client
-public:
-    NotificationManager *notificationManager; // TODO: make for core
-#endif
 
 public:
     ExtraChainNode(const QString &localIp = "");
@@ -98,9 +86,6 @@ public:
     ResolveManager *getResolveManager() const;
     PrivateProfile *getPrivateProfile() const;
     SubscribeController *getSubscribeController() const;
-#ifdef ECLIENT
-    NotificationManager *getNotificationManager() const;
-#endif
 
     void getBlockchainFile();
 
@@ -134,10 +119,6 @@ public:
 
 public:
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
-
-#ifdef ECLIENT
-    void setNotificationClient(NotificationClient *newNtfCl);
-#endif
 
     QByteArray getIdPrivateProfile() const;
     QByteArray getHashLoginPrivateProfile() const;
