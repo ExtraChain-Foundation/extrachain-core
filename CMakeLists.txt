@@ -207,7 +207,7 @@ endif (UNIX AND NOT APPLE)
 if (APPLE AND NOT IOS) # temp
     target_include_directories(extrachain PUBLIC /usr/local/Cellar/gmp/6.2.1/include)
     target_link_libraries(extrachain /usr/local/Cellar/gmp/6.2.1/lib/libgmp.a /usr/local/Cellar/gmp/6.2.1/lib/libgmpxx.a)
-endif(APPLE)
+endif(APPLE AND NOT IOS)
 if (WIN32) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
 endif(WIN32)
