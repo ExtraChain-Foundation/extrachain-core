@@ -85,7 +85,7 @@ public slots:
 
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void sendChatFile(ChatFileSender chatFile);
-    void SendMessage(QByteArray chatId, QByteArray message, QString type); //+
+    void sendMessage(QByteArray chatId, QByteArray message, QString type); //+
     void removeChatMessage(QString chatId, QString messId);
     void createDialogue(QByteArray actorId); //+
     void requestChatList();                  //+
@@ -105,7 +105,7 @@ signals:
 
     void chatListSend(QList<ChatInfo> chats);
     void chatSend(QByteArray chatId, QList<ChatMessageInfo> messages);
-    void sendMessage(const QByteArray &data, const unsigned int &type);
+    void sendNetworkMessage(const QByteArray &data, const unsigned int &type);
 
     void sendLastMessage(QByteArray chatId, ChatMessageInfo); // from network & local send
     void chatCreated(ChatInfo);
