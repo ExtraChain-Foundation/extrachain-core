@@ -258,10 +258,14 @@ void LogsManager::print(const std::string& log)
 {
 #ifdef Q_OS_ANDROID
     __android_log_print(ANDROID_LOG_DEBUG, "ExtraChain", "%s", log.c_str());
-#elif defined(Q_OS_WIN)
-    OutputDebugStringA(log.c_str());
-    OutputDebugStringA("\n");
 #else
+#if defined(Q_OS_WIN)
+    if (IsDebuggerPresent())
+    {
+        OutputDebugStringA(log.c_str());
+        OutputDebugStringA("\n");
+    }
+#endif
     std::cout << log << std::endl;
 #endif
 }
