@@ -189,6 +189,19 @@ else()
         )
 endif()
 
+# link time optimization
+if (EXTRACHAIN_ENABLE_LTO)
+    set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT lto_supported OUTPUT error)
+    if (lto_supported)
+        message(STATUS "LTO enabled")
+        set_property(TARGET extrachain PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(STATUS "LTO not supported: <${error}>")
+    endif(lto_supported)
+endif(EXTRACHAIN_ENABLE_LTO)
+
 # git
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
