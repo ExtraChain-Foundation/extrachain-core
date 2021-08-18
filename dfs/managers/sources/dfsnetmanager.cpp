@@ -41,8 +41,8 @@ QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
     return dfsResolvers;
 }
 
-DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd)
-    : NetManager(accountList, actInd)
+DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd, const QString &localIp)
+    : NetManager(accountList, actInd, localIp)
 {
     serverPort = isDebug ? 2225 : 2225;
 }

@@ -35,7 +35,7 @@ void PrivateProfile::setDfs(Dfs *value)
 
 void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray &id)
 {
-    QDir().mkdir(PathProfile);
+    QDir().mkpath(PathProfile);
     QMap<QString, QByteArray> map;
     set(map, "wallet", id);
     QByteArray data = "";
@@ -56,7 +56,7 @@ void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, c
     QByteArray hashLogin = profile.first;
     QByteArray idProfile = profile.second;
 
-    QDir().mkdir(PathProfile);
+    QDir().mkpath(PathProfile);
     QFile file(PathProfile + "/" + idProfile + ".private");
     if (!file.exists())
     {
@@ -138,55 +138,49 @@ void PrivateProfile::profile(const QByteArray &hash)
 
     if (users.isEmpty())
     {
+        qDebug() << "[PrivateProfile] Incorrect login: empty keystore";
         emit loginError(1);
-        qDebug() << "ERROR: empty keystore";
         return;
     }
-    else
+
+    bool success = false;
+
+    for (QString &fileName : users)
     {
-        bool success = false;
+        QFile file(PathProfile + "/" + fileName);
+        file.open(QIODevice::ReadOnly);
+        QByteArray data = file.readAll();
+        file.flush();
+        file.close();
+        string h = hash.toStdString();
+        data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
+        QByteArray secureLoginFile = data.mid(0, 64);
 
-        for (QString &fileName : users)
+        if (secureLoginFile == hash)
         {
-            QFile file(PathProfile + "/" + fileName);
-            file.open(QIODevice::ReadOnly);
-            QByteArray data = file.readAll();
-            file.flush();
-            file.close();
-            string h = hash.toStdString();
-            data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
-            QByteArray secureLoginFile = data.mid(0, 64);
-
-            if (secureLoginFile == hash)
-            {
-                data = data.mid(64);
-                emit setHashProfile(secureLoginFile);
-                QMap<QString, QByteArray> map;
-                readData(map, data);
-                QList<QByteArray> idList = get(map, "wallet").split('|');
-                emit setIdProfile(idList.first());
-                qDebug() << "Load private profile with id" << idList.first();
-                accController->loadActors(idList.first(), idList, hash);
-                if (accController->getMainActor() != nullptr)
-                    dfs->initMyLocalStorage();
-                emit initActorChatM();
-                success = true;
-                break;
-            }
-        }
-
-        if (!success)
-        {
-#ifdef ECONSOLE
-            qInfo() << "---> Incorrect email or password";
-            std::exit(0);
-#endif
-
-            emit loginError(2);
+            data = data.mid(64);
+            emit setHashProfile(secureLoginFile);
+            QMap<QString, QByteArray> map;
+            readData(map, data);
+            QList<QByteArray> idList = get(map, "wallet").split('|');
+            emit setIdProfile(idList.first());
+            qDebug() << "Load private profile with id" << idList.first();
+            accController->loadActors(idList.first(), idList, hash);
+            if (accController->getMainActor() != nullptr)
+                dfs->initMyLocalStorage();
+            emit initActorChatM();
+            success = true;
+            break;
         }
     }
-    return;
+
+    if (!success)
+    {
+        qDebug() << "[PrivateProfile] Incorrect email or password";
+        emit loginError(2);
+    }
 }
+
 QByteArray PrivateProfile::get(QMap<QString, QByteArray> &map, const QString &value)
 {
     return map[value];

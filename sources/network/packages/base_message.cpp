@@ -58,7 +58,7 @@ void BaseMessage::operator=(QList<QByteArray> &list)
         protocol = list.takeFirst();
         type = list.takeFirst().toUInt();
         QByteArray signBytes = list.takeFirst();
-        signer = BigNumber::isValid(signBytes) ? BigNumber(signBytes) : BigNumber();
+        signer = BigNumber::isValid(signBytes) ? signBytes : ActorId();
         digSig = list.takeFirst();
         data = list.takeFirst();
     }
@@ -75,7 +75,8 @@ bool BaseMessage::isEmpty() const
 QByteArray BaseMessage::concatenateAllData() const
 {
     QByteArray concatenatedData;
-    for (QByteArray d : serializedParams())
+    const auto params = serializedParams();
+    for (const QByteArray &d : params)
     {
         // in entry data for digSig calculation we don't need digSig field
         if (d != digSig)
@@ -88,10 +89,10 @@ QList<QByteArray> BaseMessage::serializedParams() const
 {
     QList<QByteArray> l;
     QByteArray signeR;
-    if (signer == 0)
+    if (signer.isEmpty())
         signeR = "";
     else
-        signeR = signer.toActorId();
+        signeR = signer.toByteArray();
     l << protocol << QByteArray::number(type) << signeR << digSig << data;
     return l;
 }

@@ -37,6 +37,7 @@
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)
 Q_DECLARE_METATYPE(QHostAddress)
+Q_DECLARE_METATYPE(ActorId)
 Q_DECLARE_METATYPE(Block)
 Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
@@ -69,6 +70,7 @@ void registerMetaTypes()
     qRegisterMetaType<Block>();
     qRegisterMetaType<GenesisBlock>();
     qRegisterMetaType<QHostAddress>();
+    qRegisterMetaType<ActorId>();
     qRegisterMetaType<Actor<KeyPublic>>();
     qRegisterMetaType<Transaction>();
     qRegisterMetaType<SocketService>();

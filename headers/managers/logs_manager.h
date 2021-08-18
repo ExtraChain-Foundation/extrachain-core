@@ -25,7 +25,6 @@
 #include <QFile>
 #include <QDir>
 #include <QDateTime>
-#include <iostream>
 #include "utils/variant_model.h"
 
 class LogsManager : public QObject
@@ -47,7 +46,7 @@ public:
     static void etHandler();
     static void qtHandler();
     static void emptyHandler();
-    static void logPrint(const std::string& log);
+    static void print(const std::string& log);
 
     static bool toConsole;
     static bool toFile;
@@ -65,6 +64,22 @@ signals:
 
 public: // slots:
     static void makeLog(const QString& file, int line, const QString& function, const QString& msg);
+};
+
+struct UnicodedStream : QTextStream
+{
+    using QTextStream::QTextStream;
+
+    template <typename T>
+    UnicodedStream& operator<<(T const& t)
+    {
+        return static_cast<UnicodedStream&>(static_cast<QTextStream&>(*this) << t);
+    }
+
+    UnicodedStream& operator<<(char const* ptr)
+    {
+        return static_cast<UnicodedStream&>(*this << QString(ptr));
+    }
 };
 
 #endif // LOGSMANAGER_H

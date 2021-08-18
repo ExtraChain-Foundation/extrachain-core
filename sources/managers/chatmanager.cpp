@@ -164,7 +164,7 @@ void ChatManager::parseInvite()
     for (const auto &invite : invites)
     {
         QByteArray owner = QByteArray::fromStdString(invite.at("owner"));
-        string ownerPK = _actorIndex->getActor(BigNumber(owner)).key()->getPubKey();
+        string ownerPK = _actorIndex->getActor(owner).key()->getPubKey();
         QByteArray chatIdEncrypted = QByteArray::fromStdString(invite.at("chatId"));
         QByteArray chatId = mainActor->decrypt(chatIdEncrypted, ownerPK);
         QByteArray key = mainActor->decrypt(QByteArray::fromStdString(invite.at("message")), ownerPK);
@@ -282,7 +282,7 @@ QByteArray ChatManager::CreateNewChat()
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
-    auto actor = _actorIndex->getActor(BigNumber(actorId));
+    auto actor = _actorIndex->getActor(actorId);
     auto key = actor.key();
 
     Chat *chat = getChatMemory(chatId);
@@ -386,7 +386,7 @@ void ChatManager::requestChatList()
     {
         tempusersList.clear();
         tempUsers = currentChat->getAllUsers();
-        for (auto user : qAsConst(tempUsers))
+        for (const auto &user : qAsConst(tempUsers))
             tempusersList.append(user);
 
         chats.append(ChatInfo { tempusersList, currentChat->getChatId(), currentChat->getLastMessage() });
@@ -594,7 +594,7 @@ ChatManager::~ChatManager()
 
 void ChatManager::ActorInit()
 {
-    this->_currentActorId = this->_accController->getMainActor()->id().toActorId();
+    this->_currentActorId = this->_accController->getMainActor()->id().toByteArray();
     /*
     QFile file("keystore/personal/currentID");
     file.open(QIODevice::ReadWrite);

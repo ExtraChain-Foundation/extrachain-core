@@ -57,7 +57,7 @@ public:
      */
     Actor<KeyPrivate> createActor(ActorType account, QByteArray hashLogin);
     //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
-    Actor<KeyPrivate> getActor(BigNumber id);
+    Actor<KeyPrivate> getActor(const ActorId &id);
     /**
      * @brief Gets Actor by public key
      * @param pubkey - serialized public key
@@ -72,8 +72,7 @@ public:
      */
     Actor<KeyPrivate> getCurrentActor();
 
-    int getAccountCount();
-
+    int getAccountCount() const;
     int getUserNum() const;
     void setUserNum(int value);
     QMap<QByteArray, QByteArray> getCurrentState() const;
@@ -87,7 +86,7 @@ public:
 
     void setBlockchain(Blockchain *value);
     Blockchain *getBlockchain() const;
-    QList<BigNumber> getListAccounts() const;
+    QList<ActorId> getListAccounts() const;
 
 public slots:
     /**

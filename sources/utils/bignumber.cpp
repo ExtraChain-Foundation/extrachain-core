@@ -303,16 +303,6 @@ QByteArray BigNumber::toZeroByteArray(int size) const
     return zero + number;
 }
 
-QByteArray BigNumber::toActorId() const
-{
-    QByteArray actorId = this->toByteArray();
-
-    while (actorId.length() < 20)
-        actorId.push_front('0');
-
-    return actorId;
-}
-
 BigNumber BigNumber::pow(unsigned long number)
 {
     mpz_class res;

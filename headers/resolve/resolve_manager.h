@@ -103,6 +103,8 @@ signals:
     //    void coinRequest(BigNumber id, BigNumber amount);
     //    void sendMsg(const QByteArray &msg);
     void socketSendMsg(const QByteArray &serialized, const SocketPair &receiver);
+    void saveNotificationToken(QByteArray os, ActorId actor, ActorId token);
+
 public slots:
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void registrateMsg(const QByteArray &data, const unsigned int &msgType);
@@ -116,6 +118,7 @@ public slots:
     void sendMessageResponse(const QByteArray &data, const unsigned int &msgType,
                              const QByteArray &requestHash, const SocketPair &receiver);
     void taskFinished();
+
 public slots:
     void process();
 };

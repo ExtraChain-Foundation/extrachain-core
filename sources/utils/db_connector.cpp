@@ -21,7 +21,6 @@
 
 #include <QDir>
 #include <QRegularExpression>
-#include <iostream>
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
@@ -58,6 +57,12 @@ bool DBConnector::open(const std::string &name)
     {
         m_file = name;
         m_open = true;
+
+#ifdef QT_DEBUG
+        if (!QFile::exists(name.c_str()))
+            qFatal("db open error: %s", name.c_str());
+#endif
+
         return true;
     }
 }
@@ -265,7 +270,7 @@ bool DBConnector::dropTable(const std::string &table)
     return query("DROP TABLE IF EXISTS " + table);
 }
 
-int DBConnector::count(const std::string &table, const std::string &where)
+qint64 DBConnector::count(const std::string &table, const std::string &where)
 {
     std::string query = "SELECT COUNT(*) FROM " + table;
     if (!where.empty())
@@ -274,7 +279,7 @@ int DBConnector::count(const std::string &table, const std::string &where)
     auto res = select(query);
     if (res.empty())
         return 0;
-    return std::stoi(res[0]["COUNT(*)"]);
+    return std::stoll(res[0]["COUNT(*)"]);
 }
 
 std::string DBConnector::file() const
@@ -363,9 +368,9 @@ bool DBConnector::implementationPrepare(const std::string &tableName, const DBRo
         // qDebug() << "[ImplementationPrepare] Finded" << column.c_str();
 
         if (column == "BLOB")
-            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
         else if (column == "TEXT")
-            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), el.second.size(), SQLITE_STATIC);
+            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
         else if (column == "INT")
             rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
         else if (column == "INTEGER")

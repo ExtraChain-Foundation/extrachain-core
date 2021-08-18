@@ -33,6 +33,7 @@ public:
     Test(ExtraChainNode *node, QObject *p = nullptr)
         : QObject(p)
     {
+        /*
         Transaction tr(node->getAccountController()->getCurrentActor().id(), BigNumber("ddddaaaa332232"),
                        BigNumber(124));
         Transaction tr1(node->getAccountController()->getCurrentActor().id(), BigNumber("322323dddaa"),
@@ -49,6 +50,7 @@ public:
         a = Block(Serialization::serialize(list), pr);
         b = Block(Serialization::serialize(list2));
         emit start1(a.serialize(), b.serialize());
+        */
     }
 signals:
     void start1(const QByteArray &a, const QByteArray &b);

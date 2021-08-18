@@ -54,7 +54,7 @@ private:
 
 public slots:
     /*DFS 1.5*/
-    void dfsSyncUsers(QList<QString> userId, const SocketPair &receiver = SocketPair());
+    void dfsSyncUsers(QByteArrayList actors, const SocketPair &receiver = SocketPair());
     void dfsSyncT();
     void dfsSync(const SocketPair &receiver);
     bool dfsValidate(QByteArray userId);
@@ -74,7 +74,8 @@ private:
 
 public:
     DFSNetManager *dfsNetManager = nullptr;
-    Dfs(ActorIndex *actorIndex, AccountController *accControler, QObject *parent = nullptr);
+    QString dfsNetLocalIp;
+    Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp = "", QObject *parent = nullptr);
     ~Dfs();
 
 public:
@@ -112,7 +113,7 @@ signals:
 
 public slots:
     void initMyLocalStorage();
-    void initUser(BigNumber userId);
+    void initUser(ActorId userId);
 
     void reportFileCompleted(QString filePath, SocketPair receiver);
     void save(DfsStruct::DfsSave saveType, QString file, QByteArray data, const DfsStruct::Type type);

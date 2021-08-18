@@ -140,6 +140,7 @@ SocketService::~SocketService()
 
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
 {
+    Q_UNUSED(socketData)
     // if(all)
     // send
     // if(allexcept && adress != closedAdress)

@@ -45,7 +45,7 @@ bool LogsManager::debugLogs = false;
 
 LogsManager::LogsManager()
 {
-    connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
+    // connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
 }
 
 void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
@@ -55,7 +55,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     switch (type)
     {
     case QtInfoMsg:
-        logPrint(msg.toStdString());
+        print(msg.toStdString());
         break;
     default:
         if (debugLogs)
@@ -81,7 +81,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     if (fileName.isEmpty())
         fileName = "global";
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(__GNUC__)
     fileName = fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
 #else
     fileName = fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
@@ -153,7 +153,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #ifdef QT_DEBUG
         if (isPrint)
 #endif
-            logPrint(logStr.toStdString());
+            print(logStr.toStdString());
     }
 
     if (LogsManager::toModel)
@@ -208,7 +208,7 @@ void LogsManager::offConsole()
 
 void LogsManager::onFile()
 {
-    QDir().mkdir("logs");
+    QDir().mkpath("logs");
     LogsManager::toFile = true;
 }
 
@@ -229,9 +229,10 @@ void LogsManager::offQml()
 
 void LogsManager::etHandler()
 {
+    std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
 
-    QDir().mkdir("logs");
+    QDir().mkpath("logs");
     qInstallMessageHandler(LogsManager::messageHandler);
 
 #ifdef Q_OS_WIN
@@ -253,11 +254,18 @@ void LogsManager::emptyHandler()
     });
 }
 
-void LogsManager::logPrint(const std::string& log)
+void LogsManager::print(const std::string& log)
 {
 #ifdef Q_OS_ANDROID
     __android_log_print(ANDROID_LOG_DEBUG, "ExtraChain", "%s", log.c_str());
 #else
+#if defined(Q_OS_WIN)
+    if (IsDebuggerPresent())
+    {
+        OutputDebugStringA(log.c_str());
+        OutputDebugStringA("\n");
+    }
+#endif
     std::cout << log << std::endl;
 #endif
 }

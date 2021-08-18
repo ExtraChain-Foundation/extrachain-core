@@ -22,19 +22,14 @@
 Transaction::Transaction(QObject *parent)
     : QObject(parent)
 {
-    this->sender = BigNumber(0);
-    this->receiver = BigNumber(0);
     this->amount = BigNumber(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
-    this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->approver = BigNumber(0);
     this->digSig = QByteArray();
-    this->producer = BigNumber(0);
     calcHash();
 }
 
@@ -46,19 +41,19 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     QList<QByteArray> list = Serialization::deserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
     if (list.size() == 13)
     {
-        this->sender = BigNumber(list.at(0));
-        this->receiver = BigNumber(list.at(1));
+        this->sender = list.at(0);
+        this->receiver = list.at(1);
         this->amount = BigNumber(list.at(2));
         this->date = list.at(3).toLongLong();
         this->data = list.at(4);
-        this->token = BigNumber(list.at(5));
+        this->token = list.at(5);
         this->prevBlock = BigNumber(list.at(6));
         this->gas = list.at(7).toInt();
         this->hop = list.at(8).toInt();
         this->hash = QByteArray(list.at(9));
-        this->approver = BigNumber(list.at(10));
+        this->approver = list.at(10);
         this->digSig = list.at(11);
-        this->producer = BigNumber(list.at(12));
+        this->producer = list.at(12);
     }
     else
         qDebug() << "Incorrect TX";
@@ -66,7 +61,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     calcHash();
 }
 
-Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                          QObject *parent)
     : Transaction(parent)
 {
@@ -75,18 +70,15 @@ Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, con
     this->amount = amount;
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
-    this->token = BigNumber(0);
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->approver = BigNumber(0);
     this->digSig = QByteArray();
-    this->producer = BigNumber(0);
     calcHash();
 }
 
-Transaction::Transaction(const BigNumber &sender, const BigNumber &receiver, const BigNumber &amount,
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                          const QByteArray &data, QObject *parent)
     : Transaction(sender, receiver, amount, parent)
 {
@@ -113,22 +105,22 @@ Transaction::Transaction(const Transaction &other)
     calcHash();
 }
 
-void Transaction::setReceiver(const BigNumber &value)
+void Transaction::setReceiver(const ActorId &value)
 {
     receiver = value;
 }
 
-void Transaction::setProducer(const BigNumber &value)
+void Transaction::setProducer(const ActorId &value)
 {
     producer = value;
 }
 
-void Transaction::setSender(const BigNumber &value)
+void Transaction::setSender(const ActorId &value)
 {
     sender = value;
 }
 
-BigNumber Transaction::getProducer() const
+ActorId Transaction::getProducer() const
 {
     return producer;
 }
@@ -143,7 +135,7 @@ void Transaction::setData(const QByteArray &value)
     data = value;
 }
 
-void Transaction::setToken(const BigNumber &value)
+void Transaction::setToken(const ActorId &value)
 {
     token = value;
 }
@@ -169,9 +161,9 @@ void Transaction::calcHash()
 
 QByteArray Transaction::getDataForHash() const
 {
-    return (sender.toActorId() + receiver.toActorId() + amount.toByteArray() + QByteArray::number(date) + data
-            + token.toActorId() + prevBlock.toByteArray() + QByteArray::number(gas) + approver.toActorId()
-            + producer.toActorId());
+    return (sender.toByteArray() + receiver.toByteArray() + amount.toByteArray() + QByteArray::number(date)
+            + data + token.toByteArray() + prevBlock.toByteArray() + QByteArray::number(gas)
+            + approver.toByteArray() + producer.toByteArray());
 }
 
 QByteArray Transaction::getDataForDigSig() const
@@ -220,25 +212,24 @@ void Transaction::setHop(int hop)
 void Transaction::decrementHop()
 {
     this->hop--;
-
     calcHash();
 }
 
 void Transaction::clear()
 {
-    this->sender = BigNumber(0);
-    this->receiver = BigNumber(0);
+    this->sender = "0";
+    this->receiver = "0";
     this->amount = BigNumber(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
-    this->token = BigNumber(0);
+    this->token = "0";
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->approver = BigNumber(0);
+    this->approver = "0";
     this->digSig = QByteArray();
-    this->producer = BigNumber(0);
+    this->producer = "0";
     calcHash();
 }
 
@@ -247,12 +238,12 @@ int Transaction::getGas() const
     return this->gas;
 }
 
-BigNumber Transaction::getSender() const
+ActorId Transaction::getSender() const
 {
     return this->sender;
 }
 
-BigNumber Transaction::getReceiver() const
+ActorId Transaction::getReceiver() const
 {
     return this->receiver;
 }
@@ -272,12 +263,12 @@ QByteArray Transaction::getHash() const
     return this->hash;
 }
 
-BigNumber Transaction::getToken() const
+ActorId Transaction::getToken() const
 {
     return this->token;
 }
 
-BigNumber Transaction::getApprover() const
+ActorId Transaction::getApprover() const
 {
     return this->approver;
 }
@@ -351,20 +342,20 @@ void Transaction::operator=(const Transaction &other)
 
 QString Transaction::toString() const
 {
-    return "sender:" + sender.toActorId() + ", receiver:" + receiver.toActorId()
+    return "sender:" + sender.toByteArray() + ", receiver:" + receiver.toByteArray()
         + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
-        + ", data:" + data + ", token:" + token.toActorId() + ", prevBlock:" + prevBlock.toByteArray()
+        + ", data:" + data + ", token:" + token.toByteArray() + ", prevBlock:" + prevBlock.toByteArray()
         + ", gas:" + QString::number(gas) + ", hop:" + QString::number(hop) + ", hash:" + hash
-        + ", approver:" + approver.toActorId() + ", digitalSignature:" + digSig;
+        + ", approver:" + approver.toByteArray() + ", digitalSignature:" + digSig;
 }
 
 QByteArray Transaction::serialize() const
 {
     QList<QByteArray> list;
-    list << sender.toActorId() << receiver.toActorId() << amount.toByteArray() << QByteArray::number(date)
-         << data << token.toActorId() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
-         << QString::number(hop).toLocal8Bit() << hash << approver.toActorId() << digSig
-         << producer.toActorId();
+    list << sender.toByteArray() << receiver.toByteArray() << amount.toByteArray() << QByteArray::number(date)
+         << data << token.toByteArray() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
+         << QString::number(hop).toLocal8Bit() << hash << approver.toByteArray() << digSig
+         << producer.toByteArray();
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 
     return Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE);

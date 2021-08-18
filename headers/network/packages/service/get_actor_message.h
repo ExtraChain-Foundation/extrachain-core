@@ -30,7 +30,7 @@ struct GetActorMessage : ISmallMessage
     static const short FIELD_SIZE = 2;
 
 public:
-    BigNumber actorId;
+    ActorId actorId;
 
     // ISmallMessage interface
 public:
