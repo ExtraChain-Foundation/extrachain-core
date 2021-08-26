@@ -1,6 +1,7 @@
 #include "network/websocket_service.h"
 
-#include "utils/exc_utils.h"
+#include "dfs/managers/headers/dfsnetmanager.h"
+
 #ifndef EXTRACHAIN_CMAKE
 #include "preconfig.h"
 #endif
@@ -18,7 +19,8 @@ WebSocketService::WebSocketService(QWebSocket *ws, QObject *parent)
     else
     {
         m_ws = ws;
-        qDebug() << "[WS] New service:" << m_ws->localAddress().toString() << m_ws->localPort();
+        this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
+        qDebug() << "[WS] New service:" << m_ip << m_ws->localPort();
         connections();
         sendFirstMessage();
     }
@@ -119,15 +121,23 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 
 void WebSocketService::onBinaryMessage(const QByteArray &message)
 {
-    qDebug() << "[WS] Binary length:" << message.length();
+    // qDebug() << "[WS] Binary length:" << message.length();
     // qDebug() << "[WS] Binary:" << message;
 
     if (activated)
     {
-        SocketPair pair(m_ws->localAddress().toString().toStdString(), m_ws->localPort(),
-                        NetworkProtocol::WebSocket);
+        SocketPair pair(m_ip.toStdString(), m_ws->localPort());
         pair.setId(m_identificator.toLatin1());
-        emit resolveMessage(message, pair);
+        auto mess = qUncompress(message);
+        if (m_ws->localPort() == 2234)
+        {
+            reinterpret_cast<DFSNetManager *>(networkManager)->MessageReceived(mess, pair);
+        }
+        else
+        {
+            networkManager->MessageReceived(mess, pair);
+        }
+        // emit resolveMessage(qUncompress(message), pair);
     }
     else
     {
@@ -145,13 +155,17 @@ void WebSocketService::sendMessage(const QByteArray &data)
     if (!data.length())
         qFatal("[WS] Error send size");
 
-    auto length = m_ws->sendBinaryMessage(data);
+    static int tempSizeDiff = 0;
+    auto compress = qCompress(data);
+    tempSizeDiff += data.length() - compress.length();
+    // qDebug() << "[WS] Size diff:" << tempSizeDiff;
+    auto length = m_ws->sendBinaryMessage(compress);
     // m_ws->flush();
 
     if (m_ws->isValid())
     {
-        qDebug().noquote() << "[WS] Send" << data.length() << length << m_ws->isValid()
-                           << m_ws->localAddress().toString() << m_ws->localPort();
+        // qDebug().noquote() << "[WS] Send" << data.length() << length << m_ws->isValid() << m_ip
+        //                    << m_ws->localPort();
         // qDebug() << "[WS] Send" << m_ws << data << length;
     }
     else
@@ -163,7 +177,9 @@ void WebSocketService::sendMessage(const QByteArray &data)
 void WebSocketService::connections()
 {
     connect(m_ws, &QWebSocket::connected, [this] {
-        qDebug() << "[WS] New service:" << m_ws->localAddress().toString() << m_ws->localPort();
+        this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
+        qDebug() << "[WS] New service:" << m_ip << m_ws->localPort();
+
         sendFirstMessage();
     });
     connect(m_ws, &QWebSocket::disconnected, [this] {
@@ -193,4 +209,14 @@ void WebSocketService::parseError(const QString &message)
     QString text = json["errorText"].toString();
     qDebug() << "[WS] Error (parsed)" << code << text;
     emit error(code, text);
+}
+
+const QString &WebSocketService::ip() const
+{
+    return m_ip;
+}
+
+void WebSocketService::setNetworkManager(NetManager *newNetworkManager)
+{
+    networkManager = newNetworkManager;
 }

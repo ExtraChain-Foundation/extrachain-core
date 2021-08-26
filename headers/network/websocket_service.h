@@ -4,6 +4,8 @@
 #include <QWebSocket>
 #include "network/socket_pair.h"
 
+class NetManager;
+
 class WebSocketService : public QObject
 {
     Q_OBJECT
@@ -24,6 +26,10 @@ public:
 
     bool operator==(const WebSocketService &service) const;
 
+    void setNetworkManager(NetManager *newNetworkManager);
+
+    const QString &ip() const;
+
 signals:
     void send(const QByteArray &data);
     void disconnected();
@@ -36,13 +42,15 @@ public slots:
     void sendMessage(const QByteArray &data);
 
 private:
-    QWebSocket *m_ws = nullptr;
-    QString m_identificator; // TODO: check
-    bool activated = false;
-
     void connections();
     void sendFirstMessage();
     void parseError(const QString &message);
+
+    NetManager *networkManager = nullptr;
+    QWebSocket *m_ws = nullptr;
+    QString m_identificator; // TODO: check
+    QString m_ip;
+    bool activated = false;
 };
 
 #endif // WEBSOCKETSERVICE_H

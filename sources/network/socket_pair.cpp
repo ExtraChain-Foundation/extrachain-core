@@ -26,11 +26,10 @@ SocketPair::SocketPair()
     port = 0;
 }
 
-SocketPair::SocketPair(const std::string &ip, const quint16 &port, NetworkProtocol protocol)
+SocketPair::SocketPair(const std::string &ip, const quint16 &port)
 {
     this->ip = ip;
     this->port = port;
-    this->protocol = protocol;
     this->iden = "0";
 }
 
@@ -38,7 +37,6 @@ SocketPair::SocketPair(const SocketPair &pair)
 {
     ip = pair.ip;
     port = pair.port;
-    protocol = pair.protocol;
     iden = pair.iden;
 }
 

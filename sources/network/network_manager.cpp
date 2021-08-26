@@ -163,8 +163,9 @@ void NetManager::disconnectSocket(SocketService *connection)
 
 void NetManager::connectWsService(WebSocketService *service)
 {
-    connect(service, &WebSocketService::resolveMessage,
-            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
+    service->setNetworkManager(this);
+    //    connect(service, &WebSocketService::resolveMessage,
+    //            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
     connect(service, &WebSocketService::disconnected, [this]() {
         auto service = qobject_cast<WebSocketService *>(sender());
         qDebug() << "[WS] Try remove service";
@@ -494,7 +495,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
     };
 
     // TODO: protocol for receiver
-    if (connections.isEmpty() || !allActive())
+    if (wsConnections.isEmpty() || !allActive())
         saveToCache(message, msgType, receiver, send);
 
     for (const auto &tmp : qAsConst(connections))
@@ -524,32 +525,33 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
 
     for (const auto &ws : qAsConst(wsConnections))
     {
-        //        bool isSend = false;
-        //        auto ip = ws->ws()->localAddress().toString().toStdString();
-        //        auto port = ws->ws()->localPort();
+        bool isSend = false;
+        auto ip = ws->ip().toStdString();
+        auto port = ws->ws()->localPort();
 
-        //        // if (receiver.protocol != NetworkProtocol::WebSocket)
-        //        //     qFatal("[WS] Protocol error");
+        // if (receiver.protocol != NetworkProtocol::WebSocket)
+        //     qFatal("[WS] Protocol error");
 
-        //        switch (send)
-        //        {
-        //        case Config::Net::TypeSend::Except:
-        //            isSend = ip != receiver.ip && port != receiver.port;
-        //            break;
-        //        case Config::Net::TypeSend::Focused:
-        //            isSend = ip == receiver.ip && port == receiver.port;
-        //            break;
-        //        case Config::Net::TypeSend::All:
-        //            isSend = true;
-        //            break;
-        //        default:
-        //            break;
-        //        }
+        // qDebug() << "!!!!!!!!! 2 rec:" << receiver.ip.c_str() << "ip:" << ip.c_str();
+        switch (send)
+        {
+        case Config::Net::TypeSend::Except:
+            isSend = ip != receiver.ip && port != receiver.port;
+            break;
+        case Config::Net::TypeSend::Focused:
+            isSend = ip == receiver.ip && port == receiver.port;
+            break;
+        case Config::Net::TypeSend::All:
+            isSend = true;
+            break;
+        default:
+            break;
+        }
 
-        //        if (!isSend)
-        //            continue;
-        //        if (ws->isActive())
-        ws->send(message);
+        if (!isSend)
+            continue;
+        if (ws->isActive())
+            ws->send(message);
     }
 
     //    if (checkMsgCount(message, handler, connections))
@@ -567,15 +569,15 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
         handler.insert(hashMsg, value);
     else
     {
-        if (handler.find(hashMsg).value() == list.size() - 1)
+        if (handler.find(hashMsg).value() == wsConnections.size() - 1)
         {
             handler.remove(hashMsg);
-            flag_result = false; // FALSE !!!
+            flag_result = false;
         }
         else
         {
-            flag_result = true;
             handler.find(hashMsg).value()++;
+            flag_result = true;
         }
     }
     return flag_result;
@@ -636,6 +638,7 @@ void NetManager::distMessage(const QByteArray &data, const SocketPair &socketDat
     if (flag)
     {
 #endif
+        // TODO: ws
         for (int i = 0; i < connections.size(); i++)
             connections[i]->distMsg(data, socketData);
 #ifdef ECLIENT

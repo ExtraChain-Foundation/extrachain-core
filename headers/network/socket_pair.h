@@ -22,21 +22,14 @@
 
 #include "utils/bignumber.h"
 
-enum class NetworkProtocol
-{
-    Tcp,
-    WebSocket
-};
-
 class SocketPair
 {
 public:
     std::string ip;
     quint16 port;
     QByteArray iden;
-    NetworkProtocol protocol = NetworkProtocol::Tcp;
     SocketPair();
-    SocketPair(const std::string &f, const quint16 &s, NetworkProtocol protocol = NetworkProtocol::Tcp);
+    SocketPair(const std::string &f, const quint16 &s);
     SocketPair(const SocketPair &v);
     const QString serialize() const;
     const SocketPair operator=(const SocketPair &v);
