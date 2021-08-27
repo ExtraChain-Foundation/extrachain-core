@@ -215,8 +215,8 @@ void SocketService::establishConnection()
     this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
     this->port = this->socket->peerPort();
     QByteArray idb = IDENTIFICATOR
-        + Serialization::serialize({ QByteArray::number(Network::build), net::readNetManagerIdentificator(),
-                                     netManager->getSerializedConnectionList() });
+        + Serialization::serialize({ QByteArray::number(0), net::readNetManagerIdentificator(),
+                                     netManager->getSerializedConnectionList() }); // TODO: remove build
     this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
 
     qDebug() << "[Socket Service] Address" << this->socket << address << port;
@@ -275,15 +275,6 @@ void SocketService::continueDoRead()
                     netManager->checkOnValidConnection(this->getID().toByteArray(),
                                                        this->getAddress().toLocal8Bit());
                     netManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
-
-#ifdef ECLIENT
-                    int netBuild = bl[0].toInt();
-                    if (netBuild != Network::build)
-                    {
-                        emit netManager->buildError();
-                        emit this->removeMe();
-                    }
-#endif
                 }
                 else
                 {

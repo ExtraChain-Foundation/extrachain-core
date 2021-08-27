@@ -44,7 +44,7 @@ QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd, const QString &localIp)
     : NetManager(accountList, actInd, localIp)
 {
-    serverPort = isDebug ? 2225 : 2225;
+    tcpPort = 2225;
     wsPort = 2234;
 }
 
@@ -54,19 +54,19 @@ DFSNetManager::~DFSNetManager()
     delete serverService;
 }
 
-void DFSNetManager::socketConnection()
+void DFSNetManager::socketConnection(SocketService *socket)
 {
-    qDebug() << "DFSNetManager connections:";
-    connect(connections.last(), &SocketService::clientDisconnected, this, &DFSNetManager::removeConnection);
-    connect(connections.last(), &SocketService::removeMe, this, &DFSNetManager::removeConnection);
-    connect(connections.last(), &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
+    qDebug() << "[DFS NetworkManager] Add tcp socket connections";
+    connect(socket, &SocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
+    connect(socket, &SocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
+    connect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
 }
 
-void DFSNetManager::socketDisconnect(SocketService *connection)
+void DFSNetManager::socketDisconnect(SocketService *socket)
 {
-    disconnect(connection, &SocketService::clientDisconnected, this, &DFSNetManager::removeConnection);
-    disconnect(connection, &SocketService::removeMe, this, &DFSNetManager::removeConnection);
-    disconnect(connection, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
+    disconnect(socket, &SocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
+    disconnect(socket, &SocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
+    disconnect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
 }
 
 void DFSNetManager::connectResolver(DFSResolverService *resolver)
@@ -121,7 +121,7 @@ void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &re
 void DFSNetManager::appendSocket(SocketService *socket)
 {
     connections.append(socket);
-    socketConnection();
+    socketConnection(socket);
 }
 
 void DFSNetManager::process()
@@ -139,13 +139,7 @@ void DFSNetManager::process()
 void DFSNetManager::startDFSNetwork()
 {
     startNetwork();
-    // connectToServer(serverPort, local);
-}
-
-void DFSNetManager::reconnect()
-{
-    // connectToServer(serverPort, local);
-    connectToWs();
+    // connectToNode(serverPort, local);
 }
 
 void DFSNetManager::titleArrived(Network::DataStruct ds)
@@ -203,7 +197,7 @@ void DFSNetManager::removeResolver(DFSResolverService::FinishStatus status)
     }
 }
 
-void DFSNetManager::removeConnection()
+void DFSNetManager::removeTcpConnection()
 {
     QObject *sender = QObject::sender();
 
@@ -215,6 +209,7 @@ void DFSNetManager::removeConnection()
     connections.removeAt(connections.indexOf(connection));
     emit connection->finished();
 }
+
 void DFSNetManager::checkMyIdentificator()
 {
     QObject *sender = QObject::sender();
@@ -223,7 +218,7 @@ void DFSNetManager::checkMyIdentificator()
     if (connection == nullptr)
         return;
 
-    if (allowLocalServer && net::readNetManagerIdentificator() == connection->getIdentificator())
+    if (net::readNetManagerIdentificator() == connection->getIdentificator())
         emit connection->removeMe();
 
     // short counter = 0;
@@ -243,14 +238,14 @@ void DFSNetManager::checkMyIdentificator()
     //    emit connection->setActiveSignal(true);
 }
 
-void DFSNetManager::addConnection(qint64 socketDescriptor)
+void DFSNetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 {
     SocketService *socket = new SocketService(socketDescriptor);
     connections.append(socket);
-    connections.last()->setNetManager(this);
-    socketConnection();
+    socket->setNetManager(this);
+    socketConnection(socket);
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
-    ThreadPool::addThread(connections.last());
+    ThreadPool::addThread(socket);
 }
 
 void DFSNetManager::checkConnectionsStatus()
@@ -268,16 +263,15 @@ void DFSNetManager::checkConnectionsStatus()
     }
 }
 
-SocketService *DFSNetManager::addConnectionFromPair(QHostAddress address, quint16 port)
+SocketService *DFSNetManager::connectToTcpSocket(const QString &address, quint16 port)
 {
-    SocketService *socket = new SocketService(address.toString(), port);
+    SocketService *socket = new SocketService(address, port);
     connections.append(socket);
-    connections.last()->setNetManager(this);
-    socketConnection();
-    qDebug().noquote().nospace() << "DFS NET MANAGER: New connection is established: " << address.toString()
-                                 << ":" << port;
+    socket->setNetManager(this);
+    socketConnection(socket);
+    qDebug().noquote().nospace() << "[DFS NetworkManager] New TCP connection: " << address << ":" << port;
 
-    ThreadPool::addThread(connections.last());
-    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
-    return connections.last();
+    ThreadPool::addThread(socket);
+    QTimer::singleShot(3000, this, &DFSNetManager::checkConnectionsStatus);
+    return socket;
 }

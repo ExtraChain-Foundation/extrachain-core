@@ -30,7 +30,6 @@
 #include <QCborStreamWriter>
 #include <QCborStreamReader>
 #include <QList>
-#include <QSettings>
 #include <QStorageInfo>
 #include <QString>
 #include <QStringList>
@@ -49,8 +48,8 @@
 #include "sodium.h"
 
 namespace Network {
-static QString serverIp = "51.68.181.52";
-static const int build = 1500;
+Q_NAMESPACE
+
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
 static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
 struct DataStruct
@@ -58,6 +57,13 @@ struct DataStruct
     QByteArray msg;
     SocketPair receiver;
 };
+
+enum NetworkProtocol
+{
+    Tcp = 1,
+    WebSocket = 2
+};
+Q_ENUM_NS(NetworkProtocol)
 } // namespace Network
 
 namespace TMP {

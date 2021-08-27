@@ -75,7 +75,8 @@ private:
 public:
     DFSNetManager *dfsNetManager = nullptr;
     QString dfsNetLocalIp;
-    Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp = "", QObject *parent = nullptr);
+    Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp = "",
+        QObject *parent = nullptr);
     ~Dfs();
 
 public:
@@ -105,7 +106,7 @@ signals:
     void fileChanged(QString path, DfsStruct::ChangeType changeType);
     void fileDuplicated(QString path, QString original, DfsStruct::Type type);
     void fileNetworkCompleted(QString filePath, SocketPair pair);
-    void connectToServer();
+    void connectToNode(const QString &ip, Network::NetworkProtocol protocol);
     void networkCreated();
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
     void titleReceived(QString filePath);

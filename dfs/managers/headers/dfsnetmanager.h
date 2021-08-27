@@ -40,6 +40,7 @@ class Dfs;
 class DFSNetManager : public NetManager
 {
     Q_OBJECT
+
 private:
     std::queue<Network::DataStruct> titleVector;
     Dfs *dfs;
@@ -54,11 +55,11 @@ public:
 
 private:
     /**
-     * @brief socketConnectionf
+     * @brief socketConnection
      * create connection for last append socket to the list
      */
-    void socketConnection();
-    void socketDisconnect(SocketService *connection);
+    void socketConnection(SocketService *socket);
+    void socketDisconnect(SocketService *socket);
     void connectResolver(DFSResolverService *resolver);
     void disconnectResolver(DFSResolverService *resolver);
     void createDFSResolver(Network::DataStruct ds);
@@ -82,16 +83,15 @@ public slots:
     //    void newMsg(const QByteArray &message, const SocketPafir &receiver);
     void process();
     void startDFSNetwork();
-    void reconnect();
     void titleArrived(Network::DataStruct ds);
     void removeResolver(DFSResolverService::FinishStatus status);
 
 private slots:
-    void removeConnection();
+    void removeTcpConnection();
     void checkMyIdentificator();
-    void addConnection(qint64 socketDescriptor) override;
+    void addTcpConnectionFromServer(qint64 socketDescriptor) override;
     void checkConnectionsStatus() override;
-    SocketService *addConnectionFromPair(QHostAddress address, quint16 port) override;
+    SocketService *connectToTcpSocket(const QString &address, quint16 port) override;
 };
 
 #endif // DFSNETMANAGER_H

@@ -63,6 +63,7 @@ Q_DECLARE_METATYPE(DFSResolverService::FinishStatus)
 Q_DECLARE_METATYPE(DfsStruct::DfsSave)
 Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
+Q_DECLARE_METATYPE(Network::NetworkProtocol)
 
 void registerMetaTypes()
 {
@@ -94,6 +95,7 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::DfsSave>();
     qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
+    qRegisterMetaType<Network::NetworkProtocol>();
 }
 
 #endif
