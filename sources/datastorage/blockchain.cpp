@@ -1465,14 +1465,7 @@ void Blockchain::process()
     //
 }
 
-void Blockchain::updateBlockchain(BigNumber id, bool isUser)
-{
-    Q_UNUSED(isUser)
-    Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
-}
-
-void Blockchain::updateBlockchainForSignIn(QByteArray id, QByteArrayList idList)
+void Blockchain::updateBlockchain()
 {
     Messages::BlockCount request;
     emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);

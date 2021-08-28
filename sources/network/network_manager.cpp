@@ -225,10 +225,8 @@ void NetManager::checkConnectionsStatus()
     emit networkStatusChanged(flag);
     emit networkSocketsCountChanged(tcpConnections.length());
 
-#ifdef ECLIENT
     if (flag)
         sendFromCache();
-#endif
 }
 
 void NetManager::checkMyIdentificator()
@@ -399,14 +397,6 @@ void NetManager::setupDiscoveryServiceConnections()
     //            &NetManager::addConnectionFromPair);
 }
 
-// Basic methods
-void NetManager::broadcastMsg(const QByteArray &msg)
-{
-    SocketPair socketPair("0.0.0.0", 0);
-    //    emit sendMsg(msg, socketPair);
-    distMessage(msg, socketPair);
-}
-
 void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
                              const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
@@ -442,7 +432,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
     };
 
     if (!allActive())
-        saveToCache(message, msgType, receiver, send);
+        saveToCache(message, msgType, receiver, send); // TODO: check ws
 
     auto isSendCheck = [](Config::Net::TypeSend send, std::string_view socketIp, quint16 socketPort,
                           const SocketPair &pair) {
@@ -550,34 +540,6 @@ void NetManager::sendFromCache()
         Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());
         sendMessage(data, msgType, socketData, typeSend);
     }
-}
-
-void NetManager::distMessage(const QByteArray &data, const SocketPair &socketData)
-{
-#ifdef ECLIENT
-    bool flag = false;
-    std::for_each(tcpConnections.begin(), tcpConnections.end(),
-                  [&flag](SocketService *el) { flag = flag || el->getActive(); });
-
-    if (flag)
-    {
-#endif
-        // TODO: ws
-        for (int i = 0; i < tcpConnections.size(); i++)
-            tcpConnections[i]->distMsg(data, socketData);
-#ifdef ECLIENT
-    }
-    else
-    {
-        QFile file("network_cache");
-        file.open(QFile::Append);
-        QByteArrayList list = { data, QByteArray::fromStdString(socketData.ip),
-                                QByteArray::number(socketData.port), socketData.iden };
-        QByteArray package = Serialization::serialize(list, 8);
-        file.write(Utils::intToByteArray(package.length(), 8) + package);
-        file.close();
-    }
-#endif
 }
 
 void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
@@ -718,6 +680,7 @@ void NetManager::onNewWSConnection()
     auto service = new WebSocketService(ws);
     connectWsService(service);
     emit webSocketsCountChanged(wsConnections.length());
+    emit newSocket();
 }
 
 quint16 NetManager::getServerPort() const

@@ -165,7 +165,7 @@ signals:
     void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
                                 const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
+    void savePrivateProfile(const QByteArray &hash, const ActorId &id);
     void setCurrentIdNotificationManager(const QByteArray id);
     void getAllActorsNode(ActorId id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);

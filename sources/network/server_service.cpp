@@ -33,23 +33,9 @@ void ServerService::startListen()
     emit serverStatus(status);
 
     if (!status)
-    {
-#ifdef ECONSOLE
-        if (serverError() == QAbstractSocket::AddressInUseError)
-        {
-            qInfo().nospace().noquote() << "---> [Error] Address " << localAddress->ip().toString() << ":"
-                                        << port << " already in use";
-            std::exit(0);
-        }
-        else
-#endif
-            qDebug() << "Server error:" << serverError();
-        qDebug() << "emit startError";
-    }
+        qDebug() << "Server error:" << serverError();
     else
-    {
         qDebug() << "Server address:" << this->serverAddress() << "| server port:" << this->serverPort();
-    }
 }
 
 ServerService::~ServerService()

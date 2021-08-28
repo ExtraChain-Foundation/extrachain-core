@@ -184,6 +184,7 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::connected, [this] {
         this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
+        emit networkManager->newSocket();
 
         sendFirstMessage();
     });

@@ -222,11 +222,6 @@ public slots:
      */
     void checkMyIdentificator();
     /**
-     * @brief Broadcast message to all connected peers
-     * @param msg
-     */
-    virtual void broadcastMsg(const QByteArray &msg);
-    /**
      * @brief sendMessage
      * @param data for send
      * @param messageType type to compress
@@ -248,7 +243,6 @@ public:
     virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
                              const SocketPair &receiver = {},
                              Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-    void distMessage(const QByteArray &data, const SocketPair &socketData);
     virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
 
     // void MoveToDfsN();

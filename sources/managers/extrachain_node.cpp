@@ -88,7 +88,7 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
         auto company = accController->createActor(ActorType::Company, consoleHash);
-        emit savePrivateProfile(consoleHash, company.id().toByteArray());
+        emit savePrivateProfile(consoleHash, company.id());
     }
     else
     {
@@ -508,7 +508,12 @@ void ExtraChainNode::connectSignals()
     dfsConnection();
 
     connect(netManager, &NetManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
+#ifdef ECONSOLE
+    // temp for tests
+    connect(netManager, &NetManager::newSocket, blockchain, &Blockchain::updateBlockchain);
+#endif
     connect(this, &ExtraChainNode::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
+    connect(accController, &AccountController::loadWallets, blockchain, &Blockchain::updateBlockchain);
 }
 
 void ExtraChainNode::prepareFolders()

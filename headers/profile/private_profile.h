@@ -21,6 +21,7 @@
 #define PRIVATE_PROFILE_H
 
 #include <QByteArray>
+#include "datastorage/actor.h"
 #include "utils/exc_utils.h"
 
 class AccountController;
@@ -33,7 +34,7 @@ private:
     AccountController *accController;
     Dfs *dfs;
 public slots:
-    void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
+    void savePrivateProfile(const QByteArray &hash, const ActorId &id);
     void loadPrivateProfile(const QByteArray &login, const QByteArray &password);
     void editPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
                             const QByteArray &Data, const bool &reWrite);
