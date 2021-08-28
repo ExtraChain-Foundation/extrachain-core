@@ -3,6 +3,7 @@
 
 #include <QWebSocket>
 #include "network/socket_pair.h"
+#include "utils/exc_utils.h"
 
 class NetManager;
 
@@ -15,28 +16,29 @@ public:
     WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
-    QWebSocket *ws() const;
+    QWebSocket *socket() const;
     const QString &identificator() const;
     bool isActive() const;
-
     void open(const QUrl &url);
-    void close();
-
     void sendError(int code, const QString &text);
 
     bool operator==(const WebSocketService &service) const;
 
-    void setNetworkManager(NetManager *newNetworkManager);
-
     const QString &ip() const;
+    quint16 port() const;
+    QString protocolString() const;
+    Network::Protocol protocol() const;
+
+    void setNetworkManager(NetManager *newNetworkManager);
 
 signals:
     void send(const QByteArray &data);
     void disconnected();
     void error(int code, QString errorText);
     void resolveMessage(QByteArray msg, SocketPair receiver);
+    void close();
 
-public slots:
+private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
     void sendMessage(const QByteArray &data);
@@ -46,6 +48,7 @@ private:
     void connections();
     void sendFirstMessage();
     void parseError(const QString &message);
+    void closeSocket();
 
     NetManager *networkManager = nullptr;
     QWebSocket *m_ws = nullptr;

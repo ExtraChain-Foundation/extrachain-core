@@ -20,7 +20,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, QObject *parent)
     {
         m_ws = ws;
         this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
-        qDebug() << "[WS] New service:" << m_ip << m_ws->localPort();
+        qDebug() << "[WS] New service:" << m_ip << port();
         connections();
         sendFirstMessage();
     }
@@ -37,7 +37,7 @@ WebSocketService::~WebSocketService()
     m_ws->deleteLater();
 }
 
-QWebSocket *WebSocketService::ws() const
+QWebSocket *WebSocketService::socket() const
 {
     return m_ws;
 }
@@ -63,10 +63,11 @@ void WebSocketService::open(const QUrl &url)
         qDebug() << "[WS] Open" << url;
         connections();
         m_ws->open(url);
+        m_ip = m_ws->localAddress().toString();
     }
 }
 
-void WebSocketService::close()
+void WebSocketService::closeSocket()
 {
     m_ws->close();
     emit disconnected();
@@ -104,18 +105,18 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
             qDebug() << "[WS] Close, because network or version unsuitable";
             network != networkName ? sendError(1, "Not suitable version")
                                    : sendError(2, "Not suitable version");
-            close();
+            closeSocket();
         }
 
         m_identificator = json["identificator"].toString();
         if (m_identificator == net::readNetManagerIdentificator())
         {
             sendError(3, "Not suitable identificator");
-            close();
+            closeSocket();
         }
         activated = true;
 
-        qDebug() << "[WS] Activated" << this << m_ws->localPort();
+        qDebug() << "[WS] Activated" << this << port();
     }
 }
 
@@ -124,10 +125,10 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     if (!activated)
         qFatal("[WS] Binary: not activated");
 
-    qDebug() << "[WS] Binary length:" << message.length();
+    // qDebug() << "[WS] Binary length:" << message.length();
     // qDebug() << "[WS] Binary:" << message;
 
-    SocketPair pair(m_ip.toStdString(), m_ws->localPort());
+    SocketPair pair(m_ip.toStdString(), port());
     pair.setId(m_identificator.toLatin1());
     auto mess = qUncompress(message);
     if (m_ws->localPort() == 2234)
@@ -161,12 +162,12 @@ void WebSocketService::sendMessage(const QByteArray &data)
     if (m_ws->isValid())
     {
         // qDebug().noquote() << "[WS] Send" << data.length() << length << m_ws->isValid() << m_ip
-        //                    << m_ws->localPort();
+        //                    << port();
         // qDebug() << "[WS] Send" << m_ws << data << length;
     }
     else
     {
-        qDebug() << "[WS] Cant send" << m_ws << m_ws->localPort();
+        qDebug() << "[WS] Cant send" << m_ws << port();
     }
 }
 
@@ -182,7 +183,7 @@ void WebSocketService::connections()
 {
     connect(m_ws, &QWebSocket::connected, [this] {
         this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
-        qDebug() << "[WS] New service:" << m_ip << m_ws->localPort();
+        qDebug() << "[WS] New service:" << m_ip << port();
 
         sendFirstMessage();
     });
@@ -193,13 +194,14 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
     connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
+    connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket);
     connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this,
             &WebSocketService::onError);
 }
 
 void WebSocketService::sendFirstMessage()
 {
-    qDebug() << "[WS] Send first message" << m_ws->localPort();
+    qDebug() << "[WS] Send first message" << port();
     QJsonObject json;
     json["network"] = networkName;
     json["version"] = EXTRACHAIN_VERSION;
@@ -220,6 +222,21 @@ void WebSocketService::parseError(const QString &message)
 const QString &WebSocketService::ip() const
 {
     return m_ip;
+}
+
+quint16 WebSocketService::port() const
+{
+    return m_ws->localPort();
+}
+
+QString WebSocketService::protocolString() const
+{
+    return "WebSocket";
+}
+
+Network::Protocol WebSocketService::protocol() const
+{
+    return Network::Protocol::WebSocket;
 }
 
 void WebSocketService::setNetworkManager(NetManager *newNetworkManager)

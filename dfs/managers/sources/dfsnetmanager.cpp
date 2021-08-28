@@ -120,7 +120,7 @@ void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &re
 
 void DFSNetManager::appendSocket(SocketService *socket)
 {
-    connections.append(socket);
+    tcpConnections.append(socket);
     socketConnection(socket);
 }
 
@@ -206,7 +206,7 @@ void DFSNetManager::removeTcpConnection()
 
     SocketService *connection = qobject_cast<SocketService *>(sender);
     socketDisconnect(connection);
-    connections.removeAt(connections.indexOf(connection));
+    tcpConnections.removeAt(tcpConnections.indexOf(connection));
     emit connection->finished();
 }
 
@@ -222,7 +222,7 @@ void DFSNetManager::checkMyIdentificator()
         emit connection->removeMe();
 
     // short counter = 0;
-    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
+    std::for_each(tcpConnections.begin(), tcpConnections.end(), [connection](SocketService *el) {
         if (el->getIdentificator() == connection->getIdentificator())
         {
             if (el == connection)
@@ -241,7 +241,7 @@ void DFSNetManager::checkMyIdentificator()
 void DFSNetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 {
     SocketService *socket = new SocketService(socketDescriptor);
-    connections.append(socket);
+    tcpConnections.append(socket);
     socket->setNetManager(this);
     socketConnection(socket);
     QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
@@ -251,7 +251,7 @@ void DFSNetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 void DFSNetManager::checkConnectionsStatus()
 {
     bool flag = false;
-    std::for_each(connections.begin(), connections.end(),
+    std::for_each(tcpConnections.begin(), tcpConnections.end(),
                   [&flag](SocketService *el) { flag = flag || el->getActive(); });
     emit networkStatusChanged(flag);
 
@@ -266,7 +266,7 @@ void DFSNetManager::checkConnectionsStatus()
 SocketService *DFSNetManager::connectToTcpSocket(const QString &address, quint16 port)
 {
     SocketService *socket = new SocketService(address, port);
-    connections.append(socket);
+    tcpConnections.append(socket);
     socket->setNetManager(this);
     socketConnection(socket);
     qDebug().noquote().nospace() << "[DFS NetworkManager] New TCP connection: " << address << ":" << port;

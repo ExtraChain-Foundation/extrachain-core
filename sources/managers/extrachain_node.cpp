@@ -526,7 +526,7 @@ void ExtraChainNode::prepareFolders()
 
 int ExtraChainNode::getClientListCount()
 {
-    return netManager->getConnections().size() && netManager->getWsConnections().size();
+    return netManager->getTcpConnections().size() && netManager->getWsConnections().size();
 }
 
 AccountController *ExtraChainNode::getAccountController() const

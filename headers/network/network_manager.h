@@ -121,7 +121,7 @@ public:
     void showMessage(const QHostAddress &from, const QString &message);
 
     void resolverMessage(const QHostAddress &from, const QString &message);
-    QList<SocketService *> connections;
+    QList<SocketService *> tcpConnections;
 
     quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
@@ -130,15 +130,15 @@ private:
     void connectTcpSocket(SocketService *service);
     void disconnectTcpSocket(SocketService *connection);
     void connectWsService(WebSocketService *ws);
-    void removeConnectionByAddress(QByteArray address);
     SocketService getConnectionByAddress(const QByteArray address) const;
     int connectionsCount();
 
 public:
     ServerService *getServerService();
     // ResolverService *getResolverService();
-    const QList<SocketService *> &getConnections() const;
+    const QList<SocketService *> &getTcpConnections() const;
     const QList<WebSocketService *> &getWsConnections() const;
+    void removeConnection(const QString &ip, quint16 port, Network::Protocol protocol);
 
 protected:
     NetManager *getMe();
@@ -232,6 +232,7 @@ public slots:
      * @param messageType type to compress
      */
 
+private slots:
     /**
      * @brief Remove connections from connection list
      */

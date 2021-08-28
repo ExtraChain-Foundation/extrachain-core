@@ -18,25 +18,21 @@
  */
 
 #include "network/socket_service.h"
-#ifndef DFS_NETWORK_MANAGER_DEF
-#define DFS_NETWORK_MANAGER_DEF
-class DFSNetManager;
 #include "dfs/managers/headers/dfsnetmanager.h"
-#endif
 
-QTcpSocket *SocketService::getSocket() const
+QTcpSocket *SocketService::socket() const
 {
-    return socket;
+    return m_tcp;
 }
 
 void SocketService::setSocket(QTcpSocket *value)
 {
-    socket = value;
+    m_tcp = value;
 }
 
 QAbstractSocket::SocketState SocketService::state()
 {
-    return socket->state();
+    return m_tcp->state();
 }
 
 void SocketService::reconnect()
@@ -53,11 +49,6 @@ void SocketService::reconnect()
         emit clientDisconnected();
     }
     connectionTry++;
-}
-
-int SocketService::getReconnectTry() const
-{
-    return reconnectTry;
 }
 
 void SocketService::setReconnectTry(int value)
@@ -82,7 +73,7 @@ bool SocketService::getActive() const
 
 SocketPair SocketService::getSocketPair()
 {
-    SocketPair res(address.toStdString(), port);
+    SocketPair res(address.toStdString(), m_port);
     res.iden = identificator.toByteArray();
     return res;
 }
@@ -104,20 +95,20 @@ SocketService::SocketService(const SocketService &value)
     socketDescriptor = value.socketDescriptor;
     active = value.active;
     address = value.address;
-    port = value.port;
-    socket = value.socket;
+    m_port = value.m_port;
+    m_tcp = value.m_tcp;
     identificator = value.identificator;
     _blockSize = value._blockSize;
-    //    buffer = value.buffer;
+    // buffer = value.buffer;
     reconnectTry = value.reconnectTry;
-    //    dpBuffer->clear();
+    // dpBuffer->clear();
 }
 
 SocketService::SocketService(QString address, quint16 networkPort, QObject *parent)
 //    : QObject(parent)
 {
     this->address = address;
-    this->port = networkPort;
+    this->m_port = networkPort;
     //    dpBuffer->clear();
 }
 
@@ -131,11 +122,11 @@ SocketService::SocketService(qintptr socketDescriptor, QObject *parent)
 
 SocketService::~SocketService()
 {
-    if (socket == nullptr)
+    if (m_tcp == nullptr)
         return;
-    socket->close();
-    socket->deleteLater();
-    qDebug() << "[Socket Service] Remove SocketService" << address << port;
+    m_tcp->close();
+    m_tcp->deleteLater();
+    qDebug() << "[Socket Service] Remove SocketService" << address << m_port;
 }
 
 void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
@@ -149,7 +140,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     // send
 
     // check socket status
-    if (!socket->isValid())
+    if (!m_tcp->isValid())
         return;
     // take data from pair
     // QString ipAddress = QString::fromStdString(socketData.ip);
@@ -160,7 +151,7 @@ void SocketService::sendMsg(const QByteArray &data, const SocketPair &socketData
     //    {
 
     QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE);
-    socket->write(_wtSok, _wtSok.size());
+    m_tcp->write(_wtSok, _wtSok.size());
     //    }
 }
 
@@ -172,26 +163,21 @@ void *SocketService::distMsg(const QByteArray data, const SocketPair &socketData
     return nullptr;
 }
 
-void SocketService::closeSocket()
-{
-    socket->disconnectFromHost();
-}
-
 void SocketService::process()
 {
-    if (socket == nullptr)
+    if (m_tcp == nullptr)
     {
-        this->socket = new QTcpSocket(this);
+        this->m_tcp = new QTcpSocket(this);
         connect(this, &SocketService::msgReady, this, &SocketService::sendMsg, Qt::QueuedConnection);
-        connect(socket, &QTcpSocket::connected, this, &SocketService::connected);
-        connect(socket, &QTcpSocket::disconnected, this, &SocketService::reconnect);
-        connect(socket, &QTcpSocket::readyRead, this, &SocketService::doRead, Qt::QueuedConnection);
-        connect(socket, &QTcpSocket::connected, this, &SocketService::establishConnection);
-        connect(socket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
+        connect(m_tcp, &QTcpSocket::connected, this, &SocketService::connected);
+        connect(m_tcp, &QTcpSocket::disconnected, this, &SocketService::reconnect);
+        connect(m_tcp, &QTcpSocket::readyRead, this, &SocketService::doRead, Qt::QueuedConnection);
+        connect(m_tcp, &QTcpSocket::connected, this, &SocketService::establishConnection);
+        connect(m_tcp, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
             Q_UNUSED(socketError)
             qDebug().nospace().noquote()
-                << "[Socket Service] Socket error " << socketError << " for " << address << ":" << port;
-            if (this->socket->state() != QTcpSocket::ConnectedState)
+                << "[Socket Service] Socket error " << socketError << " for " << address << ":" << m_port;
+            if (this->m_tcp->state() != QTcpSocket::ConnectedState)
                 this->reconnect();
         });
         connect(this, &SocketService::setActiveSignal, this, &SocketService::setActive);
@@ -199,28 +185,28 @@ void SocketService::process()
 
     if (socketDescriptor != 0)
     {
-        this->socket->setSocketDescriptor(socketDescriptor);
+        this->m_tcp->setSocketDescriptor(socketDescriptor);
         establishConnection();
     }
     else
     {
-        this->socket->connectToHost(address, port);
+        this->m_tcp->connectToHost(address, m_port);
     }
     //    QCoreApplication::processEvents();
 }
 
 void SocketService::establishConnection()
 {
-    qDebug() << "[Socket Service] Thread:" << this->thread() << "| Valid:" << socket->isValid();
-    this->address = QHostAddress(this->socket->peerAddress().toIPv4Address()).toString();
-    this->port = this->socket->peerPort();
+    qDebug() << "[Socket Service] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
+    this->address = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
+    this->m_port = this->m_tcp->peerPort();
     QByteArray idb = IDENTIFICATOR
         + Serialization::serialize({ QByteArray::number(0), net::readNetManagerIdentificator(),
                                      netManager->getSerializedConnectionList() }); // TODO: remove build
-    this->distMsg(idb, SocketPair(this->address.toStdString(), this->port));
+    this->distMsg(idb, SocketPair(this->address.toStdString(), this->m_port));
 
-    qDebug() << "[Socket Service] Address" << this->socket << address << port;
-    qDebug() << "[Socket Service] Open status:" << socket->isOpen();
+    qDebug() << "[Socket Service] Address" << this->m_tcp << address << m_port;
+    qDebug() << "[Socket Service] Open status:" << m_tcp->isOpen();
 }
 
 void SocketService::setActive(bool active)
@@ -234,9 +220,9 @@ void SocketService::doRead()
     {
         continueDoRead();
     }
-    if (socket->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
+    if (m_tcp->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
     {
-        QByteArray data = socket->read(Messages::FIELD_SIZE);
+        QByteArray data = m_tcp->read(Messages::FIELD_SIZE);
         pendMsgSize = Utils::qByteArrayToInt(data);
         if ((pendMsgSize > 0))
         {
@@ -247,13 +233,13 @@ void SocketService::doRead()
 
 void SocketService::continueDoRead()
 {
-    if (socket->bytesAvailable() >= pendMsgSize)
+    if (m_tcp->bytesAvailable() >= pendMsgSize)
     {
         char *pckg = new char[pendMsgSize];
 
-        int bytesRead = socket->read(pckg, pendMsgSize);
+        int bytesRead = m_tcp->read(pckg, pendMsgSize);
         QByteArray rpckg(pckg, bytesRead);
-        //        rpckg.append(pckg);
+        // rpckg.append(pckg);
 
         if (rpckg.size() > bytesRead)
         {
@@ -272,8 +258,7 @@ void SocketService::continueDoRead()
 
                     this->processID(bl[1]);
                     netManager->addTempConnections(Serialization::deserialize(bl[2]));
-                    netManager->checkOnValidConnection(this->getID().toByteArray(),
-                                                       this->getAddress().toLocal8Bit());
+                    netManager->checkOnValidConnection(this->getID().toByteArray(), this->ip().toLocal8Bit());
                     netManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
                 }
                 else
@@ -283,7 +268,7 @@ void SocketService::continueDoRead()
             }
             else
             {
-                SocketPair receiver(this->getAddress().toStdString(), this->getPort());
+                SocketPair receiver(this->ip().toStdString(), this->port());
                 receiver.setId(this->getID().toByteArray());
                 this->gotMessage(pendMsg, receiver);
             }
@@ -296,7 +281,7 @@ void SocketService::continueDoRead()
             pendMsg.append(rpckg);
         }
         delete[] pckg;
-        if (socket->bytesAvailable() >= pendMsgSize)
+        if (m_tcp->bytesAvailable() >= pendMsgSize)
         {
             doRead();
         }
@@ -370,7 +355,7 @@ void SocketService::gotMessage(QByteArray msg, SocketPair rec)
     //        //        counter = 0;
     //        //        break;
     //    }
-    if (socket->localPort() == 2223 || socket->localPort() == 2224)
+    if (m_tcp->localPort() == 2223 || m_tcp->localPort() == 2224)
     {
         reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(bmsg, rec);
     }
@@ -389,32 +374,37 @@ void SocketService::processID(QByteArray id)
     emit checkMe();
 }
 
-bool *SocketService::socketStatus() const
-{
-    return new bool(socket->isValid());
-}
-
 bool SocketService::isActive() const
 {
     return active;
 }
 
-QString SocketService::getAddress() const
+QString SocketService::ip() const
 {
     return address;
 }
 
-quint16 SocketService::getPort() const
+quint16 SocketService::port() const
 {
-    return port;
+    return m_port;
+}
+
+QString SocketService::protocolString() const
+{
+    return "TCP";
+}
+
+Network::Protocol SocketService::protocol() const
+{
+    return Network::Protocol::Tcp;
 }
 
 QHostAddress SocketService::getSocketAddress() const
 {
-    return socket->peerAddress();
+    return m_tcp->peerAddress();
 }
 
 quint16 SocketService::getSocketPeer() const
 {
-    return socket->peerPort();
+    return m_tcp->peerPort();
 }
