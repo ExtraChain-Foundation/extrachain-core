@@ -45,7 +45,7 @@
 #include <QCoreApplication>
 
 #ifdef ECONSOLE
-#include "managers/console_manager.h"
+#include "console/console_manager.h"
 #endif
 
 class ResolveManager;
@@ -115,7 +115,7 @@ public:
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
                                         ActorId token = ActorId());
 
-    int getClientList();
+    int getClientListCount();
 
 public:
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);

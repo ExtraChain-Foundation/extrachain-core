@@ -227,7 +227,6 @@ NetManager *ExtraChainNode::getNetManager()
     return netManager;
 }
 
-
 Transaction ExtraChainNode::createTransaction(Transaction tx)
 {
     if (tx.isEmpty())
@@ -525,9 +524,9 @@ void ExtraChainNode::prepareFolders()
                                        + DataStorage::BLOCK_INDEX_FOLDER_NAME);
 }
 
-int ExtraChainNode::getClientList()
+int ExtraChainNode::getClientListCount()
 {
-    return netManager->getConnections().size();
+    return netManager->getConnections().size() && netManager->getWsConnections().size();
 }
 
 AccountController *ExtraChainNode::getAccountController() const

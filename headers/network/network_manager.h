@@ -137,7 +137,8 @@ private:
 public:
     ServerService *getServerService();
     // ResolverService *getResolverService();
-    QList<SocketService *> getConnections() const;
+    const QList<SocketService *> &getConnections() const;
+    const QList<WebSocketService *> &getWsConnections() const;
 
 protected:
     NetManager *getMe();

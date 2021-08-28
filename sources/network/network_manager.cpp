@@ -20,15 +20,16 @@
 #include "network/network_manager.h"
 #include "resolve/resolve_manager.h"
 
-#ifndef EXTRACHAIN_CMAKE
-#include "preconfig.h"
-#endif
-
 using namespace Messages;
 
-QList<SocketService *> NetManager::getConnections() const
+const QList<SocketService *> &NetManager::getConnections() const
 {
     return connections;
+}
+
+const QList<WebSocketService *> &NetManager::getWsConnections() const
+{
+    return wsConnections;
 }
 
 NetManager *NetManager::getMe()

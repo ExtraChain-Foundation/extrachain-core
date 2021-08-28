@@ -28,7 +28,7 @@
 #include "managers/account_controller.h"
 
 #ifdef ECONSOLE
-#include "managers/console_manager.h"
+#include "console/console_manager.h"
 #endif
 
 using namespace Resolver;
