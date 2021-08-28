@@ -101,8 +101,9 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, c
         qDebug() << "Local not found";
     }
 
-    connect(this, &NetManager::webSocketsCountChanged,
-            [this](int count) { qDebug() << "[WS] Count:" << count << wsPort; });
+    connect(this, &NetManager::webSocketsCountChanged, [this](int count) {
+        qDebug() << "[WS]" << wsConnections << wsConnections.length() << "Count:" << count << wsPort;
+    });
 }
 
 void NetManager::process()
@@ -147,23 +148,7 @@ void NetManager::connectWsService(WebSocketService *service)
     service->setNetworkManager(this);
     //    connect(service, &WebSocketService::resolveMessage,
     //            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
-    connect(service, &WebSocketService::disconnected, [this]() {
-        auto service = qobject_cast<WebSocketService *>(QObject::sender());
-
-        // TODO
-        if (service)
-        {
-            int count = wsConnections.length();
-            wsConnections.removeAll(service);
-            if (count == wsConnections.length())
-                qFatal("[WS] Cant remove");
-            service->deleteLater();
-            qDebug() << "[WS] Removed" << service;
-            emit webSocketsCountChanged(wsConnections.length());
-        }
-        else
-            qFatal("[WS] service == nullptr");
-    });
+    connect(service, &WebSocketService::disconnected, this, &NetManager::removeWsConnection);
 
     if (!wsConnections.contains(service))
     {
@@ -357,7 +342,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     }
 }
 
-void NetManager::connectToNode(const QString &ip, Network::NetworkProtocol protocol)
+void NetManager::connectToNode(const QString &ip, Network::Protocol protocol)
 {
     if (connectionsCount() >= SIZE_OF_CONNECTIONS)
     {
@@ -368,16 +353,18 @@ void NetManager::connectToNode(const QString &ip, Network::NetworkProtocol proto
     if (ip.isEmpty())
         return;
 
-    qDebug().noquote()
-        << QString("[NetworkManager] Try connect to %1, protocol: %2").arg(ip).arg(int(protocol));
+    qDebug().noquote() << QString("[%3NetworkManager] Try connect to %1, protocol: %2")
+                              .arg(ip)
+                              .arg(int(protocol))
+                              .arg(tcpPort == 2222 ? "" : "DFS ");
 
-    using Network::NetworkProtocol;
+    using Network::Protocol;
     switch (protocol)
     {
-    case NetworkProtocol::Tcp:
+    case Protocol::Tcp:
         connectToTcpSocket(ip.simplified(), tcpPort);
         break;
-    case NetworkProtocol::WebSocket:
+    case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), wsPort);
         break;
     }
@@ -482,7 +469,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
         if (!isSend)
             continue;
         if (ws->isActive())
-            ws->send(message);
+            emit ws->send(message);
     }
 }
 
@@ -592,7 +579,8 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
         resolveManager->setTask(msg, receiver);
     // emit MsgReceived(msg, receiver);
     else
-        qDebug() << "[&Net Manager]::checkMsgCount have returned false ~ such message has been already added";
+        qDebug()
+            << "[Network Manager] checkMsgCount have returned false: such message has been already added";
     mutex.unlock();
     return nullptr;
 }
@@ -649,6 +637,19 @@ void NetManager::removeTcpConnection()
     emit connection->finished();
     connections.removeAt(connections.indexOf(connection));
     checkConnectionsStatus();
+}
+
+void NetManager::removeWsConnection()
+{
+    if (QObject::sender() == nullptr)
+        return;
+
+    auto service = qobject_cast<WebSocketService *>(QObject::sender());
+    int remove = wsConnections.removeAll(service);
+    qDebug() << "[WS] Removed" << service;
+    service->deleteLater();
+    if (remove > 0)
+        emit webSocketsCountChanged(wsConnections.length());
 }
 
 QString NetManager::localIp()

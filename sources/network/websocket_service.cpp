@@ -115,34 +115,30 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         }
         activated = true;
 
-        qDebug() << "[WS] Activated" << this;
+        qDebug() << "[WS] Activated" << this << m_ws->localPort();
     }
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message)
 {
-    // qDebug() << "[WS] Binary length:" << message.length();
+    if (!activated)
+        qFatal("[WS] Binary: not activated");
+
+    qDebug() << "[WS] Binary length:" << message.length();
     // qDebug() << "[WS] Binary:" << message;
 
-    if (activated)
+    SocketPair pair(m_ip.toStdString(), m_ws->localPort());
+    pair.setId(m_identificator.toLatin1());
+    auto mess = qUncompress(message);
+    if (m_ws->localPort() == 2234)
     {
-        SocketPair pair(m_ip.toStdString(), m_ws->localPort());
-        pair.setId(m_identificator.toLatin1());
-        auto mess = qUncompress(message);
-        if (m_ws->localPort() == 2234)
-        {
-            reinterpret_cast<DFSNetManager *>(networkManager)->MessageReceived(mess, pair);
-        }
-        else
-        {
-            networkManager->MessageReceived(mess, pair);
-        }
-        // emit resolveMessage(qUncompress(message), pair);
+        reinterpret_cast<DFSNetManager *>(networkManager)->MessageReceived(mess, pair);
     }
     else
     {
-        qFatal("[WS] Binary: not activated");
+        networkManager->MessageReceived(mess, pair);
     }
+    // emit resolveMessage(qUncompress(message), pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)
@@ -174,6 +170,14 @@ void WebSocketService::sendMessage(const QByteArray &data)
     }
 }
 
+void WebSocketService::onError(QAbstractSocket::SocketError error)
+{
+    qDebug() << "[WS] Socket error:" << m_ws->errorString() << error;
+
+    if (m_ws->state() != QAbstractSocket::ConnectedState)
+        emit disconnected();
+}
+
 void WebSocketService::connections()
 {
     connect(m_ws, &QWebSocket::connected, [this] {
@@ -189,6 +193,8 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
     connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
+    connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this,
+            &WebSocketService::onError);
 }
 
 void WebSocketService::sendFirstMessage()

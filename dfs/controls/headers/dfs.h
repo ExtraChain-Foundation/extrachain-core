@@ -106,7 +106,7 @@ signals:
     void fileChanged(QString path, DfsStruct::ChangeType changeType);
     void fileDuplicated(QString path, QString original, DfsStruct::Type type);
     void fileNetworkCompleted(QString filePath, SocketPair pair);
-    void connectToNode(const QString &ip, Network::NetworkProtocol protocol);
+    void connectToNode(const QString &ip, Network::Protocol protocol);
     void networkCreated();
     void requestFile(const QString &filePath, const SocketPair &receiver = SocketPair());
     void titleReceived(QString filePath);

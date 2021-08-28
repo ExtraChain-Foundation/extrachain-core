@@ -696,3 +696,9 @@ QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol
     fixedName = fixedName.replace("\\", replaceSymbol);
     return fixedName;
 }
+
+bool Utils::isValidIp(const QString &ip)
+{
+    QHostAddress address(ip);
+    return QAbstractSocket::IPv4Protocol == address.protocol();
+}

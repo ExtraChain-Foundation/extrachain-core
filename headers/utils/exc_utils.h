@@ -58,12 +58,12 @@ struct DataStruct
     SocketPair receiver;
 };
 
-enum NetworkProtocol
+enum Protocol
 {
     Tcp = 1,
     WebSocket = 2
 };
-Q_ENUM_NS(NetworkProtocol)
+Q_ENUM_NS(Protocol)
 } // namespace Network
 
 namespace TMP {
@@ -523,6 +523,7 @@ void softWipe(const QString &currentId);
 QString detectCompiler();
 QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
 QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
+bool isValidIp(const QString &ip);
 } // namespace Utils
 
 namespace DataStorage {

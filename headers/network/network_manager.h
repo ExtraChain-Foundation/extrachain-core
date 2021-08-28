@@ -211,7 +211,7 @@ public slots:
      * @brief addConnection
      * @param socketDescriptor
      */
-    void connectToNode(const QString &ip, Network::NetworkProtocol protocol);
+    void connectToNode(const QString &ip, Network::Protocol protocol);
 
     void process();
     void connectToServerByIpList(QList<QByteArray> ipList);
@@ -235,6 +235,7 @@ public slots:
      * @brief Remove connections from connection list
      */
     void removeTcpConnection();
+    void removeWsConnection();
 
 public:
     QString localIp();
@@ -267,7 +268,6 @@ signals:
     void networkStatusChanged(bool status);
     void networkSocketsCountChanged(int socketsCount);
     void networkErrorChanged(bool serverError);
-    void localIpFounded(QString localIp);
     void webSocketsCountChanged(int count);
 };
 

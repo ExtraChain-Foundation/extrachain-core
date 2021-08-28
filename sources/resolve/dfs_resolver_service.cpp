@@ -172,7 +172,7 @@ bool DFSResolverService::validate(const Messages::BaseMessage &message)
     }
     else
     {
-        qDebug() << QString("There no actor[%1] locally").arg(QString(signer.toByteArray()));
+        qDebug() << QString("[DfsResolver] There no actor[%1] locally").arg(QString(signer.toByteArray()));
         this->thread()->sleep(5);
         return validate(message);
     }
@@ -333,7 +333,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 break;
             }
             default: {
-                // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::SHORT";
+                // qDebug() << "[DFSResolver] Undefined message type from LIFETIME::SHORT";
                 break;
             }
             }
@@ -413,7 +413,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                 break;
             }
             default: {
-                // qDebug() << "[&DFSResolver] undefined message type from LIFETIME::LONG";
+                // qDebug() << "[DFSResolver] Undefined message type from LIFETIME::LONG";
                 break;
             }
             }
@@ -424,7 +424,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
 
 bool DFSResolverService::createTempFile(const QString &path, const long long &size, const QByteArray &tHash)
 {
-    qDebug() << "[&DfsResolver] start create tmp file:" << path;
+    qDebug() << "[DfsResolver] Start create tmp file:" << path;
     //    handlerFileMutex.lock();
     QString dirPath = path.mid(0, path.lastIndexOf("/") + 1);
     QDir dir;
@@ -438,7 +438,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
             return false;
 
         QByteArray actorId = path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20).toLatin1();
-        qDebug() << "Create temp file: actor -" << actorId;
+        qDebug() << "[DfsResolver] Create temp file: actor -" << actorId;
         Actor<KeyPublic> actor = actorIndex->getActor(actorId);
 
         if (!actor.empty())
@@ -447,7 +447,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
                 file.open(QIODevice::WriteOnly | QIODevice::Truncate);
             else
             {
-                qDebug() << "[&DfsResolver]-[actor not empty, but directory wasn't create]";
+                qDebug() << "[DfsResolver] Actor not empty, but directory wasn't create";
                 return createTempFile(path, size, tHash);
             }
         }
@@ -455,13 +455,13 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
         {
             file.close();
             this->thread()->sleep(5);
-            qDebug() << "[&DfsResolver]-[actor empty]";
+            qDebug() << "[DfsResolver] Actor empty";
             return createTempFile(path, size, tHash);
         }
     }
 
     //    handlerFileMutex.unlock();
-    qDebug() << "[&DfsResolver] succed finished" << path;
+    qDebug() << "[DfsResolver] Succed finished" << path;
     return true;
 }
 
@@ -473,11 +473,11 @@ bool DFSResolverService::registerTitle(const QString &tmpPath, DistFileSystem::T
         if (createTempFile(tmpPath, message.fileSize, message.dataHash))
         {
             dataChecker.assign(message.pckgsAmount, false);
-            qDebug() << "Ready to receive file:" << message.filePath;
+            qDebug() << "[DfsResolver] Ready to receive file:" << message.filePath;
         }
         else
         {
-            qDebug() << "[temp file was not created]";
+            qDebug() << "[DfsResolver] Temp file was not created";
             return false;
         }
         // qDebug() << "[NOT ready to receive file]" << title.filePath;
@@ -485,7 +485,7 @@ bool DFSResolverService::registerTitle(const QString &tmpPath, DistFileSystem::T
     }
     else
     {
-        qDebug() << "[NOT ready to receive file (title error)]" << message.filePath;
+        qDebug() << "[DfsResolver] Not ready to receive file (title error)" << message.filePath;
         return false;
     }
 }
