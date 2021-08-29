@@ -164,7 +164,7 @@ void NetManager::removeConnection(const QString &ip, quint16 port, Network::Prot
     {
         for (auto connection : qAsConst(tcpConnections))
         {
-            if (connection->ip() == ip)
+            if (connection->ip() == ip) // TODO: add port
                 emit connection->removeMe();
         }
     }
@@ -172,8 +172,8 @@ void NetManager::removeConnection(const QString &ip, quint16 port, Network::Prot
     {
         for (auto connection : qAsConst(wsConnections))
         {
-            if (connection->ip() == ip && connection->port() == port && connection->protocol() == protocol)
-                connection->close();
+            if (connection->ip() == ip && (port == 0 || connection->port() == port))
+                emit connection->close();
         }
     }
 }
