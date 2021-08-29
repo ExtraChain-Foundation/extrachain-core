@@ -6,7 +6,8 @@
 #include "preconfig.h"
 #endif
 
-WebSocketService::WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex, QObject *parent)
+WebSocketService::WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex,
+                                   QObject *parent)
     : QObject(parent)
 {
     networkManager = newNetworkManager;
@@ -102,11 +103,18 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
         ActorId currentFirstId = actorIndex->firstId();
         bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
+        bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
-        if (!((jsonFirstId.isEmpty() || currentFirstId.isEmpty()) || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
+        qDebug() << "[WS]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty()
+                 << jsonFirstId.isEmpty() << isFirstIdsContains << somethingEmpty
+                 << (version != EXTRACHAIN_VERSION);
+
+        if (!(somethingEmpty || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
         {
             qDebug() << "[WS] Close, because network or version unsuitable";
-            isFirstIdsContains ? sendError(1, "Not suitable version") : sendError(2, "Not suitable network");
+            version != EXTRACHAIN_VERSION ? sendError(1, "Not compatible version")
+                                          : sendError(2, "Not compatible network");
+            // emit incorrectSocket
             closeSocket();
             return;
         }
@@ -114,7 +122,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         m_identifier = json["identifier"].toString();
         if (m_identifier == net::readNetManagerIdentifier())
         {
-            sendError(3, "Not suitable identifier");
+            sendError(3, "Not compatible identifier");
             closeSocket();
             return;
         }
