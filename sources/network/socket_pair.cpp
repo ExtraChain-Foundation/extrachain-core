@@ -21,7 +21,7 @@
 
 SocketPair::SocketPair()
 {
-    iden = "0";
+    m_identifier = "0";
     ip = "0.0.0.0";
     port = 0;
 }
@@ -30,14 +30,14 @@ SocketPair::SocketPair(const std::string &ip, const quint16 &port)
 {
     this->ip = ip;
     this->port = port;
-    this->iden = "0";
+    this->m_identifier = "0";
 }
 
 SocketPair::SocketPair(const SocketPair &pair)
 {
     ip = pair.ip;
     port = pair.port;
-    iden = pair.iden;
+    m_identifier = pair.m_identifier;
 }
 
 SocketPair::~SocketPair()
@@ -46,35 +46,35 @@ SocketPair::~SocketPair()
 
 const QString SocketPair::serialize() const
 {
-    return QString::fromStdString(ip) + QString::number(port) + QString(iden);
+    return QString::fromStdString(ip) + QString::number(port) + QString(m_identifier);
 }
 
 const SocketPair SocketPair::operator=(const SocketPair &v)
 {
     ip = v.ip;
     port = v.port;
-    iden = v.iden;
+    m_identifier = v.m_identifier;
     return *this;
 }
 
 bool SocketPair::operator==(const SocketPair &v) const
 {
-    return ((ip == v.ip) && (port == v.port) && (iden == v.iden));
+    return ((ip == v.ip) && (port == v.port) && (m_identifier == v.m_identifier));
 }
 
-BigNumber SocketPair::getId() const
+BigNumber SocketPair::identifier() const
 {
-    return iden;
+    return m_identifier;
 }
 
-void SocketPair::setId(const QByteArray &value)
+void SocketPair::setIdentifier(const QByteArray &value)
 {
-    iden = value;
+    m_identifier = value;
 }
 
 bool SocketPair::isEmpty() const
 {
-    if ((ip == "0.0.0.0") && (port == 0) && (iden == "0"))
+    if ((ip == "0.0.0.0") && (port == 0) && (m_identifier == "0"))
         return true;
     else
         return false;
@@ -83,6 +83,6 @@ bool SocketPair::isEmpty() const
 QDebug operator<<(QDebug d, const SocketPair &pair)
 {
     d.noquote().nospace() << "Pair(ip: " << QString::fromStdString(pair.ip) << ", port: " << pair.port
-                          << ", identifier: " << pair.iden << ")";
+                          << ", identifier: " << pair.m_identifier << ")";
     return d;
 }

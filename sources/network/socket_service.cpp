@@ -69,7 +69,7 @@ bool SocketService::getActive() const
 SocketPair SocketService::getSocketPair()
 {
     SocketPair res(address.toStdString(), m_port);
-    res.iden = m_identifier.toByteArray();
+    res.m_identifier = m_identifier.toByteArray();
     return res;
 }
 
@@ -265,7 +265,7 @@ void SocketService::continueDoRead()
             else
             {
                 SocketPair receiver(this->ip().toStdString(), this->port());
-                receiver.setId(this->identifier().toByteArray());
+                receiver.setIdentifier(this->identifier().toByteArray());
                 this->gotMessage(pendMsg, receiver);
             }
             pendMsgSize = -1;

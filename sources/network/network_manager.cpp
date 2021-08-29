@@ -505,7 +505,7 @@ void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgT
     QByteArrayList list = { message,
                             QByteArray::fromStdString(receiver.ip),
                             QByteArray::number(receiver.port),
-                            receiver.iden,
+                            receiver.m_identifier,
                             QByteArray::number(msgType),
                             QByteArray::number(typeSend) };
     QByteArray package = Serialization::serialize(list, 8);
@@ -534,7 +534,7 @@ void NetManager::sendFromCache()
         SocketPair socketData;
         socketData.ip = package[1].toStdString();
         socketData.port = package[2].toShort();
-        socketData.iden = package[3];
+        socketData.m_identifier = package[3];
         // TODO: protocol
         auto msgType = package[4].toUInt();
         Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());

@@ -130,7 +130,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     // qDebug() << "[WS] Binary:" << message;
 
     SocketPair pair(m_ip.toStdString(), port());
-    pair.setId(m_identifier.toLatin1());
+    pair.setIdentifier(m_identifier.toLatin1());
     auto mess = qUncompress(message);
     if (m_ws->localPort() == 2234)
     {

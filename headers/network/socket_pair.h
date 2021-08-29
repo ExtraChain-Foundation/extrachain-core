@@ -27,7 +27,7 @@ class SocketPair
 public:
     std::string ip;
     quint16 port;
-    QByteArray identifier;
+    QByteArray m_identifier;
     SocketPair();
     SocketPair(const std::string &f, const quint16 &s);
     SocketPair(const SocketPair &v);
@@ -35,8 +35,8 @@ public:
     const SocketPair operator=(const SocketPair &v);
     bool operator==(const SocketPair &v) const;
     ~SocketPair();
-    BigNumber getId() const;
-    void setId(const QByteArray &value);
+    BigNumber identifier() const;
+    void setIdentifier(const QByteArray &value);
     bool isEmpty() const;
 };
 
