@@ -13,7 +13,7 @@ class WebSocketService : public QObject
     Q_OBJECT
 
 public:
-    explicit WebSocketService(QWebSocket *ws = nullptr, QObject *parent = nullptr);
+    explicit WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex, QObject *parent = nullptr);
     WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
@@ -29,8 +29,6 @@ public:
     quint16 port() const;
     QString protocolString() const;
     Network::Protocol protocol() const;
-
-    void setAbilities(NetManager *newNetworkManager, ActorIndex *actorIndex);
 
 signals:
     void send(const QByteArray &data);

@@ -146,7 +146,6 @@ void NetManager::disconnectTcpSocket(SocketService *socket)
 
 void NetManager::connectWsService(WebSocketService *service)
 {
-    service->setAbilities(this, actorIndex);
     //    connect(service, &WebSocketService::resolveMessage,
     //            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
     connect(service, &WebSocketService::disconnected, this, &NetManager::removeWsConnection);
@@ -379,7 +378,7 @@ void NetManager::connectToNode(const QString &ip, Network::Protocol protocol)
 
 void NetManager::connectToWebSocket(const QString &ip, quint16 port)
 {
-    auto service = new WebSocketService;
+    auto service = new WebSocketService(nullptr, this, actorIndex);
     service->open(QUrl(QString("ws://%1:%2").arg(ip).arg(port)));
     connectWsService(service);
 }
@@ -677,7 +676,7 @@ void NetManager::onNewWSConnection()
         return;
     }
 
-    auto service = new WebSocketService(ws);
+    auto service = new WebSocketService(ws, this, actorIndex);
     connectWsService(service);
     emit webSocketsCountChanged(wsConnections.length());
     emit newSocket();

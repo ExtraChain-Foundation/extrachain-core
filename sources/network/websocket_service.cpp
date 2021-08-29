@@ -6,9 +6,12 @@
 #include "preconfig.h"
 #endif
 
-WebSocketService::WebSocketService(QWebSocket *ws, QObject *parent)
+WebSocketService::WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex, QObject *parent)
     : QObject(parent)
 {
+    networkManager = newNetworkManager;
+    actorIndex = newActorIndex;
+
     if (ws == nullptr)
     {
         m_ws = new QWebSocket("ExtraChain " + QString(EXTRACHAIN_VERSION));
@@ -96,11 +99,11 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     {
         auto json = QJsonDocument::fromJson(message.toLatin1());
         auto version = json["version"].toString();
-        auto jsonFirstId = json["firstId"].toString();
-        auto currentFirstId = actorIndex->firstId().toString();
-        bool isFirstIdsContains = currentFirstId == jsonFirstId;
+        ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
+        ActorId currentFirstId = actorIndex->firstId();
+        bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
 
-        if ((!currentFirstId.isEmpty() || !isFirstIdsContains) || version != EXTRACHAIN_VERSION)
+        if (!((jsonFirstId.isEmpty() || currentFirstId.isEmpty()) || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
         {
             qDebug() << "[WS] Close, because network or version unsuitable";
             isFirstIdsContains ? sendError(1, "Not suitable version") : sendError(2, "Not suitable network");
@@ -239,9 +242,4 @@ QString WebSocketService::protocolString() const
 Network::Protocol WebSocketService::protocol() const
 {
     return Network::Protocol::WebSocket;
-}
-
-void WebSocketService::setAbilities(NetManager *newNetworkManager, ActorIndex *actorIndex)
-{
-    networkManager = newNetworkManager;
 }
