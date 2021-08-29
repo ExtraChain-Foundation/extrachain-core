@@ -27,7 +27,7 @@ class SocketPair
 public:
     std::string ip;
     quint16 port;
-    QByteArray iden;
+    QByteArray identifier;
     SocketPair();
     SocketPair(const std::string &f, const quint16 &s);
     SocketPair(const SocketPair &v);

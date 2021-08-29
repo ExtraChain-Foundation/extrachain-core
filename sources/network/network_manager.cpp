@@ -51,7 +51,7 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, c
 {
     requestResponseMap = new QMap<QByteArray, int>();
 
-    // deviceId = BigNumber(readNetManagerIdentificator());
+    // deviceId = BigNumber(readNetManagerIdentifier());
     accounts = accountList;
     this->actorIndex = actorIndex;
     // setupActorIndexConnections();
@@ -131,7 +131,7 @@ void NetManager::connectTcpSocket(SocketService *service)
     connect(service, &SocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
     // connect(service, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     connect(service, &SocketService::removeMe, this, &NetManager::removeTcpConnection);
-    connect(service, &SocketService::checkMe, this, &NetManager::checkMyIdentificator);
+    connect(service, &SocketService::checkMe, this, &NetManager::checkMyIdentifier);
     // connect(service, &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
@@ -146,7 +146,7 @@ void NetManager::disconnectTcpSocket(SocketService *socket)
 
 void NetManager::connectWsService(WebSocketService *service)
 {
-    service->setNetworkManager(this);
+    service->setAbilities(this, actorIndex);
     //    connect(service, &WebSocketService::resolveMessage,
     //            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
     connect(service, &WebSocketService::disconnected, this, &NetManager::removeWsConnection);
@@ -229,7 +229,7 @@ void NetManager::checkConnectionsStatus()
         sendFromCache();
 }
 
-void NetManager::checkMyIdentificator()
+void NetManager::checkMyIdentifier()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
@@ -238,7 +238,7 @@ void NetManager::checkMyIdentificator()
     if (connection == nullptr)
         return;
 
-    if (net::readNetManagerIdentificator() == connection->getIdentificator())
+    if (net::readNetManagerIdentifier() == connection->identifier())
     {
         emit connection->removeMe();
         removed = true;
@@ -247,7 +247,7 @@ void NetManager::checkMyIdentificator()
     // short counter = 0;
     for (SocketService *el : qAsConst(tcpConnections))
     {
-        if (el->getIdentificator() == connection->getIdentificator() && el != connection)
+        if (el->identifier() == connection->identifier() && el != connection)
         {
             emit el->removeMe();
             // return;
@@ -262,7 +262,7 @@ void NetManager::checkMyIdentificator()
     emit connection->setActiveSignal(true);
     emit newSocket();
     //    std::for_each(connections.begin(), connections.end(), [connection](SocketService *el) {
-    //        if (el->getIdentificator() == connection->getIdentificator())
+    //        if (el->getIdentifier() == connection->getIdentifier())
     //        {
     //            if (el == connection)
     //            {
@@ -332,11 +332,11 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     for (const auto &ip : qAsConst(ipList))
     {
         idIpPair = Serialization::deserialize(ip);
-        currentId = (getConnectionByAddress(idIpPair[1])).getID().toByteArray();
+        currentId = (getConnectionByAddress(idIpPair[1])).identifier().toByteArray();
         connectionIsActive = (getConnectionByAddress(idIpPair[1])).isActive();
 
         if (!connectionIsActive || currentId == "0" || currentId == idIpPair[0]
-            || currentId == net::readNetManagerIdentificator())
+            || currentId == net::readNetManagerIdentifier())
             continue;
 
         if (idIpPair.size() != 2)
@@ -700,13 +700,14 @@ QByteArray NetManager::getSerializedConnectionList() const
     {
         if (!i->getActive())
             continue;
-        if (net::readNetManagerIdentificator()
-            == i->getIdentificator().toByteArray()) // if it equivalent to my indetificator
+        if (net::readNetManagerIdentifier()
+            == i->identifier().toByteArray()) // if it equivalent to my indetificator
             continue;
         if (i->ip() == this->getLocal()->ip().toString().toLocal8Bit()) // if it's my ip address
             continue;
 
-        connectionsList.append(Serialization::serialize({ i->getID().toByteArray(), i->ip().toLocal8Bit() }));
+        connectionsList.append(
+            Serialization::serialize({ i->identifier().toByteArray(), i->ip().toLocal8Bit() }));
     }
     return Serialization::serialize(connectionsList);
 }

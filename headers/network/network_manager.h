@@ -139,6 +139,7 @@ public:
     const QList<SocketService *> &getTcpConnections() const;
     const QList<WebSocketService *> &getWsConnections() const;
     void removeConnection(const QString &ip, quint16 port, Network::Protocol protocol);
+    // TODO: removeConnection by id
 
 protected:
     NetManager *getMe();
@@ -218,9 +219,9 @@ public slots:
     void connectToServerByIpList(QList<QByteArray> ipList);
 
     /**
-     * @brief checkMyIdentificator
+     * @brief checkMyIdentifier
      */
-    void checkMyIdentificator();
+    void checkMyIdentifier();
     /**
      * @brief sendMessage
      * @param data for send
@@ -253,7 +254,6 @@ public:
     QNetworkAddressEntry *getLocal() const;
     QByteArray getSerializedConnectionList() const;
     void checkOnValidConnection(QByteArray id, QByteArray address);
-
     void addTempConnections(const QList<QByteArray> &value);
 
 signals:

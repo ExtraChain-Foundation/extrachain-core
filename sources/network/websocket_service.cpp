@@ -6,8 +6,6 @@
 #include "preconfig.h"
 #endif
 
-QString networkName = "ExtraChain"; // temp
-
 WebSocketService::WebSocketService(QWebSocket *ws, QObject *parent)
     : QObject(parent)
 {
@@ -42,9 +40,9 @@ QWebSocket *WebSocketService::socket() const
     return m_ws;
 }
 
-const QString &WebSocketService::identificator() const
+const QString &WebSocketService::identifier() const
 {
-    return m_identificator;
+    return m_identifier;
 }
 
 bool WebSocketService::isActive() const
@@ -97,25 +95,28 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     if (!activated)
     {
         auto json = QJsonDocument::fromJson(message.toLatin1());
-        auto network = json["network"].toString();
         auto version = json["version"].toString();
+        auto jsonFirstId = json["firstId"].toString();
+        auto currentFirstId = actorIndex->firstId().toString();
+        bool isFirstIdsContains = currentFirstId == jsonFirstId;
 
-        if (network != networkName || version != EXTRACHAIN_VERSION)
+        if ((!currentFirstId.isEmpty() || !isFirstIdsContains) || version != EXTRACHAIN_VERSION)
         {
             qDebug() << "[WS] Close, because network or version unsuitable";
-            network != networkName ? sendError(1, "Not suitable version")
-                                   : sendError(2, "Not suitable version");
+            isFirstIdsContains ? sendError(1, "Not suitable version") : sendError(2, "Not suitable network");
             closeSocket();
+            return;
         }
 
-        m_identificator = json["identificator"].toString();
-        if (m_identificator == net::readNetManagerIdentificator())
+        m_identifier = json["identifier"].toString();
+        if (m_identifier == net::readNetManagerIdentifier())
         {
-            sendError(3, "Not suitable identificator");
+            sendError(3, "Not suitable identifier");
             closeSocket();
+            return;
         }
-        activated = true;
 
+        activated = true;
         qDebug() << "[WS] Activated" << this << port();
     }
 }
@@ -129,7 +130,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     // qDebug() << "[WS] Binary:" << message;
 
     SocketPair pair(m_ip.toStdString(), port());
-    pair.setId(m_identificator.toLatin1());
+    pair.setId(m_identifier.toLatin1());
     auto mess = qUncompress(message);
     if (m_ws->localPort() == 2234)
     {
@@ -204,10 +205,9 @@ void WebSocketService::sendFirstMessage()
 {
     qDebug() << "[WS] Send first message" << port();
     QJsonObject json;
-    json["network"] = networkName;
+    json["firstId"] = actorIndex->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
-    json["identificator"] = QString(net::readNetManagerIdentificator());
-    // company id
+    json["identifier"] = QString(net::readNetManagerIdentifier());
     m_ws->sendTextMessage(QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact));
 }
 
@@ -240,7 +240,7 @@ Network::Protocol WebSocketService::protocol() const
     return Network::Protocol::WebSocket;
 }
 
-void WebSocketService::setNetworkManager(NetManager *newNetworkManager)
+void WebSocketService::setAbilities(NetManager *newNetworkManager, ActorIndex *actorIndex)
 {
     networkManager = newNetworkManager;
 }

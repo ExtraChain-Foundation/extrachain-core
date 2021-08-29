@@ -6,6 +6,7 @@
 #include "utils/exc_utils.h"
 
 class NetManager;
+class ActorIndex;
 
 class WebSocketService : public QObject
 {
@@ -17,7 +18,7 @@ public:
     ~WebSocketService();
 
     QWebSocket *socket() const;
-    const QString &identificator() const;
+    const QString &identifier() const;
     bool isActive() const;
     void open(const QUrl &url);
     void sendError(int code, const QString &text);
@@ -29,7 +30,7 @@ public:
     QString protocolString() const;
     Network::Protocol protocol() const;
 
-    void setNetworkManager(NetManager *newNetworkManager);
+    void setAbilities(NetManager *newNetworkManager, ActorIndex *actorIndex);
 
 signals:
     void send(const QByteArray &data);
@@ -51,8 +52,9 @@ private:
     void closeSocket();
 
     NetManager *networkManager = nullptr;
+    ActorIndex *actorIndex;
     QWebSocket *m_ws = nullptr;
-    QString m_identificator; // TODO: check
+    QString m_identifier;
     QString m_ip;
     bool activated = false;
 };

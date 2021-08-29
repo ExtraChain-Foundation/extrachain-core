@@ -59,14 +59,14 @@ void DFSNetManager::socketConnection(SocketService *socket)
     qDebug() << "[DFS NetworkManager] Add tcp socket connections";
     connect(socket, &SocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
     connect(socket, &SocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
-    connect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
+    connect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
 void DFSNetManager::socketDisconnect(SocketService *socket)
 {
     disconnect(socket, &SocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
     disconnect(socket, &SocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
-    disconnect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentificator);
+    disconnect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
 void DFSNetManager::connectResolver(DFSResolverService *resolver)
@@ -210,7 +210,7 @@ void DFSNetManager::removeTcpConnection()
     emit connection->finished();
 }
 
-void DFSNetManager::checkMyIdentificator()
+void DFSNetManager::checkMyIdentifier()
 {
     QObject *sender = QObject::sender();
     SocketService *connection = qobject_cast<SocketService *>(sender);
@@ -218,12 +218,12 @@ void DFSNetManager::checkMyIdentificator()
     if (connection == nullptr)
         return;
 
-    if (net::readNetManagerIdentificator() == connection->getIdentificator())
+    if (net::readNetManagerIdentifier() == connection->identifier())
         emit connection->removeMe();
 
     // short counter = 0;
     std::for_each(tcpConnections.begin(), tcpConnections.end(), [connection](SocketService *el) {
-        if (el->getIdentificator() == connection->getIdentificator())
+        if (el->identifier() == connection->identifier())
         {
             if (el == connection)
                 emit el->setActiveSignal(true);
@@ -233,7 +233,7 @@ void DFSNetManager::checkMyIdentificator()
     });
 
     emit newSocket();
-    //    dfs->requestAllCards();
+    // dfs->requestAllCards();
     // if (counter == 0)
     //    emit connection->setActiveSignal(true);
 }

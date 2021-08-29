@@ -51,7 +51,14 @@ private:
     QMap<QByteArray, QByteArray> profilesHandle;
 
 public:
-    QByteArray *companyId = nullptr;
+    QByteArray *m_firstId = nullptr;
+    ActorId firstId()
+    {
+        if (m_firstId == nullptr)
+            return ActorId();
+        else
+            return ActorId(*m_firstId);
+    }
 
 public:
     /**
@@ -118,7 +125,7 @@ public:
     QByteArray getById(const ActorId &id) const;
 
     qint64 getRecords() const;
-    void setCompanyId(QByteArray *value);
+    void setFirstId(const ActorId &value);
     QString getFolderPath() const;
 
     /**

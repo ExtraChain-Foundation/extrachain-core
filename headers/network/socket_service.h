@@ -33,7 +33,7 @@ class NetManager;
 class SocketService : public QObject
 {
     Q_OBJECT
-    const QByteArray IDENTIFICATOR = "ind:";
+    const QByteArray m_IdentifierPrefix = "ind:";
 
 private:
     NetManager *netManager = nullptr;
@@ -43,9 +43,8 @@ private:
     QString address;
     quint16 m_port;
     QTcpSocket *m_tcp = nullptr;
-    BigNumber identificator;
+    BigNumber m_identifier;
     int _blockSize = 0;
-    //    QByteArray buffer;
     int reconnectTry = 0;
     QByteArray pendMsg;
 
@@ -98,7 +97,7 @@ private slots:
 
 public:
     void gotMessage(QByteArray msg, SocketPair rec);
-    const BigNumber &getID();
+    const BigNumber &identifier() const;
     void processID(QByteArray id);
     /**
      * @brief Send message using QTcpSocket
@@ -117,8 +116,7 @@ public:
     void setSocket(QTcpSocket *value);
     QTcpSocket::SocketState state();
     void setReconnectTry(int value);
-    BigNumber getIdentificator() const;
-    void setIdentificator(const BigNumber &value);
+    void setIdentifier(const BigNumber &value);
     bool getActive() const;
     SocketPair getSocketPair();
     void setNetManager(NetManager *value);

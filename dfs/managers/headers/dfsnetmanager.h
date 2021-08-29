@@ -88,7 +88,7 @@ public slots:
 
 private slots:
     void removeTcpConnection();
-    void checkMyIdentificator();
+    void checkMyIdentifier();
     void addTcpConnectionFromServer(qint64 socketDescriptor) override;
     void checkConnectionsStatus() override;
     SocketService *connectToTcpSocket(const QString &address, quint16 port) override;

@@ -66,27 +66,20 @@ enum Protocol
 Q_ENUM_NS(Protocol)
 } // namespace Network
 
-namespace TMP {
-static QByteArray *companyActorId = new QByteArray("0");
-};
-
 namespace net {
-[[maybe_unused]] static QByteArray readNetManagerIdentificator()
+[[maybe_unused]] static QByteArray readNetManagerIdentifier()
 {
+    // static QByteArray identifier;
+    // if (!identifier.isEmpty())
+    //     return identifier;
+
     QFile file(".settings");
     file.open(QIODevice::ReadOnly);
-    QByteArray id = file.readAll();
+    QByteArray identifier = file.readAll();
     file.close();
-    return id;
+    return identifier;
 }
-[[maybe_unused]] static QByteArray dfsreadNetManagerIdentificator()
-{
-    QFile file(".dsettings");
-    file.open(QIODevice::ReadOnly);
-    QByteArray id = file.readAll();
-    file.close();
-    return id;
-}
+
 } // namespace net
 class Transaction;
 namespace storedSpace {

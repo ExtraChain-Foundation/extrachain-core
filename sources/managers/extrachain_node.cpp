@@ -29,10 +29,6 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
         QCoreApplication::exit(-1);
     }
     prepareFolders();
-    if (!QFile(".settings").exists())
-        createNetManagerIdentificator();
-    if (!QFile(".dsettings").exists())
-        dfscreateNetManagerIdentificator();
     actorIndex = new ActorIndex();
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
@@ -87,12 +83,12 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-        auto company = accController->createActor(ActorType::Company, consoleHash);
-        emit savePrivateProfile(consoleHash, company.id());
+        auto first = accController->createActor(ActorType::First, consoleHash);
+        emit savePrivateProfile(consoleHash, first.id());
     }
     else
     {
-        // company = *accController->getAccounts()[0];
+        // first = *accController->getAccounts()[0];
         qInfo() << "You cannot create a new network, data is not empty";
 #ifndef QT_DEBUG
         std::exit(0);
@@ -101,28 +97,26 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
     if (blockchain->getRecords() <= 0)
     {
-        auto company = *accController->getMainActor();
-        QByteArray td = company.key()->sign("test");
-        std::cout << company.key()->verify("test", td) << std::endl;
-        TMP::companyActorId = new QByteArray(company.id().toByteArray());
-        actorIndex->setCompanyId(new QByteArray(company.id().toByteArray()));
+        auto first = *accController->getMainActor();
+        QByteArray td = first.key()->sign("test");
+        std::cout << first.key()->verify("test", td) << std::endl;
+        actorIndex->setFirstId(first.id());
+        QString firstId = first.id().toString();
 
         QMap<ActorId, BigNumber> tm;
         tm.insert(ActorId(), 0);
-        GenesisBlock tmp = blockchain->createGenesisBlock(company, tm);
+        GenesisBlock tmp = blockchain->createGenesisBlock(first, tm);
         blockchain->addBlock(tmp, true);
 
         // TODO: as console arguments: isCreate, name, color
-        emit generateSmartContract("1000", "Default Coin", company.id().toByteArray(),
+        emit generateSmartContract("1000", "Default Coin", first.id().toByteArray(),
                                    "#fa4868"); // TODO: choose name
 
-        QString companyId = *TMP::companyActorId;
-        DBConnector dbc((DfsStruct::ROOT_FOOLDER_NAME + "/" + companyId + "/" + DfsStruct::ACTOR_CARD_FILE)
-                            .toStdString());
+        DBConnector dbc(
+            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
         dbc.createTable(Config::DataStorage::cardTableCreation);
         dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
-        QString usernamesPath =
-            QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(companyId);
+        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(firstId);
         DBConnector usernamesDB(usernamesPath.toStdString());
         usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
         dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
@@ -258,8 +252,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
-        if (tx.getSender().isEmpty() || tx.getSender() == *actorIndex->companyId || tx.getReceiver().isEmpty()
-            || tx.getReceiver() == *actorIndex->companyId)
+        if (tx.getSender().isEmpty() || tx.getSender() == *actorIndex->m_firstId || tx.getReceiver().isEmpty()
+            || tx.getReceiver() == *actorIndex->m_firstId)
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
@@ -321,8 +315,8 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         // add sent tx balances
 
         tx.setToken(token);
-        //        if (actorIndex->companyId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->companyId))
+        //        if (actorIndex->m_firstId != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
         //                tx.setSenderBalance(BigNumber(0));
 
         return this->createTransaction(tx);
@@ -352,8 +346,8 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
         // add sent tx balances
         tx.setData(toFreeze ? Fee::FREEZE_TX : Fee::UNFREEZE_TX);
         tx.setToken(token);
-        //        if (actorIndex->companyId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->companyId))
+        //        if (actorIndex->m_firstId != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
         //                tx.setSenderBalance(BigNumber(0));
 
         return this->createTransaction(tx);
@@ -381,8 +375,8 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
 
         tx.setToken(token);
         // tx.setHop(2);
-        //        if (actorIndex->companyId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->companyId))
+        //        if (actorIndex->m_firstId != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
         //                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     }
@@ -420,17 +414,9 @@ void ExtraChainNode::getAllActorsTimerCall()
 #endif
 }
 
-void ExtraChainNode::createNetManagerIdentificator()
+void ExtraChainNode::createNetManagerIdentifier()
 {
     QFile file(".settings");
-    file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(BigNumber::random(64).toByteArray());
-    file.flush();
-    file.close();
-}
-void ExtraChainNode::dfscreateNetManagerIdentificator()
-{
-    QFile file(".dsettings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
     file.write(BigNumber::random(64).toByteArray());
     file.flush();
@@ -442,13 +428,13 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
 {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
-    auto companyId = actorIndex->companyId;
-    if (companyId == nullptr)
+    auto firstId = actorIndex->m_firstId;
+    if (firstId == nullptr)
         return;
-    auto company = actorIndex->getActor(*companyId);
-    if (company.empty())
+    auto first = actorIndex->getActor(*firstId);
+    if (first.empty())
         return;
-    auto key = company.key();
+    auto key = first.key();
 
     QMap<QString, QByteArray> map = {
         { "actor", actorId.toLatin1() },
@@ -527,6 +513,8 @@ void ExtraChainNode::prepareFolders()
                                        + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     FileSystem::createFolderIfNotExist(DataStorage::BLOCKCHAIN_INDEX + "/"
                                        + DataStorage::BLOCK_INDEX_FOLDER_NAME);
+    if (!QFile(".settings").exists())
+        createNetManagerIdentifier();
 }
 
 int ExtraChainNode::getClientListCount()
@@ -599,14 +587,14 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId pl
         return;
     }
 
-    if (actorIndex->companyId == nullptr)
+    if (actorIndex->m_firstId == nullptr)
         return;
 
-    ActorId companyId = *actorIndex->companyId;
-    if (mainActor->id() == companyId)
+    ActorId m_firstId = *actorIndex->m_firstId;
+    if (mainActor->id() == m_firstId)
     {
-        qInfo().noquote() << "Company send to" << receiver << "with amount" << amount;
-        createTransactionFrom(companyId, receiver, amount);
+        qInfo().noquote() << "FirstId send to" << receiver << "with amount" << amount;
+        createTransactionFrom(m_firstId, receiver, amount);
     }
     else
     {

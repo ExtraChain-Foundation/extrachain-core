@@ -1271,7 +1271,7 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
     }
 
     m_reqFiles.append({ QDateTime::currentDateTime().toMSecsSinceEpoch(), filePath });
-    qDebug() << "Request file:" << filePath; // TODO: fix for company actor
+    qDebug() << "Request file:" << filePath; // TODO: fix for first actor
 
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
@@ -1605,7 +1605,7 @@ void Dfs::save(DfsStruct::DfsSave saveType, QString file, QByteArray data, const
         saveStaticFile(file, type, false);
         break;
     case DfsStruct::DfsSave::Network:
-        saveFN(file + DfsStruct::FILE_IDENTIFICATOR, file, type);
+        saveFN(file + DfsStruct::FILE_IDENTIFIER, file, type);
         break;
     }
 }
@@ -1637,11 +1637,9 @@ void Dfs::searchTmp()
         QFileInfo root(rootPath);
         // QFileInfo rootTmp(rootPath + ".tmp");
 
-        if (actorIndex->companyId != nullptr)
+        if (actorIndex->m_firstId != nullptr)
         {
-            QByteArray companyId = *actorIndex->companyId;
-
-            if (id == companyId)
+            if (id == actorIndex->firstId().toByteArray())
                 continue;
         }
 

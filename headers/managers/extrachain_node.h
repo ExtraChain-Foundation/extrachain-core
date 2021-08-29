@@ -178,9 +178,11 @@ private slots:
     void getAllActorsTimerCall();
     void logOut();
 
-    //    void makeContractFirstTransaction(Contract &contract);
-    //    void makeContractFinalTransaction(Contract &contract);
+    // void makeContractFirstTransaction(Contract &contract);
+    // void makeContractFinalTransaction(Contract &contract);
+
 public slots:
+    void createNetManagerIdentifier();
     void setIdPrivateProfile(QByteArray id);          //
     void setHashLoginPrivateProfile(QByteArray hash); //
     void tempareSlotForActors();
@@ -188,8 +190,6 @@ public slots:
     // test net & blockchain
     //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
-    void createNetManagerIdentificator();
-    void dfscreateNetManagerIdentificator();
 #ifdef ECLIENT
     void notificationToken(QString os, QString actorId, QString token);
 #endif

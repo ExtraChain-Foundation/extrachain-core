@@ -246,7 +246,7 @@ void Blockchain::getBlockZero()
         emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     }
     else
-        actorIndex->setCompanyId(new QByteArray(zero.getApprover().toByteArray()));
+        actorIndex->setFirstId(zero.getApprover());
 }
 
 BigNumber Blockchain::getSupply(const QByteArray &idToken)
@@ -283,7 +283,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     std::vector<DBRow> extractData2 = cacheDB2.select(
         "SELECT * FROM cacheData WHERE Token = '"
         + idToken.toStdString()
-        /* + "' AND ActorId != '" + actorIndex->companyId->toStdString() + "' AND ActorId != '"
+        /* + "' AND ActorId != '" + actorIndex->m_firstId->toStdString() + "' AND ActorId != '"
          + BigNumber(0).toActorId().toStdString()*/
         + "';");
     for (const auto &tmp : extractData2)
@@ -487,7 +487,7 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         const auto transactions = block.extractTransactions();
         for (const Transaction &tx : qAsConst(transactions))
         {
-            if (tx.getReceiver() == *actorIndex->companyId)
+            if (tx.getReceiver() == *actorIndex->m_firstId)
                 break;
             if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
             {
@@ -750,8 +750,8 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                         GenesisDataRow(i.key(), i.value(), ActorId(), DataStorage::typeDataRow::UNIVERSAL));
                 }
 
-                // nb.setApprover(BigNumber(*(actorIndex->companyId)));
-                nb.sign(accountController->getActor(ActorId(*(actorIndex->companyId))));
+                // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
+                nb.sign(accountController->getActor(ActorId(*(actorIndex->m_firstId))));
             }
             else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
@@ -1031,7 +1031,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     }
     if (block.getIndex() == 0)
     {
-        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toByteArray()));
+        this->actorIndex->setFirstId(block.getApprover());
     }
     if (block.getIndex() < 0)
         return Errors::BLOCK_IS_NOT_VALID;
@@ -1574,7 +1574,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
     if (block.getIndex() == 0)
     {
         mutex.lock();
-        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toByteArray()));
+        this->actorIndex->setFirstId(block.getApprover().toByteArray());
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
@@ -1930,9 +1930,9 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        QByteArray companyId = actorIndex->companyId != nullptr ? *actorIndex->companyId : QByteArray();
+        QByteArray firstId = actorIndex->m_firstId != nullptr ? *actorIndex->m_firstId : QByteArray();
 
-        if (targetSender.toByteArray() != companyId)
+        if (targetSender.toByteArray() != firstId)
         {
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);

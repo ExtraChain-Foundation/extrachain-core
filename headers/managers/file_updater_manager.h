@@ -60,7 +60,7 @@ private:
     // --DFS--
     // Card Files
     const QByteArrayList cardFile { "key", "id", "type", "prevId", "nextId", "version", "sign" };
-    const QByteArrayList userNamesCompany { "actorId", "username", "sign" };
+    const QByteArrayList userNamesFirst { "actorId", "username", "sign" };
     // Chat Files
     const QByteArrayList chatUser { "userId" };
     const QByteArrayList chatMessage { "messId", "userId", "message", "type", "date" };

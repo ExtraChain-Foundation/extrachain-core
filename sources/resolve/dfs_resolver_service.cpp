@@ -353,7 +353,7 @@ void DFSResolverService::resolveDfsMessage(QByteArray &data, const unsigned int 
                     }
 
                     dfs->titleReceived(message.filePath);
-                    QString path = message.filePath + DfsStruct::FILE_IDENTIFICATOR;
+                    QString path = message.filePath + DfsStruct::FILE_IDENTIFIER;
                     if (QFile::exists(message.filePath) && QFileInfo(message.filePath).size() != 0
                         && (message.filePath.right(DfsStruct::STORED_EXT_SIZE) != DfsStruct::STORED_EXT
                             && message.filePath.right(5) != "/root"))
