@@ -25,6 +25,11 @@ void ActorIndex::setAccController(AccountController *value)
     accController = value;
 }
 
+ActorId ActorIndex::firstId()
+{
+    return m_firstId;
+}
+
 ActorIndex::ActorIndex(QObject *parent)
     : QObject(parent)
 
@@ -411,14 +416,15 @@ QString ActorIndex::buildPathPubProfile(const QByteArray &id)
 
 void ActorIndex::setFirstId(const ActorId &value)
 {
-    if (m_firstId != nullptr)
+    if (!m_firstId.isEmpty())
     {
         if (firstId() != value)
             qFatal("Another FirstId");
         return;
     }
 
-    m_firstId = new QByteArray(value.toByteArray());
+    qDebug() << "[ActorIndex] Save first id:" << value;
+    m_firstId = value;
 }
 
 qint64 ActorIndex::getRecords() const
@@ -474,10 +480,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     int result = this->add(actor.id(), actor.serialize());
     auto actorId = actor.id().toByteArray();
 
-    if (actor.account() == ActorType::First && m_firstId == nullptr)
+    if (actor.account() == ActorType::First)
     {
-        qDebug() << "[ActorIndex] Save first id:" << actorId;
-        m_firstId = new QByteArray(actorId);
+        setFirstId(actorId);
     }
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)

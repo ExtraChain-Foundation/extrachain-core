@@ -252,8 +252,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
-        if (tx.getSender().isEmpty() || tx.getSender() == *actorIndex->m_firstId || tx.getReceiver().isEmpty()
-            || tx.getReceiver() == *actorIndex->m_firstId)
+        if (tx.getSender().isEmpty() || tx.getSender() == actorIndex->firstId() || tx.getReceiver().isEmpty()
+            || tx.getReceiver() == actorIndex->firstId())
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
@@ -428,10 +428,10 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
 {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
-    auto firstId = actorIndex->m_firstId;
-    if (firstId == nullptr)
+    auto firstId = actorIndex->firstId();
+    if (firstId.isEmpty())
         return;
-    auto first = actorIndex->getActor(*firstId);
+    auto first = actorIndex->getActor(firstId);
     if (first.empty())
         return;
     auto key = first.key();
@@ -587,14 +587,14 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId pl
         return;
     }
 
-    if (actorIndex->m_firstId == nullptr)
+    if (actorIndex->firstId().isEmpty())
         return;
 
-    ActorId m_firstId = *actorIndex->m_firstId;
-    if (mainActor->id() == m_firstId)
+    ActorId firstId = actorIndex->firstId();
+    if (mainActor->id() == firstId)
     {
         qInfo().noquote() << "FirstId send to" << receiver << "with amount" << amount;
-        createTransactionFrom(m_firstId, receiver, amount);
+        createTransactionFrom(firstId, receiver, amount);
     }
     else
     {

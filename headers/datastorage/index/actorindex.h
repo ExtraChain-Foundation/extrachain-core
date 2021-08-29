@@ -42,25 +42,18 @@ class ActorIndex : public QObject
     Q_OBJECT
 
 private:
-    AccountController *accController;
+    AccountController *accController = nullptr;
     ResolveManager *resolveManager = nullptr;
     qint64 records = 0;
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
     QMap<QByteArray, QByteArray> profilesHandle;
+    ActorId m_firstId;
 
 public:
-    QByteArray *m_firstId = nullptr;
-    ActorId firstId()
-    {
-        if (m_firstId == nullptr)
-            return ActorId();
-        else
-            return ActorId(*m_firstId);
-    }
+    ActorId firstId();
 
-public:
     /**
      * @brief ActorIndex
      */

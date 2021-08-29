@@ -98,8 +98,9 @@ public:
 
     bool isEmpty() const
     {
-        return m_id == "000000000000000000-1" || // temp
-            m_id.isEmpty() || m_id == "00000000000000000000";
+        if (m_id == "000000000000000000-1")
+            qFatal("ActorId: WTF");
+        return m_id.isEmpty() || m_id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId)

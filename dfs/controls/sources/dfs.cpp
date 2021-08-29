@@ -1637,7 +1637,7 @@ void Dfs::searchTmp()
         QFileInfo root(rootPath);
         // QFileInfo rootTmp(rootPath + ".tmp");
 
-        if (actorIndex->m_firstId != nullptr)
+        if (!actorIndex->firstId().isEmpty())
         {
             if (id == actorIndex->firstId().toByteArray())
                 continue;

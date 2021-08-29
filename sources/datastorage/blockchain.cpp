@@ -487,7 +487,7 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         const auto transactions = block.extractTransactions();
         for (const Transaction &tx : qAsConst(transactions))
         {
-            if (tx.getReceiver() == *actorIndex->m_firstId)
+            if (tx.getReceiver() == actorIndex->firstId())
                 break;
             if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
             {
@@ -751,7 +751,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
-                nb.sign(accountController->getActor(ActorId(*(actorIndex->m_firstId))));
+                nb.sign(accountController->getActor(actorIndex->firstId()));
             }
             else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
@@ -1930,9 +1930,7 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        QByteArray firstId = actorIndex->m_firstId != nullptr ? *actorIndex->m_firstId : QByteArray();
-
-        if (targetSender.toByteArray() != firstId)
+        if (targetSender != actorIndex->firstId())
         {
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);

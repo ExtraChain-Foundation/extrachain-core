@@ -208,7 +208,8 @@ void WebSocketService::sendFirstMessage()
     json["firstId"] = actorIndex->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(net::readNetManagerIdentifier());
-    m_ws->sendTextMessage(QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact));
+    QByteArray jsonBytes = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+    m_ws->sendTextMessage(jsonBytes);
 }
 
 void WebSocketService::parseError(const QString &message)
