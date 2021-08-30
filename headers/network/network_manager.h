@@ -19,41 +19,15 @@
 
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
-// FORWARD DECLARATION FOR CALLBACK INTEGRATION
-#ifndef SERVER_SERVICE_DEF
-#define SERVER_SERVICE_DEF
-class ServerService;
-#include "network/server_service.h"
-#endif // SERVER_SERVICE
 
-#ifndef SOCKET_SERVICE_DEF
-#define SOCKET_SERVICE_DEF
-class SocketService;
-#include "network/socket_service.h"
-#endif // SOCKET_SERVICE
-
-#ifndef UPNP_CONNECTION_DEF
-#define UPNP_CONNECTION_DEF
-class UPNPConnection;
-#include "network/upnpconnection.h"
-#endif // UPNP_CONNECTION
-
-#ifndef DISCOVERY_SERVICE_DEF
-#define DISCOVERY_SERVICE_DEF
-class DiscoveryService;
-#include "network/discovery_service.h"
-#endif
 class ResolveManager;
-//-------------------END-----------------------
 
-#include "network/packages/service/connections_message.h"
-#include <QMap>
-#include <QNetworkInterface>
-#include <QObject>
-#include <QtCore/QThread>
-#include <QtNetwork/QNetworkAddressEntry>
-#include <QWebSocketServer>
 #include <algorithm>
+#include <QNetworkInterface>
+#include <QNetworkAddressEntry>
+#include <QWebSocketServer>
+#include <QRandomGenerator>
+#include <QMutex>
 
 #include "utils/exc_utils.h"
 #include "datastorage/block.h"
@@ -61,18 +35,11 @@ class ResolveManager;
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "managers/thread_pool.h"
-#include "network/discovery_service.h"
-//#include "network/resolver_service.h"
-#include "network/server_service.h"
-#include "network/socket_service.h"
-#include "network/websocket_service.h"
 #include "network/upnpconnection.h"
 #include "network/socket_pair.h"
-
-#include "network/packages/service/connections_message.h"
-
-#include <QRandomGenerator>
-#include <QMutex>
+#include "network/tcpsocket_service.h"
+#include "network/websocket_service.h"
+#include "network/tcpserver_service.h"
 #include "network/packages/service/all_messages.h"
 
 /**
@@ -107,7 +74,7 @@ protected:
 private:
     QMap<QByteArray, int> *requestResponseMap;
 
-    ServerService *serverService;
+    TcpServerService *serverService;
     QWebSocketServer *wsServer;
     QList<WebSocketService *> wsConnections;
 
@@ -121,22 +88,22 @@ public:
     void showMessage(const QHostAddress &from, const QString &message);
 
     void resolverMessage(const QHostAddress &from, const QString &message);
-    QList<SocketService *> tcpConnections;
+    QList<TcpSocketService *> tcpConnections;
 
     quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
 
 private:
-    void connectTcpSocket(SocketService *service);
-    void disconnectTcpSocket(SocketService *connection);
+    void connectTcpSocket(TcpSocketService *service);
+    void disconnectTcpSocket(TcpSocketService *connection);
     void connectWsService(WebSocketService *ws);
-    SocketService getConnectionByAddress(const QByteArray address) const;
-    int connectionsCount();
+    TcpSocketService getConnectionByAddress(const QByteArray address) const;
+    inline int connectionsCount() const;
 
 public:
-    ServerService *getServerService();
+    TcpServerService *getServerService();
     // ResolverService *getResolverService();
-    const QList<SocketService *> &getTcpConnections() const;
+    const QList<TcpSocketService *> &getTcpConnections() const;
     const QList<WebSocketService *> &getWsConnections() const;
     void removeConnection(const QString &ip, quint16 port, Network::Protocol protocol);
     // TODO: removeConnection by id
@@ -176,7 +143,7 @@ protected:
      * @param address
      * @param port
      */
-    virtual SocketService *connectToTcpSocket(const QString &ip, quint16 port);
+    virtual TcpSocketService *connectToTcpSocket(const QString &ip, quint16 port);
     void connectToWebSocket(const QString &ip, quint16 port);
 
     /**
@@ -185,7 +152,7 @@ protected:
      * @return
      */
     bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
-                       const QList<SocketService *> list);
+                       const QList<TcpSocketService *> list);
     void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
                      Config::Net::TypeSend typeSend);
     void sendFromCache();

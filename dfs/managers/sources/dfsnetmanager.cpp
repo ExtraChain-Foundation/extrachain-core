@@ -54,19 +54,19 @@ DFSNetManager::~DFSNetManager()
     delete serverService;
 }
 
-void DFSNetManager::socketConnection(SocketService *socket)
+void DFSNetManager::socketConnection(TcpSocketService *socket)
 {
     qDebug() << "[DFS NetworkManager] Add tcp socket connections";
-    connect(socket, &SocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
-    connect(socket, &SocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
-    connect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
+    connect(socket, &TcpSocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
+    connect(socket, &TcpSocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
+    connect(socket, &TcpSocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
-void DFSNetManager::socketDisconnect(SocketService *socket)
+void DFSNetManager::socketDisconnect(TcpSocketService *socket)
 {
-    disconnect(socket, &SocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
-    disconnect(socket, &SocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
-    disconnect(socket, &SocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
+    disconnect(socket, &TcpSocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
+    disconnect(socket, &TcpSocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
+    disconnect(socket, &TcpSocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
 void DFSNetManager::connectResolver(DFSResolverService *resolver)
@@ -118,7 +118,7 @@ void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &re
     return nullptr;
 }
 
-void DFSNetManager::appendSocket(SocketService *socket)
+void DFSNetManager::appendSocket(TcpSocketService *socket)
 {
     tcpConnections.append(socket);
     socketConnection(socket);
@@ -204,7 +204,7 @@ void DFSNetManager::removeTcpConnection()
     if (sender == nullptr)
         return;
 
-    SocketService *connection = qobject_cast<SocketService *>(sender);
+    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
     socketDisconnect(connection);
     tcpConnections.removeAt(tcpConnections.indexOf(connection));
     emit connection->finished();
@@ -213,7 +213,7 @@ void DFSNetManager::removeTcpConnection()
 void DFSNetManager::checkMyIdentifier()
 {
     QObject *sender = QObject::sender();
-    SocketService *connection = qobject_cast<SocketService *>(sender);
+    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
 
     if (connection == nullptr)
         return;
@@ -222,7 +222,7 @@ void DFSNetManager::checkMyIdentifier()
         emit connection->removeMe();
 
     // short counter = 0;
-    std::for_each(tcpConnections.begin(), tcpConnections.end(), [connection](SocketService *el) {
+    std::for_each(tcpConnections.begin(), tcpConnections.end(), [connection](TcpSocketService *el) {
         if (el->identifier() == connection->identifier())
         {
             if (el == connection)
@@ -240,7 +240,7 @@ void DFSNetManager::checkMyIdentifier()
 
 void DFSNetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 {
-    SocketService *socket = new SocketService(socketDescriptor);
+    TcpSocketService *socket = new TcpSocketService(socketDescriptor);
     tcpConnections.append(socket);
     socket->setNetManager(this);
     socketConnection(socket);
@@ -252,7 +252,7 @@ void DFSNetManager::checkConnectionsStatus()
 {
     bool flag = false;
     std::for_each(tcpConnections.begin(), tcpConnections.end(),
-                  [&flag](SocketService *el) { flag = flag || el->getActive(); });
+                  [&flag](TcpSocketService *el) { flag = flag || el->getActive(); });
     emit networkStatusChanged(flag);
 
     if (flag == true)
@@ -263,9 +263,9 @@ void DFSNetManager::checkConnectionsStatus()
     }
 }
 
-SocketService *DFSNetManager::connectToTcpSocket(const QString &address, quint16 port)
+TcpSocketService *DFSNetManager::connectToTcpSocket(const QString &address, quint16 port)
 {
-    SocketService *socket = new SocketService(address, port);
+    TcpSocketService *socket = new TcpSocketService(address, port);
     tcpConnections.append(socket);
     socket->setNetManager(this);
     socketConnection(socket);

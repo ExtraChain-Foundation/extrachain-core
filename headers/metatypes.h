@@ -41,7 +41,7 @@ Q_DECLARE_METATYPE(ActorId)
 Q_DECLARE_METATYPE(Block)
 Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
-Q_DECLARE_METATYPE(SocketService)
+Q_DECLARE_METATYPE(TcpSocketService)
 // Q_DECLARE_METATYPE(SocketService*)
 Q_DECLARE_METATYPE(Messages::BaseMessage)
 Q_DECLARE_METATYPE(DfsStruct::Type)
@@ -64,6 +64,7 @@ Q_DECLARE_METATYPE(DfsStruct::DfsSave)
 Q_DECLARE_METATYPE(DfsStruct::ChangeType)
 Q_DECLARE_METATYPE(ActorType)
 Q_DECLARE_METATYPE(Network::Protocol)
+Q_DECLARE_METATYPE(Network::SocketServiceError)
 
 void registerMetaTypes()
 {
@@ -74,7 +75,7 @@ void registerMetaTypes()
     qRegisterMetaType<ActorId>();
     qRegisterMetaType<Actor<KeyPublic>>();
     qRegisterMetaType<Transaction>();
-    qRegisterMetaType<SocketService>();
+    qRegisterMetaType<TcpSocketService>();
     // qRegisterMetaType<SocketService*>();
     qRegisterMetaType<Messages::BaseMessage>();
     // qRegisterMetaType<Contract>();
@@ -96,6 +97,7 @@ void registerMetaTypes()
     qRegisterMetaType<DfsStruct::ChangeType>();
     qRegisterMetaType<ActorType>();
     qRegisterMetaType<Network::Protocol>();
+    qRegisterMetaType<Network::SocketServiceError>();
 }
 
 #endif

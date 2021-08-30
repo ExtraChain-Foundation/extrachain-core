@@ -115,9 +115,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/message_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/ping_pong_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/verify_messages.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/server_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpserver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpsocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
@@ -163,9 +163,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_block_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_pair_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/server_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpserver_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpsocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp

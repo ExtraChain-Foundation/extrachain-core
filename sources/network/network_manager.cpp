@@ -22,7 +22,7 @@
 
 using namespace Messages;
 
-const QList<SocketService *> &NetManager::getTcpConnections() const
+const QList<TcpSocketService *> &NetManager::getTcpConnections() const
 {
     return tcpConnections;
 }
@@ -125,21 +125,21 @@ void NetManager::resolverMessage(const QHostAddress &from, const QString &messag
     qDebug() << from.toIPv4Address() << " " << message;
 }
 
-void NetManager::connectTcpSocket(SocketService *service)
+void NetManager::connectTcpSocket(TcpSocketService *service)
 {
     // connect(this, &NetManager::sendMsg, service, &SocketService::sendMsg);
-    connect(service, &SocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
+    connect(service, &TcpSocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
     // connect(service, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-    connect(service, &SocketService::removeMe, this, &NetManager::removeTcpConnection);
-    connect(service, &SocketService::checkMe, this, &NetManager::checkMyIdentifier);
+    connect(service, &TcpSocketService::removeMe, this, &NetManager::removeTcpConnection);
+    connect(service, &TcpSocketService::checkMe, this, &NetManager::checkMyIdentifier);
     // connect(service, &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
 
-void NetManager::disconnectTcpSocket(SocketService *socket)
+void NetManager::disconnectTcpSocket(TcpSocketService *socket)
 {
-    disconnect(socket, &SocketService::clientRemove, this, &NetManager::removeTcpConnection);
+    disconnect(socket, &TcpSocketService::clientRemove, this, &NetManager::removeTcpConnection);
     //    disconnect(this, &NetManager::sendMsg, socket, &SocketService::sendMsg);
-    disconnect(socket, &SocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
+    disconnect(socket, &TcpSocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
     //    disconnect(socket, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
     //    disconnect(socket, &SocketService::moveMe, this, &NetManager::MoveToDfsN);
 }
@@ -177,7 +177,7 @@ void NetManager::removeConnection(const QString &ip, quint16 port, Network::Prot
     }
 }
 
-SocketService NetManager::getConnectionByAddress(const QByteArray address) const
+TcpSocketService NetManager::getConnectionByAddress(const QByteArray address) const
 {
     for (const auto currentConnection : tcpConnections)
     {
@@ -186,10 +186,10 @@ SocketService NetManager::getConnectionByAddress(const QByteArray address) const
         if (currentConnection->ip() == address)
             return *currentConnection;
     }
-    return SocketService();
+    return TcpSocketService();
 }
 
-int NetManager::connectionsCount()
+int NetManager::connectionsCount() const
 {
     return tcpConnections.length() + wsConnections.length();
 }
@@ -218,11 +218,11 @@ void NetManager::checkConnectionsStatus()
 {
     bool flag = false;
     std::for_each(tcpConnections.begin(), tcpConnections.end(),
-                  [&flag](SocketService *el) { flag = flag || el->getActive(); });
+                  [&flag](TcpSocketService *el) { flag = flag || el->getActive(); });
     std::for_each(wsConnections.begin(), wsConnections.end(),
                   [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
     emit networkStatusChanged(flag);
-    emit networkSocketsCountChanged(tcpConnections.length());
+    emit networkSocketsCountChanged(connectionsCount());
 
     if (flag)
         sendFromCache();
@@ -231,7 +231,7 @@ void NetManager::checkConnectionsStatus()
 void NetManager::checkMyIdentifier()
 {
     QObject *sender = QObject::sender();
-    SocketService *connection = qobject_cast<SocketService *>(sender);
+    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
     bool removed = false;
 
     if (connection == nullptr)
@@ -244,7 +244,7 @@ void NetManager::checkMyIdentifier()
     }
 
     // short counter = 0;
-    for (SocketService *el : qAsConst(tcpConnections))
+    for (TcpSocketService *el : qAsConst(tcpConnections))
     {
         if (el->identifier() == connection->identifier() && el != connection)
         {
@@ -289,7 +289,7 @@ void NetManager::startNetwork()
         return;
     }
 
-    serverService = new ServerService(tcpPort, local);
+    serverService = new TcpServerService(tcpPort, local);
     setupServerServiceConnections();
     serverService->startListen();
 
@@ -385,9 +385,9 @@ void NetManager::connectToWebSocket(const QString &ip, quint16 port)
 
 void NetManager::setupServerServiceConnections()
 {
-    connect(serverService, &ServerService::newServerConnection, this, &NetManager::addTcpConnectionFromServer,
-            Qt::UniqueConnection);
-    connect(serverService, &ServerService::serverStatus, this, &NetManager::networkErrorChanged);
+    connect(serverService, &TcpServerService::newServerConnection, this,
+            &NetManager::addTcpConnectionFromServer, Qt::UniqueConnection);
+    connect(serverService, &TcpServerService::serverStatus, this, &NetManager::networkErrorChanged);
 }
 
 void NetManager::setupDiscoveryServiceConnections()
@@ -472,7 +472,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
 }
 
 bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
-                               const QList<SocketService *> list)
+                               const QList<TcpSocketService *> list)
 {
     bool flag_result = true;
     bool value = 0;
@@ -565,9 +565,9 @@ void NetManager::upnpErrNet(QString msg)
     qCritical() << "NET MANAGER: UPnP Error:" << msg;
 }
 
-SocketService *NetManager::connectToTcpSocket(const QString &ip, quint16 port)
+TcpSocketService *NetManager::connectToTcpSocket(const QString &ip, quint16 port)
 {
-    SocketService *socket = new SocketService(ip, port);
+    TcpSocketService *socket = new TcpSocketService(ip, port);
     socket->setNetManager(this);
     tcpConnections.append(socket);
     connectTcpSocket(socket);
@@ -587,7 +587,7 @@ void NetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
         return;
     }
 
-    SocketService *socket = new SocketService(socketDescriptor);
+    TcpSocketService *socket = new TcpSocketService(socketDescriptor);
     socket->setNetManager(this);
     tcpConnections.append(socket);
     connectTcpSocket(socket);
@@ -602,7 +602,7 @@ void NetManager::removeTcpConnection()
     if (sender == nullptr)
         return;
 
-    SocketService *connection = qobject_cast<SocketService *>(sender);
+    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
     disconnectTcpSocket(connection);
     emit connection->finished();
     tcpConnections.removeAt(tcpConnections.indexOf(connection));
@@ -654,7 +654,7 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
     std::vector<std::pair<std::string, int>> list = msg.hosts;
     for (auto &el : list)
     {
-        SocketService *socket = new SocketService(QString::fromStdString(el.first), el.second);
+        TcpSocketService *socket = new TcpSocketService(QString::fromStdString(el.first), el.second);
         if (tcpConnections.indexOf(socket) == -1)
         {
             tcpConnections.append(socket);

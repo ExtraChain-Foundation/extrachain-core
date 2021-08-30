@@ -62,8 +62,8 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
-    $$PWD/sources/network/server_service.cpp \
-    $$PWD/sources/network/socket_service.cpp \
+    $$PWD/sources/network/tcpserver_service.cpp \
+    $$PWD/sources/network/tcpsocket_service.cpp \
     $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
     $$PWD/sources/utils/exc_utils.cpp \
@@ -139,8 +139,8 @@ HEADERS += \
     $$PWD/headers/network/packages/service/get_tx_pair_message.h \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/server_service.h \
-    $$PWD/headers/network/socket_service.h \
+    $$PWD/headers/network/tcpserver_service.h \
+    $$PWD/headers/network/tcpsocket_service.h \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \

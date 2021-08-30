@@ -19,11 +19,6 @@
 
 #ifndef DFSNETMANAGER_H
 #define DFSNETMANAGER_H
-#ifndef SOCKET_SERVICE_DEF
-#define SOCKET_SERVICE_DEF
-class SocketService;
-#include "network/socket_service.h"
-#endif // SOCKET_SERVICE
 
 #include "network/network_manager.h"
 #include "dfs/packages/headers/all.h"
@@ -37,6 +32,7 @@ static const short DFS_RESOLVERS_POOL_SIZE = 10;
 #endif
 
 class Dfs;
+
 class DFSNetManager : public NetManager
 {
     Q_OBJECT
@@ -47,7 +43,7 @@ private:
     DFSResolverService *uResolver;
     QList<DFSResolverService *> dfsResolvers;
     QMap<QByteArray, int> handler;
-    ServerService *serverService;
+    TcpServerService *serverService;
 
 public:
     DFSNetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp);
@@ -58,8 +54,8 @@ private:
      * @brief socketConnection
      * create connection for last append socket to the list
      */
-    void socketConnection(SocketService *socket);
-    void socketDisconnect(SocketService *socket);
+    void socketConnection(TcpSocketService *socket);
+    void socketDisconnect(TcpSocketService *socket);
     void connectResolver(DFSResolverService *resolver);
     void disconnectResolver(DFSResolverService *resolver);
     void createDFSResolver(Network::DataStruct ds);
@@ -79,7 +75,7 @@ signals:
     //    void newMessage(const QByteArray &message, const SocketPair &receiver);
 
 public slots:
-    void appendSocket(SocketService *socket);
+    void appendSocket(TcpSocketService *socket);
     //    void newMsg(const QByteArray &message, const SocketPafir &receiver);
     void process();
     void startDFSNetwork();
@@ -91,7 +87,7 @@ private slots:
     void checkMyIdentifier();
     void addTcpConnectionFromServer(qint64 socketDescriptor) override;
     void checkConnectionsStatus() override;
-    SocketService *connectToTcpSocket(const QString &address, quint16 port) override;
+    TcpSocketService *connectToTcpSocket(const QString &address, quint16 port) override;
 };
 
 #endif // DFSNETMANAGER_H

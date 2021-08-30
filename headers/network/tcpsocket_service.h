@@ -30,7 +30,7 @@ class NetManager;
 /**
  * @brief SocketService is responsible for message delivery
  */
-class SocketService : public QObject
+class TcpSocketService : public QObject
 {
     Q_OBJECT
     const QByteArray m_IdentifierPrefix = "ind:";
@@ -53,11 +53,11 @@ private:
     int counter = 0;
 
 public:
-    SocketService();
-    SocketService(const SocketService &value);
-    SocketService(QString address, quint16 networkPort, QObject *parent = nullptr);
-    SocketService(qintptr socketDescriptor, QObject *parent = nullptr);
-    ~SocketService() override;
+    TcpSocketService();
+    TcpSocketService(const TcpSocketService &value);
+    TcpSocketService(QString address, quint16 networkPort, QObject *parent = nullptr);
+    TcpSocketService(qintptr socketDescriptor, QObject *parent = nullptr);
+    ~TcpSocketService() override;
 
 signals:
     void msgReady(const QByteArray &data, const SocketPair &socketData);

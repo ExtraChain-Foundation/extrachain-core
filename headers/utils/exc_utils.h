@@ -64,6 +64,14 @@ enum Protocol
     WebSocket = 2
 };
 Q_ENUM_NS(Protocol)
+
+enum class SocketServiceError
+{
+    Unknown = 0,
+    IncompatibleVersion = 1,
+    IncompatibleNetwork = 2,
+    IncompatibleIdentifier = 3
+};
 } // namespace Network
 
 namespace net {

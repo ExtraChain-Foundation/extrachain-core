@@ -13,7 +13,8 @@ class WebSocketService : public QObject
     Q_OBJECT
 
 public:
-    explicit WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex, QObject *parent = nullptr);
+    explicit WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex,
+                              QObject *parent = nullptr);
     WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
@@ -21,7 +22,7 @@ public:
     const QString &identifier() const;
     bool isActive() const;
     void open(const QUrl &url);
-    void sendError(int code, const QString &text);
+    void sendError(Network::SocketServiceError code);
 
     bool operator==(const WebSocketService &service) const;
 
@@ -33,15 +34,14 @@ public:
 signals:
     void send(const QByteArray &data);
     void disconnected();
-    void error(int code, QString errorText);
-    void resolveMessage(QByteArray msg, SocketPair receiver);
+    void error(Network::SocketServiceError code);
     void close();
 
 private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
     void sendMessage(const QByteArray &data);
-    void onError(QAbstractSocket::SocketError error);
+    void onSocketError(QAbstractSocket::SocketError error);
 
 private:
     void connections();
