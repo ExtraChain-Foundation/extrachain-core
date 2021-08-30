@@ -327,31 +327,6 @@ void Utils::wipeDataFiles()
     QDir::setCurrent(current);
 }
 
-void Utils::softWipe(const QString &currentId)
-{
-    auto clearDir = [](const QString &dir, const QString &ignoredFile = "0", bool isFile = true) {
-        QDir dirToClear(dir);
-        auto filesList = dirToClear.entryInfoList(isFile ? QDir::Files : QDir::Dirs | QDir::NoDotAndDotDot);
-
-        for (auto &file : filesList)
-        {
-            qDebug() << file.fileName() << file.filePath();
-            if (file.fileName() != ignoredFile)
-                isFile ? QFile::remove(file.filePath()) : QDir(file.filePath()).removeRecursively();
-        }
-    };
-
-    QDir("blockchain/index/blocks").removeRecursively();
-    clearDir("blockchain/index/actors", currentId.right(2), false);
-    clearDir("blockchain/index/actors/" + currentId.right(2), currentId, true);
-    clearDir(DfsStruct::ROOT_FOOLDER_NAME, "", true);
-    clearDir(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId, "profile", false);
-    QFile::remove(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/root");
-    QFile::remove(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/root.tmp");
-    QDir("tmp").removeRecursively();
-    QFile(".settings").remove();
-}
-
 qint64 Utils::checkMemoryFree()
 {
     QStorageInfo x(qApp->applicationDirPath());

@@ -22,7 +22,7 @@ public:
     const QString &identifier() const;
     bool isActive() const;
     void open(const QUrl &url);
-    void sendError(Network::SocketServiceError code);
+    void sendError(Network::SocketServiceError code, const QString &errorData);
 
     bool operator==(const WebSocketService &service) const;
 
@@ -34,7 +34,7 @@ public:
 signals:
     void send(const QByteArray &data);
     void disconnected();
-    void error(Network::SocketServiceError code);
+    void error(Network::SocketServiceError code, const QString &errorData);
     void close();
 
 private slots:

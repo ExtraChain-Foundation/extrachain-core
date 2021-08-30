@@ -105,8 +105,9 @@ public:
     // ResolverService *getResolverService();
     const QList<TcpSocketService *> &getTcpConnections() const;
     const QList<WebSocketService *> &getWsConnections() const;
-    void removeConnection(const QString &ip, quint16 port, Network::Protocol protocol);
-    // TODO: removeConnection by id
+
+public slots:
+    void removeConnection(const QString &identifier);
 
 protected:
     NetManager *getMe();
@@ -201,6 +202,7 @@ private slots:
      */
     void removeTcpConnection();
     void removeWsConnection();
+    void webSocketError(Network::SocketServiceError error, QString errorData);
 
 public:
     QString localIp();
@@ -231,7 +233,7 @@ signals:
     void networkStatusChanged(bool status);
     void networkSocketsCountChanged(int socketsCount);
     void networkErrorChanged(bool serverError);
-    void webSocketsCountChanged(int count);
+    void onWebSocketError(Network::SocketServiceError, QString, QString);
 };
 
 #endif // NETWORK_MANAGER_H

@@ -70,7 +70,6 @@ public:
 
 signals:
     void newMessage(Network::DataStruct data);
-    void finished();
     //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
     //    void newMessage(const QByteArray &message, const SocketPair &receiver);
 

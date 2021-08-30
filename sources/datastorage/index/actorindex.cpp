@@ -381,9 +381,7 @@ QString ActorIndex::getFolderPath() const
 
 QString ActorIndex::buildFilePath(const QByteArray &id) const
 {
-    QByteArray Id = id;
-    if (Id.length() == 19)
-        Id = "0" + id;
+    QByteArray Id = ActorId(id).toByteArray();
 
     QByteArray section = Id.right(SECTION_NAME_SIZE);
     QString pathToFolder = folderPath + section;

@@ -21,16 +21,13 @@
 
 SocketPair::SocketPair()
 {
-    m_identifier = "0";
     ip = "0.0.0.0";
-    port = 0;
 }
 
 SocketPair::SocketPair(const std::string &ip, const quint16 &port)
 {
     this->ip = ip;
     this->port = port;
-    this->m_identifier = "0";
 }
 
 SocketPair::SocketPair(const SocketPair &pair)
@@ -74,10 +71,7 @@ void SocketPair::setIdentifier(const QByteArray &value)
 
 bool SocketPair::isEmpty() const
 {
-    if ((ip == "0.0.0.0") && (port == 0) && (m_identifier == "0"))
-        return true;
-    else
-        return false;
+    return ip == "0.0.0.0" && port == 0 && m_identifier.isEmpty();
 }
 
 QDebug operator<<(QDebug d, const SocketPair &pair)

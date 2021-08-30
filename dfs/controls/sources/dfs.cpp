@@ -659,6 +659,8 @@ void Dfs::initDFSNetManager()
     dfsNetManager = new DFSNetManager(accountControler, actorIndex, dfsNetLocalIp);
     dfsNetManager->setDfs(this);
     connect(this, &Dfs::connectToNode, dfsNetManager, &DFSNetManager::connectToNode);
+    connect(this, &Dfs::removeConnection, dfsNetManager, &DFSNetManager::removeConnection);
+
     ThreadPool::addThread(dfsNetManager);
 }
 

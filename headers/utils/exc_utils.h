@@ -65,13 +65,15 @@ enum Protocol
 };
 Q_ENUM_NS(Protocol)
 
-enum class SocketServiceError
+enum SocketServiceError
 {
     Unknown = 0,
     IncompatibleVersion = 1,
     IncompatibleNetwork = 2,
-    IncompatibleIdentifier = 3
+    IncompatibleIdentifier = 3,
+    DuplicateIdentifier = 4,
 };
+Q_ENUM_NS(SocketServiceError)
 } // namespace Network
 
 namespace net {
@@ -519,7 +521,6 @@ int compare(const QByteArray &one, const QByteArray &two);
  * @brief Remove data and cache files
  */
 void wipeDataFiles();
-void softWipe(const QString &currentId);
 
 QString detectCompiler();
 QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);

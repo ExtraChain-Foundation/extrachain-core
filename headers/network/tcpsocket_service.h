@@ -43,7 +43,7 @@ private:
     QString address;
     quint16 m_port;
     QTcpSocket *m_tcp = nullptr;
-    BigNumber m_identifier;
+    QString m_identifier;
     int _blockSize = 0;
     int reconnectTry = 0;
     QByteArray pendMsg;
@@ -67,7 +67,7 @@ signals:
      * and connection with &NetManager::removeConnection on server
      */
     void clientDisconnected();
-    void removeMe();
+    void close();
     void connected();
     void clientRemove();
     void finished();
@@ -97,7 +97,7 @@ private slots:
 
 public:
     void gotMessage(QByteArray msg, SocketPair rec);
-    const BigNumber &identifier() const;
+    const QString &identifier() const;
     void processID(QByteArray id);
     /**
      * @brief Send message using QTcpSocket
@@ -116,7 +116,7 @@ public:
     void setSocket(QTcpSocket *value);
     QTcpSocket::SocketState state();
     void setReconnectTry(int value);
-    void setIdentifier(const BigNumber &value);
+    void setIdentifier(const QString &value);
     bool getActive() const;
     SocketPair getSocketPair();
     void setNetManager(NetManager *value);

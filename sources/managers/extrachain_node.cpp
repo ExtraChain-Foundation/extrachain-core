@@ -498,6 +498,8 @@ void ExtraChainNode::connectSignals()
     // temp for tests
     connect(netManager, &NetManager::newSocket, blockchain, &Blockchain::updateBlockchain);
 #endif
+    connect(this, &ExtraChainNode::removeConnection, netManager, &NetManager::removeConnection);
+    connect(this, &ExtraChainNode::removeConnection, dfs, &Dfs::removeConnection);
     connect(this, &ExtraChainNode::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
     connect(accController, &AccountController::loadWallets, blockchain, &Blockchain::updateBlockchain);
 }

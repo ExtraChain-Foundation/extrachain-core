@@ -56,7 +56,7 @@ void TcpSocketService::setReconnectTry(int value)
     reconnectTry = value;
 }
 
-void TcpSocketService::setIdentifier(const BigNumber &value)
+void TcpSocketService::setIdentifier(const QString &value)
 {
     m_identifier = value;
 }
@@ -69,7 +69,7 @@ bool TcpSocketService::getActive() const
 SocketPair TcpSocketService::getSocketPair()
 {
     SocketPair res(address.toStdString(), m_port);
-    res.m_identifier = m_identifier.toByteArray();
+    res.m_identifier = m_identifier.toLatin1();
     return res;
 }
 
@@ -80,7 +80,6 @@ void TcpSocketService::setNetManager(NetManager *value)
 
 TcpSocketService::TcpSocketService()
 {
-    this->m_identifier = BigNumber("0");
     // dpBuffer->clear();
 }
 
@@ -253,19 +252,19 @@ void TcpSocketService::continueDoRead()
 
                     this->processID(bl[1]);
                     netManager->addTempConnections(Serialization::deserialize(bl[2]));
-                    netManager->checkOnValidConnection(this->identifier().toByteArray(),
+                    netManager->checkOnValidConnection(this->identifier().toLatin1(),
                                                        this->ip().toLocal8Bit());
                     netManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
                 }
                 else
                 {
-                    emit this->removeMe();
+                    emit this->close();
                 }
             }
             else
             {
                 SocketPair receiver(this->ip().toStdString(), this->port());
-                receiver.setIdentifier(this->identifier().toByteArray());
+                receiver.setIdentifier(this->identifier().toLatin1());
                 this->gotMessage(pendMsg, receiver);
             }
             pendMsgSize = -1;
@@ -359,14 +358,14 @@ void TcpSocketService::gotMessage(QByteArray msg, SocketPair rec)
         netManager->MessageReceived(bmsg, rec);
 }
 
-const BigNumber &TcpSocketService::identifier() const
+const QString &TcpSocketService::identifier() const
 {
     return m_identifier;
 }
 
 void TcpSocketService::processID(QByteArray id)
 {
-    m_identifier = BigNumber(id);
+    m_identifier = id;
     emit checkMe();
 }
 

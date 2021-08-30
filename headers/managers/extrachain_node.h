@@ -171,6 +171,7 @@ signals:
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
                                QByteArray color);
+    void removeConnection(QString identifier);
 
 private slots:
     void initConsoleToken(Transaction tx);

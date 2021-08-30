@@ -58,14 +58,14 @@ void DFSNetManager::socketConnection(TcpSocketService *socket)
 {
     qDebug() << "[DFS NetworkManager] Add tcp socket connections";
     connect(socket, &TcpSocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
-    connect(socket, &TcpSocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
+    connect(socket, &TcpSocketService::close, this, &DFSNetManager::removeTcpConnection);
     connect(socket, &TcpSocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
 void DFSNetManager::socketDisconnect(TcpSocketService *socket)
 {
     disconnect(socket, &TcpSocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
-    disconnect(socket, &TcpSocketService::removeMe, this, &DFSNetManager::removeTcpConnection);
+    disconnect(socket, &TcpSocketService::close, this, &DFSNetManager::removeTcpConnection);
     disconnect(socket, &TcpSocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
@@ -219,7 +219,7 @@ void DFSNetManager::checkMyIdentifier()
         return;
 
     if (net::readNetManagerIdentifier() == connection->identifier())
-        emit connection->removeMe();
+        emit connection->close();
 
     // short counter = 0;
     std::for_each(tcpConnections.begin(), tcpConnections.end(), [connection](TcpSocketService *el) {
@@ -228,7 +228,7 @@ void DFSNetManager::checkMyIdentifier()
             if (el == connection)
                 emit el->setActiveSignal(true);
             else
-                emit el->removeMe();
+                emit el->close();
         }
     });
 
