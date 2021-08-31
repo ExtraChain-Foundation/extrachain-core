@@ -210,7 +210,7 @@ void NetManager::checkConnectionsStatus()
 {
     bool flag = false;
     std::for_each(tcpConnections.begin(), tcpConnections.end(),
-                  [&flag](TcpSocketService *el) { flag = flag || el->getActive(); });
+                  [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
     std::for_each(wsConnections.begin(), wsConnections.end(),
                   [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
     emit networkStatusChanged(flag);
@@ -414,7 +414,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
             return false;
 
         for (const auto &tmp : qAsConst(tcpConnections))
-            if (tmp->getActive())
+            if (tmp->isActive())
                 return true;
         for (const auto &tmp : qAsConst(wsConnections))
             if (tmp->isActive())
@@ -450,7 +450,7 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
         bool isSend = isSendCheck(send, tcp->ip().toStdString(), tcp->port(), receiver);
         if (!isSend)
             continue;
-        if (tcp->getActive())
+        if (tcp->isActive())
             tcp->distMsg(message, receiver);
     }
 
@@ -575,8 +575,8 @@ void NetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 {
     if (connectionsCount() >= SIZE_OF_CONNECTIONS)
     {
-        qDebug()
-            << "[NetworkManager] Can't connect from tcp server because the maximum number of connections";
+        qDebug() << "[NetworkManager] Can't connect from tcp server because the maximum number of connections"
+                 << tcpPort << wsPort;
         return;
     }
 
@@ -700,7 +700,7 @@ QByteArray NetManager::getSerializedConnectionList() const
 
     for (auto connection : this->tcpConnections)
     {
-        if (!connection->getActive())
+        if (!connection->isActive())
             continue;
         if (net::readNetManagerIdentifier() == connection->identifier())
             // if it equivalent to my indetificator

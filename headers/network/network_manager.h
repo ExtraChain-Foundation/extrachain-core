@@ -76,6 +76,9 @@ private:
 
     TcpServerService *serverService;
     QWebSocketServer *wsServer;
+
+protected:
+    QList<TcpSocketService *> tcpConnections;
     QList<WebSocketService *> wsConnections;
 
 private:
@@ -88,7 +91,6 @@ public:
     void showMessage(const QHostAddress &from, const QString &message);
 
     void resolverMessage(const QHostAddress &from, const QString &message);
-    QList<TcpSocketService *> tcpConnections;
 
     quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
@@ -98,13 +100,13 @@ private:
     void disconnectTcpSocket(TcpSocketService *connection);
     void connectWsService(WebSocketService *ws);
     TcpSocketService getConnectionByAddress(const QByteArray address) const;
-    inline int connectionsCount() const;
 
 public:
     TcpServerService *getServerService();
     // ResolverService *getResolverService();
     const QList<TcpSocketService *> &getTcpConnections() const;
     const QList<WebSocketService *> &getWsConnections() const;
+    inline int connectionsCount() const;
 
 public slots:
     void removeConnection(const QString &identifier);

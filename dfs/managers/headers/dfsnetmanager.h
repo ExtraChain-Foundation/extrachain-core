@@ -50,43 +50,25 @@ public:
     ~DFSNetManager() override;
 
 private:
-    /**
-     * @brief socketConnection
-     * create connection for last append socket to the list
-     */
-    void socketConnection(TcpSocketService *socket);
-    void socketDisconnect(TcpSocketService *socket);
     void connectResolver(DFSResolverService *resolver);
     void disconnectResolver(DFSResolverService *resolver);
     void createDFSResolver(Network::DataStruct ds);
 
 public:
-    NetManager *getNetManager();
     void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
 
-    QList<DFSResolverService *> getDfsResolvers() const;
-
 signals:
     void newMessage(Network::DataStruct data);
-    //    void sendMsg(const QByteArray &message, const SocketPair &receiver);
-    //    void newMessage(const QByteArray &message, const SocketPair &receiver);
 
 public slots:
-    void appendSocket(TcpSocketService *socket);
-    //    void newMsg(const QByteArray &message, const SocketPafir &receiver);
     void process();
-    void startDFSNetwork();
     void titleArrived(Network::DataStruct ds);
     void removeResolver(DFSResolverService::FinishStatus status);
 
 private slots:
-    void removeTcpConnection();
-    void checkMyIdentifier();
-    void addTcpConnectionFromServer(qint64 socketDescriptor) override;
     void checkConnectionsStatus() override;
-    TcpSocketService *connectToTcpSocket(const QString &address, quint16 port) override;
 };
 
 #endif // DFSNETMANAGER_H

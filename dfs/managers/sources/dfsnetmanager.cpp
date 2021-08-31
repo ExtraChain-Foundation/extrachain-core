@@ -36,15 +36,10 @@ bool DFSNetManager::isLoading(const QString &fileName)
     return false;
 }
 
-QList<DFSResolverService *> DFSNetManager::getDfsResolvers() const
-{
-    return dfsResolvers;
-}
-
 DFSNetManager::DFSNetManager(AccountController *accountList, ActorIndex *actInd, const QString &localIp)
     : NetManager(accountList, actInd, localIp)
 {
-    tcpPort = 2225;
+    tcpPort = 2223;
     wsPort = 2234;
 }
 
@@ -52,21 +47,6 @@ DFSNetManager::~DFSNetManager()
 {
     emit finished();
     delete serverService;
-}
-
-void DFSNetManager::socketConnection(TcpSocketService *socket)
-{
-    qDebug() << "[DFS NetworkManager] Add tcp socket connections";
-    connect(socket, &TcpSocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
-    connect(socket, &TcpSocketService::close, this, &DFSNetManager::removeTcpConnection);
-    connect(socket, &TcpSocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
-}
-
-void DFSNetManager::socketDisconnect(TcpSocketService *socket)
-{
-    disconnect(socket, &TcpSocketService::clientDisconnected, this, &DFSNetManager::removeTcpConnection);
-    disconnect(socket, &TcpSocketService::close, this, &DFSNetManager::removeTcpConnection);
-    disconnect(socket, &TcpSocketService::checkMe, this, &DFSNetManager::checkMyIdentifier);
 }
 
 void DFSNetManager::connectResolver(DFSResolverService *resolver)
@@ -96,11 +76,6 @@ void DFSNetManager::createDFSResolver(Network::DataStruct ds)
     ThreadPool::addThread(dfsResolvers.last());
 }
 
-NetManager *DFSNetManager::getNetManager()
-{
-    return this->getMe();
-}
-
 void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     if (msg == Config::Net::PROTOCOL_VERSION)
@@ -118,12 +93,6 @@ void *DFSNetManager::MessageReceived(const QByteArray &msg, const SocketPair &re
     return nullptr;
 }
 
-void DFSNetManager::appendSocket(TcpSocketService *socket)
-{
-    tcpConnections.append(socket);
-    socketConnection(socket);
-}
-
 void DFSNetManager::process()
 {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
@@ -133,13 +102,7 @@ void DFSNetManager::process()
     connectResolver(uResolver);
 
     ThreadPool::addThread(uResolver);
-    startDFSNetwork();
-}
-
-void DFSNetManager::startDFSNetwork()
-{
-    startNetwork();
-    // connectToNode(serverPort, local);
+    NetManager::process();
 }
 
 void DFSNetManager::titleArrived(Network::DataStruct ds)
@@ -197,63 +160,15 @@ void DFSNetManager::removeResolver(DFSResolverService::FinishStatus status)
     }
 }
 
-void DFSNetManager::removeTcpConnection()
-{
-    QObject *sender = QObject::sender();
-
-    if (sender == nullptr)
-        return;
-
-    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
-    socketDisconnect(connection);
-    tcpConnections.removeAt(tcpConnections.indexOf(connection));
-    emit connection->finished();
-}
-
-void DFSNetManager::checkMyIdentifier()
-{
-    QObject *sender = QObject::sender();
-    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
-
-    if (connection == nullptr)
-        return;
-
-    if (net::readNetManagerIdentifier() == connection->identifier())
-        emit connection->close();
-
-    // short counter = 0;
-    std::for_each(tcpConnections.begin(), tcpConnections.end(), [connection](TcpSocketService *el) {
-        if (el->identifier() == connection->identifier())
-        {
-            if (el == connection)
-                emit el->setActiveSignal(true);
-            else
-                emit el->close();
-        }
-    });
-
-    emit newSocket();
-    // dfs->requestAllCards();
-    // if (counter == 0)
-    //    emit connection->setActiveSignal(true);
-}
-
-void DFSNetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
-{
-    TcpSocketService *socket = new TcpSocketService(socketDescriptor);
-    tcpConnections.append(socket);
-    socket->setNetManager(this);
-    socketConnection(socket);
-    QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
-    ThreadPool::addThread(socket);
-}
-
 void DFSNetManager::checkConnectionsStatus()
 {
     bool flag = false;
     std::for_each(tcpConnections.begin(), tcpConnections.end(),
-                  [&flag](TcpSocketService *el) { flag = flag || el->getActive(); });
+                  [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
+    std::for_each(wsConnections.begin(), wsConnections.end(),
+                  [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
     emit networkStatusChanged(flag);
+    emit networkSocketsCountChanged(connectionsCount());
 
     if (flag == true)
     {
@@ -261,17 +176,4 @@ void DFSNetManager::checkConnectionsStatus()
         for (const QString &file : files)
             emit dfs->requestFile(file);
     }
-}
-
-TcpSocketService *DFSNetManager::connectToTcpSocket(const QString &address, quint16 port)
-{
-    TcpSocketService *socket = new TcpSocketService(address, port);
-    tcpConnections.append(socket);
-    socket->setNetManager(this);
-    socketConnection(socket);
-    qDebug().noquote().nospace() << "[DFS NetworkManager] New TCP connection: " << address << ":" << port;
-
-    ThreadPool::addThread(socket);
-    QTimer::singleShot(3000, this, &DFSNetManager::checkConnectionsStatus);
-    return socket;
 }

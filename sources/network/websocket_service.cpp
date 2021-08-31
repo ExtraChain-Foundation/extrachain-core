@@ -158,14 +158,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     SocketPair pair(m_ip.toStdString(), port());
     pair.setIdentifier(m_identifier.toLatin1());
     auto mess = qUncompress(message);
-    if (m_ws->localPort() == 2234)
-    {
-        reinterpret_cast<DFSNetManager *>(networkManager)->MessageReceived(mess, pair);
-    }
-    else
-    {
-        networkManager->MessageReceived(mess, pair);
-    }
+    networkManager->MessageReceived(mess, pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)
@@ -252,7 +245,18 @@ const QString &WebSocketService::ip() const
 
 quint16 WebSocketService::port() const
 {
-    return m_ws->localPort();
+    if (m_ws->peerPort() != 2233 && m_ws->peerPort() != 2234)
+        return m_ws->peerPort();
+    else
+        return m_ws->localPort();
+}
+
+quint16 WebSocketService::serverPort() const
+{
+    if (m_ws->peerPort() == 2233 || m_ws->peerPort() == 2234)
+        return m_ws->peerPort();
+    else
+        return m_ws->localPort();
 }
 
 QString WebSocketService::protocolString() const

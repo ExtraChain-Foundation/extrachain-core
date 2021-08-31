@@ -107,6 +107,7 @@ public:
     bool isActive() const;
     QString ip() const;
     quint16 port() const;
+    quint16 serverPort() const;
     QString protocolString() const;
     Network::Protocol protocol() const;
 
@@ -117,7 +118,6 @@ public:
     QTcpSocket::SocketState state();
     void setReconnectTry(int value);
     void setIdentifier(const QString &value);
-    bool getActive() const;
     SocketPair getSocketPair();
     void setNetManager(NetManager *value);
 };

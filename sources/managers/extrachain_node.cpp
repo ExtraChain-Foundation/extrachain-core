@@ -394,24 +394,16 @@ void ExtraChainNode::getAllActors()
     //    if (!res.isEmpty())
     //        emit getAllActorsNode(res, true);
 }
+
 void ExtraChainNode::getAllActorsTimerCall()
 {
-#ifdef ECLIENT
-    QByteArray res = getIdPrivateProfile();
-    if (!res.isEmpty())
-        emit getAllActorsNode(res, true);
-#endif
-#ifdef ECONSOLE
-    if (accController->getAccountCount() > 0)
+    if (accController->getAccountCount() > 0 && netManager->connectionsCount() > 0)
     {
-        QByteArray res2 = accController->getMainActor()->id().toByteArray();
+        ActorId actorId = accController->getMainActor()->id();
 
-        if (!res2.isEmpty())
-        {
-            emit getAllActorsNode(res2, true);
-        }
+        if (!actorId.isEmpty())
+            emit getAllActorsNode(actorId, true);
     }
-#endif
 }
 
 void ExtraChainNode::createNetManagerIdentifier()

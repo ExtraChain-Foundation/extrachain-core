@@ -162,8 +162,6 @@ void DFSResolverService::setTask(QByteArray _msg, SocketPair _receiver)
 bool DFSResolverService::validate(const Messages::BaseMessage &message)
 {
     ActorId signer = message.signer;
-    if (signer.toByteArray().size() != 20 && signer.toByteArray().size() != 19)
-        return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
     if (!actor.empty())

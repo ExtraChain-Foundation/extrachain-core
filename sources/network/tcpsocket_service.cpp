@@ -61,14 +61,14 @@ void TcpSocketService::setIdentifier(const QString &value)
     m_identifier = value;
 }
 
-bool TcpSocketService::getActive() const
+bool TcpSocketService::isActive() const
 {
     return active;
 }
 
 SocketPair TcpSocketService::getSocketPair()
 {
-    SocketPair res(address.toStdString(), m_port);
+    SocketPair res(address.toStdString(), port());
     res.m_identifier = m_identifier.toLatin1();
     return res;
 }
@@ -120,7 +120,7 @@ TcpSocketService::~TcpSocketService()
         return;
     m_tcp->close();
     m_tcp->deleteLater();
-    qDebug() << "[TCP] Remove tcp socket" << address << m_port;
+    qDebug() << "[TCP] Remove tcp socket" << address << port() << serverPort();
 }
 
 void TcpSocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
@@ -146,14 +146,11 @@ void TcpSocketService::sendMsg(const QByteArray &data, const SocketPair &socketD
 
     QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE);
     m_tcp->write(_wtSok, _wtSok.size());
-    //    }
 }
 
 void *TcpSocketService::distMsg(const QByteArray data, const SocketPair &socketData)
 {
-    //    QThread::currentThread()->msleep(100);
     emit msgReady(data, socketData);
-    // QCoreApplication::processEvents();
     return nullptr;
 }
 
@@ -169,8 +166,8 @@ void TcpSocketService::process()
         connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::establishConnection);
         connect(m_tcp, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
             Q_UNUSED(socketError)
-            qDebug().nospace().noquote()
-                << "[TCP] Socket error " << socketError << " for " << address << ":" << m_port;
+            qDebug().nospace().noquote() << "[TCP] Socket error " << socketError << " for " << address << ":"
+                                         << port() << serverPort();
             if (this->m_tcp->state() != QTcpSocket::ConnectedState)
                 this->reconnect();
         });
@@ -186,20 +183,19 @@ void TcpSocketService::process()
     {
         this->m_tcp->connectToHost(address, m_port);
     }
-    //    QCoreApplication::processEvents();
 }
 
 void TcpSocketService::establishConnection()
 {
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
     this->address = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
-    this->m_port = this->m_tcp->peerPort();
     QByteArray idb = m_IdentifierPrefix
         + Serialization::serialize({ QByteArray::number(0), net::readNetManagerIdentifier(),
                                      netManager->getSerializedConnectionList() }); // TODO: remove build
-    this->distMsg(idb, SocketPair(this->address.toStdString(), this->m_port));
+    this->distMsg(idb, SocketPair(this->address.toStdString(), port()));
 
-    qDebug() << "[TCP] Address" << this->m_tcp << address << m_port;
+    qDebug() << "[TCP] Address" << this->m_tcp << address << port() << serverPort() << m_tcp->localPort()
+             << m_tcp->peerPort();
     qDebug() << "[TCP] Open status:" << m_tcp->isOpen();
 }
 
@@ -285,8 +281,6 @@ void TcpSocketService::continueDoRead()
 
 void TcpSocketService::gotMessage(QByteArray msg, SocketPair rec)
 {
-    // msg->get protocol -> end socket
-    // netManager list connections
     QByteArray bmsg = msg;
     Messages::BaseMessage dbm;
     dbm.deserialize(bmsg);
@@ -294,66 +288,15 @@ void TcpSocketService::gotMessage(QByteArray msg, SocketPair rec)
         return;
     if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
         return;
-    //    QByteArrayList msgList = Serialization::deserialize(bmsg, 8);
-    //    QByteArray checkProtocol;
-    //    if (msgList.length() > 0)
-    //        checkProtocol = msgList.at(0);
-    //    if (checkProtocol != Config::Net::PROTOCOL_VERSION)
-    //    {
-    //        qDebug().noquote().nospace() << "Incorrect protocol version for " << address << ":" << port;
-    //        this->removeMe();
-    //    }
+
     if (bmsg == Config::Net::PROTOCOL_VERSION)
     {
         qDebug() << "[TCP] Protocol msg collected";
         counter = 1;
     }
-    //    switch (counter)
-    //    {
-    //    case 0:
-    //        break;
-    //    case 1:
-    //        bm.protocol = bmsg;
-    //        //        bmr.protocol = msgList.at(0);
-    //        counter++;
-    //        return;
-    //        //        break;
-    //    case 2:
-    //        bm.type = bmsg.toUInt();
-    //        //        bmr.type = msgList.at(0).toUInt();
-    //        counter++;
-    //        return;
-    //    case 3:
-    //        bm.signer = BigNumber(bmsg);
-    //        //        bmr.signer = BigNumber(msgList.at(0));
-    //        counter++;
-    //        return;
-    //    case 4:
-    //        bm.digSig = bmsg;
-    //        //        bmr.digSig = msgList.at(0);
-    //        counter++;
-    //        return;
-    //    case 5:
-    //        bm.data = bmsg;
-    //        //        bmr.data = msgList.at(0);
-    //        counter = 0;
-    //        bmsg = bm.serialize();
-    //        break;
-    //        //        if (Messages::isGeneralResponse(bm.type))
-    //        //        {
-    //        //            counter++;
-    //        //            return;
-    //        //        }
-    //        //    case 6:
-    //        //        bm.type = msgList.at(0).toUInt();
-    //        //        bmr.type = msgList.at(0).toUInt();
-    //        //        counter = 0;
-    //        //        break;
-    //    }
-    if (m_tcp->localPort() == 2223 || m_tcp->localPort() == 2224)
-    {
+
+    if (serverPort() == 2223)
         reinterpret_cast<DFSNetManager *>(netManager)->MessageReceived(bmsg, rec);
-    }
     else
         netManager->MessageReceived(bmsg, rec);
 }
@@ -369,11 +312,6 @@ void TcpSocketService::processID(QByteArray id)
     emit checkMe();
 }
 
-bool TcpSocketService::isActive() const
-{
-    return active;
-}
-
 QString TcpSocketService::ip() const
 {
     return address;
@@ -381,7 +319,18 @@ QString TcpSocketService::ip() const
 
 quint16 TcpSocketService::port() const
 {
-    return m_port;
+    if (m_tcp->peerPort() != 2222 && m_tcp->peerPort() != 2223)
+        return m_tcp->peerPort();
+    else
+        return m_tcp->localPort();
+}
+
+quint16 TcpSocketService::serverPort() const
+{
+    if (m_tcp->peerPort() == 2222 || m_tcp->peerPort() == 2223)
+        return m_tcp->peerPort();
+    else
+        return m_tcp->localPort();
 }
 
 QString TcpSocketService::protocolString() const

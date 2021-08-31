@@ -28,6 +28,7 @@ public:
 
     const QString &ip() const;
     quint16 port() const;
+    quint16 serverPort() const;
     QString protocolString() const;
     Network::Protocol protocol() const;
 

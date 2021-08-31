@@ -27,10 +27,6 @@
 #include "managers/chatmanager.h"
 #include "managers/account_controller.h"
 
-#ifdef ECONSOLE
-#include "console/console_manager.h"
-#endif
-
 using namespace Resolver;
 
 void ResolverService::setNode(ExtraChainNode *value)
