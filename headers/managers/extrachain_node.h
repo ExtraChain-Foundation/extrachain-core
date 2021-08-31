@@ -34,7 +34,7 @@
 #include "dfs/controls/headers/dfs.h"
 #include "managers/contract_manager.h"
 #include "managers/sm_manager.h"
-#include "dfs/managers/headers/dfsnetmanager.h"
+#include "dfs/managers/headers/dfs_networkmanager.h"
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
@@ -59,8 +59,8 @@ private:
     bool fileMode = true;
     Dfs *dfs;
     ActorIndex *actorIndex;
-    Blockchain *blockchain;
-    NetManager *netManager;
+    Blockchain *m_blockchain;
+    NetworkManager *m_networkManager;
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
@@ -79,8 +79,8 @@ public:
 public:
     void createNewNetwork(const QString &email, const QString &password);
     void start();
-    Blockchain *getBlockchain();
-    NetManager *getNetManager();
+    Blockchain *blockchain();
+    NetworkManager *networkManager();
     AccountController *getAccountController() const;
     ActorIndex *getActorIndex() const;
     ResolveManager *getResolveManager() const;
@@ -130,7 +130,7 @@ public:
 private:
     void showMessage(QString from, QString message);
     /**
-     * @brief Connect signals between NetManager and Blockchain
+     * @brief Connect signals between NetworkManager and Blockchain
      */
     void connectResolveManager();
     void connectSmContractManager();
@@ -183,7 +183,7 @@ private slots:
     // void makeContractFinalTransaction(Contract &contract);
 
 public slots:
-    void createNetManagerIdentifier();
+    void createNetworkIdentifier();
     void setIdPrivateProfile(QByteArray id);          //
     void setHashLoginPrivateProfile(QByteArray hash); //
     void tempareSlotForActors();

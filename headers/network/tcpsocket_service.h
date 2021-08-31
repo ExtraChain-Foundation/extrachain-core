@@ -25,7 +25,7 @@
 #include "network/socket_pair.h"
 #include "utils/exc_utils.h"
 
-class NetManager;
+class NetworkManager;
 
 /**
  * @brief SocketService is responsible for message delivery
@@ -36,7 +36,7 @@ class TcpSocketService : public QObject
     const QByteArray m_IdentifierPrefix = "ind:";
 
 private:
-    NetManager *netManager = nullptr;
+    NetworkManager *networkManager = nullptr;
     int connectionTry = 0;
     qintptr socketDescriptor = 0;
     bool active = false;
@@ -64,7 +64,7 @@ signals:
     void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
     /**
      * @brief has only one connection with &QTcpSocket::disconnected on client
-     * and connection with &NetManager::removeConnection on server
+     * and connection with &NetworkManager::removeConnection on server
      */
     void clientDisconnected();
     void close();
@@ -119,7 +119,7 @@ public:
     void setReconnectTry(int value);
     void setIdentifier(const QString &value);
     SocketPair getSocketPair();
-    void setNetManager(NetManager *value);
+    void setNetworkManager(NetworkManager *value);
 
     int bytesIncoming() const
     {

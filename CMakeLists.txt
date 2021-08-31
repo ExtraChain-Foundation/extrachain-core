@@ -48,10 +48,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/sources/dfs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/sources/subscribe_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/card_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/dfsnetmanager.h
+    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/dfs_networkmanager.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/sender.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/card_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/dfsnetmanager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/dfs_networkmanager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/sender.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/all.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/dfs_changes.h

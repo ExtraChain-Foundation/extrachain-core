@@ -141,7 +141,7 @@ void DFSResolverService::checkStatus()
             DistFileSystem::ReqFragsMessage reqFrags;
             reqFrags.filePath = title.filePath.toUtf8();
             reqFrags.listFrag = emptyFrags;
-            dfs->dfsNetManager->send(reqFrags.serialize(), Messages::DFSMessage::requestFragments);
+            dfs->networkManager()->send(reqFrags.serialize(), Messages::DFSMessage::requestFragments);
         }
     }
 }

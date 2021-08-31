@@ -22,36 +22,36 @@
 
 using namespace Messages;
 
-const QList<TcpSocketService *> &NetManager::getTcpConnections() const
+const QList<TcpSocketService *> &NetworkManager::getTcpConnections() const
 {
     return tcpConnections;
 }
 
-const QList<WebSocketService *> &NetManager::getWsConnections() const
+const QList<WebSocketService *> &NetworkManager::getWsConnections() const
 {
     return wsConnections;
 }
 
-NetManager *NetManager::getMe()
+NetworkManager *NetworkManager::getMe()
 {
     return this;
 }
 
-void NetManager::setResolveManager(ResolveManager *value)
+void NetworkManager::setResolveManager(ResolveManager *value)
 {
     resolveManager = value;
 }
 
-void NetManager::addTempConnections(const QList<QByteArray> &value)
+void NetworkManager::addTempConnections(const QList<QByteArray> &value)
 {
     tempConnections += value;
 }
 
-NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp)
+NetworkManager::NetworkManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp)
 {
     requestResponseMap = new QMap<QByteArray, int>();
 
-    // deviceId = BigNumber(readNetManagerIdentifier());
+    // deviceId = BigNumber(Network::currentIdentifier());
     accounts = accountList;
     this->actorIndex = actorIndex;
     // setupActorIndexConnections();
@@ -59,16 +59,16 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, c
     if (localIp.isEmpty())
     {
         local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
-        qDebug().noquote() << "[NetManager] Found local IP:" << local->ip().toString();
+        qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
     }
     else
     {
-        qDebug().noquote() << "[NetManager] Set local IP from settings:" << localIp;
+        qDebug().noquote() << "[NetworkManager] Set local IP from settings:" << localIp;
         local = new QNetworkAddressEntry();
         local->setIp(QHostAddress(localIp));
     }
 
-    qDebug() << "[NetManager] init net fun start" << (local != nullptr);
+    qDebug() << "[NetworkManager] init net fun start" << (local != nullptr);
 
     if (local != nullptr)
     {
@@ -104,55 +104,55 @@ NetManager::NetManager(AccountController *accountList, ActorIndex *actorIndex, c
     }
 }
 
-void NetManager::process()
+void NetworkManager::process()
 {
     startNetwork();
     QTimer *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &NetManager::checkConnectionsStatus);
+    connect(timer, &QTimer::timeout, this, &NetworkManager::checkConnectionsStatus);
     timer->start(5000);
 }
 
-void NetManager::showMessage(const QHostAddress &from, const QString &message)
+void NetworkManager::showMessage(const QHostAddress &from, const QString &message)
 {
     qDebug() << from.toIPv4Address() << " " << message;
 }
 
-void NetManager::resolverMessage(const QHostAddress &from, const QString &message)
+void NetworkManager::resolverMessage(const QHostAddress &from, const QString &message)
 {
     qDebug() << from.toIPv4Address() << " " << message;
 }
 
-void NetManager::connectTcpSocket(TcpSocketService *service)
+void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
-    // connect(this, &NetManager::sendMsg, service, &SocketService::sendMsg);
-    connect(service, &TcpSocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
-    // connect(service, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-    connect(service, &TcpSocketService::close, this, &NetManager::removeTcpConnection);
-    connect(service, &TcpSocketService::checkMe, this, &NetManager::checkMyIdentifier);
-    // connect(service, &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+    // connect(this, &NetworkManager::sendMsg, service, &SocketService::sendMsg);
+    connect(service, &TcpSocketService::clientDisconnected, this, &NetworkManager::removeTcpConnection);
+    // connect(service, &SocketService::MessageReceived, this, &NetworkManager::MessageReceived);
+    connect(service, &TcpSocketService::close, this, &NetworkManager::removeTcpConnection);
+    connect(service, &TcpSocketService::checkMe, this, &NetworkManager::checkMyIdentifier);
+    // connect(service, &SocketService::moveMe, this, &NetworkManager::MoveToDfsN);
 }
 
-void NetManager::disconnectTcpSocket(TcpSocketService *socket)
+void NetworkManager::disconnectTcpSocket(TcpSocketService *socket)
 {
-    disconnect(socket, &TcpSocketService::clientRemove, this, &NetManager::removeTcpConnection);
-    //    disconnect(this, &NetManager::sendMsg, socket, &SocketService::sendMsg);
-    disconnect(socket, &TcpSocketService::clientDisconnected, this, &NetManager::removeTcpConnection);
-    //    disconnect(socket, &SocketService::MessageReceived, this, &NetManager::MessageReceived);
-    //    disconnect(socket, &SocketService::moveMe, this, &NetManager::MoveToDfsN);
+    disconnect(socket, &TcpSocketService::clientRemove, this, &NetworkManager::removeTcpConnection);
+    //    disconnect(this, &NetworkManager::sendMsg, socket, &SocketService::sendMsg);
+    disconnect(socket, &TcpSocketService::clientDisconnected, this, &NetworkManager::removeTcpConnection);
+    //    disconnect(socket, &SocketService::MessageReceived, this, &NetworkManager::MessageReceived);
+    //    disconnect(socket, &SocketService::moveMe, this, &NetworkManager::MoveToDfsN);
 }
 
-void NetManager::connectWsService(WebSocketService *service)
+void NetworkManager::connectWsService(WebSocketService *service)
 {
     //    connect(service, &WebSocketService::resolveMessage,
     //            [this](QByteArray msg, SocketPair receiver) { MessageReceived(msg, receiver); });
-    connect(service, &WebSocketService::error, this, &NetManager::webSocketError);
-    connect(service, &WebSocketService::disconnected, this, &NetManager::removeWsConnection);
+    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
+    connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
 
     if (!wsConnections.contains(service))
         wsConnections.append(service);
 }
 
-void NetManager::removeConnection(const QString &identifier)
+void NetworkManager::removeConnection(const QString &identifier)
 {
     if (identifier.isEmpty())
         qFatal("Try remove with empty identifier");
@@ -169,7 +169,7 @@ void NetManager::removeConnection(const QString &identifier)
     searchAndRemove(wsConnections);
 }
 
-TcpSocketService NetManager::getConnectionByAddress(const QByteArray address) const
+TcpSocketService NetworkManager::getConnectionByAddress(const QByteArray address) const
 {
     for (const auto currentConnection : tcpConnections)
     {
@@ -181,12 +181,12 @@ TcpSocketService NetManager::getConnectionByAddress(const QByteArray address) co
     return TcpSocketService();
 }
 
-int NetManager::connectionsCount() const
+int NetworkManager::connectionsCount() const
 {
     return tcpConnections.length() + wsConnections.length();
 }
 
-NetManager::~NetManager()
+NetworkManager::~NetworkManager()
 {
     //    delete resolverService;
     delete upnpNet;
@@ -206,7 +206,7 @@ NetManager::~NetManager()
     emit finished();
 }
 
-void NetManager::checkConnectionsStatus()
+void NetworkManager::checkConnectionsStatus()
 {
     bool flag = false;
     std::for_each(tcpConnections.begin(), tcpConnections.end(),
@@ -220,7 +220,7 @@ void NetManager::checkConnectionsStatus()
         sendFromCache();
 }
 
-void NetManager::checkMyIdentifier()
+void NetworkManager::checkMyIdentifier()
 {
     QObject *sender = QObject::sender();
     TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
@@ -229,7 +229,7 @@ void NetManager::checkMyIdentifier()
     if (connection == nullptr)
         return;
 
-    if (net::readNetManagerIdentifier() == connection->identifier())
+    if (Network::currentIdentifier() == connection->identifier())
     {
         emit connection->close();
         removed = true;
@@ -268,7 +268,7 @@ void NetManager::checkMyIdentifier()
     //    emit connection->setActiveSignal(true);
 }
 
-void NetManager::startNetwork()
+void NetworkManager::startNetwork()
 {
     qDebug() << "[NetworkManager] Start servers...";
 
@@ -291,7 +291,7 @@ void NetManager::startNetwork()
 
     if (wsServer->listen(QHostAddress::Any, wsPort))
     {
-        connect(wsServer, &QWebSocketServer::newConnection, this, &NetManager::onNewWSConnection);
+        connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWSConnection);
         connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
             qDebug() << "[WS] Server error code:" << closeCode;
         });
@@ -306,15 +306,15 @@ void NetManager::startNetwork()
 #endif
 }
 
-void NetManager::startDiscovery()
+void NetworkManager::startDiscovery()
 {
-    qDebug() << "NetManager::startDiscovery()";
+    qDebug() << "NetworkManager::startDiscovery()";
     // discoveryService = new DiscoveryService(extPort, tcpPort, local);
     // ThreadPool::addThread(discoveryService);
     setupDiscoveryServiceConnections();
 }
 
-void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
+void NetworkManager::connectToServerByIpList(QList<QByteArray> ipList)
 {
     QByteArrayList idIpPair;
 
@@ -327,7 +327,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
         connectionIsActive = (getConnectionByAddress(idIpPair[1])).isActive();
 
         if (!connectionIsActive || currentId.isEmpty() || currentId == idIpPair[0]
-            || currentId == net::readNetManagerIdentifier())
+            || currentId == Network::currentIdentifier())
             continue;
 
         if (idIpPair.size() != 2)
@@ -340,7 +340,7 @@ void NetManager::connectToServerByIpList(QList<QByteArray> ipList)
     }
 }
 
-void NetManager::connectToNode(const QString &ip, Network::Protocol protocol)
+void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol)
 {
     if (connectionsCount() >= SIZE_OF_CONNECTIONS)
     {
@@ -369,28 +369,28 @@ void NetManager::connectToNode(const QString &ip, Network::Protocol protocol)
     }
 }
 
-void NetManager::connectToWebSocket(const QString &ip, quint16 port)
+void NetworkManager::connectToWebSocket(const QString &ip, quint16 port)
 {
     auto service = new WebSocketService(nullptr, this, actorIndex);
     service->open(QUrl(QString("ws://%1:%2").arg(ip).arg(port)));
     connectWsService(service);
 }
 
-void NetManager::setupServerServiceConnections()
+void NetworkManager::setupServerServiceConnections()
 {
     connect(serverService, &TcpServerService::newServerConnection, this,
-            &NetManager::addTcpConnectionFromServer, Qt::UniqueConnection);
-    connect(serverService, &TcpServerService::serverStatus, this, &NetManager::networkErrorChanged);
+            &NetworkManager::addTcpConnectionFromServer, Qt::UniqueConnection);
+    connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
 }
 
-void NetManager::setupDiscoveryServiceConnections()
+void NetworkManager::setupDiscoveryServiceConnections()
 {
     //    connect(discoveryService, &DiscoveryService::ClientDiscovered, this,
-    //            &NetManager::addConnectionFromPair);
+    //            &NetworkManager::addConnectionFromPair);
 }
 
-void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver, Config::Net::TypeSend typeSend)
+void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
+                                 const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
     Config::Net::TypeSend send;
 
@@ -464,8 +464,8 @@ void NetManager::sendMessage(const QByteArray &message, const unsigned int &msgT
     }
 }
 
-bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
-                               const QList<TcpSocketService *> list)
+bool NetworkManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
+                                   const QList<TcpSocketService *> list)
 {
     bool flag_result = true;
     bool value = 0;
@@ -489,8 +489,8 @@ bool NetManager::checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &han
     return flag_result;
 }
 
-void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver, Config::Net::TypeSend typeSend)
+void NetworkManager::saveToCache(const QByteArray &message, const unsigned int &msgType,
+                                 const SocketPair &receiver, Config::Net::TypeSend typeSend)
 {
     QFile file("tmp/network.cache");
     file.open(QFile::Append);
@@ -505,7 +505,7 @@ void NetManager::saveToCache(const QByteArray &message, const unsigned int &msgT
     file.close();
 }
 
-void NetManager::sendFromCache()
+void NetworkManager::sendFromCache()
 {
     QFile file("tmp/network.cache");
     if (!file.exists())
@@ -534,7 +534,7 @@ void NetManager::sendFromCache()
     }
 }
 
-void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+void *NetworkManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     QMutex mutex;
     mutex.lock();
@@ -548,20 +548,20 @@ void *NetManager::MessageReceived(const QByteArray &msg, const SocketPair &recei
     return nullptr;
 }
 
-void NetManager::upnpErrDis(QString msg)
+void NetworkManager::upnpErrDis(QString msg)
 {
     qCritical() << "NET MANAGER: UPnP Error:" << msg;
 }
 
-void NetManager::upnpErrNet(QString msg)
+void NetworkManager::upnpErrNet(QString msg)
 {
     qCritical() << "NET MANAGER: UPnP Error:" << msg;
 }
 
-TcpSocketService *NetManager::connectToTcpSocket(const QString &ip, quint16 port)
+TcpSocketService *NetworkManager::connectToTcpSocket(const QString &ip, quint16 port)
 {
     TcpSocketService *socket = new TcpSocketService(ip, port);
-    socket->setNetManager(this);
+    socket->setNetworkManager(this);
     tcpConnections.append(socket);
     connectTcpSocket(socket);
     qDebug().noquote().nospace() << "[NetworkManager] New TCP connection: " << ip << ":" << port;
@@ -571,7 +571,7 @@ TcpSocketService *NetManager::connectToTcpSocket(const QString &ip, quint16 port
     return socket;
 }
 
-void NetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
+void NetworkManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 {
     if (connectionsCount() >= SIZE_OF_CONNECTIONS)
     {
@@ -581,14 +581,14 @@ void NetManager::addTcpConnectionFromServer(qint64 socketDescriptor)
     }
 
     TcpSocketService *socket = new TcpSocketService(socketDescriptor);
-    socket->setNetManager(this);
+    socket->setNetworkManager(this);
     tcpConnections.append(socket);
     connectTcpSocket(socket);
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(socket);
 }
 
-void NetManager::removeTcpConnection()
+void NetworkManager::removeTcpConnection()
 {
     QObject *sender = QObject::sender();
 
@@ -602,7 +602,7 @@ void NetManager::removeTcpConnection()
     checkConnectionsStatus();
 }
 
-void NetManager::removeWsConnection()
+void NetworkManager::removeWsConnection()
 {
     if (QObject::sender() == nullptr)
         return;
@@ -613,7 +613,7 @@ void NetManager::removeWsConnection()
     service->deleteLater();
 }
 
-void NetManager::webSocketError(Network::SocketServiceError error, QString errorData)
+void NetworkManager::webSocketError(Network::SocketServiceError error, QString errorData)
 {
     if (QObject::sender() == nullptr)
         return;
@@ -625,13 +625,13 @@ void NetManager::webSocketError(Network::SocketServiceError error, QString error
         emit onWebSocketError(error, service->identifier(), errorData);
 }
 
-QString NetManager::localIp()
+QString NetworkManager::localIp()
 {
     return local->ip().toString();
 }
 
-void NetManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
-                      Config::Net::TypeSend typeSend)
+void NetworkManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
+                          Config::Net::TypeSend typeSend)
 {
     Messages::BaseMessage msg;
     msg.type = msgType;
@@ -640,17 +640,17 @@ void NetManager::send(const QByteArray &data, const unsigned int &msgType, const
     sendMessage(message, msgType, receiver, typeSend);
 }
 
-void NetManager::signMessage(BaseMessage &message) const
+void NetworkManager::signMessage(BaseMessage &message) const
 {
     message.calcDigSig(*accounts->getMainActor());
 }
 
-QByteArray NetManager::calcHash(const Messages::IMessage &message) const
+QByteArray NetworkManager::calcHash(const Messages::IMessage &message) const
 {
     return Utils::calcKeccak(message.serialize());
 }
 
-void NetManager::createNewConnectionsFromList(const QByteArray &message)
+void NetworkManager::createNewConnectionsFromList(const QByteArray &message)
 {
     Messages::ConnectionsMessage msg;
     msg = message;
@@ -667,7 +667,7 @@ void NetManager::createNewConnectionsFromList(const QByteArray &message)
     }
 }
 
-void NetManager::onNewWSConnection()
+void NetworkManager::onNewWSConnection()
 {
     auto ws = wsServer->nextPendingConnection();
     if (ws == nullptr)
@@ -684,17 +684,17 @@ void NetManager::onNewWSConnection()
     emit newSocket();
 }
 
-quint16 NetManager::getServerPort() const
+quint16 NetworkManager::getServerPort() const
 {
     return tcpPort;
 }
 
-QNetworkAddressEntry *NetManager::getLocal() const
+QNetworkAddressEntry *NetworkManager::getLocal() const
 {
     return local;
 }
 
-QByteArray NetManager::getSerializedConnectionList() const
+QByteArray NetworkManager::getSerializedConnectionList() const
 {
     QList<QByteArray> connectionsList;
 
@@ -702,7 +702,7 @@ QByteArray NetManager::getSerializedConnectionList() const
     {
         if (!connection->isActive())
             continue;
-        if (net::readNetManagerIdentifier() == connection->identifier())
+        if (Network::currentIdentifier() == connection->identifier())
             // if it equivalent to my indetificator
             continue;
         if (connection->ip() == this->getLocal()->ip().toString().toLocal8Bit())
@@ -716,7 +716,7 @@ QByteArray NetManager::getSerializedConnectionList() const
     return Serialization::serialize(connectionsList);
 }
 
-void NetManager::checkOnValidConnection(QByteArray id, QByteArray address)
+void NetworkManager::checkOnValidConnection(QByteArray id, QByteArray address)
 {
     QList<QByteArray> idAddressPair;
     for (const auto &connection : qAsConst(tempConnections))

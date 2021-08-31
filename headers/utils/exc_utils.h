@@ -74,10 +74,8 @@ enum SocketServiceError
     DuplicateIdentifier = 4,
 };
 Q_ENUM_NS(SocketServiceError)
-} // namespace Network
 
-namespace net {
-[[maybe_unused]] static QByteArray readNetManagerIdentifier()
+[[maybe_unused]] static QByteArray currentIdentifier()
 {
     // static QByteArray identifier;
     // if (!identifier.isEmpty())
@@ -89,8 +87,8 @@ namespace net {
     file.close();
     return identifier;
 }
+} // namespace Network
 
-} // namespace net
 class Transaction;
 namespace storedSpace {
 

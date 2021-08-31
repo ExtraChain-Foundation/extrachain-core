@@ -33,27 +33,27 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
-    netManager = new NetManager(accController, actorIndex, localIp);
+    m_networkManager = new NetworkManager(accController, actorIndex, localIp);
     subscribeController = new SubscribeController();
     subscribeController->setExtraChainNode(this);
     actorIndex->setAccController(accController);
-    ThreadPool::addThread(netManager);
+    ThreadPool::addThread(m_networkManager);
     //    this->thread()->sleep(1);
-    blockchain = new Blockchain(accController, fileMode);
-    accController->setBlockchain(blockchain);
-    txManager = new TransactionManager(accController, blockchain, this);
+    m_blockchain = new Blockchain(accController, fileMode);
+    accController->setBlockchain(m_blockchain);
+    txManager = new TransactionManager(accController, m_blockchain, this);
     prProfile->setAccountController(accController);
     chatManager = new ChatManager(accController, actorIndex);
-    chatManager->setNetManager(netManager);
+    chatManager->setNetworkManager(m_networkManager);
     //    contractManager = new ContractManager(accController, blockchain);
     dfs = new Dfs(actorIndex, accController, localIp);
 
-    resolveManager = new ResolveManager(actorIndex, blockchain, netManager, txManager, accController);
+    resolveManager = new ResolveManager(actorIndex, m_blockchain, m_networkManager, txManager, accController);
     resolveManager->setNode(this);
     resolveManager->setChatManager(chatManager);
-    blockchain->setTxManager(txManager);
-    netManager->setResolveManager(resolveManager);
-    //    dfs->initDFSNetManager(resolveManager);
+    m_blockchain->setTxManager(txManager);
+    m_networkManager->setResolveManager(resolveManager);
+    // dfs->initDfsNetwork(resolveManager);
     prProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
     connectSignals();
@@ -62,7 +62,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
 
-    ThreadPool::addThread(blockchain);
+    ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(actorIndex);
     ThreadPool::addThread(txManager);
     // ThreadPool::addThread(contractManager);
@@ -95,7 +95,7 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 #endif
     }
 
-    if (blockchain->getRecords() <= 0)
+    if (m_blockchain->getRecords() <= 0)
     {
         auto first = *accController->getMainActor();
         QByteArray td = first.key()->sign("test");
@@ -105,8 +105,8 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
         QMap<ActorId, BigNumber> tm;
         tm.insert(ActorId(), 0);
-        GenesisBlock tmp = blockchain->createGenesisBlock(first, tm);
-        blockchain->addBlock(tmp, true);
+        GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
+        m_blockchain->addBlock(tmp, true);
 
         // TODO: as console arguments: isCreate, name, color
         emit generateSmartContract("1000", "Default Coin", first.id().toByteArray(),
@@ -137,11 +137,11 @@ void ExtraChainNode::initConsoleToken(Transaction tx)
     Q_UNUSED(tx)
 #ifdef ECONSOLE
     QByteArray data = Serialization::serialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
-    Block lastBlock = blockchain->getLastBlock();
+    Block lastBlock = m_blockchain->getLastBlock();
     Block block(data, lastBlock);
-    blockchain->signBlock(block);
+    m_blockchain->signBlock(block);
     qDebug() << "Created block:" << block.getIndex();
-    blockchain->addBlock(block);
+    m_blockchain->addBlock(block);
 #endif
 }
 
@@ -152,23 +152,24 @@ void ExtraChainNode::showMessage(QString from, QString message)
 
 void ExtraChainNode::connectResolveManager()
 {
-    //    connect(netManager, &NetManager::MsgReceived, resolveManager, &ResolveManager::resolveMessage);
-    //    connect(resolveManager, &ResolveManager::coinRequest, this, &ExtraChainNode::coinResponse);
-    //    connect(dfs->getDfsNetManager(), &DFSNetManager::newMessage, resolveManager,
+    //    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
+    //    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
+    //    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
+    //    resolveManager,
     //            &ResolveManager::resolveMessage);
     // TODO: move
-    //    connect(resolveManager, &ResolveManager::sendMsg, netManager, &NetManager::sendMessage);
+    //    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
 
     connect(this, &ExtraChainNode::sendMsg, resolveManager, &ResolveManager::registrateMsg);
     connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
-    connect(blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+    connect(m_blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
 void ExtraChainNode::connectSmContractManager()
 {
-    //    connect(smContractController, &SmartContractManager::verifyActor, netManager,
-    //    &NetManager::NewActor); TODO!!!
+    //    connect(smContractController, &SmartContractManager::verifyActor, m_networkManager,
+    //    &networkManager::NewActor); TODO!!!
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
     //            &ExtraChainNode::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
@@ -187,8 +188,8 @@ void ExtraChainNode::connectSmContractManager()
     connect(smContractController, &SmartContractManager::initConsoleToken, this,
             &ExtraChainNode::initConsoleToken);
 
-    // connect(smContractController, &SmartContractManager::sendCurrentToken,netManager,
-    // &NetManager::NewActor);
+    // connect(smContractController, &SmartContractManager::sendCurrentToken, m_networkManager,
+    // &networkManager::NewActor);
 }
 
 void ExtraChainNode::connectTxManager()
@@ -199,8 +200,8 @@ void ExtraChainNode::connectTxManager()
 
 ExtraChainNode::~ExtraChainNode()
 {
-    // netManager->quit();
-    // delete netManager;
+    // m_networkManager->quit();
+    // delete networkManager;
     delete txManager;
     // delete blockchain;
     delete accController;
@@ -211,14 +212,14 @@ ExtraChainNode::~ExtraChainNode()
 //    return dfsIndex;
 //}
 
-Blockchain *ExtraChainNode::getBlockchain()
+Blockchain *ExtraChainNode::blockchain()
 {
-    return blockchain;
+    return m_blockchain;
 }
 
-NetManager *ExtraChainNode::getNetManager()
+NetworkManager *ExtraChainNode::networkManager()
 {
-    return netManager;
+    return m_networkManager;
 }
 
 Transaction ExtraChainNode::createTransaction(Transaction tx)
@@ -236,7 +237,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
                         .arg(tx.toString(), QString(actor.id().toByteArray()));
 
         // 1) set prev block id
-        BigNumber lastBlockId = blockchain->getLastBlock().getIndex();
+        BigNumber lastBlockId = m_blockchain->getLastBlock().getIndex();
         if (lastBlockId.isEmpty())
         {
             qDebug() << QString("Warning: can not create tx:[%1]. There no last block in "
@@ -262,7 +263,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         else
         {
             BigNumber amountTemp(tx.getAmount());
-            if (blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
+            if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
                 >= 0)
             {
                 // send with fee
@@ -397,7 +398,7 @@ void ExtraChainNode::getAllActors()
 
 void ExtraChainNode::getAllActorsTimerCall()
 {
-    if (accController->getAccountCount() > 0 && netManager->connectionsCount() > 0)
+    if (accController->getAccountCount() > 0 && m_networkManager->connectionsCount() > 0)
     {
         ActorId actorId = accController->getMainActor()->id();
 
@@ -406,7 +407,7 @@ void ExtraChainNode::getAllActorsTimerCall()
     }
 }
 
-void ExtraChainNode::createNetManagerIdentifier()
+void ExtraChainNode::createNetworkIdentifier()
 {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
@@ -463,12 +464,13 @@ void ExtraChainNode::connectActorIndex()
 void ExtraChainNode::dfsConnection()
 {
     // init dfs for user
-    // connect(this, &ExtraChainNode::ready, netManager, &NetManager::startNetwork);
+    // connect(this, &ExtraChainNode::ready, networkManager, &NetworkManager::startNetwork);
     connect(this, &ExtraChainNode::ready, dfs, &Dfs::startDFS);
     connect(accController, &AccountController::initDfs, dfs, &Dfs::initMyLocalStorage);
     connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
-    //    connect(netManager, &NetManager::newDfsSocket, dfsNetManager, &DFSNetManager::appendSocket);
+    //    connect(networkManager, &NetworkManager::newDfsSocket, dfsNetworkManager,
+    //    &DfsNetworkManager::appendSocket);
 }
 
 void ExtraChainNode::connectSignals()
@@ -485,15 +487,15 @@ void ExtraChainNode::connectSignals()
     connectSmContractManager();
     dfsConnection();
 
-    connect(netManager, &NetManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
 #ifdef ECONSOLE
     // temp for tests
-    connect(netManager, &NetManager::newSocket, blockchain, &Blockchain::updateBlockchain);
+    connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
 #endif
-    connect(this, &ExtraChainNode::removeConnection, netManager, &NetManager::removeConnection);
+    connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
     connect(this, &ExtraChainNode::removeConnection, dfs, &Dfs::removeConnection);
     connect(this, &ExtraChainNode::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
-    connect(accController, &AccountController::loadWallets, blockchain, &Blockchain::updateBlockchain);
+    connect(accController, &AccountController::loadWallets, m_blockchain, &Blockchain::updateBlockchain);
 }
 
 void ExtraChainNode::prepareFolders()
@@ -508,12 +510,12 @@ void ExtraChainNode::prepareFolders()
     FileSystem::createFolderIfNotExist(DataStorage::BLOCKCHAIN_INDEX + "/"
                                        + DataStorage::BLOCK_INDEX_FOLDER_NAME);
     if (!QFile(".settings").exists())
-        createNetManagerIdentifier();
+        createNetworkIdentifier();
 }
 
 int ExtraChainNode::getClientListCount()
 {
-    return netManager->getTcpConnections().size() && netManager->getWsConnections().size();
+    return m_networkManager->getTcpConnections().size() && m_networkManager->getWsConnections().size();
 }
 
 AccountController *ExtraChainNode::getAccountController() const
@@ -552,7 +554,7 @@ void ExtraChainNode::logOut()
 //    qDebug() << "ExtraChainNode::makeContractFirstTransaction";
 //    //    contract.setFirst_transaction_hash(
 //    //        createTransaction(BigNumber(0), contract.getAmount()).getHash());
-//    netManager->shareContract(contract);
+//    m_networkManager->shareContract(contract);
 //}
 
 // void ExtraChainNode::makeContractFinalTransaction(Contract &contract)
@@ -561,7 +563,7 @@ void ExtraChainNode::logOut()
 //        createTransaction(contract.getPerformer(), contract.getAmount()).getHash());
 //    qDebug() << contract.serialize();
 //    contract.setIsCompleted(true);
-//    netManager->shareContract(contract);
+//    m_networkManager->shareContract(contract);
 //}
 
 void ExtraChainNode::tempareSlotForActors()
@@ -597,7 +599,7 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId pl
             return;
         }
 
-        if (blockchain->getUserBalance(mainActor->id(), ActorId(0)) < amount)
+        if (m_blockchain->getUserBalance(mainActor->id(), ActorId(0)) < amount)
         {
             qInfo().noquote() << "Not enough coins on wallet" << mainActor;
             return;

@@ -24,7 +24,7 @@
 #include "dfs/packages/headers/dfs_changes.h"
 #include "dfs/packages/headers/all.h"
 #include "dfs/managers/headers/sender.h"
-#include "dfs/managers/headers/dfsnetmanager.h"
+#include "dfs/managers/headers/dfs_networkmanager.h"
 #include "utils/exc_utils.h"
 #include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
@@ -45,11 +45,13 @@ class Dfs : public QObject
 
 private:
     // send from nodeManger
-    AccountController *accountControler;
+    AccountController *accountController;
     ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
     Sender *sender = nullptr;
     bool myQuickMode = false;
+    DfsNetworkManager *m_networkManager = nullptr;
+    QString dfsNetLocalIp;
     // DFSResolver *resolver;
 
 public slots:
@@ -62,7 +64,7 @@ public slots:
     /*DFS 1.5*/
 
 private:
-    void initDFS(const QByteArray &userId);
+    void initDfs(const QByteArray &userId);
     void saveToDFS(const QString &path, const QByteArray &data,
                    const DfsStruct::Type &type = DfsStruct::Type::Image);
     void saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored);
@@ -73,16 +75,14 @@ private:
     void getDFSStatus();
 
 public:
-    DFSNetManager *dfsNetManager = nullptr;
-    QString dfsNetLocalIp;
-    Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp = "",
+    Dfs(ActorIndex *actorIndex, AccountController *accController, const QString &localIp = "",
         QObject *parent = nullptr);
     ~Dfs();
 
 public:
-    void initDFSNetManager();
-    DFSNetManager *getDfsNetManager() const;
-    void setDfsNetManager(DFSNetManager *value);
+    void initDfsNetwork();
+    DfsNetworkManager *networkManager() const;
+    void setNetworkManager(DfsNetworkManager *value);
     void fileResponse(const QString filePath, const SocketPair &receiver);
     void sendFragments(QString path, QByteArray frags, SocketPair receiver);
     Sender *getSender() const;

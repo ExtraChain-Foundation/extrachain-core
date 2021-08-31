@@ -5,7 +5,7 @@
 #include "network/socket_pair.h"
 #include "utils/exc_utils.h"
 
-class NetManager;
+class NetworkManager;
 class ActorIndex;
 
 class WebSocketService : public QObject
@@ -13,7 +13,7 @@ class WebSocketService : public QObject
     Q_OBJECT
 
 public:
-    explicit WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex,
+    explicit WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager, ActorIndex *newActorIndex,
                               QObject *parent = nullptr);
     WebSocketService(const WebSocketService &);
     ~WebSocketService();
@@ -54,7 +54,7 @@ private:
     void parseError(const QString &message);
     void closeSocket();
 
-    NetManager *networkManager = nullptr;
+    NetworkManager *networkManager = nullptr;
     ActorIndex *actorIndex;
     QWebSocket *m_ws = nullptr;
     QString m_identifier;

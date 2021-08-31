@@ -40,7 +40,7 @@ QMap<QByteArray, int> *ResolveManager::getRequestResponseMap() const
     return requestResponseMap;
 }
 
-ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
+ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetworkManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler,
                                QObject *parent)
     : QObject(parent)
@@ -59,7 +59,7 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
 ResolveManager::~ResolveManager()
 {
 
-    //    disconnect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
+    //    disconnect(this, &ResolveManager::socketSendMsg, networkManager, &NetworkManager::sendMsg);
     disconnect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     disconnect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
     emit finished();
@@ -170,7 +170,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     if (msgType != Messages::GeneralResponse::getActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
-    //    qDebug() << "NetManager: send " << msgType;
+    //    qDebug() << "NetworkManager: send " << msgType;
     // if (msgType == Messages::GeneralResponse::getAllActorsResponse)
     //     qDebug() << "306 is sending";
     //    sendMessage(message, msgType, receiver);

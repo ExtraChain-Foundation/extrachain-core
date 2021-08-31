@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DFSNETMANAGER_H
-#define DFSNETMANAGER_H
+#ifndef DFSNETWORKMANAGER_H
+#define DFSNETWORKMANAGER_H
 
 #include "network/network_manager.h"
 #include "dfs/packages/headers/all.h"
@@ -33,7 +33,7 @@ static const short DFS_RESOLVERS_POOL_SIZE = 10;
 
 class Dfs;
 
-class DFSNetManager : public NetManager
+class DfsNetworkManager : public NetworkManager
 {
     Q_OBJECT
 
@@ -46,8 +46,8 @@ private:
     TcpServerService *serverService;
 
 public:
-    DFSNetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp);
-    ~DFSNetManager() override;
+    DfsNetworkManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp);
+    ~DfsNetworkManager() override;
 
 private:
     void connectResolver(DFSResolverService *resolver);
@@ -71,4 +71,4 @@ private slots:
     void checkConnectionsStatus() override;
 };
 
-#endif // DFSNETMANAGER_H
+#endif // DFSNETWORKMANAGER_H

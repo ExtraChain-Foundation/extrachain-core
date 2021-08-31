@@ -159,7 +159,7 @@ public slots:
 
 signals:
     /**
-     * @brief sendMessage to NetManager slot: sendMessage
+     * @brief sendMessage to NetworkManager slot: sendMessage
      * @param data
      * @param type
      */

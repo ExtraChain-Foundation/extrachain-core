@@ -43,11 +43,11 @@ class ResolveManager;
 #include "network/packages/service/all_messages.h"
 
 /**
- * @brief The NetManager class
+ * @brief The NetworkManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
 // static QMutex mutex;
-class NetManager : public QObject
+class NetworkManager : public QObject
 {
     Q_OBJECT
     const int maxValueTryConnections = 3;
@@ -85,8 +85,8 @@ private:
     QMap<QByteArray, int> handler = {};
 
 public:
-    NetManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp = "");
-    ~NetManager();
+    NetworkManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp = "");
+    ~NetworkManager();
 
     void showMessage(const QHostAddress &from, const QString &message);
 
@@ -112,7 +112,7 @@ public slots:
     void removeConnection(const QString &identifier);
 
 protected:
-    NetManager *getMe();
+    NetworkManager *getMe();
 
 signals:
     void finished();
@@ -150,7 +150,7 @@ protected:
     void connectToWebSocket(const QString &ip, quint16 port);
 
     /**
-     * @brief NetManager::checkMsgCount
+     * @brief NetworkManager::checkMsgCount
      * @param msg
      * @return
      */

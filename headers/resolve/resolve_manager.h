@@ -20,7 +20,7 @@
 #ifndef RESOLVE_MANAGER_H
 #define RESOLVE_MANAGER_H
 
-class NetManager;
+class NetworkManager;
 class ResolverService;
 class ExtraChainNode;
 class ChatManager;
@@ -52,14 +52,14 @@ private:
 private:
     ActorIndex *actorIndex;
     Blockchain *blockchain;
-    NetManager *networkManager;
+    NetworkManager *networkManager;
     TransactionManager *txManager;
     AccountController *accountControler;
     ExtraChainNode *node;
     ChatManager *chatManager;
 
 public:
-    ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
+    ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetworkManager *networkManager,
                    TransactionManager *txManager, AccountController *accountControler,
                    QObject *parent = nullptr);
     ~ResolveManager();

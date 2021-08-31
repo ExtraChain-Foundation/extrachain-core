@@ -1,13 +1,13 @@
 #include "network/websocket_service.h"
 
-#include "dfs/managers/headers/dfsnetmanager.h"
+#include "dfs/managers/headers/dfs_networkmanager.h"
 
 #ifndef EXTRACHAIN_CMAKE
 #include "preconfig.h"
 #endif
 
-WebSocketService::WebSocketService(QWebSocket *ws, NetManager *newNetworkManager, ActorIndex *newActorIndex,
-                                   QObject *parent)
+WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager,
+                                   ActorIndex *newActorIndex, QObject *parent)
     : QObject(parent)
 {
     networkManager = newNetworkManager;
@@ -136,7 +136,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
             return;
         }
 
-        if (m_identifier == net::readNetManagerIdentifier())
+        if (m_identifier == Network::currentIdentifier())
         {
             sendError(Network::SocketServiceError::IncompatibleIdentifier, "");
             closeSocket();
@@ -242,7 +242,7 @@ void WebSocketService::sendFirstMessage()
     QJsonObject json;
     json["firstId"] = actorIndex->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
-    json["identifier"] = QString(net::readNetManagerIdentifier());
+    json["identifier"] = QString(Network::currentIdentifier());
     QByteArray jsonBytes = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     m_ws->sendTextMessage(jsonBytes);
 }
@@ -262,7 +262,7 @@ const QString &WebSocketService::ip() const
 
 quint16 WebSocketService::port() const
 {
-    if (m_ws->peerPort() != 2233 && m_ws->peerPort() != 2234)
+    if (m_ws->peerPort() != networkManager->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
@@ -270,7 +270,7 @@ quint16 WebSocketService::port() const
 
 quint16 WebSocketService::serverPort() const
 {
-    if (m_ws->peerPort() == 2233 || m_ws->peerPort() == 2234)
+    if (m_ws->peerPort() == networkManager->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();

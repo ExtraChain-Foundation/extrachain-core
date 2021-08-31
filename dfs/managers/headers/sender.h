@@ -29,15 +29,15 @@
 
 #ifndef DFS_NETWORK_MANAGER_DEF
 #define DFS_NETWORK_MANAGER_DEF
-class DFSNetManager;
-#include "dfs/managers/headers/dfsnetmanager.h"
+class DfsNetworkManager;
+#include "dfs/managers/headers/dfs_networkmanager.h"
 #endif
 
 class Sender : public QObject
 {
     Q_OBJECT
     const int data_offset = DistFileSystem::dataSize;
-    DFSNetManager *NetManager = nullptr;
+    DfsNetworkManager *m_networkManager = nullptr;
 
 public:
     /**
@@ -45,7 +45,7 @@ public:
      * @param userId
      */
     Sender(QObject *parent = nullptr);
-    void setNetManager(DFSNetManager *value);
+    void setNetworkManager(DfsNetworkManager *value);
     /**
      * @brief Send file
      * @param filePath
@@ -70,9 +70,9 @@ public:
             return;
         }
 
-        if (NetManager != nullptr)
+        if (m_networkManager != nullptr)
         {
-            NetManager->send(dfsMessage.serialize(), type, receiver, typeSend);
+            m_networkManager->send(dfsMessage.serialize(), type, receiver, typeSend);
         }
     }
 
