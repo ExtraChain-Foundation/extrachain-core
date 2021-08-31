@@ -76,6 +76,21 @@ void WebSocketService::closeSocket()
     emit disconnected();
 }
 
+int WebSocketService::bytesCompressed() const
+{
+    return m_bytesCompressed;
+}
+
+int WebSocketService::bytesOutgoing() const
+{
+    return m_bytesOutgoing;
+}
+
+int WebSocketService::bytesIncoming() const
+{
+    return m_bytesIncoming;
+}
+
 void WebSocketService::sendError(Network::SocketServiceError code, const QString &errorData)
 {
     // qDebug() << "[WS] Error" << int(code);
@@ -158,6 +173,8 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     SocketPair pair(m_ip.toStdString(), port());
     pair.setIdentifier(m_identifier.toLatin1());
     auto mess = qUncompress(message);
+    m_bytesCompressed += mess.length() - message.length();
+    m_bytesIncoming += message.length();
     networkManager->MessageReceived(mess, pair);
 }
 
@@ -171,10 +188,10 @@ void WebSocketService::sendMessage(const QByteArray &data)
     if (!data.length())
         qFatal("[WS] Error send size");
 
-    // static int tempSizeDiff = 0;
     auto compress = qCompress(data);
-    // tempSizeDiff += data.length() - compress.length();
-    // qDebug() << "[WS] Size diff:" << tempSizeDiff;
+    m_bytesCompressed += data.length() - compress.length();
+    m_bytesOutgoing += compress.length();
+
     auto length = m_ws->sendBinaryMessage(compress);
     Q_UNUSED(length)
     // m_ws->flush();

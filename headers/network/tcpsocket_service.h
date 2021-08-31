@@ -120,5 +120,18 @@ public:
     void setIdentifier(const QString &value);
     SocketPair getSocketPair();
     void setNetManager(NetManager *value);
+
+    int bytesIncoming() const
+    {
+        return -1;
+    }
+    int bytesOutgoing() const
+    {
+        return -1;
+    }
+    int bytesCompressed() const
+    {
+        return -1;
+    }
 };
 #endif // SOCKET_SERVICE_H

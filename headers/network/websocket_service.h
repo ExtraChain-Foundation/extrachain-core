@@ -32,6 +32,10 @@ public:
     QString protocolString() const;
     Network::Protocol protocol() const;
 
+    int bytesIncoming() const;
+    int bytesOutgoing() const;
+    int bytesCompressed() const;
+
 signals:
     void send(const QByteArray &data);
     void disconnected();
@@ -56,6 +60,10 @@ private:
     QString m_identifier;
     QString m_ip;
     bool activated = false;
+
+    int m_bytesIncoming = 0;
+    int m_bytesOutgoing = 0;
+    int m_bytesCompressed = 0;
 };
 
 #endif // WEBSOCKETSERVICE_H
