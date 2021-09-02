@@ -99,7 +99,7 @@ private:
     void connectTcpSocket(TcpSocketService *service);
     void disconnectTcpSocket(TcpSocketService *connection);
     void connectWsService(WebSocketService *ws);
-    TcpSocketService getConnectionByAddress(const QByteArray address) const;
+    TcpSocketService *getConnectionByAddress(const QByteArray address) const;
 
 public:
     TcpServerService *getServerService();
@@ -186,7 +186,6 @@ public slots:
     void connectToNode(const QString &ip, Network::Protocol protocol);
 
     void process();
-    void connectToServerByIpList(QList<QByteArray> ipList);
 
     /**
      * @brief checkMyIdentifier

@@ -125,7 +125,6 @@ void NetworkManager::resolverMessage(const QHostAddress &from, const QString &me
 void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
     // connect(this, &NetworkManager::sendMsg, service, &SocketService::sendMsg);
-    connect(service, &TcpSocketService::clientDisconnected, this, &NetworkManager::removeTcpConnection);
     // connect(service, &SocketService::MessageReceived, this, &NetworkManager::MessageReceived);
     connect(service, &TcpSocketService::close, this, &NetworkManager::removeTcpConnection);
     connect(service, &TcpSocketService::checkMe, this, &NetworkManager::checkMyIdentifier);
@@ -134,11 +133,12 @@ void NetworkManager::connectTcpSocket(TcpSocketService *service)
 
 void NetworkManager::disconnectTcpSocket(TcpSocketService *socket)
 {
-    disconnect(socket, &TcpSocketService::clientRemove, this, &NetworkManager::removeTcpConnection);
+    //    disconnect(socket, &TcpSocketService::clientRemove, this, &NetworkManager::removeTcpConnection);
     //    disconnect(this, &NetworkManager::sendMsg, socket, &SocketService::sendMsg);
-    disconnect(socket, &TcpSocketService::clientDisconnected, this, &NetworkManager::removeTcpConnection);
-    //    disconnect(socket, &SocketService::MessageReceived, this, &NetworkManager::MessageReceived);
-    //    disconnect(socket, &SocketService::moveMe, this, &NetworkManager::MoveToDfsN);
+    //    disconnect(socket, &TcpSocketService::clientDisconnected, this,
+    //    &NetworkManager::removeTcpConnection); disconnect(socket, &SocketService::MessageReceived, this,
+    //    &NetworkManager::MessageReceived); disconnect(socket, &SocketService::moveMe, this,
+    //    &NetworkManager::MoveToDfsN);
 }
 
 void NetworkManager::connectWsService(WebSocketService *service)
@@ -169,16 +169,17 @@ void NetworkManager::removeConnection(const QString &identifier)
     searchAndRemove(wsConnections);
 }
 
-TcpSocketService NetworkManager::getConnectionByAddress(const QByteArray address) const
+TcpSocketService *NetworkManager::getConnectionByAddress(const QByteArray address) const
 {
     for (const auto currentConnection : tcpConnections)
     {
         if (currentConnection == nullptr)
             continue;
         if (currentConnection->ip() == address)
-            return *currentConnection;
+            return currentConnection;
     }
-    return TcpSocketService();
+    qFatal("TcpSocketService == nullptr");
+    return nullptr;
 }
 
 int NetworkManager::connectionsCount() const
@@ -188,21 +189,20 @@ int NetworkManager::connectionsCount() const
 
 NetworkManager::~NetworkManager()
 {
-    //    delete resolverService;
+    // delete resolverService;
     delete upnpNet;
     delete upnpDis;
     delete local;
     delete serverService;
-    //    delete discoveryService;
+    // delete discoveryService;
     for (auto delSock : qAsConst(tcpConnections))
     {
-        //        delSock->get
+        // delSock->get
         delSock->socket()->disconnectFromHost();
         delete delSock;
     }
+    // TODO: remove WS
     // qDeleteAll(wsList.begin(), wsList.end());
-    if (QFile(".handlerFile").exists())
-        QFile(".handlerFile").remove();
     emit finished();
 }
 
@@ -314,32 +314,6 @@ void NetworkManager::startDiscovery()
     setupDiscoveryServiceConnections();
 }
 
-void NetworkManager::connectToServerByIpList(QList<QByteArray> ipList)
-{
-    QByteArrayList idIpPair;
-
-    bool connectionIsActive;
-    QByteArray currentId;
-    for (const auto &ip : qAsConst(ipList))
-    {
-        idIpPair = Serialization::deserialize(ip);
-        currentId = (getConnectionByAddress(idIpPair[1])).identifier().toLatin1();
-        connectionIsActive = (getConnectionByAddress(idIpPair[1])).isActive();
-
-        if (!connectionIsActive || currentId.isEmpty() || currentId == idIpPair[0]
-            || currentId == Network::currentIdentifier())
-            continue;
-
-        if (idIpPair.size() != 2)
-        {
-            qDebug() << "[Error][" << __LINE__ << "][" << __FILE__ << "]" << __FUNCTION__ << "] size!=2";
-            continue;
-        }
-
-        connectToTcpSocket(idIpPair[1], tcpPort);
-    }
-}
-
 void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol)
 {
     if (connectionsCount() >= SIZE_OF_CONNECTIONS)
@@ -351,10 +325,10 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
-    qDebug().noquote() << QString("[%3NetworkManager] Try connect to %1, protocol: %2")
+    qDebug().noquote() << QString("[NetworkManager] Try connect to %1, protocol: %2, port: %3")
                               .arg(ip)
                               .arg(int(protocol))
-                              .arg(tcpPort == 2222 ? "" : "DFS ");
+                              .arg(protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
 
     using Network::Protocol;
     switch (protocol)
@@ -363,7 +337,6 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
         connectToTcpSocket(ip.simplified(), tcpPort);
         break;
     case Protocol::WebSocket:
-
         connectToWebSocket(ip.simplified(), wsPort);
         break;
     }
@@ -451,7 +424,7 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         if (!isSend)
             continue;
         if (tcp->isActive())
-            tcp->distMsg(message, receiver);
+            emit tcp->send(message);
     }
 
     for (const auto &ws : qAsConst(wsConnections))

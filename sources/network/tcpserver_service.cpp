@@ -40,7 +40,6 @@ void TcpServerService::startListen()
 
 TcpServerService::~TcpServerService()
 {
-    //    active = false;
     emit finished();
 }
 
