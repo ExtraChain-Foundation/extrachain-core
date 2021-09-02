@@ -591,7 +591,11 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
             socket->bind(entry.ip());
             socket->connectToHost("8.8.8.8", 53);
             if (!socket->waitForConnected(1000))
-                continue;
+            {
+                socket->connectToHost("1.1.1.1", 53);
+                if (!socket->waitForConnected(1000))
+                    continue;
+            }
 
             if (localIpNotConnect.contains(entry.ip()))
             {
