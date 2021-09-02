@@ -18,6 +18,7 @@
  */
 
 #include "managers/thread_pool.h"
+#include <QThread>
 
 QThread *ThreadPool::addThread(QObject *worker)
 {
