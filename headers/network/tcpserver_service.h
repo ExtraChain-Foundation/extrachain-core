@@ -43,12 +43,11 @@ private:
     quint16 port;
 
 public:
-    TcpServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent = nullptr);
+    explicit TcpServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent = nullptr);
     ~TcpServerService() override;
 
 public slots:
-    // void run() override;
-    int process();
+    void process();
 
 public:
     void startListen();

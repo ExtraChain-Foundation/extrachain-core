@@ -395,8 +395,7 @@ void NetworkManager::messageReceived(const QByteArray &msg, const SocketPair &re
 
 void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port)
 {
-    TcpSocketService *socket = new TcpSocketService(ip, port);
-    socket->setNetworkManager(this);
+    TcpSocketService *socket = new TcpSocketService(ip, this);
     m_tcpConnections.append(socket);
     connectTcpSocket(socket);
     qDebug().noquote().nospace() << "[NetworkManager] New TCP connection: " << ip << ":" << port;
@@ -412,8 +411,7 @@ void NetworkManager::addTcpConnectionFromServer(qint64 socketDescriptor)
         return;
     }
 
-    TcpSocketService *socket = new TcpSocketService(socketDescriptor);
-    socket->setNetworkManager(this);
+    TcpSocketService *socket = new TcpSocketService(socketDescriptor, this);
     m_tcpConnections.append(socket);
     connectTcpSocket(socket);
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));

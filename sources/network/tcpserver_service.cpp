@@ -29,13 +29,13 @@ TcpServerService::TcpServerService(quint16 networkPort, QNetworkAddressEntry *lo
 void TcpServerService::startListen()
 {
     bool status = this->listen(localAddress->ip(), port);
-    qDebug() << "Server listening status:" << status;
     emit serverStatus(status);
 
     if (!status)
-        qDebug() << "Server error:" << serverError();
+        qDebug() << "[TCP] Server error:" << serverError();
     else
-        qDebug() << "Server address:" << this->serverAddress() << "| server port:" << this->serverPort();
+        qDebug().noquote() << "[TCP] Start listening:" << this->serverAddress().toString()
+                           << this->serverPort();
 }
 
 TcpServerService::~TcpServerService()
@@ -43,30 +43,9 @@ TcpServerService::~TcpServerService()
     emit finished();
 }
 
-int TcpServerService::process()
+void TcpServerService::process()
 {
-    //    qDebug() << " slot PROCCES server->hasPendingConnections()"
-    //             << server->hasPendingConnections();
-    //    if (server->hasPendingConnections())
-    //    {
-    //        //        QTcpSocket *newSocket = server->nextPendingConnection();
-    //        //        if (newSocket->peerAddress() != QHostAddress(""))
-    //        //        {
-    //        //            emit newServerConnection(newSocket);
-    //        //            qDebug() << "SERVER SERVICE: new connection, socket address:"
-    //        //                     << newSocket->peerAddress() << ":" <<
-    //        newSocket->peerPort();
-    //        //        }
-    //        //        else
-    //        //        {
-    //        //            qDebug() << "SERVER SERVICE: new forbidden connection, socket
-    //        address:
-    //        "
-    //        //                     << newSocket->peerAddress() << ":" <<
-    //        newSocket->peerPort();
-    //        //        }
-    //    }
-    return 0;
+    qFatal("ThreadPool for tcp server");
 }
 
 void TcpServerService::incomingConnection(qintptr socketDescriptor)

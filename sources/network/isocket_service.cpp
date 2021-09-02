@@ -55,6 +55,10 @@ int SocketService::bytesIncoming() const
 bool SocketService::checkFirstMessage(const QString &message)
 {
     auto json = QJsonDocument::fromJson(message.toLatin1());
+    if (json.isEmpty())
+    {
+        qFatal("[Socket] Can't check first message");
+    }
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
@@ -97,6 +101,7 @@ bool SocketService::checkFirstMessage(const QString &message)
     }
 
     qDebug() << "[Socket] Activated" << this << protocol();
+    // m_activated = true;
     return true;
 }
 
