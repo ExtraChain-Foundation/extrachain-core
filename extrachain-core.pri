@@ -1,4 +1,4 @@
-QT += concurrent
+QT += concurrent websockets
 VERSION = "$$cat($$PWD/extrachain_version)"
 win32: CONFIG += precompile_header
 win32: PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
@@ -62,8 +62,9 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
-    $$PWD/sources/network/server_service.cpp \
-    $$PWD/sources/network/socket_service.cpp \
+    $$PWD/sources/network/tcpserver_service.cpp \
+    $$PWD/sources/network/tcpsocket_service.cpp \
+    $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
     $$PWD/sources/utils/exc_utils.cpp \
     $$PWD/sources/utils/variant_model.cpp
@@ -138,8 +139,9 @@ HEADERS += \
     $$PWD/headers/network/packages/service/get_tx_pair_message.h \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/server_service.h \
-    $$PWD/headers/network/socket_service.h \
+    $$PWD/headers/network/tcpserver_service.h \
+    $$PWD/headers/network/tcpsocket_service.h \
+    $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
     $$PWD/headers/utils/variant_model.h \

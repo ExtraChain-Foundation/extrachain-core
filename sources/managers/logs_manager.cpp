@@ -130,11 +130,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
     QString fileNameStd;
     if (fileName != "global")
-        fileNameStd =
-#ifdef ECLIENT
-            "file:/" +
-#endif
-            fileName;
+        fileNameStd = "file:/" + fileName;
     else
         fileNameStd = "global";
 #endif

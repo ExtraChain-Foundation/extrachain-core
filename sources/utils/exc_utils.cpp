@@ -311,7 +311,6 @@ void Utils::wipeDataFiles()
     QFile("user.private").remove();
     QFile("user.private.login").remove();
     QFile(".settings").remove();
-    QFile(".dsettings").remove();
 
     QDir dir(QDir::currentPath());
     dir.cdUp();
@@ -326,76 +325,6 @@ void Utils::wipeDataFiles()
     QDir(shareFolder).removeRecursively();
 
     QDir::setCurrent(current);
-
-    /*
-#ifdef ECONSOLE
-    auto clearDir = [](const QString &dir, const QString &ignoredFile = "0") {
-        QDir dirToClear(dir);
-        auto filesList = dirToClear.entryInfoList(QDir::Files);
-
-        for (auto &file : filesList)
-        {
-            if (file.fileName() != ignoredFile)
-                QFile::remove(file.filePath());
-        }
-    };
-
-    QByteArray companySection = TMP::companyActorId->right(2);
-    QDir actorDir("blockchain/index/actors");
-    auto dirsList = actorDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    for (auto &dir : dirsList)
-    {
-        if (dir.fileName() != companySection)
-            QDir(dir.filePath()).removeRecursively();
-    }
-
-    clearDir("blockchain/index/actors/" + companySection, *TMP::companyActorId);
-    clearDir("blockchain/index/blocks/0", "0");
-    clearDir("keystore/personal", *TMP::companyActorId + ".key");
-    clearDir("keystore/profile", *TMP::companyActorId + ".private");
-    QDir("tmp").removeRecursively();
-    QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
-    QFile("blockchain/index/actors/.first").remove();
-    QFile("blockchain/index/actors/.last").remove();
-    QFile("blockchain/index/blocks/.first").remove();
-    QFile("blockchain/index/blocks/.last").remove();
-#else
-    QDir("blockchain").removeRecursively();
-    QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
-    QDir("keystore").removeRecursively();
-    QDir("tmp").removeRecursively();
-    QFile("user.private").remove();
-    QFile("user.private.login").remove();
-#endif
-    QFile(".extrachain.lock").remove();
-    QFile(".settings").remove();
-    */
-}
-
-void Utils::softWipe(const QString &currentId)
-{
-    auto clearDir = [](const QString &dir, const QString &ignoredFile = "0", bool isFile = true) {
-        QDir dirToClear(dir);
-        auto filesList = dirToClear.entryInfoList(isFile ? QDir::Files : QDir::Dirs | QDir::NoDotAndDotDot);
-
-        for (auto &file : filesList)
-        {
-            qDebug() << file.fileName() << file.filePath();
-            if (file.fileName() != ignoredFile)
-                isFile ? QFile::remove(file.filePath()) : QDir(file.filePath()).removeRecursively();
-        }
-    };
-
-    QDir("blockchain/index/blocks").removeRecursively();
-    clearDir("blockchain/index/actors", currentId.right(2), false);
-    clearDir("blockchain/index/actors/" + currentId.right(2), currentId, true);
-    clearDir(DfsStruct::ROOT_FOOLDER_NAME, "", true);
-    clearDir(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId, "profile", false);
-    QFile::remove(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/root");
-    QFile::remove(DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/root.tmp");
-    QDir("tmp").removeRecursively();
-    QFile(".settings").remove();
 }
 
 qint64 Utils::checkMemoryFree()
@@ -691,8 +620,14 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
 
 QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol)
 {
-    QString fixedName = fileName;
+    QString fixedName = fileName.simplified();
     fixedName = fixedName.replace(QRegularExpression("[+%@!:*?/\"<>|«»]+"), replaceSymbol);
     fixedName = fixedName.replace("\\", replaceSymbol);
     return fixedName;
+}
+
+bool Utils::isValidIp(const QString &ip)
+{
+    QHostAddress address(ip);
+    return QAbstractSocket::IPv4Protocol == address.protocol();
 }

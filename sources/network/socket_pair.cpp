@@ -21,26 +21,20 @@
 
 SocketPair::SocketPair()
 {
-
-    iden = "0";
     ip = "0.0.0.0";
-    port = 0;
 }
 
-SocketPair::SocketPair(const std::string &f, const quint16 &s)
+SocketPair::SocketPair(const std::string &ip, const quint16 &port)
 {
-    ip = f;
-    port = s;
-
-    iden = "0";
+    this->ip = ip;
+    this->port = port;
 }
 
-SocketPair::SocketPair(const SocketPair &v)
+SocketPair::SocketPair(const SocketPair &pair)
 {
-    ip = v.ip;
-    port = v.port;
-
-    iden = v.iden;
+    ip = pair.ip;
+    port = pair.port;
+    m_identifier = pair.m_identifier;
 }
 
 SocketPair::~SocketPair()
@@ -49,43 +43,40 @@ SocketPair::~SocketPair()
 
 const QString SocketPair::serialize() const
 {
-    return QString::fromStdString(ip) + QString::number(port) + QString(iden);
+    return QString::fromStdString(ip) + QString::number(port) + QString(m_identifier);
 }
 
 const SocketPair SocketPair::operator=(const SocketPair &v)
 {
     ip = v.ip;
     port = v.port;
-    iden = v.iden;
+    m_identifier = v.m_identifier;
     return *this;
 }
 
 bool SocketPair::operator==(const SocketPair &v) const
 {
-    return ((ip == v.ip) && (port == v.port) && (iden == v.iden));
+    return ((ip == v.ip) && (port == v.port) && (m_identifier == v.m_identifier));
 }
 
-BigNumber SocketPair::getId() const
+BigNumber SocketPair::identifier() const
 {
-    return iden;
+    return m_identifier;
 }
 
-void SocketPair::setId(const QByteArray &value)
+void SocketPair::setIdentifier(const QByteArray &value)
 {
-    iden = value;
+    m_identifier = value;
 }
 
 bool SocketPair::isEmpty() const
 {
-    if ((ip == "0.0.0.0") && (port == 0) && (iden == "0"))
-        return true;
-    else
-        return false;
+    return ip == "0.0.0.0" && port == 0 && m_identifier.isEmpty();
 }
 
 QDebug operator<<(QDebug d, const SocketPair &pair)
 {
     d.noquote().nospace() << "Pair(ip: " << QString::fromStdString(pair.ip) << ", port: " << pair.port
-                          << ", identificator: " << pair.iden << ")";
+                          << ", identifier: " << pair.m_identifier << ")";
     return d;
 }

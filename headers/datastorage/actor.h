@@ -38,7 +38,7 @@ enum class ActorType
 {
     Wallet = 0,
     Account = 1,
-    Company = 2
+    First = 2
 };
 
 class ActorId
@@ -81,12 +81,7 @@ public:
         return m_id < actorId.m_id;
     }
 
-    QByteArray toByteArray() const
-    {
-        return m_id;
-    }
-
-    QByteArray &toByteArrayRef()
+    const QByteArray &toByteArray() const
     {
         return m_id;
     }
@@ -103,8 +98,9 @@ public:
 
     bool isEmpty() const
     {
-        return m_id == "000000000000000000-1" || // temp
-            m_id.isEmpty() || m_id == "00000000000000000000";
+        if (m_id == "000000000000000000-1")
+            qFatal("ActorId: WTF");
+        return m_id.isEmpty() || m_id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId)

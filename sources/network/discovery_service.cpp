@@ -74,7 +74,7 @@ void DiscoveryService::process()
             // qDebug() << "DISCOVERY SERVICE: finder";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            socket->writeDatagram(Messages::createPingMessage(), QHostAddress(i /*"51.68.181.53"*/), port);
+            socket->writeDatagram(Messages::createPingMessage(), QHostAddress(i /*"ip"*/), port);
             // qDebug() << "udp send message";
         }
     }

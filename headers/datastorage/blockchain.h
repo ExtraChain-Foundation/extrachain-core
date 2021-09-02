@@ -347,10 +347,8 @@ public:
     void setTxManager(TransactionManager *value);
 
 public slots:
-
     void process();
-    void updateBlockchain(BigNumber id, bool isUser);
-    void updateBlockchainForSignIn(QByteArray id, QByteArrayList idList);
+    void updateBlockchain();
     /**
      * @brief Checks if there is a such block in a local blockchain.
      * Emits BlockExistence or SendMergedBlock signals.

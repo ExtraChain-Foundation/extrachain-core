@@ -25,7 +25,7 @@ CoinProcess::CoinProcess(QObject* parent)
 }
 
 QList<Transaction> CoinProcess::blockDataToFeeTxs(QList<Transaction> pendingTxs, QByteArray blockHash,
-                                                  ActorId myActorId, QByteArray* companyId)
+                                                  ActorId myActorId, QByteArray* firstId)
 {
 
     static_assert(Fee::TRANSACTION_FEE > 0 && Fee::TRANSACTION_FEE < 100, "TRANSACTION_FEE fee error");
@@ -36,8 +36,8 @@ QList<Transaction> CoinProcess::blockDataToFeeTxs(QList<Transaction> pendingTxs,
     for (const auto& i : pendingTxs)
     {
         // if current transaction ==fee transaction continue
-        if (i.getSender().isEmpty() || i.getSender() == *companyId || i.getReceiver().isEmpty()
-            || i.getReceiver() == *companyId || i.getData() == Fee::FREEZE_TX
+        if (i.getSender().isEmpty() || i.getSender() == *firstId || i.getReceiver().isEmpty()
+            || i.getReceiver() == *firstId || i.getData() == Fee::FREEZE_TX
             || i.getData() == Fee::UNFREEZE_TX)
             continue;
 

@@ -17,48 +17,34 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "network/server_service.h"
+#include "network/tcpserver_service.h"
 
-ServerService::ServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent)
+TcpServerService::TcpServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent)
     : QTcpServer(parent)
     , localAddress(local)
     , port(networkPort)
 {
 }
 
-void ServerService::startListen()
+void TcpServerService::startListen()
 {
     bool status = this->listen(localAddress->ip(), port);
     qDebug() << "Server listening status:" << status;
     emit serverStatus(status);
 
     if (!status)
-    {
-#ifdef ECONSOLE
-        if (serverError() == QAbstractSocket::AddressInUseError)
-        {
-            qInfo().nospace().noquote() << "---> [Error] Address " << localAddress->ip().toString() << ":"
-                                        << port << " already in use";
-            std::exit(0);
-        }
-        else
-#endif
-            qDebug() << "Server error:" << serverError();
-        qDebug() << "emit startError";
-    }
+        qDebug() << "Server error:" << serverError();
     else
-    {
         qDebug() << "Server address:" << this->serverAddress() << "| server port:" << this->serverPort();
-    }
 }
 
-ServerService::~ServerService()
+TcpServerService::~TcpServerService()
 {
     //    active = false;
     emit finished();
 }
 
-int ServerService::process()
+int TcpServerService::process()
 {
     //    qDebug() << " slot PROCCES server->hasPendingConnections()"
     //             << server->hasPendingConnections();
@@ -84,7 +70,7 @@ int ServerService::process()
     return 0;
 }
 
-void ServerService::incomingConnection(qintptr socketDescriptor)
+void TcpServerService::incomingConnection(qintptr socketDescriptor)
 {
     emit newServerConnection(socketDescriptor);
 }
@@ -116,7 +102,7 @@ void ServerService::incomingConnection(qintptr socketDescriptor)
 //    }
 //}
 
-void ServerService::socketDisconnected()
+void TcpServerService::socketDisconnected()
 {
     //
 }

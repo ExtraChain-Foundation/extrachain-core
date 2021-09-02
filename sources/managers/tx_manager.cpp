@@ -246,7 +246,7 @@ Block TransactionManager::makeBlock()
     // fee section start
     //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
     //                                                               accountController->getMainActor()->getId(),
-    //                                                               accountController->getActorIndex()->companyId);
+    //                                                               accountController->getActorIndex()->m_firstId);
     //    for (const auto &i : feeTxs)
     //        extraChainNode->createTransaction(i);
     // fee section end

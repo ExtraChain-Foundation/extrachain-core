@@ -25,6 +25,11 @@ void ActorIndex::setAccController(AccountController *value)
     accController = value;
 }
 
+ActorId ActorIndex::firstId()
+{
+    return m_firstId;
+}
+
 ActorIndex::ActorIndex(QObject *parent)
     : QObject(parent)
 
@@ -34,7 +39,8 @@ ActorIndex::ActorIndex(QObject *parent)
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal("%s", QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
+        qFatal("%s",
+               QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
@@ -146,7 +152,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
         {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
         }
-        else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company)
+        else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::First)
         { // if profile not exist
             static QMap<QByteArray, qint64> tempCheck;
             qDebug() << "[ActorIndex] No profile for actor" << actorId;
@@ -343,7 +349,7 @@ QByteArrayList ActorIndex::getProfile(QString id)
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty())
     {
-        if (actor.account() != ActorType::Wallet && actor.account() != ActorType::Company
+        if (actor.account() != ActorType::Wallet && actor.account() != ActorType::First
             && resolveManager != nullptr)
         {
             Messages::GetActorMessage msg;
@@ -375,9 +381,7 @@ QString ActorIndex::getFolderPath() const
 
 QString ActorIndex::buildFilePath(const QByteArray &id) const
 {
-    QByteArray Id = id;
-    if (Id.length() == 19)
-        Id = "0" + id;
+    QByteArray Id = ActorId(id).toByteArray();
 
     QByteArray section = Id.right(SECTION_NAME_SIZE);
     QString pathToFolder = folderPath + section;
@@ -408,9 +412,17 @@ QString ActorIndex::buildPathPubProfile(const QByteArray &id)
     return pathToFolder + id + ".profile";
 }
 
-void ActorIndex::setCompanyId(QByteArray *value)
+void ActorIndex::setFirstId(const ActorId &value)
 {
-    companyId = value;
+    if (!m_firstId.isEmpty())
+    {
+        if (firstId() != value)
+            qFatal("Another FirstId");
+        return;
+    }
+
+    qDebug() << "[ActorIndex] Save first id:" << value;
+    m_firstId = value;
 }
 
 qint64 ActorIndex::getRecords() const
@@ -466,10 +478,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
     int result = this->add(actor.id(), actor.serialize());
     auto actorId = actor.id().toByteArray();
 
-    if (actor.account() == ActorType::Company && companyId == nullptr)
+    if (actor.account() == ActorType::First)
     {
-        qDebug() << "[ActorIndex] Save company id:" << actorId;
-        companyId = new QByteArray(actorId);
+        setFirstId(actorId);
     }
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED)

@@ -19,14 +19,14 @@
 
 #include "dfs/controls/headers/dfs.h"
 
-DFSNetManager *Dfs::getDfsNetManager() const
+DfsNetworkManager *Dfs::networkManager() const
 {
-    return dfsNetManager;
+    return m_networkManager;
 }
 
-void Dfs::setDfsNetManager(DFSNetManager *value)
+void Dfs::setNetworkManager(DfsNetworkManager *value)
 {
-    dfsNetManager = value;
+    m_networkManager = value;
 }
 
 Sender *Dfs::getSender() const
@@ -251,7 +251,7 @@ void Dfs::applyCardFileChange(DistFileSystem::CardFileChange cfc, SocketPair rec
     //    }
 }
 
-void Dfs::initDFS(const QByteArray &userId)
+void Dfs::initDfs(const QByteArray &userId)
 {
     QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME);
     QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId);
@@ -286,7 +286,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         return;
     }
 
-    QByteArray userId = accountControler->getMainActor()->id().toByteArray();
+    QByteArray userId = accountController->getMainActor()->id().toByteArray();
     QString dfsPath;
     bool exists = false;
 
@@ -389,14 +389,14 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             DistFileSystem::DfsChanges dfsChanges;
             dfsChanges.data << d;
             dfsChanges.range = "sql";
-            dfsChanges.userId = accountControler->getMainActor()->id().toByteArray();
+            dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
             QByteArray sType = DfsStruct::toByteArray(type);
             dfsChanges.filePath = dfsPath;
             dfsChanges.changeType = 3;
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountControler->getMainActor()->key()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountController->getMainActor()->key()->sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
             if (!stored)
@@ -456,7 +456,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
 bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                        bool isFilePath)
 {
-    QByteArray sign = accountControler->getMainActor()->key()->sign(
+    QByteArray sign = accountController->getMainActor()->key()->sign(
         (isFilePath ? CardManager::cutPath(path) : path).toLatin1() + QByteArray::number(type));
 
     CardFile cardFile(userId);
@@ -639,11 +639,12 @@ void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver)
     sender->sendFragments(path, CardManager::getTypeByName(path), frags, receiver);
 }
 
-Dfs::Dfs(ActorIndex *actorIndex, AccountController *accControler, const QString &localIp, QObject *parent)
+Dfs::Dfs(ActorIndex *actorIndex, AccountController *accountController, const QString &localIp,
+         QObject *parent)
     : QObject(parent)
-    , accountControler(accControler)
-    , actorIndex(actorIndex),
-      dfsNetLocalIp(localIp)
+    , accountController(accountController)
+    , actorIndex(actorIndex)
+    , dfsNetLocalIp(localIp)
 {
     connect(this, &Dfs::requestFile, this, &Dfs::requestFileHandle);
     connect(this, &Dfs::titleReceived, this, &Dfs::titleReceivedHandle);
@@ -654,17 +655,19 @@ Dfs::~Dfs()
     sender->deleteLater();
 }
 
-void Dfs::initDFSNetManager()
+void Dfs::initDfsNetwork()
 {
-    dfsNetManager = new DFSNetManager(accountControler, actorIndex, dfsNetLocalIp);
-    dfsNetManager->setDfs(this);
-    connect(this, &Dfs::connectToServer, dfsNetManager, &DFSNetManager::reconnect);
-    ThreadPool::addThread(dfsNetManager);
+    m_networkManager = new DfsNetworkManager(accountController, actorIndex, dfsNetLocalIp);
+    m_networkManager->setDfs(this);
+    connect(this, &Dfs::connectToNode, m_networkManager, &DfsNetworkManager::connectToNode);
+    connect(this, &Dfs::removeConnection, m_networkManager, &DfsNetworkManager::removeConnection);
+
+    ThreadPool::addThread(m_networkManager);
 }
 
 void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored)
 {
-    QByteArray userId = accountControler->getMainActor()->id().toByteArray();
+    QByteArray userId = accountController->getMainActor()->id().toByteArray();
     QByteArray sType = DfsStruct::toByteArray(type);
     QString dfsPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + sType + "/" + fileName;
 
@@ -692,14 +695,14 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             DistFileSystem::DfsChanges dfsChanges;
             dfsChanges.data << data;
             dfsChanges.range = "sql";
-            dfsChanges.userId = accountControler->getMainActor()->id().toByteArray();
+            dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
             QByteArray sType = DfsStruct::toByteArray(type);
             dfsChanges.filePath = dfsPath;
             dfsChanges.changeType = 3;
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountControler->getMainActor()->key()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountController->getMainActor()->key()->sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
 
@@ -747,7 +750,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
 void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data)
 {
     DistFileSystem::DfsChanges dfsChanges;
-    dfsChanges.userId = accountControler->getMainActor()->id().toByteArray();
+    dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
     dfsChanges.changeType = 3;
     dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
     int pckg = 0;
@@ -808,7 +811,7 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     DistFileSystem::DfsChanges dfsChanges;
     dfsChanges.data << sqlChanges;
     dfsChanges.range = "sql";
-    dfsChanges.userId = accountControler->getMainActor()->id().toByteArray();
+    dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
     QByteArray sType = DfsStruct::toByteArray(type);
     dfsChanges.filePath = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + sType + "/" + fileName;
     dfsChanges.changeType = sqlType;
@@ -826,7 +829,7 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
 {
     if (!QFile::exists(dfsChanges.filePath))
         return false;
-    if (dfsChanges.userId != accountControler->getMainActor()->id().toByteArray())
+    if (dfsChanges.userId != accountController->getMainActor()->id().toByteArray())
     {
         auto actor = actorIndex->getActor(dfsChanges.userId);
         if (actor.empty())
@@ -1041,11 +1044,11 @@ void Dfs::dfsSyncUsers(QByteArrayList actors, const SocketPair &receiver)
 
 void Dfs::dfsSyncT()
 {
-    if (accountControler->getMainActor() == nullptr)
+    if (accountController->getMainActor() == nullptr)
         return;
 
     dfsValidateAll();
-    QByteArray mainActor = accountControler->getMainActor()->id().toByteArray();
+    QByteArray mainActor = accountController->getMainActor()->id().toByteArray();
     QByteArrayList actors = !myQuickMode ? actorIndex->allActors() : QByteArrayList { mainActor };
     dfsSyncUsers(actors);
 }
@@ -1169,7 +1172,7 @@ bool Dfs::dfsValidate(QByteArray userId)
 
 QList<QByteArray> Dfs::dfsValidateAll()
 {
-    QByteArray mainActor = accountControler->getMainActor()->id().toByteArray();
+    QByteArray mainActor = accountController->getMainActor()->id().toByteArray();
     // QString myCardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
     QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
@@ -1212,14 +1215,14 @@ void Dfs::startDFS()
             continue;
         }
 
-        initDFS(actor);
+        initDfs(actor);
     }
 
-    initDFSNetManager();
+    initDfsNetwork();
     if (sender == nullptr)
     {
         sender = new Sender();
-        sender->setNetManager(dfsNetManager);
+        sender->setNetworkManager(m_networkManager);
         ThreadPool::addThread(sender);
     }
 
@@ -1239,10 +1242,10 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
     //    qDebug() << "File is exists";
     //     return;
     // }
-    if (dfsNetManager == nullptr || sender == nullptr)
+    if (m_networkManager == nullptr || sender == nullptr)
     {
-        qDebug().nospace() << "What's up, Doc? " << (dfsNetManager == nullptr ? "dfsNetManager" : "sender")
-                           << " == nullptr";
+        qDebug().nospace() << "What's up, Doc?"
+                           << (m_networkManager == nullptr ? "dfsNetworkManager" : "sender") << " == nullptr";
         return;
     }
 
@@ -1251,7 +1254,7 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
         // qDebug() << "root requested";
     }
 
-    if (dfsNetManager->isLoading(filePath))
+    if (m_networkManager->isLoading(filePath))
         return;
 
     //    if (m_reqFiles.indexOf(filePath) != -1)
@@ -1271,7 +1274,7 @@ void Dfs::requestFileHandle(const QString &filePath, const SocketPair &receiver)
     }
 
     m_reqFiles.append({ QDateTime::currentDateTime().toMSecsSinceEpoch(), filePath });
-    qDebug() << "Request file:" << filePath; // TODO: fix for company actor
+    qDebug() << "Request file:" << filePath; // TODO: fix for first actor
 
     DistFileSystem::DfsRequest dfsRequest;
     dfsRequest.filePath = filePath;
@@ -1322,13 +1325,13 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
 {
     DBConnector dbc((dfsChanges.filePath + DfsStruct::STORED_EXT).toStdString());
 
-    if (!init && dfsChanges.userId == accountControler->getMainActor()->id().toByteArray())
+    if (!init && dfsChanges.userId == accountController->getMainActor()->id().toByteArray())
     {
         auto res = dbc.select("SELECT hash FROM Stored ORDER by _ROWID_ DESC LIMIT 1 ");
         if (!res.size())
             return false;
         dfsChanges.prevHash = QByteArray::fromStdString(res[0]["hash"]);
-        dfsChanges.sign = accountControler->getMainActor()->key()->sign(dfsChanges.prepareSign());
+        dfsChanges.sign = accountController->getMainActor()->key()->sign(dfsChanges.prepareSign());
     }
 
     DBRow row = { { "version", std::to_string(dfsChanges.fileVersion) },
@@ -1544,8 +1547,8 @@ void Dfs::initMyLocalStorage()
     //    ThreadPool::addThread(resolver);
 
     //    getDFSStatus();
-    QByteArray userId = accountControler->getMainActor()->id().toByteArray();
-    initDFS(userId);
+    QByteArray userId = accountController->getMainActor()->id().toByteArray();
+    initDfs(userId);
     //    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
     //    if (acDir.exists())
     //    {
@@ -1557,7 +1560,7 @@ void Dfs::initMyLocalStorage()
     //            //                QString cPath = dfsStruct::ROOT_FOOLDER_NAME + '/' + el + '/' +
     //            //                dfsStruct::ACTOR_CARD_FILE; DFSMessage::dfs_request rqst(cPath,
     //            //                accountControler->getMainActor()->getId().toActorId());
-    //            //                dfsNetManager->send(rqst.serialize());
+    //            //                m_networkManager->send(rqst.serialize());
     //            //            }
     //        }
     //    }
@@ -1573,13 +1576,13 @@ void Dfs::initUser(ActorId userId)
         return;
     }
 
-    initDFS(userId.toByteArray());
+    initDfs(userId.toByteArray());
     // QString cPath =
     //     DfsStruct::ROOT_FOOLDER_NAME + '/' + userId.toActorId() + '/' + DfsStruct::ACTOR_CARD_FILE;
     // if (accountControler->getMainActor() == nullptr)
     //     return;
     //    DFSMessage::dfs_request rqst(cPath, accountControler->getMainActor()->getId().toActorId());
-    //    dfsNetManager->send(rqst.serialize());
+    //    m_networkManager->send(rqst.serialize());
 }
 
 void Dfs::reportFileCompleted(QString filePath, SocketPair receiver)
@@ -1605,7 +1608,7 @@ void Dfs::save(DfsStruct::DfsSave saveType, QString file, QByteArray data, const
         saveStaticFile(file, type, false);
         break;
     case DfsStruct::DfsSave::Network:
-        saveFN(file + DfsStruct::FILE_IDENTIFICATOR, file, type);
+        saveFN(file + DfsStruct::FILE_IDENTIFIER, file, type);
         break;
     }
 }
@@ -1637,15 +1640,13 @@ void Dfs::searchTmp()
         QFileInfo root(rootPath);
         // QFileInfo rootTmp(rootPath + ".tmp");
 
-        if (actorIndex->companyId != nullptr)
+        if (!actorIndex->firstId().isEmpty())
         {
-            QByteArray companyId = *actorIndex->companyId;
-
-            if (id == companyId)
+            if (id == actorIndex->firstId().toByteArray())
                 continue;
         }
 
-        if (dfsNetManager->isLoading(rootPath))
+        if (m_networkManager->isLoading(rootPath))
             return;
 
         if (!root.exists() || root.size() == 0)
@@ -1689,7 +1690,7 @@ void Dfs::searchTmp()
 
 void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 {
-    if (myQuickMode && userId != accountControler->getMainActor()->id().toByteArray())
+    if (myQuickMode && userId != accountController->getMainActor()->id().toByteArray())
         return;
 
     if (ignoredIds.contains(userId))
@@ -1698,10 +1699,10 @@ void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
         return;
     }
 
-    if (dfsNetManager == nullptr || sender == nullptr)
+    if (m_networkManager == nullptr || sender == nullptr)
     {
-        qDebug().nospace() << "What's up, Doc? " << (dfsNetManager == nullptr ? "dfsNetManager" : "sender")
-                           << " == nullptr";
+        qDebug().nospace() << "What's up, Doc? "
+                           << (m_networkManager == nullptr ? "dfsNetworkManager" : "sender") << " == nullptr";
         return;
     }
 

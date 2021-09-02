@@ -30,7 +30,6 @@
 #include <QCborStreamWriter>
 #include <QCborStreamReader>
 #include <QList>
-#include <QSettings>
 #include <QStorageInfo>
 #include <QString>
 #include <QStringList>
@@ -49,8 +48,8 @@
 #include "sodium.h"
 
 namespace Network {
-static QString serverIp = "51.68.181.52";
-static const int build = 1500;
+Q_NAMESPACE
+
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
 static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
 struct DataStruct
@@ -58,30 +57,38 @@ struct DataStruct
     QByteArray msg;
     SocketPair receiver;
 };
-} // namespace Network
 
-namespace TMP {
-static QByteArray *companyActorId = new QByteArray("0");
-};
-
-namespace net {
-[[maybe_unused]] static QByteArray readNetManagerIdentificator()
+enum Protocol
 {
+    Tcp = 1,
+    WebSocket = 2
+};
+Q_ENUM_NS(Protocol)
+
+enum SocketServiceError
+{
+    Unknown = 0,
+    IncompatibleVersion = 1,
+    IncompatibleNetwork = 2,
+    IncompatibleIdentifier = 3,
+    DuplicateIdentifier = 4,
+};
+Q_ENUM_NS(SocketServiceError)
+
+[[maybe_unused]] static QByteArray currentIdentifier()
+{
+    // static QByteArray identifier;
+    // if (!identifier.isEmpty())
+    //     return identifier;
+
     QFile file(".settings");
     file.open(QIODevice::ReadOnly);
-    QByteArray id = file.readAll();
+    QByteArray identifier = file.readAll();
     file.close();
-    return id;
+    return identifier;
 }
-[[maybe_unused]] static QByteArray dfsreadNetManagerIdentificator()
-{
-    QFile file(".dsettings");
-    file.open(QIODevice::ReadOnly);
-    QByteArray id = file.readAll();
-    file.close();
-    return id;
-}
-} // namespace net
+} // namespace Network
+
 class Transaction;
 namespace storedSpace {
 
@@ -512,11 +519,11 @@ int compare(const QByteArray &one, const QByteArray &two);
  * @brief Remove data and cache files
  */
 void wipeDataFiles();
-void softWipe(const QString &currentId);
 
 QString detectCompiler();
 QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
 QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
+bool isValidIp(const QString &ip);
 } // namespace Utils
 
 namespace DataStorage {
