@@ -19,6 +19,9 @@
 
 #ifndef MESSAGE_TYPES_H
 #define MESSAGE_TYPES_H
+
+#include <QMetaEnum>
+
 namespace Messages {
 Q_NAMESPACE
 
@@ -125,7 +128,7 @@ Q_ENUM_NS(VerifyRequest)
 }
 
 template <typename QEnum>
-QByteArray QtEnumToString(const QEnum value)
+QByteArray QtEnumToString(const QEnum value) // TODO: move to Utils
 {
     return QMetaEnum::fromType<QEnum>().valueToKey(value);
 }
