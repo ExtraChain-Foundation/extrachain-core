@@ -124,14 +124,20 @@ Q_ENUM_NS(VerifyRequest)
 }
 }
 
-#define PRINT_MESSAGE_TYPE(message, msgType)                                            \
-    if (Messages::isGeneralRequest(msgType))                                            \
-        qDebug().noquote() << message << Messages::GeneralRequest(msgType) << msgType;  \
-    else if (Messages::isGeneralResponse(msgType))                                      \
-        qDebug().noquote() << message << Messages::GeneralResponse(msgType) << msgType; \
-    else if (Messages::isChainMessage(msgType))                                         \
-        qDebug().noquote() << message << Messages::ChainMessage(msgType) << msgType;    \
-    else if (Messages::isDFSMessage(msgType))                                           \
-        qDebug().noquote() << message << Messages::DFSMessage(msgType) << msgType;
+template <typename QEnum>
+QByteArray QtEnumToString(const QEnum value)
+{
+    return QMetaEnum::fromType<QEnum>().valueToKey(value);
+}
+
+#define PRINT_MESSAGE_TYPE(message, msgType)                                                            \
+    if (Messages::isGeneralRequest(msgType))                                                            \
+        qDebug().noquote() << message << QtEnumToString(Messages::GeneralRequest(msgType)) << msgType;  \
+    else if (Messages::isGeneralResponse(msgType))                                                      \
+        qDebug().noquote() << message << QtEnumToString(Messages::GeneralResponse(msgType)) << msgType; \
+    else if (Messages::isChainMessage(msgType))                                                         \
+        qDebug().noquote() << message << QtEnumToString(Messages::ChainMessage(msgType)) << msgType;    \
+    else if (Messages::isDFSMessage(msgType))                                                           \
+        qDebug().noquote() << message << QtEnumToString(Messages::DFSMessage(msgType)) << msgType;
 
 #endif // MESSAGE_TYPES_H
