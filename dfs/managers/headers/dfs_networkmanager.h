@@ -42,11 +42,9 @@ private:
     Dfs *dfs;
     DFSResolverService *uResolver;
     QList<DFSResolverService *> dfsResolvers;
-    QMap<QByteArray, int> handler;
-    TcpServerService *serverService;
 
 public:
-    DfsNetworkManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp);
+    DfsNetworkManager(ActorIndex *actorIndex, const QString &localIp);
     ~DfsNetworkManager() override;
 
 private:
@@ -55,7 +53,7 @@ private:
     void createDFSResolver(Network::DataStruct ds);
 
 public:
-    void *MessageReceived(const QByteArray &msg, const SocketPair &receiver) override;
+    void messageReceived(const QByteArray &msg, const SocketPair &receiver) override;
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
 

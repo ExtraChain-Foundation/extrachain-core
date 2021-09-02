@@ -63,6 +63,7 @@ enum GeneralResponse
     getTxPairResponse = 305,
     getAllActorsResponse = 306
 };
+
 [[maybe_unused]] static bool isGeneralResponse(unsigned int value)
 {
     if (value >= 300 && value <= 399)

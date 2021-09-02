@@ -60,10 +60,9 @@ public:
 
 signals:
     void send(const QByteArray &data);
-    void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
+    // void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
     void close();
     void finished();
-    void checkMe();
     void setActiveSignal(bool active);
 
 public slots:

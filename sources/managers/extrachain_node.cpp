@@ -33,7 +33,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     prProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
-    m_networkManager = new NetworkManager(accController, actorIndex, localIp);
+    m_networkManager = new NetworkManager(actorIndex, localIp);
     subscribeController = new SubscribeController();
     subscribeController->setExtraChainNode(this);
     actorIndex->setAccController(accController);
@@ -202,6 +202,7 @@ ExtraChainNode::~ExtraChainNode()
 {
     // m_networkManager->quit();
     // delete networkManager;
+    m_networkManager->finished();
     delete txManager;
     // delete blockchain;
     delete accController;
@@ -515,7 +516,7 @@ void ExtraChainNode::prepareFolders()
 
 int ExtraChainNode::getClientListCount()
 {
-    return m_networkManager->getTcpConnections().size() && m_networkManager->getWsConnections().size();
+    return m_networkManager->tcpConnections().size() && m_networkManager->wsConnections().size();
 }
 
 AccountController *ExtraChainNode::getAccountController() const

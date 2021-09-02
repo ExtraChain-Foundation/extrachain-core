@@ -137,7 +137,7 @@ bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message)
 {
     if (validate(message))
     {
-        qDebug() << "RESOLVER SERVICE: "
+        qDebug() << "[ResolverService]"
                  << "checkMsgType(): valid";
         return false;
     }
@@ -231,7 +231,7 @@ void ResolverService::resolveGeneralTask()
     }
     //    if (msgType != Messages::GeneralRequest::getAllActors
     //        && msgType != Messages::GeneralResponse::getAllActorsResponse)
-    qDebug() << "Resolver: receive" << msgType;
+    qDebug() << "[ResolverService] receive" << msgType;
     if ((msgType != Messages::ChainMessage::actorMessage) && (Messages::isDFSMessage(msgType))
         && (msgType != Messages::GeneralRequest::GetActor)
         && (msgType != Messages::GeneralResponse::getActorResponse)
@@ -250,7 +250,7 @@ void ResolverService::resolveGeneralTask()
         }
         else
         {
-            //            qDebug() << "received msg signature:" << message.getDigSig();
+            // qDebug() << "received msg signature:" << message.getDigSig();
             if (MessageIsNotValid(message))
             {
                 finishWork();
@@ -258,6 +258,7 @@ void ResolverService::resolveGeneralTask()
             }
         }
     }
+
     switch (msgType)
     {
     case Messages::GeneralRequest::GetAllActors: {
@@ -333,7 +334,7 @@ void ResolverService::resolveGeneralTask()
     }
     case Messages::ChainMessage::contractMessage: {
         //        Contract contract(message.getMsg_data());
-        qDebug() << "RESOLVER SERVICE: "
+        qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "CONTRACT_MESSAGE";
         Transaction tx(message.data);
@@ -381,7 +382,7 @@ void ResolverService::resolveGeneralTask()
 
     // response messages
     case Messages::GeneralResponse::getActorResponse: {
-        qDebug() << "RESOLVER SERVICE: "
+        qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_ACTOR_RESPONSE_MESSAGE"
                  << "\nmessage: " << msg;
@@ -396,7 +397,7 @@ void ResolverService::resolveGeneralTask()
     }
 
     case Messages::GeneralResponse::getTxResponse: {
-        qDebug() << "RESOLVER SERVICE: "
+        qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_TX_RESPONSE_MESSAGE";
         BaseMessageResponse responseMessage;
@@ -414,7 +415,7 @@ void ResolverService::resolveGeneralTask()
         break;
     }
     case Messages::GeneralResponse::getBlockResponse: {
-        qDebug() << "RESOLVER SERVICE: "
+        qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_BLOCK_RESPONSE_MESSAGE";
 
@@ -451,8 +452,8 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        qDebug() << "RESOLVER SERVICE: "
-                 << "recieveMsg(): type: "
+        qDebug() << "[ResolverService]"
+                 << "recieveMsg(): type:"
                  << "GET_BLOCK_COUNT_RESPONSE_MESSAGE";
         BigNumber count(responseMessage.data);
         emit blockCount(count);
@@ -464,7 +465,7 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        qDebug() << "RESOLVER SERVICE: "
+        qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_ACTOR_COUNT_RESPONSE_MESSAGE";
         finishWork();
@@ -491,15 +492,13 @@ void ResolverService::resolveGeneralTask()
 
 bool ResolverService::validateBlock(const Block &block)
 {
-    qDebug() << "RESOLVER SERVICE: "
-             << "validate(Block):";
+    qDebug() << "[ResolverService] validate(Block):";
     return actorIndex->validateBlock(block);
 }
 
 bool ResolverService::validate(const Transaction &tx)
 {
-    qDebug() << "RESOLVER SERVICE: "
-             << "validate(Transaction):";
+    qDebug() << "[ResolverService] validate(Transaction):";
     if (tx.getSender() == ActorId(0) && tx.getData().contains(Fee::STAKING_REWARD))
         return true;
     if (actorIndex->getActor(tx.getSender()).empty())

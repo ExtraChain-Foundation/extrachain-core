@@ -13,8 +13,7 @@ class WebSocketService : public QObject
     Q_OBJECT
 
 public:
-    explicit WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager, ActorIndex *newActorIndex,
-                              QObject *parent = nullptr);
+    explicit WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager, QObject *parent = nullptr);
     WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
@@ -53,7 +52,6 @@ private:
     void closeSocket();
 
     NetworkManager *networkManager = nullptr;
-    ActorIndex *actorIndex;
     QWebSocket *m_ws = nullptr;
     QString m_identifier;
     QString m_ip;

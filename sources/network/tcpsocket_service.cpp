@@ -125,8 +125,9 @@ void TcpSocketService::establishConnection()
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
     this->address = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
     QByteArray idb = m_IdentifierPrefix
-        + Serialization::serialize({ QByteArray::number(0), Network::currentIdentifier(),
-                                     networkManager->getSerializedConnectionList() }); // TODO: remove build
+        + Serialization::serialize(
+                         { QByteArray::number(0), Network::currentIdentifier(),
+                           "" }); // TODO: remove build & networkManager->getSerializedConnectionList()
 
     emit send(idb);
 
@@ -183,10 +184,6 @@ void TcpSocketService::continueDoRead()
                 {
 
                     m_identifier = bl[1];
-                    emit checkMe();
-                    networkManager->addTempConnections(Serialization::deserialize(bl[2]));
-                    networkManager->checkOnValidConnection(this->identifier().toLatin1(),
-                                                           this->ip().toLocal8Bit());
                     // networkManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
                 }
                 else
@@ -232,9 +229,9 @@ void TcpSocketService::gotMessage(QByteArray msg, SocketPair rec)
     }
 
     if (serverPort() == 2223)
-        reinterpret_cast<DfsNetworkManager *>(networkManager)->MessageReceived(bmsg, rec);
+        reinterpret_cast<DfsNetworkManager *>(networkManager)->messageReceived(bmsg, rec);
     else
-        networkManager->MessageReceived(bmsg, rec);
+        networkManager->messageReceived(bmsg, rec);
 }
 
 const QString &TcpSocketService::identifier() const

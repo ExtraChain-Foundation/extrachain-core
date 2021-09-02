@@ -6,12 +6,10 @@
 #include "preconfig.h"
 #endif
 
-WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager,
-                                   ActorIndex *newActorIndex, QObject *parent)
+WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager, QObject *parent)
     : QObject(parent)
 {
     networkManager = newNetworkManager;
-    actorIndex = newActorIndex;
 
     if (ws == nullptr)
     {
@@ -109,7 +107,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         auto version = json["version"].toString();
         m_identifier = json["identifier"].toString();
         ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
-        ActorId currentFirstId = actorIndex->firstId();
+        ActorId currentFirstId = networkManager->actorIndex()->firstId();
         bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
         bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
@@ -135,7 +133,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         }
 
         bool flag = false;
-        auto &wsConnections = networkManager->getWsConnections();
+        auto &wsConnections = networkManager->wsConnections();
         std::for_each(wsConnections.begin(), wsConnections.end(), [&flag, this](WebSocketService *el) {
             flag = flag || (this != el && el->identifier() == m_identifier);
         });
@@ -166,7 +164,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     auto mess = qUncompress(message);
     m_bytesCompressed += mess.length() - message.length();
     m_bytesIncoming += message.length();
-    networkManager->MessageReceived(mess, pair);
+    networkManager->messageReceived(mess, pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)
@@ -231,7 +229,7 @@ void WebSocketService::sendFirstMessage()
 {
     qDebug() << "[WS] Send first message" << port();
     QJsonObject json;
-    json["firstId"] = actorIndex->firstId().toString();
+    json["firstId"] = networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
     QByteArray jsonBytes = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);

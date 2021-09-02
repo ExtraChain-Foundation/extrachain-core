@@ -97,7 +97,7 @@ signals:
     void stageSucceded(QString stage);
     void udpResponse();
     void extAddressExtracted();
-    void upnp_error(QString message);
+    void upnpError(QString message);
 };
 
 #endif // UPNPCONNECTION_H
