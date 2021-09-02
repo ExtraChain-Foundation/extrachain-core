@@ -6,11 +6,9 @@
 #include "preconfig.h"
 #endif
 
-WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager, QObject *parent)
-    : QObject(parent)
+WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
+    : SocketService(networkManager, parent)
 {
-    networkManager = newNetworkManager;
-
     if (ws == nullptr)
     {
         m_ws = new QWebSocket("ExtraChain " + QString(EXTRACHAIN_VERSION));
@@ -27,6 +25,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkMan
 }
 
 WebSocketService::WebSocketService(const WebSocketService &service)
+    : SocketService(service)
 {
     qFatal("[WS] Copy");
     this->m_ws = service.m_ws;
@@ -43,14 +42,9 @@ QWebSocket *WebSocketService::socket() const
     return m_ws;
 }
 
-const QString &WebSocketService::identifier() const
-{
-    return m_identifier;
-}
-
 bool WebSocketService::isActive() const
 {
-    return m_ws->isValid() && activated;
+    return m_ws->isValid() && m_activated;
 }
 
 void WebSocketService::open(const QUrl &url)
@@ -70,24 +64,9 @@ void WebSocketService::open(const QUrl &url)
 
 void WebSocketService::closeSocket()
 {
-    activated = false;
+    m_activated = false;
     m_ws->close();
     emit disconnected();
-}
-
-int WebSocketService::bytesCompressed() const
-{
-    return m_bytesCompressed;
-}
-
-int WebSocketService::bytesOutgoing() const
-{
-    return m_bytesOutgoing;
-}
-
-int WebSocketService::bytesIncoming() const
-{
-    return m_bytesIncoming;
 }
 
 bool WebSocketService::operator==(const WebSocketService &service) const
@@ -95,65 +74,23 @@ bool WebSocketService::operator==(const WebSocketService &service) const
     return m_ws == service.m_ws;
 }
 
-void WebSocketService::onTextMessage(const QString &message) // for first message and errors
+void WebSocketService::onTextMessage(const QString &message) // for first message
 {
-    qDebug() << "[WS] Text:" << message;
+    qDebug() << "[WS] First message:" << message;
 
-    // if (message.left(8) == "{\"error\"") { }
-
-    if (!activated)
+    if (!m_activated)
     {
-        auto json = QJsonDocument::fromJson(message.toLatin1());
-        auto version = json["version"].toString();
-        m_identifier = json["identifier"].toString();
-        ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
-        ActorId currentFirstId = networkManager->actorIndex()->firstId();
-        bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
-        bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
-
-        qDebug() << "[WS]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty()
-                 << jsonFirstId.isEmpty() << isFirstIdsContains << somethingEmpty
-                 << (version != EXTRACHAIN_VERSION);
-
-        if (!(somethingEmpty || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
-        {
-            qDebug() << "[WS] Close, because network or version unsuitable";
-            version != EXTRACHAIN_VERSION
-                ? error(Network::SocketServiceError::IncompatibleVersion, version)
-                : error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
-            closeSocket();
-            return;
-        }
-
-        if (m_identifier == Network::currentIdentifier())
-        {
-            error(Network::SocketServiceError::IncompatibleIdentifier, "");
-            closeSocket();
-            return;
-        }
-
-        bool flag = false;
-        auto &wsConnections = networkManager->wsConnections();
-        std::for_each(wsConnections.begin(), wsConnections.end(), [&flag, this](WebSocketService *el) {
-            flag = flag || (this != el && el->identifier() == m_identifier);
-        });
-        qDebug() << "[WS] Flag:" << flag;
-        if (flag)
-        {
-            error(Network::SocketServiceError::DuplicateIdentifier, "");
-            qDebug() << "[WS] Duplicate identifier";
-            closeSocket();
-            return;
-        }
-
-        activated = true;
-        qDebug() << "[WS] Activated" << this << port();
+        m_activated = checkFirstMessage(message);
+    }
+    else
+    {
+        qFatal("[WS] Extra text message");
     }
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message)
 {
-    if (!activated)
+    if (!m_activated)
         qFatal("[WS] Binary: not activated");
 
     // qDebug() << "[WS] Binary length:" << message.length();
@@ -164,7 +101,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     auto mess = qUncompress(message);
     m_bytesCompressed += mess.length() - message.length();
     m_bytesIncoming += message.length();
-    networkManager->messageReceived(mess, pair);
+    m_networkManager->messageReceived(mess, pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)
@@ -198,7 +135,7 @@ void WebSocketService::sendMessage(const QByteArray &data)
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error)
-{
+{ // maybe move
     qDebug() << "[WS] Socket error:" << error;
 
     if (m_ws->state() != QAbstractSocket::ConnectedState)
@@ -210,7 +147,7 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::connected, [this] {
         this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
-        emit networkManager->newSocket();
+        emit m_networkManager->newSocket();
         sendFirstMessage();
     });
     connect(m_ws, &QWebSocket::disconnected, [this] {
@@ -227,23 +164,13 @@ void WebSocketService::connections()
 
 void WebSocketService::sendFirstMessage()
 {
-    qDebug() << "[WS] Send first message" << port();
-    QJsonObject json;
-    json["firstId"] = networkManager->actorIndex()->firstId().toString();
-    json["version"] = EXTRACHAIN_VERSION;
-    json["identifier"] = QString(Network::currentIdentifier());
-    QByteArray jsonBytes = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
-    m_ws->sendTextMessage(jsonBytes);
-}
-
-const QString &WebSocketService::ip() const
-{
-    return m_ip;
+    auto json = generateFirstMessage();
+    m_ws->sendTextMessage(json);
 }
 
 quint16 WebSocketService::port() const
 {
-    if (m_ws->peerPort() != networkManager->wsPort)
+    if (m_ws->peerPort() != m_networkManager->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
@@ -251,18 +178,8 @@ quint16 WebSocketService::port() const
 
 quint16 WebSocketService::serverPort() const
 {
-    if (m_ws->peerPort() == networkManager->wsPort)
+    if (m_ws->peerPort() == m_networkManager->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
-}
-
-QString WebSocketService::protocolString() const
-{
-    return "WebSocket";
-}
-
-Network::Protocol WebSocketService::protocol() const
-{
-    return Network::Protocol::WebSocket;
 }
