@@ -22,7 +22,6 @@ public:
     const QString &identifier() const;
     bool isActive() const;
     void open(const QUrl &url);
-    void sendError(Network::SocketServiceError code, const QString &errorData);
 
     bool operator==(const WebSocketService &service) const;
 
@@ -51,7 +50,6 @@ private slots:
 private:
     void connections();
     void sendFirstMessage();
-    void parseError(const QString &message);
     void closeSocket();
 
     NetworkManager *networkManager = nullptr;

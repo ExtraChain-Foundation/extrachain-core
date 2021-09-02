@@ -30,6 +30,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkMan
 
 WebSocketService::WebSocketService(const WebSocketService &service)
 {
+    qFatal("[WS] Copy");
     this->m_ws = service.m_ws;
 }
 
@@ -91,13 +92,6 @@ int WebSocketService::bytesIncoming() const
     return m_bytesIncoming;
 }
 
-void WebSocketService::sendError(Network::SocketServiceError code, const QString &errorData)
-{
-    // qDebug() << "[WS] Error" << int(code);
-    m_ws->sendTextMessage(QString("{\"error\":%1\"}").arg(int(code)));
-    emit error(code, errorData);
-}
-
 bool WebSocketService::operator==(const WebSocketService &service) const
 {
     return m_ws == service.m_ws;
@@ -107,10 +101,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 {
     qDebug() << "[WS] Text:" << message;
 
-    if (message.left(8) == "{\"error\"")
-    {
-        parseError(message);
-    }
+    // if (message.left(8) == "{\"error\"") { }
 
     if (!activated)
     {
@@ -130,15 +121,15 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         {
             qDebug() << "[WS] Close, because network or version unsuitable";
             version != EXTRACHAIN_VERSION
-                ? sendError(Network::SocketServiceError::IncompatibleVersion, version)
-                : sendError(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
+                ? error(Network::SocketServiceError::IncompatibleVersion, version)
+                : error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
             closeSocket();
             return;
         }
 
         if (m_identifier == Network::currentIdentifier())
         {
-            sendError(Network::SocketServiceError::IncompatibleIdentifier, "");
+            error(Network::SocketServiceError::IncompatibleIdentifier, "");
             closeSocket();
             return;
         }
@@ -151,7 +142,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         qDebug() << "[WS] Flag:" << flag;
         if (flag)
         {
-            sendError(Network::SocketServiceError::DuplicateIdentifier, "");
+            error(Network::SocketServiceError::DuplicateIdentifier, "");
             qDebug() << "[WS] Duplicate identifier";
             closeSocket();
             return;
@@ -245,14 +236,6 @@ void WebSocketService::sendFirstMessage()
     json["identifier"] = QString(Network::currentIdentifier());
     QByteArray jsonBytes = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     m_ws->sendTextMessage(jsonBytes);
-}
-
-void WebSocketService::parseError(const QString &message)
-{
-    auto json = QJsonDocument::fromJson(message.toLatin1());
-    auto code = Network::SocketServiceError(json["error"].toInt());
-    qDebug() << "[WS] Error (parsed)" << int(code);
-    emit error(code, "");
 }
 
 const QString &WebSocketService::ip() const
