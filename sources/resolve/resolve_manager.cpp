@@ -133,11 +133,13 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 
 void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType)
 {
+    PRINT_MESSAGE_TYPE("[ResolveManager] Sending", msgType);
+
     Messages::BaseMessage msg;
     msg.type = msgType;
     msg.data = data;
-    qDebug() << "sending" << msgType;
-    if (msgType != Messages::ChainMessage::actorMessage)
+
+    if (msgType != Messages::ChainMessage::ActorMessage)
     {
         if (accountControler->getAccountCount() == 0)
             return;
@@ -162,12 +164,13 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
                                          const QByteArray &requestHash, const SocketPair &receiver)
 
 {
+    PRINT_MESSAGE_TYPE("[ResolveManager] Sending", msgType);
+
     Messages::BaseMessageResponse rmsg;
     rmsg.data = data;
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
-    qDebug() << "[ResolveManager] Sending" << msgType;
-    if (msgType != Messages::GeneralResponse::getActorResponse)
+    if (msgType != Messages::GeneralResponse::GetActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
     //    qDebug() << "NetworkManager: send " << msgType;

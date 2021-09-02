@@ -221,7 +221,7 @@ void ResolverService::resolveGeneralTask()
     unsigned int msgType = message.type;
     if (msgType == 0)
     {
-        qDebug() << "msgType.isEmpty()";
+        qDebug() << "[ResolverService] Receive empty message";
     }
     if (message.data.isEmpty() && msgType != Messages::GeneralRequest::GetAllActors
         && msgType != Messages::GeneralRequest::GetBlockCount)
@@ -229,14 +229,14 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         return;
     }
-    //    if (msgType != Messages::GeneralRequest::getAllActors
-    //        && msgType != Messages::GeneralResponse::getAllActorsResponse)
-    qDebug() << "[ResolverService] receive" << msgType;
-    if ((msgType != Messages::ChainMessage::actorMessage) && (Messages::isDFSMessage(msgType))
+
+    PRINT_MESSAGE_TYPE("[ResolverService] Receive", msgType);
+
+    if ((msgType != Messages::ChainMessage::ActorMessage) && (Messages::isDFSMessage(msgType))
         && (msgType != Messages::GeneralRequest::GetActor)
-        && (msgType != Messages::GeneralResponse::getActorResponse)
+        && (msgType != Messages::GeneralResponse::GetActorResponse)
         && (msgType != Messages::GeneralRequest::GetAllActors)
-        && (msgType != Messages::GeneralResponse::getAllActorsResponse))
+        && (msgType != Messages::GeneralResponse::GetAllActorsResponse))
     {
         if (Messages::isGeneralResponse(msgType))
         {
@@ -266,7 +266,7 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getAllActorsResponse: {
+    case Messages::GeneralResponse::GetAllActorsResponse: {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
@@ -276,19 +276,19 @@ void ResolverService::resolveGeneralTask()
         break;
     }
         // spread messages
-    case Messages::ChainMessage::profileMessage: {
+    case Messages::ChainMessage::ProfileMessage: {
         emit newProfile(message.data);
         finishWork();
         break;
     }
-    case Messages::ChainMessage::actorMessage: {
+    case Messages::ChainMessage::ActorMessage: {
         Actor<KeyPublic> actor(message.data);
         actorIndex->handleNewActor(actor);
         // emit newActor(actor);
         finishWork();
         break;
     }
-    case Messages::ChainMessage::blockMessage: {
+    case Messages::ChainMessage::BlockMessage: {
         Block block(message.data);
         if (!validateBlock(block))
         {
@@ -301,14 +301,14 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::ChainMessage::genesisBlockMessage: {
+    case Messages::ChainMessage::GenesisBlockMessage: {
         GenesisBlock block = message.data;
         blockchain->addGenBlockToBlockchain(block);
         // emit newGenesisBlock(block);
         finishWork();
         break;
     }
-    case Messages::ChainMessage::coinRequest: {
+    case Messages::ChainMessage::CoinRequest: {
         QByteArray msg = message.data;
         auto list = msg.split(' ');
         BigNumber amount(list[0]);
@@ -318,7 +318,7 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::ChainMessage::txMessage: {
+    case Messages::ChainMessage::TxMessage: {
         Transaction tx(message.data);
 
         if (!validate(tx))
@@ -332,7 +332,7 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::ChainMessage::contractMessage: {
+    case Messages::ChainMessage::ContractMessage: {
         //        Contract contract(message.getMsg_data());
         qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
@@ -381,7 +381,7 @@ void ResolverService::resolveGeneralTask()
     }
 
     // response messages
-    case Messages::GeneralResponse::getActorResponse: {
+    case Messages::GeneralResponse::GetActorResponse: {
         qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_ACTOR_RESPONSE_MESSAGE"
@@ -396,7 +396,7 @@ void ResolverService::resolveGeneralTask()
         break;
     }
 
-    case Messages::GeneralResponse::getTxResponse: {
+    case Messages::GeneralResponse::GetTxResponse: {
         qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_TX_RESPONSE_MESSAGE";
@@ -414,7 +414,7 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getBlockResponse: {
+    case Messages::GeneralResponse::GetBlockResponse: {
         qDebug() << "[ResolverService]"
                  << "recieveMsg(): type: "
                  << "GET_BLOCK_RESPONSE_MESSAGE";
@@ -447,7 +447,7 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getBlockCountResponse: {
+    case Messages::GeneralResponse::GetBlockCountResponse: {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
@@ -460,7 +460,7 @@ void ResolverService::resolveGeneralTask()
         finishWork();
         break;
     }
-    case Messages::GeneralResponse::getActorCountResponse: {
+    case Messages::GeneralResponse::GetActorCountResponse: {
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))

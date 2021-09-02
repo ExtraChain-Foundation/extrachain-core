@@ -145,12 +145,12 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
         auto profileData = actor.profile().serialize();
         bool isProfile = !profileData.isEmpty();
 
-        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::getActorResponse,
+        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::GetActorResponse,
                                             reqHash, receiver);
 
         if (isProfile)
         {
-            resolveManager->registrateMsg(profileData, Messages::ChainMessage::profileMessage);
+            resolveManager->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
         }
         else if (actor.account() != ActorType::Wallet && actor.account() != ActorType::First)
         { // if profile not exist
@@ -188,7 +188,7 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
     if (!result.isEmpty())
     {
         QByteArray data = Serialization::serialize(result, 4);
-        resolveManager->sendMessageResponse(data, Messages::GeneralResponse::getAllActorsResponse, reqHash,
+        resolveManager->sendMessageResponse(data, Messages::GeneralResponse::GetAllActorsResponse, reqHash,
                                             receiver);
         //        emit responseReady(Serialization::serialize(result, 4),
         //                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
@@ -253,7 +253,7 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &
 
     qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
     resolveManager->sendMessageResponse(QByteArray::number(this->getRecords()),
-                                        Messages::GeneralResponse::getActorCountResponse, requestHash,
+                                        Messages::GeneralResponse::GetActorCountResponse, requestHash,
                                         receiver);
     //    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
     //                       requestHash, receiver);
@@ -290,7 +290,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile)
                 return;
             }
 
-            resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::profileMessage);
+            resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::ProfileMessage);
             emit profileAvailabled(profile.id, actor.profile().getListProfile());
         }
     }
@@ -315,7 +315,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile
     }
     else
     {
-        resolveManager->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::profileMessage);
+        resolveManager->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::ProfileMessage);
         // emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
@@ -494,7 +494,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor)
             qFatal("db actor insert error");
 
         qDebug() << "[ActorIndex] Actor " << actor.id() << "was added";
-        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::actorMessage);
+        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::ActorMessage);
         // emit sendMessage(actor.serialize(), classType);
         // qDebug() << "emit signal for init dfs for user" << actorId;
         emit initDfs(actor.id());

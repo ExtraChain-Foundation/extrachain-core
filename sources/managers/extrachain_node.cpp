@@ -259,7 +259,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+            emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
         }
         else
         {
@@ -282,8 +282,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
                 }
 
                 // send fee tx
-                emit sendMsg(txFee.serialize(), Messages::ChainMessage::txMessage); // send fee
-                emit sendMsg(tx.serialize(), Messages::ChainMessage::txMessage);
+                emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
+                emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
             }
             else
             {

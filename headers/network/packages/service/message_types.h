@@ -20,16 +20,20 @@
 #ifndef MESSAGE_TYPES_H
 #define MESSAGE_TYPES_H
 namespace Messages {
+Q_NAMESPACE
+
 enum ChainMessage
 {
-    actorMessage = 100,
-    blockMessage = 101,
-    genesisBlockMessage = 102,
-    txMessage = 103,
-    contractMessage = 104,
-    profileMessage = 198,
-    coinRequest = 199,
+    ActorMessage = 100,
+    BlockMessage = 101,
+    GenesisBlockMessage = 102,
+    TxMessage = 103,
+    ContractMessage = 104,
+    ProfileMessage = 198,
+    CoinRequest = 199,
 };
+Q_ENUM_NS(ChainMessage)
+
 [[maybe_unused]] static bool isChainMessage(unsigned int value)
 {
     if (value >= 100 && value <= 199)
@@ -47,6 +51,8 @@ enum GeneralRequest
     GetAllActors = 206,
     Notification = 270
 };
+Q_ENUM_NS(GeneralRequest)
+
 [[maybe_unused]] static bool isGeneralRequest(unsigned int value)
 {
     if (value >= 200 && value <= 299)
@@ -55,14 +61,15 @@ enum GeneralRequest
 }
 enum GeneralResponse
 {
-    getBlockCountResponse = 300,
-    getActorCountResponse = 301,
-    getActorResponse = 302,
-    getBlockResponse = 303,
-    getTxResponse = 304,
-    getTxPairResponse = 305,
-    getAllActorsResponse = 306
+    GetBlockCountResponse = 300,
+    GetActorCountResponse = 301,
+    GetActorResponse = 302,
+    GetBlockResponse = 303,
+    GetTxResponse = 304,
+    GetTxPairResponse = 305,
+    GetAllActorsResponse = 306
 };
+Q_ENUM_NS(GeneralResponse)
 
 [[maybe_unused]] static bool isGeneralResponse(unsigned int value)
 {
@@ -71,6 +78,7 @@ enum GeneralResponse
     else
         return false;
 }
+
 enum DFSMessage
 {
     titleMessage = 400,
@@ -93,6 +101,8 @@ enum DFSMessage
 
     none = 499
 };
+Q_ENUM_NS(DFSMessage)
+
 [[maybe_unused]] static bool isDFSMessage(unsigned int value)
 {
     if (value >= 400 && value <= 499)
@@ -104,6 +114,8 @@ enum VerifyRequest
     verifyActor = 501,
     verifyActorResponse = 502
 };
+Q_ENUM_NS(VerifyRequest)
+
 [[maybe_unused]] static bool isVerifyRequest(unsigned int value)
 {
     if (value >= 500 && value <= 599)
@@ -111,4 +123,15 @@ enum VerifyRequest
     return false;
 }
 }
+
+#define PRINT_MESSAGE_TYPE(message, msgType)                                            \
+    if (Messages::isGeneralRequest(msgType))                                            \
+        qDebug().noquote() << message << Messages::GeneralRequest(msgType) << msgType;  \
+    else if (Messages::isGeneralResponse(msgType))                                      \
+        qDebug().noquote() << message << Messages::GeneralResponse(msgType) << msgType; \
+    else if (Messages::isChainMessage(msgType))                                         \
+        qDebug().noquote() << message << Messages::ChainMessage(msgType) << msgType;    \
+    else if (Messages::isDFSMessage(msgType))                                           \
+        qDebug().noquote() << message << Messages::DFSMessage(msgType) << msgType;
+
 #endif // MESSAGE_TYPES_H

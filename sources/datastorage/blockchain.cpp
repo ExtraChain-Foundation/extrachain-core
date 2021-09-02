@@ -390,7 +390,7 @@ void Blockchain::stakingReward(const Block &block)
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(wallet);
                 rtx.sign(accountController->getActor(wallet));
-                emit sendMessage(rtx.serialize(), Messages::ChainMessage::txMessage);
+                emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
             }
         }
     }
@@ -674,7 +674,7 @@ void Blockchain::sendUnFee(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        emit sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
+        emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
     }
 }
 
@@ -721,7 +721,7 @@ void Blockchain::sendFeeUnfreeze(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        emit sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
+        emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
     }
 }
 
@@ -1036,7 +1036,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     if (block.getIndex() < 0)
         return Errors::BLOCK_IS_NOT_VALID;
     if (signCheckAdd(block))
-        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -1046,7 +1046,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
 
-        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
         saveTxInfoInEC(block.getData());
         stakingReward(block);
         break;
@@ -1082,7 +1082,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
             if (blockIndex.addBlock(gB) == 0)
             {
                 qDebug() << "Block" << gB.getIndex() << gB.getType() << "is successfully added to blockchain";
-                emit sendMessage(gB.serialize(), Messages::ChainMessage::genesisBlockMessage);
+                emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
             }
         }
@@ -1522,7 +1522,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
-    emit responseReady(srBlock, Messages::GeneralResponse::getBlockResponse, requestHash, receiver);
+    emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash, receiver);
 }
 
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
@@ -1539,7 +1539,7 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
     // QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
     emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
-                       Messages::GeneralResponse::getBlockCountResponse, requestHash, receiver);
+                       Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
 }
 
 void Blockchain::addBlockToBlockchain(Block block)
@@ -1578,7 +1578,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
-        emit sendMessage(block.serialize(), Messages::ChainMessage::genesisBlockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::GenesisBlockMessage);
 }
 
 // Actors //
@@ -1598,7 +1598,7 @@ void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QBy
     Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty())
     {
-        emit responseReady(transaction.serialize(), Messages::GeneralResponse::getTxResponse, request,
+        emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse, request,
                            receiver);
     }
     else

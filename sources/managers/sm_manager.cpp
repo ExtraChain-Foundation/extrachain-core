@@ -80,7 +80,7 @@ void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QBy
     tx.sign(*sender);
 
 #ifdef ECLIENT
-    emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::contractMessage);
+    emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::ContractMessage);
 #endif
 #ifdef ECONSOLE
     emit initConsoleToken(tx);
