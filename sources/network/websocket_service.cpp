@@ -6,13 +6,9 @@
 #include "preconfig.h"
 #endif
 
-WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkManager,
-                                   ActorIndex *newActorIndex, QObject *parent)
-    : QObject(parent)
+WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
+    : SocketService(networkManager, parent)
 {
-    networkManager = newNetworkManager;
-    actorIndex = newActorIndex;
-
     if (ws == nullptr)
     {
         m_ws = new QWebSocket("ExtraChain " + QString(EXTRACHAIN_VERSION));
@@ -29,7 +25,9 @@ WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *newNetworkMan
 }
 
 WebSocketService::WebSocketService(const WebSocketService &service)
+    : SocketService(service)
 {
+    qFatal("[WS] Copy");
     this->m_ws = service.m_ws;
 }
 
@@ -44,14 +42,9 @@ QWebSocket *WebSocketService::socket() const
     return m_ws;
 }
 
-const QString &WebSocketService::identifier() const
-{
-    return m_identifier;
-}
-
 bool WebSocketService::isActive() const
 {
-    return m_ws->isValid() && activated;
+    return m_activated && m_ws->isValid();
 }
 
 void WebSocketService::open(const QUrl &url)
@@ -71,31 +64,9 @@ void WebSocketService::open(const QUrl &url)
 
 void WebSocketService::closeSocket()
 {
-    activated = false;
+    m_activated = false;
     m_ws->close();
     emit disconnected();
-}
-
-int WebSocketService::bytesCompressed() const
-{
-    return m_bytesCompressed;
-}
-
-int WebSocketService::bytesOutgoing() const
-{
-    return m_bytesOutgoing;
-}
-
-int WebSocketService::bytesIncoming() const
-{
-    return m_bytesIncoming;
-}
-
-void WebSocketService::sendError(Network::SocketServiceError code, const QString &errorData)
-{
-    // qDebug() << "[WS] Error" << int(code);
-    m_ws->sendTextMessage(QString("{\"error\":%1\"}").arg(int(code)));
-    emit error(code, errorData);
 }
 
 bool WebSocketService::operator==(const WebSocketService &service) const
@@ -103,68 +74,23 @@ bool WebSocketService::operator==(const WebSocketService &service) const
     return m_ws == service.m_ws;
 }
 
-void WebSocketService::onTextMessage(const QString &message) // for first message and errors
+void WebSocketService::onTextMessage(const QString &message) // for first message
 {
-    qDebug() << "[WS] Text:" << message;
+    qDebug() << "[WS] First message:" << message;
 
-    if (message.left(8) == "{\"error\"")
+    if (!m_activated)
     {
-        parseError(message);
+        m_activated = checkFirstMessage(message);
     }
-
-    if (!activated)
+    else
     {
-        auto json = QJsonDocument::fromJson(message.toLatin1());
-        auto version = json["version"].toString();
-        m_identifier = json["identifier"].toString();
-        ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
-        ActorId currentFirstId = actorIndex->firstId();
-        bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
-        bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
-
-        qDebug() << "[WS]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty()
-                 << jsonFirstId.isEmpty() << isFirstIdsContains << somethingEmpty
-                 << (version != EXTRACHAIN_VERSION);
-
-        if (!(somethingEmpty || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
-        {
-            qDebug() << "[WS] Close, because network or version unsuitable";
-            version != EXTRACHAIN_VERSION
-                ? sendError(Network::SocketServiceError::IncompatibleVersion, version)
-                : sendError(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
-            closeSocket();
-            return;
-        }
-
-        if (m_identifier == Network::currentIdentifier())
-        {
-            sendError(Network::SocketServiceError::IncompatibleIdentifier, "");
-            closeSocket();
-            return;
-        }
-
-        bool flag = false;
-        auto &wsConnections = networkManager->getWsConnections();
-        std::for_each(wsConnections.begin(), wsConnections.end(), [&flag, this](WebSocketService *el) {
-            flag = flag || (this != el && el->identifier() == m_identifier);
-        });
-        qDebug() << "[WS] Flag:" << flag;
-        if (flag)
-        {
-            sendError(Network::SocketServiceError::DuplicateIdentifier, "");
-            qDebug() << "[WS] Duplicate identifier";
-            closeSocket();
-            return;
-        }
-
-        activated = true;
-        qDebug() << "[WS] Activated" << this << port();
+        qFatal("[WS] Extra text message");
     }
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message)
 {
-    if (!activated)
+    if (!m_activated)
         qFatal("[WS] Binary: not activated");
 
     // qDebug() << "[WS] Binary length:" << message.length();
@@ -175,7 +101,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     auto mess = qUncompress(message);
     m_bytesCompressed += mess.length() - message.length();
     m_bytesIncoming += message.length();
-    networkManager->MessageReceived(mess, pair);
+    m_networkManager->messageReceived(mess, pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)
@@ -209,7 +135,7 @@ void WebSocketService::sendMessage(const QByteArray &data)
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error)
-{
+{ // maybe move
     qDebug() << "[WS] Socket error:" << error;
 
     if (m_ws->state() != QAbstractSocket::ConnectedState)
@@ -221,7 +147,7 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::connected, [this] {
         this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
-        emit networkManager->newSocket();
+        emit m_networkManager->newSocket();
         sendFirstMessage();
     });
     connect(m_ws, &QWebSocket::disconnected, [this] {
@@ -231,38 +157,20 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
     connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
-    connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket);
+    connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
     connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this,
             &WebSocketService::onSocketError);
 }
 
 void WebSocketService::sendFirstMessage()
 {
-    qDebug() << "[WS] Send first message" << port();
-    QJsonObject json;
-    json["firstId"] = actorIndex->firstId().toString();
-    json["version"] = EXTRACHAIN_VERSION;
-    json["identifier"] = QString(Network::currentIdentifier());
-    QByteArray jsonBytes = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
-    m_ws->sendTextMessage(jsonBytes);
-}
-
-void WebSocketService::parseError(const QString &message)
-{
-    auto json = QJsonDocument::fromJson(message.toLatin1());
-    auto code = Network::SocketServiceError(json["error"].toInt());
-    qDebug() << "[WS] Error (parsed)" << int(code);
-    emit error(code, "");
-}
-
-const QString &WebSocketService::ip() const
-{
-    return m_ip;
+    auto json = generateFirstMessage();
+    m_ws->sendTextMessage(json);
 }
 
 quint16 WebSocketService::port() const
 {
-    if (m_ws->peerPort() != networkManager->wsPort)
+    if (m_ws->peerPort() != m_networkManager->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
@@ -270,18 +178,8 @@ quint16 WebSocketService::port() const
 
 quint16 WebSocketService::serverPort() const
 {
-    if (m_ws->peerPort() == networkManager->wsPort)
+    if (m_ws->peerPort() == m_networkManager->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
-}
-
-QString WebSocketService::protocolString() const
-{
-    return "WebSocket";
-}
-
-Network::Protocol WebSocketService::protocol() const
-{
-    return Network::Protocol::WebSocket;
 }

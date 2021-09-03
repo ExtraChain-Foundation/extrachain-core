@@ -22,6 +22,7 @@
 
 #include <QTcpSocket>
 
+#include "network/isocket_service.h"
 #include "network/socket_pair.h"
 #include "utils/exc_utils.h"
 
@@ -30,108 +31,50 @@ class NetworkManager;
 /**
  * @brief SocketService is responsible for message delivery
  */
-class TcpSocketService : public QObject
+class TcpSocketService : public SocketService
 {
     Q_OBJECT
-    const QByteArray m_IdentifierPrefix = "ind:";
-
-private:
-    NetworkManager *networkManager = nullptr;
-    int connectionTry = 0;
-    qintptr socketDescriptor = 0;
-    bool active = false;
-    QString address;
-    quint16 m_port;
-    QTcpSocket *m_tcp = nullptr;
-    QString m_identifier;
-    int _blockSize = 0;
-    int reconnectTry = 0;
-    QByteArray pendMsg;
-
-    int pendMsgSize = -1;
-
-    int counter = 0;
 
 public:
-    TcpSocketService();
+    explicit TcpSocketService();
+    explicit TcpSocketService(QString address, NetworkManager *networkManager, QObject *parent = nullptr);
+    explicit TcpSocketService(qintptr socketDescriptor, NetworkManager *networkManager,
+                              QObject *parent = nullptr);
     TcpSocketService(const TcpSocketService &value);
-    TcpSocketService(QString address, quint16 networkPort, QObject *parent = nullptr);
-    TcpSocketService(qintptr socketDescriptor, QObject *parent = nullptr);
-    ~TcpSocketService() override;
+    ~TcpSocketService();
 
 signals:
-    void msgReady(const QByteArray &data, const SocketPair &socketData);
-    void MessageReceived(const QByteArray &msgS, const SocketPair &receiver);
-    /**
-     * @brief has only one connection with &QTcpSocket::disconnected on client
-     * and connection with &NetworkManager::removeConnection on server
-     */
-    void clientDisconnected();
-    void close();
-    void connected();
-    void clientRemove();
     void finished();
-    void checkMe();
-
-    //    void moveMe();
-    void setActiveSignal(bool active);
-
-private slots:
-
-    void reconnect();
-    //    void readData();
 
 public slots:
     /**
      * @brief Send message using QTcpSocket
      * @param message
      */
-    void sendMsg(const QByteArray &data, const SocketPair &socketData);
+    void sendMessage(const QByteArray &data);
     void process();
     void establishConnection();
-    void setActive(bool active);
+    void closeSocket() override;
 
 private slots:
     void doRead();
-    void continueDoRead();
 
 public:
-    void gotMessage(QByteArray msg, SocketPair rec);
-    const QString &identifier() const;
-    void processID(QByteArray id);
-    /**
-     * @brief Send message using QTcpSocket
-     * @param message
-     */
-    void *distMsg(const QByteArray data, const SocketPair &socketData);
     bool isActive() const;
-    QString ip() const;
     quint16 port() const;
     quint16 serverPort() const;
-    QString protocolString() const;
-    Network::Protocol protocol() const;
-
-    QHostAddress getSocketAddress() const;
-    quint16 getSocketPeer() const;
+    QString protocolString() const override;
+    Network::Protocol protocol() const override;
     QTcpSocket *socket() const;
-    void setSocket(QTcpSocket *value);
-    QTcpSocket::SocketState state();
-    void setReconnectTry(int value);
-    void setIdentifier(const QString &value);
-    SocketPair getSocketPair();
-    void setNetworkManager(NetworkManager *value);
 
-    int bytesIncoming() const
-    {
-        return -1;
-    }
-    int bytesOutgoing() const
-    {
-        return -1;
-    }
-    int bytesCompressed() const
-    {
-        return -1;
-    }
+private:
+    qintptr socketDescriptor = 0;
+    QTcpSocket *m_tcp = nullptr;
+    int _blockSize = 0;
+    QByteArray pendMsg;
+    int pendMsgSize = -1;
+
+    void gotMessage(const QByteArray &msg, const SocketPair &pair);
+    void continueDoRead();
 };
 #endif // SOCKET_SERVICE_H

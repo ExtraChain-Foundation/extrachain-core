@@ -657,7 +657,7 @@ Dfs::~Dfs()
 
 void Dfs::initDfsNetwork()
 {
-    m_networkManager = new DfsNetworkManager(accountController, actorIndex, dfsNetLocalIp);
+    m_networkManager = new DfsNetworkManager(actorIndex, dfsNetLocalIp);
     m_networkManager->setDfs(this);
     connect(this, &Dfs::connectToNode, m_networkManager, &DfsNetworkManager::connectToNode);
     connect(this, &Dfs::removeConnection, m_networkManager, &DfsNetworkManager::removeConnection);

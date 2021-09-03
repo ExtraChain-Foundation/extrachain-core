@@ -50,7 +50,6 @@ class ResolveManager;
 class NetworkManager : public QObject
 {
     Q_OBJECT
-    const int maxValueTryConnections = 3;
 
 private:
     bool reservedActorListUse = false;
@@ -58,95 +57,53 @@ private:
     BigNumber maxBlockCount; // latest known block num in the blockchain
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
-    QList<QByteArray> tempConnections;
+    QMap<QByteArray, int> msgHashList = {};
 
 #ifdef ECLIENT
     const int SIZE_OF_CONNECTIONS = 5;
 #else
     const int SIZE_OF_CONNECTIONS = 100;
 #endif
-protected:
-    ActorIndex *actorIndex;
-    AccountController *accounts;
+    ActorIndex *m_actorIndex;
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
-
-private:
-    QMap<QByteArray, int> *requestResponseMap;
-
-    TcpServerService *serverService;
+    TcpServerService *tcpServer;
     QWebSocketServer *wsServer;
-
-protected:
-    QList<TcpSocketService *> tcpConnections;
-    QList<WebSocketService *> wsConnections;
-
-private:
-    QMap<QByteArray, int> handler = {};
+    QList<TcpSocketService *> m_tcpConnections;
+    QList<WebSocketService *> m_wsConnections;
 
 public:
-    NetworkManager(AccountController *accountList, ActorIndex *actorIndex, const QString &localIp = "");
+    NetworkManager(ActorIndex *actorIndex, const QString &localIp = "");
     ~NetworkManager();
 
-    void showMessage(const QHostAddress &from, const QString &message);
-
-    void resolverMessage(const QHostAddress &from, const QString &message);
-
+    // protected:
     quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
 
 private:
     void connectTcpSocket(TcpSocketService *service);
-    void disconnectTcpSocket(TcpSocketService *connection);
     void connectWsService(WebSocketService *ws);
-    TcpSocketService getConnectionByAddress(const QByteArray address) const;
 
 public:
-    TcpServerService *getServerService();
-    // ResolverService *getResolverService();
-    const QList<TcpSocketService *> &getTcpConnections() const;
-    const QList<WebSocketService *> &getWsConnections() const;
-    inline int connectionsCount() const;
+    const QList<TcpSocketService *> &tcpConnections() const;
+    const QList<WebSocketService *> &wsConnections() const;
+    bool serverStatus(Network::Protocol protocol) const;
+    int connectionsCount() const;
 
 public slots:
     void removeConnection(const QString &identifier);
 
-protected:
-    NetworkManager *getMe();
-
 signals:
-    void finished();
+    void finished(); // ThreadPool
 
 protected:
+    void startNetwork();
     /**
-     * @brief startNetwork
-     * @param serverPort
-     * @param local
-     * @param serverService
-     */
-    virtual void startNetwork();
-
-    virtual void setupServerServiceConnections();
-    void setupDiscoveryServiceConnections();
-    /**
-     * @brief signMessage
-     * @param message
-     */
-    void signMessage(Messages::BaseMessage &message) const;
-    /**
-     * @brief calcHash
-     * @param message
-     * @return
-     */
-    QByteArray calcHash(const Messages::IMessage &message) const;
-
-protected:
-    /**
-     * @brief Creates new socket connection and adds it to connections
-     * @param address
+     * @brief Creates new tcp socket connection and adds it to connections
+     * @param ip
      * @param port
      */
-    virtual TcpSocketService *connectToTcpSocket(const QString &ip, quint16 port);
+    void connectToTcpSocket(const QString &ip, quint16 port);
     void connectToWebSocket(const QString &ip, quint16 port);
 
     /**
@@ -154,49 +111,22 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg, QMap<QByteArray, int> &handler,
-                       const QList<TcpSocketService *> list);
+    bool checkMsgCount(const QByteArray &msg);
     void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
                      Config::Net::TypeSend typeSend);
     void sendFromCache();
 
 private slots:
-    /**
-     * @brief createNewConnectionsFromList
-     * @param message
-     */
-    void createNewConnectionsFromList(const QByteArray &message);
     void onNewWSConnection();
 
 protected slots:
-    virtual void addTcpConnectionFromServer(qint64 socketDescriptor);
+    void addTcpConnectionFromServer(qint64 socketDescriptor);
     virtual void checkConnectionsStatus();
     void startDiscovery();
-    // for upnpn
-    void upnpErrDis(QString msg);
-    void upnpErrNet(QString msg);
-
-    // spread messages
 
 public slots:
-    /**
-     * @brief addConnection
-     * @param socketDescriptor
-     */
     void connectToNode(const QString &ip, Network::Protocol protocol);
-
     void process();
-    void connectToServerByIpList(QList<QByteArray> ipList);
-
-    /**
-     * @brief checkMyIdentifier
-     */
-    void checkMyIdentifier();
-    /**
-     * @brief sendMessage
-     * @param data for send
-     * @param messageType type to compress
-     */
 
 private slots:
     /**
@@ -207,7 +137,7 @@ private slots:
     void webSocketError(Network::SocketServiceError error, QString errorData);
 
 public:
-    QString localIp();
+    QString localIp(); // TODO: remove
     void send(const QByteArray &message, const unsigned int &msgType,
               const SocketPair &receiver = SocketPair(),
               Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
@@ -215,27 +145,19 @@ public:
     virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
                              const SocketPair &receiver = {},
                              Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-    virtual void *MessageReceived(const QByteArray &msg, const SocketPair &receiver);
-
-    // void MoveToDfsN();
+    virtual void messageReceived(const QByteArray &msg, const SocketPair &receiver);
 
     void setResolveManager(ResolveManager *value);
 
-    quint16 getServerPort() const;
-    QNetworkAddressEntry *getLocal() const;
-    QByteArray getSerializedConnectionList() const;
-    void checkOnValidConnection(QByteArray id, QByteArray address);
-    void addTempConnections(const QList<QByteArray> &value);
+    ActorIndex *actorIndex() const;
 
 signals:
-    // void newDfsSocket(SocketService *socket);
-    // void MsgReceived(const QByteArray &msg, const SocketPair &receiver);
-    // void sendMsg(const QByteArray &data, const SocketPair &socketData);
     void newSocket();
-    void networkStatusChanged(bool status);
-    void networkSocketsCountChanged(int socketsCount);
-    void networkErrorChanged(bool serverError);
-    void onWebSocketError(Network::SocketServiceError, QString, QString);
+    void connectionStatusChanged(bool status);
+    void connectionsCountChanged(int socketsCount);
+    void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
+
+    friend class DfsNetworkManager;
 };
 
 #endif // NETWORK_MANAGER_H

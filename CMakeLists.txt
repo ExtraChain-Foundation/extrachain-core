@@ -117,6 +117,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/verify_messages.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpserver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpsocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
@@ -165,6 +166,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_pair_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpserver_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpsocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp

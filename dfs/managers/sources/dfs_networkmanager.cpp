@@ -36,9 +36,8 @@ bool DfsNetworkManager::isLoading(const QString &fileName)
     return false;
 }
 
-DfsNetworkManager::DfsNetworkManager(AccountController *accountList, ActorIndex *actInd,
-                                     const QString &localIp)
-    : NetworkManager(accountList, actInd, localIp)
+DfsNetworkManager::DfsNetworkManager(ActorIndex *actInd, const QString &localIp)
+    : NetworkManager(actInd, localIp)
 {
     tcpPort = 2223;
     wsPort = 2234;
@@ -47,7 +46,6 @@ DfsNetworkManager::DfsNetworkManager(AccountController *accountList, ActorIndex 
 DfsNetworkManager::~DfsNetworkManager()
 {
     emit finished();
-    delete serverService;
 }
 
 void DfsNetworkManager::connectResolver(DFSResolverService *resolver)
@@ -69,7 +67,7 @@ void DfsNetworkManager::createDFSResolver(Network::DataStruct ds)
 {
     DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
     resolver->setDfs(dfs);
-    resolver->setActorIndex(actorIndex);
+    resolver->setActorIndex(m_actorIndex);
     resolver->setTask(ds.msg, ds.receiver);
     resolver->setLongReceiver(ds.receiver);
     dfsResolvers.append(resolver);
@@ -77,12 +75,12 @@ void DfsNetworkManager::createDFSResolver(Network::DataStruct ds)
     ThreadPool::addThread(dfsResolvers.last());
 }
 
-void *DfsNetworkManager::MessageReceived(const QByteArray &msg, const SocketPair &receiver)
+void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
     if (msg == Config::Net::PROTOCOL_VERSION)
     {
         qDebug() << "Protocol msg Error read";
-        return nullptr;
+        return;
     }
     if (!msg.isEmpty())
     {
@@ -91,14 +89,13 @@ void *DfsNetworkManager::MessageReceived(const QByteArray &msg, const SocketPair
         dStruct.receiver = receiver;
         emit newMessage(dStruct);
     }
-    return nullptr;
 }
 
 void DfsNetworkManager::process()
 {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
     uResolver->setDfs(dfs);
-    uResolver->setActorIndex(actorIndex);
+    uResolver->setActorIndex(m_actorIndex);
 
     connectResolver(uResolver);
 
@@ -164,14 +161,14 @@ void DfsNetworkManager::removeResolver(DFSResolverService::FinishStatus status)
 void DfsNetworkManager::checkConnectionsStatus()
 {
     bool flag = false;
-    std::for_each(tcpConnections.begin(), tcpConnections.end(),
+    std::for_each(m_tcpConnections.begin(), m_tcpConnections.end(),
                   [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
-    std::for_each(wsConnections.begin(), wsConnections.end(),
+    std::for_each(m_wsConnections.begin(), m_wsConnections.end(),
                   [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
-    emit networkStatusChanged(flag);
-    emit networkSocketsCountChanged(connectionsCount());
+    emit connectionStatusChanged(flag);
+    emit connectionsCountChanged(connectionsCount());
 
-    if (flag == true)
+    if (flag == true) // TODO: replace to networkStatusChanged slot
     {
         const auto files = dfs->tmpFiles();
         for (const QString &file : files)

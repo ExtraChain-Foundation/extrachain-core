@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -20,138 +20,64 @@
 #include "network/tcpsocket_service.h"
 #include "dfs/managers/headers/dfs_networkmanager.h"
 
-QTcpSocket *TcpSocketService::socket() const
-{
-    return m_tcp;
-}
-
-void TcpSocketService::setSocket(QTcpSocket *value)
-{
-    m_tcp = value;
-}
-
-QAbstractSocket::SocketState TcpSocketService::state()
-{
-    return m_tcp->state();
-}
-
-void TcpSocketService::reconnect()
-{
-    active = false;
-    if (connectionTry < 3)
-    {
-        this->socketDescriptor = 0;
-        QTimer::singleShot(4000, this, SLOT(process()));
-    }
-    else
-    {
-        this->socketDescriptor = 0;
-        emit clientDisconnected();
-    }
-    connectionTry++;
-}
-
-void TcpSocketService::setReconnectTry(int value)
-{
-    reconnectTry = value;
-}
-
-void TcpSocketService::setIdentifier(const QString &value)
-{
-    m_identifier = value;
-}
-
-bool TcpSocketService::isActive() const
-{
-    return active;
-}
-
-SocketPair TcpSocketService::getSocketPair()
-{
-    SocketPair res(address.toStdString(), port());
-    res.m_identifier = m_identifier.toLatin1();
-    return res;
-}
-
-void TcpSocketService::setNetworkManager(NetworkManager *value)
-{
-    networkManager = value;
-}
-
 TcpSocketService::TcpSocketService()
+    : SocketService(nullptr, nullptr)
 {
+    qFatal("tcp test");
+}
+
+TcpSocketService::TcpSocketService(QString address, NetworkManager *networkManager, QObject *parent)
+    : SocketService(networkManager, parent)
+{
+    this->m_ip = address;
     // dpBuffer->clear();
 }
 
-TcpSocketService::TcpSocketService(const TcpSocketService &value)
-{
-    connectionTry = value.connectionTry;
-    socketDescriptor = value.socketDescriptor;
-    active = value.active;
-    address = value.address;
-    m_port = value.m_port;
-    m_tcp = value.m_tcp;
-    m_identifier = value.m_identifier;
-    _blockSize = value._blockSize;
-    // buffer = value.buffer;
-    reconnectTry = value.reconnectTry;
-    // dpBuffer->clear();
-}
-
-TcpSocketService::TcpSocketService(QString address, quint16 networkPort, QObject *parent)
-//    : QObject(parent)
-{
-    this->address = address;
-    this->m_port = networkPort;
-    // dpBuffer->clear();
-}
-
-TcpSocketService::TcpSocketService(qintptr socketDescriptor, QObject *parent)
-//    : QObject(parent)
+TcpSocketService::TcpSocketService(qintptr socketDescriptor, NetworkManager *networkManager, QObject *parent)
+    : SocketService(networkManager, parent)
 {
     this->socketDescriptor = socketDescriptor;
     // dpBuffer->clear();
     qDebug() << "[TCP] Socket Descriptor" << socketDescriptor;
 }
 
+TcpSocketService::TcpSocketService(const TcpSocketService &value)
+    : SocketService(value)
+{
+    m_tcp = value.m_tcp;
+    socketDescriptor = value.socketDescriptor;
+    _blockSize = value._blockSize;
+    // buffer = value.buffer;
+    // dpBuffer->clear();
+}
+
 TcpSocketService::~TcpSocketService()
 {
     if (m_tcp == nullptr)
-        return;
+        qFatal("[TCP] nullptr socket in destructor");
     m_tcp->close();
     m_tcp->deleteLater();
-    qDebug() << "[TCP] Remove tcp socket" << address << port() << serverPort();
+    qDebug() << "[TCP] Remove tcp socket" << m_ip << port() << serverPort();
 }
 
-void TcpSocketService::sendMsg(const QByteArray &data, const SocketPair &socketData)
+QTcpSocket *TcpSocketService::socket() const
 {
-    Q_UNUSED(socketData)
-    // if(all)
-    // send
-    // if(allexcept && adress != closedAdress)
-    // send
-    // if(focused && adress == mustAdress)
-    // send
+    return m_tcp;
+}
 
-    // check socket status
+bool TcpSocketService::isActive() const
+{
+    return m_activated && m_tcp->isValid();
+}
+
+void TcpSocketService::sendMessage(const QByteArray &data)
+{
     if (!m_tcp->isValid())
         return;
-    // take data from pair
-    // QString ipAddress = QString::fromStdString(socketData.ip);
-    // qint64 portAddress = socketData.port;
-    // take socket which we need if we have 0 - port and 0.0.0.0 - ip address send anyway
-    //    if (((ipAddress == address) || ipAddress == "0.0.0.0") && ((port == portAddress) || (portAddress ==
-    //    0)))
-    //    {
 
-    QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE);
+    QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE); // qCompress
+    m_bytesOutgoing += _wtSok.length();
     m_tcp->write(_wtSok, _wtSok.size());
-}
-
-void *TcpSocketService::distMsg(const QByteArray data, const SocketPair &socketData)
-{
-    emit msgReady(data, socketData);
-    return nullptr;
 }
 
 void TcpSocketService::process()
@@ -159,19 +85,21 @@ void TcpSocketService::process()
     if (m_tcp == nullptr)
     {
         this->m_tcp = new QTcpSocket(this);
-        connect(this, &TcpSocketService::msgReady, this, &TcpSocketService::sendMsg, Qt::QueuedConnection);
-        connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::connected);
-        connect(m_tcp, &QTcpSocket::disconnected, this, &TcpSocketService::reconnect);
+        connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::establishConnection);
+        connect(this, &TcpSocketService::close, this, &TcpSocketService::closeSocket);
         connect(m_tcp, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
             Q_UNUSED(socketError)
-            qDebug().nospace().noquote() << "[TCP] Socket error " << socketError << " for " << address << ":"
-                                         << port() << serverPort();
+            qDebug().noquote() << "[TCP] Socket error" << socketError << "for" << m_ip << port()
+                               << serverPort();
             if (this->m_tcp->state() != QTcpSocket::ConnectedState)
-                this->reconnect();
+                emit this->close();
         });
-        connect(this, &TcpSocketService::setActiveSignal, this, &TcpSocketService::setActive);
+    }
+    else
+    {
+        qFatal("[TCP] tcp != nullptr in process");
     }
 
     if (socketDescriptor != 0)
@@ -181,27 +109,26 @@ void TcpSocketService::process()
     }
     else
     {
-        this->m_tcp->connectToHost(address, m_port);
+        qDebug() << "[TCP]" << this->m_tcp << m_ip << m_networkManager->tcpPort;
+        this->m_tcp->connectToHost(m_ip, m_networkManager->tcpPort);
     }
 }
 
 void TcpSocketService::establishConnection()
 {
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
-    this->address = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
-    QByteArray idb = m_IdentifierPrefix
-        + Serialization::serialize({ QByteArray::number(0), Network::currentIdentifier(),
-                                     networkManager->getSerializedConnectionList() }); // TODO: remove build
-    this->distMsg(idb, SocketPair(this->address.toStdString(), port()));
+    this->m_ip = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
+    qDebug() << "[TCP]" << serverPort() << "Send first message:" << generateFirstMessage();
+    emit send(generateFirstMessage());
 
-    qDebug() << "[TCP] Address" << this->m_tcp << address << port() << serverPort() << m_tcp->localPort()
+    qDebug() << "[TCP] Address" << this->m_tcp << m_ip << port() << serverPort() << m_tcp->localPort()
              << m_tcp->peerPort();
     qDebug() << "[TCP] Open status:" << m_tcp->isOpen();
 }
 
-void TcpSocketService::setActive(bool active)
-{
-    this->active = active;
+void TcpSocketService::closeSocket() {
+    m_activated = false;
+    emit disconnected();
 }
 
 void TcpSocketService::doRead()
@@ -238,29 +165,16 @@ void TcpSocketService::continueDoRead()
         if (pendMsgSize == bytesRead)
         {
             pendMsg.append(rpckg);
-            if (!this->isActive() && pendMsg.left(m_IdentifierPrefix.size()) == m_IdentifierPrefix)
+            if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
-                QByteArray b = pendMsg.mid(m_IdentifierPrefix.size());
-
-                QByteArrayList bl = Serialization::deserialize(b);
-                if (bl.length() == 3)
-                {
-
-                    this->processID(bl[1]);
-                    networkManager->addTempConnections(Serialization::deserialize(bl[2]));
-                    networkManager->checkOnValidConnection(this->identifier().toLatin1(),
-                                                           this->ip().toLocal8Bit());
-                    networkManager->connectToServerByIpList(Serialization::deserialize(bl[2]));
-                }
-                else
-                {
-                    emit this->close();
-                }
+                m_activated = checkFirstMessage(pendMsg);
+                qDebug() << "[TCP] First message" << pendMsg << m_activated;
             }
             else
             {
-                SocketPair receiver(this->ip().toStdString(), this->port());
+                SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
+                m_bytesIncoming += pendMsg.length();
                 this->gotMessage(pendMsg, receiver);
             }
             pendMsgSize = -1;
@@ -279,47 +193,33 @@ void TcpSocketService::continueDoRead()
     }
 }
 
-void TcpSocketService::gotMessage(QByteArray msg, SocketPair rec)
+void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 {
-    QByteArray bmsg = msg;
     Messages::BaseMessage dbm;
-    dbm.deserialize(bmsg);
+    dbm.deserialize(msg);
     if (dbm.isEmpty())
-        return;
+        qFatal("dmb is empty");
     if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
-        return;
+        qFatal("protocol");
 
-    if (bmsg == Config::Net::PROTOCOL_VERSION)
-    {
-        qDebug() << "[TCP] Protocol msg collected";
-        counter = 1;
+    if (msg == Config::Net::PROTOCOL_VERSION) {
+        qDebug() << "[TCP] WTF";
+        return;
     }
 
     if (serverPort() == 2223)
-        reinterpret_cast<DfsNetworkManager *>(networkManager)->MessageReceived(bmsg, rec);
+        reinterpret_cast<DfsNetworkManager *>(m_networkManager)->messageReceived(msg, pair);
     else
-        networkManager->MessageReceived(bmsg, rec);
-}
-
-const QString &TcpSocketService::identifier() const
-{
-    return m_identifier;
-}
-
-void TcpSocketService::processID(QByteArray id)
-{
-    m_identifier = id;
-    emit checkMe();
-}
-
-QString TcpSocketService::ip() const
-{
-    return address;
+        m_networkManager->messageReceived(msg, pair);
 }
 
 quint16 TcpSocketService::port() const
 {
-    if (m_tcp->peerPort() != networkManager->tcpPort)
+    if (m_tcp == nullptr) {
+        qFatal("TCP port nullptr");
+        return m_networkManager->tcpPort;
+    }
+    if (m_tcp->peerPort() != m_networkManager->tcpPort)
         return m_tcp->peerPort();
     else
         return m_tcp->localPort();
@@ -327,10 +227,7 @@ quint16 TcpSocketService::port() const
 
 quint16 TcpSocketService::serverPort() const
 {
-    if (m_tcp->peerPort() == networkManager->tcpPort)
-        return m_tcp->peerPort();
-    else
-        return m_tcp->localPort();
+    return m_networkManager->tcpPort;
 }
 
 QString TcpSocketService::protocolString() const
@@ -341,14 +238,4 @@ QString TcpSocketService::protocolString() const
 Network::Protocol TcpSocketService::protocol() const
 {
     return Network::Protocol::Tcp;
-}
-
-QHostAddress TcpSocketService::getSocketAddress() const
-{
-    return m_tcp->peerAddress();
-}
-
-quint16 TcpSocketService::getSocketPeer() const
-{
-    return m_tcp->peerPort();
 }

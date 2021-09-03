@@ -50,7 +50,6 @@ class TransactionManager;
  * - merging blocks
  *
  */
-static QMutex mutex;
 
 enum class FreezeBalanceSearch
 {

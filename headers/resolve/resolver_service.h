@@ -189,6 +189,7 @@ private:
      */
     void resolveTask();
     void resolveGeneralTask();
+
 public slots:
     /**
      * @brief process

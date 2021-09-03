@@ -60,6 +60,7 @@ struct DataStruct
 
 enum Protocol
 {
+    Undefined = 0,
     Tcp = 1,
     WebSocket = 2
 };
