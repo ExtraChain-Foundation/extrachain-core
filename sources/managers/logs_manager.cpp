@@ -55,7 +55,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     switch (type)
     {
     case QtInfoMsg:
-        print(msg.toStdString());
+        makeLog(context.file, context.line, context.function, msg);
         break;
     case QtFatalMsg: {
         makeLog(context.file, context.line, context.function, "[Fatal Error] " + msg);
