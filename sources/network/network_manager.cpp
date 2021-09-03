@@ -32,6 +32,18 @@ const QList<WebSocketService *> &NetworkManager::wsConnections() const
     return m_wsConnections;
 }
 
+bool NetworkManager::serverStatus(Network::Protocol protocol) const
+{
+    switch (protocol) {
+    case Network::Protocol::Tcp:
+        return tcpServer->isListening();
+    case Network::Protocol::WebSocket:
+        return wsServer->isListening();
+    case Network::Protocol::Undefined:
+        return false;
+    }
+}
+
 void NetworkManager::setResolveManager(ResolveManager *value)
 {
     resolveManager = value;
@@ -98,12 +110,16 @@ void NetworkManager::process()
 
 void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
-    connect(service, &TcpSocketService::close, this, &NetworkManager::removeTcpConnection);
+    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
+    connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
+
+    if (!m_tcpConnections.contains(service))
+        m_tcpConnections.append(service);
 }
 
 void NetworkManager::connectWsService(WebSocketService *service)
 {
-    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError); // TODO: add for tcp
+    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
 
     if (!m_wsConnections.contains(service))
@@ -138,10 +154,13 @@ NetworkManager::~NetworkManager()
     delete upnpNet;
     delete upnpDis;
     delete local;
-    delete serverService;
+    delete tcpServer;
     // delete discoveryService;
 
-    qDeleteAll(m_tcpConnections);
+    for(const auto& connection: qAsConst(m_tcpConnections)) {
+        connection->close();
+        connection->finished();
+    }
     m_tcpConnections.clear();
     qDeleteAll(m_wsConnections);
     m_wsConnections.clear();
@@ -154,8 +173,8 @@ void NetworkManager::checkConnectionsStatus()
                   [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
     std::for_each(m_wsConnections.begin(), m_wsConnections.end(),
                   [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
-    emit networkStatusChanged(flag);
-    emit networkSocketsCountChanged(connectionsCount());
+    emit connectionStatusChanged(flag);
+    emit connectionsCountChanged(connectionsCount());
 
     if (flag) // TODO: replace to networkStatusChanged slot
         sendFromCache();
@@ -171,11 +190,11 @@ void NetworkManager::startNetwork()
         return;
     }
 
-    serverService = new TcpServerService(tcpPort, local);
-    connect(serverService, &TcpServerService::newServerConnection, this,
+    tcpServer = new TcpServerService(tcpPort, local);
+    connect(tcpServer, &TcpServerService::newServerConnection, this,
             &NetworkManager::addTcpConnectionFromServer, Qt::UniqueConnection);
-    connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
-    serverService->startListen();
+    // connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
+    if (tcpServer->startListen()) { }
 
     wsServer = new QWebSocketServer(QStringLiteral("ExtraChain %1").arg(EXTRACHAIN_VERSION),
                                     QWebSocketServer::SslMode::NonSecureMode);
@@ -230,6 +249,8 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), wsPort);
         break;
+    case Protocol::Undefined:
+        qFatal("Undefined connectToNode");
     }
 }
 
@@ -264,11 +285,11 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         if (m_tcpConnections.isEmpty() && m_wsConnections.isEmpty())
             return false;
 
-        for (const auto &tmp : qAsConst(m_tcpConnections))
-            if (tmp->isActive())
+        for (const auto &el : qAsConst(m_tcpConnections))
+            if (el->isActive())
                 return true;
-        for (const auto &tmp : qAsConst(m_wsConnections))
-            if (tmp->isActive())
+        for (const auto &el : qAsConst(m_wsConnections))
+            if (el->isActive())
                 return true;
 
         return false;
@@ -396,7 +417,6 @@ void NetworkManager::messageReceived(const QByteArray &msg, const SocketPair &re
 void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port)
 {
     TcpSocketService *socket = new TcpSocketService(ip, this);
-    m_tcpConnections.append(socket);
     connectTcpSocket(socket);
     qDebug().noquote().nospace() << "[NetworkManager] New TCP connection: " << ip << ":" << port;
     ThreadPool::addThread(socket);
@@ -412,7 +432,6 @@ void NetworkManager::addTcpConnectionFromServer(qint64 socketDescriptor)
     }
 
     TcpSocketService *socket = new TcpSocketService(socketDescriptor, this);
-    m_tcpConnections.append(socket);
     connectTcpSocket(socket);
     // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(socket);
@@ -426,9 +445,9 @@ void NetworkManager::removeTcpConnection()
         return;
 
     TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
+    m_tcpConnections.removeAll(connection);
+    emit connection->close();
     emit connection->finished();
-    m_tcpConnections.removeAt(m_tcpConnections.indexOf(connection));
-    checkConnectionsStatus();
 }
 
 void NetworkManager::removeWsConnection()
@@ -447,11 +466,11 @@ void NetworkManager::webSocketError(Network::SocketServiceError error, QString e
     if (QObject::sender() == nullptr)
         return;
 
-    auto service = qobject_cast<WebSocketService *>(QObject::sender());
-    qDebug() << "[NetworkManager] WS: Error socket" << int(error) << service->identifier();
+    auto service = qobject_cast<SocketService *>(QObject::sender());
+    qDebug() << "[NetworkManager] WS: Error socket" << error << service->identifier();
 
     if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion)
-        emit onWebSocketError(error, service->identifier(), errorData);
+        emit connectionError(error, service->identifier(), errorData);
 }
 
 QString NetworkManager::localIp()

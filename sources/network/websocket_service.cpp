@@ -44,7 +44,7 @@ QWebSocket *WebSocketService::socket() const
 
 bool WebSocketService::isActive() const
 {
-    return m_ws->isValid() && m_activated;
+    return m_activated && m_ws->isValid();
 }
 
 void WebSocketService::open(const QUrl &url)
@@ -157,7 +157,7 @@ void WebSocketService::connections()
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
     connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
-    connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket);
+    connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
     connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this,
             &WebSocketService::onSocketError);
 }

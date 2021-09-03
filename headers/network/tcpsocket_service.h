@@ -44,7 +44,6 @@ public:
     ~TcpSocketService();
 
 signals:
-    void close();
     void finished();
 
 public slots:
@@ -55,6 +54,7 @@ public slots:
     void sendMessage(const QByteArray &data);
     void process();
     void establishConnection();
+    void closeSocket() override;
 
 private slots:
     void doRead();
@@ -69,13 +69,12 @@ public:
 
 private:
     qintptr socketDescriptor = 0;
-    QString address;
     QTcpSocket *m_tcp = nullptr;
     int _blockSize = 0;
     QByteArray pendMsg;
     int pendMsgSize = -1;
 
-    void gotMessage(QByteArray msg, SocketPair rec);
+    void gotMessage(const QByteArray &msg, const SocketPair &pair);
     void continueDoRead();
 };
 #endif // SOCKET_SERVICE_H

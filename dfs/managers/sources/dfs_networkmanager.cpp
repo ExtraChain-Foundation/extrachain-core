@@ -165,8 +165,8 @@ void DfsNetworkManager::checkConnectionsStatus()
                   [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
     std::for_each(m_wsConnections.begin(), m_wsConnections.end(),
                   [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
-    emit networkStatusChanged(flag);
-    emit networkSocketsCountChanged(connectionsCount());
+    emit connectionStatusChanged(flag);
+    emit connectionsCountChanged(connectionsCount());
 
     if (flag == true) // TODO: replace to networkStatusChanged slot
     {

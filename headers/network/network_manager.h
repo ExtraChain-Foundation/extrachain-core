@@ -64,16 +64,11 @@ private:
 #else
     const int SIZE_OF_CONNECTIONS = 100;
 #endif
-protected:
     ActorIndex *m_actorIndex;
-
-private:
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
-    TcpServerService *serverService;
+    TcpServerService *tcpServer;
     QWebSocketServer *wsServer;
-
-protected:
     QList<TcpSocketService *> m_tcpConnections;
     QList<WebSocketService *> m_wsConnections;
 
@@ -92,7 +87,8 @@ private:
 public:
     const QList<TcpSocketService *> &tcpConnections() const;
     const QList<WebSocketService *> &wsConnections() const;
-    inline int connectionsCount() const;
+    bool serverStatus(Network::Protocol protocol) const;
+    int connectionsCount() const;
 
 public slots:
     void removeConnection(const QString &identifier);
@@ -102,8 +98,6 @@ signals:
 
 protected:
     void startNetwork();
-
-protected:
     /**
      * @brief Creates new tcp socket connection and adds it to connections
      * @param ip
@@ -159,10 +153,11 @@ public:
 
 signals:
     void newSocket();
-    void networkStatusChanged(bool status);
-    void networkSocketsCountChanged(int socketsCount);
-    void networkErrorChanged(bool serverError);
-    void onWebSocketError(Network::SocketServiceError, QString, QString);
+    void connectionStatusChanged(bool status);
+    void connectionsCountChanged(int socketsCount);
+    void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
+
+    friend class DfsNetworkManager;
 };
 
 #endif // NETWORK_MANAGER_H

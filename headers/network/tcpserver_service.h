@@ -50,7 +50,7 @@ public slots:
     void process();
 
 public:
-    void startListen();
+    bool startListen();
     bool isActive() const;
 
 protected:

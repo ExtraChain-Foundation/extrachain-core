@@ -26,7 +26,7 @@ TcpServerService::TcpServerService(quint16 networkPort, QNetworkAddressEntry *lo
 {
 }
 
-void TcpServerService::startListen()
+bool TcpServerService::startListen()
 {
     bool status = this->listen(localAddress->ip(), port);
     emit serverStatus(status);
@@ -36,6 +36,8 @@ void TcpServerService::startListen()
     else
         qDebug().noquote() << "[TCP] Start listening:" << this->serverAddress().toString()
                            << this->serverPort();
+
+    return status;
 }
 
 TcpServerService::~TcpServerService()

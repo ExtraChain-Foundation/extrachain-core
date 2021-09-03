@@ -40,12 +40,13 @@ private slots:
     void onBinaryMessage(const QByteArray &message);
     void sendMessage(const QByteArray &data);
     void onSocketError(QAbstractSocket::SocketError error);
+    void closeSocket() override;
 
 private:
     void connections();
     void sendFirstMessage();
-    void closeSocket() override;
 
+private:
     QWebSocket *m_ws = nullptr;
 };
 
