@@ -64,6 +64,9 @@ signals:
 
 public: // slots:
     static void makeLog(const QString& file, int line, const QString& function, const QString& msg);
+
+private:
+    static QString normalizeFileName(const QString &file);
 };
 
 struct UnicodedStream : QTextStream

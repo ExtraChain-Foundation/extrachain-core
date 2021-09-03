@@ -57,6 +57,24 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     case QtInfoMsg:
         print(msg.toStdString());
         break;
+    case QtFatalMsg: {
+        makeLog(context.file, context.line, context.function, "[Fatal Error] " + msg);
+
+        QFile file("logs/extrachain-fatal.log");
+        if (file.open(QFile::Append)) {
+            QJsonObject json;
+            json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
+#ifdef QT_DEBUG
+            json["file"] = normalizeFileName(context.file);
+            json["line"] = QString::number(context.line);
+            json["function"] = QString(context.function);
+#endif
+            json["message"] = msg;
+            file.write(QJsonDocument(json).toJson(QJsonDocument::Compact) + "\n");
+            file.close();
+        }
+        break;
+    }
     default:
         if (debugLogs)
             makeLog(context.file, context.line, context.function, msg);
@@ -77,15 +95,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
 #ifdef QT_DEBUG
     // TODO: to std::string
-    QString fileName = file;
-    if (fileName.isEmpty())
-        fileName = "global";
-
-#if defined(Q_OS_WIN) && !defined(__GNUC__)
-    fileName = fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
-#else
-    fileName = fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
-#endif
+    QString fileName = normalizeFileName(file);
 #endif
 
 #ifdef QT_DEBUG
@@ -176,6 +186,24 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         logFile.flush();
         mutex.unlock();
     }
+}
+
+QString LogsManager::normalizeFileName(const QString &file)
+{
+#ifdef QT_DEBUG
+    // TODO: to std::string
+    QString fileName = file;
+    if (fileName.isEmpty())
+        fileName = "global";
+
+#if defined(Q_OS_WIN) && !defined(__GNUC__)
+    return fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
+#else
+    return fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
+#endif
+#elif
+    return "";
+#endif
 }
 
 void LogsManager::on()
