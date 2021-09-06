@@ -57,8 +57,7 @@ bool SocketService::checkFirstMessage(const QString &message)
     auto json = QJsonDocument::fromJson(message.toLatin1());
     if (json.isEmpty())
     {
-        qDebug() << "[Socket]"
-                 << "First message:" << message;
+        qDebug() << "[Socket] First message:" << message;
         qFatal("[Socket] Can't check first message");
     }
     auto version = json["version"].toString();
@@ -68,15 +67,21 @@ bool SocketService::checkFirstMessage(const QString &message)
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
-    qDebug() << "[WS]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty() << jsonFirstId.isEmpty()
-             << isFirstIdsContains << somethingEmpty << (version != EXTRACHAIN_VERSION);
+    qDebug() << "[Socket]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty()
+             << jsonFirstId.isEmpty() << isFirstIdsContains << somethingEmpty
+             << (version != EXTRACHAIN_VERSION);
 
-    if (!(somethingEmpty || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
+    if (version != EXTRACHAIN_VERSION)
     {
-        qDebug() << "[WS] Close, because network or version unsuitable";
-        version != EXTRACHAIN_VERSION
-            ? emit error(Network::SocketServiceError::IncompatibleVersion, version)
-            : emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
+        qDebug() << "[Socket] Close, because version incompatible";
+        emit error(Network::SocketServiceError::IncompatibleVersion, version);
+        closeSocket();
+    }
+
+    if (!(somethingEmpty || isFirstIdsContains))
+    {
+        qDebug() << "[Socket] Close, because network incompatible";
+        emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
         closeSocket();
         return false;
     }
@@ -97,7 +102,7 @@ bool SocketService::checkFirstMessage(const QString &message)
     if (flag)
     {
         emit error(Network::SocketServiceError::DuplicateIdentifier, "");
-        qDebug() << "[WS] Duplicate identifier";
+        qDebug() << "[Socket] Duplicate identifier";
         closeSocket();
         return false;
     }

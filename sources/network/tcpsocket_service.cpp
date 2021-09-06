@@ -127,7 +127,7 @@ void TcpSocketService::establishConnection()
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
     this->m_ip = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
     qDebug() << "[TCP]" << serverPort() << "Send first message:" << generateFirstMessage();
-    emit send(generateFirstMessage());
+    sendMessage(generateFirstMessage());
 
     qDebug() << "[TCP] Address" << this->m_tcp << m_ip << port() << serverPort() << m_tcp->localPort()
              << m_tcp->peerPort();
@@ -147,7 +147,6 @@ void TcpSocketService::doRead()
         continueDoRead();
     }
 
-    qDebug() << m_tcp->bytesAvailable();
     if (m_tcp->bytesAvailable() >= Messages::FIELD_SIZE)
     {
         QByteArray data = m_tcp->read(Messages::FIELD_SIZE);
@@ -183,7 +182,6 @@ void TcpSocketService::continueDoRead()
             QByteArray message = qUncompress(pendMsg);
             m_bytesIncoming += pendMsg.length();
             m_bytesCompressed += message.length() - pendMsg.length();
-            qDebug() << pendMsg;
 
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
