@@ -147,7 +147,8 @@ void TcpSocketService::doRead()
         continueDoRead();
     }
 
-    if (m_tcp->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
+    qDebug() << m_tcp->bytesAvailable();
+    if (m_tcp->bytesAvailable() >= Messages::FIELD_SIZE)
     {
         QByteArray data = m_tcp->read(Messages::FIELD_SIZE);
         pendMsgSize = Utils::qByteArrayToInt(data);
@@ -182,6 +183,7 @@ void TcpSocketService::continueDoRead()
             QByteArray message = qUncompress(pendMsg);
             m_bytesIncoming += pendMsg.length();
             m_bytesCompressed += message.length() - pendMsg.length();
+            qDebug() << pendMsg;
 
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
@@ -220,14 +222,6 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
     if (baseMessage.isEmpty())
     {
         qDebug() << "[TCP] ! Empty base message:" << msg;
-        return;
-    }
-    if (baseMessage.protocol != Config::Net::PROTOCOL_VERSION)
-        qFatal("protocol");
-
-    if (msg == Config::Net::PROTOCOL_VERSION)
-    {
-        qDebug() << "[TCP] WTF";
         return;
     }
 

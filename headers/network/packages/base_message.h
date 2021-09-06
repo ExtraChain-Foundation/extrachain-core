@@ -37,10 +37,10 @@ namespace Messages {
  */
 struct BaseMessage : IMessage
 {
-    QByteArray protocol = Config::Net::PROTOCOL_VERSION; // protocol version
-    unsigned int type = 0;                               // message type
-    ActorId signer;                                      // message signer actor's id
-    QByteArray digSig;                                   // msg digital signature
+    // QByteArray protocol = Config::Net::PROTOCOL_VERSION; // protocol version
+    unsigned int type = 0; // message type
+    ActorId signer;        // message signer actor's id
+    QByteArray digSig;     // msg digital signature
     QByteArray data = "";
 
     static const short FIELDS_COUNT = 5;
