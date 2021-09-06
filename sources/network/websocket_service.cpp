@@ -84,6 +84,8 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     if (!m_activated)
     {
         m_activated = checkFirstMessage(message);
+        if (m_activated)
+            emit activated();
     }
     else
     {

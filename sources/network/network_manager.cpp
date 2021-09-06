@@ -99,15 +99,13 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex, const QString &localIp)
 void NetworkManager::process()
 {
     startNetwork();
-    QTimer *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &NetworkManager::checkConnectionsStatus);
-    timer->start(5000);
 }
 
 void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
-    connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
+    connect(service, &TcpSocketService::error, this, &NetworkManager::socketError);
     connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
+    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
     if (!m_connections.contains(service))
         m_connections.append(service);
@@ -117,6 +115,7 @@ void NetworkManager::connectWsService(WebSocketService *service)
 {
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
+    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
     if (!m_connections.contains(service))
         m_connections.append(service);
@@ -145,8 +144,8 @@ NetworkManager::~NetworkManager()
 
     for (const auto &connection : qAsConst(m_connections))
     {
-        connection->close();
-        connection->finished();
+        emit connection->close();
+        emit connection->finished();
     }
     m_connections.clear();
 }
@@ -154,10 +153,14 @@ NetworkManager::~NetworkManager()
 void NetworkManager::checkConnectionsStatus()
 {
     bool flag = false;
-    std::for_each(m_connections.begin(), m_connections.end(),
-                  [&flag](SocketService *el) { flag = flag || el->isActive(); });
+    int count = 0;
+    std::for_each(m_connections.begin(), m_connections.end(), [&flag, &count](SocketService *el) {
+        flag = flag || el->isActive();
+        if (el->isActive())
+            count++;
+    });
     emit connectionStatusChanged(flag);
-    emit connectionsCountChanged(m_connections.length());
+    emit connectionsCountChanged(count); // TODO: check prev count value
 
     if (flag) // TODO: replace to networkStatusChanged slot
         sendFromCache();
@@ -418,6 +421,7 @@ void NetworkManager::removeTcpConnection() //
     TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
     m_connections.removeAll(connection);
     emit connection->finished();
+    checkConnectionsStatus();
 }
 
 void NetworkManager::removeWsConnection() //
@@ -429,6 +433,7 @@ void NetworkManager::removeWsConnection() //
     m_connections.removeAll(service);
     qDebug() << "[WS] Removed" << service;
     service->deleteLater();
+    checkConnectionsStatus();
 }
 
 void NetworkManager::socketError(Network::SocketServiceError error, QString errorData)

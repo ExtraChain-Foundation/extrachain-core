@@ -186,6 +186,8 @@ void TcpSocketService::continueDoRead()
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
                 m_activated = checkFirstMessage(message);
+                if (m_activated)
+                    emit activated();
                 qDebug() << "[TCP] First message" << message << m_activated;
             }
             else

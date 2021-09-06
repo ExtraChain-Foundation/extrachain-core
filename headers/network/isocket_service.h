@@ -44,6 +44,7 @@ signals:
     void disconnected();
     void error(Network::SocketServiceError code, const QString &errorData);
     void close();
+    void activated();
     void finished(); // if threads
 };
 
