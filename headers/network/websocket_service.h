@@ -19,7 +19,7 @@ public:
     ~WebSocketService();
 
     QWebSocket *socket() const;
-    bool isActive() const;
+    bool isActive() const override;
     void open(const QUrl &url);
     virtual QString protocolString() const override
     {
@@ -32,8 +32,8 @@ public:
 
     bool operator==(const WebSocketService &service) const;
 
-    quint16 port() const;
-    quint16 serverPort() const;
+    quint16 port() const override;
+    quint16 serverPort() const override;
 
 private slots:
     void onTextMessage(const QString &message);

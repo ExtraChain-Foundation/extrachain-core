@@ -399,7 +399,7 @@ void ExtraChainNode::getAllActors()
 
 void ExtraChainNode::getAllActorsTimerCall()
 {
-    if (accController->getAccountCount() > 0 && m_networkManager->connectionsCount() > 0)
+    if (accController->getAccountCount() > 0 && m_networkManager->connections().length() > 0)
     {
         ActorId actorId = accController->getMainActor()->id();
 
@@ -512,11 +512,6 @@ void ExtraChainNode::prepareFolders()
                                        + DataStorage::BLOCK_INDEX_FOLDER_NAME);
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
-}
-
-int ExtraChainNode::getClientListCount()
-{
-    return m_networkManager->tcpConnections().size() && m_networkManager->wsConnections().size();
 }
 
 AccountController *ExtraChainNode::getAccountController() const

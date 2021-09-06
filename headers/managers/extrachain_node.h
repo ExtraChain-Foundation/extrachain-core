@@ -115,8 +115,6 @@ public:
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
                                         ActorId token = ActorId());
 
-    int getClientListCount();
-
 public:
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
 

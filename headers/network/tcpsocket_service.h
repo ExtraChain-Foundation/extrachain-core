@@ -43,9 +43,6 @@ public:
     TcpSocketService(const TcpSocketService &value);
     ~TcpSocketService();
 
-signals:
-    void finished();
-
 public slots:
     /**
      * @brief Send message using QTcpSocket
@@ -60,9 +57,9 @@ private slots:
     void doRead();
 
 public:
-    bool isActive() const;
-    quint16 port() const;
-    quint16 serverPort() const;
+    bool isActive() const override;
+    quint16 port() const override;
+    quint16 serverPort() const override;
     QString protocolString() const override;
     Network::Protocol protocol() const override;
     QTcpSocket *socket() const;

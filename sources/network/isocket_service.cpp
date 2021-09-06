@@ -87,8 +87,8 @@ bool SocketService::checkFirstMessage(const QString &message)
     }
 
     bool flag = false;
-    auto &wsConnections = m_networkManager->wsConnections();
-    std::for_each(wsConnections.begin(), wsConnections.end(), [&flag, this](WebSocketService *el) {
+    auto &connections = m_networkManager->connections();
+    std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
 
