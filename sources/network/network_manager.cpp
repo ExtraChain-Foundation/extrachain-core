@@ -419,7 +419,6 @@ void NetworkManager::removeTcpConnection() //
 
     TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
     m_connections.removeAll(connection);
-    emit connection->close();
     emit connection->finished();
 }
 

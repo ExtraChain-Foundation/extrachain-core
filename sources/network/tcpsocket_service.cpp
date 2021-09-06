@@ -126,7 +126,8 @@ void TcpSocketService::establishConnection()
     qDebug() << "[TCP] Open status:" << m_tcp->isOpen();
 }
 
-void TcpSocketService::closeSocket() {
+void TcpSocketService::closeSocket()
+{
     m_activated = false;
     emit disconnected();
 }
@@ -198,11 +199,15 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
     Messages::BaseMessage dbm;
     dbm.deserialize(msg);
     if (dbm.isEmpty())
-        qFatal("dmb is empty");
+    {
+        qDebug() << "[TCP] ! Empty base message:" << msg;
+        return;
+    }
     if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
         qFatal("protocol");
 
-    if (msg == Config::Net::PROTOCOL_VERSION) {
+    if (msg == Config::Net::PROTOCOL_VERSION)
+    {
         qDebug() << "[TCP] WTF";
         return;
     }
@@ -215,7 +220,8 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 
 quint16 TcpSocketService::port() const
 {
-    if (m_tcp == nullptr) {
+    if (m_tcp == nullptr)
+    {
         qFatal("TCP port nullptr");
         return m_networkManager->tcpPort;
     }
