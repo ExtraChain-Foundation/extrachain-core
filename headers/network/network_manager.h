@@ -135,7 +135,7 @@ private slots:
      */
     void removeTcpConnection();
     void removeWsConnection();
-    void webSocketError(Network::SocketServiceError error, QString errorData);
+    void socketError(Network::SocketServiceError error, QString errorData);
 
 public:
     QString localIp(); // TODO: remove

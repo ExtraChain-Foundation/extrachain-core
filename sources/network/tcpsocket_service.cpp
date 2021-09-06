@@ -20,6 +20,9 @@
 #include "network/tcpsocket_service.h"
 #include "dfs/managers/headers/dfs_networkmanager.h"
 
+//#define qCompress(q) q
+//#define qUncompress(q) q
+
 TcpSocketService::TcpSocketService()
     : SocketService(nullptr, nullptr)
 {
@@ -75,9 +78,10 @@ void TcpSocketService::sendMessage(const QByteArray &data)
     if (!m_tcp->isValid())
         return;
 
-    QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE); // qCompress
-    m_bytesOutgoing += _wtSok.length();
-    m_tcp->write(_wtSok, _wtSok.size());
+    QByteArray message = Serialization::serialize({ qCompress(data) }, Messages::FIELD_SIZE);
+    m_bytesOutgoing += message.length();
+    m_bytesCompressed += data.length() - message.length();
+    m_tcp->write(message, message.size());
 }
 
 void TcpSocketService::process()
@@ -88,13 +92,17 @@ void TcpSocketService::process()
         connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::establishConnection);
+        connect(m_tcp, &QTcpSocket::disconnected, [this] {
+            qDebug() << "[TCP] Disconnected";
+            closeSocket();
+        });
         connect(this, &TcpSocketService::close, this, &TcpSocketService::closeSocket);
         connect(m_tcp, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
             Q_UNUSED(socketError)
             qDebug().noquote() << "[TCP] Socket error" << socketError << "for" << m_ip << port()
                                << serverPort();
             if (this->m_tcp->state() != QTcpSocket::ConnectedState)
-                emit this->close();
+                closeSocket();
         });
     }
     else
@@ -138,10 +146,12 @@ void TcpSocketService::doRead()
     {
         continueDoRead();
     }
+
     if (m_tcp->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
     {
         QByteArray data = m_tcp->read(Messages::FIELD_SIZE);
         pendMsgSize = Utils::qByteArrayToInt(data);
+
         if ((pendMsgSize > 0))
         {
             continueDoRead();
@@ -166,17 +176,23 @@ void TcpSocketService::continueDoRead()
         if (pendMsgSize == bytesRead)
         {
             pendMsg.append(rpckg);
+
+            if (pendMsg.isEmpty())
+                qFatal("tcp omg");
+            QByteArray message = qUncompress(pendMsg);
+            m_bytesIncoming += pendMsg.length();
+            m_bytesCompressed += message.length() - pendMsg.length();
+
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
-                m_activated = checkFirstMessage(pendMsg);
-                qDebug() << "[TCP] First message" << pendMsg << m_activated;
+                m_activated = checkFirstMessage(message);
+                qDebug() << "[TCP] First message" << message << m_activated;
             }
             else
             {
                 SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
-                m_bytesIncoming += pendMsg.length();
-                this->gotMessage(pendMsg, receiver);
+                this->gotMessage(message, receiver);
             }
             pendMsgSize = -1;
             pendMsg = "";
@@ -196,14 +212,15 @@ void TcpSocketService::continueDoRead()
 
 void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 {
-    Messages::BaseMessage dbm;
-    dbm.deserialize(msg);
-    if (dbm.isEmpty())
+    Messages::BaseMessage baseMessage;
+    baseMessage.deserialize(msg);
+
+    if (baseMessage.isEmpty())
     {
         qDebug() << "[TCP] ! Empty base message:" << msg;
         return;
     }
-    if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
+    if (baseMessage.protocol != Config::Net::PROTOCOL_VERSION)
         qFatal("protocol");
 
     if (msg == Config::Net::PROTOCOL_VERSION)

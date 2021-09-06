@@ -6,6 +6,9 @@
 #include "preconfig.h"
 #endif
 
+// #define qCompress(q) q
+// #define qUncompress(q) q
+
 WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
     : SocketService(networkManager, parent)
 {

@@ -106,7 +106,7 @@ void NetworkManager::process()
 
 void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
-    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
+    connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
 
     if (!m_connections.contains(service))
@@ -115,7 +115,7 @@ void NetworkManager::connectTcpSocket(TcpSocketService *service)
 
 void NetworkManager::connectWsService(WebSocketService *service)
 {
-    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
+    connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
 
     if (!m_connections.contains(service))
@@ -218,10 +218,8 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
-    qDebug().noquote() << QString("[NetworkManager] Try connect to %1, protocol: %2, port: %3")
-                              .arg(ip)
-                              .arg(int(protocol))
-                              .arg(protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
+    qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
+                                 << ", port: " << (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
 
     using Network::Protocol;
     switch (protocol)
@@ -433,7 +431,7 @@ void NetworkManager::removeWsConnection() //
     service->deleteLater();
 }
 
-void NetworkManager::webSocketError(Network::SocketServiceError error, QString errorData)
+void NetworkManager::socketError(Network::SocketServiceError error, QString errorData)
 {
     if (QObject::sender() == nullptr)
         return;

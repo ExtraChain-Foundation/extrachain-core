@@ -57,6 +57,8 @@ bool SocketService::checkFirstMessage(const QString &message)
     auto json = QJsonDocument::fromJson(message.toLatin1());
     if (json.isEmpty())
     {
+        qDebug() << "[Socket]"
+                 << "First message:" << message;
         qFatal("[Socket] Can't check first message");
     }
     auto version = json["version"].toString();
