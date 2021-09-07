@@ -5,6 +5,7 @@ SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
     : QObject(parent)
 {
     m_networkManager = networkManager;
+    priv.create(ActorType::Wallet);
 }
 
 SocketService::SocketService(const SocketService &socket)
@@ -55,13 +56,16 @@ int SocketService::bytesIncoming() const
 bool SocketService::checkFirstMessage(const QString &message)
 {
     auto json = QJsonDocument::fromJson(message.toLatin1());
+
     if (json.isEmpty())
     {
         qDebug() << "[Socket] First message:" << message;
         qFatal("[Socket] Can't check first message");
     }
+
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
+    pub = json["key"].toString().toStdString();
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
     ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
@@ -123,5 +127,28 @@ QByteArray SocketService::generateFirstMessage()
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
+    json["key"] = QString::fromStdString(priv.key()->getPubKey());
     return QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+}
+
+QByteArray SocketService::prepareSendMessage(const QByteArray &message)
+{
+    if (pub.empty())
+        qFatal("Socket encrypt error");
+
+    auto result = priv.key()->encrypt(qCompress(message), pub);
+    m_bytesOutgoing += result.length();
+    m_bytesCompressed += message.length() - result.length();
+    return result;
+}
+
+QByteArray SocketService::prepareReceiveMessage(const QByteArray &message)
+{
+    if (pub.empty())
+        qFatal("Socket decrypt error");
+
+    auto result = qUncompress(priv.key()->decrypt(message, pub));
+    m_bytesIncoming += message.length();
+    m_bytesCompressed += result.length() - message.length();
+    return result;
 }

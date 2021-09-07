@@ -25,6 +25,21 @@ public:
     int bytesOutgoing() const;
     int bytesIncoming() const;
 
+protected: // methods
+    bool checkFirstMessage(const QString &message);
+    virtual void closeSocket();
+    QByteArray generateFirstMessage();
+    QByteArray prepareSendMessage(const QByteArray &message);
+    QByteArray prepareReceiveMessage(const QByteArray &message);
+
+signals:
+    void send(const QByteArray &data);
+    void disconnected();
+    void error(Network::SocketServiceError code, const QString &errorData);
+    void close();
+    void activated();
+    void finished(); // if threads
+
 protected:
     NetworkManager *m_networkManager = nullptr;
     QString m_identifier;
@@ -34,18 +49,9 @@ protected:
     int m_bytesOutgoing = 0;
     int m_bytesCompressed = 0;
 
-protected: // methods
-    bool checkFirstMessage(const QString &message);
-    virtual void closeSocket();
-    QByteArray generateFirstMessage();
-
-signals:
-    void send(const QByteArray &data);
-    void disconnected();
-    void error(Network::SocketServiceError code, const QString &errorData);
-    void close();
-    void activated();
-    void finished(); // if threads
+private:
+    Actor<KeyPrivate> priv;
+    std::string pub;
 };
 
 #endif // WEBSOCKETSERVICE_H

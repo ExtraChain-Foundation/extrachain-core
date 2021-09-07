@@ -6,9 +6,6 @@
 #include "preconfig.h"
 #endif
 
-// #define qCompress(q) q
-// #define qUncompress(q) q
-
 WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
     : SocketService(networkManager, parent)
 {
@@ -103,9 +100,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
 
     SocketPair pair(m_ip.toStdString(), port());
     pair.setIdentifier(m_identifier.toLatin1());
-    auto mess = qUncompress(message);
-    m_bytesCompressed += mess.length() - message.length();
-    m_bytesIncoming += message.length();
+    auto mess = prepareReceiveMessage(message);
     m_networkManager->messageReceived(mess, pair);
 }
 
@@ -116,14 +111,10 @@ void WebSocketService::sendMessage(const QByteArray &data)
         qDebug() << (QString("[WS] Try to send without activation %1").arg(QString(data)).toUtf8().data());
         return;
     }
-    if (!data.length())
+    if (data.isEmpty())
         qFatal("[WS] Error send size");
 
-    auto compress = qCompress(data);
-    m_bytesCompressed += data.length() - compress.length();
-    m_bytesOutgoing += compress.length();
-
-    auto length = m_ws->sendBinaryMessage(compress);
+    auto length = m_ws->sendBinaryMessage(prepareSendMessage(data));
     Q_UNUSED(length)
     // m_ws->flush();
 
