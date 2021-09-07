@@ -74,6 +74,7 @@ private:
     TcpServerService *tcpServer;
     QWebSocketServer *wsServer;
     QList<SocketService *> m_connections;
+    QMap<QString, Network::Protocol> m_reconnections;
 
 public:
     NetworkManager(ActorIndex *actorIndex, const QString &localIp = "");
@@ -128,6 +129,7 @@ protected slots:
 public slots:
     void connectToNode(const QString &ip, Network::Protocol protocol);
     void process();
+    void reconnection();
 
 private slots:
     /**

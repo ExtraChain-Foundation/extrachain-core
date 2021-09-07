@@ -46,7 +46,6 @@ private:
     void connections();
     void sendFirstMessage();
 
-private:
     QWebSocket *m_ws = nullptr;
 };
 

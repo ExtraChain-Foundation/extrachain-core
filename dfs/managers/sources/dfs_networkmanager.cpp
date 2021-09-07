@@ -173,4 +173,6 @@ void DfsNetworkManager::checkConnectionsStatus()
         for (const QString &file : files)
             emit dfs->requestFile(file);
     }
+
+    reconnection();
 }

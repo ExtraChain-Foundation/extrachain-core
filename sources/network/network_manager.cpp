@@ -101,6 +101,23 @@ void NetworkManager::process()
     startNetwork();
 }
 
+void NetworkManager::reconnection()
+{
+    auto reconnections = m_reconnections;
+
+    std::for_each(m_connections.begin(), m_connections.end(), [&reconnections](SocketService *el) {
+        if (reconnections.find(el->ip()) != reconnections.end())
+            reconnections.remove(el->ip());
+    });
+
+    for (auto i = reconnections.begin(); i != reconnections.end(); i++)
+    {
+        qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
+                           << i.key() << i.value();
+        connectToNode(i.key(), i.value());
+    }
+}
+
 void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
     connect(service, &TcpSocketService::error, this, &NetworkManager::socketError);
@@ -164,6 +181,8 @@ void NetworkManager::checkConnectionsStatus()
 
     if (flag) // TODO: replace to networkStatusChanged slot
         sendFromCache();
+
+    reconnection();
 }
 
 void NetworkManager::startNetwork()
@@ -223,6 +242,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
                                  << ", port: " << (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
+    m_reconnections[ip] = protocol;
 
     using Network::Protocol;
     switch (protocol)
@@ -419,7 +439,10 @@ void NetworkManager::removeTcpConnection() //
         return;
 
     TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
-    m_connections.removeAll(connection);
+    auto removed = m_connections.removeAll(connection);
+    if (removed == 0)
+        return;
+    qDebug() << "[TCP] Removed" << connection;
     emit connection->finished();
     checkConnectionsStatus();
 }
@@ -429,10 +452,12 @@ void NetworkManager::removeWsConnection() //
     if (QObject::sender() == nullptr)
         return;
 
-    auto service = qobject_cast<SocketService *>(QObject::sender());
-    m_connections.removeAll(service);
-    qDebug() << "[WS] Removed" << service;
-    service->deleteLater();
+    auto connection = qobject_cast<SocketService *>(QObject::sender());
+    auto removed = m_connections.removeAll(connection);
+    if (removed == 0)
+        return;
+    qDebug() << "[WS] Removed" << connection;
+    connection->deleteLater();
     checkConnectionsStatus();
 }
 
@@ -442,7 +467,10 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
         return;
 
     auto service = qobject_cast<SocketService *>(QObject::sender());
-    qDebug() << "[NetworkManager] WS: Error socket" << error << service->identifier();
+    qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
+
+    if (error != Network::SocketServiceError::DuplicateIdentifier)
+        m_reconnections.remove(service->ip());
 
     if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion)
         emit connectionError(error, service->identifier(), errorData);
