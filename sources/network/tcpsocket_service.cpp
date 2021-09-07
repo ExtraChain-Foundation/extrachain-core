@@ -20,9 +20,6 @@
 #include "network/tcpsocket_service.h"
 #include "dfs/managers/headers/dfs_networkmanager.h"
 
-//#define qCompress(q) q
-//#define qUncompress(q) q
-
 TcpSocketService::TcpSocketService()
     : SocketService(nullptr, nullptr)
 {
@@ -78,9 +75,7 @@ void TcpSocketService::sendMessage(const QByteArray &data)
     if (!m_tcp->isValid())
         return;
 
-    QByteArray message = Serialization::serialize({ qCompress(data) }, Messages::FIELD_SIZE);
-    m_bytesOutgoing += message.length();
-    m_bytesCompressed += data.length() - message.length();
+    QByteArray message = Serialization::serialize({ prepareSendMessage(data) }, Messages::FIELD_SIZE);
     m_tcp->write(message, message.size());
 }
 
@@ -127,7 +122,10 @@ void TcpSocketService::establishConnection()
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
     this->m_ip = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
     qDebug() << "[TCP]" << serverPort() << "Send first message:" << generateFirstMessage();
-    sendMessage(generateFirstMessage());
+
+    auto json = generateFirstMessage();
+    QByteArray message = Serialization::serialize({ json }, Messages::FIELD_SIZE);
+    m_tcp->write(message, message.size());
 
     qDebug() << "[TCP] Address" << this->m_tcp << m_ip << port() << serverPort() << m_tcp->localPort()
              << m_tcp->peerPort();
@@ -179,22 +177,19 @@ void TcpSocketService::continueDoRead()
 
             if (pendMsg.isEmpty())
                 qFatal("tcp omg");
-            QByteArray message = qUncompress(pendMsg);
-            m_bytesIncoming += pendMsg.length();
-            m_bytesCompressed += message.length() - pendMsg.length();
 
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
-                m_activated = checkFirstMessage(message);
+                m_activated = checkFirstMessage(pendMsg);
                 if (m_activated)
                     emit activated();
-                qDebug() << "[TCP] First message" << message << m_activated;
+                qDebug() << "[TCP] First message" << pendMsg << m_activated;
             }
             else
             {
                 SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
-                this->gotMessage(message, receiver);
+                this->gotMessage(prepareReceiveMessage(pendMsg), receiver);
             }
             pendMsgSize = -1;
             pendMsg = "";
