@@ -1,6 +1,10 @@
 #include "network/isocket_service.h"
 #include "network/network_manager.h"
 
+#ifndef EXTRACHAIN_CMAKE
+#include "preconfig.h"
+#endif
+
 SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
     : QObject(parent)
 {

@@ -201,8 +201,7 @@ void NetworkManager::startNetwork()
     // connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
     if (tcpServer->startListen()) { }
 
-    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain %1").arg(EXTRACHAIN_VERSION),
-                                    QWebSocketServer::SslMode::NonSecureMode);
+    wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
     if (wsServer->listen(QHostAddress::Any, wsPort))
     {

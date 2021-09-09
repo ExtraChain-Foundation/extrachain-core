@@ -2,16 +2,12 @@
 
 #include "dfs/managers/headers/dfs_networkmanager.h"
 
-#ifndef EXTRACHAIN_CMAKE
-#include "preconfig.h"
-#endif
-
 WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
     : SocketService(networkManager, parent)
 {
     if (ws == nullptr)
     {
-        m_ws = new QWebSocket("ExtraChain " + QString(EXTRACHAIN_VERSION));
+        m_ws = new QWebSocket("ExtraChain");
         qDebug() << "[WS] Create new ws";
     }
     else
