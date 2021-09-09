@@ -103,18 +103,18 @@ void NetworkManager::process()
 
 void NetworkManager::reconnection()
 {
-    auto reconnections = m_reconnections;
-
-    std::for_each(m_connections.begin(), m_connections.end(), [&reconnections](SocketService *el) {
-        if (reconnections.find(el->ip()) != reconnections.end())
-            reconnections.remove(el->ip());
-    });
-
-    for (auto i = reconnections.begin(); i != reconnections.end(); i++)
+    for (const auto &el : qAsConst(m_reconnections))
     {
+        bool finded = std::find_if(m_connections.begin(), m_connections.end(),
+                                   [el](SocketService *service) { return service->ip() == el.first; })
+            != m_connections.end();
+
+        if (finded)
+            continue;
+
         qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
-                           << i.key() << i.value();
-        connectToNode(i.key(), i.value());
+                           << el.first << el.second;
+        connectToNode(el.first, el.second);
     }
 }
 
@@ -241,7 +241,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
                                  << ", port: " << (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
-    m_reconnections[ip] = protocol;
+    m_reconnections << std::pair { ip, protocol };
 
     using Network::Protocol;
     switch (protocol)
@@ -469,7 +469,7 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
 
     if (error != Network::SocketServiceError::DuplicateIdentifier)
-        m_reconnections.remove(service->ip());
+        m_reconnections.remove({ service->ip(), service->protocol() });
 
     if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion)
         emit connectionError(error, service->identifier(), errorData);

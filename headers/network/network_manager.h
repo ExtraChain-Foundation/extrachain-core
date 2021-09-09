@@ -74,7 +74,7 @@ private:
     TcpServerService *tcpServer;
     QWebSocketServer *wsServer;
     QList<SocketService *> m_connections;
-    QMap<QString, Network::Protocol> m_reconnections;
+    QSet<std::pair<QString, Network::Protocol>> m_reconnections;
 
 public:
     NetworkManager(ActorIndex *actorIndex, const QString &localIp = "");
