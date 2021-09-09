@@ -71,9 +71,7 @@ bool SocketService::checkFirstMessage(const QString &message)
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
-    qDebug() << "[Socket]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty()
-             << jsonFirstId.isEmpty() << isFirstIdsContains << somethingEmpty
-             << (version != EXTRACHAIN_VERSION);
+    qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
 
     if (version != EXTRACHAIN_VERSION)
     {
@@ -128,7 +126,8 @@ QByteArray SocketService::generateFirstMessage()
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
     json["key"] = QString::fromStdString(priv.key()->getPubKey());
-    return QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+    QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+    return result;
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message)
