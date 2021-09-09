@@ -136,6 +136,7 @@ QByteArray SocketService::generateFirstMessage()
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message)
 {
+    //    return message;
     if (pub.empty())
         qFatal("Socket encrypt error");
 
@@ -147,10 +148,14 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message)
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message)
 {
+    //    return message;
     if (pub.empty())
         qFatal("Socket decrypt error");
 
-    auto result = qUncompress(priv.key()->decrypt(message, pub));
+    auto decrypt = priv.key()->decrypt(message, pub);
+    if (decrypt.isEmpty())
+        return "";
+    auto result = qUncompress(decrypt);
     m_bytesIncoming += message.length();
     m_bytesCompressed += result.length() - message.length();
     return result;

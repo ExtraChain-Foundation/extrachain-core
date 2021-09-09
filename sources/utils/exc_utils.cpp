@@ -92,7 +92,7 @@ bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode)
 {
     if (!file.open(mode))
     {
-        qCritical().noquote() << QString("[WARNING] Can't open [%1] file").arg(file.fileName());
+        qDebug().noquote() << QString("[WARNING] Can't open [%1] file").arg(file.fileName());
         return false;
     }
     return true;

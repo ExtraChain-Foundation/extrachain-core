@@ -20,6 +20,9 @@
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
 
+#undef qCritical // temp
+#define qCritical qDebug
+
 Blockchain::Blockchain(AccountController *accountController, bool fileMode)
     : fileMode(fileMode)
     , accountController(accountController)

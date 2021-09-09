@@ -76,7 +76,9 @@ void TcpSocketService::sendMessage(const QByteArray &data)
         return;
 
     QByteArray message = Serialization::serialize({ prepareSendMessage(data) }, Messages::FIELD_SIZE);
+    m_tcp->waitForBytesWritten();
     m_tcp->write(message, message.size());
+    m_tcp->waitForBytesWritten();
 }
 
 void TcpSocketService::process()
@@ -210,6 +212,9 @@ void TcpSocketService::continueDoRead()
 
 void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 {
+    if (msg.isEmpty())
+        return;
+
     Messages::BaseMessage baseMessage;
     baseMessage.deserialize(msg);
 

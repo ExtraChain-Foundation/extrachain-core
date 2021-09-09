@@ -450,7 +450,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data)
         return 0;
     }
 
-    qCritical() << "[ActorIndex] Can't save the file" << path << "(file is not opened)";
+    qDebug() << "[ActorIndex] Can't save the file" << path << "(file is not opened)";
     return Errors::FILE_IS_NOT_OPENED;
 }
 
@@ -460,7 +460,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const
     QFile file(filePath);
     if (!file.exists())
     {
-        qCritical() << "[ActorIndex] File with path" << filePath << "not found";
+        qDebug() << "[ActorIndex] File with path" << filePath << "not found";
         return QByteArray();
     }
     file.open(QIODevice::ReadOnly);
