@@ -255,7 +255,6 @@ void LogsManager::offQml()
 
 void LogsManager::etHandler()
 {
-    return;
     std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
 

@@ -84,8 +84,8 @@ void TcpSocketService::process()
     if (m_tcp == nullptr)
     {
         this->m_tcp = new QTcpSocket(this);
-        connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage);
-        connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead);
+        connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage, Qt::QueuedConnection);
+        connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::establishConnection);
         connect(m_tcp, &QTcpSocket::disconnected, [this] {
             qDebug() << "[TCP] Disconnected";
@@ -175,8 +175,8 @@ void TcpSocketService::continueDoRead()
         {
             pendMsg.append(rpckg);
 
-            if (pendMsg.isEmpty())
-                qFatal("tcp omg");
+            // if (pendMsg.isEmpty())
+            //     qFatal("tcp omg");
 
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
@@ -185,12 +185,13 @@ void TcpSocketService::continueDoRead()
                     emit activated();
                 qDebug() << "[TCP] First message" << pendMsg << m_activated;
             }
-            else
+            else if (!pendMsg.isEmpty())
             {
                 SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
                 this->gotMessage(prepareReceiveMessage(pendMsg), receiver);
             }
+
             pendMsgSize = -1;
             pendMsg = "";
         }
