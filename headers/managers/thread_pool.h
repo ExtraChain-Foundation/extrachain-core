@@ -32,55 +32,70 @@ private:
     ~ThreadPool() = default;
 
 public:
-    static QThread *addThread(QObject *worker)
+    template <class Worker>
+    static QThread *addThread(Worker *worker, QThread *newThread = nullptr)
     {
-        return ThreadPool::addThread(QList<QObject *>() << worker);
-    }
+        QThread *thread = newThread == nullptr ? new QThread() : newThread;
 
-    static QThread *addThread(QList<QObject *> workers)
-    {
-        static int threadCount = 0;
-        // mutex.tryLock();
-        static QList<QThread *> threads;
-        static bool isFirst = true;
-
-        QThread *thread = new QThread();
-        for (const auto &worker : workers)
-        {
-            worker->moveToThread(thread);
-            QObject::connect(thread, SIGNAL(started()), worker, SLOT(process()));
-            QObject::connect(worker, SIGNAL(finished()), thread, SLOT(quit()));
-            QObject::connect(thread, SIGNAL(finished()), worker, SLOT(deleteLater()));
-        }
-
-        QObject::connect(thread, &QThread::finished, [thread, workers]() {
-            // threadCount--;
-            //        threads.removeOne(thread); // ERROR!!!
-            //        qDebug() << "Remove thread"
-            //                 << "from pool with new length" << threadCount;
+        QObject::connect(thread, &QThread::started, worker, &Worker::process);
+        QObject::connect(worker, &Worker::finished, thread, &QThread::quit);
+        QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
+        // QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+        QObject::connect(thread, &QThread::finished, [thread]() {
+            if (!threads.contains(thread))
+            {
+                qDebug() << "[ThreadPool] Ignore" << thread;
+                return;
+            }
+            qDebug() << "[ThreadPool] Remove thread" << thread << threads.removeAll(thread) << "to"
+                     << threads.length();
             thread->deleteLater();
         });
 
         if (isFirst)
         {
-            qDebug() << "Connected with qApp";
+            qDebug() << "[ThreadPool] Connected with qApp";
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-                qDebug() << "Remove all threads" << threadCount;
+                qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
 
+                //                for (auto it = threads.cend(); it != threads.cbegin(); it++)
+                //                    (*it)->quit();
                 for (auto &&thread : threads)
-                    thread->quit();
+                {
+                    thread->exit(0);
+                    // threads.removeAll(thread);
+                    //                    thread->quit();
+                    //                    QTimer::singleShot(0, thread, &QThread::quit);
+                    //                    qDebug() << "[ThreadPool] Quit" << thread;
+                }
+                threads.clear();
             });
 
             isFirst = false;
         }
 
-        //    threads << thread;
-        // threadCount++;
-        //    qDebug() << "Add thread for" << workers << "to pool with new length" << threadCount;
-        // mutex.unlock();
-        thread->start();
+        qDebug() << "[ThreadPool] Move to thread" << thread << "for" << worker << threads.length();
+        // qDebug() << "[ThreadPool] Before" << worker->thread();
+        worker->moveToThread(thread);
+        // qDebug() << "[ThreadPool] After" << worker->thread();
+
+        if (!thread->isRunning())
+        {
+            // qDebug() << "[ThreadPool] Start" << thread;
+            threads << thread;
+            thread->start();
+        }
+        else
+        {
+            qDebug() << "[ThreadPool] Ignore start" << thread;
+        }
+
         return thread;
     }
+
+private:
+    static bool isFirst;
+    static QList<QThread *> threads;
 };
 
 #endif // THREAD_POOL_H

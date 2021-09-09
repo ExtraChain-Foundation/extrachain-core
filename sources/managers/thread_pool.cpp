@@ -18,3 +18,6 @@
  */
 
 #include "managers/thread_pool.h"
+
+bool ThreadPool::isFirst = true;
+QList<QThread *> ThreadPool::threads = {};

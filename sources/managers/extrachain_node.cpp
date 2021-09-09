@@ -64,14 +64,15 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
 
     ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(actorIndex);
-    ThreadPool::addThread(txManager);
+    ThreadPool::addThread(txManager, m_blockchain->thread());
     // ThreadPool::addThread(contractManager);
     ThreadPool::addThread(dfs);
-    ThreadPool::addThread(smContractController);
+    ThreadPool::addThread(smContractController, this->thread());
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
 
+    // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
     // FileUpdaterManager fl;
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
