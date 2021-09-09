@@ -22,19 +22,15 @@
 
 using namespace Messages;
 
-const QList<TcpSocketService *> &NetworkManager::tcpConnections() const
+const QList<SocketService *> &NetworkManager::connections() const
 {
-    return m_tcpConnections;
-}
-
-const QList<WebSocketService *> &NetworkManager::wsConnections() const
-{
-    return m_wsConnections;
+    return m_connections;
 }
 
 bool NetworkManager::serverStatus(Network::Protocol protocol) const
 {
-    switch (protocol) {
+    switch (protocol)
+    {
     case Network::Protocol::Tcp:
         return tcpServer->isListening();
     case Network::Protocol::WebSocket:
@@ -103,27 +99,43 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex, const QString &localIp)
 void NetworkManager::process()
 {
     startNetwork();
-    QTimer *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &NetworkManager::checkConnectionsStatus);
-    timer->start(5000);
+}
+
+void NetworkManager::reconnection()
+{
+    auto reconnections = m_reconnections;
+
+    std::for_each(m_connections.begin(), m_connections.end(), [&reconnections](SocketService *el) {
+        if (reconnections.find(el->ip()) != reconnections.end())
+            reconnections.remove(el->ip());
+    });
+
+    for (auto i = reconnections.begin(); i != reconnections.end(); i++)
+    {
+        qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
+                           << i.key() << i.value();
+        connectToNode(i.key(), i.value());
+    }
 }
 
 void NetworkManager::connectTcpSocket(TcpSocketService *service)
 {
-    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
+    connect(service, &TcpSocketService::error, this, &NetworkManager::socketError);
     connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
+    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
-    if (!m_tcpConnections.contains(service))
-        m_tcpConnections.append(service);
+    if (!m_connections.contains(service))
+        m_connections.append(service);
 }
 
 void NetworkManager::connectWsService(WebSocketService *service)
 {
-    connect(service, &WebSocketService::error, this, &NetworkManager::webSocketError);
+    connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
+    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
-    if (!m_wsConnections.contains(service))
-        m_wsConnections.append(service);
+    if (!m_connections.contains(service))
+        m_connections.append(service);
 }
 
 void NetworkManager::removeConnection(const QString &identifier)
@@ -131,21 +143,11 @@ void NetworkManager::removeConnection(const QString &identifier)
     if (identifier.isEmpty())
         qFatal("Try remove with empty identifier");
 
-    auto searchAndRemove = [identifier](const auto &list) {
-        for (auto connection : qAsConst(list))
-        {
-            if (connection->identifier() == identifier)
-                emit connection->close();
-        }
-    };
-
-    searchAndRemove(m_tcpConnections);
-    searchAndRemove(m_wsConnections);
-}
-
-int NetworkManager::connectionsCount() const
-{
-    return m_tcpConnections.length() + m_wsConnections.length();
+    for (auto connection : qAsConst(m_connections))
+    {
+        if (connection->identifier() == identifier)
+            emit connection->close();
+    }
 }
 
 NetworkManager::~NetworkManager()
@@ -157,27 +159,30 @@ NetworkManager::~NetworkManager()
     delete tcpServer;
     // delete discoveryService;
 
-    for(const auto& connection: qAsConst(m_tcpConnections)) {
-        connection->close();
-        connection->finished();
+    for (const auto &connection : qAsConst(m_connections))
+    {
+        emit connection->close();
+        emit connection->finished();
     }
-    m_tcpConnections.clear();
-    qDeleteAll(m_wsConnections);
-    m_wsConnections.clear();
+    m_connections.clear();
 }
 
 void NetworkManager::checkConnectionsStatus()
 {
     bool flag = false;
-    std::for_each(m_tcpConnections.begin(), m_tcpConnections.end(),
-                  [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
-    std::for_each(m_wsConnections.begin(), m_wsConnections.end(),
-                  [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
+    int count = 0;
+    std::for_each(m_connections.begin(), m_connections.end(), [&flag, &count](SocketService *el) {
+        flag = flag || el->isActive();
+        if (el->isActive())
+            count++;
+    });
     emit connectionStatusChanged(flag);
-    emit connectionsCountChanged(connectionsCount());
+    emit connectionsCountChanged(count); // TODO: check prev count value
 
     if (flag) // TODO: replace to networkStatusChanged slot
         sendFromCache();
+
+    reconnection();
 }
 
 void NetworkManager::startNetwork()
@@ -226,7 +231,7 @@ void NetworkManager::startDiscovery()
 
 void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol)
 {
-    if (connectionsCount() >= SIZE_OF_CONNECTIONS)
+    if (m_connections.length() >= SIZE_OF_CONNECTIONS)
     {
         qDebug() << "[NetworkManager] Can't connect because the maximum number of connections";
         return;
@@ -235,10 +240,9 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
-    qDebug().noquote() << QString("[NetworkManager] Try connect to %1, protocol: %2, port: %3")
-                              .arg(ip)
-                              .arg(int(protocol))
-                              .arg(protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
+    qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
+                                 << ", port: " << (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
+    m_reconnections[ip] = protocol;
 
     using Network::Protocol;
     switch (protocol)
@@ -282,15 +286,14 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
     }
 
     auto allActive = [this] {
-        if (m_tcpConnections.isEmpty() && m_wsConnections.isEmpty())
+        if (m_connections.isEmpty())
             return false;
 
-        for (const auto &el : qAsConst(m_tcpConnections))
+        for (const auto &el : qAsConst(m_connections))
+        {
             if (el->isActive())
                 return true;
-        for (const auto &el : qAsConst(m_wsConnections))
-            if (el->isActive())
-                return true;
+        }
 
         return false;
     };
@@ -317,22 +320,13 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         }
     };
 
-    for (const auto &tcp : qAsConst(m_tcpConnections))
+    for (const auto &tcp : qAsConst(m_connections))
     {
         bool isSend = isSendCheck(send, tcp->ip().toStdString(), tcp->port(), receiver);
         if (!isSend)
             continue;
         if (tcp->isActive())
             emit tcp->send(message);
-    }
-
-    for (const auto &ws : qAsConst(m_wsConnections))
-    {
-        bool isSend = isSendCheck(send, ws->ip().toStdString(), ws->port(), receiver);
-        if (!isSend)
-            continue;
-        if (ws->isActive())
-            emit ws->send(message);
     }
 }
 
@@ -346,7 +340,7 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg)
         msgHashList.insert(hashMsg, value);
     else
     {
-        if (msgHashList.find(hashMsg).value() == connectionsCount() - 1)
+        if (msgHashList.find(hashMsg).value() == m_connections.length() - 1)
         {
             msgHashList.remove(hashMsg);
             flag_result = false;
@@ -424,7 +418,7 @@ void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port)
 
 void NetworkManager::addTcpConnectionFromServer(qint64 socketDescriptor)
 {
-    if (connectionsCount() >= SIZE_OF_CONNECTIONS)
+    if (m_connections.length() >= SIZE_OF_CONNECTIONS)
     {
         qDebug() << "[NetworkManager] Can't connect from tcp server because the maximum number of connections"
                  << tcpPort << wsPort;
@@ -437,7 +431,7 @@ void NetworkManager::addTcpConnectionFromServer(qint64 socketDescriptor)
     ThreadPool::addThread(socket);
 }
 
-void NetworkManager::removeTcpConnection()
+void NetworkManager::removeTcpConnection() //
 {
     QObject *sender = QObject::sender();
 
@@ -445,29 +439,38 @@ void NetworkManager::removeTcpConnection()
         return;
 
     TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
-    m_tcpConnections.removeAll(connection);
-    emit connection->close();
+    auto removed = m_connections.removeAll(connection);
+    if (removed == 0)
+        return;
+    qDebug() << "[TCP] Removed" << connection;
     emit connection->finished();
+    checkConnectionsStatus();
 }
 
-void NetworkManager::removeWsConnection()
+void NetworkManager::removeWsConnection() //
 {
     if (QObject::sender() == nullptr)
         return;
 
-    auto service = qobject_cast<WebSocketService *>(QObject::sender());
-    m_wsConnections.removeAll(service);
-    qDebug() << "[WS] Removed" << service;
-    service->deleteLater();
+    auto connection = qobject_cast<SocketService *>(QObject::sender());
+    auto removed = m_connections.removeAll(connection);
+    if (removed == 0)
+        return;
+    qDebug() << "[WS] Removed" << connection;
+    connection->deleteLater();
+    checkConnectionsStatus();
 }
 
-void NetworkManager::webSocketError(Network::SocketServiceError error, QString errorData)
+void NetworkManager::socketError(Network::SocketServiceError error, QString errorData)
 {
     if (QObject::sender() == nullptr)
         return;
 
     auto service = qobject_cast<SocketService *>(QObject::sender());
-    qDebug() << "[NetworkManager] WS: Error socket" << error << service->identifier();
+    qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
+
+    if (error != Network::SocketServiceError::DuplicateIdentifier)
+        m_reconnections.remove(service->ip());
 
     if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion)
         emit connectionError(error, service->identifier(), errorData);
@@ -494,7 +497,7 @@ void NetworkManager::onNewWSConnection()
     if (ws == nullptr)
         qFatal("[WS] Error: ws == nulltpr");
 
-    if (connectionsCount() >= SIZE_OF_CONNECTIONS)
+    if (m_connections.length() >= SIZE_OF_CONNECTIONS)
     {
         qDebug() << "[NetworkManager] Can't connect from WS server because the maximum number of connections";
         return;

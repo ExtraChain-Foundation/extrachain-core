@@ -5,6 +5,7 @@ SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
     : QObject(parent)
 {
     m_networkManager = networkManager;
+    priv.create(ActorType::Wallet);
 }
 
 SocketService::SocketService(const SocketService &socket)
@@ -55,26 +56,34 @@ int SocketService::bytesIncoming() const
 bool SocketService::checkFirstMessage(const QString &message)
 {
     auto json = QJsonDocument::fromJson(message.toLatin1());
+
     if (json.isEmpty())
     {
+        qDebug() << "[Socket] First message:" << message;
         qFatal("[Socket] Can't check first message");
     }
+
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
+    pub = json["key"].toString().toStdString();
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
     ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
-    qDebug() << "[WS]" << currentFirstId << jsonFirstId << currentFirstId.isEmpty() << jsonFirstId.isEmpty()
-             << isFirstIdsContains << somethingEmpty << (version != EXTRACHAIN_VERSION);
+    qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
 
-    if (!(somethingEmpty || isFirstIdsContains) || version != EXTRACHAIN_VERSION)
+    if (version != EXTRACHAIN_VERSION)
     {
-        qDebug() << "[WS] Close, because network or version unsuitable";
-        version != EXTRACHAIN_VERSION
-            ? emit error(Network::SocketServiceError::IncompatibleVersion, version)
-            : emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
+        qDebug() << "[Socket] Close, because version incompatible";
+        emit error(Network::SocketServiceError::IncompatibleVersion, version);
+        closeSocket();
+    }
+
+    if (!(somethingEmpty || isFirstIdsContains))
+    {
+        qDebug() << "[Socket] Close, because network incompatible";
+        emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
         closeSocket();
         return false;
     }
@@ -87,15 +96,15 @@ bool SocketService::checkFirstMessage(const QString &message)
     }
 
     bool flag = false;
-    auto &wsConnections = m_networkManager->wsConnections();
-    std::for_each(wsConnections.begin(), wsConnections.end(), [&flag, this](WebSocketService *el) {
+    auto &connections = m_networkManager->connections();
+    std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
 
     if (flag)
     {
         emit error(Network::SocketServiceError::DuplicateIdentifier, "");
-        qDebug() << "[WS] Duplicate identifier";
+        qDebug() << "[Socket] Duplicate identifier";
         closeSocket();
         return false;
     }
@@ -116,5 +125,29 @@ QByteArray SocketService::generateFirstMessage()
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    return QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+    json["key"] = QString::fromStdString(priv.key()->getPubKey());
+    QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+    return result;
+}
+
+QByteArray SocketService::prepareSendMessage(const QByteArray &message)
+{
+    if (pub.empty())
+        qFatal("Socket encrypt error");
+
+    auto result = priv.key()->encrypt(qCompress(message), pub);
+    m_bytesOutgoing += result.length();
+    m_bytesCompressed += message.length() - result.length();
+    return result;
+}
+
+QByteArray SocketService::prepareReceiveMessage(const QByteArray &message)
+{
+    if (pub.empty())
+        qFatal("Socket decrypt error");
+
+    auto result = qUncompress(priv.key()->decrypt(message, pub));
+    m_bytesIncoming += message.length();
+    m_bytesCompressed += result.length() - message.length();
+    return result;
 }

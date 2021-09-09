@@ -75,9 +75,8 @@ void TcpSocketService::sendMessage(const QByteArray &data)
     if (!m_tcp->isValid())
         return;
 
-    QByteArray _wtSok = Serialization::serialize({ data }, Messages::FIELD_SIZE); // qCompress
-    m_bytesOutgoing += _wtSok.length();
-    m_tcp->write(_wtSok, _wtSok.size());
+    QByteArray message = Serialization::serialize({ prepareSendMessage(data) }, Messages::FIELD_SIZE);
+    m_tcp->write(message, message.size());
 }
 
 void TcpSocketService::process()
@@ -88,13 +87,17 @@ void TcpSocketService::process()
         connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::establishConnection);
+        connect(m_tcp, &QTcpSocket::disconnected, [this] {
+            qDebug() << "[TCP] Disconnected";
+            closeSocket();
+        });
         connect(this, &TcpSocketService::close, this, &TcpSocketService::closeSocket);
         connect(m_tcp, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
             Q_UNUSED(socketError)
             qDebug().noquote() << "[TCP] Socket error" << socketError << "for" << m_ip << port()
                                << serverPort();
             if (this->m_tcp->state() != QTcpSocket::ConnectedState)
-                emit this->close();
+                closeSocket();
         });
     }
     else
@@ -119,14 +122,18 @@ void TcpSocketService::establishConnection()
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
     this->m_ip = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
     qDebug() << "[TCP]" << serverPort() << "Send first message:" << generateFirstMessage();
-    emit send(generateFirstMessage());
+
+    auto json = generateFirstMessage();
+    QByteArray message = Serialization::serialize({ json }, Messages::FIELD_SIZE);
+    m_tcp->write(message, message.size());
 
     qDebug() << "[TCP] Address" << this->m_tcp << m_ip << port() << serverPort() << m_tcp->localPort()
              << m_tcp->peerPort();
     qDebug() << "[TCP] Open status:" << m_tcp->isOpen();
 }
 
-void TcpSocketService::closeSocket() {
+void TcpSocketService::closeSocket()
+{
     m_activated = false;
     emit disconnected();
 }
@@ -137,10 +144,12 @@ void TcpSocketService::doRead()
     {
         continueDoRead();
     }
-    if (m_tcp->bytesAvailable() >= Config::Net::PROTOCOL_VERSION.size() + 8)
+
+    if (m_tcp->bytesAvailable() >= Messages::FIELD_SIZE)
     {
         QByteArray data = m_tcp->read(Messages::FIELD_SIZE);
         pendMsgSize = Utils::qByteArrayToInt(data);
+
         if ((pendMsgSize > 0))
         {
             continueDoRead();
@@ -165,17 +174,22 @@ void TcpSocketService::continueDoRead()
         if (pendMsgSize == bytesRead)
         {
             pendMsg.append(rpckg);
+
+            if (pendMsg.isEmpty())
+                qFatal("tcp omg");
+
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
                 m_activated = checkFirstMessage(pendMsg);
+                if (m_activated)
+                    emit activated();
                 qDebug() << "[TCP] First message" << pendMsg << m_activated;
             }
             else
             {
                 SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
-                m_bytesIncoming += pendMsg.length();
-                this->gotMessage(pendMsg, receiver);
+                this->gotMessage(prepareReceiveMessage(pendMsg), receiver);
             }
             pendMsgSize = -1;
             pendMsg = "";
@@ -195,15 +209,12 @@ void TcpSocketService::continueDoRead()
 
 void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 {
-    Messages::BaseMessage dbm;
-    dbm.deserialize(msg);
-    if (dbm.isEmpty())
-        qFatal("dmb is empty");
-    if (dbm.protocol != Config::Net::PROTOCOL_VERSION)
-        qFatal("protocol");
+    Messages::BaseMessage baseMessage;
+    baseMessage.deserialize(msg);
 
-    if (msg == Config::Net::PROTOCOL_VERSION) {
-        qDebug() << "[TCP] WTF";
+    if (baseMessage.isEmpty())
+    {
+        qDebug() << "[TCP] ! Empty base message:" << msg;
         return;
     }
 
@@ -215,7 +226,8 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 
 quint16 TcpSocketService::port() const
 {
-    if (m_tcp == nullptr) {
+    if (m_tcp == nullptr)
+    {
         qFatal("TCP port nullptr");
         return m_networkManager->tcpPort;
     }

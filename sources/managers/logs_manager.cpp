@@ -61,7 +61,8 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
         makeLog(context.file, context.line, context.function, "[Fatal Error] " + msg);
 
         QFile file("logs/extrachain-fatal.log");
-        if (file.open(QFile::Append)) {
+        if (file.open(QFile::Append))
+        {
             QJsonObject json;
             json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
 #ifdef QT_DEBUG
@@ -188,7 +189,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     }
 }
 
-QString LogsManager::normalizeFileName(const QString &file)
+QString LogsManager::normalizeFileName(const QString& file)
 {
 #ifdef QT_DEBUG
     // TODO: to std::string

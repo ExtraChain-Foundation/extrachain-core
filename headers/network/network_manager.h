@@ -20,8 +20,6 @@
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
-class ResolveManager;
-
 #include <algorithm>
 #include <QNetworkInterface>
 #include <QNetworkAddressEntry>
@@ -36,7 +34,13 @@ class ResolveManager;
 #include "managers/account_controller.h"
 #include "managers/thread_pool.h"
 #include "network/upnpconnection.h"
-#include "network/socket_pair.h"
+//#include "network/socket_pair.h"
+
+class ResolveManager;
+// class SocketService;
+// class TcpSocketService;
+// class WebSocketService;
+// class TcpServerService;
 #include "network/tcpsocket_service.h"
 #include "network/websocket_service.h"
 #include "network/tcpserver_service.h"
@@ -69,8 +73,8 @@ private:
     QNetworkAddressEntry *local = nullptr;
     TcpServerService *tcpServer;
     QWebSocketServer *wsServer;
-    QList<TcpSocketService *> m_tcpConnections;
-    QList<WebSocketService *> m_wsConnections;
+    QList<SocketService *> m_connections;
+    QMap<QString, Network::Protocol> m_reconnections;
 
 public:
     NetworkManager(ActorIndex *actorIndex, const QString &localIp = "");
@@ -85,10 +89,8 @@ private:
     void connectWsService(WebSocketService *ws);
 
 public:
-    const QList<TcpSocketService *> &tcpConnections() const;
-    const QList<WebSocketService *> &wsConnections() const;
+    const QList<SocketService *> &connections() const;
     bool serverStatus(Network::Protocol protocol) const;
-    int connectionsCount() const;
 
 public slots:
     void removeConnection(const QString &identifier);
@@ -127,6 +129,7 @@ protected slots:
 public slots:
     void connectToNode(const QString &ip, Network::Protocol protocol);
     void process();
+    void reconnection();
 
 private slots:
     /**
@@ -134,7 +137,7 @@ private slots:
      */
     void removeTcpConnection();
     void removeWsConnection();
-    void webSocketError(Network::SocketServiceError error, QString errorData);
+    void socketError(Network::SocketServiceError error, QString errorData);
 
 public:
     QString localIp(); // TODO: remove

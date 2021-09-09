@@ -19,6 +19,7 @@
 
 #include "dfs/managers/headers/dfs_networkmanager.h"
 #include "resolve/resolve_manager.h"
+#include "network/isocket_service.h"
 
 void DfsNetworkManager::setDfs(Dfs *value)
 {
@@ -161,12 +162,10 @@ void DfsNetworkManager::removeResolver(DFSResolverService::FinishStatus status)
 void DfsNetworkManager::checkConnectionsStatus()
 {
     bool flag = false;
-    std::for_each(m_tcpConnections.begin(), m_tcpConnections.end(),
-                  [&flag](TcpSocketService *el) { flag = flag || el->isActive(); });
-    std::for_each(m_wsConnections.begin(), m_wsConnections.end(),
-                  [&flag](WebSocketService *el) { flag = flag || el->isActive(); });
+    std::for_each(m_connections.begin(), m_connections.end(),
+                  [&flag](SocketService *el) { flag = flag || el->isActive(); });
     emit connectionStatusChanged(flag);
-    emit connectionsCountChanged(connectionsCount());
+    emit connectionsCountChanged(m_connections.length());
 
     if (flag == true) // TODO: replace to networkStatusChanged slot
     {
@@ -174,4 +173,6 @@ void DfsNetworkManager::checkConnectionsStatus()
         for (const QString &file : files)
             emit dfs->requestFile(file);
     }
+
+    reconnection();
 }
