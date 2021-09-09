@@ -78,11 +78,6 @@ void DfsNetworkManager::createDFSResolver(Network::DataStruct ds)
 
 void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair &receiver)
 {
-    if (msg == Config::Net::PROTOCOL_VERSION)
-    {
-        qDebug() << "Protocol msg Error read";
-        return;
-    }
     if (!msg.isEmpty())
     {
         Network::DataStruct dStruct;
@@ -90,6 +85,8 @@ void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair 
         dStruct.receiver = receiver;
         emit newMessage(dStruct);
     }
+    else
+        qFatal("dfs message empty");
 }
 
 void DfsNetworkManager::process()
