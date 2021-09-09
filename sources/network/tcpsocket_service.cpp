@@ -84,8 +84,8 @@ void TcpSocketService::process()
     if (m_tcp == nullptr)
     {
         this->m_tcp = new QTcpSocket(this);
-        connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage, Qt::QueuedConnection);
-        connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead, Qt::QueuedConnection);
+        connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage);
+        connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead);
         connect(m_tcp, &QTcpSocket::connected, this, &TcpSocketService::establishConnection);
         connect(m_tcp, &QTcpSocket::disconnected, [this] {
             qDebug() << "[TCP] Disconnected";
