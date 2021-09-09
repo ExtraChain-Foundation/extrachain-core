@@ -132,10 +132,6 @@ void ActorIndex::process()
 
 void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver)
 {
-#ifdef QT_DEBUG
-    if (actorId.toByteArray().size() < 18)
-        qFatal("handleGetActor, size < 18");
-#endif
     // receive id
     // create response message
     Actor<KeyPublic> actor = getActor(actorId);

@@ -58,10 +58,8 @@ bool DBConnector::open(const std::string &name)
         m_file = name;
         m_open = true;
 
-#ifdef QT_DEBUG
         if (!QFile::exists(name.c_str()))
             qFatal("db open error: %s", name.c_str());
-#endif
 
         return true;
     }

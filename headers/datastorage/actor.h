@@ -51,10 +51,9 @@ public:
 
     ActorId(const QByteArray &actorId)
     {
-#ifdef QT_DEBUG
         if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
-            qFatal("ActorId not valid");
-#endif
+            qFatal("ActorId not valid"); // TODO: remove after tests
+
         m_id = !actorId.isEmpty() ? actorId : QByteArray("00000000000000000000");
         normalize();
     }
