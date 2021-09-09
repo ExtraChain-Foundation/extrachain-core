@@ -319,13 +319,13 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         }
     };
 
-    for (const auto &tcp : qAsConst(m_connections))
+    for (const auto &service : qAsConst(m_connections))
     {
-        bool isSend = isSendCheck(send, tcp->ip().toStdString(), tcp->port(), receiver);
+        bool isSend = isSendCheck(send, service->ip().toStdString(), service->port(), receiver);
         if (!isSend)
             continue;
-        if (tcp->isActive())
-            emit tcp->send(message);
+        if (service->isActive())
+            emit service->send(message);
     }
 }
 
