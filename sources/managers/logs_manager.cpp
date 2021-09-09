@@ -202,7 +202,7 @@ QString LogsManager::normalizeFileName(const QString& file)
 #else
     return fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
 #endif
-#elif
+#else
     return "";
 #endif
 }
