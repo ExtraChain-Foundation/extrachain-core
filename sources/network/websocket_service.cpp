@@ -97,7 +97,8 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     SocketPair pair(m_ip.toStdString(), port());
     pair.setIdentifier(m_identifier.toLatin1());
     auto mess = prepareReceiveMessage(message);
-    m_networkManager->messageReceived(mess, pair);
+    if (!mess.isEmpty())
+        m_networkManager->messageReceived(mess, pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)

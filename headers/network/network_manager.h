@@ -71,8 +71,8 @@ private:
     ActorIndex *m_actorIndex;
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
-    TcpServerService *tcpServer;
-    QWebSocketServer *wsServer;
+    TcpServerService *tcpServer = nullptr;
+    QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
     QSet<std::pair<QString, Network::Protocol>> m_reconnections;
 

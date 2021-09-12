@@ -32,9 +32,9 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const
     switch (protocol)
     {
     case Network::Protocol::Tcp:
-        return tcpServer->isListening();
+        return tcpServer == nullptr ? false : tcpServer->isListening();
     case Network::Protocol::WebSocket:
-        return wsServer->isListening();
+        return wsServer == nullptr ? false : wsServer->isListening();
     case Network::Protocol::Undefined:
         return false;
     }
@@ -99,6 +99,10 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex, const QString &localIp)
 void NetworkManager::process()
 {
     startNetwork();
+
+    auto tempTimer = new QTimer(this);
+    connect(tempTimer, &QTimer::timeout, [this] { this->reconnection(); });
+    tempTimer->start(5000);
 }
 
 void NetworkManager::reconnection()
@@ -181,8 +185,6 @@ void NetworkManager::checkConnectionsStatus()
 
     if (flag) // TODO: replace to networkStatusChanged slot
         sendFromCache();
-
-    reconnection();
 }
 
 void NetworkManager::startNetwork()
@@ -195,6 +197,8 @@ void NetworkManager::startNetwork()
         return;
     }
 
+    // temp disable for clients
+#ifdef ECONSOLE
     tcpServer = new TcpServerService(tcpPort, local);
     connect(tcpServer, &TcpServerService::newServerConnection, this,
             &NetworkManager::addTcpConnectionFromServer, Qt::UniqueConnection);
@@ -217,6 +221,7 @@ void NetworkManager::startNetwork()
         qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
                            << wsServer->serverPort() << wsServer->serverName();
     }
+#endif
 }
 
 void NetworkManager::startDiscovery()
