@@ -13,7 +13,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManage
     else
     {
         m_ws = ws;
-        this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
+        this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
         connections();
         sendFirstMessage();
@@ -43,7 +43,7 @@ bool WebSocketService::isActive() const
     return m_activated && m_ws->isValid();
 }
 
-void WebSocketService::open(const QUrl &url)
+void WebSocketService::open(const QString &ip, quint16 port)
 {
     if (m_ws->isValid())
     {
@@ -51,10 +51,11 @@ void WebSocketService::open(const QUrl &url)
     }
     else
     {
+        auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         qDebug() << "[WS] Open" << url;
         connections();
         m_ws->open(url);
-        m_ip = m_ws->localAddress().toString();
+        m_ip = m_ws->peerAddress().toString();
     }
 }
 
@@ -138,7 +139,7 @@ void WebSocketService::onSocketError(QAbstractSocket::SocketError error)
 void WebSocketService::connections()
 {
     connect(m_ws, &QWebSocket::connected, [this] {
-        this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
+        this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
         emit m_networkManager->newSocket();
         sendFirstMessage();

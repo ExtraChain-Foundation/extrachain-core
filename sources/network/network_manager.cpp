@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -38,6 +38,7 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const
     case Network::Protocol::Undefined:
         return false;
     }
+    return false;
 }
 
 void NetworkManager::setResolveManager(ResolveManager *value)
@@ -109,9 +110,16 @@ void NetworkManager::reconnection()
 {
     for (const auto &el : qAsConst(m_reconnections))
     {
-        bool finded = std::find_if(m_connections.begin(), m_connections.end(),
-                                   [el](SocketService *service) { return service->ip() == el.first; })
-            != m_connections.end();
+        bool finded = false;
+        for (SocketService *service : m_connections)
+        {
+            // qDebug() << "Reconnection" << service << service->ip() << service->serverPort() << el.first;
+            if (service->ip() == el.first)
+            {
+                finded = true;
+                break;
+            }
+        }
 
         if (finded)
             continue;
@@ -265,7 +273,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 void NetworkManager::connectToWebSocket(const QString &ip, quint16 port)
 {
     auto service = new WebSocketService(nullptr, this);
-    service->open(QUrl(QString("ws://%1:%2").arg(ip).arg(port)));
+    service->open(ip, port);
     connectWsService(service);
 }
 

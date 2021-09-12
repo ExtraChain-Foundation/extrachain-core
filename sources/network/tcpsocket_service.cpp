@@ -224,9 +224,7 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
         return;
     }
 
-    if (serverPort() == 2223)
-        reinterpret_cast<DfsNetworkManager *>(m_networkManager)->messageReceived(msg, pair);
-    else
+    if (!msg.isEmpty())
         m_networkManager->messageReceived(msg, pair);
 }
 

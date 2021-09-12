@@ -85,8 +85,6 @@ void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair 
         dStruct.receiver = receiver;
         emit newMessage(dStruct);
     }
-    else
-        qFatal("dfs message empty");
 }
 
 void DfsNetworkManager::process()
@@ -170,6 +168,4 @@ void DfsNetworkManager::checkConnectionsStatus()
         for (const QString &file : files)
             emit dfs->requestFile(file);
     }
-
-    reconnection();
 }
