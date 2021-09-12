@@ -20,7 +20,7 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
-class QObject;
+#include <QThread>
 
 class ThreadPool
 {
