@@ -81,7 +81,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/searchfilters.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
@@ -188,6 +187,7 @@ if (EXTRACHAIN_STATIC_BUILD)
         ${EXTRACHAIN_CORE_SOURCES}
         )
 else()
+    add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
     add_library(extrachain SHARED
         ${EXTRACHAIN_CORE_SOURCES}
         )
