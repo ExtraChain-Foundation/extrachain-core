@@ -94,6 +94,9 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
 {
+    Q_UNUSED(file)
+    Q_UNUSED(line)
+    Q_UNUSED(function)
     static QFile logFile("logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
                          + ".log");
 
@@ -209,6 +212,7 @@ QString LogsManager::normalizeFileName(const QString& file)
     return fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
 #endif
 #else
+    Q_UNUSED(file)
     return "";
 #endif
 }

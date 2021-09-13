@@ -45,6 +45,7 @@ static const QByteArray PONG_MESSAGE = "pong ExtraNet";
 
 [[maybe_unused]] static QByteArray createPongMessage(const quint16 port)
 {
+    Q_UNUSED(port)
     QByteArray msg("{");
     qFatal("Need correct pong");
     //    msg.append("\"proto\":\"")

@@ -33,6 +33,7 @@ public:
     Test(ExtraChainNode *node, QObject *p = nullptr)
         : QObject(p)
     {
+        Q_UNUSED(node)
         /*
         Transaction tr(node->getAccountController()->getCurrentActor().id(), BigNumber("ddddaaaa332232"),
                        BigNumber(124));
