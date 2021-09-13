@@ -21,10 +21,9 @@
 #define KEY_PRIVATE_H
 
 #include <QDebug>
-#include <sodium.h>
-#include "utils/exc_utils.h"
+#include "extrachain_global.h"
 
-class KeyPrivate
+class EXTRACHAIH_EXPORT KeyPrivate
 {
 private:
     std::string secKey;

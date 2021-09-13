@@ -20,9 +20,10 @@
 #ifndef SOCKET_PAIR_H
 #define SOCKET_PAIR_H
 
-#include "utils/bignumber.h"
+#include "extrachain_global.h"
+class BigNumber;
 
-class SocketPair
+class EXTRACHAIH_EXPORT SocketPair
 {
 public:
     std::string ip;

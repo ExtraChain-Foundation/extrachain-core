@@ -9,7 +9,7 @@
 class NetworkManager;
 class ActorIndex;
 
-class WebSocketService : public SocketService
+class EXTRACHAIH_EXPORT WebSocketService : public SocketService
 {
     Q_OBJECT
 

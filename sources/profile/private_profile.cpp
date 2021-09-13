@@ -20,6 +20,7 @@
 #include <profile/private_profile.h>
 #include "managers/account_controller.h"
 #include "dfs/controls/headers/dfs.h"
+#include "enc/enc_tools.h"
 
 using std::string;
 

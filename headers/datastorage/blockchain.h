@@ -59,7 +59,7 @@ enum class FreezeBalanceSearch
     OnlySender
 };
 
-class Blockchain : public QObject
+class EXTRACHAIH_EXPORT Blockchain : public QObject
 {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."

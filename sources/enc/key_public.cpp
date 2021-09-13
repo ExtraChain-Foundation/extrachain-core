@@ -18,6 +18,7 @@
  */
 
 #include "enc/key_public.h"
+#include "enc/enc_tools.h"
 
 using std::string, std::vector;
 

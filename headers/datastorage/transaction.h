@@ -28,7 +28,7 @@
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
 
-class Transaction : public QObject
+class EXTRACHAIH_EXPORT Transaction : public QObject
 {
     Q_OBJECT
 

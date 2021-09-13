@@ -33,7 +33,7 @@ static const short DFS_RESOLVERS_POOL_SIZE = 10;
 
 class Dfs;
 
-class DfsNetworkManager : public NetworkManager
+class EXTRACHAIH_EXPORT DfsNetworkManager : public NetworkManager
 {
     Q_OBJECT
 

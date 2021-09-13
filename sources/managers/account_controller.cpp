@@ -19,6 +19,7 @@
 
 #include "managers/account_controller.h"
 #include "datastorage/blockchain.h"
+#include "enc/enc_tools.h"
 
 QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
 {

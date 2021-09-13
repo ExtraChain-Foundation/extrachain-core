@@ -18,6 +18,7 @@
  */
 
 #include "network/socket_pair.h"
+#include "utils/bignumber.h"
 
 SocketPair::SocketPair()
 {

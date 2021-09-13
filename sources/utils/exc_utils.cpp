@@ -25,6 +25,10 @@
 #include <QStandardPaths>
 #include <QTcpSocket>
 
+#include "enc/enc_tools.h"
+#include "dfs/types/headers/dfstruct.h"
+#include "utils/Keccak256.h"
+
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
     Keccak keccak;

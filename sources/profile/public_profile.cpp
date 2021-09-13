@@ -18,6 +18,7 @@
  */
 
 #include "profile/public_profile.h"
+#include "dfs/types/headers/dfstruct.h"
 
 PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id)
 {
@@ -125,7 +126,8 @@ bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
             sign = "";
             return false;
         }
-        else {
+        else
+        {
             profile.resize(0);
         }
     }
@@ -310,10 +312,4 @@ QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)
     size = Utils::qByteArrayToInt(index1.mid(index1.indexOf(" ")));
     list.append(serializeData.mid(pos, size));
     return list;
-}
-
-indexList::indexList(long long curPos, int _size)
-{
-    currentPosition = curPos;
-    size = _size;
 }

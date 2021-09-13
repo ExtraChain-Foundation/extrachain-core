@@ -21,11 +21,11 @@
 #define NETWORK_MANAGER_H
 
 #include <algorithm>
-#include <QNetworkInterface>
-#include <QNetworkAddressEntry>
-#include <QWebSocketServer>
-#include <QRandomGenerator>
-#include <QMutex>
+#include <QtNetwork/QNetworkInterface>
+#include <QtNetwork/QNetworkAddressEntry>
+#include <QtWebSockets/QWebSocketServer>
+#include <QtCore/QRandomGenerator>
+#include <QtCore/QMutex>
 
 #include "utils/exc_utils.h"
 #include "datastorage/block.h"
@@ -51,7 +51,7 @@ class ResolveManager;
  * Creates Discovery, Resolver, Server and Sockets services
  */
 // static QMutex mutex;
-class NetworkManager : public QObject
+class EXTRACHAIH_EXPORT NetworkManager : public QObject
 {
     Q_OBJECT
 

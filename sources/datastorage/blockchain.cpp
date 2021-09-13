@@ -19,6 +19,7 @@
 
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
+#include "network/packages/service/all_messages.h"
 
 #undef qCritical // temp
 #define qCritical qDebug

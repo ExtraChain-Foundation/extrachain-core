@@ -20,6 +20,26 @@
 #include "managers/extrachain_node.h"
 
 #include "resolve/resolve_manager.h"
+#include "network/network_manager.h"
+#include "managers/tx_manager.h"
+#include "managers/account_controller.h"
+#include "datastorage/index/actorindex.h"
+#include "datastorage/blockchain.h"
+#include "datastorage/block.h"
+#include "datastorage/transaction.h"
+#include "datastorage/actor.h"
+#include "managers/thread_pool.h"
+#include "dfs/controls/headers/dfs.h"
+#include "managers/contract_manager.h"
+#include "managers/sm_manager.h"
+#include "dfs/managers/headers/dfs_networkmanager.h"
+#include "managers/chatmanager.h"
+#include "profile/private_profile.h"
+#include "dfs/controls/headers/subscribe_controller.h"
+#include "network/packages/service/message_types.h"
+#include "managers/file_updater_manager.h"
+
+#include "metatypes.h"
 
 ExtraChainNode::ExtraChainNode(const QString &localIp)
 {
@@ -28,6 +48,8 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
         qDebug() << "Encryption init error";
         QCoreApplication::exit(-1);
     }
+
+    registerMetaTypes();
     prepareFolders();
     actorIndex = new ActorIndex();
     prProfile = new PrivateProfile();
@@ -586,7 +608,7 @@ void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId pl
     if (mainActor->id() == firstId)
     {
         qInfo().noquote() << "FirstId send to" << receiver << "with amount" << amount;
-        createTransactionFrom(firstId, receiver, amount);
+        createTransactionFrom(firstId, receiver, amount, ActorId());
     }
     else
     {

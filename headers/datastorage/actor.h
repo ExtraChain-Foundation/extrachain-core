@@ -20,14 +20,18 @@
 #ifndef ACTOR_H
 #define ACTOR_H
 
-#include <QDebug>
 #include <utility>
 #include <type_traits>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QDebug>
 
+#include "dfs/types/headers/dfstruct.h"
 #include "utils/bignumber.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "profile/public_profile.h"
+#include "extrachain_global.h"
 
 /**
  * Acting entity.
@@ -41,7 +45,7 @@ enum class ActorType
     First = 2
 };
 
-class ActorId
+class EXTRACHAIH_EXPORT ActorId
 {
 public:
     ActorId()
@@ -120,7 +124,7 @@ private:
 };
 
 template <typename T>
-class Actor final
+class EXTRACHAIH_EXPORT Actor final
 {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
                   "Your type is not supported. Only Keys are supported");

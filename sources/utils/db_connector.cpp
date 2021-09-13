@@ -21,6 +21,7 @@
 
 #include <QDir>
 #include <QRegularExpression>
+#include "sqlite3.h"
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 

@@ -31,7 +31,7 @@ class NetworkManager;
 /**
  * @brief SocketService is responsible for message delivery
  */
-class TcpSocketService : public SocketService
+class EXTRACHAIH_EXPORT TcpSocketService : public SocketService
 {
     Q_OBJECT
 

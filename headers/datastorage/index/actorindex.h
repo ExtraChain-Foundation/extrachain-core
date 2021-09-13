@@ -24,20 +24,16 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include <datastorage/searchfilters.h>
-#include "profile/public_profile.h"
-#include "network/socket_pair.h"
-#include "network/packages/base_message_response.h"
-#include "network/packages/service/all_messages.h"
-#include "network/packages/service/message_types.h"
 
-class ResolveManager;
+#include "managers/extrachain_node.h"
+#include "extrachain_global.h"
+
 class AccountController;
 
 /**
  * @brief Actors that stored in blockchain
  */
-class ActorIndex : public QObject
+class EXTRACHAIH_EXPORT ActorIndex : public QObject
 {
     Q_OBJECT
 

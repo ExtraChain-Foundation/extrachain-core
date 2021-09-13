@@ -32,6 +32,7 @@ class ChatManager;
 #include "datastorage/index/actorindex.h"
 #include "managers/tx_manager.h"
 #include "dfs/controls/headers/dfs.h"
+#include "extrachain_global.h"
 
 #ifdef ECLIENT
 static const short ResolverServicePoolMaxSize = 5;

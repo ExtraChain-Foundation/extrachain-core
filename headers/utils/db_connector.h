@@ -29,7 +29,9 @@
 
 #include <QMutex>
 
-#include "sqlite3.h"
+struct sqlite3;
+struct sqlite3_stmt;
+
 static QMutex dbmutex;
 typedef std::unordered_map<std::string, std::string> DBRow;
 

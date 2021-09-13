@@ -20,8 +20,10 @@
 #ifndef DFS_REUEST_H
 #define DFS_REUEST_H
 
+#include "dfs/types/headers/dfstruct.h"
 #include "dfs/packages/headers/dfs_message_interface.h"
 #include "network/packages/message_interface.h"
+#include "extrachain_global.h"
 
 namespace DistFileSystem {
 struct DfsRequest : Messages::ISmallMessage

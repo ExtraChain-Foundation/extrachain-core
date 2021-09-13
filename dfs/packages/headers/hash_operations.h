@@ -22,6 +22,7 @@
 
 #include "dfs/packages/headers/dfs_message_interface.h"
 #include "network/packages/message_interface.h"
+#include "dfs/types/headers/dfstruct.h"
 
 namespace DistFileSystem {
 // TODO: package root array
