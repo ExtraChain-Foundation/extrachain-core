@@ -550,7 +550,7 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data)
 
         return 0;
     }
-    qCritical() << "Can't save the file" << path << "(File is not opened)";
+    qDebug() << "Can't save the file" << path << "(File is not opened)";
     return Errors::FILE_IS_NOT_OPENED;
 }
 

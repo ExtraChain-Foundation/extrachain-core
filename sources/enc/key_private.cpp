@@ -126,7 +126,12 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
     }
 
     if (sdata.size() < crypto_secretbox_MACBYTES)
-        qFatal("[KeyPrivate::decrypt] Incorrect msg: %s", data.data());
+    {
+        qCritical() << "Critical: [KeyPrivate::decrypt] Incorrect msg" << sdata.size()
+                    << crypto_secretbox_MACBYTES;
+        return "";
+        qFatal("[KeyPrivate::decrypt] Incorrect msg");
+    }
 
     vector<unsigned char> skr(sk.begin(), sk.end());
     vector<unsigned char> pks(pksr.begin(), pksr.end());
@@ -149,7 +154,7 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
         res = string(dec_msg.begin(), dec_msg.end());
     }
     if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data()
+        qDebug() << "[KeyPrivate::encrypt] res is empty." /*msg:" << data.data()*/
                  << "| secret:" << publicKeySender.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }

@@ -38,7 +38,7 @@ enum class ActorType
 {
     Wallet = 0,
     Account = 1,
-    Company = 2
+    First = 2
 };
 
 class ActorId
@@ -51,10 +51,9 @@ public:
 
     ActorId(const QByteArray &actorId)
     {
-#ifdef QT_DEBUG
         if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
-            qFatal("ActorId not valid");
-#endif
+            qFatal("ActorId not valid"); // TODO: remove after tests
+
         m_id = !actorId.isEmpty() ? actorId : QByteArray("00000000000000000000");
         normalize();
     }
@@ -81,12 +80,7 @@ public:
         return m_id < actorId.m_id;
     }
 
-    QByteArray toByteArray() const
-    {
-        return m_id;
-    }
-
-    QByteArray &toByteArrayRef()
+    const QByteArray &toByteArray() const
     {
         return m_id;
     }
@@ -103,8 +97,9 @@ public:
 
     bool isEmpty() const
     {
-        return m_id == "000000000000000000-1" || // temp
-            m_id.isEmpty() || m_id == "00000000000000000000";
+        if (m_id == "000000000000000000-1")
+            qFatal("ActorId: WTF");
+        return m_id.isEmpty() || m_id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId)

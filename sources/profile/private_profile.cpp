@@ -33,17 +33,17 @@ void PrivateProfile::setDfs(Dfs *value)
     dfs = value;
 }
 
-void PrivateProfile::savePrivateProfile(const QByteArray &hash, const QByteArray &id)
+void PrivateProfile::savePrivateProfile(const QByteArray &hash, const ActorId &id)
 {
     QDir().mkpath(PathProfile);
     QMap<QString, QByteArray> map;
-    set(map, "wallet", id);
+    set(map, "wallet", id.toByteArray());
     QByteArray data = "";
     writeData(map, data);
     data = hash + data;
     string h = hash.toStdString();
     data = QByteArray::fromStdString(SecretKey::encryptWithPassword(data.toStdString(), h));
-    QFile file(PathProfile + "/" + id + ".private");
+    QFile file(PathProfile + "/" + id.toByteArray() + ".private");
     file.open(QIODevice::WriteOnly);
     file.write(data);
     file.flush();

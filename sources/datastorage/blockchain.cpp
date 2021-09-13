@@ -20,6 +20,9 @@
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
 
+#undef qCritical // temp
+#define qCritical qDebug
+
 Blockchain::Blockchain(AccountController *accountController, bool fileMode)
     : fileMode(fileMode)
     , accountController(accountController)
@@ -246,7 +249,7 @@ void Blockchain::getBlockZero()
         emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     }
     else
-        actorIndex->setCompanyId(new QByteArray(zero.getApprover().toByteArray()));
+        actorIndex->setFirstId(zero.getApprover());
 }
 
 BigNumber Blockchain::getSupply(const QByteArray &idToken)
@@ -283,7 +286,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     std::vector<DBRow> extractData2 = cacheDB2.select(
         "SELECT * FROM cacheData WHERE Token = '"
         + idToken.toStdString()
-        /* + "' AND ActorId != '" + actorIndex->companyId->toStdString() + "' AND ActorId != '"
+        /* + "' AND ActorId != '" + actorIndex->m_firstId->toStdString() + "' AND ActorId != '"
          + BigNumber(0).toActorId().toStdString()*/
         + "';");
     for (const auto &tmp : extractData2)
@@ -390,7 +393,7 @@ void Blockchain::stakingReward(const Block &block)
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(wallet);
                 rtx.sign(accountController->getActor(wallet));
-                emit sendMessage(rtx.serialize(), Messages::ChainMessage::txMessage);
+                emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
             }
         }
     }
@@ -487,7 +490,7 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
         const auto transactions = block.extractTransactions();
         for (const Transaction &tx : qAsConst(transactions))
         {
-            if (tx.getReceiver() == *actorIndex->companyId)
+            if (tx.getReceiver() == actorIndex->firstId())
                 break;
             if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
             {
@@ -674,7 +677,7 @@ void Blockchain::sendUnFee(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        emit sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
+        emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
     }
 }
 
@@ -721,7 +724,7 @@ void Blockchain::sendFeeUnfreeze(Block &block)
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        emit sendMessage(tx.serialize(), Messages::ChainMessage::txMessage);
+        emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
     }
 }
 
@@ -750,8 +753,8 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                         GenesisDataRow(i.key(), i.value(), ActorId(), DataStorage::typeDataRow::UNIVERSAL));
                 }
 
-                // nb.setApprover(BigNumber(*(actorIndex->companyId)));
-                nb.sign(accountController->getActor(ActorId(*(actorIndex->companyId))));
+                // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
+                nb.sign(accountController->getActor(actorIndex->firstId()));
             }
             else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
@@ -1031,12 +1034,12 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     }
     if (block.getIndex() == 0)
     {
-        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toByteArray()));
+        this->actorIndex->setFirstId(block.getApprover());
     }
     if (block.getIndex() < 0)
         return Errors::BLOCK_IS_NOT_VALID;
     if (signCheckAdd(block))
-        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode)
@@ -1046,7 +1049,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
         getSmContractMembers(block);
 
-        emit sendMessage(block.serialize(), Messages::ChainMessage::blockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
         saveTxInfoInEC(block.getData());
         stakingReward(block);
         break;
@@ -1082,7 +1085,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
             if (blockIndex.addBlock(gB) == 0)
             {
                 qDebug() << "Block" << gB.getIndex() << gB.getType() << "is successfully added to blockchain";
-                emit sendMessage(gB.serialize(), Messages::ChainMessage::genesisBlockMessage);
+                emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
             }
         }
@@ -1465,14 +1468,7 @@ void Blockchain::process()
     //
 }
 
-void Blockchain::updateBlockchain(BigNumber id, bool isUser)
-{
-    Q_UNUSED(isUser)
-    Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
-}
-
-void Blockchain::updateBlockchainForSignIn(QByteArray id, QByteArrayList idList)
+void Blockchain::updateBlockchain()
 {
     Messages::BlockCount request;
     emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
@@ -1529,7 +1525,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
-    emit responseReady(srBlock, Messages::GeneralResponse::getBlockResponse, requestHash, receiver);
+    emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash, receiver);
 }
 
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
@@ -1546,7 +1542,7 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
     // QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
     emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
-                       Messages::GeneralResponse::getBlockCountResponse, requestHash, receiver);
+                       Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
 }
 
 void Blockchain::addBlockToBlockchain(Block block)
@@ -1581,11 +1577,11 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
     if (block.getIndex() == 0)
     {
         mutex.lock();
-        this->actorIndex->setCompanyId(new QByteArray(block.getApprover().toByteArray()));
+        this->actorIndex->setFirstId(block.getApprover().toByteArray());
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
-        emit sendMessage(block.serialize(), Messages::ChainMessage::genesisBlockMessage);
+        emit sendMessage(block.serialize(), Messages::ChainMessage::GenesisBlockMessage);
 }
 
 // Actors //
@@ -1605,7 +1601,7 @@ void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QBy
     Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty())
     {
-        emit responseReady(transaction.serialize(), Messages::GeneralResponse::getTxResponse, request,
+        emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse, request,
                            receiver);
     }
     else
@@ -1937,9 +1933,7 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        QByteArray companyId = actorIndex->companyId != nullptr ? *actorIndex->companyId : QByteArray();
-
-        if (targetSender.toByteArray() != companyId)
+        if (targetSender != actorIndex->firstId())
         {
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);

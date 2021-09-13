@@ -39,7 +39,7 @@
 
 #ifndef NETWORK_MANAGER_DEF
 #define NETWORK_MANAGER_DEF
-class NetManager;
+class NetworkManager;
 #include "network/network_manager.h"
 #endif
 
@@ -52,7 +52,7 @@ private:
     ActorIndex *_actorIndex;
     QList<Chat *> _chatList;
     QByteArray _currentActorId;
-    NetManager *netManager;
+    NetworkManager *m_networkManager;
 
 private:
     void AddChat(QByteArray chatId, QByteArray key, QByteArray owner);
@@ -72,7 +72,7 @@ public:
     bool isChatExist(QByteArray chatId);
     ~ChatManager(); //+
 
-    void setNetManager(NetManager *value);
+    void setNetworkManager(NetworkManager *value);
     QMap<QByteArray, QByteArray> extractChatKey();
 
 public slots:
@@ -85,7 +85,7 @@ public slots:
 
     void InviteToChat(QByteArray chatId, QByteArray actorId); //+
     void sendChatFile(ChatFileSender chatFile);
-    void SendMessage(QByteArray chatId, QByteArray message, QString type); //+
+    void sendMessage(QByteArray chatId, QByteArray message, QString type); //+
     void removeChatMessage(QString chatId, QString messId);
     void createDialogue(QByteArray actorId); //+
     void requestChatList();                  //+
@@ -105,7 +105,7 @@ signals:
 
     void chatListSend(QList<ChatInfo> chats);
     void chatSend(QByteArray chatId, QList<ChatMessageInfo> messages);
-    void sendMessage(const QByteArray &data, const unsigned int &type);
+    void sendNetworkMessage(const QByteArray &data, const unsigned int &type);
 
     void sendLastMessage(QByteArray chatId, ChatMessageInfo); // from network & local send
     void chatCreated(ChatInfo);

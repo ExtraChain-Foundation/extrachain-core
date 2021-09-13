@@ -38,7 +38,6 @@ bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const
 
 void BaseMessage::operator=(BaseMessage b)
 {
-    protocol = b.protocol;
     type = b.type;
     signer = b.signer;
     digSig = b.digSig;
@@ -53,9 +52,8 @@ void BaseMessage::operator=(QByteArray &serialized)
 
 void BaseMessage::operator=(QList<QByteArray> &list)
 {
-    if (list.size() >= 5)
+    if (list.size() >= 4)
     {
-        protocol = list.takeFirst();
         type = list.takeFirst().toUInt();
         QByteArray signBytes = list.takeFirst();
         signer = BigNumber::isValid(signBytes) ? signBytes : ActorId();
@@ -66,7 +64,7 @@ void BaseMessage::operator=(QList<QByteArray> &list)
 
 bool BaseMessage::isEmpty() const
 {
-    if (protocol.isEmpty() || type == 0 || data.isEmpty())
+    if (type == 0 || data.isEmpty())
         return true;
     else
         return false;
@@ -93,7 +91,7 @@ QList<QByteArray> BaseMessage::serializedParams() const
         signeR = "";
     else
         signeR = signer.toByteArray();
-    l << protocol << QByteArray::number(type) << signeR << digSig << data;
+    l << QByteArray::number(type) << signeR << digSig << data;
     return l;
 }
 

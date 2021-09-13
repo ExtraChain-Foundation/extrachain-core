@@ -40,7 +40,7 @@ QMap<QByteArray, int> *ResolveManager::getRequestResponseMap() const
     return requestResponseMap;
 }
 
-ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetManager *networkManager,
+ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetworkManager *networkManager,
                                TransactionManager *txManager, AccountController *accountControler,
                                QObject *parent)
     : QObject(parent)
@@ -59,7 +59,7 @@ ResolveManager::ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, N
 ResolveManager::~ResolveManager()
 {
 
-    //    disconnect(this, &ResolveManager::socketSendMsg, networkManager, &NetManager::sendMsg);
+    //    disconnect(this, &ResolveManager::socketSendMsg, networkManager, &NetworkManager::sendMsg);
     disconnect(actorIndex, &ActorIndex::responseReady, this, &ResolveManager::sendMessageResponse);
     disconnect(blockchain, &Blockchain::responseReady, this, &ResolveManager::sendMessageResponse);
     emit finished();
@@ -133,11 +133,13 @@ bool ResolveManager::setTask(QByteArray msg, const SocketPair &receiver)
 
 void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &msgType)
 {
+    PRINT_MESSAGE_TYPE("[ResolveManager] Sending", msgType);
+
     Messages::BaseMessage msg;
     msg.type = msgType;
     msg.data = data;
-    qDebug() << "sending" << msgType;
-    if (msgType != Messages::ChainMessage::actorMessage)
+
+    if (msgType != Messages::ChainMessage::ActorMessage)
     {
         if (accountControler->getAccountCount() == 0)
             return;
@@ -162,15 +164,16 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
                                          const QByteArray &requestHash, const SocketPair &receiver)
 
 {
+    PRINT_MESSAGE_TYPE("[ResolveManager] Sending", msgType);
+
     Messages::BaseMessageResponse rmsg;
     rmsg.data = data;
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
-    qDebug() << "[ResolveManager] Sending" << msgType;
-    if (msgType != Messages::GeneralResponse::getActorResponse)
+    if (msgType != Messages::GeneralResponse::GetActorResponse)
         rmsg.calcDigSig(*accountControler->getMainActor());
 
-    //    qDebug() << "NetManager: send " << msgType;
+    //    qDebug() << "NetworkManager: send " << msgType;
     // if (msgType == Messages::GeneralResponse::getAllActorsResponse)
     //     qDebug() << "306 is sending";
     //    sendMessage(message, msgType, receiver);

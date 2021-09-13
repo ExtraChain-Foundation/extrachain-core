@@ -1,5 +1,5 @@
-QT += concurrent
-VERSION = 0.8.5
+QT += concurrent websockets
+VERSION = "$$cat($$PWD/extrachain_version)"
 win32: CONFIG += precompile_header
 win32: PRECOMPILED_HEADER = $$PWD/headers/precompiled.h
 INCLUDEPATH += $$PWD/headers
@@ -7,7 +7,7 @@ INCLUDEPATH += $$PWD
 
 SOURCES += \
     $$PWD/dfs/controls/sources/subscribe_controller.cpp \
-    $$PWD/dfs/managers/sources/dfsnetmanager.cpp \
+    $$PWD/dfs/managers/sources/dfs_networkmanager.cpp \
     $$PWD/dfs/managers/sources/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
     $$PWD/dfs/packages/sources/hash_operations.cpp \
@@ -62,8 +62,10 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
-    $$PWD/sources/network/server_service.cpp \
-    $$PWD/sources/network/socket_service.cpp \
+    $$PWD/sources/network/tcpserver_service.cpp \
+    $$PWD/sources/network/isocket_service.cpp \
+    $$PWD/sources/network/tcpsocket_service.cpp \
+    $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
     $$PWD/sources/utils/exc_utils.cpp \
     $$PWD/sources/utils/variant_model.cpp
@@ -71,7 +73,7 @@ SOURCES += \
 HEADERS += \
     $$PWD/headers/precompiled.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
-    $$PWD/dfs/managers/headers/dfsnetmanager.h \
+    $$PWD/dfs/managers/headers/dfs_networkmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
@@ -138,8 +140,10 @@ HEADERS += \
     $$PWD/headers/network/packages/service/get_tx_pair_message.h \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/server_service.h \
-    $$PWD/headers/network/socket_service.h \
+    $$PWD/headers/network/tcpserver_service.h \
+    $$PWD/headers/network/isocket_service.h \
+    $$PWD/headers/network/tcpsocket_service.h \
+    $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
     $$PWD/headers/utils/variant_model.h \

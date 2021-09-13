@@ -32,8 +32,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     endif (UNIX)
 endif()
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent REQUIRED)
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
@@ -48,10 +48,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/sources/dfs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/sources/subscribe_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/card_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/dfsnetmanager.h
+    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/dfs_networkmanager.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/sender.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/card_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/dfsnetmanager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/dfs_networkmanager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/sender.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/all.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/dfs_changes.h
@@ -115,9 +115,11 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/message_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/ping_pong_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/verify_messages.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/server_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpserver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpsocket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/public_profile.h
@@ -162,9 +164,11 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_block_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_pair_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/server_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpserver_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpsocket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/public_profile.cpp
@@ -207,11 +211,14 @@ execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
 string(STRIP "${GIT_COMMIT_CORE}" GIT_COMMIT_CORE)
 string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
-add_compile_definitions(GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
+string(TIMESTAMP COMPILE_DATE "%m.%d")
+add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers) # TODO: remove console headers
-target_link_libraries(extrachain Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Concurrent
+target_link_libraries(extrachain
+    Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
 
 if (UNIX AND NOT APPLE)

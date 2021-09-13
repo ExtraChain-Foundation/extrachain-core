@@ -25,9 +25,9 @@ Sender::Sender(QObject *parent)
     // connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 
-void Sender::setNetManager(DFSNetManager *value)
+void Sender::setNetworkManager(DfsNetworkManager *value)
 {
-    NetManager = value;
+    m_networkManager = value;
 }
 
 void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver)

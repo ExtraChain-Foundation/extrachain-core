@@ -48,6 +48,7 @@ UPNPConnection::~UPNPConnection()
 {
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
+    timer->deleteLater();
 }
 
 void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text)
@@ -70,7 +71,7 @@ void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QS
     }
     else
     {
-        emit upnp_error("Invalid protocol");
+        emit upnpError("Invalid protocol");
     }
 }
 
@@ -131,7 +132,7 @@ void UPNPConnection::timeExpired()
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
     timer->stop();
-    emit upnp_error("Time expired!");
+    emit upnpError("Time expired!");
 }
 
 void UPNPConnection::processReq(QNetworkReply *reply)
@@ -243,7 +244,7 @@ void UPNPConnection::getHttp()
 void UPNPConnection::getHttpError(QNetworkReply::NetworkError err)
 {
     Q_UNUSED(err)
-    emit upnp_error(http_reply->errorString());
+    emit upnpError(http_reply->errorString());
 }
 
 void UPNPConnection::extractExternalIP(QString message)
@@ -279,7 +280,7 @@ void UPNPConnection::extractUPNPError(QString message)
         }
         else
         {
-            emit upnp_error(ertext);
+            emit upnpError(ertext);
             int rp = QRandomGenerator::global()->bounded(1000, 2000);
             internalPort = rp;
             externalPort = rp;

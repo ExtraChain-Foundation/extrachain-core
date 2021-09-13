@@ -34,7 +34,7 @@
  * @brief ServerService is responsible for handling incoming sockets connections.
  * All connections is stored in a sockets list.
  */
-class ServerService : public QTcpServer
+class TcpServerService : public QTcpServer
 {
     Q_OBJECT
 private:
@@ -43,15 +43,14 @@ private:
     quint16 port;
 
 public:
-    ServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent = nullptr);
-    ~ServerService() override;
+    explicit TcpServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent = nullptr);
+    ~TcpServerService() override;
 
 public slots:
-    // void run() override;
-    int process();
+    void process();
 
 public:
-    void startListen();
+    bool startListen();
     bool isActive() const;
 
 protected:

@@ -23,16 +23,22 @@
 
 #include "managers/logs_manager.h"
 
+#include <iostream>
 #include <QMutex>
+#include <QJsonObject>
 
 #ifdef Q_OS_ANDROID
 #include <android/log.h>
 #endif
 
+#ifdef QT_DEBUG
+#define LOG_FILENAME
+#endif
+
 bool LogsManager::toConsole = true;
 bool LogsManager::toFile = true;
 bool LogsManager::toModel =
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
     true;
 #else
     true;
@@ -55,8 +61,30 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     switch (type)
     {
     case QtInfoMsg:
-        print(msg.toStdString());
+        makeLog(context.file, context.line, context.function, msg);
         break;
+    case QtCriticalMsg:
+        makeLog(context.file, context.line, context.function, "[Critical] " + msg);
+        break;
+    case QtFatalMsg: {
+        makeLog(context.file, context.line, context.function, "[Fatal Error] " + msg);
+
+        QFile file("logs/extrachain-fatal.log");
+        if (file.open(QFile::Append))
+        {
+            QJsonObject json;
+            json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
+#ifdef LOG_FILENAME
+            json["file"] = normalizeFileName(context.file);
+            json["line"] = QString::number(context.line);
+            json["function"] = QString(context.function);
+#endif
+            json["message"] = msg;
+            file.write(QJsonDocument(json).toJson(QJsonDocument::Compact) + "\n");
+            file.close();
+        }
+        break;
+    }
     default:
         if (debugLogs)
             makeLog(context.file, context.line, context.function, msg);
@@ -75,20 +103,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     QString message = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
 
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
     // TODO: to std::string
-    QString fileName = file;
-    if (fileName.isEmpty())
-        fileName = "global";
-
-#if defined(Q_OS_WIN) && !defined(__GNUC__)
-    fileName = fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
-#else
-    fileName = fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
-#endif
-#endif
-
-#ifdef QT_DEBUG
+    QString fileName = normalizeFileName(file);
     bool isPrint = !filesFilter.length();
 
     if (!isPrint)
@@ -130,17 +147,13 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
     QString fileNameStd;
     if (fileName != "global")
-        fileNameStd =
-#ifdef ECLIENT
-            "file:/" +
-#endif
-            fileName;
+        fileNameStd = "file:/" + fileName;
     else
         fileNameStd = "global";
 #endif
 
     const QString logStr = currentDateTime.toString("hh:mm:ss ")
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
         + "["
         + (fileNameQrc.length() ? fileNameQrc
                                 : fileNameStd + (fileNameStd == "global" ? "" : ":" + QString::number(line)))
@@ -150,7 +163,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
     if (LogsManager::toConsole)
     {
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
         if (isPrint)
 #endif
             print(logStr.toStdString());
@@ -162,7 +175,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         mutex.lock();
         logs.append({ { "text", msg },
                       { "date", currentDateTime.toMSecsSinceEpoch() }
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
                       ,
                       { "file", fileName },
                       { "line", line },
@@ -180,6 +193,24 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         logFile.flush();
         mutex.unlock();
     }
+}
+
+QString LogsManager::normalizeFileName(const QString& file)
+{
+#ifdef LOG_FILENAME
+    // TODO: to std::string
+    QString fileName = file;
+    if (fileName.isEmpty())
+        fileName = "global";
+
+#if defined(Q_OS_WIN) && !defined(__GNUC__)
+    return fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
+#else
+    return fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
+#endif
+#else
+    return "";
+#endif
 }
 
 void LogsManager::on()

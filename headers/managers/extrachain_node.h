@@ -34,7 +34,7 @@
 #include "dfs/controls/headers/dfs.h"
 #include "managers/contract_manager.h"
 #include "managers/sm_manager.h"
-#include "dfs/managers/headers/dfsnetmanager.h"
+#include "dfs/managers/headers/dfs_networkmanager.h"
 #include "managers/chatmanager.h"
 #include "profile/private_profile.h"
 #include "dfs/controls/headers/subscribe_controller.h"
@@ -45,7 +45,7 @@
 #include <QCoreApplication>
 
 #ifdef ECONSOLE
-#include "managers/console_manager.h"
+#include "console/console_manager.h"
 #endif
 
 class ResolveManager;
@@ -59,8 +59,8 @@ private:
     bool fileMode = true;
     Dfs *dfs;
     ActorIndex *actorIndex;
-    Blockchain *blockchain;
-    NetManager *netManager;
+    Blockchain *m_blockchain;
+    NetworkManager *m_networkManager;
     TransactionManager *txManager;
     AccountController *accController;
     SmartContractManager *smContractController;
@@ -79,8 +79,8 @@ public:
 public:
     void createNewNetwork(const QString &email, const QString &password);
     void start();
-    Blockchain *getBlockchain();
-    NetManager *getNetManager();
+    Blockchain *blockchain();
+    NetworkManager *networkManager();
     AccountController *getAccountController() const;
     ActorIndex *getActorIndex() const;
     ResolveManager *getResolveManager() const;
@@ -115,8 +115,6 @@ public:
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
                                         ActorId token = ActorId());
 
-    int getClientList();
-
 public:
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
 
@@ -130,7 +128,7 @@ public:
 private:
     void showMessage(QString from, QString message);
     /**
-     * @brief Connect signals between NetManager and Blockchain
+     * @brief Connect signals between NetworkManager and Blockchain
      */
     void connectResolveManager();
     void connectSmContractManager();
@@ -165,12 +163,13 @@ signals:
     void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
                                 const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void savePrivateProfile(const QByteArray &hash, const QByteArray &id);
+    void savePrivateProfile(const QByteArray &hash, const ActorId &id);
     void setCurrentIdNotificationManager(const QByteArray id);
     void getAllActorsNode(ActorId id, bool acc);
     void loadProfileForConsoleLogin(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
                                QByteArray color);
+    void removeConnection(QString identifier);
 
 private slots:
     void initConsoleToken(Transaction tx);
@@ -178,9 +177,11 @@ private slots:
     void getAllActorsTimerCall();
     void logOut();
 
-    //    void makeContractFirstTransaction(Contract &contract);
-    //    void makeContractFinalTransaction(Contract &contract);
+    // void makeContractFirstTransaction(Contract &contract);
+    // void makeContractFinalTransaction(Contract &contract);
+
 public slots:
+    void createNetworkIdentifier();
     void setIdPrivateProfile(QByteArray id);          //
     void setHashLoginPrivateProfile(QByteArray hash); //
     void tempareSlotForActors();
@@ -188,8 +189,6 @@ public slots:
     // test net & blockchain
     //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
-    void createNetManagerIdentificator();
-    void dfscreateNetManagerIdentificator();
 #ifdef ECLIENT
     void notificationToken(QString os, QString actorId, QString token);
 #endif
