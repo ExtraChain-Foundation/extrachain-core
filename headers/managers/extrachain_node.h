@@ -55,7 +55,7 @@ class KeyPublic;
 #include "datastorage/blockchain.h"
 #endif
 
-class EXTRACHAIH_EXPORT ExtraChainNode : public QObject
+class EXTRACHAIN_EXPORT ExtraChainNode : public QObject
 {
     Q_OBJECT
 
