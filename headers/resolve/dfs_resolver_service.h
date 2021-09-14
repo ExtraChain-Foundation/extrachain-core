@@ -41,7 +41,7 @@ class AccountController;
 class ActorIndex;
 class Dfs;
 
-class DFSResolverService : public QObject
+class EXTRACHAIN_EXPORT DFSResolverService : public QObject
 {
     Q_OBJECT
 

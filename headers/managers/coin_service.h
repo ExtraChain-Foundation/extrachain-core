@@ -28,7 +28,7 @@
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
 
-class CoinService : public QThread
+class EXTRACHAIH_EXPORT CoinService : public QThread
 {
     Q_OBJECT
 private:

@@ -18,6 +18,7 @@
  */
 
 #include "managers/sm_manager.h"
+#include "network/packages/service/all_messages.h"
 
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent)

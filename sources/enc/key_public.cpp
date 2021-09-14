@@ -24,30 +24,26 @@ using std::string, std::vector;
 
 KeyPublic::KeyPublic(const string &publicKey)
 {
-    pubKey = publicKey;
+    m_publicKey = publicKey;
 }
 
 KeyPublic::KeyPublic(const QJsonObject &json)
 {
-    pubKey = json["publicKey"].toString().toStdString();
+    m_publicKey = json["publicKey"].toString().toStdString();
 }
 
 KeyPublic::KeyPublic(const KeyPublic &keyPublic)
 {
-    pubKey = keyPublic.getPubKey();
+    m_publicKey = keyPublic.publicKey();
 }
 
-KeyPublic::~KeyPublic()
-{
-}
-
-QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySender)
+QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey)
 {
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-    string pkrs = Utils::hexStringToByte(pubKey);
+    string pkrs = Utils::hexStringToByte(m_publicKey);
     vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
-    string sk = Utils::hexStringToByte(privateKeySender);
+    string sk = Utils::hexStringToByte(senderPrivateKey);
     vector<unsigned char> sks(sk.begin(), sk.end());
 
     vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
@@ -76,27 +72,16 @@ QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySe
 
 bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex)
 {
-    string pks = Utils::hexStringToByte(this->pubKey);
+    string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
-    if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    return res == 0;
 }
 
-bool KeyPublic::isEmpty()
+string KeyPublic::publicKey() const
 {
-    return pubKey.empty();
-}
-
-string KeyPublic::getPubKey() const
-{
-    return pubKey;
+    return m_publicKey;
 }

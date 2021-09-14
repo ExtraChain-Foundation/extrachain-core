@@ -24,7 +24,7 @@
 #include "datastorage/genesis_block.h"
 #include "utils/db_connector.h"
 
-class EXTRACHAIH_EXPORT BlockIndex
+class EXTRACHAIN_EXPORT BlockIndex
 {
 public:
     BlockIndex();

@@ -39,17 +39,20 @@
 #include "network/packages/service/message_types.h"
 #include "managers/file_updater_manager.h"
 
-#include "metatypes.h"
-
 ExtraChainNode::ExtraChainNode(const QString &localIp)
 {
+    static bool singleton = false;
+    if (!singleton)
+        singleton = true;
+    else
+        qFatal("Two instances of Node");
+
     if (sodium_init() != 0)
     {
         qDebug() << "Encryption init error";
         QCoreApplication::exit(-1);
     }
 
-    registerMetaTypes();
     prepareFolders();
     actorIndex = new ActorIndex();
     prProfile = new PrivateProfile();
@@ -60,14 +63,14 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     subscribeController->setExtraChainNode(this);
     actorIndex->setAccController(accController);
     ThreadPool::addThread(m_networkManager);
-    //    this->thread()->sleep(1);
+    // this->thread()->sleep(1);
     m_blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(m_blockchain);
     txManager = new TransactionManager(accController, m_blockchain, this);
     prProfile->setAccountController(accController);
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetworkManager(m_networkManager);
-    //    contractManager = new ContractManager(accController, blockchain);
+    // contractManager = new ContractManager(accController, blockchain);
     dfs = new Dfs(actorIndex, accController, localIp);
 
     resolveManager = new ResolveManager(actorIndex, m_blockchain, m_networkManager, txManager, accController);
@@ -98,30 +101,28 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
 
-void ExtraChainNode::createNewNetwork(const QString &email, const QString &password)
+bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
+                                      const QString &tokenCount, const QString &tokenColor)
 {
-#ifdef ECONSOLE
+    //    qDebug() << accController->getMainActor();
+    //    std::exit(0);
     if (QDir("keystore/profile").isEmpty())
     {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
         auto first = accController->createActor(ActorType::First, consoleHash);
         emit savePrivateProfile(consoleHash, first.id());
+        actorIndex->setFirstId(first.id());
     }
     else
     {
-        // first = *accController->getAccounts()[0];
         qInfo() << "You cannot create a new network, data is not empty";
-#ifndef QT_DEBUG
-        std::exit(0);
-#endif
+        return false;
     }
 
     if (m_blockchain->getRecords() <= 0)
     {
         auto first = *accController->getMainActor();
-        QByteArray td = first.key()->sign("test");
-        std::cout << first.key()->verify("test", td) << std::endl;
         actorIndex->setFirstId(first.id());
         QString firstId = first.id().toString();
 
@@ -130,10 +131,10 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
         m_blockchain->addBlock(tmp, true);
 
-        // TODO: as console arguments: isCreate, name, color
-        emit generateSmartContract("1000", "Default Coin", first.id().toByteArray(),
-                                   "#fa4868"); // TODO: choose name
+        emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
+                                   tokenColor.toLatin1());
 
+        // TODO: usernames: move to console
         DBConnector dbc(
             (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
         dbc.createTable(Config::DataStorage::cardTableCreation);
@@ -143,10 +144,8 @@ void ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
         dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
-#else
-    Q_UNUSED(email)
-    Q_UNUSED(password)
-#endif
+
+    return true;
 }
 
 void ExtraChainNode::start()
@@ -156,7 +155,6 @@ void ExtraChainNode::start()
 
 void ExtraChainNode::initConsoleToken(Transaction tx)
 {
-    Q_UNUSED(tx)
 #ifdef ECONSOLE
     QByteArray data = Serialization::serialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
     Block lastBlock = m_blockchain->getLastBlock();
@@ -450,13 +448,12 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto first = actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto key = first.key();
+    auto mainKey = accController->getMainActor()->key();
+    auto publicKey = first.key()->publicKey();
 
-    QMap<QString, QByteArray> map = {
-        { "actor", actorId.toLatin1() },
-        { "token", key->encrypt(token.toLatin1(), accController->getMainActor()->key()->getSecKey()) },
-        { "os", key->encrypt(os.toLatin1(), accController->getMainActor()->key()->getSecKey()) }
-    };
+    QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },
+                                      { "token", mainKey->encrypt(token.toLatin1(), publicKey) },
+                                      { "os", mainKey->encrypt(os.toLatin1(), publicKey) } };
 
     emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }

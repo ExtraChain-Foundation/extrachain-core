@@ -23,7 +23,7 @@
 #include "extrachain_global.h"
 class BigNumber;
 
-class EXTRACHAIH_EXPORT SocketPair
+class EXTRACHAIN_EXPORT SocketPair
 {
 public:
     std::string ip;

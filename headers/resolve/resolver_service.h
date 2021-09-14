@@ -58,7 +58,7 @@ class ChatManager;
  * type and deserialize it. There are package definition methods, and signals to
  * ResolveManager.
  */
-class ResolverService : public QObject
+class EXTRACHAIN_EXPORT ResolverService : public QObject
 {
     Q_OBJECT
 

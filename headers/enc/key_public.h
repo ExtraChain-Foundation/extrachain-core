@@ -24,26 +24,22 @@
 #include "utils/exc_utils.h"
 #include <QDebug>
 
-class EXTRACHAIH_EXPORT KeyPublic
+class EXTRACHAIN_EXPORT KeyPublic
 {
 private:
-    std::string pubKey;
+    std::string m_publicKey;
 
 public:
     KeyPublic(const std::string &publicKey);
     KeyPublic(const QJsonObject &json);
     KeyPublic(const KeyPublic &keyPublic);
-    ~KeyPublic();
+    ~KeyPublic() = default;
 
-public:
-    QByteArray encrypt(const QByteArray &data, const std::string &privateKeySender);
+    QByteArray encrypt(const QByteArray &data, const std::string &senderPrivateKey);
 
-public:
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
-public:
-    bool isEmpty();
-    std::string getPubKey() const;
+    std::string publicKey() const;
 };
 
 #endif // KEY_PUBLIC_H

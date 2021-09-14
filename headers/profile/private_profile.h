@@ -27,7 +27,7 @@
 class AccountController;
 class Dfs;
 
-class PrivateProfile : public QObject
+class EXTRACHAIN_EXPORT PrivateProfile : public QObject
 {
     Q_OBJECT
 private:

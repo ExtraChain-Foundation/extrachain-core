@@ -21,8 +21,9 @@
 #define THREAD_POOL_H
 
 #include <QThread>
+#include "extrachain_global.h"
 
-class ThreadPool
+class EXTRACHAIN_EXPORT ThreadPool
 {
 
 private:

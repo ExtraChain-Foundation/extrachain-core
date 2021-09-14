@@ -35,9 +35,10 @@
 #include "utils/exc_utils.h"
 #include "network/packages/service/ping_pong_message.h"
 
-class DiscoveryService : public QObject
+class EXTRACHAIN_EXPORT DiscoveryService : public QObject
 {
     Q_OBJECT
+
 private:
     quint16 netPort; // network port
     quint16 port;    // discovery port
@@ -54,6 +55,7 @@ public slots:
      * @brief run IPv4 scan
      */
     void process();
+
 private slots:
     /**
      * @brief Process recieved messages and answer them
@@ -74,12 +76,14 @@ private slots:
     //     * @return status
     //     */
     //    bool isActive() const;
+
 signals:
     /**
      * @brief ClientDiscovered signal for socket and server service
      * @param address
      */
     void ClientDiscovered(QHostAddress address, quint16 port);
+
     /**
      * @brief finished thread
      */

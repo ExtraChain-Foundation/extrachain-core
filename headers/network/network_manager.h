@@ -51,7 +51,7 @@ class ResolveManager;
  * Creates Discovery, Resolver, Server and Sockets services
  */
 // static QMutex mutex;
-class EXTRACHAIH_EXPORT NetworkManager : public QObject
+class EXTRACHAIN_EXPORT NetworkManager : public QObject
 {
     Q_OBJECT
 

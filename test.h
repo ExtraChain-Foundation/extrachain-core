@@ -25,9 +25,9 @@
 class Test : public QObject
 {
     Q_OBJECT
-    Block a;
-    Block b;
-    Block pr;
+    // Block a;
+    // Block b;
+    // Block pr;
 
 public:
     Test(ExtraChainNode *node, QObject *p = nullptr)

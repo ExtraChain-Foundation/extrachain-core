@@ -90,7 +90,7 @@ BigNumber BigNumber::operator>>(const uint &value)
 BigNumber BigNumber::operator>>=(const uint &value)
 {
     BigNumber ret(*m_data >> value);
-    m_data = ret.data();
+    *m_data = *ret.data();
     UPDATE_DEBUG()
     return *this;
 }
@@ -157,18 +157,14 @@ BigNumber BigNumber::operator%(long long number)
 
 BigNumber &BigNumber::operator=(const BigNumber &bigNumber)
 {
-    if (m_data != nullptr)
-        delete m_data;
-    m_data = new mpz_class(*bigNumber.data());
+    *m_data = *bigNumber.data();
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator=(long long number)
 {
-    if (m_data != nullptr)
-        delete m_data;
-    m_data = new mpz_class(std::to_string(number));
+    *m_data = std::to_string(number);
     UPDATE_DEBUG()
     return *this;
 }
@@ -182,21 +178,21 @@ BigNumber &BigNumber::operator++()
 
 BigNumber BigNumber::operator++(int)
 {
-    ++m_data;
+    ++(*m_data);
     UPDATE_DEBUG()
     return *m_data;
 }
 
 BigNumber &BigNumber::operator--()
 {
-    m_data--;
+    (*m_data)--;
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber BigNumber::operator--(int)
 {
-    --m_data;
+    --(*m_data);
     UPDATE_DEBUG()
     return *m_data;
 }
@@ -288,7 +284,7 @@ int BigNumber::isProbPrime() const
 
 bool BigNumber::isEmpty() const // TODO
 {
-    return m_data == nullptr || *m_data == -1;
+    return *m_data == -1;
 }
 
 QByteArray BigNumber::toByteArray(int base) const

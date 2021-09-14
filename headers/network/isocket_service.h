@@ -7,7 +7,7 @@
 class NetworkManager;
 class ActorIndex;
 
-class EXTRACHAIH_EXPORT SocketService : public QObject
+class EXTRACHAIN_EXPORT SocketService : public QObject
 {
     Q_OBJECT
 

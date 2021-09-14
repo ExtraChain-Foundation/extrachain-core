@@ -27,6 +27,6 @@
 //#else
 //#define EXTRACHAIH_EXPORT Q_DECL_IMPORT
 //#endif
-#define EXTRACHAIH_EXPORT
+#define EXTRACHAIN_EXPORT
 
 #endif // EXTRACHAIN_GLOBAL_H

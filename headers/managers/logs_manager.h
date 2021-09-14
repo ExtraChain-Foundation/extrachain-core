@@ -28,7 +28,7 @@
 #include "utils/variant_model.h"
 #include "extrachain_global.h"
 
-class EXTRACHAIH_EXPORT LogsManager : public QObject
+class EXTRACHAIN_EXPORT LogsManager : public QObject
 {
     Q_OBJECT
 

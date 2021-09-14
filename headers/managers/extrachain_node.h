@@ -24,6 +24,7 @@
 #include <QMap>
 #include <QCoreApplication>
 
+#include "datastorage/transaction.h"
 #include "extrachain_global.h"
 
 #ifdef ECONSOLE
@@ -81,7 +82,8 @@ public:
     ~ExtraChainNode();
 
 public:
-    void createNewNetwork(const QString &email, const QString &password);
+    bool createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
+                          const QString &tokenCount, const QString &tokenColor);
     void start();
     Blockchain *blockchain();
     NetworkManager *networkManager();

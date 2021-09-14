@@ -129,7 +129,7 @@ QByteArray SocketService::generateFirstMessage()
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["key"] = QString::fromStdString(priv.key()->getPubKey());
+    json["key"] = QString::fromStdString(priv.key()->publicKey());
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;
 }

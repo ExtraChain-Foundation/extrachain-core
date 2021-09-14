@@ -40,7 +40,7 @@ static const short ResolverServicePoolMaxSize = 5;
 static const short ResolverServicePoolMaxSize = 100;
 #endif
 
-class ResolveManager : public QObject
+class EXTRACHAIN_EXPORT ResolveManager : public QObject
 {
     Q_OBJECT
 

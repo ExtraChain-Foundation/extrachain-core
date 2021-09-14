@@ -33,7 +33,7 @@ class AccountController;
 /**
  * @brief Actors that stored in blockchain
  */
-class EXTRACHAIH_EXPORT ActorIndex : public QObject
+class EXTRACHAIN_EXPORT ActorIndex : public QObject
 {
     Q_OBJECT
 

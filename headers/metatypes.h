@@ -25,19 +25,18 @@
 //#include <QMetaType>
 
 #include "managers/extrachain_node.h"
-//#include "dfs/controls/headers/dfs.h"
-//#include "datastorage/blockchain.h"
-//#include "datastorage/contract.h"
-//#include "network/socket_pair.h"
-//#include "network/network_manager.h"
-//#include "profile/private_profile.h"
-//#include "managers/chat.h"
-//#include "dfs/controls/headers/subscribe_controller.h"
+#include "dfs/controls/headers/dfs.h"
+#include "datastorage/blockchain.h"
+#include "datastorage/contract.h"
+#include "network/socket_pair.h"
+#include "network/network_manager.h"
+#include "profile/private_profile.h"
+#include "managers/chat.h"
+#include "dfs/controls/headers/subscribe_controller.h"
 
 class QHostAddress;
 class Block;
 class TcpSocketService;
-
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)

@@ -164,7 +164,7 @@ void ChatManager::parseInvite()
     for (const auto &invite : invites)
     {
         QByteArray owner = QByteArray::fromStdString(invite.at("owner"));
-        string ownerPK = _actorIndex->getActor(owner).key()->getPubKey();
+        string ownerPK = _actorIndex->getActor(owner).key()->publicKey();
         QByteArray chatIdEncrypted = QByteArray::fromStdString(invite.at("chatId"));
         QByteArray chatId = mainActor->decrypt(chatIdEncrypted, ownerPK);
         QByteArray key = mainActor->decrypt(QByteArray::fromStdString(invite.at("message")), ownerPK);
@@ -282,8 +282,8 @@ QByteArray ChatManager::CreateNewChat()
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 {
-    auto actor = _actorIndex->getActor(actorId);
-    auto key = actor.key();
+    auto main = _accController->getMainActor();
+    auto publicKey = _actorIndex->getActor(actorId).key()->publicKey();
 
     Chat *chat = getChatMemory(chatId);
     if (chat == nullptr)
@@ -295,10 +295,9 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId)
 
     QByteArrayList query = { Config::DataStorage::chatInviteTableName.c_str(),
                              "chatId",
-                             key->encrypt(chatId, _accController->getMainActor()->key()->getSecKey()),
+                             main->key()->encrypt(chatId, publicKey),
                              "message",
-                             key->encrypt(chat->getChatKey(),
-                                          _accController->getMainActor()->key()->getSecKey()),
+                             main->key()->encrypt(chat->getChatKey(), publicKey),
                              "owner",
                              _currentActorId };
     emit sendEditSql(actorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Insert, query);

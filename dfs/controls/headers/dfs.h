@@ -39,7 +39,7 @@
 #endif
 #include "extrachain_global.h"
 
-class EXTRACHAIH_EXPORT Dfs : public QObject
+class EXTRACHAIN_EXPORT Dfs : public QObject
 {
 
     Q_OBJECT

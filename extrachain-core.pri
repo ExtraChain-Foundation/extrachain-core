@@ -72,6 +72,7 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/headers/precompiled.h \
+    $$PWD/headers/extrachain_global.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
     $$PWD/dfs/managers/headers/dfs_networkmanager.h \
     $$PWD/dfs/managers/headers/sender.h \

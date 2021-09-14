@@ -24,20 +24,19 @@ using std::string, std::vector;
 
 KeyPrivate::KeyPrivate()
 {
-    secKey = string();
-    pubKey = string();
+    generate();
 }
 
 KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate)
 {
-    secKey = keyPrivate.getSecKey();
-    pubKey = keyPrivate.getPubKey();
+    m_secretKey = keyPrivate.secretKey();
+    m_publicKey = keyPrivate.publicKey();
 }
 
 KeyPrivate::KeyPrivate(const QJsonObject &json)
 {
-    secKey = json["privateKey"].toString().toStdString();
-    pubKey = json["publicKey"].toString().toStdString();
+    m_secretKey = json["privateKey"].toString().toStdString();
+    m_publicKey = json["publicKey"].toString().toStdString();
 }
 
 KeyPrivate::~KeyPrivate()
@@ -49,23 +48,23 @@ void KeyPrivate::generate()
     vector<unsigned char> sk(crypto_sign_SECRETKEYBYTES);
     vector<unsigned char> pk(crypto_sign_PUBLICKEYBYTES);
     crypto_sign_keypair(pk.data(), sk.data());
-    secKey = Utils::byteToHexString(sk);
-    secKey.erase(--secKey.end());
-    pubKey = Utils::byteToHexString(pk);
-    pubKey.erase(--pubKey.end());
+    m_secretKey = Utils::byteToHexString(sk);
+    m_secretKey.erase(--m_secretKey.end());
+    m_publicKey = Utils::byteToHexString(pk);
+    m_publicKey.erase(--m_publicKey.end());
 }
 
-QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce)
+QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &receiverPublicKey, const string &nonce)
 {
-    if (data.isEmpty() || publicKeyReceiver.empty())
+    if (data.isEmpty() || receiverPublicKey.empty())
         qFatal("[KeyPrivate::encrypt] msg or secret is empty. msg: %s, secret: %s", data.data(),
-               publicKeyReceiver.data());
+               receiverPublicKey.data());
 
     string sdata = data.toStdString();
     unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-    string pkrs = Utils::hexStringToByte(publicKeyReceiver);
+    string pkrs = Utils::hexStringToByte(receiverPublicKey);
     vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
-    string sk = Utils::hexStringToByte(secKey);
+    string sk = Utils::hexStringToByte(m_secretKey);
     vector<unsigned char> sks(sk.begin(), sk.end());
 
     vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
@@ -101,19 +100,19 @@ QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyRe
     }
     if (res.empty())
         qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data()
-                 << "| secret:" << publicKeyReceiver.data() << "| nonce:" << nonce.data();
+                 << "| secret:" << receiverPublicKey.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }
 
-QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce)
+QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &senderPublicKey, const string &nonce)
 {
-    if (data.isEmpty() || publicKeySender.empty())
+    if (data.isEmpty() || senderPublicKey.empty())
         qFatal("[KeyPrivate::decrypt] msg or secret is empty. msg: %s, secret: %s", data.data(),
-               publicKeySender.data());
+               senderPublicKey.data());
 
     string sdata = Utils::hexStringToByte(data.toStdString());
-    string pksr = Utils::hexStringToByte(publicKeySender);
-    string sk = Utils::hexStringToByte(secKey);
+    string pksr = Utils::hexStringToByte(senderPublicKey);
+    string sk = Utils::hexStringToByte(m_secretKey);
     vector<unsigned char> vnonce;
     if (nonce.size() == crypto_box_NONCEBYTES)
     {
@@ -156,27 +155,27 @@ QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySe
     }
     if (res.empty())
         qDebug() << "[KeyPrivate::encrypt] res is empty." /*msg:" << data.data()*/
-                 << "| secret:" << publicKeySender.data() << "| nonce:" << nonce.data();
+                 << "| secret:" << senderPublicKey.data() << "| nonce:" << nonce.data();
     return QByteArray::fromStdString(res);
 }
 
 QByteArray KeyPrivate::encryptSelf(const QByteArray &data)
 {
-    string sk = Utils::hexStringToByte(secKey);
+    string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
-    return this->encrypt(data, this->pubKey, pnonce);
+    return this->encrypt(data, this->m_publicKey, pnonce);
 }
 
 QByteArray KeyPrivate::decryptSelf(const QByteArray &data)
 {
-    string sk = Utils::hexStringToByte(secKey);
+    string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
-    return this->decrypt(data, this->pubKey, pnonce);
+    return this->decrypt(data, this->m_publicKey, pnonce);
 }
 
 QByteArray KeyPrivate::sign(const QByteArray &data)
 {
-    string sks = Utils::hexStringToByte(secKey);
+    string sks = Utils::hexStringToByte(m_secretKey);
     vector<unsigned char> sk(sks.begin(), sks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(crypto_sign_BYTES);
@@ -188,27 +187,21 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
 
 bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex)
 {
-    string pks = Utils::hexStringToByte(this->pubKey);
+    string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
-    if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    return res == 0;
 }
 
-std::string KeyPrivate::getSecKey() const
+std::string KeyPrivate::secretKey() const
 {
-    return secKey;
+    return m_secretKey;
 }
 
-std::string KeyPrivate::getPubKey() const
+std::string KeyPrivate::publicKey() const
 {
-    return pubKey;
+    return m_publicKey;
 }
