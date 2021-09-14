@@ -61,7 +61,6 @@ signals:
     //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
     void saveActorInPrivateProfile(const QByteArray &id, const QString &type = "wallet",
                                    const bool &rewrite = false);
-    void initConsoleToken(Transaction tx);
     void finished();
 };
 

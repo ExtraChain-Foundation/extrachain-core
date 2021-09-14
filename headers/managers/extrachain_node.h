@@ -176,7 +176,6 @@ signals:
     void removeConnection(QString identifier);
 
 private slots:
-    void initConsoleToken(Transaction tx);
     void getAllActors();
     void getAllActorsTimerCall();
     void logOut();

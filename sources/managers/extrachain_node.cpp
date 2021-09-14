@@ -153,18 +153,6 @@ void ExtraChainNode::start()
     QTimer::singleShot(500, this, &ExtraChainNode::ready);
 }
 
-void ExtraChainNode::initConsoleToken(Transaction tx)
-{
-#ifdef ECONSOLE
-    QByteArray data = Serialization::serialize({ tx.serialize() }, Serialization::TRANSACTION_FIELD_SIZE);
-    Block lastBlock = m_blockchain->getLastBlock();
-    Block block(data, lastBlock);
-    m_blockchain->signBlock(block);
-    qDebug() << "Created block:" << block.getIndex();
-    m_blockchain->addBlock(block);
-#endif
-}
-
 void ExtraChainNode::showMessage(QString from, QString message)
 {
     qDebug() << from << " " << message;
@@ -205,8 +193,6 @@ void ExtraChainNode::connectSmContractManager()
             &SmartContractManager::createContractProfile);
     connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
             &ResolveManager::registrateMsg);
-    connect(smContractController, &SmartContractManager::initConsoleToken, this,
-            &ExtraChainNode::initConsoleToken);
 
     // connect(smContractController, &SmartContractManager::sendCurrentToken, m_networkManager,
     // &networkManager::NewActor);
