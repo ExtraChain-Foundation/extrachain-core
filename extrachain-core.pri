@@ -86,7 +86,6 @@ HEADERS += \
     $$PWD/headers/enc/key_private.h \
     $$PWD/headers/enc/key_public.h \
     $$PWD/headers/enc/sign_interface.h \
-    $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_changes.h \
     $$PWD/dfs/types/headers/cardfile.h \
     $$PWD/headers/managers/chat.h \
