@@ -29,22 +29,14 @@
 #include <QRandomGenerator>
 #include <QDebug>
 
-#include "extrachain_global.h"
+#include "gmpxx.h"
 
 #ifdef QT_DEBUG
-#define UPDATE_DEBUG()                   \
-    qdata = m_data->get_str(16).c_str(); \
-    qdataDec = m_data->get_str(10).c_str();
+#define UPDATE_DEBUG()                  \
+    qdata = m_data.get_str(16).c_str(); \
+    qdataDec = m_data.get_str(10).c_str();
 #else
 #define UPDATE_DEBUG()
-#endif
-
-#ifndef __GMP_PLUSPLUS__
-struct __mpz_struct;
-typedef __mpz_struct mpz_t[1];
-template <class T, class U>
-class __gmp_expr;
-typedef __gmp_expr<mpz_t, mpz_t> mpz_class;
 #endif
 
 namespace BigNumberUtils {
@@ -56,7 +48,7 @@ const static QVector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
  */
-class EXTRACHAIN_EXPORT BigNumber
+class BigNumber
 {
 public:
     BigNumber();
@@ -65,10 +57,11 @@ public:
     BigNumber(int number);
     BigNumber(long long number);
     BigNumber(mpz_class number);
-    ~BigNumber();
+    ~BigNumber() = default;
 
 private:
-    mpz_class *m_data = nullptr;
+    mpz_class m_data;
+    bool infinity = false;
 
 #ifdef QT_DEBUG
     QByteArray qdata;
@@ -108,7 +101,7 @@ public:
     BigNumber operator-() const;
 
 public:
-    mpz_class *data() const;
+    mpz_class data() const;
     int isProbPrime() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const;
@@ -129,18 +122,67 @@ public:
     static BigNumber random(BigNumber max, bool zeroAllowed = true);
 };
 
-bool operator<(const BigNumber &l, const BigNumber &r);
-bool operator>(const BigNumber &l, const BigNumber &r);
-bool operator<=(const BigNumber &l, const BigNumber &r);
-bool operator>=(const BigNumber &l, const BigNumber &r);
-bool operator==(const BigNumber &l, const BigNumber &r);
-bool operator!=(const BigNumber &l, const BigNumber &r);
-bool operator<(const BigNumber &l, const int &r);
-bool operator>(const BigNumber &l, const int &r);
-bool operator<=(const BigNumber &l, const int &r);
-bool operator>=(const BigNumber &l, const int &r);
-bool operator==(const BigNumber &l, const int &r);
-bool operator!=(const BigNumber &l, const int &r);
+inline bool operator<(const BigNumber &l, const BigNumber &r)
+{
+
+    return l.data() < r.data();
+}
+
+inline bool operator>(const BigNumber &l, const BigNumber &r)
+{
+    return l.data() > r.data();
+}
+
+inline bool operator<=(const BigNumber &l, const BigNumber &r)
+{
+    return l.data() <= r.data();
+}
+
+inline bool operator>=(const BigNumber &l, const BigNumber &r)
+{
+    return l.data() >= r.data();
+}
+
+inline bool operator==(const BigNumber &l, const BigNumber &r)
+{
+    return l.data() == r.data();
+}
+
+inline bool operator!=(const BigNumber &l, const BigNumber &r)
+{
+    return l.data() != r.data();
+}
+
+inline bool operator<(const BigNumber &l, const int &r)
+{
+
+    return l.data() < r;
+}
+
+inline bool operator>(const BigNumber &l, const int &r)
+{
+    return l.data() > r;
+}
+
+inline bool operator<=(const BigNumber &l, const int &r)
+{
+    return l.data() <= r;
+}
+
+inline bool operator>=(const BigNumber &l, const int &r)
+{
+    return l.data() >= r;
+}
+
+inline bool operator==(const BigNumber &l, const int &r)
+{
+    return l.data() == r;
+}
+
+inline bool operator!=(const BigNumber &l, const int &r)
+{
+    return l.data() != r;
+}
 
 #if QT_VERSION_MAJOR == 6
 inline size_t qHash(const BigNumber &key, size_t seed)
