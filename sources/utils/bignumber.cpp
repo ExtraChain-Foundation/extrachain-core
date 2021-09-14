@@ -77,19 +77,19 @@ BigNumber::~BigNumber()
 
 BigNumber BigNumber::operator&(const BigNumber &value)
 {
-    BigNumber da(*m_data & *value.data());
+    BigNumber da((*m_data) & *value.data());
     return da;
 }
 
 BigNumber BigNumber::operator>>(const uint &value)
 {
-    BigNumber ret(*m_data >> value);
+    BigNumber ret((*m_data) >> value);
     return ret;
 }
 
 BigNumber BigNumber::operator>>=(const uint &value)
 {
-    BigNumber ret(*m_data >> value);
+    BigNumber ret((*m_data) >> value);
     *m_data = *ret.data();
     UPDATE_DEBUG()
     return *this;
@@ -97,19 +97,19 @@ BigNumber BigNumber::operator>>=(const uint &value)
 
 BigNumber BigNumber::operator+(const BigNumber &other)
 {
-    BigNumber ret(*m_data + *other.data());
+    BigNumber ret((*m_data) + *other.data());
     return ret;
 }
 
 BigNumber BigNumber::operator+(long long number)
 {
-    BigNumber ret(*m_data + *BigNumber(number).data());
+    BigNumber ret((*m_data) + *BigNumber(number).data());
     return ret;
 }
 
 BigNumber BigNumber::operator-(const BigNumber &bigNumber)
 {
-    BigNumber ret(*m_data - *bigNumber.data());
+    BigNumber ret((*m_data) - *bigNumber.data());
     return ret;
 }
 
@@ -121,37 +121,37 @@ BigNumber BigNumber::operator-(long long number)
 
 BigNumber BigNumber::operator*(const BigNumber &bigNumber) const
 {
-    BigNumber ret(*m_data * *bigNumber.data());
+    BigNumber ret((*m_data) * *bigNumber.data());
     return ret;
 }
 
 BigNumber BigNumber::operator*(long long number)
 {
-    BigNumber ret(*m_data * *BigNumber(number).data());
+    BigNumber ret((*m_data) * *BigNumber(number).data());
     return ret;
 }
 
 BigNumber BigNumber::operator/(const BigNumber &bigNumber)
 {
-    BigNumber ret(*m_data / *bigNumber.data());
+    BigNumber ret((*m_data) / *bigNumber.data());
     return ret;
 }
 
 BigNumber BigNumber::operator/(long long number)
 {
-    BigNumber ret(*m_data / *BigNumber(number).data());
+    BigNumber ret((*m_data) / *BigNumber(number).data());
     return ret;
 }
 
 BigNumber BigNumber::operator%(const BigNumber &bigNumber)
 {
-    BigNumber ret(*m_data % *bigNumber.data());
+    BigNumber ret((*m_data) % *bigNumber.data());
     return ret;
 }
 
 BigNumber BigNumber::operator%(long long number)
 {
-    BigNumber ret(*m_data % *BigNumber(number).data());
+    BigNumber ret((*m_data) % *BigNumber(number).data());
     return ret;
 }
 

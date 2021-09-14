@@ -23,6 +23,7 @@
 #include <string>
 #include <vector>
 #include <QObject>
+#include <QFile>
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"

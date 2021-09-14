@@ -24,6 +24,11 @@
 #include <QNetworkInterface>
 #include <QStandardPaths>
 #include <QTcpSocket>
+#include <QStorageInfo>
+#include <QCborStreamWriter>
+#include <QCborStreamReader>
+#include <QCoreApplication>
+#include <QRegularExpression>
 
 #include "enc/enc_tools.h"
 #include "dfs/types/headers/dfstruct.h"

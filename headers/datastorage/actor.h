@@ -45,7 +45,7 @@ enum class ActorType
     First = 2
 };
 
-class EXTRACHAIH_EXPORT ActorId
+class EXTRACHAIN_EXPORT ActorId
 {
 public:
     ActorId()
@@ -124,7 +124,7 @@ private:
 };
 
 template <typename T>
-class EXTRACHAIH_EXPORT Actor final
+class EXTRACHAIN_EXPORT Actor final
 {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
                   "Your type is not supported. Only Keys are supported");

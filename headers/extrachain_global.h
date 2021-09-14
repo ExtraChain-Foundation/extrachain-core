@@ -23,9 +23,9 @@
 #include <QtCore/qglobal.h>
 
 //#ifdef EXTRACHAIN_LIBRARY
-//#define EXTRACHAIH_EXPORT Q_DECL_EXPORT
+//#define EXTRACHAIN_EXPORT Q_DECL_EXPORT
 //#else
-//#define EXTRACHAIH_EXPORT Q_DECL_IMPORT
+//#define EXTRACHAIN_EXPORT Q_DECL_IMPORT
 //#endif
 #define EXTRACHAIN_EXPORT
 

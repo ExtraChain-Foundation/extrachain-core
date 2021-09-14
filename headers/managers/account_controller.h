@@ -38,7 +38,7 @@ class ActorIndex;
  * and provides access to them.
  */
 
-class EXTRACHAIH_EXPORT AccountController : public QObject
+class EXTRACHAIN_EXPORT AccountController : public QObject
 {
     Q_OBJECT
 

@@ -20,6 +20,8 @@
 #include "enc/key_private.h"
 #include "enc/enc_tools.h"
 
+#include <QJsonObject>
+
 using std::string, std::vector;
 
 KeyPrivate::KeyPrivate()
