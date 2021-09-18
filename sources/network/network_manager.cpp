@@ -111,7 +111,7 @@ void NetworkManager::reconnection()
     for (const auto &el : qAsConst(m_reconnections))
     {
         bool finded = false;
-        for (SocketService *service : m_connections)
+        for (SocketService *service : qAsConst(m_connections))
         {
             // qDebug() << "Reconnection" << service << service->ip() << service->serverPort() << el.first;
             if (service->ip() == el.first)
