@@ -232,3 +232,19 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
 
     return res;
 }
+
+QByteArray SecretKey::encryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
+                                        const QByteArray &public_key, const QByteArray &nonce)
+{
+    auto res = encryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
+                                 nonce.toStdString());
+    return QByteArray::fromStdString(res);
+}
+
+QByteArray SecretKey::decryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
+                                        const QByteArray &public_key, const QByteArray &nonce)
+{
+    auto res = decryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
+                                 nonce.toStdString());
+    return QByteArray::fromStdString(res);
+}
