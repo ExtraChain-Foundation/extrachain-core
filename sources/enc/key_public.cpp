@@ -41,34 +41,7 @@ KeyPublic::KeyPublic(const KeyPublic &keyPublic)
 
 QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey)
 {
-    string sdata = data.toStdString();
-    unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-    string pkrs = Utils::hexStringToByte(m_publicKey);
-    vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
-    string sk = Utils::hexStringToByte(senderPrivateKey);
-    vector<unsigned char> sks(sk.begin(), sk.end());
-
-    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
-
-    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
-    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
-    (void)conv_res; // unused
-    //    if (conv_res)
-    vector<unsigned char> enc_msg(enc_size);
-    vector<unsigned char> dec_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> nonce;
-    nonce.resize(crypto_box_NONCEBYTES);
-    randombytes_buf(nonce.data(), nonce.size());
-    int r = crypto_box_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), nonce.data(), xpkr.data(),
-                            xsks.data());
-    string res;
-    if (r == 0)
-    {
-        enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
-        res = Utils::byteToHexString(enc_msg);
-        res.erase(--res.end());
-    }
+    auto res = SecretKey::encryptAsymmetric(data.toStdString(), senderPrivateKey, m_publicKey);
     return QByteArray::fromStdString(res);
 }
 

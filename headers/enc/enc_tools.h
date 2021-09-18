@@ -13,5 +13,11 @@ std::string encrypt(const std::string &msg, const std::string &secret_key);
 std::string decrypt(const std::string &msg, const std::string &secret_key);
 std::string encryptWithPassword(const std::string &data, const std::string &password);
 std::string decryptWithPassword(const std::string &data, const std::string &password);
+
+std::pair<std::string, std::string> createAsymmetricPair();
+std::string encryptAsymmetric(const std::string &data, const std::string &secret_key,
+                              const std::string &public_key, const std::string &nonce = "");
+std::string decryptAsymmetric(const std::string &data, const std::string &secret_key,
+                              const std::string &public_key, const std::string &nonce = "");
 }
 #endif // ENC_TOOLS_H
