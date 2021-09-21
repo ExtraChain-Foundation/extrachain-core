@@ -104,8 +104,8 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
                                       const QString &tokenCount, const QString &tokenColor)
 {
-    //    qDebug() << accController->getMainActor();
-    //    std::exit(0);
+    // TODO: check correct color in tokenColor
+
     if (QDir("keystore/profile").isEmpty())
     {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
