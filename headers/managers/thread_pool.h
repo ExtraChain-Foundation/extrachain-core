@@ -24,9 +24,7 @@
 #include <QThread>
 #include <QDebug>
 
-#include "extrachain_global.h"
-
-class EXTRACHAIN_EXPORT ThreadPool
+class ThreadPool
 {
 
 private:
@@ -43,14 +41,16 @@ public:
         QObject::connect(worker, &Worker::finished, thread, &QThread::quit);
         QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
         // QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
-        QObject::connect(thread, &QThread::finished, [thread]() {
+        QObject::connect(thread, &QThread::finished, [thread, worker]() {
             if (!threads.contains(thread))
             {
-                qDebug() << "[ThreadPool] Ignore" << thread;
+                // qDebug() << "[ThreadPool] Ignore" << thread;
                 return;
             }
-            qDebug() << "[ThreadPool] Remove thread" << thread << threads.removeAll(thread) << "to"
-                     << threads.length();
+            qDebug() << "[ThreadPool] Remove thread for" << worker;
+            // qDebug() << "[ThreadPool] Remove thread" << thread << "for" << worker <<
+            // threads.removeAll(thread)
+            //          << "to" << threads.length();
             thread->deleteLater();
         });
 
@@ -58,25 +58,18 @@ public:
         {
             qDebug() << "[ThreadPool] Connected with qApp";
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-                qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
-
-                //                for (auto it = threads.cend(); it != threads.cbegin(); it++)
-                //                    (*it)->quit();
-                //                for (auto &&thread : threads)
-                for (auto i = threads.size(); i != 0; i--)
-                {
+                // qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
+                for (auto i = threads.size() - 1; i != 0; i--)
                     threads[i]->quit();
-                }
                 threads.clear();
             });
 
             isFirst = false;
         }
 
-        qDebug() << "[ThreadPool] Move to thread" << thread << "for" << worker << threads.length();
-        // qDebug() << "[ThreadPool] Before" << worker->thread();
+        qDebug() << "[ThreadPool] Move for" << worker;
+        // qDebug() << "[ThreadPool] Move to thread" << thread << "for" << worker << threads.length();
         worker->moveToThread(thread);
-        // qDebug() << "[ThreadPool] After" << worker->thread();
 
         if (!thread->isRunning())
         {
@@ -86,7 +79,7 @@ public:
         }
         else
         {
-            qDebug() << "[ThreadPool] Ignore start" << thread;
+            // qDebug() << "[ThreadPool] Ignore start" << thread;
         }
 
         return thread;

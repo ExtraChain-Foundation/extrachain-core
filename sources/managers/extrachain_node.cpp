@@ -89,10 +89,10 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
 
     ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(actorIndex);
-    ThreadPool::addThread(txManager, m_blockchain->thread());
+    ThreadPool::addThread(txManager);
     // ThreadPool::addThread(contractManager);
     ThreadPool::addThread(dfs);
-    ThreadPool::addThread(smContractController, this->thread());
+    ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
