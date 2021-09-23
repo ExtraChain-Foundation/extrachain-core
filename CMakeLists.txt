@@ -212,7 +212,7 @@ string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
-target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers) # TODO: remove console headers
+target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 target_link_libraries(extrachain
     Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::WebSockets

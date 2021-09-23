@@ -96,6 +96,9 @@ QList<QByteArray> AccountController::getAccountID()
 
 Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray hashLogin)
 {
+    if (hashLogin.isEmpty())
+        qFatal("[AccountController] Create actor: hash is empty");
+
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
     actor->create(account);
 
@@ -152,7 +155,8 @@ Actor<KeyPrivate> AccountController::getActor(int number)
 
 Actor<KeyPrivate> *AccountController::getMainActor()
 {
-    // assert(!accounts.isEmpty());
+    if (accounts.isEmpty())
+        qFatal("[AccountController] No main actor");
     return accounts.isEmpty() ? nullptr : accounts.first();
 }
 

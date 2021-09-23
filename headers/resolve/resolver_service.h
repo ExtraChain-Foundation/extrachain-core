@@ -235,7 +235,7 @@ signals:
     void getBlock(const SearchEnum::BlockParam &param, const QByteArray &value, const QByteArray &requestHash,
                   const SocketPair &receiver);
 
-    void coinRequest(BigNumber id, BigNumber amount);
+    void coinRequest(ActorId receiver, BigNumber amount, ActorId plsr);
 
     void getActorsCount(const QByteArray &requestHash, const SocketPair &receiver);
 

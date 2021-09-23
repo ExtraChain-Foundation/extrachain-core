@@ -36,6 +36,7 @@ void PrivateProfile::setDfs(Dfs *value)
 
 void PrivateProfile::savePrivateProfile(const QByteArray &hash, const ActorId &id)
 {
+    this->m_hash = hash;
     QDir().mkpath(PathProfile);
     QMap<QString, QByteArray> map;
     set(map, "wallet", id.toByteArray());
@@ -112,18 +113,17 @@ void PrivateProfile::loadInfoFromPrivateProfile(const QByteArray &hash, const QB
         return;
     }
     else
-        qDebug() << "[PrivateProfile] Error : incorrect login or id";
+        qDebug() << "[PrivateProfile] Error: incorrect login or id";
     return;
 }
 
-void PrivateProfile::loadPrivateProfile(const QByteArray &login, const QByteArray &password)
+void PrivateProfile::loadPrivateProfileLogin(const QByteArray &login, const QByteArray &password)
 {
-    QByteArray data = login + password;
-    QByteArray secureLogin = Utils::calcKeccak(data);
-    profile(secureLogin);
+    QByteArray hash = Utils::calcKeccak(login + password);
+    profile(hash);
 }
 
-void PrivateProfile::loadProfileForAutoLogin(const QByteArray &hash)
+void PrivateProfile::loadPrivateProfileHash(const QByteArray &hash)
 {
     profile(hash);
 }
@@ -160,11 +160,11 @@ void PrivateProfile::profile(const QByteArray &hash)
         if (secureLoginFile == hash)
         {
             data = data.mid(64);
-            emit setHashProfile(secureLoginFile);
+            this->m_hash = secureLoginFile;
             QMap<QString, QByteArray> map;
             readData(map, data);
             QList<QByteArray> idList = get(map, "wallet").split('|');
-            emit setIdProfile(idList.first());
+            idList.first();
             qDebug() << "Load private profile with id" << idList.first();
             accController->loadActors(idList.first(), idList, hash);
             if (accController->getMainActor() != nullptr)
@@ -220,4 +220,11 @@ void PrivateProfile::readData(QMap<QString, QByteArray> &map, QByteArray &data)
         res.removeFirst();
         res.removeFirst();
     }
+}
+
+const QByteArray &PrivateProfile::hash() const
+{
+    if (m_hash.isEmpty())
+        qFatal("[PrivateProfile] Hash is empty");
+    return m_hash;
 }

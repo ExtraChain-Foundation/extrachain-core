@@ -183,7 +183,7 @@ void DFSResolverService::process()
         if (reloadTimer == nullptr)
         {
             reloadTimer = new QTimer(this);
-            qDebug() << reloadTimer;
+            // qDebug() << reloadTimer;
             connect(reloadTimer, &QTimer::timeout, this, &DFSResolverService::checkStatus,
                     Qt::QueuedConnection);
         }

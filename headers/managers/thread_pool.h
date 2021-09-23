@@ -47,7 +47,7 @@ public:
                 // qDebug() << "[ThreadPool] Ignore" << thread;
                 return;
             }
-            qDebug() << "[ThreadPool] Remove thread for" << worker;
+            // qDebug() << "[ThreadPool] Remove thread for" << worker;
             // qDebug() << "[ThreadPool] Remove thread" << thread << "for" << worker <<
             // threads.removeAll(thread)
             //          << "to" << threads.length();
@@ -59,15 +59,15 @@ public:
             qDebug() << "[ThreadPool] Connected with qApp";
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
                 // qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
-                for (auto i = threads.size() - 1; i != 0; i--)
-                    threads[i]->quit();
+                // for (auto i = threads.size() - 1; i != 0; i--)
+                //     threads[i]->quit();
                 threads.clear();
             });
 
             isFirst = false;
         }
 
-        qDebug() << "[ThreadPool] Move for" << worker;
+        // qDebug() << "[ThreadPool] Move for" << worker;
         // qDebug() << "[ThreadPool] Move to thread" << thread << "for" << worker << threads.length();
         worker->moveToThread(thread);
 

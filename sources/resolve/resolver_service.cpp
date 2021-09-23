@@ -309,12 +309,28 @@ void ResolverService::resolveGeneralTask()
         break;
     }
     case Messages::ChainMessage::CoinRequest: {
-        QByteArray msg = message.data;
-        auto list = msg.split(' ');
+        auto list = Serialization::deserialize(message.data);
+        if (list.isEmpty())
+        {
+            finishWork();
+            break;
+        }
+
         BigNumber amount(list[0]);
-        auto plsr = list.length() > 1 ? list[1] : ActorId();
-        node->coinResponse(message.signer, amount, plsr);
-        // emit coinRequest(message.getSigner(), amount);
+        auto plsr = list.length() > 2 ? list[2] : ActorId();
+
+        if (plsr.isEmpty())
+        {
+            auto mainId = node->getAccountController()->getMainActor()->id();
+            auto firstId = node->getActorIndex()->firstId();
+            if (mainId == firstId)
+                node->createTransactionFrom(firstId, message.signer, amount, ActorId());
+        }
+        else
+        {
+            emit coinRequest(message.signer, amount, plsr);
+        }
+
         finishWork();
         break;
     }

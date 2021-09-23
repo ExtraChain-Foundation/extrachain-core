@@ -30,25 +30,22 @@ class Dfs;
 class EXTRACHAIN_EXPORT PrivateProfile : public QObject
 {
     Q_OBJECT
-private:
-    AccountController *accController;
-    Dfs *dfs;
+
 public slots:
     void savePrivateProfile(const QByteArray &hash, const ActorId &id);
-    void loadPrivateProfile(const QByteArray &login, const QByteArray &password);
+    void loadPrivateProfileLogin(const QByteArray &login, const QByteArray &password);
     void editPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
                             const QByteArray &Data, const bool &reWrite);
     void loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void loadProfileForAutoLogin(const QByteArray &hash);
+    void loadPrivateProfileHash(const QByteArray &hash);
     void process();
 
 public:
     void setAccountController(AccountController *value);
     void setDfs(Dfs *value);
+    const QByteArray &hash() const;
 
 signals:
-    void setIdProfile(QByteArray id);
-    void setHashProfile(QByteArray hash);
     void initActorChatM();
     void infoAvailabled(const QByteArray &info, const QString &type);
     void loginError(int error);
@@ -63,6 +60,10 @@ private:
     void readData(QMap<QString, QByteArray> &map, QByteArray &data);
 
     const QString PathProfile = "keystore/profile";
+    QByteArray m_hash;
+
+    AccountController *accController;
+    Dfs *dfs;
 };
 
 #endif // PRIVATE_PROFILE_H

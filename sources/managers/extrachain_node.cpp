@@ -55,7 +55,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
 
     prepareFolders();
     actorIndex = new ActorIndex();
-    prProfile = new PrivateProfile();
+    m_privateProfile = new PrivateProfile();
     smContractController = new SmartContractManager(actorIndex);
     accController = new AccountController(actorIndex);
     m_networkManager = new NetworkManager(actorIndex, localIp);
@@ -67,7 +67,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     m_blockchain = new Blockchain(accController, fileMode);
     accController->setBlockchain(m_blockchain);
     txManager = new TransactionManager(accController, m_blockchain, this);
-    prProfile->setAccountController(accController);
+    m_privateProfile->setAccountController(accController);
     chatManager = new ChatManager(accController, actorIndex);
     chatManager->setNetworkManager(m_networkManager);
     // contractManager = new ContractManager(accController, blockchain);
@@ -79,7 +79,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     m_blockchain->setTxManager(txManager);
     m_networkManager->setResolveManager(resolveManager);
     // dfs->initDfsNetwork(resolveManager);
-    prProfile->setDfs(dfs);
+    m_privateProfile->setDfs(dfs);
     actorIndex->setResolveManager(resolveManager);
     connectSignals();
 
@@ -94,7 +94,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     ThreadPool::addThread(dfs);
     ThreadPool::addThread(smContractController);
     ThreadPool::addThread(resolveManager);
-    ThreadPool::addThread(prProfile);
+    ThreadPool::addThread(m_privateProfile);
     ThreadPool::addThread(chatManager);
 
     // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
@@ -182,13 +182,14 @@ void ExtraChainNode::connectSmContractManager()
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
     //            &ExtraChainNode::addActorInActorIndex);
     connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
-            [this](const QByteArray &id, const QString &type, const bool &rewrite) {
-                emit nodeEditPrivateProfile({ getHashLoginPrivateProfile(), getIdPrivateProfile() }, type, id,
-                                            rewrite);
+            [this](const QByteArray &id, const QString &type, const bool &rewrite) { // TODO?
+                auto mainId = accController->getMainActor()->id().toByteArray();
+                emit nodeEditPrivateProfile({ m_privateProfile->hash(), mainId }, type, id, rewrite);
             });
 
     //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
-    connect(this, &ExtraChainNode::nodeEditPrivateProfile, prProfile, &PrivateProfile::editPrivateProfile);
+    connect(this, &ExtraChainNode::nodeEditPrivateProfile, m_privateProfile,
+            &PrivateProfile::editPrivateProfile);
 
     connect(this, &ExtraChainNode::generateSmartContract, smContractController,
             &SmartContractManager::createContractProfile);
@@ -446,15 +447,6 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
 }
 #endif
 
-#ifdef ECONSOLE
-void ExtraChainNode::connectConsole()
-{
-    connect(this, &ExtraChainNode::savePrivateProfile, prProfile, &PrivateProfile::savePrivateProfile);
-    connect(this, &ExtraChainNode::loadProfileForConsoleLogin, prProfile,
-            &PrivateProfile::loadPrivateProfile);
-}
-#endif
-
 void ExtraChainNode::connectContractManager()
 {
 }
@@ -462,10 +454,6 @@ void ExtraChainNode::connectContractManager()
 void ExtraChainNode::connectActorIndex()
 {
     connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
-    // this connect with service message
-
-    connect(prProfile, &PrivateProfile::setIdProfile, this, &ExtraChainNode::setIdPrivateProfile);
-    connect(prProfile, &PrivateProfile::setHashProfile, this, &ExtraChainNode::setHashLoginPrivateProfile);
 }
 
 void ExtraChainNode::dfsConnection()
@@ -484,9 +472,6 @@ void ExtraChainNode::connectSignals()
 {
     connect(this, &ExtraChainNode::ready, []() { qInfo() << "Node: started"; });
     connectTxManager();
-#ifdef ECONSOLE
-    connectConsole();
-#endif
     connectResolveManager();
     connectContractManager();
     //    connectAccountController();
@@ -495,14 +480,17 @@ void ExtraChainNode::connectSignals()
     dfsConnection();
 
     connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
-#ifdef ECONSOLE
-    // temp for tests
+
+    // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
-#endif
+
     connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
     connect(this, &ExtraChainNode::removeConnection, dfs, &Dfs::removeConnection);
     connect(this, &ExtraChainNode::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
     connect(accController, &AccountController::loadWallets, m_blockchain, &Blockchain::updateBlockchain);
+
+    connect(this, &ExtraChainNode::login, m_privateProfile, &PrivateProfile::loadPrivateProfileLogin);
+    connect(this, &ExtraChainNode::savePrivateProfile, m_privateProfile, &PrivateProfile::savePrivateProfile);
 }
 
 void ExtraChainNode::prepareFolders()
@@ -535,9 +523,9 @@ ResolveManager *ExtraChainNode::getResolveManager() const
     return resolveManager;
 }
 
-PrivateProfile *ExtraChainNode::getPrivateProfile() const
+PrivateProfile *ExtraChainNode::privateProfile() const
 {
-    return prProfile;
+    return m_privateProfile;
 }
 
 SubscribeController *ExtraChainNode::getSubscribeController() const
@@ -572,77 +560,6 @@ void ExtraChainNode::tempareSlotForActors()
 {
     emit sendActorStateList(accController->getCurrentState());
     emit sendActorToWallet(accController->getAccountID());
-}
-
-void ExtraChainNode::coinResponse(ActorId receiver, BigNumber amount, ActorId plsr)
-{
-#ifdef ECONSOLE
-    auto mainActor = accController->getMainActor();
-
-    if (mainActor == nullptr)
-    {
-        qDebug() << "Main actor not exists";
-        return;
-    }
-
-    if (actorIndex->firstId().isEmpty())
-        return;
-
-    ActorId firstId = actorIndex->firstId();
-    if (mainActor->id() == firstId)
-    {
-        qInfo().noquote() << "FirstId send to" << receiver << "with amount" << amount;
-        createTransactionFrom(firstId, receiver, amount, ActorId());
-    }
-    else
-    {
-        if (!plsr.isEmpty() && mainActor->id() != plsr)
-        {
-            return;
-        }
-
-        if (m_blockchain->getUserBalance(mainActor->id(), ActorId(0)) < amount)
-        {
-            qInfo().noquote() << "Not enough coins on wallet" << mainActor;
-            return;
-        }
-
-        m_requestCoinQueue.append({ receiver, amount, plsr });
-        if (m_listenCoinRequest)
-        {
-            return;
-        }
-
-        qInfo().noquote() << "Coin request from" << receiver.toByteArray() << "with amount"
-                          << Transaction::amountToVisible(amount);
-        qInfo() << "Send? (y/n)";
-        m_listenCoinRequest = true;
-    }
-#else
-    Q_UNUSED(receiver)
-    Q_UNUSED(amount)
-    Q_UNUSED(plsr)
-#endif
-}
-
-QByteArray ExtraChainNode::getIdPrivateProfile() const
-{
-    return idPrivateProfile;
-}
-
-void ExtraChainNode::setIdPrivateProfile(QByteArray id)
-{
-    idPrivateProfile = id;
-}
-
-QByteArray ExtraChainNode::getHashLoginPrivateProfile() const
-{
-    return hashLoginPrivateProfile;
-}
-
-void ExtraChainNode::setHashLoginPrivateProfile(QByteArray hash)
-{
-    hashLoginPrivateProfile = hash;
 }
 
 ChatManager *ExtraChainNode::getChatManager() const

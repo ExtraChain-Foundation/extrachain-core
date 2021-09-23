@@ -19,6 +19,7 @@
 
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "managers/extrachain_node.h"
+#include "managers/account_controller.h"
 
 SubscribeController::SubscribeController(QObject *parent)
     : QObject(parent)
@@ -31,7 +32,7 @@ SubscribeController::~SubscribeController()
 
 void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 {
-    QByteArray currentId = extraChainNode->getIdPrivateProfile();
+    QByteArray currentId = extraChainNode->getAccountController()->getMainActor()->id().toByteArray();
     emit sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
                      isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
                      { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
@@ -44,8 +45,8 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
 
 bool SubscribeController::checkSubscribe(QByteArray id)
 {
-    QString path =
-        DfsStruct::ROOT_FOOLDER_NAME + "/" + extraChainNode->getIdPrivateProfile() + "/services/subscribe";
+    QByteArray currentId = extraChainNode->getAccountController()->getMainActor()->id().toByteArray();
+    QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumnTableName
