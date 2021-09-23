@@ -113,6 +113,7 @@ void WebSocketService::sendMessage(const QByteArray &data)
         qFatal("[WS] Error send size");
 
     auto length = m_ws->sendBinaryMessage(prepareSendMessage(data));
+    // m_ws->flush();
     Q_UNUSED(length)
     // m_ws->flush();
 
@@ -124,7 +125,8 @@ void WebSocketService::sendMessage(const QByteArray &data)
     }
     else
     {
-        qFatal("[WS] Can't send");
+        // qDebug() << "[WS] Can't send: socket not valid";
+        qFatal("[WS] Can't send: socket not valid");
     }
 }
 
