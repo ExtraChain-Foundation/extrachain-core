@@ -7,7 +7,7 @@ INCLUDEPATH += $$PWD
 
 SOURCES += \
     $$PWD/dfs/controls/sources/subscribe_controller.cpp \
-    $$PWD/dfs/managers/sources/dfsnetmanager.cpp \
+    $$PWD/dfs/managers/sources/dfs_networkmanager.cpp \
     $$PWD/dfs/managers/sources/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
     $$PWD/dfs/packages/sources/hash_operations.cpp \
@@ -63,6 +63,7 @@ SOURCES += \
     $$PWD/sources/network/packages/service/get_tx_message.cpp \
     $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
     $$PWD/sources/network/tcpserver_service.cpp \
+    $$PWD/sources/network/isocket_service.cpp \
     $$PWD/sources/network/tcpsocket_service.cpp \
     $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
@@ -71,8 +72,9 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/headers/precompiled.h \
+    $$PWD/headers/extrachain_global.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
-    $$PWD/dfs/managers/headers/dfsnetmanager.h \
+    $$PWD/dfs/managers/headers/dfs_networkmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \
     $$PWD/dfs/packages/headers/dfs_message_interface.h \
@@ -85,7 +87,6 @@ HEADERS += \
     $$PWD/headers/enc/key_private.h \
     $$PWD/headers/enc/key_public.h \
     $$PWD/headers/enc/sign_interface.h \
-    $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_changes.h \
     $$PWD/dfs/types/headers/cardfile.h \
     $$PWD/headers/managers/chat.h \
@@ -140,6 +141,7 @@ HEADERS += \
     $$PWD/headers/network/packages/service/ping_pong_message.h \
     $$PWD/headers/network/packages/service/verify_messages.h \
     $$PWD/headers/network/tcpserver_service.h \
+    $$PWD/headers/network/isocket_service.h \
     $$PWD/headers/network/tcpsocket_service.h \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \

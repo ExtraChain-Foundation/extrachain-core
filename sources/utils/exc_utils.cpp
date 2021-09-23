@@ -24,6 +24,15 @@
 #include <QNetworkInterface>
 #include <QStandardPaths>
 #include <QTcpSocket>
+#include <QStorageInfo>
+#include <QCborStreamWriter>
+#include <QCborStreamReader>
+#include <QCoreApplication>
+#include <QRegularExpression>
+
+#include "enc/enc_tools.h"
+#include "dfs/types/headers/dfstruct.h"
+#include "utils/Keccak256.h"
 
 QByteArray Utils::calcKeccak(const QByteArray &b)
 {
@@ -92,7 +101,7 @@ bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode)
 {
     if (!file.open(mode))
     {
-        qCritical().noquote() << QString("[WARNING] Can't open [%1] file").arg(file.fileName());
+        qDebug().noquote() << QString("[WARNING] Can't open [%1] file").arg(file.fileName());
         return false;
     }
     return true;

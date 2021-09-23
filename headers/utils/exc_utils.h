@@ -20,32 +20,14 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <QByteArray>
-#include <QCoreApplication>
-#include <QDateTime>
-#include <QDebug>
-#include <QDir>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QCborStreamWriter>
-#include <QCborStreamReader>
-#include <QList>
-#include <QStorageInfo>
-#include <QString>
-#include <QStringList>
-#include <QNetworkAddressEntry>
-#include <exception>
-#include <sstream>
 #include <string>
+#include <vector>
+#include <QObject>
+#include <QFile>
+#include <QtNetwork/QNetworkAddressEntry>
 
-#include "enc/enc_tools.h"
-
-#include "dfs/types/headers/dfstruct.h"
+#include "extrachain_global.h"
 #include "network/socket_pair.h"
-#include "utils/Keccak256.h"
-#include "utils/bignumber.h"
-
-#include "sodium.h"
 
 namespace Network {
 Q_NAMESPACE
@@ -76,7 +58,7 @@ enum SocketServiceError
 };
 Q_ENUM_NS(SocketServiceError)
 
-[[maybe_unused]] static QByteArray currentIdentifier()
+[[maybe_unused]] inline static QByteArray currentIdentifier()
 {
     // static QByteArray identifier;
     // if (!identifier.isEmpty())
@@ -419,10 +401,6 @@ namespace DataStorage {
 } // namespace DataStorage
 
 namespace Net {
-
-    // Type of Protocol. Should be changed according to client in use.
-    static const QByteArray PROTOCOL_VERSION = "ExtraChain_v5";
-
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
 
@@ -463,10 +441,12 @@ namespace Serialization {
 static const int TRANSACTION_FIELD_SIZE = 4;
 static const int DEFAULT_FIELD_SIZE = 8;
 
-QByteArray serialize(const QList<QByteArray> &list, const int &fiels_size = DEFAULT_FIELD_SIZE);
-QList<QByteArray> deserialize(const QByteArray &serialized, const int &fiels_size = DEFAULT_FIELD_SIZE);
-QByteArray serializeMap(const QMap<QString, QByteArray> &map);
-QMap<QString, QByteArray> deserializeMap(const QByteArray &data);
+EXTRACHAIN_EXPORT QByteArray serialize(const QList<QByteArray> &list,
+                                       const int &fiels_size = DEFAULT_FIELD_SIZE);
+EXTRACHAIN_EXPORT QList<QByteArray> deserialize(const QByteArray &serialized,
+                                                const int &fiels_size = DEFAULT_FIELD_SIZE);
+EXTRACHAIN_EXPORT QByteArray serializeMap(const QMap<QString, QByteArray> &map);
+EXTRACHAIN_EXPORT QMap<QString, QByteArray> deserializeMap(const QByteArray &data);
 
 QByteArray fromMap(const QMap<QString, QByteArray> &map);
 QByteArray fromList(const QByteArrayList &list);
@@ -492,15 +472,15 @@ static QString filePrefix = "file:///";
 static QString filePrefix = "file://";
 #endif
 
-QString dataDir(const QString &newDir = "");
-qint64 checkMemoryFree();  // MB
-qint64 checkMemoryTotal(); // MB
+EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
+EXTRACHAIN_EXPORT qint64 checkMemoryFree();  // MB
+EXTRACHAIN_EXPORT qint64 checkMemoryTotal(); // MB
 
 QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
-QByteArray calcKeccak(const QByteArray &data);
-QByteArray calcKeccakForFile(const QString &path);
+EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
+EXTRACHAIN_EXPORT QByteArray calcKeccakForFile(const QString &path);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
@@ -519,12 +499,12 @@ int compare(const QByteArray &one, const QByteArray &two);
 /**
  * @brief Remove data and cache files
  */
-void wipeDataFiles();
+EXTRACHAIN_EXPORT void wipeDataFiles();
 
-QString detectCompiler();
-QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
-QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
-bool isValidIp(const QString &ip);
+EXTRACHAIN_EXPORT QString detectCompiler();
+EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
+EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
+EXTRACHAIN_EXPORT bool isValidIp(const QString &ip);
 } // namespace Utils
 
 namespace DataStorage {

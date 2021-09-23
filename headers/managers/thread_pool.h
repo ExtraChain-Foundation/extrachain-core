@@ -24,7 +24,9 @@
 #include <QThread>
 #include <QDebug>
 
-class ThreadPool
+#include "extrachain_global.h"
+
+class EXTRACHAIN_EXPORT ThreadPool
 {
 
 private:
@@ -60,13 +62,10 @@ public:
 
                 //                for (auto it = threads.cend(); it != threads.cbegin(); it++)
                 //                    (*it)->quit();
-                for (auto &&thread : threads)
+                //                for (auto &&thread : threads)
+                for (auto i = threads.size(); i != 0; i--)
                 {
-                    thread->exit(0);
-                    // threads.removeAll(thread);
-                    //                    thread->quit();
-                    //                    QTimer::singleShot(0, thread, &QThread::quit);
-                    //                    qDebug() << "[ThreadPool] Quit" << thread;
+                    threads[i]->quit();
                 }
                 threads.clear();
             });

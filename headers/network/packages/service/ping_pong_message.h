@@ -31,30 +31,33 @@ static const QByteArray PONG_MESSAGE = "pong ExtraNet";
 [[maybe_unused]] static QByteArray createPingMessage()
 {
     QByteArray msg("{");
-    msg.append("\"proto\":\"")
-        .append(Config::Net::PROTOCOL_VERSION)
-        .append("\",")
-        .append("\"type\":\"")
-        .append(PING_MESSAGE)
-        .append("\"")
-        .append("}");
+    qFatal("Need correct ping");
+    //    msg.append("\"proto\":\"")
+    //        .append(Config::Net::PROTOCOL_VERSION)
+    //        .append("\",")
+    //        .append("\"type\":\"")
+    //        .append(PING_MESSAGE)
+    //        .append("\"")
+    //        .append("}");
 
     return msg;
 }
 
 [[maybe_unused]] static QByteArray createPongMessage(const quint16 port)
 {
+    Q_UNUSED(port)
     QByteArray msg("{");
-    msg.append("\"proto\":\"")
-        .append(Config::Net::PROTOCOL_VERSION)
-        .append("\",")
-        .append("\"type\":\"")
-        .append(PONG_MESSAGE)
-        .append("\",")
-        .append("\"netPort\":\"")
-        .append(QByteArray::number(port))
-        .append("\"")
-        .append("}");
+    qFatal("Need correct pong");
+    //    msg.append("\"proto\":\"")
+    //        .append(Config::Net::PROTOCOL_VERSION)
+    //        .append("\",")
+    //        .append("\"type\":\"")
+    //        .append(PONG_MESSAGE)
+    //        .append("\",")
+    //        .append("\"netPort\":\"")
+    //        .append(QByteArray::number(port))
+    //        .append("\"")
+    //        .append("}");
 
     return msg;
 }
@@ -68,7 +71,7 @@ static const QByteArray PONG_MESSAGE = "pong ExtraNet";
 static bool checkType(const QByteArray &msg, const QString &type)
 {
     QJsonDocument doc = QJsonDocument::fromJson(msg);
-    return !doc.isNull() && doc.object().value("proto").toString() == Config::Net::PROTOCOL_VERSION
+    return !doc.isNull() /*&& doc.object().value("proto").toString() == Config::Net::PROTOCOL_VERSION*/
         && doc.object().value("type").toString() == type;
 }
 

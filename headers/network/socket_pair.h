@@ -20,9 +20,13 @@
 #ifndef SOCKET_PAIR_H
 #define SOCKET_PAIR_H
 
-#include "utils/bignumber.h"
+#include "extrachain_global.h"
 
-class SocketPair
+#include <QString>
+#include <QHash>
+class BigNumber;
+
+class EXTRACHAIN_EXPORT SocketPair
 {
 public:
     std::string ip;

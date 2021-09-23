@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -20,14 +20,18 @@
 #ifndef ACTOR_H
 #define ACTOR_H
 
-#include <QDebug>
 #include <utility>
 #include <type_traits>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QDebug>
 
+#include "dfs/types/headers/dfstruct.h"
 #include "utils/bignumber.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "profile/public_profile.h"
+#include "extrachain_global.h"
 
 /**
  * Acting entity.
@@ -41,7 +45,7 @@ enum class ActorType
     First = 2
 };
 
-class ActorId
+class EXTRACHAIN_EXPORT ActorId
 {
 public:
     ActorId()
@@ -51,10 +55,9 @@ public:
 
     ActorId(const QByteArray &actorId)
     {
-#ifdef QT_DEBUG
         if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
-            qFatal("ActorId not valid");
-#endif
+            qFatal("ActorId not valid"); // TODO: remove after tests
+
         m_id = !actorId.isEmpty() ? actorId : QByteArray("00000000000000000000");
         normalize();
     }
@@ -121,29 +124,29 @@ private:
 };
 
 template <typename T>
-class Actor final
+class EXTRACHAIN_EXPORT Actor final
 {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
                   "Your type is not supported. Only Keys are supported");
     const int FIELDS_SIZE = 4;
 
-protected:
+private:
     ActorId m_id;
     T *m_key;
-    ActorType m_account;
+    ActorType m_type;
 
 public:
     Actor()
     {
         m_key = nullptr;
-        m_account = ActorType::Wallet;
+        m_type = ActorType::Wallet;
     }
 
     Actor(const Actor<T> &copyActor)
     {
         m_id = copyActor.id();
         m_key = new T(*(copyActor.key()));
-        m_account = ActorType(copyActor.account());
+        m_type = ActorType(copyActor.type());
     }
 
     Actor(const QByteArray &serialized)
@@ -160,7 +163,7 @@ public:
     {
         m_id = copyActor.id();
         m_key = new T(*(copyActor.key()));
-        m_account = ActorType(copyActor.account());
+        m_type = ActorType(copyActor.type());
         return *this;
     }
 
@@ -202,7 +205,7 @@ public:
 
         this->m_id = json["id"].toString().toLatin1();
         this->m_key = new T(json);
-        this->m_account = ActorType(json["account"].toInt());
+        this->m_type = ActorType(json["account"].toInt());
 
         if (empty())
         {
@@ -217,31 +220,21 @@ public:
      * @brief initial construction of new Actor
      * @param id
      */
-    bool create(ActorType account)
+    void create(ActorType type)
     {
-        if (!isPrivate())
-            return false;
+        static_assert(std::is_same<T, KeyPrivate>::value,
+                      "Сannot be created with a public key. Only private is supported");
 
-        m_key = new T();
+        this->m_key = new T();
+        this->m_type = type;
 
-        if (typeid(T) == typeid(KeyPrivate))
-        {
-            KeyPrivate *k = reinterpret_cast<KeyPrivate *>(m_key);
-            k->generate();
-            auto publicKey = k->getPubKey();
-            QByteArray pk = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
-            if (pk.size() >= 20)
-            {
-                m_id = pk.left(20);
-            }
-            else
-            {
-                qDebug() << "[Error] Actor.h func InitNew. Error size of hashPubKey";
-            }
-        }
+        auto publicKey = this->m_key->publicKey();
+        auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
 
-        this->m_account = account;
-        return true;
+        if (hash.size() >= 20)
+            m_id = hash.left(20);
+        else
+            qFatal("[Actor] Create: error size of hash");
     }
 
     bool empty() const
@@ -252,7 +245,7 @@ public:
         if (!isPrivate())
         {
             KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(m_key);
-            return pbKey->isEmpty();
+            return pbKey->publicKey().empty();
         }
 
         return m_id.isEmpty();
@@ -267,7 +260,7 @@ public:
     QByteArray serialize() const
     {
         QString actorId = QString(this->m_id.toByteArray());
-        int type = static_cast<uint32_t>(m_account);
+        int type = static_cast<uint32_t>(m_type);
 
         if (m_key == nullptr || empty())
         {
@@ -275,14 +268,14 @@ public:
             Q_ASSERT(!empty());
         }
 
-        QString publicKey = QString::fromStdString(m_key->getPubKey());
+        QString publicKey = QString::fromStdString(m_key->publicKey());
 
         QJsonObject json = { { "id", actorId }, { "account", type }, { "publicKey", publicKey } };
 
         if (isPrivate())
         {
             KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(m_key);
-            QString privateKey = QString::fromStdString(keyPrivate->getSecKey());
+            QString privateKey = QString::fromStdString(keyPrivate->secretKey());
             json["privateKey"] = privateKey;
         }
 
@@ -299,11 +292,10 @@ public:
 public:
     bool operator==(const Actor<T> &other)
     {
-        T *otherKey = other.key();
-        return this->id() == other.id() && *m_key == *otherKey;
+        return this->m_id == other.m_id && *m_key == *other.m_key && m_type == other.m_type;
     }
 
-    ActorId id() const
+    const ActorId &id() const
     {
         return m_id;
     }
@@ -313,19 +305,9 @@ public:
         return m_key;
     }
 
-    ActorType account() const
+    ActorType type() const
     {
-        return m_account;
-    }
-
-    QString accountString() const
-    {
-        return QString::number(int(m_account));
-    }
-
-    std::string accountStdString() const
-    {
-        return std::to_string(int(m_account));
+        return m_type;
     }
 
     Actor<KeyPublic> convertToPublic()
@@ -333,8 +315,8 @@ public:
         Actor<KeyPublic> actor;
 
         actor.setId(m_id);
-        actor.setPublicKey(m_key->getPubKey());
-        actor.setAccount(ActorType(m_account));
+        actor.setPublicKey(m_key->publicKey());
+        actor.setAccount(m_type);
 
         return actor;
     }
@@ -352,7 +334,7 @@ public:
 
     void setAccount(const ActorType &account)
     {
-        m_account = account;
+        m_type = account;
     }
 };
 

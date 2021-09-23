@@ -20,24 +20,28 @@
 #ifndef ACCOUNT_CONTROLLER_H
 #define ACCOUNT_CONTROLLER_H
 
-#include "enc/enc_tools.h"
-
-#include "utils/bignumber.h"
-#include "datastorage/actor.h"
-#include "datastorage/index/actorindex.h"
-#include "enc/key_private.h"
 #include <QDebug>
 #include <QObject>
+
+//#include "enc/enc_tools.h"
+#include "utils/bignumber.h"
+#include "datastorage/actor.h"
+//#include "datastorage/index/actorindex.h"
+//#include "enc/key_private.h"
+
 class Blockchain;
+class ActorIndex;
+
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
 
-class AccountController : public QObject
+class EXTRACHAIN_EXPORT AccountController : public QObject
 {
     Q_OBJECT
+
 private:
     // Current user, used in AccountController.
     int userNum = 0;

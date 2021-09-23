@@ -1,6 +1,10 @@
 #include "network/isocket_service.h"
 #include "network/network_manager.h"
 
+#ifndef EXTRACHAIN_CMAKE
+#include "preconfig.h"
+#endif
+
 SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
     : QObject(parent)
 {
@@ -125,29 +129,33 @@ QByteArray SocketService::generateFirstMessage()
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["key"] = QString::fromStdString(priv.key()->getPubKey());
+    json["key"] = QString::fromStdString(priv.key()->publicKey());
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message)
 {
+    //    return message;
     if (pub.empty())
         qFatal("Socket encrypt error");
 
-    auto result = priv.key()->encrypt(qCompress(message), pub);
+    auto result = priv.key()->encrypt(message, pub);
     m_bytesOutgoing += result.length();
-    m_bytesCompressed += message.length() - result.length();
+    // m_bytesCompressed += message.length() - result.length();
     return result;
 }
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message)
 {
+    //    return message;
     if (pub.empty())
         qFatal("Socket decrypt error");
 
-    auto result = qUncompress(priv.key()->decrypt(message, pub));
+    auto result = priv.key()->decrypt(message, pub);
+    if (result.isEmpty())
+        return "";
     m_bytesIncoming += message.length();
-    m_bytesCompressed += result.length() - message.length();
+    // m_bytesCompressed += result.length() - message.length();
     return result;
 }

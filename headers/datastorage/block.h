@@ -53,7 +53,7 @@ static const QByteArray DATA_BLOCK_TYPE = "data";
 static const QByteArray MERGE_BLOCK = "dataMerge";
 }
 
-class Block
+class EXTRACHAIN_EXPORT Block
 {
 
 protected:

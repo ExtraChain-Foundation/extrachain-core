@@ -26,7 +26,7 @@
  * @brief Representation of one row in genesis block data field
  */
 
-class GenesisDataRow
+class EXTRACHAIN_EXPORT GenesisDataRow
 {
 public:
     ActorId actorId;
@@ -88,7 +88,7 @@ static const QByteArray GENESIS_BLOCK_MERGE = "genesisMerge";
  * @brief Genesis block it's an extended block, with has specific data field
  * and one additional field - prevGenHash.
  */
-class GenesisBlock : public Block
+class EXTRACHAIN_EXPORT GenesisBlock : public Block
 {
 public:
     QByteArray prevGenHash; // previous genesis block hashes

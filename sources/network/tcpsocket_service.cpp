@@ -76,7 +76,9 @@ void TcpSocketService::sendMessage(const QByteArray &data)
         return;
 
     QByteArray message = Serialization::serialize({ prepareSendMessage(data) }, Messages::FIELD_SIZE);
+    m_tcp->waitForBytesWritten();
     m_tcp->write(message, message.size());
+    m_tcp->waitForBytesWritten();
 }
 
 void TcpSocketService::process()
@@ -175,8 +177,8 @@ void TcpSocketService::continueDoRead()
         {
             pendMsg.append(rpckg);
 
-            if (pendMsg.isEmpty())
-                qFatal("tcp omg");
+            // if (pendMsg.isEmpty())
+            //     qFatal("tcp omg");
 
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
             {
@@ -185,12 +187,13 @@ void TcpSocketService::continueDoRead()
                     emit activated();
                 qDebug() << "[TCP] First message" << pendMsg << m_activated;
             }
-            else
+            else if (!pendMsg.isEmpty())
             {
                 SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
                 this->gotMessage(prepareReceiveMessage(pendMsg), receiver);
             }
+
             pendMsgSize = -1;
             pendMsg = "";
         }
@@ -209,6 +212,9 @@ void TcpSocketService::continueDoRead()
 
 void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
 {
+    if (msg.isEmpty())
+        return;
+
     Messages::BaseMessage baseMessage;
     baseMessage.deserialize(msg);
 
@@ -218,9 +224,7 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
         return;
     }
 
-    if (serverPort() == 2223)
-        reinterpret_cast<DfsNetworkManager *>(m_networkManager)->messageReceived(msg, pair);
-    else
+    if (!msg.isEmpty())
         m_networkManager->messageReceived(msg, pair);
 }
 

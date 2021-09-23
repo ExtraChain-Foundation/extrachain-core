@@ -29,7 +29,7 @@
 #include "enc/key_private.h"
 #include "datastorage/transaction.h"
 
-class SmartContractManager : public QObject
+class EXTRACHAIN_EXPORT SmartContractManager : public QObject
 {
     Q_OBJECT
 
@@ -61,7 +61,6 @@ signals:
     //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
     void saveActorInPrivateProfile(const QByteArray &id, const QString &type = "wallet",
                                    const bool &rewrite = false);
-    void initConsoleToken(Transaction tx);
     void finished();
 };
 

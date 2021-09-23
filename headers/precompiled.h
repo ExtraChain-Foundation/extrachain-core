@@ -83,4 +83,5 @@
 #include <QtCore>
 #include <QtNetwork>
 #include <QtConcurrent>
+#include <QtWebSockets>
 #endif

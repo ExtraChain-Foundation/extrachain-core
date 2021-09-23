@@ -23,14 +23,7 @@
 #include "utils/exc_utils.h"
 #include "utils/db_connector.h"
 
-struct indexList
-{
-    indexList(long long curPos, int _size);
-    long long currentPosition;
-    int size;
-};
-
-class PublicProfile
+class EXTRACHAIN_EXPORT PublicProfile
 {
 public:
     PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id);

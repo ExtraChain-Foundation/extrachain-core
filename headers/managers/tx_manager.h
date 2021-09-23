@@ -40,7 +40,7 @@ class ExtraChainNode;
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
  */
-class TransactionManager : public QObject
+class EXTRACHAIN_EXPORT TransactionManager : public QObject
 {
     Q_OBJECT
 

@@ -23,16 +23,22 @@
 
 #include "managers/logs_manager.h"
 
+#include <iostream>
 #include <QMutex>
+#include <QJsonObject>
 
 #ifdef Q_OS_ANDROID
 #include <android/log.h>
 #endif
 
+#ifdef QT_DEBUG
+#define LOG_FILENAME
+#endif
+
 bool LogsManager::toConsole = true;
 bool LogsManager::toFile = true;
 bool LogsManager::toModel =
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
     true;
 #else
     true;
@@ -57,6 +63,9 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     case QtInfoMsg:
         makeLog(context.file, context.line, context.function, msg);
         break;
+    case QtCriticalMsg:
+        makeLog(context.file, context.line, context.function, "[Critical] " + msg);
+        break;
     case QtFatalMsg: {
         makeLog(context.file, context.line, context.function, "[Fatal Error] " + msg);
 
@@ -65,7 +74,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
         {
             QJsonObject json;
             json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
             json["file"] = normalizeFileName(context.file);
             json["line"] = QString::number(context.line);
             json["function"] = QString(context.function);
@@ -85,6 +94,9 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
 {
+    Q_UNUSED(file)
+    Q_UNUSED(line)
+    Q_UNUSED(function)
     static QFile logFile("logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
                          + ".log");
 
@@ -94,12 +106,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     QString message = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
 
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
     // TODO: to std::string
     QString fileName = normalizeFileName(file);
-#endif
-
-#ifdef QT_DEBUG
     bool isPrint = !filesFilter.length();
 
     if (!isPrint)
@@ -147,7 +156,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #endif
 
     const QString logStr = currentDateTime.toString("hh:mm:ss ")
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
         + "["
         + (fileNameQrc.length() ? fileNameQrc
                                 : fileNameStd + (fileNameStd == "global" ? "" : ":" + QString::number(line)))
@@ -157,7 +166,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
     if (LogsManager::toConsole)
     {
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
         if (isPrint)
 #endif
             print(logStr.toStdString());
@@ -169,7 +178,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         mutex.lock();
         logs.append({ { "text", msg },
                       { "date", currentDateTime.toMSecsSinceEpoch() }
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
                       ,
                       { "file", fileName },
                       { "line", line },
@@ -191,7 +200,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
 QString LogsManager::normalizeFileName(const QString& file)
 {
-#ifdef QT_DEBUG
+#ifdef LOG_FILENAME
     // TODO: to std::string
     QString fileName = file;
     if (fileName.isEmpty())
@@ -202,7 +211,8 @@ QString LogsManager::normalizeFileName(const QString& file)
 #else
     return fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
 #endif
-#elif
+#else
+    Q_UNUSED(file)
     return "";
 #endif
 }

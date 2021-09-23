@@ -17,29 +17,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef KEY_PUBLIC_H
-#define KEY_PUBLIC_H
+#ifndef EXTRACHAIN_GLOBAL_H
+#define EXTRACHAIN_GLOBAL_H
 
-#include <string>
-#include "utils/exc_utils.h"
-#include <QDebug>
+#include <QtCore/qglobal.h>
 
-class EXTRACHAIN_EXPORT KeyPublic
-{
-private:
-    std::string m_publicKey;
+//#ifdef EXTRACHAIN_LIBRARY
+//#define EXTRACHAIN_EXPORT Q_DECL_EXPORT
+//#else
+//#define EXTRACHAIN_EXPORT Q_DECL_IMPORT
+//#endif
+#define EXTRACHAIN_EXPORT
 
-public:
-    KeyPublic(const std::string &publicKey);
-    KeyPublic(const QJsonObject &json);
-    KeyPublic(const KeyPublic &keyPublic);
-    ~KeyPublic() = default;
-
-    QByteArray encrypt(const QByteArray &data, const std::string &senderPrivateKey);
-
-    bool verify(const QByteArray &data, const QByteArray &dsignHex);
-
-    std::string publicKey() const;
-};
-
-#endif // KEY_PUBLIC_H
+#endif // EXTRACHAIN_GLOBAL_H

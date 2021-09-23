@@ -21,14 +21,13 @@
 #define KEY_PRIVATE_H
 
 #include <QDebug>
-#include <sodium.h>
-#include "utils/exc_utils.h"
+#include "extrachain_global.h"
 
-class KeyPrivate
+class EXTRACHAIN_EXPORT KeyPrivate
 {
 private:
-    std::string secKey;
-    std::string pubKey;
+    std::string m_secretKey;
+    std::string m_publicKey;
 
 public:
     /**
@@ -43,24 +42,22 @@ public:
     KeyPrivate(const KeyPrivate &keyPrivate);
     ~KeyPrivate();
 
-public:
+private:
     void generate();
 
 public:
-    QByteArray encrypt(const QByteArray &data, const std::string &publicKeyReceiver,
+    QByteArray encrypt(const QByteArray &data, const std::string &receiverPublicKey,
                        const std::string &nonce = "");
-    QByteArray decrypt(const QByteArray &data, const std::string &publicKeySender,
+    QByteArray decrypt(const QByteArray &data, const std::string &senderPublicKey,
                        const std::string &nonce = "");
     QByteArray encryptSelf(const QByteArray &data);
     QByteArray decryptSelf(const QByteArray &data);
 
-public:
     QByteArray sign(const QByteArray &data);
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
-public:
-    std::string getSecKey() const;
-    std::string getPubKey() const;
+    std::string secretKey() const;
+    std::string publicKey() const;
 };
 
 #endif // KEY_PRIVATE_H

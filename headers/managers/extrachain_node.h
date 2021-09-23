@@ -22,35 +22,40 @@
 
 #include <QObject>
 #include <QMap>
-#include "network/network_manager.h"
-#include "managers/tx_manager.h"
-#include "managers/account_controller.h"
-#include "datastorage/index/actorindex.h"
-#include "datastorage/blockchain.h"
-#include "datastorage/block.h"
-#include "datastorage/transaction.h"
-#include "datastorage/actor.h"
-#include "managers/thread_pool.h"
-#include "dfs/controls/headers/dfs.h"
-#include "managers/contract_manager.h"
-#include "managers/sm_manager.h"
-#include "dfs/managers/headers/dfs_networkmanager.h"
-#include "managers/chatmanager.h"
-#include "profile/private_profile.h"
-#include "dfs/controls/headers/subscribe_controller.h"
-#include "network/packages/service/message_types.h"
-#include "managers/file_updater_manager.h"
-
-#include <QtConcurrent>
 #include <QCoreApplication>
+
+#include "datastorage/transaction.h"
+#include "extrachain_global.h"
 
 #ifdef ECONSOLE
 #include "console/console_manager.h"
 #endif
 
+class Dfs;
+class ActorIndex;
+class Blockchain;
+class NetworkManager;
+class TransactionManager;
+class AccountController;
+class SmartContractManager;
+class ChatManager;
 class ResolveManager;
+class SubscribeController;
+class PrivateProfile;
+class Transaction;
+class ActorId;
+class BigNumber;
+template <typename T>
+class Actor;
+class KeyPrivate;
+class KeyPublic;
 
-class ExtraChainNode : public QObject
+#ifdef ECONSOLE
+#include <QDebug>
+#include "datastorage/blockchain.h"
+#endif
+
+class EXTRACHAIN_EXPORT ExtraChainNode : public QObject
 {
     Q_OBJECT
 
@@ -77,7 +82,8 @@ public:
     ~ExtraChainNode();
 
 public:
-    void createNewNetwork(const QString &email, const QString &password);
+    bool createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
+                          const QString &tokenCount, const QString &tokenColor);
     void start();
     Blockchain *blockchain();
     NetworkManager *networkManager();
@@ -100,10 +106,9 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token = ActorId());
+    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token);
 
-    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
-                                      ActorId token = ActorId());
+    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount, ActorId token);
     /**
      * @brief createFreezeTransaction
      * if receiver = 0 -> to me
@@ -112,8 +117,7 @@ public:
      * @param token
      * @return
      */
-    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
-                                        ActorId token = ActorId());
+    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
 
 public:
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
@@ -172,7 +176,6 @@ signals:
     void removeConnection(QString identifier);
 
 private slots:
-    void initConsoleToken(Transaction tx);
     void getAllActors();
     void getAllActorsTimerCall();
     void logOut();

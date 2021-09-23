@@ -26,8 +26,9 @@
 #include <QDir>
 #include <QDateTime>
 #include "utils/variant_model.h"
+#include "extrachain_global.h"
 
-class LogsManager : public QObject
+class EXTRACHAIN_EXPORT LogsManager : public QObject
 {
     Q_OBJECT
 
@@ -66,7 +67,7 @@ public: // slots:
     static void makeLog(const QString& file, int line, const QString& function, const QString& msg);
 
 private:
-    static QString normalizeFileName(const QString &file);
+    static QString normalizeFileName(const QString& file);
 };
 
 struct UnicodedStream : QTextStream

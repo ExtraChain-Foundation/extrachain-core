@@ -12,11 +12,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-if (WIN32)
-    set(EXTRACHAIN_STATIC_BUILD true)
-endif()
 if (EXTRACHAIN_STATIC_BUILD)
     message("Build static ExtraChain")
 endif()
@@ -81,7 +77,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/searchfilters.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
@@ -99,6 +94,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/tx_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message.h
@@ -188,6 +184,7 @@ if (EXTRACHAIN_STATIC_BUILD)
         ${EXTRACHAIN_CORE_SOURCES}
         )
 else()
+    add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
     add_library(extrachain SHARED
         ${EXTRACHAIN_CORE_SOURCES}
         )
@@ -233,4 +230,3 @@ if (WIN32) # temp
 endif(WIN32)
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
-message("--- ExtraChain Core ---")

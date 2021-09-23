@@ -43,7 +43,7 @@ class NetworkManager;
 #include "network/network_manager.h"
 #endif
 
-class ChatManager : public QObject
+class EXTRACHAIN_EXPORT ChatManager : public QObject
 {
     Q_OBJECT
 private:

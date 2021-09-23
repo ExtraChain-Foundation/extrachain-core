@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -32,12 +32,13 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const
     switch (protocol)
     {
     case Network::Protocol::Tcp:
-        return tcpServer->isListening();
+        return tcpServer == nullptr ? false : tcpServer->isListening();
     case Network::Protocol::WebSocket:
-        return wsServer->isListening();
+        return wsServer == nullptr ? false : wsServer->isListening();
     case Network::Protocol::Undefined:
         return false;
     }
+    return false;
 }
 
 void NetworkManager::setResolveManager(ResolveManager *value)
@@ -99,22 +100,33 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex, const QString &localIp)
 void NetworkManager::process()
 {
     startNetwork();
+
+    auto tempTimer = new QTimer(this);
+    connect(tempTimer, &QTimer::timeout, [this] { this->reconnection(); });
+    tempTimer->start(5000);
 }
 
 void NetworkManager::reconnection()
 {
-    auto reconnections = m_reconnections;
-
-    std::for_each(m_connections.begin(), m_connections.end(), [&reconnections](SocketService *el) {
-        if (reconnections.find(el->ip()) != reconnections.end())
-            reconnections.remove(el->ip());
-    });
-
-    for (auto i = reconnections.begin(); i != reconnections.end(); i++)
+    for (const auto &el : qAsConst(m_reconnections))
     {
+        bool finded = false;
+        for (SocketService *service : qAsConst(m_connections))
+        {
+            // qDebug() << "Reconnection" << service << service->ip() << service->serverPort() << el.first;
+            if (service->ip() == el.first)
+            {
+                finded = true;
+                break;
+            }
+        }
+
+        if (finded)
+            continue;
+
         qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
-                           << i.key() << i.value();
-        connectToNode(i.key(), i.value());
+                           << el.first << el.second;
+        connectToNode(el.first, el.second);
     }
 }
 
@@ -181,8 +193,6 @@ void NetworkManager::checkConnectionsStatus()
 
     if (flag) // TODO: replace to networkStatusChanged slot
         sendFromCache();
-
-    reconnection();
 }
 
 void NetworkManager::startNetwork()
@@ -195,14 +205,15 @@ void NetworkManager::startNetwork()
         return;
     }
 
+    // temp disable for clients
+#ifdef ECONSOLE
     tcpServer = new TcpServerService(tcpPort, local);
     connect(tcpServer, &TcpServerService::newServerConnection, this,
             &NetworkManager::addTcpConnectionFromServer, Qt::UniqueConnection);
     // connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
     if (tcpServer->startListen()) { }
 
-    wsServer = new QWebSocketServer(QStringLiteral("ExtraChain %1").arg(EXTRACHAIN_VERSION),
-                                    QWebSocketServer::SslMode::NonSecureMode);
+    wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
     if (wsServer->listen(QHostAddress::Any, wsPort))
     {
@@ -218,6 +229,7 @@ void NetworkManager::startNetwork()
         qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
                            << wsServer->serverPort() << wsServer->serverName();
     }
+#endif
 }
 
 void NetworkManager::startDiscovery()
@@ -242,7 +254,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
                                  << ", port: " << (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
-    m_reconnections[ip] = protocol;
+    m_reconnections << std::pair { ip, protocol };
 
     using Network::Protocol;
     switch (protocol)
@@ -261,7 +273,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 void NetworkManager::connectToWebSocket(const QString &ip, quint16 port)
 {
     auto service = new WebSocketService(nullptr, this);
-    service->open(QUrl(QString("ws://%1:%2").arg(ip).arg(port)));
+    service->open(ip, port);
     connectWsService(service);
 }
 
@@ -320,13 +332,13 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         }
     };
 
-    for (const auto &tcp : qAsConst(m_connections))
+    for (const auto &service : qAsConst(m_connections))
     {
-        bool isSend = isSendCheck(send, tcp->ip().toStdString(), tcp->port(), receiver);
+        bool isSend = isSendCheck(send, service->ip().toStdString(), service->port(), receiver);
         if (!isSend)
             continue;
-        if (tcp->isActive())
-            emit tcp->send(message);
+        if (service->isActive())
+            emit service->send(message);
     }
 }
 
@@ -470,7 +482,7 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
 
     if (error != Network::SocketServiceError::DuplicateIdentifier)
-        m_reconnections.remove(service->ip());
+        m_reconnections.remove({ service->ip(), service->protocol() });
 
     if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion)
         emit connectionError(error, service->identifier(), errorData);

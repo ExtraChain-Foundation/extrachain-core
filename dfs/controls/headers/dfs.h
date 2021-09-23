@@ -37,8 +37,9 @@
 #include <QImage>
 #include <QImageReader>
 #endif
+#include "extrachain_global.h"
 
-class Dfs : public QObject
+class EXTRACHAIN_EXPORT Dfs : public QObject
 {
 
     Q_OBJECT

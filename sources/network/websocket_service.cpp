@@ -2,22 +2,18 @@
 
 #include "dfs/managers/headers/dfs_networkmanager.h"
 
-#ifndef EXTRACHAIN_CMAKE
-#include "preconfig.h"
-#endif
-
 WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
     : SocketService(networkManager, parent)
 {
     if (ws == nullptr)
     {
-        m_ws = new QWebSocket("ExtraChain " + QString(EXTRACHAIN_VERSION));
+        m_ws = new QWebSocket("ExtraChain");
         qDebug() << "[WS] Create new ws";
     }
     else
     {
         m_ws = ws;
-        this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
+        this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
         connections();
         sendFirstMessage();
@@ -47,7 +43,7 @@ bool WebSocketService::isActive() const
     return m_activated && m_ws->isValid();
 }
 
-void WebSocketService::open(const QUrl &url)
+void WebSocketService::open(const QString &ip, quint16 port)
 {
     if (m_ws->isValid())
     {
@@ -55,10 +51,11 @@ void WebSocketService::open(const QUrl &url)
     }
     else
     {
+        auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         qDebug() << "[WS] Open" << url;
         connections();
         m_ws->open(url);
-        m_ip = m_ws->localAddress().toString();
+        m_ip = m_ws->peerAddress().toString();
     }
 }
 
@@ -101,7 +98,8 @@ void WebSocketService::onBinaryMessage(const QByteArray &message)
     SocketPair pair(m_ip.toStdString(), port());
     pair.setIdentifier(m_identifier.toLatin1());
     auto mess = prepareReceiveMessage(message);
-    m_networkManager->messageReceived(mess, pair);
+    if (!mess.isEmpty())
+        m_networkManager->messageReceived(mess, pair);
 }
 
 void WebSocketService::sendMessage(const QByteArray &data)
@@ -115,6 +113,7 @@ void WebSocketService::sendMessage(const QByteArray &data)
         qFatal("[WS] Error send size");
 
     auto length = m_ws->sendBinaryMessage(prepareSendMessage(data));
+    // m_ws->flush();
     Q_UNUSED(length)
     // m_ws->flush();
 
@@ -126,7 +125,8 @@ void WebSocketService::sendMessage(const QByteArray &data)
     }
     else
     {
-        qFatal("[WS] Can't send");
+        // qDebug() << "[WS] Can't send: socket not valid";
+        qFatal("[WS] Can't send: socket not valid");
     }
 }
 
@@ -141,7 +141,7 @@ void WebSocketService::onSocketError(QAbstractSocket::SocketError error)
 void WebSocketService::connections()
 {
     connect(m_ws, &QWebSocket::connected, [this] {
-        this->m_ip = m_ws->localAddress().toString().replace("::ffff:", "");
+        this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
         qDebug() << "[WS] New service:" << m_ip << port();
         emit m_networkManager->newSocket();
         sendFirstMessage();

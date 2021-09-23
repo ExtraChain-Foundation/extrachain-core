@@ -9,7 +9,7 @@
 class NetworkManager;
 class ActorIndex;
 
-class WebSocketService : public SocketService
+class EXTRACHAIN_EXPORT WebSocketService : public SocketService
 {
     Q_OBJECT
 
@@ -20,7 +20,7 @@ public:
 
     QWebSocket *socket() const;
     bool isActive() const override;
-    void open(const QUrl &url);
+    void open(const QString &ip, quint16 port);
     virtual QString protocolString() const override
     {
         return "WebSocket";
