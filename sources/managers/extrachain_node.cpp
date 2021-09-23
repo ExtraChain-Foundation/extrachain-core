@@ -97,6 +97,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     ThreadPool::addThread(prProfile);
     ThreadPool::addThread(chatManager);
 
+    // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
     // FileUpdaterManager fl;
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
