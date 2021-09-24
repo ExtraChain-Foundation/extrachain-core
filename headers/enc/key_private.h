@@ -38,9 +38,10 @@ public:
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
+    KeyPrivate(const std::string &secret_key, const std::string &public_key);
     KeyPrivate(const QJsonObject &json);
     KeyPrivate(const KeyPrivate &keyPrivate);
-    ~KeyPrivate();
+    ~KeyPrivate() = default;
 
 private:
     void generate();

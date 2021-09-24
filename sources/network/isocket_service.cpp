@@ -1,5 +1,6 @@
 #include "network/isocket_service.h"
 #include "network/network_manager.h"
+#include "enc/enc_tools.h"
 
 #ifndef EXTRACHAIN_CMAKE
 #include "preconfig.h"
@@ -9,7 +10,6 @@ SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
     : QObject(parent)
 {
     m_networkManager = networkManager;
-    priv.create(ActorType::Wallet);
 }
 
 SocketService::SocketService(const SocketService &socket)
@@ -69,7 +69,7 @@ bool SocketService::checkFirstMessage(const QString &message)
 
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
-    pub = json["key"].toString().toStdString();
+    pub = json["key"].toString().toLatin1();
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
     ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
@@ -129,18 +129,21 @@ QByteArray SocketService::generateFirstMessage()
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["key"] = QString::fromStdString(priv.key()->publicKey());
+
+    auto keys = SecretKey::createAsymmetricPair();
+    priv = QByteArray::fromStdString(keys.first);
+    json["key"] = QString::fromStdString(keys.second);
+
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message)
 {
-    //    return message;
-    if (pub.empty())
+    if (pub.isEmpty())
         qFatal("Socket encrypt error");
 
-    auto result = priv.key()->encrypt(message, pub);
+    auto result = SecretKey::encryptAsymmetric(message, priv, pub);
     m_bytesOutgoing += result.length();
     // m_bytesCompressed += message.length() - result.length();
     return result;
@@ -148,11 +151,10 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message)
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message)
 {
-    //    return message;
-    if (pub.empty())
+    if (pub.isEmpty())
         qFatal("Socket decrypt error");
 
-    auto result = priv.key()->decrypt(message, pub);
+    auto result = SecretKey::decryptAsymmetric(message, priv, pub);
     if (result.isEmpty())
         return "";
     m_bytesIncoming += message.length();

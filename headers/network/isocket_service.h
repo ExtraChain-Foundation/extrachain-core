@@ -2,10 +2,8 @@
 #define ISOCKETSERVICE_H
 
 #include "utils/exc_utils.h"
-#include "datastorage/actor.h"
 
 class NetworkManager;
-class ActorIndex;
 
 class EXTRACHAIN_EXPORT SocketService : public QObject
 {
@@ -51,8 +49,8 @@ protected:
     int m_bytesCompressed = 0;
 
 private:
-    Actor<KeyPrivate> priv;
-    std::string pub;
+    QByteArray priv;
+    QByteArray pub;
 };
 
 #endif // WEBSOCKETSERVICE_H
