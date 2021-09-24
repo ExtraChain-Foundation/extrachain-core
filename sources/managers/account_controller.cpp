@@ -21,16 +21,6 @@
 #include "datastorage/blockchain.h"
 #include "enc/enc_tools.h"
 
-QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
-{
-    return currentState;
-}
-
-void AccountController::setCurrentState(const QMap<QByteArray, QByteArray> &value)
-{
-    currentState = value;
-}
-
 QList<Actor<KeyPrivate> *> AccountController::getAccounts() const
 {
     return accounts;

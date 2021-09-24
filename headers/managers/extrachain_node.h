@@ -137,11 +137,9 @@ signals:
     void sendKey(QByteArray key);
     void sendPrivateKey(QByteArray prKey);
     // public:
-    void sendActorToWallet(QList<QByteArray> list);
-    void sendActorStateList(QMap<QByteArray, QByteArray> map);
     void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
     void sendTransactionContract(Transaction tx);
-    //    void addActorInActorIndex(Actor<KeyPublic> actor);
+    // void addActorInActorIndex(Actor<KeyPublic> actor);
     void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
                                 const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
@@ -164,11 +162,6 @@ private slots:
 
 public slots:
     void createNetworkIdentifier();
-    void tempareSlotForActors();
-
-    // test net & blockchain
-    //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
-    //    void makeFirstContractTransaction(Contract contract);
     void notificationToken(QString os, QString actorId, QString token);
 };
 #endif // EXTRACHAIN_NODE_H

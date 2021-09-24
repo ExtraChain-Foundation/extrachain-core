@@ -47,7 +47,6 @@ private:
     Blockchain *blockchain;
     QList<Actor<KeyPrivate> *> accounts;
     ActorIndex *actorIndex;
-    QMap<QByteArray, QByteArray> currentState;
 
 public:
     AccountController(ActorIndex *actorIndex);
@@ -78,8 +77,6 @@ public:
     int getAccountCount() const;
     int getUserNum() const;
     void setUserNum(int value);
-    QMap<QByteArray, QByteArray> getCurrentState() const;
-    void setCurrentState(const QMap<QByteArray, QByteArray> &value);
 
     QList<Actor<KeyPrivate> *> getAccounts() const;
     void setAccounts(const QList<Actor<KeyPrivate> *> &value);
