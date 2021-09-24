@@ -24,6 +24,7 @@
 #include "resolve/resolver_service.h"
 #include "managers/extrachain_node.h"
 #include "managers/chatmanager.h"
+#include "managers/thread_pool.h"
 
 void ResolveManager::setNode(ExtraChainNode *value)
 {
@@ -143,7 +144,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &m
     {
         if (accountControler->getAccountCount() == 0)
             return;
-        msg.calcDigSig(*accountControler->getMainActor());
+        msg.calcDigSig(*accountControler->mainActor());
     }
     //    qDebug() << "msg signature:" << msg.getDigSig();
 
@@ -171,7 +172,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
     if (msgType != Messages::GeneralResponse::GetActorResponse)
-        rmsg.calcDigSig(*accountControler->getMainActor());
+        rmsg.calcDigSig(*accountControler->mainActor());
 
     //    qDebug() << "NetworkManager: send " << msgType;
     // if (msgType == Messages::GeneralResponse::getAllActorsResponse)
@@ -248,7 +249,7 @@ bool ResolveManager::popUnprocces()
     static QMutex mutex;
     mutex.lock();
     bool res = false;
-    while (l1Res.size() < ResolverServicePoolMaxSize && !unprocessed.empty())
+    while (l1Res.size() < Network::maxResolver && !unprocessed.empty())
     {
         createNewResolver(unprocessed.front());
         unprocessed.pop();

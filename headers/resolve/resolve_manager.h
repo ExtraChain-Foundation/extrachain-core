@@ -34,12 +34,6 @@ class ChatManager;
 #include "dfs/controls/headers/dfs.h"
 #include "extrachain_global.h"
 
-#ifdef ECLIENT
-static const short ResolverServicePoolMaxSize = 5;
-#else
-static const short ResolverServicePoolMaxSize = 100;
-#endif
-
 class EXTRACHAIN_EXPORT ResolveManager : public QObject
 {
     Q_OBJECT

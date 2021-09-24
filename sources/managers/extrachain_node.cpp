@@ -54,33 +54,34 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     }
 
     prepareFolders();
-    actorIndex = new ActorIndex();
+    m_actorIndex = new ActorIndex();
     m_privateProfile = new PrivateProfile();
-    smContractController = new SmartContractManager(actorIndex);
-    accController = new AccountController(actorIndex);
-    m_networkManager = new NetworkManager(actorIndex, localIp);
-    subscribeController = new SubscribeController();
-    subscribeController->setExtraChainNode(this);
-    actorIndex->setAccController(accController);
+    m_smartContractManager = new SmartContractManager(m_actorIndex);
+    m_accountController = new AccountController(m_actorIndex);
+    m_networkManager = new NetworkManager(m_actorIndex, localIp);
+    m_subscribeController = new SubscribeController();
+    m_subscribeController->setExtraChainNode(this);
+    m_actorIndex->setAccController(m_accountController);
     ThreadPool::addThread(m_networkManager);
     // this->thread()->sleep(1);
-    m_blockchain = new Blockchain(accController, fileMode);
-    accController->setBlockchain(m_blockchain);
-    txManager = new TransactionManager(accController, m_blockchain, this);
-    m_privateProfile->setAccountController(accController);
-    chatManager = new ChatManager(accController, actorIndex);
-    chatManager->setNetworkManager(m_networkManager);
+    m_blockchain = new Blockchain(m_accountController, fileMode);
+    m_accountController->setBlockchain(m_blockchain);
+    m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
+    m_privateProfile->setAccountController(m_accountController);
+    m_chatManager = new ChatManager(m_accountController, m_actorIndex);
+    m_chatManager->setNetworkManager(m_networkManager);
     // contractManager = new ContractManager(accController, blockchain);
-    dfs = new Dfs(actorIndex, accController, localIp);
+    m_dfs = new Dfs(m_actorIndex, m_accountController, localIp);
 
-    resolveManager = new ResolveManager(actorIndex, m_blockchain, m_networkManager, txManager, accController);
-    resolveManager->setNode(this);
-    resolveManager->setChatManager(chatManager);
-    m_blockchain->setTxManager(txManager);
-    m_networkManager->setResolveManager(resolveManager);
+    m_resolveManager =
+        new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
+    m_resolveManager->setNode(this);
+    m_resolveManager->setChatManager(m_chatManager);
+    m_blockchain->setTxManager(m_txManager);
+    m_networkManager->setResolveManager(m_resolveManager);
     // dfs->initDfsNetwork(resolveManager);
-    m_privateProfile->setDfs(dfs);
-    actorIndex->setResolveManager(resolveManager);
+    m_privateProfile->setDfs(m_dfs);
+    m_actorIndex->setResolveManager(m_resolveManager);
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -88,14 +89,14 @@ ExtraChainNode::ExtraChainNode(const QString &localIp)
     getAllActorsTimer.start(30000);
 
     ThreadPool::addThread(m_blockchain);
-    ThreadPool::addThread(actorIndex);
-    ThreadPool::addThread(txManager);
+    ThreadPool::addThread(m_actorIndex);
+    ThreadPool::addThread(m_txManager);
     // ThreadPool::addThread(contractManager);
-    ThreadPool::addThread(dfs);
-    ThreadPool::addThread(smContractController);
-    ThreadPool::addThread(resolveManager);
+    ThreadPool::addThread(m_dfs);
+    ThreadPool::addThread(m_smartContractManager);
+    ThreadPool::addThread(m_resolveManager);
     ThreadPool::addThread(m_privateProfile);
-    ThreadPool::addThread(chatManager);
+    ThreadPool::addThread(m_chatManager);
 
     // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
     // FileUpdaterManager fl;
@@ -111,9 +112,9 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-        auto first = accController->createActor(ActorType::First, consoleHash);
+        auto first = m_accountController->createActor(ActorType::First, consoleHash);
         emit savePrivateProfile(consoleHash, first.id());
-        actorIndex->setFirstId(first.id());
+        m_actorIndex->setFirstId(first.id());
     }
     else
     {
@@ -123,8 +124,8 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
     if (m_blockchain->getRecords() <= 0)
     {
-        auto first = *accController->getMainActor();
-        actorIndex->setFirstId(first.id());
+        auto first = *m_accountController->mainActor();
+        m_actorIndex->setFirstId(first.id());
         QString firstId = first.id().toString();
 
         QMap<ActorId, BigNumber> tm;
@@ -143,7 +144,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(firstId);
         DBConnector usernamesDB(usernamesPath.toStdString());
         usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
-        dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
+        m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
 
     return true;
@@ -169,9 +170,9 @@ void ExtraChainNode::connectResolveManager()
     // TODO: move
     //    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
 
-    connect(this, &ExtraChainNode::sendMsg, resolveManager, &ResolveManager::registrateMsg);
-    connect(txManager, &TransactionManager::SendBlock, resolveManager, &ResolveManager::registrateMsg);
-    connect(m_blockchain, &Blockchain::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+    connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
+    connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
+    connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 }
 
@@ -181,9 +182,9 @@ void ExtraChainNode::connectSmContractManager()
     //    &networkManager::NewActor); TODO!!!
     //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
     //            &ExtraChainNode::addActorInActorIndex);
-    connect(smContractController, &SmartContractManager::saveActorInPrivateProfile,
+    connect(m_smartContractManager, &SmartContractManager::saveActorInPrivateProfile,
             [this](const QByteArray &id, const QString &type, const bool &rewrite) { // TODO?
-                auto mainId = accController->getMainActor()->id().toByteArray();
+                auto mainId = m_accountController->mainActor()->id().toByteArray();
                 emit nodeEditPrivateProfile({ m_privateProfile->hash(), mainId }, type, id, rewrite);
             });
 
@@ -191,9 +192,9 @@ void ExtraChainNode::connectSmContractManager()
     connect(this, &ExtraChainNode::nodeEditPrivateProfile, m_privateProfile,
             &PrivateProfile::editPrivateProfile);
 
-    connect(this, &ExtraChainNode::generateSmartContract, smContractController,
+    connect(this, &ExtraChainNode::generateSmartContract, m_smartContractManager,
             &SmartContractManager::createContractProfile);
-    connect(smContractController, &SmartContractManager::sendTransactionCreateContract, resolveManager,
+    connect(m_smartContractManager, &SmartContractManager::sendTransactionCreateContract, m_resolveManager,
             &ResolveManager::registrateMsg);
 
     // connect(smContractController, &SmartContractManager::sendCurrentToken, m_networkManager,
@@ -203,7 +204,7 @@ void ExtraChainNode::connectSmContractManager()
 void ExtraChainNode::connectTxManager()
 {
     // TODOD delete later (s)
-    connect(this, &ExtraChainNode::NewTx, txManager, &TransactionManager::addTransaction);
+    connect(this, &ExtraChainNode::NewTx, m_txManager, &TransactionManager::addTransaction);
 }
 
 ExtraChainNode::~ExtraChainNode()
@@ -211,9 +212,9 @@ ExtraChainNode::~ExtraChainNode()
     // m_networkManager->quit();
     // delete networkManager;
     m_networkManager->finished();
-    delete txManager;
+    delete m_txManager;
     // delete blockchain;
-    delete accController;
+    delete m_accountController;
     // delete actorIndex;
 }
 
@@ -239,7 +240,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = accController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
     if (!actor.empty())
     {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
@@ -262,8 +263,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx)
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
         // send without fee
-        if (tx.getSender().isEmpty() || tx.getSender() == actorIndex->firstId() || tx.getReceiver().isEmpty()
-            || tx.getReceiver() == actorIndex->firstId())
+        if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId()
+            || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
         {
@@ -317,7 +318,7 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = accController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
     if (!actor.empty())
     {
         qDebug() << actor.id();
@@ -340,7 +341,7 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
                                                     ActorId token)
 {
 
-    Actor<KeyPrivate> actor = accController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
 
     if (!actor.empty())
     {
@@ -376,7 +377,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = accController->getActor(sender);
+    Actor<KeyPrivate> actor = m_accountController->getActor(sender);
     if (!actor.empty())
     {
         qDebug() << actor.id();
@@ -407,9 +408,9 @@ void ExtraChainNode::getAllActors()
 
 void ExtraChainNode::getAllActorsTimerCall()
 {
-    if (accController->getAccountCount() > 0 && m_networkManager->connections().length() > 0)
+    if (m_accountController->getAccountCount() > 0 && m_networkManager->connections().length() > 0)
     {
-        ActorId actorId = accController->getMainActor()->id();
+        ActorId actorId = m_accountController->mainActor()->id();
 
         if (!actorId.isEmpty())
             emit getAllActorsNode(actorId, true);
@@ -425,18 +426,17 @@ void ExtraChainNode::createNetworkIdentifier()
     file.close();
 }
 
-#ifdef ECLIENT
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token)
 {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
-    auto firstId = actorIndex->firstId();
+    auto firstId = m_actorIndex->firstId();
     if (firstId.isEmpty())
         return;
-    auto first = actorIndex->getActor(firstId);
+    auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto mainKey = accController->getMainActor()->key();
+    auto mainKey = m_accountController->mainActor()->key();
     auto publicKey = first.key()->publicKey();
 
     QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },
@@ -445,7 +445,6 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
 
     emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
-#endif
 
 void ExtraChainNode::connectContractManager()
 {
@@ -453,16 +452,16 @@ void ExtraChainNode::connectContractManager()
 
 void ExtraChainNode::connectActorIndex()
 {
-    connect(actorIndex, &ActorIndex::sendMessage, resolveManager, &ResolveManager::registrateMsg);
+    connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
 }
 
 void ExtraChainNode::dfsConnection()
 {
     // init dfs for user
     // connect(this, &ExtraChainNode::ready, networkManager, &NetworkManager::startNetwork);
-    connect(this, &ExtraChainNode::ready, dfs, &Dfs::startDFS);
-    connect(accController, &AccountController::initDfs, dfs, &Dfs::initMyLocalStorage);
-    connect(actorIndex, &ActorIndex::initDfs, dfs, &Dfs::initUser);
+    connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
+    connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
+    connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(networkManager, &NetworkManager::newDfsSocket, dfsNetworkManager,
     //    &DfsNetworkManager::appendSocket);
@@ -485,9 +484,10 @@ void ExtraChainNode::connectSignals()
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
 
     connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
-    connect(this, &ExtraChainNode::removeConnection, dfs, &Dfs::removeConnection);
-    connect(this, &ExtraChainNode::getAllActorsNode, actorIndex, &ActorIndex::getAllActors);
-    connect(accController, &AccountController::loadWallets, m_blockchain, &Blockchain::updateBlockchain);
+    connect(this, &ExtraChainNode::removeConnection, m_dfs, &Dfs::removeConnection);
+    connect(this, &ExtraChainNode::getAllActorsNode, m_actorIndex, &ActorIndex::getAllActors);
+    connect(m_accountController, &AccountController::loadWallets, m_blockchain,
+            &Blockchain::updateBlockchain);
 
     connect(this, &ExtraChainNode::login, m_privateProfile, &PrivateProfile::loadPrivateProfileLogin);
     connect(this, &ExtraChainNode::savePrivateProfile, m_privateProfile, &PrivateProfile::savePrivateProfile);
@@ -508,19 +508,19 @@ void ExtraChainNode::prepareFolders()
         createNetworkIdentifier();
 }
 
-AccountController *ExtraChainNode::getAccountController() const
+AccountController *ExtraChainNode::accountController() const
 {
-    return accController;
+    return m_accountController;
 }
 
-ActorIndex *ExtraChainNode::getActorIndex() const
+ActorIndex *ExtraChainNode::actorIndex() const
 {
-    return actorIndex;
+    return m_actorIndex;
 }
 
-ResolveManager *ExtraChainNode::getResolveManager() const
+ResolveManager *ExtraChainNode::resolveManager() const
 {
-    return resolveManager;
+    return m_resolveManager;
 }
 
 PrivateProfile *ExtraChainNode::privateProfile() const
@@ -528,9 +528,9 @@ PrivateProfile *ExtraChainNode::privateProfile() const
     return m_privateProfile;
 }
 
-SubscribeController *ExtraChainNode::getSubscribeController() const
+SubscribeController *ExtraChainNode::subscribeController() const
 {
-    return subscribeController;
+    return m_subscribeController;
 }
 
 void ExtraChainNode::logOut()
@@ -558,16 +558,16 @@ void ExtraChainNode::logOut()
 
 void ExtraChainNode::tempareSlotForActors()
 {
-    emit sendActorStateList(accController->getCurrentState());
-    emit sendActorToWallet(accController->getAccountID());
+    emit sendActorStateList(m_accountController->getCurrentState());
+    emit sendActorToWallet(m_accountController->getAccountID());
 }
 
-ChatManager *ExtraChainNode::getChatManager() const
+ChatManager *ExtraChainNode::chatManager() const
 {
-    return chatManager;
+    return m_chatManager;
 }
 
-Dfs *ExtraChainNode::getDfs() const
+Dfs *ExtraChainNode::dfs() const
 {
-    return dfs;
+    return m_dfs;
 }

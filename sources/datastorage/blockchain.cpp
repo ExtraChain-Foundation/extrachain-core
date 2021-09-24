@@ -562,10 +562,10 @@ bool Blockchain::signCheckAdd(Block &block)
         {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->id().toByteArray();
+            QByteArray id = accountController->mainActor()->id().toByteArray();
             if (!list.contains(id))
             {
-                QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
+                QByteArray sign = accountController->mainActor()->key()->sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -620,10 +620,10 @@ bool Blockchain::signCheckAdd(Block &block)
             }
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->id().toByteArray();
+            QByteArray id = accountController->mainActor()->id().toByteArray();
             if (!list.contains(id))
             {
-                QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
+                QByteArray sign = accountController->mainActor()->key()->sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -1082,7 +1082,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation())
         {
-            GenesisBlock gB = createGenesisBlock(*(accountController->getMainActor()));
+            GenesisBlock gB = createGenesisBlock(*(accountController->mainActor()));
             if (blockIndex.addBlock(gB) == 0)
             {
                 qDebug() << "Block" << gB.getIndex() << gB.getType() << "is successfully added to blockchain";

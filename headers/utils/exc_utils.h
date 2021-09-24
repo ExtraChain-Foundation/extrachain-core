@@ -34,6 +34,11 @@ Q_NAMESPACE
 
 static const unsigned long FRAGMENT_STACK_SIZE = 2048;
 static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
+static bool isStartedServer = true;
+static quint16 maxConnections = 100;
+static quint16 maxResolver = 100;
+static quint16 maxDfsResolver = 10;
+
 struct DataStruct
 {
     QByteArray msg;
@@ -480,7 +485,7 @@ QByteArray intToByteArray(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
 EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
-EXTRACHAIN_EXPORT QByteArray calcKeccakForFile(const QString &path);
+EXTRACHAIN_EXPORT QByteArray calcKeccakForFile(const QString &fileName);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);

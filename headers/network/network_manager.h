@@ -32,25 +32,18 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "managers/thread_pool.h"
-#include "network/upnpconnection.h"
-//#include "network/socket_pair.h"
 
 class ResolveManager;
-// class SocketService;
-// class TcpSocketService;
-// class WebSocketService;
-// class TcpServerService;
-#include "network/tcpsocket_service.h"
-#include "network/websocket_service.h"
-#include "network/tcpserver_service.h"
-#include "network/packages/service/all_messages.h"
+class SocketService;
+class TcpSocketService;
+class WebSocketService;
+class TcpServerService;
+class UPNPConnection;
 
 /**
  * @brief The NetworkManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
-// static QMutex mutex;
 class EXTRACHAIN_EXPORT NetworkManager : public QObject
 {
     Q_OBJECT
@@ -63,11 +56,6 @@ private:
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};
 
-#ifdef ECLIENT
-    const int SIZE_OF_CONNECTIONS = 5;
-#else
-    const int SIZE_OF_CONNECTIONS = 100;
-#endif
     ActorIndex *m_actorIndex;
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
@@ -119,10 +107,10 @@ protected:
     void sendFromCache();
 
 private slots:
-    void onNewWSConnection();
+    void onNewWsConnection();
 
 protected slots:
-    void addTcpConnectionFromServer(qint64 socketDescriptor);
+    void onNewTcpConnection(qint64 socketDescriptor);
     virtual void checkConnectionsStatus();
     void startDiscovery();
 

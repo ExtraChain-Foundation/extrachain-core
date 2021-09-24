@@ -39,6 +39,7 @@ private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
     void sendMessage(const QByteArray &data);
+    void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;
 

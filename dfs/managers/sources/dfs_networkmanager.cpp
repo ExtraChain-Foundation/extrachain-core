@@ -20,6 +20,7 @@
 #include "dfs/managers/headers/dfs_networkmanager.h"
 #include "resolve/resolve_manager.h"
 #include "network/isocket_service.h"
+#include "managers/thread_pool.h"
 
 void DfsNetworkManager::setDfs(Dfs *value)
 {
@@ -101,7 +102,7 @@ void DfsNetworkManager::process()
 
 void DfsNetworkManager::titleArrived(Network::DataStruct ds)
 {
-    if (dfsResolvers.size() >= DFS_RESOLVERS_POOL_SIZE)
+    if (dfsResolvers.size() >= Network::maxDfsResolver)
     {
         titleVector.push(ds);
         return;

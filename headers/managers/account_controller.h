@@ -37,7 +37,6 @@ class ActorIndex;
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-
 class EXTRACHAIN_EXPORT AccountController : public QObject
 {
     Q_OBJECT
@@ -69,7 +68,7 @@ public:
      */
     Actor<KeyPrivate> getActor(int number);
 
-    Actor<KeyPrivate> *getMainActor();
+    Actor<KeyPrivate> *mainActor();
     /**
      * @brief Gets current active actor
      * @return actor

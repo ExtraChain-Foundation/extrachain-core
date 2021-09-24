@@ -120,7 +120,7 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
         qDebug() << "Dfs hash init for me";
         emit initDfs(); //
     }
-    emit newActorIsCreated(this->getMainActor()->id().toByteArray(),
+    emit newActorIsCreated(this->mainActor()->id().toByteArray(),
                            account == ActorType::Account); // TODO: send type
 
     if (!accounts.isEmpty())
@@ -153,7 +153,7 @@ Actor<KeyPrivate> AccountController::getActor(int number)
     return Actor<KeyPrivate>();
 }
 
-Actor<KeyPrivate> *AccountController::getMainActor()
+Actor<KeyPrivate> *AccountController::mainActor()
 {
     if (accounts.isEmpty())
         qFatal("[AccountController] No main actor");

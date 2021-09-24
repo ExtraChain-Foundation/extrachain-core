@@ -19,6 +19,11 @@
 
 #include "network/network_manager.h"
 #include "resolve/resolve_manager.h"
+#include "network/tcpserver_service.h"
+#include "network/tcpsocket_service.h"
+#include "network/websocket_service.h"
+#include "network/upnpconnection.h"
+#include "managers/thread_pool.h"
 
 using namespace Messages;
 
@@ -205,11 +210,12 @@ void NetworkManager::startNetwork()
         return;
     }
 
-    // temp disable for clients
-#ifdef ECONSOLE
+    if (!Network::isStartedServer)
+        return;
+
     tcpServer = new TcpServerService(tcpPort, local);
-    connect(tcpServer, &TcpServerService::newServerConnection, this,
-            &NetworkManager::addTcpConnectionFromServer, Qt::UniqueConnection);
+    connect(tcpServer, &TcpServerService::newServerConnection, this, &NetworkManager::onNewTcpConnection,
+            Qt::UniqueConnection);
     // connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
     if (tcpServer->startListen()) { }
 
@@ -217,7 +223,7 @@ void NetworkManager::startNetwork()
 
     if (wsServer->listen(QHostAddress::Any, wsPort))
     {
-        connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWSConnection);
+        connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
         connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
             qDebug() << "[WS] Server error code:" << closeCode;
         });
@@ -229,7 +235,6 @@ void NetworkManager::startNetwork()
         qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
                            << wsServer->serverPort() << wsServer->serverName();
     }
-#endif
 }
 
 void NetworkManager::startDiscovery()
@@ -243,7 +248,7 @@ void NetworkManager::startDiscovery()
 
 void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol)
 {
-    if (m_connections.length() >= SIZE_OF_CONNECTIONS)
+    if (m_connections.length() >= Network::maxConnections)
     {
         qDebug() << "[NetworkManager] Can't connect because the maximum number of connections";
         return;
@@ -428,9 +433,9 @@ void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port)
     ThreadPool::addThread(socket);
 }
 
-void NetworkManager::addTcpConnectionFromServer(qint64 socketDescriptor)
+void NetworkManager::onNewTcpConnection(qint64 socketDescriptor)
 {
-    if (m_connections.length() >= SIZE_OF_CONNECTIONS)
+    if (m_connections.length() >= Network::maxConnections)
     {
         qDebug() << "[NetworkManager] Can't connect from tcp server because the maximum number of connections"
                  << tcpPort << wsPort;
@@ -503,13 +508,13 @@ void NetworkManager::send(const QByteArray &data, const unsigned int &msgType, c
     sendMessage(message, msgType, receiver, typeSend);
 }
 
-void NetworkManager::onNewWSConnection()
+void NetworkManager::onNewWsConnection()
 {
     auto ws = wsServer->nextPendingConnection();
     if (ws == nullptr)
         qFatal("[WS] Error: ws == nulltpr");
 
-    if (m_connections.length() >= SIZE_OF_CONNECTIONS)
+    if (m_connections.length() >= Network::maxConnections)
     {
         qDebug() << "[NetworkManager] Can't connect from WS server because the maximum number of connections";
         return;

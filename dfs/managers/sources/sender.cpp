@@ -18,6 +18,7 @@
  */
 
 #include "dfs/managers/headers/sender.h"
+#include "network/packages/service/all_messages.h"
 
 Sender::Sender(QObject *parent)
     : QObject(parent)

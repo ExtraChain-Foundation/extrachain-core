@@ -27,6 +27,7 @@
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
 #include "enc/enc_tools.h"
+#include "network/packages/base_message.h"
 
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
 // path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current

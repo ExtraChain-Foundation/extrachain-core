@@ -18,6 +18,8 @@
  */
 
 #include "dfs/controls/headers/dfs.h"
+#include "managers/thread_pool.h"
+#include "network/packages/service/all_messages.h"
 
 DfsNetworkManager *Dfs::networkManager() const
 {
@@ -286,7 +288,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
         return;
     }
 
-    QByteArray userId = accountController->getMainActor()->id().toByteArray();
+    QByteArray userId = accountController->mainActor()->id().toByteArray();
     QString dfsPath;
     bool exists = false;
 
@@ -389,14 +391,14 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             DistFileSystem::DfsChanges dfsChanges;
             dfsChanges.data << d;
             dfsChanges.range = "sql";
-            dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
+            dfsChanges.userId = accountController->mainActor()->id().toByteArray();
             QByteArray sType = DfsStruct::toByteArray(type);
             dfsChanges.filePath = dfsPath;
             dfsChanges.changeType = 3;
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountController->getMainActor()->key()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountController->mainActor()->key()->sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
             if (!stored)
@@ -456,7 +458,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
 bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                        bool isFilePath)
 {
-    QByteArray sign = accountController->getMainActor()->key()->sign(
+    QByteArray sign = accountController->mainActor()->key()->sign(
         (isFilePath ? CardManager::cutPath(path) : path).toLatin1() + QByteArray::number(type));
 
     CardFile cardFile(userId);
@@ -667,7 +669,7 @@ void Dfs::initDfsNetwork()
 
 void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored)
 {
-    QByteArray userId = accountController->getMainActor()->id().toByteArray();
+    QByteArray userId = accountController->mainActor()->id().toByteArray();
     QByteArray sType = DfsStruct::toByteArray(type);
     QString dfsPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + sType + "/" + fileName;
 
@@ -695,14 +697,14 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             DistFileSystem::DfsChanges dfsChanges;
             dfsChanges.data << data;
             dfsChanges.range = "sql";
-            dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
+            dfsChanges.userId = accountController->mainActor()->id().toByteArray();
             QByteArray sType = DfsStruct::toByteArray(type);
             dfsChanges.filePath = dfsPath;
             dfsChanges.changeType = 3;
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountController->getMainActor()->key()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountController->mainActor()->key()->sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
 
@@ -750,7 +752,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
 void Dfs::editData(QString userId, QString fileName, DfsStruct::Type type, QByteArray data)
 {
     DistFileSystem::DfsChanges dfsChanges;
-    dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
+    dfsChanges.userId = accountController->mainActor()->id().toByteArray();
     dfsChanges.changeType = 3;
     dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
     int pckg = 0;
@@ -811,7 +813,7 @@ void Dfs::editSqlDatabase(QString userId, QString fileName, DfsStruct::Type type
     DistFileSystem::DfsChanges dfsChanges;
     dfsChanges.data << sqlChanges;
     dfsChanges.range = "sql";
-    dfsChanges.userId = accountController->getMainActor()->id().toByteArray();
+    dfsChanges.userId = accountController->mainActor()->id().toByteArray();
     QByteArray sType = DfsStruct::toByteArray(type);
     dfsChanges.filePath = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + sType + "/" + fileName;
     dfsChanges.changeType = sqlType;
@@ -829,7 +831,7 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges)
 {
     if (!QFile::exists(dfsChanges.filePath))
         return false;
-    if (dfsChanges.userId != accountController->getMainActor()->id().toByteArray())
+    if (dfsChanges.userId != accountController->mainActor()->id().toByteArray())
     {
         auto actor = actorIndex->getActor(dfsChanges.userId);
         if (actor.empty())
@@ -1044,11 +1046,11 @@ void Dfs::dfsSyncUsers(QByteArrayList actors, const SocketPair &receiver)
 
 void Dfs::dfsSyncT()
 {
-    if (accountController->getMainActor() == nullptr)
+    if (accountController->mainActor() == nullptr)
         return;
 
     dfsValidateAll();
-    QByteArray mainActor = accountController->getMainActor()->id().toByteArray();
+    QByteArray mainActor = accountController->mainActor()->id().toByteArray();
     QByteArrayList actors = !myQuickMode ? actorIndex->allActors() : QByteArrayList { mainActor };
     dfsSyncUsers(actors);
 }
@@ -1172,7 +1174,7 @@ bool Dfs::dfsValidate(QByteArray userId)
 
 QList<QByteArray> Dfs::dfsValidateAll()
 {
-    QByteArray mainActor = accountController->getMainActor()->id().toByteArray();
+    QByteArray mainActor = accountController->mainActor()->id().toByteArray();
     // QString myCardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + mainActor + "/" + DfsStruct::ACTOR_CARD_FILE;
     QStringList reqCards;
     QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
@@ -1325,13 +1327,13 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init)
 {
     DBConnector dbc((dfsChanges.filePath + DfsStruct::STORED_EXT).toStdString());
 
-    if (!init && dfsChanges.userId == accountController->getMainActor()->id().toByteArray())
+    if (!init && dfsChanges.userId == accountController->mainActor()->id().toByteArray())
     {
         auto res = dbc.select("SELECT hash FROM Stored ORDER by _ROWID_ DESC LIMIT 1 ");
         if (!res.size())
             return false;
         dfsChanges.prevHash = QByteArray::fromStdString(res[0]["hash"]);
-        dfsChanges.sign = accountController->getMainActor()->key()->sign(dfsChanges.prepareSign());
+        dfsChanges.sign = accountController->mainActor()->key()->sign(dfsChanges.prepareSign());
     }
 
     DBRow row = { { "version", std::to_string(dfsChanges.fileVersion) },
@@ -1547,7 +1549,7 @@ void Dfs::initMyLocalStorage()
     //    ThreadPool::addThread(resolver);
 
     //    getDFSStatus();
-    QByteArray userId = accountController->getMainActor()->id().toByteArray();
+    QByteArray userId = accountController->mainActor()->id().toByteArray();
     initDfs(userId);
     //    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);
     //    if (acDir.exists())
@@ -1690,7 +1692,7 @@ void Dfs::searchTmp()
 
 void Dfs::requestCardById(QByteArray userId, const SocketPair &receiver)
 {
-    if (myQuickMode && userId != accountController->getMainActor()->id().toByteArray())
+    if (myQuickMode && userId != accountController->mainActor()->id().toByteArray())
         return;
 
     if (ignoredIds.contains(userId))

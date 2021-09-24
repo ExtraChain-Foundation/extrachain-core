@@ -19,6 +19,7 @@
 
 #include "datastorage/index/actorindex.h"
 #include "resolve/resolve_manager.h"
+#include "network/packages/service/all_messages.h"
 
 void ActorIndex::setAccController(AccountController *value)
 {

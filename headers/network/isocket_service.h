@@ -25,12 +25,8 @@ public:
     int bytesOutgoing() const;
     int bytesIncoming() const;
 
-protected: // methods
-    bool checkFirstMessage(const QString &message);
+protected slots:
     virtual void closeSocket();
-    QByteArray generateFirstMessage();
-    QByteArray prepareSendMessage(const QByteArray &message);
-    QByteArray prepareReceiveMessage(const QByteArray &message);
 
 signals:
     void send(const QByteArray &data);
@@ -41,6 +37,11 @@ signals:
     void finished(); // if threads
 
 protected:
+    bool checkFirstMessage(const QString &message);
+    QByteArray generateFirstMessage();
+    QByteArray prepareSendMessage(const QByteArray &message);
+    QByteArray prepareReceiveMessage(const QByteArray &message);
+
     NetworkManager *m_networkManager = nullptr;
     QString m_identifier;
     QString m_ip;

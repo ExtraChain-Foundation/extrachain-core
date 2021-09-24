@@ -321,8 +321,8 @@ void ResolverService::resolveGeneralTask()
 
         if (plsr.isEmpty())
         {
-            auto mainId = node->getAccountController()->getMainActor()->id();
-            auto firstId = node->getActorIndex()->firstId();
+            auto mainId = node->accountController()->mainActor()->id();
+            auto firstId = node->actorIndex()->firstId();
             if (mainId == firstId)
                 node->createTransactionFrom(firstId, message.signer, amount, ActorId());
         }
@@ -488,12 +488,10 @@ void ResolverService::resolveGeneralTask()
         break;
     }
     case Messages::GeneralRequest::Notification: {
-#ifdef ECONSOLE
         BaseMessageResponse responseMessage;
         responseMessage = msg;
         auto map = Serialization::deserializeMap(responseMessage.data);
         emit saveNotificationToken(map["os"], ActorId(map["actor"]), ActorId(map["token"]));
-#endif
 
         finishWork();
         break;

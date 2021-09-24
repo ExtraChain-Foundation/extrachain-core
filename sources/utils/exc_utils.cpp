@@ -34,11 +34,13 @@
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/Keccak256.h"
 
-QByteArray Utils::calcKeccak(const QByteArray &b)
+QByteArray Utils::calcKeccak(const QByteArray &data)
 {
-    Keccak keccak;
-    QByteArray hashmsg = keccak(b);
-    return hashmsg;
+    // Keccak keccak;
+    // QByteArray hash = keccak(data);
+    // return hash;
+    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Keccak_256).toHex();
+    return hash;
 }
 
 // SERIALIZATION //
@@ -172,12 +174,13 @@ int Utils::qByteArrayToInt(const QByteArray &number)
     return res;
 }
 
-QByteArray Utils::calcKeccakForFile(const QString &path)
+QByteArray Utils::calcKeccakForFile(const QString &fileName)
 {
-    QFile file(path);
+    /*
+    QFile file(fileName);
     if (!file.exists())
     {
-        qDebug() << "Utils::File not exist" << path;
+        qDebug() << "Utils::File not exist" << fileName;
         return "";
     }
     file.open(QIODevice::ReadOnly);
@@ -198,6 +201,19 @@ QByteArray Utils::calcKeccakForFile(const QString &path)
         hash += el;
     file.close();
     return Utils::calcKeccak(hash);
+    */
+
+    QFile file(fileName);
+    if (file.open(QFile::ReadOnly))
+    {
+        QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
+        if (hash.addData(&file))
+            return hash.result().toHex();
+    }
+
+    qFatal("Utils::calcKeccakForFile");
+    qDebug() << "[KeccakForFile] Can't open file" << fileName;
+    return "";
 }
 
 bool Utils::encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,

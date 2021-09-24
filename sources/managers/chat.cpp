@@ -27,7 +27,7 @@ Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, ActorIndex* actor
 {
     this->_chatManager = chatManager;
     this->_chatId = chatId;
-    this->_currentActorId = accountController->getMainActor()->id().toByteArray();
+    this->_currentActorId = accountController->mainActor()->id().toByteArray();
     this->_actorIndex = actorIndex;
     this->_accountController = accountController;
     this->_encryptionKey = getChatKey();
@@ -47,7 +47,7 @@ Chat::Chat(ChatManager* chatManager, const QByteArray& chatId, const QByteArray&
     this->_chatId = chatId;
     this->_encryptionKey = key;
     this->_accountController = accountController;
-    this->_currentActorId = accountController->getMainActor()->id().toByteArray();
+    this->_currentActorId = accountController->mainActor()->id().toByteArray();
     //    if (currentSession == 0)
     //        this->_currentSession = getActualCurrentSession();
     //    else
@@ -109,7 +109,7 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
         this->ownerID = _ownerId;
     }
 
-    auto mainActor = _accountController->getMainActor()->key();
+    auto mainActor = _accountController->mainActor()->key();
     emit _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
                                    { Config::DataStorage::chatIdTableName.c_str(), "chatId",
                                      mainActor->encryptSelf(_chatId), "key", mainActor->encryptSelf(key),
@@ -171,7 +171,7 @@ QByteArray Chat::getChatKey()
     if (!QFile::exists(filePath))
         return "";
 
-    auto mainActor = _accountController->getMainActor()->key();
+    auto mainActor = _accountController->mainActor()->key();
     DBConnector DB(filePath.toStdString());
     std::vector<DBRow> res =
         DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName + " WHERE chatId = ?",

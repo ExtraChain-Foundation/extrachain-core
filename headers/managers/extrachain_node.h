@@ -53,18 +53,18 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject
 private:
     // common object for
     bool fileMode = true;
-    Dfs *dfs;
-    ActorIndex *actorIndex;
+    Dfs *m_dfs;
+    ActorIndex *m_actorIndex;
     Blockchain *m_blockchain;
     NetworkManager *m_networkManager;
-    TransactionManager *txManager;
-    AccountController *accController;
-    SmartContractManager *smContractController;
-    ChatManager *chatManager;
-    ResolveManager *resolveManager;
-    SubscribeController *subscribeController;
+    TransactionManager *m_txManager;
+    AccountController *m_accountController;
+    SmartContractManager *m_smartContractManager;
+    ChatManager *m_chatManager;
+    ResolveManager *m_resolveManager;
+    SubscribeController *m_subscribeController;
     PrivateProfile *m_privateProfile;
-    // ContractManager *contractManager;
+    // ContractManager *m_contractManager;
 
 public:
     ExtraChainNode(const QString &localIp = "");
@@ -76,13 +76,13 @@ public:
     void start();
     Blockchain *blockchain();
     NetworkManager *networkManager();
-    AccountController *getAccountController() const;
-    ActorIndex *getActorIndex() const;
-    ResolveManager *getResolveManager() const;
+    AccountController *accountController() const;
+    ActorIndex *actorIndex() const;
+    ResolveManager *resolveManager() const;
     PrivateProfile *privateProfile() const;
-    SubscribeController *getSubscribeController() const;
-
-    void getBlockchainFile();
+    SubscribeController *subscribeController() const;
+    ChatManager *chatManager() const;
+    Dfs *dfs() const;
 
     /**
      * @brief Create new transaction from current user
@@ -107,10 +107,6 @@ public:
      * @return
      */
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
-
-public:
-    ChatManager *getChatManager() const;
-    Dfs *getDfs() const;
 
 private:
     void showMessage(QString from, QString message);
@@ -173,8 +169,6 @@ public slots:
     // test net & blockchain
     //    void CheckBlockCount(BigNumber blockCount, QHostAddress peerAddress);
     //    void makeFirstContractTransaction(Contract contract);
-#ifdef ECLIENT
     void notificationToken(QString os, QString actorId, QString token);
-#endif
 };
 #endif // EXTRACHAIN_NODE_H
