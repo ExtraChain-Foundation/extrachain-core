@@ -124,7 +124,7 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
                                          const std::string &public_key, const std::string &nonce)
 {
     if (data.empty() || secret_key.empty() || public_key.empty())
-        qFatal("[SecretKey::encryptPrivatePublic] data, secret or public is empty");
+        qFatal("[SecretKey::encryptAsymmetric] data, secret or public is empty");
 
     unsigned long long enc_size = crypto_box_MACBYTES + data.length();
     string pkrs = Utils::hexStringToByte(public_key);
@@ -168,7 +168,7 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
     }
 
     if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data()
+        qDebug() << "[SecretKey::encryptAsymmetric] res is empty. msg:" << data.data()
                  << "| secret:" << secret_key.data() << "| public:" << public_key.data()
                  << "| nonce:" << nonce.data();
     return res;
@@ -178,7 +178,7 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
                                          const std::string &public_key, const std::string &nonce)
 {
     if (data.empty() || secret_key.empty() || public_key.empty())
-        qFatal("[SecretKey::encryptPrivatePublic] data, secret or public is empty");
+        qFatal("[SecretKey::decryptAsymmetric] data, secret or public is empty");
 
     string sdata = Utils::hexStringToByte(data);
     string pksr = Utils::hexStringToByte(public_key);
@@ -198,10 +198,10 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
 
     if (sdata.size() < crypto_secretbox_MACBYTES)
     {
-        qCritical() << "Critical: [KeyPrivate::decrypt] Incorrect msg" << sdata.size()
+        qCritical() << "Critical: [SecretKey::decryptAsymmetric] Incorrect msg" << sdata.size()
                     << crypto_secretbox_MACBYTES;
         return "";
-        qFatal("[KeyPrivate::decrypt] Incorrect msg");
+        qFatal("[SecretKey::decryptAsymmetric] Incorrect msg");
     }
 
     vector<unsigned char> skr(sk.begin(), sk.end());
