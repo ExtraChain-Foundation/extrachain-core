@@ -556,12 +556,6 @@ void ExtraChainNode::logOut()
 //    m_networkManager->shareContract(contract);
 //}
 
-void ExtraChainNode::tempareSlotForActors()
-{
-    emit sendActorStateList(m_accountController->getCurrentState());
-    emit sendActorToWallet(m_accountController->getAccountID());
-}
-
 ChatManager *ExtraChainNode::chatManager() const
 {
     return m_chatManager;
