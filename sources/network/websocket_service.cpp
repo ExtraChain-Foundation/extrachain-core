@@ -10,9 +10,9 @@ WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManage
     } else {
         m_ws = ws;
         this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
-        qDebug() << "[WS] New service:" << m_ip << port();
+        qDebug() << "[WS] New service:" << m_ip;
         connections();
-        sendFirstMessage();
+        handshake();
     }
 }
 
@@ -60,11 +60,24 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 
 void WebSocketService::onTextMessage(const QString &message) // for first message
 {
+    if (pub.publicKey().empty()) {
+        if (message == "StatusOnly") {
+            m_ws->sendTextMessage(generateFirstMessage());
+            return;
+        }
+
+        pub = KeyPublic(message.toStdString());
+
+        auto firstMessage = prepareSendMessage(generateFirstMessage());
+        m_ws->sendTextMessage(firstMessage);
+        return;
+    }
+
     if (m_activated)
         return;
 
     qDebug() << "[WS] First message:" << message;
-    m_activated = checkFirstMessage(message);
+    m_activated = checkFirstMessage(prepareReceiveMessage(message.toLatin1()));
     if (m_activated)
         emit activated();
 }
@@ -97,9 +110,9 @@ void WebSocketService::sendMessage(const QByteArray &data) {
 
 void WebSocketService::onConnected() {
     this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
+    handshake();
     qDebug() << "[WS] New service:" << m_ip << port();
     emit m_networkManager->newSocket();
-    sendFirstMessage();
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
@@ -120,9 +133,8 @@ void WebSocketService::connections() {
             &WebSocketService::onSocketError);
 }
 
-void WebSocketService::sendFirstMessage() {
-    auto json = generateFirstMessage();
-    m_ws->sendTextMessage(json);
+void WebSocketService::handshake() {
+    m_ws->sendTextMessage(QString::fromStdString(priv.publicKey()));
 }
 
 quint16 WebSocketService::port() const {

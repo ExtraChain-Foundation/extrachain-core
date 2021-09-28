@@ -6,6 +6,8 @@
 #include "utils/exc_utils.h"
 #include <QWebSocket>
 
+#include "extrachain_global.h"
+
 class NetworkManager;
 class ActorIndex;
 
@@ -42,7 +44,7 @@ private slots:
 
 private:
     void connections();
-    void sendFirstMessage();
+    void handshake();
 
     QWebSocket *m_ws = nullptr;
 };
