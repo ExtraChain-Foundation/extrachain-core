@@ -21,19 +21,16 @@
 
 #include "managers/extrachain_node.h"
 
-QList<Transaction *> TransactionManager::getReceivedTxList() const
-{
+QList<Transaction *> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
 }
 
-QList<Transaction> TransactionManager::getPendingTxs() const
-{
+QList<Transaction> TransactionManager::getPendingTxs() const {
     return pendingTxs;
 }
 
 TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain,
-                                       ExtraChainNode *extraChainNode)
-{
+                                       ExtraChainNode *extraChainNode) {
     this->accountController = accountController;
     this->blockchain = blockchain;
     this->extraChainNode = extraChainNode;
@@ -45,13 +42,11 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
     qDebug() << "start timer:";
 }
 
-void TransactionManager::removeTransaction(int i)
-{
+void TransactionManager::removeTransaction(int i) {
     this->pendingTxs.removeAt(i);
 }
 
-void TransactionManager::addTransaction(Transaction tx)
-{
+void TransactionManager::addTransaction(Transaction tx) {
     qDebug() << "TRANSACTION MANAGER: addTransaction " << tx.toString();
 
     if (tx.isEmpty())
@@ -80,12 +75,10 @@ void TransactionManager::addTransaction(Transaction tx)
     //    //    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());`
 }
 
-void TransactionManager::addProvedTransaction(Transaction *tx)
-{
+void TransactionManager::addProvedTransaction(Transaction *tx) {
     qDebug() << "addProvedTransaction";
     if (tx->getData().contains(Fee::UNFEE))
-        if (!blockchain->checkHaveUNFreezeTx(tx, Serialization::deserialize(tx->getData()).at(0)))
-        {
+        if (!blockchain->checkHaveUNFreezeTx(tx, Serialization::deserialize(tx->getData()).at(0))) {
             receivedTxList.removeOne(tx);
             return;
         }
@@ -95,26 +88,18 @@ void TransactionManager::addProvedTransaction(Transaction *tx)
     receivedTxList.removeOne(tx);
 }
 
-void TransactionManager::removeUnApprovedTransaction(Transaction *tx)
-{
-
+void TransactionManager::removeUnApprovedTransaction(Transaction *tx) {
     receivedTxList.removeOne(tx);
 }
 
-void TransactionManager::addPendingForFeeTxs(Transaction *transaction)
-{
-    for (const auto i : qAsConst(pendingFeeTxs))
-    {
-        if (transaction->getHash() == Serialization::deserialize(i->getData())[1])
-        {
-            if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount())
-            {
+void TransactionManager::addPendingForFeeTxs(Transaction *transaction) {
+    for (const auto i : qAsConst(pendingFeeTxs)) {
+        if (transaction->getHash() == Serialization::deserialize(i->getData())[1]) {
+            if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount()) {
                 pendingFeeTxs.removeOne(i);
                 transaction->sign(accountController->getCurrentActor());
                 emit transaction->Approved(transaction);
-            }
-            else
-            {
+            } else {
                 qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
                 emit transaction->NotApproved(transaction);
             }
@@ -123,67 +108,54 @@ void TransactionManager::addPendingForFeeTxs(Transaction *transaction)
     pendingForFeeTxs.append(transaction);
 }
 
-void TransactionManager::verifyApproverFeeTx(Transaction *tx)
-{
+void TransactionManager::verifyApproverFeeTx(Transaction *tx) {
     // sender == 0  receive ==actor id
     // IF it's fee transaction
     // WAIT FOR 3 SEC
     QList<QByteArray> tempData = Serialization::deserialize(tx->getData());
 
     Block block = blockchain->getBlockByHash(tempData[1]);
-    if (block.isEmpty())
-    {
+    if (block.isEmpty()) {
         qDebug() << "[Check fee] Block is not valid. Invalid fee transaction";
         emit tx->NotApproved(tx);
         return;
     }
     Transaction tempTx = block.getTransactionByHash(tempData[2]);
-    if (tempTx.getAmount() / 100 / 100 * Fee::TRANSACTION_FEE != tx->getAmount())
-    {
+    if (tempTx.getAmount() / 100 / 100 * Fee::TRANSACTION_FEE != tx->getAmount()) {
         qDebug() << "[Check fee] amount1 != amount2 Fee";
         emit tx->NotApproved(tx);
 
         return;
     }
-    if (tempTx.isEmpty())
-    {
+    if (tempTx.isEmpty()) {
         qDebug() << "[Check fee] Fee transaction is not found in block. Invalid transaction";
         emit tx->NotApproved(tx);
         return;
     }
 
-    if (tempTx.getApprover() == tx->getReceiver())
-    {
+    if (tempTx.getApprover() == tx->getReceiver()) {
         qDebug() << "Fee approver transaciton successfull approved";
         tx->sign(accountController->getCurrentActor());
         emit tx->Approved(tx);
         return;
-    }
-    else
-    {
+    } else {
         qDebug() << "Current actor is not tx approver and don't get fee";
         emit tx->NotApproved(tx);
     }
 }
 
-void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
-{
+void TransactionManager::addPendingFeeSenderTxs(Transaction *tx) {
     // sender actor  receiver 0
     QByteArray hashTx = Serialization::deserialize(tx->getData())[1];
-    for (const auto &i : qAsConst(pendingForFeeTxs))
-    {
-        if (i->getHash() == hashTx)
-        {
-            if (i->getAmount() / 100 * Fee::TRANSACTION_FEE == tx->getAmount())
-            {
+    for (const auto &i : qAsConst(pendingForFeeTxs)) {
+        if (i->getHash() == hashTx) {
+            if (i->getAmount() / 100 * Fee::TRANSACTION_FEE == tx->getAmount()) {
                 qDebug() << i->getHash() << " transaction successfull approved";
                 tx->sign(accountController->getCurrentActor());
                 i->sign(accountController->getCurrentActor());
                 emit i->Approved(i);
                 emit tx->Approved(tx);
-            }
-            else
-            {
+            } else {
                 qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
                 emit tx->NotApproved(tx);
                 emit i->NotApproved(i);
@@ -195,42 +167,35 @@ void TransactionManager::addPendingFeeSenderTxs(Transaction *tx)
 
 // Tx hashes (for network)
 
-bool TransactionManager::isUnapproved(const QByteArray &txHash)
-{
+bool TransactionManager::isUnapproved(const QByteArray &txHash) {
     return unApprovedTxHashes.contains(txHash);
 }
 
-void TransactionManager::removeUnapprovedHash(const QByteArray &txHash)
-{
+void TransactionManager::removeUnapprovedHash(const QByteArray &txHash) {
     QMutableListIterator<QByteArray> i(unApprovedTxHashes);
-    while (i.hasNext())
-    {
+    while (i.hasNext()) {
         if (i.next() == txHash)
             i.remove();
     }
 }
 
-void TransactionManager::addUnapprovedHash(QByteArray txHash)
-{
+void TransactionManager::addUnapprovedHash(QByteArray txHash) {
     unApprovedTxHashes.append(txHash);
 }
 
-void TransactionManager::addVerifiedTx(Transaction tx)
-{
+void TransactionManager::addVerifiedTx(Transaction tx) {
     qDebug() << QString("Adding tx[%1] to pending list").arg(tx.toString());
     pendingTxs.append(tx);
 }
 
 // Block making
 
-Block TransactionManager::makeBlock()
-{
+Block TransactionManager::makeBlock() {
     int txs = pendingTxs.size();
     //    qDebug() << QString("Attempting to make a block from [%1]
     //    txs)").arg(txs);
 
-    if (txs == 0)
-    {
+    if (txs == 0) {
         return Block();
     }
 
@@ -254,29 +219,21 @@ Block TransactionManager::makeBlock()
     return block;
 }
 
-QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs)
-{
+QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs) {
     QList<QByteArray> l;
-    for (const Transaction &tx : txs)
-    {
+    for (const Transaction &tx : txs) {
         l << tx.serialize();
     }
     return Serialization::serialize(l, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
-BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender)
-{
+BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender) {
     BigNumber res = 0;
-    if (!pendingTxs.isEmpty())
-    {
-        for (const Transaction &tmp : qAsConst(pendingTxs))
-        {
-            if (tmp.getSender() == sender)
-            {
+    if (!pendingTxs.isEmpty()) {
+        for (const Transaction &tmp : qAsConst(pendingTxs)) {
+            if (tmp.getSender() == sender) {
                 res -= tmp.getAmount();
-            }
-            else if (tmp.getReceiver() == sender)
-            {
+            } else if (tmp.getReceiver() == sender) {
                 res += tmp.getAmount();
             }
         }
@@ -284,6 +241,5 @@ BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender)
     return res;
 }
 
-void TransactionManager::process()
-{
+void TransactionManager::process() {
 }

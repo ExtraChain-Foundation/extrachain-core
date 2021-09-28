@@ -28,8 +28,7 @@ namespace Messages {
 static const QByteArray PING_MESSAGE = "ping ExtraNet";
 static const QByteArray PONG_MESSAGE = "pong ExtraNet";
 
-[[maybe_unused]] static QByteArray createPingMessage()
-{
+[[maybe_unused]] static QByteArray createPingMessage() {
     QByteArray msg("{");
     qFatal("Need correct ping");
     //    msg.append("\"proto\":\"")
@@ -43,8 +42,7 @@ static const QByteArray PONG_MESSAGE = "pong ExtraNet";
     return msg;
 }
 
-[[maybe_unused]] static QByteArray createPongMessage(const quint16 port)
-{
+[[maybe_unused]] static QByteArray createPongMessage(const quint16 port) {
     Q_UNUSED(port)
     QByteArray msg("{");
     qFatal("Need correct pong");
@@ -68,20 +66,17 @@ static const QByteArray PONG_MESSAGE = "pong ExtraNet";
  * @param type - type field
  * @return true, if proto and type is good
  */
-static bool checkType(const QByteArray &msg, const QString &type)
-{
+static bool checkType(const QByteArray &msg, const QString &type) {
     QJsonDocument doc = QJsonDocument::fromJson(msg);
     return !doc.isNull() /*&& doc.object().value("proto").toString() == Config::Net::PROTOCOL_VERSION*/
         && doc.object().value("type").toString() == type;
 }
 
-[[maybe_unused]] static bool isPing(const QByteArray &msg)
-{
+[[maybe_unused]] static bool isPing(const QByteArray &msg) {
     return Messages::checkType(msg, PING_MESSAGE);
 }
 
-[[maybe_unused]] static bool isPong(const QByteArray &msg)
-{
+[[maybe_unused]] static bool isPong(const QByteArray &msg) {
     return Messages::checkType(msg, PONG_MESSAGE);
 }
 }

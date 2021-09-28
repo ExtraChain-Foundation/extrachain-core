@@ -27,8 +27,7 @@
 namespace DistFileSystem {
 // TODO: package root array
 
-struct requestLast : Messages::ISmallMessage
-{
+struct requestLast : Messages::ISmallMessage {
     const short FIELDS_COUNT = 1;
     QByteArrayList actors;
 
@@ -43,8 +42,7 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-struct responseLast : Messages::ISmallMessage
-{
+struct responseLast : Messages::ISmallMessage {
     const short FIELDS_COUNT = 1;
     QByteArrayList lasts;
     const QList<QByteArray> serializedParams() const;
@@ -58,8 +56,7 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-struct CardFileChange : Messages::ISmallMessage
-{
+struct CardFileChange : Messages::ISmallMessage {
     const short FIELDS_COUNT = 8;
     int key = -1;
     QByteArray actorId;
@@ -81,8 +78,7 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-struct RequestCardPart : Messages::ISmallMessage
-{
+struct RequestCardPart : Messages::ISmallMessage {
     const short FIELDS_COUNT = 3;
     QByteArray actorId;
     int count = -1;
@@ -99,8 +95,7 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-struct ResponseCardPart : Messages::ISmallMessage
-{
+struct ResponseCardPart : Messages::ISmallMessage {
     const short FIELDS_COUNT = 4;
     QByteArray actorId;
     int count = -1;

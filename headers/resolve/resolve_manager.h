@@ -34,8 +34,7 @@ class ChatManager;
 #include "dfs/controls/headers/dfs.h"
 #include "extrachain_global.h"
 
-class EXTRACHAIN_EXPORT ResolveManager : public QObject
-{
+class EXTRACHAIN_EXPORT ResolveManager : public QObject {
     Q_OBJECT
 
 private:

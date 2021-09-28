@@ -20,22 +20,19 @@
 #include "profile/public_profile.h"
 #include "dfs/types/headers/dfstruct.h"
 
-PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id)
-{
+PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id) {
     sign = _sign;
     id = _id;
     setProfile(_profile, path);
 }
 
-PublicProfile::PublicProfile()
-{
+PublicProfile::PublicProfile() {
     idPath = "";
     sign = "";
     id = "";
 }
 
-PublicProfile::PublicProfile(QByteArray _id, QString _path)
-{
+PublicProfile::PublicProfile(QByteArray _id, QString _path) {
     id = _id;
     idPath = _path + id + ".profile";
 
@@ -51,8 +48,7 @@ PublicProfile::PublicProfile(QByteArray _id, QString _path)
     sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
 }
 
-PublicProfile::PublicProfile(const QByteArray &serialize)
-{
+PublicProfile::PublicProfile(const QByteArray &serialize) {
     int signSize = Utils::qByteArrayToInt(serialize.mid(serialize.size() - 4, 4));
     id = serialize.mid(serialize.size() - signSize - 4, signSize);
     QByteArray serializeData = serialize.mid(0, serialize.size() - signSize - 4);
@@ -65,8 +61,7 @@ PublicProfile::PublicProfile(const QByteArray &serialize)
     //    saveProfileFromNet(dataToProfile);
 }
 
-QByteArray PublicProfile::serialize() const
-{
+QByteArray PublicProfile::serialize() const {
     QFile profile(idPath);
     if (!profile.open(QIODevice::ReadOnly))
         return "";
@@ -80,8 +75,7 @@ QByteArray PublicProfile::serialize() const
     return data;
 }
 
-void PublicProfile::setProfile(QByteArrayList profile, QString path)
-{
+void PublicProfile::setProfile(QByteArrayList profile, QString path) {
     idPath = path;
     QFile file(path);
     QByteArray newProfile = serialize(profile);
@@ -92,15 +86,13 @@ void PublicProfile::setProfile(QByteArrayList profile, QString path)
     file.flush();
     file.close();
 
-    if (newProfile.mid(0, 1) == "6")
-    {
+    if (newProfile.mid(0, 1) == "6") {
         QByteArrayList list = deserialize(newProfile);
         saveTokenNames(list.at(2), list.at(3), list.at(6));
     }
 }
 
-void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArray color)
-{
+void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArray color) {
     DBConnector db("blockchain/tokens.cache");
     db.createTable(Config::DataStorage::tokensCacheTableCreate);
     db.insert(Config::DataStorage::tokensCacheTable,
@@ -110,24 +102,19 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
                 { "canStaking", "1" } }); // TODO
 }
 
-bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
-{
+bool PublicProfile::saveProfileFromNet(QByteArray newProfile) {
     QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/");
     QFile profile(idPath);
-    if (profile.exists())
-    {
+    if (profile.exists()) {
         profile.open(QIODevice::ReadOnly);
         QByteArray oldProfile = profile.readAll();
         profile.flush();
         profile.close();
-        if (newProfile == oldProfile)
-        {
+        if (newProfile == oldProfile) {
             qDebug() << "profile exist";
             sign = "";
             return false;
-        }
-        else
-        {
+        } else {
             profile.resize(0);
         }
     }
@@ -138,8 +125,7 @@ bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
     profile.flush();
     profile.close();
 
-    if (newProfile.mid(0, 1) == "6")
-    {
+    if (newProfile.mid(0, 1) == "6") {
         int signSize = Utils::qByteArrayToInt(newProfile.mid(newProfile.size() - 4, 4));
         QByteArray sign = newProfile.mid(newProfile.size() - 4 - signSize, signSize);
         QByteArray serializeData = newProfile.mid(0, newProfile.size() - 4 - signSize);
@@ -149,13 +135,11 @@ bool PublicProfile::saveProfileFromNet(QByteArray newProfile)
     return true;
 }
 
-QByteArrayList PublicProfile::getListProfile()
-{
+QByteArrayList PublicProfile::getListProfile() {
     // QDir().mkdir(idPath);
     QString pathProfile = idPath;
     QFile profile(pathProfile);
-    if (!profile.exists())
-    {
+    if (!profile.exists()) {
         // qDebug() << "Profile isn't exist" << id;
         return { QByteArrayList() };
     }
@@ -171,12 +155,10 @@ QByteArrayList PublicProfile::getListProfile()
     return listProfile;
 }
 
-QByteArray PublicProfile::getProfile()
-{
+QByteArray PublicProfile::getProfile() {
     QString pathProfile = idPath;
     QFile profile(pathProfile);
-    if (!profile.exists())
-    {
+    if (!profile.exists()) {
         // qDebug() << "Profile isn't exist" << id;
         return { "" };
     }
@@ -191,29 +173,24 @@ QByteArray PublicProfile::getProfile()
     return serializeData;
 }
 
-QByteArray PublicProfile::serialize(QByteArrayList profileList)
-{
+QByteArray PublicProfile::serialize(QByteArrayList profileList) {
     QByteArray data = "";
     QByteArray actorData = "";
     int count = -1;
     QByteArray index = "";
-    for (const QByteArray &element : qAsConst(profileList))
-    {
-        if (count == -1)
-        {
+    for (const QByteArray &element : qAsConst(profileList)) {
+        if (count == -1) {
             actorData.append(element);
             count++;
             continue;
         }
-        if (count == 0)
-        {
+        if (count == 0) {
             index += "0 1 4|";
             actorData.append(Utils::intToByteArray(element.toInt(), 4));
             count++;
             continue;
         }
-        if (element == "")
-        {
+        if (element == "") {
             index += QByteArray::number(count) + " 0|";
             actorData.append(element);
             count++;
@@ -227,19 +204,16 @@ QByteArray PublicProfile::serialize(QByteArrayList profileList)
     return actorData + "|" + index + Utils::intToByteArray(index.size(), 4);
 }
 
-QByteArrayList PublicProfile::deserialize(QByteArray serializeData)
-{
+QByteArrayList PublicProfile::deserialize(QByteArray serializeData) {
     QByteArrayList profileData;
     int size = 0, pos = 0;
     profileData.append(serializeData.mid(0, 1));
     int indexSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
     QByteArray index = serializeData.mid(serializeData.size() - 4 - indexSize, indexSize);
-    while (index.size() > 1)
-    {
+    while (index.size() > 1) {
         QByteArray index1 = index.mid(0, index.indexOf("|"));
         index = index.mid(index1.size() + 1);
-        if (index1.contains(" 0"))
-        {
+        if (index1.contains(" 0")) {
             profileData.append("");
             continue;
         }
@@ -252,8 +226,7 @@ QByteArrayList PublicProfile::deserialize(QByteArray serializeData)
     return profileData;
 }
 
-QByteArray PublicProfile::getProfileDataFromNetwork(const QByteArray &withSignData)
-{
+QByteArray PublicProfile::getProfileDataFromNetwork(const QByteArray &withSignData) {
     qDebug() << withSignData;
     int actorSize = Utils::qByteArrayToInt(withSignData.mid(withSignData.size() - 4, 4));
     QByteArray withActor = withSignData.left(withSignData.size() - 4 - actorSize);
@@ -270,8 +243,7 @@ QByteArray PublicProfile::getProfileDataFromNetwork(const QByteArray &withSignDa
     return serializeData;
 }
 
-QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)
-{
+QByteArrayList PublicProfile::getQuickProfile(QByteArray _data) {
     //    QString pathProfile = idPath;
     //    QDir().mkdir(idPath);
     //    QFile profile(pathProfile);
@@ -284,13 +256,11 @@ QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)
     QByteArray index = serializeData.mid(serializeData.size() - 4 - indexSize, indexSize);
     serializeData = serializeData.mid(0, serializeData.size() - 4 - indexSize);
     int pos = 0, size = 0;
-    for (int i = 1; i < 4; i++)
-    {
+    for (int i = 1; i < 4; i++) {
         int pos1 = index.indexOf("|" + QByteArray::number(i) + " ");
         QByteArray index1 =
             index.mid(index.indexOf("|" + QByteArray::number(i) + " "), index.indexOf("|", pos1 + 1) - pos1);
-        if (index1.contains(" 0"))
-        {
+        if (index1.contains(" 0")) {
             list.append("");
             continue;
         }
@@ -302,8 +272,7 @@ QByteArrayList PublicProfile::getQuickProfile(QByteArray _data)
     int pos1 = index.indexOf("|" + QByteArray::number(7) + " ");
     QByteArray index1 =
         index.mid(index.indexOf("|" + QByteArray::number(7) + " "), index.indexOf("|", pos1 + 1) - pos1);
-    if (index1.contains(" 0"))
-    {
+    if (index1.contains(" 0")) {
         list.append("");
         return list;
     }

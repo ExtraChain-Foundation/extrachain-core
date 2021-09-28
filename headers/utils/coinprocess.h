@@ -24,8 +24,7 @@
 #include "datastorage/transaction.h"
 #include <cassert>
 
-class CoinProcess : public QObject
-{
+class CoinProcess : public QObject {
     Q_OBJECT
 public:
     explicit CoinProcess(QObject* parent = nullptr);

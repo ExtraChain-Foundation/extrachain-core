@@ -24,8 +24,7 @@
 namespace Messages {
 static const QByteArray ENABLE_LIST_CONNECTIONS = "connections";
 
-struct ConnectionsMessage : ISmallMessage
-{
+struct ConnectionsMessage : ISmallMessage {
     const short FIELD_SIZE = 3;
     const short FIELDS_COUNT = 1;
     std::vector<std::pair<std::string, int>> hosts;

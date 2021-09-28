@@ -19,8 +19,7 @@
 
 #include "dfs/packages/headers/title_message.h"
 
-bool DistFileSystem::titleMessage::isEmpty() const
-{
+bool DistFileSystem::titleMessage::isEmpty() const {
     if (filePath.isEmpty())
         return true;
     if (pckgsAmount == 0)
@@ -34,15 +33,12 @@ bool DistFileSystem::titleMessage::isEmpty() const
     return false;
 }
 
-void DistFileSystem::titleMessage::calcHash()
-{
+void DistFileSystem::titleMessage::calcHash() {
     QFile file(filePath);
-    if (file.exists())
-    {
+    if (file.exists()) {
         file.open(QIODevice::ReadOnly);
         fileSize = file.size();
-        while (file.pos() + dataSize < file.size())
-        {
+        while (file.pos() + dataSize < file.size()) {
             pckgsAmount++;
             QByteArray sgmHash = Utils::calcKeccak(file.read(dataSize));
             dataHash = Utils::calcKeccak(dataHash + sgmHash);
@@ -54,16 +50,14 @@ void DistFileSystem::titleMessage::calcHash()
     }
 }
 
-const QList<QByteArray> DistFileSystem::titleMessage::serializedParams() const
-{
+const QList<QByteArray> DistFileSystem::titleMessage::serializedParams() const {
     QList<QByteArray> list;
     list << filePath.toUtf8() << QByteArray::number(static_cast<long long>(pckgsAmount))
          << QByteArray::number(fileSize) << dataHash << QByteArray::number(f_type) << prevId;
     return list;
 }
 
-void DistFileSystem::titleMessage::operator=(DistFileSystem::TitleMessage title)
-{
+void DistFileSystem::titleMessage::operator=(DistFileSystem::TitleMessage title) {
     filePath = title.filePath;
     pckgsAmount = title.pckgsAmount;
     fileSize = title.fileSize;
@@ -72,28 +66,23 @@ void DistFileSystem::titleMessage::operator=(DistFileSystem::TitleMessage title)
     prevId = title.prevId;
 }
 
-void DistFileSystem::titleMessage::operator=(const QByteArray &serialized)
-{
+void DistFileSystem::titleMessage::operator=(const QByteArray &serialized) {
     deserialize(serialized);
 }
 
-void DistFileSystem::titleMessage::operator=(QByteArray &serialized)
-{
+void DistFileSystem::titleMessage::operator=(QByteArray &serialized) {
     deserialize(serialized);
 }
 
-short DistFileSystem::titleMessage::getFieldsCount() const
-{
+short DistFileSystem::titleMessage::getFieldsCount() const {
     return titleMessage::FIELDS_COUNT;
 }
 
-QByteArray DistFileSystem::titleMessage::serialize() const
-{
+QByteArray DistFileSystem::titleMessage::serialize() const {
     return Serialization::serialize(serializedParams(), DistFileSystem::fieldsSize);
 }
 
-void DistFileSystem::titleMessage::deserialize(const QByteArray &serialized)
-{
+void DistFileSystem::titleMessage::deserialize(const QByteArray &serialized) {
     QList<QByteArray> l = Serialization::deserialize(serialized);
 
     if (l.size() != FIELDS_COUNT)

@@ -9,8 +9,7 @@
 
 #include "extrachain_global.h"
 
-class EXTRACHAIN_EXPORT VariantModel : public QAbstractListModel
-{
+class EXTRACHAIN_EXPORT VariantModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 

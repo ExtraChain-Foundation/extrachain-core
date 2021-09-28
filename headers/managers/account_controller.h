@@ -37,8 +37,7 @@ class ActorIndex;
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-class EXTRACHAIN_EXPORT AccountController : public QObject
-{
+class EXTRACHAIN_EXPORT AccountController : public QObject {
     Q_OBJECT
 
 private:

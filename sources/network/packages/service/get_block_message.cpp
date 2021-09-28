@@ -21,29 +21,24 @@
 
 using namespace Messages;
 
-void GetBlockMessage::operator=(QByteArray &serialized)
-{
+void GetBlockMessage::operator=(QByteArray &serialized) {
     deserialize(serialized);
 }
 
-bool GetBlockMessage::isEmpty() const
-{
+bool GetBlockMessage::isEmpty() const {
     return (param == SearchEnum::BlockParam::Null) || (value.isEmpty());
 }
 
-short GetBlockMessage::getFieldsCount() const
-{
+short GetBlockMessage::getFieldsCount() const {
     return GetBlockMessage::FIELDS_COUNT;
 }
 
-QByteArray GetBlockMessage::serialize() const
-{
+QByteArray GetBlockMessage::serialize() const {
     return Serialization::serialize({ SearchEnum::toString(param).toUtf8(), value },
                                     GetBlockMessage::FIELD_SIZE);
 }
 
-void GetBlockMessage::deserialize(const QByteArray &serilaized)
-{
+void GetBlockMessage::deserialize(const QByteArray &serilaized) {
     QList<QByteArray> list = Serialization::deserialize(serilaized, GetBlockMessage::FIELD_SIZE);
     this->param = SearchEnum::fromStringBlockParam(list.at(0));
     this->value = list.at(1);

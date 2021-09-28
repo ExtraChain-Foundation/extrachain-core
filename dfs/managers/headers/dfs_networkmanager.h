@@ -27,8 +27,7 @@
 
 class Dfs;
 
-class EXTRACHAIN_EXPORT DfsNetworkManager : public NetworkManager
-{
+class EXTRACHAIN_EXPORT DfsNetworkManager : public NetworkManager {
     Q_OBJECT
 
 private:

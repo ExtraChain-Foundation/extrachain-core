@@ -24,8 +24,7 @@
 
 namespace Messages {
 
-struct GetActorMessage : ISmallMessage
-{
+struct GetActorMessage : ISmallMessage {
     static const short FIELDS_COUNT = 1;
     static const short FIELD_SIZE = 2;
 

@@ -2,22 +2,19 @@
 #include "managers/extrachain_node.h"
 #include "managers/logs_manager.h"
 
-class Test : public QObject
-{
+class Test : public QObject {
     Q_OBJECT
 
 public:
     Test(QObject *parent = nullptr)
-        : QObject(parent)
-    {
+        : QObject(parent) {
     }
 
 private:
     ExtraChainNode *node;
 
 private slots:
-    void actors()
-    {
+    void actors() {
         Actor<KeyPrivate> actor1;
         Actor<KeyPrivate> actor2;
         actor1.create(ActorType::Wallet);
@@ -34,8 +31,7 @@ private slots:
         QCOMPARE(decrypted, decrypted2);
     }
 
-    void createNetwork()
-    {
+    void createNetwork() {
         LogsManager::qtHandler();
         QDir().mkdir("test-data");
         QDir::setCurrent("test-data");
@@ -45,8 +41,7 @@ private slots:
         QVERIFY(isCreated);
     }
 
-    void blocks()
-    {
+    void blocks() {
         //        Block a;
         //        Block b;
         //        Block pr;

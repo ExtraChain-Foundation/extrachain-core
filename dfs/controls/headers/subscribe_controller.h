@@ -29,8 +29,7 @@
 
 class ExtraChainNode;
 
-class SubscribeController : public QObject
-{
+class SubscribeController : public QObject {
     Q_OBJECT
 
 public:

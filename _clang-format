@@ -9,17 +9,23 @@ BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeTernaryOperators: true
 BreakBeforeBraces: Custom
 BraceWrapping:
- AfterClass: true
- AfterControlStatement: true # false
+ AfterClass: false
+ AfterControlStatement: Never
  AfterEnum: true
- AfterFunction: true
+ AfterFunction: false
  AfterNamespace: false
  AfterObjCDeclaration: false
- AfterStruct: true
+ AfterStruct: false
  AfterUnion: false
+ AfterExternBlock: false
  BeforeCatch: false
- BeforeElse: true
+ BeforeElse: false
+ BeforeLambdaBody: false
+ BeforeWhile: false
  IndentBraces: false
+ SplitEmptyFunction: true
+ SplitEmptyRecord: true
+ SplitEmptyNamespace: true
 
 AlignAfterOpenBracket: true
 AlwaysBreakTemplateDeclarations: true
@@ -29,6 +35,8 @@ AlignTrailingComments: true
 AllowShortFunctionsOnASingleLine: None
 SpaceBeforeParens: ControlStatements
 DerivePointerAlignment: true
+IndentPPDirectives: BeforeHash
+KeepEmptyLinesAtTheStartOfBlocks: false
 
 MaxEmptyLinesToKeep: 1
 AllowShortIfStatementsOnASingleLine: false

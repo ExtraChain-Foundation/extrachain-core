@@ -39,8 +39,7 @@ static quint16 maxConnections = 100;
 static quint16 maxResolver = 100;
 static quint16 maxDfsResolver = 10;
 
-struct DataStruct
-{
+struct DataStruct {
     QByteArray msg;
     SocketPair receiver;
 };
@@ -63,8 +62,7 @@ enum SocketServiceError
 };
 Q_ENUM_NS(SocketServiceError)
 
-[[maybe_unused]] inline static QByteArray currentIdentifier()
-{
+[[maybe_unused]] inline static QByteArray currentIdentifier() {
     // static QByteArray identifier;
     // if (!identifier.isEmpty())
     //     return identifier;
@@ -582,10 +580,8 @@ enum class TxParam
     Null
 };
 
-[[maybe_unused]] static QString toString(BlockParam param)
-{
-    switch (param)
-    {
+[[maybe_unused]] static QString toString(BlockParam param) {
+    switch (param) {
     case BlockParam::Id:
         return "Id";
     case BlockParam::Approver:
@@ -599,8 +595,7 @@ enum class TxParam
     }
 }
 
-[[maybe_unused]] static BlockParam fromStringBlockParam(QByteArray s)
-{
+[[maybe_unused]] static BlockParam fromStringBlockParam(QByteArray s) {
     if (s == "Id")
         return BlockParam::Id;
     if (s == "Approver")
@@ -612,10 +607,8 @@ enum class TxParam
     return BlockParam::Null;
 }
 
-[[maybe_unused]] static QString toString(TxParam param)
-{
-    switch (param)
-    {
+[[maybe_unused]] static QString toString(TxParam param) {
+    switch (param) {
     case TxParam::UserSender:
         return "UserSender";
     case TxParam::UserReceiver:
@@ -633,8 +626,7 @@ enum class TxParam
     }
 }
 
-[[maybe_unused]] static TxParam fromStringTxParam(QByteArray s)
-{
+[[maybe_unused]] static TxParam fromStringTxParam(QByteArray s) {
     if (s == "User")
         return TxParam::User;
     if (s == "UserApprover")
@@ -651,8 +643,7 @@ enum class TxParam
 }
 } // namespace SearchEnum
 
-struct Notification
-{
+struct Notification {
     enum NotifyType
     {
         TxToUser,

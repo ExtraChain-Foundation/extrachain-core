@@ -19,8 +19,7 @@
 
 #include "dfs/packages/headers/dfs_changes.h"
 
-const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const
-{
+const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const {
     QList<QByteArray> list;
 
     list << filePath.toUtf8() << Serialization::serialize(data, DistFileSystem::fieldsSize) << range
@@ -30,8 +29,7 @@ const QList<QByteArray> DistFileSystem::DfsChanges::serializedParams() const
     return list;
 }
 
-void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list)
-{
+void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list) {
     filePath = list.takeFirst();
     data = Serialization::deserialize(list.takeFirst(), DistFileSystem::fieldsSize);
     range = list.takeFirst();
@@ -43,35 +41,29 @@ void DistFileSystem::DfsChanges::operator=(QList<QByteArray> &list)
     fileVersion = list.takeFirst().toInt();
 }
 
-void DistFileSystem::DfsChanges::operator=(QByteArray &serialized)
-{
+void DistFileSystem::DfsChanges::operator=(QByteArray &serialized) {
     deserialize(serialized);
 }
 
-bool DistFileSystem::DfsChanges::isEmpty() const
-{
+bool DistFileSystem::DfsChanges::isEmpty() const {
     return filePath.isEmpty() || data.isEmpty() || range.isEmpty() || changeType == -1 || userId.isEmpty()
         || sign.isEmpty() || messHash.isEmpty() || fileVersion == -1;
 }
 
-short DistFileSystem::DfsChanges::getFieldsCount() const
-{
+short DistFileSystem::DfsChanges::getFieldsCount() const {
     return DfsChanges::FIELDS_COUNT;
 }
 
-QByteArray DistFileSystem::DfsChanges::serialize() const
-{
+QByteArray DistFileSystem::DfsChanges::serialize() const {
     return Serialization::serialize(serializedParams(), DistFileSystem::fieldsSize);
 }
 
-void DistFileSystem::DfsChanges::deserialize(const QByteArray &serialized)
-{
+void DistFileSystem::DfsChanges::deserialize(const QByteArray &serialized) {
     QList<QByteArray> l = Serialization::deserialize(serialized, DistFileSystem::fieldsSize);
     operator=(l);
 }
 
-QByteArray DistFileSystem::DfsChanges::prepareSign()
-{
+QByteArray DistFileSystem::DfsChanges::prepareSign() {
     QList<QByteArray> list;
     list << filePath.toUtf8() << Serialization::serialize(data, DistFileSystem::fieldsSize) << range
          << QByteArray::number(changeType) << userId << messHash << prevHash

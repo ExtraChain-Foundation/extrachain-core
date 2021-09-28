@@ -23,8 +23,7 @@
 #include "utils/exc_utils.h"
 #include "utils/db_connector.h"
 
-class EXTRACHAIN_EXPORT PublicProfile
-{
+class EXTRACHAIN_EXPORT PublicProfile {
 public:
     PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id);
     PublicProfile(const QByteArray &serialize);

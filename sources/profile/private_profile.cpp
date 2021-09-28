@@ -24,18 +24,15 @@
 
 using std::string;
 
-void PrivateProfile::setAccountController(AccountController *value)
-{
+void PrivateProfile::setAccountController(AccountController *value) {
     accController = value;
 }
 
-void PrivateProfile::setDfs(Dfs *value)
-{
+void PrivateProfile::setDfs(Dfs *value) {
     dfs = value;
 }
 
-void PrivateProfile::savePrivateProfile(const QByteArray &hash, const ActorId &id)
-{
+void PrivateProfile::savePrivateProfile(const QByteArray &hash, const ActorId &id) {
     this->m_hash = hash;
     QDir().mkpath(PathProfile);
     QMap<QString, QByteArray> map;
@@ -53,15 +50,13 @@ void PrivateProfile::savePrivateProfile(const QByteArray &hash, const ActorId &i
 }
 
 void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
-                                        const QByteArray &Data, const bool &reWrite)
-{
+                                        const QByteArray &Data, const bool &reWrite) {
     QByteArray hashLogin = profile.first;
     QByteArray idProfile = profile.second;
 
     QDir().mkpath(PathProfile);
     QFile file(PathProfile + "/" + idProfile + ".private");
-    if (!file.exists())
-    {
+    if (!file.exists()) {
         qDebug() << "Don`t have private profile";
         return;
     }
@@ -69,8 +64,7 @@ void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, c
     QByteArray data = file.readAll();
     string hl = hashLogin.toStdString();
     data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), hl));
-    if (data.mid(0, 64) == hashLogin)
-    {
+    if (data.mid(0, 64) == hashLogin) {
         data = data.mid(64);
         QMap<QString, QByteArray> map;
         readData(map, data);
@@ -85,16 +79,14 @@ void PrivateProfile::editPrivateProfile(QPair<QByteArray, QByteArray> profile, c
         data = QByteArray::fromStdString(SecretKey::encryptWithPassword(data.toStdString(), hll));
         file.resize(0);
         file.write(data);
-    }
-    else
+    } else
         qDebug() << "[PrivateProfile] Error : incorrect login or id";
     file.flush();
     file.close();
 }
 
 void PrivateProfile::loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile,
-                                                const QString &type)
-{
+                                                const QString &type) {
     QFile file(PathProfile + "/" + idProfile + ".private");
     file.open(QIODevice::ReadOnly);
     QByteArray data = file.readAll();
@@ -103,42 +95,35 @@ void PrivateProfile::loadInfoFromPrivateProfile(const QByteArray &hash, const QB
     string h = hash.toStdString();
     data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
     QByteArray secureLoginFile = data.mid(0, 64);
-    if (secureLoginFile == hash)
-    {
+    if (secureLoginFile == hash) {
         data = data.mid(64);
         QMap<QString, QByteArray> map;
         readData(map, data);
         QByteArray info = get(map, type);
         emit infoAvailabled(info, type);
         return;
-    }
-    else
+    } else
         qDebug() << "[PrivateProfile] Error: incorrect login or id";
     return;
 }
 
-void PrivateProfile::loadPrivateProfileLogin(const QByteArray &login, const QByteArray &password)
-{
+void PrivateProfile::loadPrivateProfileLogin(const QByteArray &login, const QByteArray &password) {
     QByteArray hash = Utils::calcKeccak(login + password);
     profile(hash);
 }
 
-void PrivateProfile::loadPrivateProfileHash(const QByteArray &hash)
-{
+void PrivateProfile::loadPrivateProfileHash(const QByteArray &hash) {
     profile(hash);
 }
 
-void PrivateProfile::process()
-{
+void PrivateProfile::process() {
 }
 
-void PrivateProfile::profile(const QByteArray &hash)
-{
+void PrivateProfile::profile(const QByteArray &hash) {
     QDir dir(PathProfile);
     QStringList users = dir.entryList(QDir::Files);
 
-    if (users.isEmpty())
-    {
+    if (users.isEmpty()) {
         qDebug() << "[PrivateProfile] Incorrect login: empty keystore";
         emit loginError(1);
         return;
@@ -146,8 +131,7 @@ void PrivateProfile::profile(const QByteArray &hash)
 
     bool success = false;
 
-    for (QString &fileName : users)
-    {
+    for (QString &fileName : users) {
         QFile file(PathProfile + "/" + fileName);
         file.open(QIODevice::ReadOnly);
         QByteArray data = file.readAll();
@@ -157,8 +141,7 @@ void PrivateProfile::profile(const QByteArray &hash)
         data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
         QByteArray secureLoginFile = data.mid(0, 64);
 
-        if (secureLoginFile == hash)
-        {
+        if (secureLoginFile == hash) {
             data = data.mid(64);
             this->m_hash = secureLoginFile;
             QMap<QString, QByteArray> map;
@@ -175,55 +158,46 @@ void PrivateProfile::profile(const QByteArray &hash)
         }
     }
 
-    if (!success)
-    {
+    if (!success) {
         qDebug() << "[PrivateProfile] Incorrect email or password";
         emit loginError(2);
     }
 }
 
-QByteArray PrivateProfile::get(QMap<QString, QByteArray> &map, const QString &value)
-{
+QByteArray PrivateProfile::get(QMap<QString, QByteArray> &map, const QString &value) {
     return map[value];
 }
 
-void PrivateProfile::set(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data)
-{
+void PrivateProfile::set(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data) {
     map[value] = data;
 }
 
-void PrivateProfile::add(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data)
-{
+void PrivateProfile::add(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data) {
     if (!map[value].contains(data))
         map[value] += "|" + data;
 }
 
-void PrivateProfile::writeData(QMap<QString, QByteArray> &map, QByteArray &out)
-{
+void PrivateProfile::writeData(QMap<QString, QByteArray> &map, QByteArray &out) {
     QMap<QString, QByteArray>::iterator it = map.begin();
     QByteArray res = "";
-    while (it != map.end())
-    {
+    while (it != map.end()) {
         res += Serialization::serialize({ it.key().toUtf8(), it.value() });
         it++;
     }
     out = res;
 }
 
-void PrivateProfile::readData(QMap<QString, QByteArray> &map, QByteArray &data)
-{
+void PrivateProfile::readData(QMap<QString, QByteArray> &map, QByteArray &data) {
     QByteArrayList res;
     res = Serialization::deserialize(data);
-    while (res.size() != 0)
-    {
+    while (res.size() != 0) {
         map.insert(res.at(0), res.at(1));
         res.removeFirst();
         res.removeFirst();
     }
 }
 
-const QByteArray &PrivateProfile::hash() const
-{
+const QByteArray &PrivateProfile::hash() const {
     if (m_hash.isEmpty())
         qFatal("[PrivateProfile] Hash is empty");
     return m_hash;

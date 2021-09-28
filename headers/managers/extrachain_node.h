@@ -46,8 +46,7 @@ class Actor;
 class KeyPrivate;
 class KeyPublic;
 
-class EXTRACHAIN_EXPORT ExtraChainNode : public QObject
-{
+class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
 
 private:

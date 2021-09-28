@@ -34,8 +34,7 @@
  * @brief ServerService is responsible for handling incoming sockets connections.
  * All connections is stored in a sockets list.
  */
-class EXTRACHAIN_EXPORT TcpServerService : public QTcpServer
-{
+class EXTRACHAIN_EXPORT TcpServerService : public QTcpServer {
     Q_OBJECT
 private:
     // bool active = false;

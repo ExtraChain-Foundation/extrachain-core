@@ -44,8 +44,7 @@ class UPNPConnection;
  * @brief The NetworkManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
-class EXTRACHAIN_EXPORT NetworkManager : public QObject
-{
+class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:

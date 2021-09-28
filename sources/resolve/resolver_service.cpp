@@ -29,38 +29,31 @@
 
 using namespace Resolver;
 
-void ResolverService::setNode(ExtraChainNode *value)
-{
+void ResolverService::setNode(ExtraChainNode *value) {
     node = value;
 }
 
-void ResolverService::setBlockchain(Blockchain *value)
-{
+void ResolverService::setBlockchain(Blockchain *value) {
     blockchain = value;
 }
 
-void ResolverService::setChatManager(ChatManager *value)
-{
+void ResolverService::setChatManager(ChatManager *value) {
     chatManager = value;
 }
 
-void ResolverService::setResolveManager(ResolveManager *value)
-{
+void ResolverService::setResolveManager(ResolveManager *value) {
     resolveManager = value;
 }
 
-Resolver::Type ResolverService::getType() const
-{
+Resolver::Type ResolverService::getType() const {
     return type;
 }
 
-void ResolverService::setType(const Resolver::Type &value)
-{
+void ResolverService::setType(const Resolver::Type &value) {
     type = value;
 }
 
-Resolver::Lifetime ResolverService::getLifetime() const
-{
+Resolver::Lifetime ResolverService::getLifetime() const {
     return lifetime;
 }
 
@@ -71,55 +64,45 @@ Resolver::Lifetime ResolverService::getLifetime() const
 
 ResolverService::ResolverService(Resolver::Type type, Lifetime lifetime, ActorIndex *actorIndex,
                                  ResolveManager *resolveManager, QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
     this->type = type;
     this->lifetime = lifetime;
     this->actorIndex = actorIndex;
     this->resolveManager = resolveManager;
 }
 
-ResolverService::~ResolverService()
-{
+ResolverService::~ResolverService() {
     //    emit finished();
 }
 
-void ResolverService::finishWork()
-{
+void ResolverService::finishWork() {
     active = false;
 
-    if (this->lifetime == Resolver::Lifetime::SHORT)
-    {
+    if (this->lifetime == Resolver::Lifetime::SHORT) {
         emit TaskFinished();
     }
 }
 
-bool ResolverService::isActive() const
-{
+bool ResolverService::isActive() const {
     return active;
 }
 
-void ResolverService::setTask(QByteArray msg, SocketPair receiver)
-{
+void ResolverService::setTask(QByteArray msg, SocketPair receiver) {
     active = true;
     this->msg = msg;
     this->hash = calcHash(msg);
     this->receiver = receiver;
 }
 
-bool ResolverService::validate(const Messages::BaseMessage &message)
-{
+bool ResolverService::validate(const Messages::BaseMessage &message) {
     ActorId signer = message.signer;
     if (signer.isEmpty())
         return false;
     Actor<KeyPublic> actor = actorIndex->getActor(signer);
 
-    if (!actor.empty())
-    {
+    if (!actor.empty()) {
         return message.verifyDigSig(actor);
-    }
-    else
-    {
+    } else {
         qDebug() << QString("There no actor %1 locally").arg(signer.toString());
         //        emit SendGetActor(signer);
         //        return false;
@@ -128,15 +111,12 @@ bool ResolverService::validate(const Messages::BaseMessage &message)
     }
 }
 
-QByteArray ResolverService::calcHash(const QByteArray &request) const
-{
+QByteArray ResolverService::calcHash(const QByteArray &request) const {
     return Utils::calcKeccak(request);
 }
 
-bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message)
-{
-    if (validate(message))
-    {
+bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message) {
+    if (validate(message)) {
         qDebug() << "[ResolverService]"
                  << "checkMsgType(): valid";
         return false;
@@ -146,16 +126,13 @@ bool ResolverService::MessageIsNotValid(const Messages::BaseMessage &message)
     return true;
 }
 
-bool ResolverService::addResponseHandler(const QByteArray &message, const unsigned int &msgType)
-{
+bool ResolverService::addResponseHandler(const QByteArray &message, const unsigned int &msgType) {
     bool flag = false;
     handlerFileMutex.lock();
     QByteArray hash = Utils::calcKeccak(message);
-    if (Messages::isGeneralResponse(msgType))
-    {
+    if (Messages::isGeneralResponse(msgType)) {
         if (resolveManager->getRequestResponseMap()->find(hash)
-            == resolveManager->getRequestResponseMap()->end())
-        {
+            == resolveManager->getRequestResponseMap()->end()) {
             resolveManager->getRequestResponseMap()->insert(hash, Config::Net::NECESSARY_RESPONSE_COUNT);
             flag = true;
         }
@@ -164,29 +141,21 @@ bool ResolverService::addResponseHandler(const QByteArray &message, const unsign
     return flag;
 }
 
-bool ResolverService::checkResponseHandler(const QByteArray &hash)
-{
+bool ResolverService::checkResponseHandler(const QByteArray &hash) {
     handlerFileMutex.lock();
     bool flag = true;
     int value = Config::Net::NECESSARY_RESPONSE_COUNT;
     QMap<QByteArray, int>::iterator it = resolveManager->getRequestResponseMap()->find(hash);
-    if (it != resolveManager->getRequestResponseMap()->end())
-    {
+    if (it != resolveManager->getRequestResponseMap()->end()) {
         int t = it.value() - 1;
-        if (t <= 0)
-        {
-
+        if (t <= 0) {
             //            requestResponseMap->remove(hash);
             flag = false;
-        }
-        else
-        {
+        } else {
             resolveManager->getRequestResponseMap()->remove(hash);
             resolveManager->getRequestResponseMap()->insert(hash, t);
         }
-    }
-    else
-    {
+    } else {
         resolveManager->getRequestResponseMap()->insert(hash, value);
     }
 
@@ -194,15 +163,12 @@ bool ResolverService::checkResponseHandler(const QByteArray &hash)
     return flag;
 }
 
-void ResolverService::process()
-{
+void ResolverService::process() {
     resolveTask();
 }
 
-void ResolverService::resolveTask()
-{
-    switch (this->type)
-    {
+void ResolverService::resolveTask() {
+    switch (this->type) {
     case Resolver::Type::GENERAL:
         resolveGeneralTask();
         break;
@@ -211,21 +177,18 @@ void ResolverService::resolveTask()
     }
 }
 
-void ResolverService::resolveGeneralTask()
-{
+void ResolverService::resolveGeneralTask() {
     // QList<QByteArray> res = Serialization::deserialize(msg);
     using namespace Messages;
     BaseMessage message;
     message = msg;
 
     unsigned int msgType = message.type;
-    if (msgType == 0)
-    {
+    if (msgType == 0) {
         qDebug() << "[ResolverService] Receive empty message";
     }
     if (message.data.isEmpty() && msgType != Messages::GeneralRequest::GetAllActors
-        && msgType != Messages::GeneralRequest::GetBlockCount)
-    {
+        && msgType != Messages::GeneralRequest::GetBlockCount) {
         finishWork();
         return;
     }
@@ -236,31 +199,24 @@ void ResolverService::resolveGeneralTask()
         && (msgType != Messages::GeneralRequest::GetActor)
         && (msgType != Messages::GeneralResponse::GetActorResponse)
         && (msgType != Messages::GeneralRequest::GetAllActors)
-        && (msgType != Messages::GeneralResponse::GetAllActorsResponse))
-    {
-        if (Messages::isGeneralResponse(msgType))
-        {
+        && (msgType != Messages::GeneralResponse::GetAllActorsResponse)) {
+        if (Messages::isGeneralResponse(msgType)) {
             BaseMessageResponse responseMessage;
             responseMessage = msg;
-            if (MessageIsNotValid(responseMessage))
-            {
+            if (MessageIsNotValid(responseMessage)) {
                 finishWork();
                 return;
             }
-        }
-        else
-        {
+        } else {
             // qDebug() << "received msg signature:" << message.getDigSig();
-            if (MessageIsNotValid(message))
-            {
+            if (MessageIsNotValid(message)) {
                 finishWork();
                 return;
             }
         }
     }
 
-    switch (msgType)
-    {
+    switch (msgType) {
     case Messages::GeneralRequest::GetAllActors: {
         actorIndex->handleGetAllActor(calcHash(msg), receiver);
         finishWork();
@@ -290,8 +246,7 @@ void ResolverService::resolveGeneralTask()
     }
     case Messages::ChainMessage::BlockMessage: {
         Block block(message.data);
-        if (!validateBlock(block))
-        {
+        if (!validateBlock(block)) {
             qDebug() << "Received block" << block.getIndex() << "is not valid";
             finishWork();
             return;
@@ -310,8 +265,7 @@ void ResolverService::resolveGeneralTask()
     }
     case Messages::ChainMessage::CoinRequest: {
         auto list = Serialization::deserialize(message.data);
-        if (list.isEmpty())
-        {
+        if (list.isEmpty()) {
             finishWork();
             break;
         }
@@ -319,15 +273,12 @@ void ResolverService::resolveGeneralTask()
         BigNumber amount(list[0]);
         auto plsr = list.length() > 2 ? list[2] : ActorId();
 
-        if (plsr.isEmpty())
-        {
+        if (plsr.isEmpty()) {
             auto mainId = node->accountController()->mainActor()->id();
             auto firstId = node->actorIndex()->firstId();
             if (mainId == firstId)
                 node->createTransactionFrom(firstId, message.signer, amount, ActorId());
-        }
-        else
-        {
+        } else {
             emit coinRequest(message.signer, amount, plsr);
         }
 
@@ -337,8 +288,7 @@ void ResolverService::resolveGeneralTask()
     case Messages::ChainMessage::TxMessage: {
         Transaction tx(message.data);
 
-        if (!validate(tx))
-        {
+        if (!validate(tx)) {
             qDebug() << "Received tx" << tx.getHash() << "is not valid";
             return;
         }
@@ -354,8 +304,7 @@ void ResolverService::resolveGeneralTask()
                  << "recieveMsg(): type: "
                  << "CONTRACT_MESSAGE";
         Transaction tx(message.data);
-        if (!validate(tx))
-        {
+        if (!validate(tx)) {
             qDebug() << "Received tx of contract" << tx.getHash() << "is not valid";
             return;
         }
@@ -421,8 +370,7 @@ void ResolverService::resolveGeneralTask()
         if (checkResponseHandler(responseMessage.dataHash))
             return;
         Transaction tx(responseMessage.data);
-        if (!validate(tx))
-        {
+        if (!validate(tx)) {
             qDebug() << "Received tx" << tx.getHash() << "is not valid";
             return;
         }
@@ -439,21 +387,16 @@ void ResolverService::resolveGeneralTask()
         responseMessage = msg;
         if (checkResponseHandler(responseMessage.dataHash))
             return;
-        if (GenesisBlock::isGenesisBlock(msg))
-        {
+        if (GenesisBlock::isGenesisBlock(msg)) {
             GenesisBlock gblock(responseMessage.data);
-            if (!validateBlock(gblock))
-            {
+            if (!validateBlock(gblock)) {
                 qDebug() << "Received block" << gblock.getIndex() << "is not valid";
                 return;
             }
             emit newGenesisBlock(gblock);
-        }
-        else
-        {
+        } else {
             Block block(responseMessage.data);
-            if (!validateBlock(block))
-            {
+            if (!validateBlock(block)) {
                 qDebug() << "Received block" << block.getIndex() << "is not valid";
                 return;
             }
@@ -504,19 +447,16 @@ void ResolverService::resolveGeneralTask()
 }
 // validation methods //
 
-bool ResolverService::validateBlock(const Block &block)
-{
+bool ResolverService::validateBlock(const Block &block) {
     qDebug() << "[ResolverService] validate(Block):";
     return actorIndex->validateBlock(block);
 }
 
-bool ResolverService::validate(const Transaction &tx)
-{
+bool ResolverService::validate(const Transaction &tx) {
     qDebug() << "[ResolverService] validate(Transaction):";
     if (tx.getSender() == ActorId(0) && tx.getData().contains(Fee::STAKING_REWARD))
         return true;
-    if (actorIndex->getActor(tx.getSender()).empty())
-    {
+    if (actorIndex->getActor(tx.getSender()).empty()) {
         this->thread()->sleep(5);
         return validate(tx);
     }

@@ -27,8 +27,7 @@
 
 namespace DistFileSystem {
 
-struct Status : Messages::ISmallMessage
-{
+struct Status : Messages::ISmallMessage {
     const short FIELDS_COUNT = 3;
 
     QByteArray hash = "";

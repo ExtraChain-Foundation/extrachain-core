@@ -27,8 +27,7 @@
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
 
-class EXTRACHAIN_EXPORT FileUpdaterManager : public QObject
-{
+class EXTRACHAIN_EXPORT FileUpdaterManager : public QObject {
     Q_OBJECT
 
 public:

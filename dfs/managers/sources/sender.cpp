@@ -21,21 +21,17 @@
 #include "network/packages/service/all_messages.h"
 
 Sender::Sender(QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
     // connect(this, &Sender::resendFragments, this, &Sender::resendFragmentsSlot);
 }
 
-void Sender::setNetworkManager(DfsNetworkManager *value)
-{
+void Sender::setNetworkManager(DfsNetworkManager *value) {
     m_networkManager = value;
 }
 
-void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver)
-{
+void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, const SocketPair &receiver) {
     QFile file(path);
-    if (file.open(QIODevice::ReadOnly))
-    {
+    if (file.open(QIODevice::ReadOnly)) {
         DistFileSystem::TitleMessage title;
         title.filePath = path;
         title.f_type = type;
@@ -43,27 +39,21 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
         std::vector<long long> fragsID;
         QByteArrayList frags = frag.split(' ');
 
-        for (const QByteArray &b : frags)
-        {
-            if (b.indexOf(":") == -1)
-            {
+        for (const QByteArray &b : frags) {
+            if (b.indexOf(":") == -1) {
                 fragsID.push_back(b.toLongLong());
-            }
-            else
-            {
+            } else {
                 QByteArrayList bs = b.split(':');
                 unsigned long s = bs[0].toULong();
                 unsigned long e = bs[1].toULong();
-                for (unsigned long i = s; i <= e; i++)
-                {
+                for (unsigned long i = s; i <= e; i++) {
                     fragsID.push_back(static_cast<long long>(i));
                 }
             }
             // fragsID.push_back(b.toLongLong());
         }
         //        int p = 0;
-        for (unsigned int i = 0; i < fragsID.size(); i++)
-        {
+        for (unsigned int i = 0; i < fragsID.size(); i++) {
             file.seek(fragsID[i] * data_offset);
             QByteArray data = file.read(data_offset);
             DistFileSystem::DfsMessage pck; // package for send
@@ -85,12 +75,10 @@ void Sender::sendFragments(QString path, DfsStruct::Type type, QByteArray frag, 
     }
 }
 
-void Sender::process()
-{
+void Sender::process() {
 }
 
-void Sender::sendFile(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver)
-{
+void Sender::sendFile(const QString &filePath, const DfsStruct::Type &type, const SocketPair &receiver) {
     QFile file(filePath);
     file.open(QIODevice::ReadOnly);
     // create title_message
@@ -99,8 +87,7 @@ void Sender::sendFile(const QString &filePath, const DfsStruct::Type &type, cons
     title.filePath = filePath;
     title.f_type = type;
     title.calcHash();
-    if (title.isEmpty())
-    {
+    if (title.isEmpty()) {
         qDebug() << "empty title";
         return;
     }

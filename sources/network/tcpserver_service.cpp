@@ -22,12 +22,10 @@
 TcpServerService::TcpServerService(quint16 networkPort, QNetworkAddressEntry *local, QTcpServer *parent)
     : QTcpServer(parent)
     , localAddress(local)
-    , port(networkPort)
-{
+    , port(networkPort) {
 }
 
-bool TcpServerService::startListen()
-{
+bool TcpServerService::startListen() {
     bool status = this->listen(localAddress->ip(), port);
     emit serverStatus(status);
 
@@ -40,18 +38,15 @@ bool TcpServerService::startListen()
     return status;
 }
 
-TcpServerService::~TcpServerService()
-{
+TcpServerService::~TcpServerService() {
     emit finished();
 }
 
-void TcpServerService::process()
-{
+void TcpServerService::process() {
     qFatal("ThreadPool for tcp server");
 }
 
-void TcpServerService::incomingConnection(qintptr socketDescriptor)
-{
+void TcpServerService::incomingConnection(qintptr socketDescriptor) {
     emit newServerConnection(socketDescriptor);
 }
 
@@ -82,7 +77,6 @@ void TcpServerService::incomingConnection(qintptr socketDescriptor)
 //    }
 //}
 
-void TcpServerService::socketDisconnected()
-{
+void TcpServerService::socketDisconnected() {
     //
 }

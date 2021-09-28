@@ -34,8 +34,7 @@
 #include <QXmlStreamReader>
 #include <QRandomGenerator>
 
-class UPNPConnection : public QObject
-{
+class UPNPConnection : public QObject {
     Q_OBJECT
 public:
     enum State

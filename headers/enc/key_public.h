@@ -24,8 +24,7 @@
 #include "utils/exc_utils.h"
 #include <QDebug>
 
-class EXTRACHAIN_EXPORT KeyPublic
-{
+class EXTRACHAIN_EXPORT KeyPublic {
 private:
     std::string m_publicKey;
 

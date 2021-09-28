@@ -20,8 +20,7 @@
 #include "datastorage/transaction.h"
 
 Transaction::Transaction(QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
     this->amount = BigNumber(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
@@ -34,13 +33,11 @@ Transaction::Transaction(QObject *parent)
 }
 
 Transaction::Transaction(const QByteArray &serialized, QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
     //    QList<QByteArray> list =
     //        Serialization::deserialize(serialized, Serialization::TX_FIELD_SPLITTER);
     QList<QByteArray> list = Serialization::deserialize(serialized, Serialization::TRANSACTION_FIELD_SIZE);
-    if (list.size() == 13)
-    {
+    if (list.size() == 13) {
         this->sender = list.at(0);
         this->receiver = list.at(1);
         this->amount = BigNumber(list.at(2));
@@ -54,8 +51,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
         this->approver = list.at(10);
         this->digSig = list.at(11);
         this->producer = list.at(12);
-    }
-    else
+    } else
         qDebug() << "Incorrect TX";
 
     calcHash();
@@ -63,8 +59,7 @@ Transaction::Transaction(const QByteArray &serialized, QObject *parent)
 
 Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                          QObject *parent)
-    : Transaction(parent)
-{
+    : Transaction(parent) {
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
@@ -80,15 +75,13 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
 
 Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                          const QByteArray &data, QObject *parent)
-    : Transaction(sender, receiver, amount, parent)
-{
+    : Transaction(sender, receiver, amount, parent) {
     this->data = data;
 
     calcHash();
 }
 
-Transaction::Transaction(const Transaction &other)
-{
+Transaction::Transaction(const Transaction &other) {
     this->sender = other.sender;
     this->receiver = other.receiver;
     this->amount = other.amount;
@@ -105,118 +98,97 @@ Transaction::Transaction(const Transaction &other)
     calcHash();
 }
 
-void Transaction::setReceiver(const ActorId &value)
-{
+void Transaction::setReceiver(const ActorId &value) {
     receiver = value;
 }
 
-void Transaction::setProducer(const ActorId &value)
-{
+void Transaction::setProducer(const ActorId &value) {
     producer = value;
 }
 
-void Transaction::setSender(const ActorId &value)
-{
+void Transaction::setSender(const ActorId &value) {
     sender = value;
 }
 
-ActorId Transaction::getProducer() const
-{
+ActorId Transaction::getProducer() const {
     return producer;
 }
 
-void Transaction::setAmount(const BigNumber &value)
-{
+void Transaction::setAmount(const BigNumber &value) {
     amount = value;
 }
 
-void Transaction::setData(const QByteArray &value)
-{
+void Transaction::setData(const QByteArray &value) {
     data = value;
 }
 
-void Transaction::setToken(const ActorId &value)
-{
+void Transaction::setToken(const ActorId &value) {
     token = value;
 }
 
-long long Transaction::getDate() const
-{
+long long Transaction::getDate() const {
     return date;
 }
 
-void Transaction::setDate(long long value)
-{
+void Transaction::setDate(long long value) {
     date = value;
 }
 
-void Transaction::calcHash()
-{
+void Transaction::calcHash() {
     QByteArray resultHash = Utils::calcKeccak(getDataForHash());
-    if (!resultHash.isEmpty())
-    {
+    if (!resultHash.isEmpty()) {
         this->hash = resultHash;
     }
 }
 
-QByteArray Transaction::getDataForHash() const
-{
+QByteArray Transaction::getDataForHash() const {
     return (sender.toByteArray() + receiver.toByteArray() + amount.toByteArray() + QByteArray::number(date)
             + data + token.toByteArray() + prevBlock.toByteArray() + QByteArray::number(gas)
             + approver.toByteArray() + producer.toByteArray());
 }
 
-QByteArray Transaction::getDataForDigSig() const
-{
+QByteArray Transaction::getDataForDigSig() const {
     return getDataForHash() + hash;
 }
 
-void Transaction::sign(const Actor<KeyPrivate> &actor)
-{
+void Transaction::sign(const Actor<KeyPrivate> &actor) {
     this->approver = actor.id();
     calcHash();
     this->digSig = actor.key()->sign(getDataForDigSig());
 }
 
-bool Transaction::verify(const Actor<KeyPublic> &actor) const
-{
+bool Transaction::verify(const Actor<KeyPublic> &actor) const {
     return digSig.isEmpty() ? false : actor.key()->verify(getDataForDigSig(), getDigSig());
 }
 
-int Transaction::getHop() const
-{
+int Transaction::getHop() const {
     return hop;
 }
 
-void Transaction::setPrevBlock(const BigNumber &value)
-{
+void Transaction::setPrevBlock(const BigNumber &value) {
     this->prevBlock = value;
 
     calcHash();
 }
 
-void Transaction::setGas(int gas)
-{
+void Transaction::setGas(int gas) {
     this->gas = gas;
 
     calcHash();
 }
 
-void Transaction::setHop(int hop)
-{
+void Transaction::setHop(int hop) {
     this->hop = hop;
 
     calcHash();
 }
 
-void Transaction::decrementHop()
-{
+void Transaction::decrementHop() {
     this->hop--;
     calcHash();
 }
 
-void Transaction::clear()
-{
+void Transaction::clear() {
     this->sender = "0";
     this->receiver = "0";
     this->amount = BigNumber(0);
@@ -233,64 +205,52 @@ void Transaction::clear()
     calcHash();
 }
 
-int Transaction::getGas() const
-{
+int Transaction::getGas() const {
     return this->gas;
 }
 
-ActorId Transaction::getSender() const
-{
+ActorId Transaction::getSender() const {
     return this->sender;
 }
 
-ActorId Transaction::getReceiver() const
-{
+ActorId Transaction::getReceiver() const {
     return this->receiver;
 }
 
-BigNumber Transaction::getAmount() const
-{
+BigNumber Transaction::getAmount() const {
     return this->amount;
 }
 
-BigNumber Transaction::getPrevBlock() const
-{
+BigNumber Transaction::getPrevBlock() const {
     return this->prevBlock;
 }
 
-QByteArray Transaction::getHash() const
-{
+QByteArray Transaction::getHash() const {
     return this->hash;
 }
 
-ActorId Transaction::getToken() const
-{
+ActorId Transaction::getToken() const {
     return this->token;
 }
 
-ActorId Transaction::getApprover() const
-{
+ActorId Transaction::getApprover() const {
     return this->approver;
 }
 
-QByteArray Transaction::getData() const
-{
+QByteArray Transaction::getData() const {
     return this->data;
 }
 
-QByteArray Transaction::getDigSig() const
-{
+QByteArray Transaction::getDigSig() const {
     return this->digSig;
 }
 
-bool Transaction::isEmpty() const
-{
+bool Transaction::isEmpty() const {
     return sender.isEmpty() && receiver.isEmpty() && amount.isEmpty() && data.isEmpty() && prevBlock.isEmpty()
         && approver.isEmpty() && hash.isEmpty();
 }
 
-bool Transaction::operator==(const Transaction &transaction) const
-{
+bool Transaction::operator==(const Transaction &transaction) const {
     if (this->sender != transaction.getSender())
         return false;
     if (this->receiver != transaction.getReceiver())
@@ -318,13 +278,11 @@ bool Transaction::operator==(const Transaction &transaction) const
     return true;
 }
 
-bool Transaction::operator!=(const Transaction &transaction) const
-{
+bool Transaction::operator!=(const Transaction &transaction) const {
     return !(*this == transaction);
 }
 
-void Transaction::operator=(const Transaction &other)
-{
+void Transaction::operator=(const Transaction &other) {
     this->sender = other.sender;
     this->receiver = other.receiver;
     this->amount = other.amount;
@@ -340,8 +298,7 @@ void Transaction::operator=(const Transaction &other)
     this->producer = other.producer;
 }
 
-QString Transaction::toString() const
-{
+QString Transaction::toString() const {
     return "sender:" + sender.toByteArray() + ", receiver:" + receiver.toByteArray()
         + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
         + ", data:" + data + ", token:" + token.toByteArray() + ", prevBlock:" + prevBlock.toByteArray()
@@ -349,8 +306,7 @@ QString Transaction::toString() const
         + ", approver:" + approver.toByteArray() + ", digitalSignature:" + digSig;
 }
 
-QByteArray Transaction::serialize() const
-{
+QByteArray Transaction::serialize() const {
     QList<QByteArray> list;
     list << sender.toByteArray() << receiver.toByteArray() << amount.toByteArray() << QByteArray::number(date)
          << data << token.toByteArray() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
@@ -361,8 +317,7 @@ QByteArray Transaction::serialize() const
     return Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE);
 }
 
-BigNumber Transaction::visibleToAmount(QByteArray amount)
-{
+BigNumber Transaction::visibleToAmount(QByteArray amount) {
     if (amount.isEmpty())
         return 0;
 
@@ -376,16 +331,14 @@ BigNumber Transaction::visibleToAmount(QByteArray amount)
     return BigNumber(amount, 10);
 }
 
-QString Transaction::amountToVisible(BigNumber number)
-{
+QString Transaction::amountToVisible(BigNumber number) {
     if (number == 0)
         return "0";
 
     QByteArray numberArr = number.toByteArray(10);
     bool minus = false;
 
-    if (numberArr[0] == '-')
-    {
+    if (numberArr[0] == '-') {
         numberArr = numberArr.remove(0, 1);
         minus = true;
     }
@@ -402,16 +355,14 @@ QString Transaction::amountToVisible(BigNumber number)
     return (minus ? "-" : "") + numberDec;
 }
 
-BigNumber Transaction::amountNormalizeMul(BigNumber number)
-{
+BigNumber Transaction::amountNormalizeMul(BigNumber number) {
     QByteArray n = number.toByteArray(10);
     if (n.length() < 36)
         return number;
     return BigNumber(n.chopped(18), 10);
 }
 
-BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
-{
+BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2) {
     QByteArray one = Transaction::amountToVisible(number1).toLatin1();
     QByteArray two = Transaction::amountToVisible(number1).toLatin1();
     int index1 = one.indexOf(".");
@@ -426,8 +377,7 @@ BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2)
     return amountNormalizeMul(number) / returned1 / returned2;
 }
 
-BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)
-{
+BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2) {
     QByteArray two = Transaction::amountToVisible(number2).toLatin1();
     int index = two.indexOf(".");
     int div = two.size() - index - 1;
@@ -441,8 +391,7 @@ BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2)
     return number1 * returned / second;
 }
 
-BigNumber Transaction::amountPercent(BigNumber number, uint percent)
-{
+BigNumber Transaction::amountPercent(BigNumber number, uint percent) {
     if (percent > 100)
         percent = 100;
     return number * percent / 100;

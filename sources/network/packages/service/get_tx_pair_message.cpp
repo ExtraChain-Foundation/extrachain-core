@@ -21,24 +21,20 @@
 
 using namespace Messages;
 
-void Messages::GetTxPairMessage::operator=(QByteArray &serialized)
-{
+void Messages::GetTxPairMessage::operator=(QByteArray &serialized) {
     deserialize(serialized);
 }
 
-short Messages::GetTxPairMessage::getFieldsCount() const
-{
+short Messages::GetTxPairMessage::getFieldsCount() const {
     return GetTxPairMessage::FIELDS_COUNT;
 }
 
-QByteArray GetTxPairMessage::serialize() const
-{
+QByteArray GetTxPairMessage::serialize() const {
     return Serialization::serialize({ senderId.toByteArray(), receiverId.toByteArray() },
                                     GetTxPairMessage::FIELD_SIZE);
 }
 
-void GetTxPairMessage::deserialize(const QByteArray &serilaized)
-{
+void GetTxPairMessage::deserialize(const QByteArray &serilaized) {
     QList<QByteArray> list = Serialization::deserialize(serilaized, GetTxPairMessage::FIELD_SIZE);
     this->senderId = list.at(0);
     this->receiverId = list.at(1);

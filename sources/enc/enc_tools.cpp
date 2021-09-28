@@ -2,8 +2,7 @@
 
 using std::string, std::vector;
 
-string SecretKey::keygen()
-{
+string SecretKey::keygen() {
     vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
     crypto_secretbox_keygen(sk.data());
     string skey = Utils::byteToHexString(sk);
@@ -11,15 +10,11 @@ string SecretKey::keygen()
     return skey;
 }
 
-string SecretKey::getKeyFromPass(const string &pass, const string &salt)
-{
+string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
     vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
-    if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES)
-    {
+    if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES) {
         std::fill(vsalt.begin(), vsalt.end(), '0');
-    }
-    else
-    {
+    } else {
         vsalt = vector<unsigned char>(salt.begin(), salt.end());
     }
     vector<unsigned char> key(crypto_box_SEEDBYTES);
@@ -32,8 +27,7 @@ string SecretKey::getKeyFromPass(const string &pass, const string &salt)
     return skey;
 }
 
-string SecretKey::encrypt(const string &msg, const string &secret_key)
-{
+string SecretKey::encrypt(const string &msg, const string &secret_key) {
     if (msg.empty() || secret_key.empty())
         qFatal("[SecretKey::encrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
                secret_key.data());
@@ -49,8 +43,7 @@ string SecretKey::encrypt(const string &msg, const string &secret_key)
     randombytes_buf(nonce.data(), nonce.size());
     int r = crypto_secretbox_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), nonce.data(), sk.data());
     string res;
-    if (r == 0)
-    {
+    if (r == 0) {
         enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
         res = Utils::byteToHexString(enc_msg);
         res.erase(--res.end());
@@ -62,8 +55,7 @@ string SecretKey::encrypt(const string &msg, const string &secret_key)
     return res;
 }
 
-string SecretKey::decrypt(const string &msg, const string &secret_key)
-{
+string SecretKey::decrypt(const string &msg, const string &secret_key) {
     if (msg.empty() || secret_key.empty())
         qFatal("[SecretKey::decrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
                secret_key.data());
@@ -85,8 +77,7 @@ string SecretKey::decrypt(const string &msg, const string &secret_key)
     int r =
         crypto_secretbox_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), nonce.data(), sk.data());
     string res;
-    if (r == 0)
-    {
+    if (r == 0) {
         res = string(dec_msg.begin(), dec_msg.end());
     }
 
@@ -96,20 +87,17 @@ string SecretKey::decrypt(const string &msg, const string &secret_key)
     return res;
 }
 
-string SecretKey::encryptWithPassword(const string &data, const string &password)
-{
+string SecretKey::encryptWithPassword(const string &data, const string &password) {
     string key = getKeyFromPass(password);
     return encrypt(data, key);
 }
 
-string SecretKey::decryptWithPassword(const string &data, const string &password)
-{
+string SecretKey::decryptWithPassword(const string &data, const string &password) {
     string key = getKeyFromPass(password);
     return decrypt(data, key);
 }
 
-std::pair<std::string, std::string> SecretKey::createAsymmetricPair()
-{
+std::pair<std::string, std::string> SecretKey::createAsymmetricPair() {
     std::vector<unsigned char> sk(crypto_sign_SECRETKEYBYTES);
     std::vector<unsigned char> pk(crypto_sign_PUBLICKEYBYTES);
     crypto_sign_keypair(pk.data(), sk.data());
@@ -121,8 +109,7 @@ std::pair<std::string, std::string> SecretKey::createAsymmetricPair()
 }
 
 std::string SecretKey::encryptAsymmetric(const std::string &data, const std::string &secret_key,
-                                         const std::string &public_key, const std::string &nonce)
-{
+                                         const std::string &public_key, const std::string &nonce) {
     if (data.empty() || secret_key.empty() || public_key.empty())
         qFatal("[SecretKey::encryptAsymmetric] data, secret or public is empty");
 
@@ -144,12 +131,9 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
     vector<unsigned char> vnonce;
     vnonce.resize(crypto_box_NONCEBYTES);
 
-    if (nonce.size() == crypto_box_NONCEBYTES)
-    {
+    if (nonce.size() == crypto_box_NONCEBYTES) {
         vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
-    }
-    else
-    {
+    } else {
         randombytes_buf(vnonce.data(), vnonce.size());
     }
 
@@ -157,10 +141,8 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
                             vnonce.data(), xpkr.data(), xsks.data());
 
     string res;
-    if (r == 0)
-    {
-        if (nonce.size() != crypto_box_NONCEBYTES)
-        {
+    if (r == 0) {
+        if (nonce.size() != crypto_box_NONCEBYTES) {
             enc_msg.insert(enc_msg.begin(), vnonce.begin(), vnonce.end());
         }
         res = Utils::byteToHexString(enc_msg);
@@ -175,8 +157,7 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
 }
 
 std::string SecretKey::decryptAsymmetric(const std::string &data, const std::string &secret_key,
-                                         const std::string &public_key, const std::string &nonce)
-{
+                                         const std::string &public_key, const std::string &nonce) {
     if (data.empty() || secret_key.empty() || public_key.empty())
         qFatal("[SecretKey::decryptAsymmetric] data, secret or public is empty");
 
@@ -185,19 +166,15 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
     string sk = Utils::hexStringToByte(secret_key);
     vector<unsigned char> vnonce;
 
-    if (nonce.size() == crypto_box_NONCEBYTES)
-    {
+    if (nonce.size() == crypto_box_NONCEBYTES) {
         vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
-    }
-    else
-    {
+    } else {
         string s_nonce = sdata.substr(0, crypto_box_NONCEBYTES);
         sdata.erase(0, crypto_box_NONCEBYTES);
         vnonce = vector<unsigned char>(s_nonce.begin(), s_nonce.end());
     }
 
-    if (sdata.size() < crypto_secretbox_MACBYTES)
-    {
+    if (sdata.size() < crypto_secretbox_MACBYTES) {
         qCritical() << "Critical: [SecretKey::decryptAsymmetric] Incorrect msg" << sdata.size()
                     << crypto_secretbox_MACBYTES;
         return "";
@@ -220,8 +197,7 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
     int r = crypto_box_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), vnonce.data(), xpks.data(),
                                  xskr.data());
     string res;
-    if (r == 0)
-    {
+    if (r == 0) {
         res = string(dec_msg.begin(), dec_msg.end());
     }
 
@@ -234,16 +210,14 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
 }
 
 QByteArray SecretKey::encryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
-                                        const QByteArray &public_key, const QByteArray &nonce)
-{
+                                        const QByteArray &public_key, const QByteArray &nonce) {
     auto res = encryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
                                  nonce.toStdString());
     return QByteArray::fromStdString(res);
 }
 
 QByteArray SecretKey::decryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
-                                        const QByteArray &public_key, const QByteArray &nonce)
-{
+                                        const QByteArray &public_key, const QByteArray &nonce) {
     auto res = decryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
                                  nonce.toStdString());
     return QByteArray::fromStdString(res);

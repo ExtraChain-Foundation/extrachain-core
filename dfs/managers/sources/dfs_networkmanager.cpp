@@ -22,15 +22,12 @@
 #include "network/isocket_service.h"
 #include "managers/thread_pool.h"
 
-void DfsNetworkManager::setDfs(Dfs *value)
-{
+void DfsNetworkManager::setDfs(Dfs *value) {
     dfs = value;
 }
 
-bool DfsNetworkManager::isLoading(const QString &fileName)
-{
-    for (DFSResolverService *resolver : qAsConst(dfsResolvers))
-    {
+bool DfsNetworkManager::isLoading(const QString &fileName) {
+    for (DFSResolverService *resolver : qAsConst(dfsResolvers)) {
         if (resolver->getTitle().filePath == fileName)
             return true;
     }
@@ -39,34 +36,29 @@ bool DfsNetworkManager::isLoading(const QString &fileName)
 }
 
 DfsNetworkManager::DfsNetworkManager(ActorIndex *actInd, const QString &localIp)
-    : NetworkManager(actInd, localIp)
-{
+    : NetworkManager(actInd, localIp) {
     tcpPort = 2223;
     wsPort = 2234;
 }
 
-DfsNetworkManager::~DfsNetworkManager()
-{
+DfsNetworkManager::~DfsNetworkManager() {
     emit finished();
 }
 
-void DfsNetworkManager::connectResolver(DFSResolverService *resolver)
-{
+void DfsNetworkManager::connectResolver(DFSResolverService *resolver) {
     connect(resolver, &DFSResolverService::dfsTitle, this, &DfsNetworkManager::titleArrived);
     connect(this, &DfsNetworkManager::newMessage, resolver, &DFSResolverService::assignNewTask);
     connect(resolver, &DFSResolverService::TaskFinished, this, &DfsNetworkManager::removeResolver);
     connect(this, &DfsNetworkManager::newSocket, dfs, &Dfs::dfsSyncT);
 }
 
-void DfsNetworkManager::disconnectResolver(DFSResolverService *resolver)
-{
+void DfsNetworkManager::disconnectResolver(DFSResolverService *resolver) {
     disconnect(resolver, &DFSResolverService::dfsTitle, this, &DfsNetworkManager::titleArrived);
     disconnect(this, &DfsNetworkManager::newMessage, resolver, &DFSResolverService::assignNewTask);
     disconnect(resolver, &DFSResolverService::TaskFinished, this, &DfsNetworkManager::removeResolver);
 }
 
-void DfsNetworkManager::createDFSResolver(Network::DataStruct ds)
-{
+void DfsNetworkManager::createDFSResolver(Network::DataStruct ds) {
     DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
     resolver->setDfs(dfs);
     resolver->setActorIndex(m_actorIndex);
@@ -77,10 +69,8 @@ void DfsNetworkManager::createDFSResolver(Network::DataStruct ds)
     ThreadPool::addThread(dfsResolvers.last());
 }
 
-void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair &receiver)
-{
-    if (!msg.isEmpty())
-    {
+void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair &receiver) {
+    if (!msg.isEmpty()) {
         Network::DataStruct dStruct;
         dStruct.msg = msg;
         dStruct.receiver = receiver;
@@ -88,8 +78,7 @@ void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair 
     }
 }
 
-void DfsNetworkManager::process()
-{
+void DfsNetworkManager::process() {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
     uResolver->setDfs(dfs);
     uResolver->setActorIndex(m_actorIndex);
@@ -100,25 +89,19 @@ void DfsNetworkManager::process()
     NetworkManager::process();
 }
 
-void DfsNetworkManager::titleArrived(Network::DataStruct ds)
-{
-    if (dfsResolvers.size() >= Network::maxDfsResolver)
-    {
+void DfsNetworkManager::titleArrived(Network::DataStruct ds) {
+    if (dfsResolvers.size() >= Network::maxDfsResolver) {
         titleVector.push(ds);
         return;
-    }
-    else
-    {
+    } else {
         createDFSResolver(ds);
     }
 }
 
-void DfsNetworkManager::removeResolver(DFSResolverService::FinishStatus status)
-{
+void DfsNetworkManager::removeResolver(DFSResolverService::FinishStatus status) {
     DFSResolverService *resolver = qobject_cast<DFSResolverService *>(QObject::sender());
 
-    if (resolver == nullptr)
-    {
+    if (resolver == nullptr) {
         qDebug() << "WAT";
         return;
     }
@@ -127,23 +110,20 @@ void DfsNetworkManager::removeResolver(DFSResolverService::FinishStatus status)
     auto pair = resolver->getLongReceiver();
     disconnectResolver(resolver);
 
-    if (resolver->getType() == Resolver::Type::DFS)
-    {
+    if (resolver->getType() == Resolver::Type::DFS) {
         dfsResolvers.removeOne(resolver);
     }
 
     if (resolver != nullptr)
         emit resolver->finished();
 
-    if (titleVector.size() > 0)
-    {
+    if (titleVector.size() > 0) {
         Network::DataStruct ds = titleVector.front();
         titleVector.pop();
         createDFSResolver(ds);
     }
 
-    switch (status)
-    {
+    switch (status) {
     case DFSResolverService::FinishStatus::FileReset:
         emit dfs->requestFile(filePath);
         break;
@@ -155,8 +135,7 @@ void DfsNetworkManager::removeResolver(DFSResolverService::FinishStatus status)
     }
 }
 
-void DfsNetworkManager::checkConnectionsStatus()
-{
+void DfsNetworkManager::checkConnectionsStatus() {
     bool flag = false;
     std::for_each(m_connections.begin(), m_connections.end(),
                   [&flag](SocketService *el) { flag = flag || el->isActive(); });

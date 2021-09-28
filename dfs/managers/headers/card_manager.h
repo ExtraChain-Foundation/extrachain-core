@@ -24,8 +24,7 @@
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
 
-class CardManager
-{
+class CardManager {
 public:
     enum class PathStyle
     {

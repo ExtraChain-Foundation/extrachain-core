@@ -23,8 +23,7 @@
 #include <QDebug>
 #include "extrachain_global.h"
 
-class EXTRACHAIN_EXPORT KeyPrivate
-{
+class EXTRACHAIN_EXPORT KeyPrivate {
 private:
     std::string m_secretKey;
     std::string m_publicKey;

@@ -5,8 +5,7 @@
 
 class NetworkManager;
 
-class EXTRACHAIN_EXPORT SocketService : public QObject
-{
+class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:

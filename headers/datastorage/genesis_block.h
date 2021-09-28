@@ -26,8 +26,7 @@
  * @brief Representation of one row in genesis block data field
  */
 
-class EXTRACHAIN_EXPORT GenesisDataRow
-{
+class EXTRACHAIN_EXPORT GenesisDataRow {
 public:
     ActorId actorId;
     BigNumber state;
@@ -35,8 +34,7 @@ public:
     DataStorage::typeDataRow type;
 
 public:
-    GenesisDataRow()
-    {
+    GenesisDataRow() {
     }
 
     GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
@@ -44,27 +42,22 @@ public:
         : actorId(actorId)
         , state(state)
         , token(token)
-        , type(type)
-    {
+        , type(type) {
     }
 
-    GenesisDataRow(const QByteArray &serialized)
-    {
+    GenesisDataRow(const QByteArray &serialized) {
         deserialize(serialized);
     }
 
-    QByteArray serialize() const
-    {
+    QByteArray serialize() const {
         QList<QByteArray> l;
         l << actorId.toByteArray() << state.toByteArray() << token.toByteArray() << QByteArray::number(type);
         return Serialization::serialize(l, Serialization::DEFAULT_FIELD_SIZE);
     }
 
-    void deserialize(const QByteArray &serialized)
-    {
+    void deserialize(const QByteArray &serialized) {
         QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
-        if (l.size() == 4)
-        {
+        if (l.size() == 4) {
             actorId = l.at(0);
             state = BigNumber(l.at(1));
             token = l.at(2);
@@ -72,8 +65,7 @@ public:
         }
     }
 
-    bool operator==(const GenesisDataRow &other) const
-    {
+    bool operator==(const GenesisDataRow &other) const {
         return this->actorId == other.actorId && this->state == other.state && this->token == other.token
             && this->type == other.type;
     }
@@ -88,8 +80,7 @@ static const QByteArray GENESIS_BLOCK_MERGE = "genesisMerge";
  * @brief Genesis block it's an extended block, with has specific data field
  * and one additional field - prevGenHash.
  */
-class EXTRACHAIN_EXPORT GenesisBlock : public Block
-{
+class EXTRACHAIN_EXPORT GenesisBlock : public Block {
 public:
     QByteArray prevGenHash; // previous genesis block hashes
 

@@ -26,8 +26,7 @@
 #include "utils/db_connector.h"
 #include "dfs/managers/headers/card_manager.h"
 
-class CardFile
-{
+class CardFile {
 public:
     CardFile(QString userId);
 

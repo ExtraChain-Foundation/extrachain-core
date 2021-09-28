@@ -18,16 +18,16 @@
  */
 
 #ifndef CHATMANAGER_H
-#define CHATMANAGER_H
+    #define CHATMANAGER_H
 
-#include "chat.h"
-#include <QObject>
-#include <QList>
-#include <QTimer>
-#include "dfs/types/headers/dfstruct.h"
-#include "utils/db_connector.h"
-#include "enc/enc_tools.h"
-#include "network/packages/base_message.h"
+    #include "chat.h"
+    #include <QObject>
+    #include <QList>
+    #include <QTimer>
+    #include "dfs/types/headers/dfstruct.h"
+    #include "utils/db_connector.h"
+    #include "enc/enc_tools.h"
+    #include "network/packages/base_message.h"
 
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
 // path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current
@@ -38,14 +38,13 @@
 // of inviter and it id blockhain/index/actor/[ownerId]/chatStorage/[chatId]  /[sessionNumb]            //file
 // that content user messages
 
-#ifndef NETWORK_MANAGER_DEF
-#define NETWORK_MANAGER_DEF
+    #ifndef NETWORK_MANAGER_DEF
+        #define NETWORK_MANAGER_DEF
 class NetworkManager;
-#include "network/network_manager.h"
-#endif
+        #include "network/network_manager.h"
+    #endif
 
-class EXTRACHAIN_EXPORT ChatManager : public QObject
-{
+class EXTRACHAIN_EXPORT ChatManager : public QObject {
     Q_OBJECT
 private:
     const QByteArray _salt = "invitetochat";

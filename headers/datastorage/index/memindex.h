@@ -26,8 +26,7 @@
 #include "datastorage/block.h"
 #include "utils/exc_utils.h"
 
-class MemIndex
-{
+class MemIndex {
 private:
     QList<Block> blocks;
 

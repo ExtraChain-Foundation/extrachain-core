@@ -24,29 +24,24 @@
 
 using std::string, std::vector;
 
-KeyPublic::KeyPublic(const string &publicKey)
-{
+KeyPublic::KeyPublic(const string &publicKey) {
     m_publicKey = publicKey;
 }
 
-KeyPublic::KeyPublic(const QJsonObject &json)
-{
+KeyPublic::KeyPublic(const QJsonObject &json) {
     m_publicKey = json["publicKey"].toString().toStdString();
 }
 
-KeyPublic::KeyPublic(const KeyPublic &keyPublic)
-{
+KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
     m_publicKey = keyPublic.publicKey();
 }
 
-QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey)
-{
+QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey) {
     auto res = SecretKey::encryptAsymmetric(data.toStdString(), senderPrivateKey, m_publicKey);
     return QByteArray::fromStdString(res);
 }
 
-bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex)
-{
+bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) {
     string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
@@ -56,7 +51,6 @@ bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex)
     return res == 0;
 }
 
-string KeyPublic::publicKey() const
-{
+string KeyPublic::publicKey() const {
     return m_publicKey;
 }

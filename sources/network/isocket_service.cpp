@@ -3,17 +3,15 @@
 #include "enc/enc_tools.h"
 
 #ifndef EXTRACHAIN_CMAKE
-#include "preconfig.h"
+    #include "preconfig.h"
 #endif
 
 SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
     m_networkManager = networkManager;
 }
 
-SocketService::SocketService(const SocketService &socket)
-{
+SocketService::SocketService(const SocketService &socket) {
     m_identifier = socket.m_identifier;
     m_ip = socket.m_ip;
     m_activated = socket.m_activated;
@@ -22,47 +20,38 @@ SocketService::SocketService(const SocketService &socket)
     m_bytesCompressed = socket.m_bytesCompressed;
 }
 
-const QString &SocketService::identifier() const
-{
+const QString &SocketService::identifier() const {
     return m_identifier;
 }
 
-QString SocketService::protocolString() const
-{
+QString SocketService::protocolString() const {
     return "Undefined";
 }
 
-Network::Protocol SocketService::protocol() const
-{
+Network::Protocol SocketService::protocol() const {
     return Network::Protocol::Undefined;
 }
 
-const QString &SocketService::ip() const
-{
+const QString &SocketService::ip() const {
     return m_ip;
 }
 
-int SocketService::bytesCompressed() const
-{
+int SocketService::bytesCompressed() const {
     return m_bytesCompressed;
 }
 
-int SocketService::bytesOutgoing() const
-{
+int SocketService::bytesOutgoing() const {
     return m_bytesOutgoing;
 }
 
-int SocketService::bytesIncoming() const
-{
+int SocketService::bytesIncoming() const {
     return m_bytesIncoming;
 }
 
-bool SocketService::checkFirstMessage(const QString &message)
-{
+bool SocketService::checkFirstMessage(const QString &message) {
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
-    if (json.isEmpty())
-    {
+    if (json.isEmpty()) {
         qDebug() << "[Socket] First message:" << message;
         qFatal("[Socket] Can't check first message");
     }
@@ -77,23 +66,20 @@ bool SocketService::checkFirstMessage(const QString &message)
 
     qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
 
-    if (version != EXTRACHAIN_VERSION)
-    {
+    if (version != EXTRACHAIN_VERSION) {
         qDebug() << "[Socket] Close, because version incompatible";
         emit error(Network::SocketServiceError::IncompatibleVersion, version);
         closeSocket();
     }
 
-    if (!(somethingEmpty || isFirstIdsContains))
-    {
+    if (!(somethingEmpty || isFirstIdsContains)) {
         qDebug() << "[Socket] Close, because network incompatible";
         emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
         closeSocket();
         return false;
     }
 
-    if (m_identifier == Network::currentIdentifier())
-    {
+    if (m_identifier == Network::currentIdentifier()) {
         emit error(Network::SocketServiceError::IncompatibleIdentifier, "");
         closeSocket();
         return false;
@@ -105,8 +91,7 @@ bool SocketService::checkFirstMessage(const QString &message)
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
 
-    if (flag)
-    {
+    if (flag) {
         emit error(Network::SocketServiceError::DuplicateIdentifier, "");
         qDebug() << "[Socket] Duplicate identifier";
         closeSocket();
@@ -118,13 +103,11 @@ bool SocketService::checkFirstMessage(const QString &message)
     return true;
 }
 
-void SocketService::closeSocket()
-{
+void SocketService::closeSocket() {
     m_activated = false;
 }
 
-QByteArray SocketService::generateFirstMessage()
-{
+QByteArray SocketService::generateFirstMessage() {
     QJsonObject json;
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
@@ -138,8 +121,7 @@ QByteArray SocketService::generateFirstMessage()
     return result;
 }
 
-QByteArray SocketService::prepareSendMessage(const QByteArray &message)
-{
+QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
     if (pub.isEmpty())
         qFatal("Socket encrypt error");
 
@@ -149,8 +131,7 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message)
     return result;
 }
 
-QByteArray SocketService::prepareReceiveMessage(const QByteArray &message)
-{
+QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     if (pub.isEmpty())
         qFatal("Socket decrypt error");
 

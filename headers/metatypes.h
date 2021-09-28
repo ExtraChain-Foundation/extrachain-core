@@ -67,8 +67,7 @@ Q_DECLARE_METATYPE(ActorType)
 Q_DECLARE_METATYPE(Network::Protocol)
 Q_DECLARE_METATYPE(Network::SocketServiceError)
 
-void registerMetaTypes()
-{
+void registerMetaTypes() {
     qRegisterMetaType<BigNumber>();
     qRegisterMetaType<Block>();
     qRegisterMetaType<GenesisBlock>();

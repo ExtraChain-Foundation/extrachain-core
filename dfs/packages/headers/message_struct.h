@@ -26,9 +26,7 @@
 #include "network/packages/message_interface.h"
 
 namespace DistFileSystem {
-struct DfsMessage : Messages::ISmallMessage
-{
-
+struct DfsMessage : Messages::ISmallMessage {
     const short FIELDS_COUNT = 4;
 
     QByteArray dataHash;

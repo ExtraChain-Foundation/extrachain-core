@@ -26,8 +26,7 @@
 #include <QHash>
 class BigNumber;
 
-class EXTRACHAIN_EXPORT SocketPair
-{
+class EXTRACHAIN_EXPORT SocketPair {
 public:
     std::string ip;
     quint16 port = 0;
@@ -45,13 +44,11 @@ public:
 };
 
 #if QT_VERSION_MAJOR == 6
-inline size_t qHash(const SocketPair &key, size_t seed = 0)
-{
+inline size_t qHash(const SocketPair &key, size_t seed = 0) {
     return qHash(key.serialize(), seed);
 }
 #else
-inline uint qHash(const SocketPair &key, uint seed = 0)
-{
+inline uint qHash(const SocketPair &key, uint seed = 0) {
     return qHash(key.serialize(), seed);
 }
 #endif

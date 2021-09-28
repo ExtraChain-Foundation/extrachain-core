@@ -26,8 +26,7 @@
 #include <QFile>
 
 namespace DistFileSystem {
-struct DfsChanges : Messages::ISmallMessage
-{
+struct DfsChanges : Messages::ISmallMessage {
     const short FIELDS_COUNT = 9;
 
     QString filePath;

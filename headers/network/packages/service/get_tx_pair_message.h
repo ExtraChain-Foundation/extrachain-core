@@ -24,8 +24,7 @@
 
 namespace Messages {
 
-struct GetTxPairMessage : IMessage
-{
+struct GetTxPairMessage : IMessage {
     static const short FIELD_SIZE = 2;
     static const short FIELDS_COUNT = 2;
 

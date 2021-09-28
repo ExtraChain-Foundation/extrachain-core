@@ -28,8 +28,7 @@
 #include "utils/variant_model.h"
 #include "extrachain_global.h"
 
-class EXTRACHAIN_EXPORT LogsManager : public QObject
-{
+class EXTRACHAIN_EXPORT LogsManager : public QObject {
     Q_OBJECT
 
 public:
@@ -70,18 +69,15 @@ private:
     static QString normalizeFileName(const QString& file);
 };
 
-struct UnicodedStream : QTextStream
-{
+struct UnicodedStream : QTextStream {
     using QTextStream::QTextStream;
 
     template <typename T>
-    UnicodedStream& operator<<(T const& t)
-    {
+    UnicodedStream& operator<<(T const& t) {
         return static_cast<UnicodedStream&>(static_cast<QTextStream&>(*this) << t);
     }
 
-    UnicodedStream& operator<<(char const* ptr)
-    {
+    UnicodedStream& operator<<(char const* ptr) {
         return static_cast<UnicodedStream&>(*this << QString(ptr));
     }
 };

@@ -26,8 +26,7 @@
 #include "extrachain_global.h"
 
 namespace DistFileSystem {
-struct DfsRequest : Messages::ISmallMessage
-{
+struct DfsRequest : Messages::ISmallMessage {
     const short FIELDS_COUNT = 1;
     QString filePath;
 
@@ -42,8 +41,7 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-struct DfsRequestFinished : Messages::ISmallMessage
-{
+struct DfsRequestFinished : Messages::ISmallMessage {
     const short FIELDS_COUNT = 1;
     QString filePath;
 

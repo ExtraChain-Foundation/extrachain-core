@@ -35,8 +35,7 @@ namespace Messages {
  * 3) initFields
  *
  */
-struct BaseMessage : IMessage
-{
+struct BaseMessage : IMessage {
     unsigned int type = 0; // message type
     ActorId signer;        // message signer actor's id
     QByteArray digSig;     // msg digital signature

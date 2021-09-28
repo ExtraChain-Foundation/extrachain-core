@@ -19,8 +19,7 @@
 
 #include "dfs/types/headers/dfstruct.h"
 
-DfsStruct::Type DfsStruct::toDfsType(QByteArray type)
-{
+DfsStruct::Type DfsStruct::toDfsType(QByteArray type) {
     if (type == "images")
         return DfsStruct::Type::Image;
     else if (type == "video")
@@ -42,11 +41,9 @@ DfsStruct::Type DfsStruct::toDfsType(QByteArray type)
     return DfsStruct::Type::Service;
 }
 
-QByteArray DfsStruct::toByteArray(Type type)
-{
+QByteArray DfsStruct::toByteArray(Type type) {
     QByteArray res;
-    switch (type)
-    {
+    switch (type) {
     case DfsStruct::Type::Image:
         res = "images";
         break;
@@ -84,7 +81,6 @@ QByteArray DfsStruct::toByteArray(Type type)
     return res;
 }
 
-QString DfsStruct::toString(Type type)
-{
+QString DfsStruct::toString(Type type) {
     return QString(DfsStruct::toByteArray(type));
 }

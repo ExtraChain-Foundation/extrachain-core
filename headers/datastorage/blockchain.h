@@ -59,8 +59,7 @@ enum class FreezeBalanceSearch
     OnlySender
 };
 
-class EXTRACHAIN_EXPORT Blockchain : public QObject
-{
+class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");

@@ -29,8 +29,7 @@
 #include "enc/key_private.h"
 #include "datastorage/transaction.h"
 
-class EXTRACHAIN_EXPORT SmartContractManager : public QObject
-{
+class EXTRACHAIN_EXPORT SmartContractManager : public QObject {
     Q_OBJECT
 
 private:

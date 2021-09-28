@@ -29,8 +29,7 @@
 
 namespace DistFileSystem {
 
-struct ReqFragsMessage : Messages::ISmallMessage
-{
+struct ReqFragsMessage : Messages::ISmallMessage {
     const short FIELDS_COUNT = 2;
 
     QString filePath;

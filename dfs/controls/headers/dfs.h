@@ -34,14 +34,12 @@
 #include <QDirIterator>
 #include <iterator>
 #ifdef ECLIENT
-#include <QImage>
-#include <QImageReader>
+    #include <QImage>
+    #include <QImageReader>
 #endif
 #include "extrachain_global.h"
 
-class EXTRACHAIN_EXPORT Dfs : public QObject
-{
-
+class EXTRACHAIN_EXPORT Dfs : public QObject {
     Q_OBJECT
 
 private:

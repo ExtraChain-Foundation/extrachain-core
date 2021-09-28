@@ -35,8 +35,7 @@
 #include "utils/exc_utils.h"
 #include "network/packages/service/ping_pong_message.h"
 
-class EXTRACHAIN_EXPORT DiscoveryService : public QObject
-{
+class EXTRACHAIN_EXPORT DiscoveryService : public QObject {
     Q_OBJECT
 
 private:

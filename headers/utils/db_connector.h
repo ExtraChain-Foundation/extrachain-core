@@ -37,16 +37,14 @@ struct sqlite3_stmt;
 static QMutex dbmutex;
 typedef std::unordered_map<std::string, std::string> DBRow;
 
-struct DBColumn
-{
+struct DBColumn {
     std::string name;
     std::string type;
     // bool notNull = false;
     // std::string defaultValue;
     // int primaryKey = -1;
 
-    operator QString() const
-    {
+    operator QString() const {
         return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type)
             + ")";
     }
@@ -54,8 +52,7 @@ struct DBColumn
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 
-class EXTRACHAIN_EXPORT DBConnector
-{
+class EXTRACHAIN_EXPORT DBConnector {
 private:
     std::string m_file;
     bool m_open = false;

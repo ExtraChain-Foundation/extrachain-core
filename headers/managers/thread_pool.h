@@ -24,17 +24,14 @@
 #include <QThread>
 #include <QDebug>
 
-class ThreadPool
-{
-
+class ThreadPool {
 private:
     ThreadPool() = default;
     ~ThreadPool() = default;
 
 public:
     template <class Worker>
-    static QThread *addThread(Worker *worker, QThread *newThread = nullptr)
-    {
+    static QThread *addThread(Worker *worker, QThread *newThread = nullptr) {
         QThread *thread = newThread == nullptr ? new QThread() : newThread;
 
         QObject::connect(thread, &QThread::started, worker, &Worker::process);
@@ -42,8 +39,7 @@ public:
         // QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
         // QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
         QObject::connect(thread, &QThread::finished, [thread, worker]() {
-            if (!threads.contains(thread))
-            {
+            if (!threads.contains(thread)) {
                 qDebug() << "[ThreadPool] Ignore" << worker;
                 return;
             }
@@ -55,8 +51,7 @@ public:
             thread->deleteLater();
         });
 
-        if (isFirst)
-        {
+        if (isFirst) {
             qDebug() << "[ThreadPool] Connected with qApp";
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
                 // qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
@@ -72,14 +67,11 @@ public:
         // qDebug() << "[ThreadPool] Move to thread" << thread << "for" << worker << threads.length();
         worker->moveToThread(thread);
 
-        if (!thread->isRunning())
-        {
+        if (!thread->isRunning()) {
             // qDebug() << "[ThreadPool] Start" << thread;
             threads << thread;
             thread->start();
-        }
-        else
-        {
+        } else {
             // qDebug() << "[ThreadPool] Ignore start" << thread;
         }
 

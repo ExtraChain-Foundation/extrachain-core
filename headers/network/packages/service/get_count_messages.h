@@ -24,40 +24,32 @@
 
 namespace Messages {
 
-struct BlockCount
-{
+struct BlockCount {
     QByteArray request;
 
-    BlockCount()
-    {
+    BlockCount() {
         request = QByteArray::number(Messages::GeneralRequest::GetBlockCount); /* GET_BLOCK_COUNT_MESSAGE;*/
     }
-    BlockCount(const QByteArray &serialized)
-    {
+    BlockCount(const QByteArray &serialized) {
         request = serialized;
     }
 
-    const QByteArray serialize() const
-    {
+    const QByteArray serialize() const {
         return request;
     }
 };
 
-struct ActorCount
-{
+struct ActorCount {
     QByteArray request;
 
-    ActorCount()
-    {
+    ActorCount() {
         request = QByteArray::number(Messages::GeneralRequest::GetActorCount); /*GET_ACTOR_COUNT_MESSAGE;*/
     }
-    ActorCount(const QByteArray &serialized)
-    {
+    ActorCount(const QByteArray &serialized) {
         request = serialized;
     }
 
-    const QByteArray serialize() const
-    {
+    const QByteArray serialize() const {
         return request;
     }
 };

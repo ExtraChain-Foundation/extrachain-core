@@ -34,8 +34,8 @@
 typedef unsigned __int8 uint8_t;
 typedef unsigned __int64 uint64_t;
 #else
-// GCC
-#include <stdint.h>
+    // GCC
+    #include <stdint.h>
 #endif
 
 /// compute Keccak hash (designated SHA3)

@@ -19,74 +19,60 @@
 
 #include "managers/coin_service.h"
 
-CoinService::CoinService(/*ResolverService *resolverService*/)
-{
+CoinService::CoinService(/*ResolverService *resolverService*/) {
     //	resolver = resolverService;
 }
 
-CoinService::~CoinService()
-{
+CoinService::~CoinService() {
     //
 }
 
-void CoinService::run()
-{
+void CoinService::run() {
     this->active = true;
     exec();
 }
 
-int CoinService::exec()
-{
-    while (isActive())
-    {
+int CoinService::exec() {
+    while (isActive()) {
         //
     }
     return 0;
 }
 
-void CoinService::quit()
-{
+void CoinService::quit() {
     active = false;
 }
 
-bool CoinService::isActive()
-{
+bool CoinService::isActive() {
     return active;
 }
 
-BigNumber CoinService::getPeerLimit()
-{
+BigNumber CoinService::getPeerLimit() {
     return PEER_LIM;
 }
 
-BigNumber CoinService::getGasLimit()
-{
+BigNumber CoinService::getGasLimit() {
     return GAS_LIM;
 }
 
-const BigNumber CoinService::getGenesisAddress()
-{
+const BigNumber CoinService::getGenesisAddress() {
     return GEN_ADDR;
 }
 
-void CoinService::checkGenBlock(Block block)
-{
-    if (BigNumber(block.getApprover().toByteArray()) == GEN_ADDR)
-    {
+void CoinService::checkGenBlock(Block block) {
+    if (BigNumber(block.getApprover().toByteArray()) == GEN_ADDR) {
         emit GenBlock(block);
     }
 }
 
-void CoinService::mineCoin(BigNumber blockCountLocal, BigNumber blockCountMax, int peerCount, Transaction tx)
-{
+void CoinService::mineCoin(BigNumber blockCountLocal, BigNumber blockCountMax, int peerCount,
+                           Transaction tx) {
     BigNumber pCount(peerCount);
     BigNumber txGas(tx.getGas());
-    if ((pCount < PEER_LIM) || (txGas < GAS_LIM))
-    {
+    if ((pCount < PEER_LIM) || (txGas < GAS_LIM)) {
         BigNumber limit = (blockCountMax + PEER_LIM + GAS_LIM) / txGas;
         BigNumber x = (blockCountMax - blockCountLocal) + (PEER_LIM - pCount) + (GAS_LIM - txGas);
-        if (x < limit)
-        {
+        if (x < limit) {
             emit CoinMined(tx);
         }
     }

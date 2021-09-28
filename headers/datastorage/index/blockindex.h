@@ -24,8 +24,7 @@
 #include "datastorage/genesis_block.h"
 #include "utils/db_connector.h"
 
-class EXTRACHAIN_EXPORT BlockIndex
-{
+class EXTRACHAIN_EXPORT BlockIndex {
 public:
     BlockIndex();
     BlockIndex(const BigNumber &recordsLimit);
