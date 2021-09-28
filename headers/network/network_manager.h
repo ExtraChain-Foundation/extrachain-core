@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkAddressEntry>
+#include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <QtCore/QRandomGenerator>
 #include <QtCore/QMutex>
