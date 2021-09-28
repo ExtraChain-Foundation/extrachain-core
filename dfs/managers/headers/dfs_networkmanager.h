@@ -37,7 +37,7 @@ private:
     QList<DFSResolverService *> dfsResolvers;
 
 public:
-    DfsNetworkManager(ActorIndex *actorIndex, const QString &localIp);
+    DfsNetworkManager(ActorIndex *actorIndex);
     ~DfsNetworkManager() override;
 
 private:

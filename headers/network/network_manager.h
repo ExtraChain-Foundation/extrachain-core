@@ -33,6 +33,7 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
+#include "network/network_status.h"
 
 class ResolveManager;
 class SocketService;
@@ -63,9 +64,10 @@ private:
     QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
     QSet<std::pair<QString, Network::Protocol>> m_reconnections;
+    NetworkStatus m_networkStatus;
 
 public:
-    NetworkManager(ActorIndex *actorIndex, const QString &localIp = "");
+    NetworkManager(ActorIndex *actorIndex);
     ~NetworkManager();
 
     // protected:

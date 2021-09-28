@@ -19,7 +19,6 @@
 
 #include "managers/extrachain_node.h"
 
-#include "resolve/resolve_manager.h"
 #include "network/network_manager.h"
 #include "managers/tx_manager.h"
 #include "managers/account_controller.h"
@@ -39,7 +38,7 @@
 #include "network/packages/service/message_types.h"
 #include "managers/file_updater_manager.h"
 
-ExtraChainNode::ExtraChainNode(const QString &localIp) {
+ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -56,7 +55,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp) {
     m_privateProfile = new PrivateProfile();
     m_smartContractManager = new SmartContractManager(m_actorIndex);
     m_accountController = new AccountController(m_actorIndex);
-    m_networkManager = new NetworkManager(m_actorIndex, localIp);
+    m_networkManager = new NetworkManager(m_actorIndex);
     m_subscribeController = new SubscribeController();
     m_subscribeController->setExtraChainNode(this);
     m_actorIndex->setAccController(m_accountController);
@@ -69,7 +68,7 @@ ExtraChainNode::ExtraChainNode(const QString &localIp) {
     m_chatManager = new ChatManager(m_accountController, m_actorIndex);
     m_chatManager->setNetworkManager(m_networkManager);
     // contractManager = new ContractManager(accController, blockchain);
-    m_dfs = new Dfs(m_actorIndex, m_accountController, localIp);
+    m_dfs = new Dfs(m_actorIndex, m_accountController);
 
     m_resolveManager =
         new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);

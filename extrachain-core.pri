@@ -57,6 +57,7 @@ SOURCES += \
     $$PWD/dfs/types/sources/dfstruct.cpp \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
+    $$PWD/sources/network/network_status.cpp \
     $$PWD/sources/network/packages/base_message.cpp \
     $$PWD/sources/network/packages/service/get_actor_message.cpp \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
@@ -130,6 +131,7 @@ HEADERS += \
     $$PWD/dfs/types/headers/dfstruct.h \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
+    $$PWD/headers/network/network_status.h \
     $$PWD/headers/network/packages/base_message.h \
     $$PWD/headers/network/packages/message_interface.h \
     $$PWD/headers/network/packages/service/all_messages.h \

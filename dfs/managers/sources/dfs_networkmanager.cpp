@@ -18,9 +18,9 @@
  */
 
 #include "dfs/managers/headers/dfs_networkmanager.h"
-#include "resolve/resolve_manager.h"
-#include "network/isocket_service.h"
 #include "managers/thread_pool.h"
+#include "network/isocket_service.h"
+#include "resolve/resolve_manager.h"
 
 void DfsNetworkManager::setDfs(Dfs *value) {
     dfs = value;
@@ -35,8 +35,8 @@ bool DfsNetworkManager::isLoading(const QString &fileName) {
     return false;
 }
 
-DfsNetworkManager::DfsNetworkManager(ActorIndex *actInd, const QString &localIp)
-    : NetworkManager(actInd, localIp) {
+DfsNetworkManager::DfsNetworkManager(ActorIndex *actorIndex)
+    : NetworkManager(actorIndex) {
     tcpPort = 2223;
     wsPort = 2234;
 }

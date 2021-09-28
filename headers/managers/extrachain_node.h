@@ -66,7 +66,7 @@ private:
     // ContractManager *m_contractManager;
 
 public:
-    ExtraChainNode(const QString &localIp = "");
+    ExtraChainNode();
     ~ExtraChainNode();
 
 public:

@@ -97,6 +97,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message_response.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_interface.h
@@ -152,6 +153,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/tx_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message_response.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/connections_message.cpp

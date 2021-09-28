@@ -51,16 +51,18 @@ ActorIndex *NetworkManager::actorIndex() const {
     return m_actorIndex;
 }
 
-NetworkManager::NetworkManager(ActorIndex *actorIndex, const QString &localIp) {
+NetworkManager::NetworkManager(ActorIndex *actorIndex) {
     this->m_actorIndex = actorIndex;
 
-    if (localIp.isEmpty()) {
+    connect(&m_networkStatus, &NetworkStatus::statusChanged,
+            [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
+
+    auto status = m_networkStatus.status();
+    qDebug() << "[NetworkManager] Current:" << m_networkStatus.status();
+
+    if (status == NetworkStatus::Status::Online) {
         local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
         qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    } else {
-        qDebug().noquote() << "[NetworkManager] Set local IP from settings:" << localIp;
-        local = new QNetworkAddressEntry();
-        local->setIp(QHostAddress(localIp));
     }
 
     if (local != nullptr) {

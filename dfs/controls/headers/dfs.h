@@ -50,7 +50,6 @@ private:
     Sender *sender = nullptr;
     bool myQuickMode = false;
     DfsNetworkManager *m_networkManager = nullptr;
-    QString dfsNetLocalIp;
     // DFSResolver *resolver;
 
 public slots:
@@ -74,8 +73,7 @@ private:
     void getDFSStatus();
 
 public:
-    Dfs(ActorIndex *actorIndex, AccountController *accController, const QString &localIp = "",
-        QObject *parent = nullptr);
+    Dfs(ActorIndex *actorIndex, AccountController *accController, QObject *parent = nullptr);
     ~Dfs();
 
 public:
