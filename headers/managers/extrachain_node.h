@@ -20,9 +20,9 @@
 #ifndef EXTRACHAIN_NODE_H
 #define EXTRACHAIN_NODE_H
 
-#include <QObject>
-#include <QMap>
 #include <QCoreApplication>
+#include <QMap>
+#include <QObject>
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"

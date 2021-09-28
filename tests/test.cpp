@@ -1,6 +1,6 @@
-#include <QtTest/QtTest>
 #include "managers/extrachain_node.h"
 #include "managers/logs_manager.h"
+#include <QtTest/QtTest>
 
 class Test : public QObject {
     Q_OBJECT

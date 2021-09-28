@@ -20,8 +20,8 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
-#include <QDebug>
 #include "extrachain_global.h"
+#include <QDebug>
 
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:

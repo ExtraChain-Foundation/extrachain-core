@@ -20,20 +20,20 @@
 #ifndef DISCOVERY_SERVICE_H
 #define DISCOVERY_SERVICE_H
 
-#include <QObject>
-#include <QtNetwork/QUdpSocket>
-#include <QtNetwork/QNetworkDatagram>
-#include <QThread>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAddressEntry>
 #include <QNetworkInterface>
+#include <QObject>
 #include <QRandomGenerator>
+#include <QThread>
+#include <QtNetwork/QNetworkDatagram>
+#include <QtNetwork/QUdpSocket>
 #include <chrono>
 #include <thread>
 
-#include "utils/exc_utils.h"
 #include "network/packages/service/ping_pong_message.h"
+#include "utils/exc_utils.h"
 
 class EXTRACHAIN_EXPORT DiscoveryService : public QObject {
     Q_OBJECT

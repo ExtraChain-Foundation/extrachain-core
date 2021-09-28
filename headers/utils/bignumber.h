@@ -20,14 +20,14 @@
 #ifndef BIGNUMBER_H
 #define BIGNUMBER_H
 
-#include <QtCore/QString>
-#include <QtCore/QChar>
-#include <QMetaType>
-#include <string>
-#include <sstream>
-#include <QString>
-#include <QRandomGenerator>
 #include <QDebug>
+#include <QMetaType>
+#include <QRandomGenerator>
+#include <QString>
+#include <QtCore/QChar>
+#include <QtCore/QString>
+#include <sstream>
+#include <string>
 
 #include "gmpxx.h"
 

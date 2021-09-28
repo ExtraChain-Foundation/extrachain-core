@@ -20,14 +20,14 @@
 #ifndef SM_CONTROLLER_H
 #define SM_CONTROLLER_H
 
-#include <QObject>
 #include <QDebug>
+#include <QObject>
 
-#include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
-#include "enc/key_private.h"
 #include "datastorage/transaction.h"
+#include "enc/key_private.h"
+#include "utils/bignumber.h"
 
 class EXTRACHAIN_EXPORT SmartContractManager : public QObject {
     Q_OBJECT

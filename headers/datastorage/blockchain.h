@@ -31,9 +31,9 @@
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QHostAddress>
+#include <QMutex>
 #include <QObject>
 #include <QString>
-#include <QMutex>
 #include <QTemporaryFile>
 #include <cassert>
 // database

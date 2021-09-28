@@ -18,12 +18,12 @@
  */
 
 #include "network/network_manager.h"
-#include "resolve/resolve_manager.h"
+#include "managers/thread_pool.h"
 #include "network/tcpserver_service.h"
 #include "network/tcpsocket_service.h"
-#include "network/websocket_service.h"
 #include "network/upnpconnection.h"
-#include "managers/thread_pool.h"
+#include "network/websocket_service.h"
+#include "resolve/resolve_manager.h"
 
 using namespace Messages;
 

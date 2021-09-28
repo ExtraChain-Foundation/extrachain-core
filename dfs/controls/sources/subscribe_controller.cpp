@@ -18,8 +18,8 @@
  */
 
 #include "dfs/controls/headers/subscribe_controller.h"
-#include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
+#include "managers/extrachain_node.h"
 
 SubscribeController::SubscribeController(QObject *parent)
     : QObject(parent) {

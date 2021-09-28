@@ -20,13 +20,13 @@
 #ifndef TRANSACTION_H
 #define TRANSACTION_H
 
-#include <QString>
-#include <QByteArray>
-#include <QDateTime>
 #include "datastorage/actor.h"
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
+#include <QByteArray>
+#include <QDateTime>
+#include <QString>
 
 class EXTRACHAIN_EXPORT Transaction : public QObject {
     Q_OBJECT

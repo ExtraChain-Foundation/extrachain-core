@@ -20,11 +20,11 @@
 #include "resolve/resolve_manager.h"
 
 #include "datastorage/blockchain.h"
+#include "managers/chatmanager.h"
+#include "managers/extrachain_node.h"
+#include "managers/thread_pool.h"
 #include "network/network_manager.h"
 #include "resolve/resolver_service.h"
-#include "managers/extrachain_node.h"
-#include "managers/chatmanager.h"
-#include "managers/thread_pool.h"
 
 void ResolveManager::setNode(ExtraChainNode *value) {
     node = value;

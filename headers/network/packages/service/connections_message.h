@@ -19,8 +19,8 @@
 
 #ifndef CONNECTTIONS_MESSAGE_H
 #define CONNECTTIONS_MESSAGE_H
-#include <vector>
 #include "network/packages/base_message.h"
+#include <vector>
 namespace Messages {
 static const QByteArray ENABLE_LIST_CONNECTIONS = "connections";
 

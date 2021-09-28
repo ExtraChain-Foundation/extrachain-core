@@ -20,9 +20,9 @@
 #ifndef KEY_PUBLIC_H
 #define KEY_PUBLIC_H
 
-#include <string>
 #include "utils/exc_utils.h"
 #include <QDebug>
+#include <string>
 
 class EXTRACHAIN_EXPORT KeyPublic {
 private:

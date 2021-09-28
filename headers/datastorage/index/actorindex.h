@@ -25,8 +25,8 @@
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 
-#include "managers/extrachain_node.h"
 #include "extrachain_global.h"
+#include "managers/extrachain_node.h"
 
 class AccountController;
 

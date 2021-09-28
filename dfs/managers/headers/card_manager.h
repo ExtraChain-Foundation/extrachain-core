@@ -20,9 +20,9 @@
 #ifndef CARD_MANAGER_H
 #define CARD_MANAGER_H
 
-#include "utils/exc_utils.h"
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
+#include "utils/exc_utils.h"
 
 class CardManager {
 public:

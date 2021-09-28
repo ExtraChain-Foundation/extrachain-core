@@ -20,8 +20,8 @@
 #ifndef DFSNETWORKMANAGER_H
 #define DFSNETWORKMANAGER_H
 
-#include "network/network_manager.h"
 #include "dfs/packages/headers/all.h"
+#include "network/network_manager.h"
 #include "resolve/dfs_resolver_service.h"
 #include "utils/exc_utils.h"
 

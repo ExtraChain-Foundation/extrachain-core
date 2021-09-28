@@ -2,10 +2,10 @@
 #define VARIANT_MODEL_H
 
 #include <QAbstractListModel>
-#include <QVariant>
-#include <QModelIndex>
 #include <QFile>
 #include <QJsonDocument>
+#include <QModelIndex>
+#include <QVariant>
 
 #include "extrachain_global.h"
 

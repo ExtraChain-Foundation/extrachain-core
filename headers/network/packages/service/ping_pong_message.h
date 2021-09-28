@@ -20,9 +20,9 @@
 #ifndef PING_PONG_MESSAGE_H
 #define PING_PONG_MESSAGE_H
 
+#include "utils/exc_utils.h"
 #include <QByteArray>
 #include <QJsonDocument>
-#include "utils/exc_utils.h"
 
 namespace Messages {
 static const QByteArray PING_MESSAGE = "ping ExtraNet";

@@ -21,8 +21,8 @@
 #define THREAD_POOL_H
 
 #include <QCoreApplication>
-#include <QThread>
 #include <QDebug>
+#include <QThread>
 
 class ThreadPool {
 private:

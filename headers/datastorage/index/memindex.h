@@ -20,11 +20,11 @@
 #ifndef MEMINDEX_H
 #define MEMINDEX_H
 
-#include <QMap>
-#include <QDebug>
-#include <algorithm>
 #include "datastorage/block.h"
 #include "utils/exc_utils.h"
+#include <QDebug>
+#include <QMap>
+#include <algorithm>
 
 class MemIndex {
 private:

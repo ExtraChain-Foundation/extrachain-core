@@ -20,14 +20,14 @@
 #ifndef DB_CONNECTOR_H
 #define DB_CONNECTOR_H
 
-#include <vector>
+#include <algorithm>
 #include <unordered_map>
 #include <utility>
-#include <algorithm>
+#include <vector>
 
 #include <QByteArray>
-#include <QMutex>
 #include <QDebug>
+#include <QMutex>
 
 #include "extrachain_global.h"
 

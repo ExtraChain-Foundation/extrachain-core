@@ -20,14 +20,14 @@
 #ifndef DFSTRUCT_H
 #define DFSTRUCT_H
 
-#include <QDir>
-#include <QDebug>
-#include <QString>
-#include <QDateTime>
-#include <QByteArray>
-#include <unordered_map>
-#include <tuple>
 #include "utils/bignumber.h"
+#include <QByteArray>
+#include <QDateTime>
+#include <QDebug>
+#include <QDir>
+#include <QString>
+#include <tuple>
+#include <unordered_map>
 
 namespace PathStruct {
 static const short rFolder = 0;

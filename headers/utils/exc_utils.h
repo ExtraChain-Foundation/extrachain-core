@@ -20,11 +20,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <QFile>
+#include <QObject>
+#include <QtNetwork/QNetworkAddressEntry>
 #include <string>
 #include <vector>
-#include <QObject>
-#include <QFile>
-#include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
 #include "network/socket_pair.h"

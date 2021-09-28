@@ -20,10 +20,10 @@
 #ifndef MESSAGE_STRCUT_H
 #define MESSAGE_STRCUT_H
 
-#include "utils/exc_utils.h"
-#include "dfs/types/headers/dfstruct.h"
 #include "dfs/packages/headers/dfs_message_interface.h"
+#include "dfs/types/headers/dfstruct.h"
 #include "network/packages/message_interface.h"
+#include "utils/exc_utils.h"
 
 namespace DistFileSystem {
 struct DfsMessage : Messages::ISmallMessage {

@@ -23,9 +23,9 @@
 
 #include "managers/logs_manager.h"
 
-#include <iostream>
-#include <QMutex>
 #include <QJsonObject>
+#include <QMutex>
+#include <iostream>
 
 #ifdef Q_OS_ANDROID
     #include <android/log.h>

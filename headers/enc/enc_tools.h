@@ -2,9 +2,9 @@
 #define ENC_TOOLS_H
 
 #include <sodium.h>
-#include <vector>
 #include <string>
 #include <utils/exc_utils.h>
+#include <vector>
 
 namespace SecretKey {
 std::string keygen();

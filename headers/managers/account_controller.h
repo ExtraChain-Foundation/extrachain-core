@@ -24,8 +24,8 @@
 #include <QObject>
 
 //#include "enc/enc_tools.h"
-#include "utils/bignumber.h"
 #include "datastorage/actor.h"
+#include "utils/bignumber.h"
 //#include "datastorage/index/actorindex.h"
 //#include "enc/key_private.h"
 

@@ -21,13 +21,13 @@
     #define CHATMANAGER_H
 
     #include "chat.h"
-    #include <QObject>
-    #include <QList>
-    #include <QTimer>
     #include "dfs/types/headers/dfstruct.h"
-    #include "utils/db_connector.h"
     #include "enc/enc_tools.h"
     #include "network/packages/base_message.h"
+    #include "utils/db_connector.h"
+    #include <QList>
+    #include <QObject>
+    #include <QTimer>
 
 // blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
 // path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current

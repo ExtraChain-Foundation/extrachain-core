@@ -23,9 +23,9 @@
 #include "dfs/packages/headers/dfs_message_interface.h"
 #include "network/packages/message_interface.h"
 
+#include <QByteArray>
 #include <QFile>
 #include <QList>
-#include <QByteArray>
 
 namespace DistFileSystem {
 

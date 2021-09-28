@@ -20,8 +20,8 @@
 #ifndef FILEUPDATERMANAGER_H
 #define FILEUPDATERMANAGER_H
 
-#include <QList>
 #include <QByteArray>
+#include <QList>
 #include <QObject>
 
 #include "dfs/types/headers/dfstruct.h"

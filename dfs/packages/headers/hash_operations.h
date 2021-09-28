@@ -21,8 +21,8 @@
 #define HASH_OPERATIONS_H
 
 #include "dfs/packages/headers/dfs_message_interface.h"
-#include "network/packages/message_interface.h"
 #include "dfs/types/headers/dfstruct.h"
+#include "network/packages/message_interface.h"
 
 namespace DistFileSystem {
 // TODO: package root array

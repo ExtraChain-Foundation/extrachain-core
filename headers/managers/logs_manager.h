@@ -20,13 +20,13 @@
 #ifndef LOGSMANAGER_H
 #define LOGSMANAGER_H
 
-#include <QString>
-#include <QObject>
-#include <QFile>
-#include <QDir>
-#include <QDateTime>
-#include "utils/variant_model.h"
 #include "extrachain_global.h"
+#include "utils/variant_model.h"
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QObject>
+#include <QString>
 
 class EXTRACHAIN_EXPORT LogsManager : public QObject {
     Q_OBJECT

@@ -20,16 +20,15 @@
 #ifndef MEMBLOCK_H
 #define MEMBLOCK_H
 
-#include <QString>
-#include <QDebug>
+#include "actor.h"
+#include "datastorage/transaction.h"
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"
-#include "utils/exc_utils.h"
-#include "datastorage/transaction.h"
-#include "actor.h"
+#include "utils/db_connector.h"
 #include "utils/exc_utils.h"
 #include <QDateTime>
-#include "utils/db_connector.h"
+#include <QDebug>
+#include <QString>
 
 // Block comparison result
 struct forApprovers {

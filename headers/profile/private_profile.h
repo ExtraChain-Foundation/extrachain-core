@@ -20,9 +20,9 @@
 #ifndef PRIVATE_PROFILE_H
 #define PRIVATE_PROFILE_H
 
-#include <QByteArray>
 #include "datastorage/actor.h"
 #include "utils/exc_utils.h"
+#include <QByteArray>
 
 class AccountController;
 class Dfs;

@@ -22,8 +22,8 @@
 
 #include "extrachain_global.h"
 
-#include <QString>
 #include <QHash>
+#include <QString>
 class BigNumber;
 
 class EXTRACHAIN_EXPORT SocketPair {

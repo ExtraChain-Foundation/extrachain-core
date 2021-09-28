@@ -20,8 +20,8 @@
 #ifndef COINPROCESS_H
 #define COINPROCESS_H
 
-#include <QObject>
 #include "datastorage/transaction.h"
+#include <QObject>
 #include <cassert>
 
 class CoinProcess : public QObject {

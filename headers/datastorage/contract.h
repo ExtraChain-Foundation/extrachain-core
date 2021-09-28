@@ -20,12 +20,12 @@
 #ifndef CONTRACT_H
 #define CONTRACT_H
 /*
-#include "utils/bignumber.h"
-#include "datastorage/transaction.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include <QObject>
+#include "datastorage/transaction.h"
+#include "utils/bignumber.h"
 #include <QDate>
+#include <QObject>
 class Token : public QObject
 {
     Q_OBJECT

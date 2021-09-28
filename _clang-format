@@ -30,7 +30,8 @@ BraceWrapping:
 AlignAfterOpenBracket: true
 AlwaysBreakTemplateDeclarations: true
 AllowShortFunctionsOnASingleLine: Inline
-SortIncludes: false
+SortIncludes: true
+SortUsingDeclarations: true
 AlignTrailingComments: true
 AllowShortFunctionsOnASingleLine: None
 SpaceBeforeParens: ControlStatements

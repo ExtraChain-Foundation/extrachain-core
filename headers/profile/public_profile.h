@@ -20,8 +20,8 @@
 #ifndef PUBLIC_PROFILE_H
 #define PUBLIC_PROFILE_H
 
-#include "utils/exc_utils.h"
 #include "utils/db_connector.h"
+#include "utils/exc_utils.h"
 
 class EXTRACHAIN_EXPORT PublicProfile {
 public:

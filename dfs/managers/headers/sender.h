@@ -20,12 +20,12 @@
 #ifndef SENDER_H
 #define SENDER_H
 
-#include <QObject>
-#include <QThread>
 #include "dfs/packages/headers/all.h"
 #include "managers/account_controller.h"
-#include <vector>
+#include <QObject>
+#include <QThread>
 #include <type_traits>
+#include <vector>
 
 #ifndef DFS_NETWORK_MANAGER_DEF
     #define DFS_NETWORK_MANAGER_DEF

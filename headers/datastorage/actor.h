@@ -20,18 +20,18 @@
 #ifndef ACTOR_H
 #define ACTOR_H
 
-#include <utility>
-#include <type_traits>
+#include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QDebug>
+#include <type_traits>
+#include <utility>
 
 #include "dfs/types/headers/dfstruct.h"
-#include "utils/bignumber.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
-#include "profile/public_profile.h"
 #include "extrachain_global.h"
+#include "profile/public_profile.h"
+#include "utils/bignumber.h"
 
 /**
  * Acting entity.

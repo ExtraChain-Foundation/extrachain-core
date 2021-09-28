@@ -19,8 +19,8 @@
 
 #ifndef SIMPLE_MESSAGE_H
 #define SIMPLE_MESSAGE_H
-#include <QByteArray>
 #include "network/packages/service/message_types.h"
+#include <QByteArray>
 
 namespace Messages {
 

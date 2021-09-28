@@ -24,9 +24,9 @@
 #include <QThread>
 
 //#include "utils/bignumber.h"
-#include "utils/bignumber.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
+#include "utils/bignumber.h"
 
 class EXTRACHAIN_EXPORT CoinService : public QThread {
     Q_OBJECT

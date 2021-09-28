@@ -19,9 +19,9 @@
 
 #include "utils/db_connector.h"
 
+#include "sqlite3.h"
 #include <QDir>
 #include <QRegularExpression>
-#include "sqlite3.h"
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 

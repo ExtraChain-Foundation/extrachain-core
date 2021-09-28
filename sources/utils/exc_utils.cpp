@@ -19,19 +19,19 @@
 
 #include "utils/exc_utils.h"
 
+#include <QCborStreamReader>
+#include <QCborStreamWriter>
+#include <QCoreApplication>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
-#include <QStandardPaths>
-#include <QTcpSocket>
-#include <QStorageInfo>
-#include <QCborStreamWriter>
-#include <QCborStreamReader>
-#include <QCoreApplication>
 #include <QRegularExpression>
+#include <QStandardPaths>
+#include <QStorageInfo>
+#include <QTcpSocket>
 
-#include "enc/enc_tools.h"
 #include "dfs/types/headers/dfstruct.h"
+#include "enc/enc_tools.h"
 #include "utils/Keccak256.h"
 
 QByteArray Utils::calcKeccak(const QByteArray &data) {
