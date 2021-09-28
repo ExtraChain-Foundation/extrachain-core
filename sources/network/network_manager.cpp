@@ -115,6 +115,17 @@ void NetworkManager::reconnection() {
     }
 }
 
+void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &hostName, quint16 port,
+                                const QString &user, const QString &password) {
+    QNetworkProxy proxy;
+    proxy.setType(type);
+    proxy.setHostName(hostName);
+    proxy.setPort(port);
+    proxy.setUser(user);
+    proxy.setPassword(password);
+    QNetworkProxy::setApplicationProxy(proxy);
+}
+
 void NetworkManager::connectTcpSocket(TcpSocketService *service) {
     connect(service, &TcpSocketService::error, this, &NetworkManager::socketError);
     connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
@@ -310,6 +321,7 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
     bool value = 0;
     QByteArray hashMsg = Utils::calcKeccak(msg);
     QMap<QByteArray, int>::iterator it = msgHashList.find(hashMsg);
+
     if (it == msgHashList.end())
         msgHashList.insert(hashMsg, value);
     else {
@@ -321,6 +333,7 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
             flag_result = true;
         }
     }
+
     return flag_result;
 }
 
@@ -341,10 +354,10 @@ void NetworkManager::saveToCache(const QByteArray &message, const unsigned int &
 
 void NetworkManager::sendFromCache() {
     QFile file("tmp/network.cache");
-    if (!file.exists())
+    if (!file.exists() || !file.open(QFile::ReadOnly)) {
         return;
-    if (!file.open(QFile::ReadOnly))
-        return;
+    }
+
     QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
     file.close();
     file.remove();
@@ -390,7 +403,6 @@ void NetworkManager::onNewTcpConnection(qint64 socketDescriptor) {
 
     TcpSocketService *socket = new TcpSocketService(socketDescriptor, this);
     connectTcpSocket(socket);
-    // QTimer::singleShot(3000, this, SLOT(checkConnectionsStatus()));
     ThreadPool::addThread(socket);
 }
 

@@ -117,6 +117,8 @@ public slots:
     void connectToNode(const QString &ip, Network::Protocol protocol);
     void process();
     void reconnection();
+    void setupProxy(QNetworkProxy::ProxyType type, const QString &hostName, quint16 port, const QString &user,
+                    const QString &password);
 
 private slots:
     /**
