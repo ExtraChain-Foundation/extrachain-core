@@ -39,18 +39,19 @@ public:
 
         QObject::connect(thread, &QThread::started, worker, &Worker::process);
         QObject::connect(worker, &Worker::finished, thread, &QThread::quit);
-        QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
+        // QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
         // QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
         QObject::connect(thread, &QThread::finished, [thread, worker]() {
             if (!threads.contains(thread))
             {
-                // qDebug() << "[ThreadPool] Ignore" << thread;
+                qDebug() << "[ThreadPool] Ignore" << worker;
                 return;
             }
             // qDebug() << "[ThreadPool] Remove thread for" << worker;
             // qDebug() << "[ThreadPool] Remove thread" << thread << "for" << worker <<
             // threads.removeAll(thread)
             //          << "to" << threads.length();
+            worker->deleteLater();
             thread->deleteLater();
         });
 

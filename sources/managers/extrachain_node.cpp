@@ -209,13 +209,12 @@ void ExtraChainNode::connectTxManager()
 
 ExtraChainNode::~ExtraChainNode()
 {
-    // m_networkManager->quit();
-    // delete networkManager;
-    m_networkManager->finished();
-    delete m_txManager;
-    // delete blockchain;
-    delete m_accountController;
-    // delete actorIndex;
+    emit m_networkManager->finished();
+    emit m_txManager->finished();
+    emit m_txManager->finished();
+    emit m_blockchain->finished();
+    emit m_accountController->finished();
+    emit m_actorIndex->finished();
 }
 
 // DFSIndex *ExtraChainNode::getDFSIndex(){
