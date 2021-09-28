@@ -146,8 +146,7 @@ HEADERS += \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
-    $$PWD/headers/utils/variant_model.h \
-    $$PWD/test.h
+    $$PWD/headers/utils/variant_model.h
 
 gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function  -Wno-deprecated # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 
