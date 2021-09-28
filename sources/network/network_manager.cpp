@@ -65,28 +65,30 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
         qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
     }
 
-    if (local != nullptr) {
-        bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
-        upnpDis = new UPNPConnection(*local);
-        upnpNet = new UPNPConnection(*local);
-        qDebug() << "Sub:" << sub;
-
-        if (sub) {
-            // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::startNetwork);
-            // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
-            connect(upnpNet, &UPNPConnection::upnpError,
-                    [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
-            connect(upnpDis, &UPNPConnection::upnpError,
-                    [](QString msg) { qDebug() << "[NetworkManager] UPnP Discovery error:" << msg; });
-            // qDebug() << "Tunnel creation started!";
-            // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
-            // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
-        } else {
-            // startDiscovery();
-        }
-    } else {
+    if (local == nullptr) {
         qDebug() << "Local not found";
+        return;
     }
+
+    bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
+    qDebug() << "Sub:" << sub;
+
+    if (!sub) {
+        // startDiscovery();
+        return;
+    }
+
+    upnpDis = new UPNPConnection(*local);
+    upnpNet = new UPNPConnection(*local);
+    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::startNetwork);
+    // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
+    connect(upnpNet, &UPNPConnection::upnpError,
+            [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
+    connect(upnpDis, &UPNPConnection::upnpError,
+            [](QString msg) { qDebug() << "[NetworkManager] UPnP Discovery error:" << msg; });
+    // qDebug() << "Tunnel creation started!";
+    // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
+    // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 }
 
 void NetworkManager::process() {
@@ -102,7 +104,7 @@ void NetworkManager::reconnection() {
         bool finded = false;
         for (SocketService *service : qAsConst(m_connections)) {
             // qDebug() << "Reconnection" << service << service->ip() << service->serverPort() << el.first;
-            if (service->ip() == el.first) {
+            if (service->ip() == el.ip) {
                 finded = true;
                 break;
             }
@@ -112,8 +114,8 @@ void NetworkManager::reconnection() {
             continue;
 
         qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
-                           << el.first << el.second;
-        connectToNode(el.first, el.second);
+                           << el.ip << el.protocol;
+        connectToNode(el.ip, el.protocol);
     }
 }
 
@@ -237,17 +239,18 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
+    const quint16 port = (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
-                                 << ", port: " << (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
-    m_reconnections << std::pair { ip, protocol };
+                                 << ", port: " << port;
+    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
     switch (protocol) {
     case Protocol::Tcp:
-        connectToTcpSocket(ip.simplified(), tcpPort);
+        connectToTcpSocket(ip.simplified(), port);
         break;
     case Protocol::WebSocket:
-        connectToWebSocket(ip.simplified(), wsPort);
+        connectToWebSocket(ip.simplified(), port);
         break;
     case Protocol::Undefined:
         qFatal("Undefined connectToNode");
@@ -439,17 +442,26 @@ void NetworkManager::removeWsConnection() //
 }
 
 void NetworkManager::socketError(Network::SocketServiceError error, QString errorData) {
-    if (QObject::sender() == nullptr)
+    if (QObject::sender() == nullptr) {
         return;
+    }
 
     auto service = qobject_cast<SocketService *>(QObject::sender());
     qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
 
-    if (error != Network::SocketServiceError::DuplicateIdentifier)
-        m_reconnections.remove({ service->ip(), service->protocol() });
+    if (error != Network::SocketServiceError::DuplicateIdentifier) {
+        auto res = std::find_if(m_reconnections.begin(), m_reconnections.end(),
+                                [service](const NetworkReconnect &recon) {
+                                    return recon.ip == service->ip() && recon.protocol == service->protocol();
+                                });
+        if (res != m_reconnections.end()) {
+            m_reconnections.remove(*res);
+        }
+    }
 
-    if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion)
+    if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion) {
         emit connectionError(error, service->identifier(), errorData);
+    }
 }
 
 QString NetworkManager::localIp() {

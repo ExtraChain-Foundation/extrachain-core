@@ -42,6 +42,20 @@ class WebSocketService;
 class TcpServerService;
 class UPNPConnection;
 
+struct NetworkReconnect {
+    QString ip;
+    quint16 port;
+    Network::Protocol protocol;
+    // quint64 lastTry;
+    auto operator==(const NetworkReconnect &reconnect) const {
+        return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
+    }
+};
+
+inline uint qHash(const NetworkReconnect &reconnect) {
+    return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
+}
+
 /**
  * @brief The NetworkManager class
  * Creates Discovery, Resolver, Server and Sockets services
@@ -63,7 +77,7 @@ private:
     TcpServerService *tcpServer = nullptr;
     QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
-    QSet<std::pair<QString, Network::Protocol>> m_reconnections;
+    QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
 
 public:
