@@ -37,6 +37,7 @@
 #include "dfs/controls/headers/subscribe_controller.h"
 #include "network/packages/service/message_types.h"
 #include "managers/file_updater_manager.h"
+#include "resolve/resolve_manager.h"
 
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
