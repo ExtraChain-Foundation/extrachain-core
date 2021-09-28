@@ -1,6 +1,8 @@
 #ifndef ISOCKETSERVICE_H
 #define ISOCKETSERVICE_H
 
+#include "enc/key_private.h"
+#include "enc/key_public.h"
 #include "utils/exc_utils.h"
 
 class NetworkManager;
@@ -47,9 +49,8 @@ protected:
     int m_bytesOutgoing = 0;
     int m_bytesCompressed = 0;
 
-private:
-    QByteArray priv;
-    QByteArray pub;
+    KeyPrivate priv;
+    KeyPublic pub;
 };
 
 #endif // WEBSOCKETSERVICE_H

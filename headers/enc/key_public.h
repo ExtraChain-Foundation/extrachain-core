@@ -20,15 +20,17 @@
 #ifndef KEY_PUBLIC_H
 #define KEY_PUBLIC_H
 
-#include "utils/exc_utils.h"
 #include <QDebug>
 #include <string>
+
+#include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT KeyPublic {
 private:
     std::string m_publicKey;
 
 public:
+    KeyPublic() = default;
     KeyPublic(const std::string &publicKey);
     KeyPublic(const QJsonObject &json);
     KeyPublic(const KeyPublic &keyPublic);
@@ -38,7 +40,7 @@ public:
 
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
-    std::string publicKey() const;
+    const std::string &publicKey() const;
 };
 
 #endif // KEY_PUBLIC_H

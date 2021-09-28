@@ -3,8 +3,9 @@
 
 #include <sodium.h>
 #include <string>
-#include <utils/exc_utils.h>
 #include <vector>
+
+#include <utils/exc_utils.h>
 
 namespace SecretKey {
 std::string keygen();

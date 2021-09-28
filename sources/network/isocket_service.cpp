@@ -58,7 +58,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
-    pub = json["key"].toString().toLatin1();
+    pub = KeyPublic(json["key"].toString().toStdString());
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
     ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
@@ -112,30 +112,27 @@ QByteArray SocketService::generateFirstMessage() {
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-
-    auto keys = SecretKey::createAsymmetricPair();
-    priv = QByteArray::fromStdString(keys.first);
-    json["key"] = QString::fromStdString(keys.second);
+    json["key"] = QString::fromStdString(priv.publicKey());
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
-    if (pub.isEmpty())
+    if (pub.publicKey().empty())
         qFatal("Socket encrypt error");
 
-    auto result = SecretKey::encryptAsymmetric(message, priv, pub);
+    auto result = priv.encrypt(message, pub.publicKey());
     m_bytesOutgoing += result.length();
     // m_bytesCompressed += message.length() - result.length();
     return result;
 }
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
-    if (pub.isEmpty())
+    if (pub.publicKey().empty())
         qFatal("Socket decrypt error");
 
-    auto result = SecretKey::decryptAsymmetric(message, priv, pub);
+    auto result = priv.decrypt(message, pub.publicKey());
     if (result.isEmpty())
         return "";
     m_bytesIncoming += message.length();

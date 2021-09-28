@@ -20,8 +20,9 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
-#include "extrachain_global.h"
 #include <QDebug>
+
+#include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:
@@ -56,8 +57,8 @@ public:
     QByteArray sign(const QByteArray &data);
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
-    std::string secretKey() const;
-    std::string publicKey() const;
+    const std::string &secretKey() const;
+    const std::string &publicKey() const;
 };
 
 #endif // KEY_PRIVATE_H

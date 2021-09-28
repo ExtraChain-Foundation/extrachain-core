@@ -51,6 +51,6 @@ bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) {
     return res == 0;
 }
 
-string KeyPublic::publicKey() const {
+const std::string &KeyPublic::publicKey() const {
     return m_publicKey;
 }

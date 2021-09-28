@@ -93,10 +93,10 @@ bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex) {
     return res == 0;
 }
 
-std::string KeyPrivate::secretKey() const {
+const std::string &KeyPrivate::secretKey() const {
     return m_secretKey;
 }
 
-std::string KeyPrivate::publicKey() const {
+const std::string &KeyPrivate::publicKey() const {
     return m_publicKey;
 }
