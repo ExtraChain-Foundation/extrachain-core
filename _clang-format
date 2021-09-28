@@ -1,5 +1,5 @@
 BasedOnStyle: WebKit
-Standard: Cpp11
+Standard: c++20
 Language: Cpp
 ColumnLimit: 110
 CommentPragmas: "^!|^:"
@@ -34,4 +34,3 @@ MaxEmptyLinesToKeep: 1
 AllowShortIfStatementsOnASingleLine: false
 AlignEscapedNewlinesLeft: true
 AllowShortLoopsOnASingleLine: false
-

@@ -17,7 +17,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
 #include "managers/contract_manager.h"
 
 // ContractManager::ContractManager(AccountController *accountController, Blockchain *blockchain)

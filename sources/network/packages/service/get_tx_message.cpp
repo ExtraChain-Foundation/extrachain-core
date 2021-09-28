@@ -39,7 +39,7 @@ short Messages::GetTxMessage::getFieldsCount() const
 QByteArray GetTxMessage::serialize() const
 {
     return Serialization::serialize({ SearchEnum::toString(param).toUtf8(), value },
-                                             GetTxMessage::FIELD_SIZE);
+                                    GetTxMessage::FIELD_SIZE);
 }
 
 void GetTxMessage::deserialize(const QByteArray &serilaized)

@@ -49,11 +49,11 @@ bool Messages::ConnectionsMessage::isEmpty() const
 QList<QByteArray> Messages::ConnectionsMessage::serializedParams() const
 {
     QList<QByteArray> v;
-    for (auto& p : hosts)
+    for (auto &p : hosts)
     {
-        QByteArray r = Serialization::serialize(
-            { QByteArray::fromStdString(p.first), QByteArray::number(p.second) },
-            ConnectionsMessage::FIELD_SIZE);
+        QByteArray r =
+            Serialization::serialize({ QByteArray::fromStdString(p.first), QByteArray::number(p.second) },
+                                     ConnectionsMessage::FIELD_SIZE);
         v << r;
     }
     return v;

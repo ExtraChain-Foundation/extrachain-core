@@ -47,8 +47,7 @@ short DistFileSystem::ReqFragsMessage::getFieldsCount() const
 
 QByteArray DistFileSystem::ReqFragsMessage::serialize() const
 {
-    return Serialization::serialize({ filePath.toLocal8Bit(), listFrag },
-                                             DistFileSystem::fieldsSize);
+    return Serialization::serialize({ filePath.toLocal8Bit(), listFrag }, DistFileSystem::fieldsSize);
 }
 
 void DistFileSystem::ReqFragsMessage::deserialize(const QByteArray &serialized)

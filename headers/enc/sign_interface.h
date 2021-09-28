@@ -26,6 +26,7 @@ class IApprover
 {
 public:
     virtual ~IApprover() = 0;
+
 public:
     /**
      * @brief creates digital signature from data
@@ -57,6 +58,8 @@ public:
     virtual QByteArray getPublicKey() = 0;
 };
 
-inline IApprover::~IApprover() {}
+inline IApprover::~IApprover()
+{
+}
 
 #endif // SIGN_INTERFACE_H

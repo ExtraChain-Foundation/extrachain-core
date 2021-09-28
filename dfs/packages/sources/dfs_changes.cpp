@@ -77,7 +77,6 @@ QByteArray DistFileSystem::DfsChanges::prepareSign()
          << QByteArray::number(changeType) << userId << messHash << prevHash
          << QByteArray::number(fileVersion);
     // qDebug() << "prepareSign" << list;
-    QByteArray keccak =
-        Utils::calcKeccak(Serialization::serialize(list, DistFileSystem::fieldsSize));
+    QByteArray keccak = Utils::calcKeccak(Serialization::serialize(list, DistFileSystem::fieldsSize));
     return keccak;
 }

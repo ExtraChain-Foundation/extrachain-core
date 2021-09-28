@@ -43,8 +43,7 @@ QByteArray GetAllActorMessage::serialize() const
 
 void GetAllActorMessage::deserialize(const QByteArray &serilaized)
 {
-    QList<QByteArray> list =
-        Serialization::deserialize({ serilaized }, GetAllActorMessage::FIELD_SIZE);
+    QList<QByteArray> list = Serialization::deserialize({ serilaized }, GetAllActorMessage::FIELD_SIZE);
     if (list.size() > 0)
     {
         actorId = list.at(0);

@@ -22,13 +22,13 @@
 
 #include "dfs/controls/headers/dfs.h"
 #include "QRandomGenerator"
-//class Test : public QObject
+// class Test : public QObject
 //{
 //    Q_OBJECT
-//private:
+// private:
 //    QStringList pathImageList;
 
-//public:
+// public:
 //    Test(Dfs *dfs, QObject *parent = nullptr)
 //        : QObject(parent)
 //    {
@@ -59,12 +59,12 @@
 //        //        based_dfs_struct::SubType::ievent,
 //        //                             based_dfs_struct::NEW);
 //    }
-//signals:
+// signals:
 //    void testSaveNewData(const QString &path, const based_dfs_struct::Type &type,
 //                         const based_dfs_struct::SubType &subType,
 //                         const based_dfs_struct::Status &status);
 //    void testRecieverData(Messages::DfsMessage msg);
-//public slots:
+// public slots:
 //    void testSendData(const Messages::DfsMessage &msg)
 //    {
 //        QFile file("../testSendData.txt");

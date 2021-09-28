@@ -39,7 +39,7 @@ short GetBlockMessage::getFieldsCount() const
 QByteArray GetBlockMessage::serialize() const
 {
     return Serialization::serialize({ SearchEnum::toString(param).toUtf8(), value },
-                                             GetBlockMessage::FIELD_SIZE);
+                                    GetBlockMessage::FIELD_SIZE);
 }
 
 void GetBlockMessage::deserialize(const QByteArray &serilaized)
