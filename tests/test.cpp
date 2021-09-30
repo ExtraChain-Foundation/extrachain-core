@@ -31,6 +31,44 @@ private slots:
         QCOMPARE(decrypted, decrypted2);
     }
 
+//    auto key1 =
+    //        KeyPrivate("0c6b88536b8e82af9080650ee7fc02bc721d6b9dce7b9f31513ddf6611154ad3517a72717814ff418628"
+    //                   "b11648731f4ecd16828b52d7752e3af15e1f10991b3a",
+    //                   "517a72717814ff418628b11648731f4ecd16828b52d7752e3af15e1f10991b3a");
+    //    auto key2 =
+    //    KeyPrivate("aef07e6dbd4874a881a511bf0c052a901480fa79ea748bf0bb6092ce37ea959c53f0dda754236784d"
+    //                           "729f27b9ed033d90bb17bb7d78a36fabac53130422c06e6",
+    //                           "53f0dda754236784d729f27b9ed033d90bb17bb7d78a36fabac53130422c06e6");
+
+    //    const QByteArray message = "Something";
+    //    auto sign1 = key1.sign(message);
+    //    auto sign2 = key2.sign(message);
+    //    qDebug() << "Sign1:" << sign1;
+    //    qDebug() << "Sign2:" << sign2;
+
+    //    auto verify1 = key1.verify(message, sign1);
+    //    auto verify2 = key2.verify(message, sign2);
+    //    auto verify1Test = key1.verify(message, sign2);
+    //    auto verify2Test = key2.verify(message, sign1);
+    //    qDebug() << "Verify:" << verify1 << verify2 << verify1Test << verify2Test;
+
+    //    auto encrypted = key1.encrypt(message, key2.publicKey());
+    //    qDebug() << "Encrypt:" << encrypted;
+    //    auto decrypted = key2.decrypt(encrypted, key1.publicKey());
+    //    qDebug() << "Decrypt:" << decrypted;
+    //    return 0;
+    //    KeyPrivate key;
+    //    QByteArray data = QByteArray("qweqe").repeated(30000);
+    //    qDebug() << data.size();
+
+    //    while (true) {
+    //        QElapsedTimer timer;
+    //        timer.start();
+    //        for (int i = 0; i != 10000; i++)
+    //            key.sign(data);
+    //        qDebug() << timer.elapsed() << "ms";
+    //    }
+
     void createNetwork() {
         LogsManager::qtHandler();
         QDir().mkdir("test-data");
