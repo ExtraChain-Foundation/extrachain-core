@@ -20,15 +20,15 @@
 #ifndef LOGSMANAGER_H
 #define LOGSMANAGER_H
 
-#include <QString>
-#include <QObject>
-#include <QFile>
-#include <QDir>
-#include <QDateTime>
+#include "extrachain_global.h"
 #include "utils/variant_model.h"
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QObject>
+#include <QString>
 
-class LogsManager : public QObject
-{
+class EXTRACHAIN_EXPORT LogsManager : public QObject {
     Q_OBJECT
 
 public:
@@ -66,21 +66,18 @@ public: // slots:
     static void makeLog(const QString& file, int line, const QString& function, const QString& msg);
 
 private:
-    static QString normalizeFileName(const QString &file);
+    static QString normalizeFileName(const QString& file);
 };
 
-struct UnicodedStream : QTextStream
-{
+struct UnicodedStream : QTextStream {
     using QTextStream::QTextStream;
 
     template <typename T>
-    UnicodedStream& operator<<(T const& t)
-    {
+    UnicodedStream& operator<<(T const& t) {
         return static_cast<UnicodedStream&>(static_cast<QTextStream&>(*this) << t);
     }
 
-    UnicodedStream& operator<<(char const* ptr)
-    {
+    UnicodedStream& operator<<(char const* ptr) {
         return static_cast<UnicodedStream&>(*this << QString(ptr));
     }
 };

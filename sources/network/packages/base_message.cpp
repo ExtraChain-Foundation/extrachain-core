@@ -20,24 +20,20 @@
 #include "network/packages/base_message.h"
 
 using namespace Messages;
-void BaseMessage::setMsgData(const QByteArray &data)
-{
+void BaseMessage::setMsgData(const QByteArray &data) {
     this->data = data;
 }
 
-void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor)
-{
+void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor) {
     signer = actor.id();
     digSig = actor.key()->sign(concatenateAllData());
 }
 
-bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const
-{
+bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const {
     return actor.key()->verify(concatenateAllData(), digSig);
 }
 
-void BaseMessage::operator=(BaseMessage b)
-{
+void BaseMessage::operator=(BaseMessage b) {
     type = b.type;
     signer = b.signer;
     digSig = b.digSig;
@@ -45,15 +41,12 @@ void BaseMessage::operator=(BaseMessage b)
 }
 
 // IMessage interface
-void BaseMessage::operator=(QByteArray &serialized)
-{
+void BaseMessage::operator=(QByteArray &serialized) {
     deserialize(serialized);
 }
 
-void BaseMessage::operator=(QList<QByteArray> &list)
-{
-    if (list.size() >= 4)
-    {
+void BaseMessage::operator=(QList<QByteArray> &list) {
+    if (list.size() >= 4) {
         type = list.takeFirst().toUInt();
         QByteArray signBytes = list.takeFirst();
         signer = BigNumber::isValid(signBytes) ? signBytes : ActorId();
@@ -62,20 +55,17 @@ void BaseMessage::operator=(QList<QByteArray> &list)
     }
 }
 
-bool BaseMessage::isEmpty() const
-{
+bool BaseMessage::isEmpty() const {
     if (type == 0 || data.isEmpty())
         return true;
     else
         return false;
 }
 
-QByteArray BaseMessage::concatenateAllData() const
-{
+QByteArray BaseMessage::concatenateAllData() const {
     QByteArray concatenatedData;
     const auto params = serializedParams();
-    for (const QByteArray &d : params)
-    {
+    for (const QByteArray &d : params) {
         // in entry data for digSig calculation we don't need digSig field
         if (d != digSig)
             concatenatedData += d;
@@ -83,8 +73,7 @@ QByteArray BaseMessage::concatenateAllData() const
     return concatenatedData;
 }
 
-QList<QByteArray> BaseMessage::serializedParams() const
-{
+QList<QByteArray> BaseMessage::serializedParams() const {
     QList<QByteArray> l;
     QByteArray signeR;
     if (signer.isEmpty())
@@ -95,13 +84,11 @@ QList<QByteArray> BaseMessage::serializedParams() const
     return l;
 }
 
-short BaseMessage::getFieldsCount() const
-{
+short BaseMessage::getFieldsCount() const {
     return BaseMessage::FIELDS_COUNT;
 }
 
-QByteArray BaseMessage::serialize() const
-{
+QByteArray BaseMessage::serialize() const {
     //    QByteArray serialized = "";
     return Serialization::serialize(serializedParams(), Messages::FIELD_SIZE);
     //    for (const QByteArray &param : serializedParams())
@@ -114,27 +101,23 @@ QByteArray BaseMessage::serialize() const
     //    return serialized;
 }
 
-void BaseMessage::deserialize(const QByteArray &serialized)
-{
+void BaseMessage::deserialize(const QByteArray &serialized) {
     QList<QByteArray> list = {};
     int pos = 0;
-    for (int i = 0; i < getFieldsCount(); i++)
-    {
+    for (int i = 0; i < getFieldsCount(); i++) {
         int count = Utils::qByteArrayToInt(serialized.mid(pos, Messages::FIELD_SIZE));
         pos += Messages::FIELD_SIZE;
         //        QByteArray el =
         list << serialized.mid(pos, count);
         pos += count;
     }
-    if (list.size() < getFieldsCount())
-    {
+    if (list.size() < getFieldsCount()) {
         qDebug() << "Error: can't deserialize message:" << serialized;
     }
     // QList<QByteArray> l = Serialization::deserialize(serialized);
     operator=(list);
 }
 
-const QByteArray BaseMessage::hash() const
-{
+const QByteArray BaseMessage::hash() const {
     return Utils::calcKeccak(data);
 }

@@ -20,27 +20,26 @@
 #ifndef DFS_H
 #define DFS_H
 
-#include "dfs/managers/headers/card_manager.h"
-#include "dfs/packages/headers/dfs_changes.h"
-#include "dfs/packages/headers/all.h"
-#include "dfs/managers/headers/sender.h"
-#include "dfs/managers/headers/dfs_networkmanager.h"
-#include "utils/exc_utils.h"
-#include "utils/db_connector.h"
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "dfs/managers/headers/card_manager.h"
+#include "dfs/managers/headers/dfs_networkmanager.h"
+#include "dfs/managers/headers/sender.h"
+#include "dfs/packages/headers/all.h"
+#include "dfs/packages/headers/dfs_changes.h"
 #include "dfs/types/headers/cardfile.h"
-#include <QVector>
-#include <QTimer>
+#include "utils/db_connector.h"
+#include "utils/exc_utils.h"
 #include <QDirIterator>
+#include <QTimer>
+#include <QVector>
 #include <iterator>
 #ifdef ECLIENT
-#include <QImage>
-#include <QImageReader>
+    #include <QImage>
+    #include <QImageReader>
 #endif
+#include "extrachain_global.h"
 
-class Dfs : public QObject
-{
-
+class EXTRACHAIN_EXPORT Dfs : public QObject {
     Q_OBJECT
 
 private:
@@ -51,7 +50,6 @@ private:
     Sender *sender = nullptr;
     bool myQuickMode = false;
     DfsNetworkManager *m_networkManager = nullptr;
-    QString dfsNetLocalIp;
     // DFSResolver *resolver;
 
 public slots:
@@ -75,8 +73,7 @@ private:
     void getDFSStatus();
 
 public:
-    Dfs(ActorIndex *actorIndex, AccountController *accController, const QString &localIp = "",
-        QObject *parent = nullptr);
+    Dfs(ActorIndex *actorIndex, AccountController *accController, QObject *parent = nullptr);
     ~Dfs();
 
 public:

@@ -20,8 +20,7 @@
 #include "network/discovery_service.h"
 
 DiscoveryService::DiscoveryService(quint16 discoveryPort, quint16 networkPort, QNetworkAddressEntry *local)
-    : local(local)
-{
+    : local(local) {
     qDebug() << "DISCOVERY SERVICE: constructor";
     netPort = networkPort;
     port = discoveryPort;
@@ -30,34 +29,28 @@ DiscoveryService::DiscoveryService(quint16 discoveryPort, quint16 networkPort, Q
     connect(socket, &QUdpSocket::readyRead, this, &DiscoveryService::recieveMsg);
 }
 
-DiscoveryService::~DiscoveryService()
-{
+DiscoveryService::~DiscoveryService() {
     emit finished();
     active = false;
     //    this->disable();
     delete socket;
 }
 
-void DiscoveryService::process()
-{
+void DiscoveryService::process() {
     qDebug() << "DISCOVERY SERVICE: process start";
     active = true;
-    foreach (QNetworkInterface networkInterface, QNetworkInterface::allInterfaces())
-    {
-        if (networkInterface.type() != QNetworkInterface::Wifi)
-        {
+    foreach (QNetworkInterface networkInterface, QNetworkInterface::allInterfaces()) {
+        if (networkInterface.type() != QNetworkInterface::Wifi) {
             continue;
         }
         qDebug() << networkInterface.flags() << " " << networkInterface.name() << " "
                  << networkInterface.type();
-        foreach (QNetworkAddressEntry entry, networkInterface.addressEntries())
-        {
+        foreach (QNetworkAddressEntry entry, networkInterface.addressEntries()) {
             QHostAddress broadcastAddress = entry.broadcast();
             if (broadcastAddress != QHostAddress::Null
                 && entry.ip().protocol() == QAbstractSocket::IPv4Protocol
                 && broadcastAddress != QHostAddress::LocalHost
-                && broadcastAddress != QHostAddress(QHostAddress::LocalHost))
-            {
+                && broadcastAddress != QHostAddress(QHostAddress::LocalHost)) {
                 qDebug() << broadcastAddress << " " << QHostAddress(QHostAddress::LocalHost);
                 if (broadcastAddress != local->ip())
                     socket->writeDatagram(Messages::createPingMessage(), broadcastAddress, port);
@@ -65,12 +58,10 @@ void DiscoveryService::process()
         }
     }
 
-    while (active)
-    {
+    while (active) {
         QRandomGenerator randHost;
         for (quint32 i = randHost.bounded(quint32(1), QHostAddress("255.255.255.255").toIPv4Address());
-             i <= QHostAddress("255.255.255.255").toIPv4Address(); i++)
-        {
+             i <= QHostAddress("255.255.255.255").toIPv4Address(); i++) {
             // qDebug() << "DISCOVERY SERVICE: finder";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
@@ -80,12 +71,10 @@ void DiscoveryService::process()
     }
 }
 
-void DiscoveryService::recieveMsg()
-{
+void DiscoveryService::recieveMsg() {
     qDebug() << "DISCOVERY SERVICE: recieveMsg";
     QNetworkDatagram datagram = socket->receiveDatagram();
-    if (Messages::isPing(datagram.data()))
-    {
+    if (Messages::isPing(datagram.data())) {
         qDebug() << "Ping message is received from"
                  << QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
         socket->writeDatagram(Messages::createPongMessage(netPort),
@@ -94,8 +83,7 @@ void DiscoveryService::recieveMsg()
         //                              port);
         return;
     }
-    if (Messages::isPong(datagram.data()))
-    {
+    if (Messages::isPong(datagram.data())) {
         qDebug() << "Pong message is received from"
                  << QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
         // QString sender = QHostAddress(datagram.senderAddress().toIPv4Address()).toString();

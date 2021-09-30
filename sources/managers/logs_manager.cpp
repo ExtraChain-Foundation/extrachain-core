@@ -18,21 +18,21 @@
  */
 
 #ifdef _WIN32
-#include <Windows.h>
+    #include <Windows.h>
 #endif
 
 #include "managers/logs_manager.h"
 
-#include <iostream>
-#include <QMutex>
 #include <QJsonObject>
+#include <QMutex>
+#include <iostream>
 
 #ifdef Q_OS_ANDROID
-#include <android/log.h>
+    #include <android/log.h>
 #endif
 
 #ifdef QT_DEBUG
-#define LOG_FILENAME
+    #define LOG_FILENAME
 #endif
 
 bool LogsManager::toConsole = true;
@@ -49,17 +49,14 @@ QStringList LogsManager::filesFilter;
 bool LogsManager::antiFilter = false;
 bool LogsManager::debugLogs = false;
 
-LogsManager::LogsManager()
-{
+LogsManager::LogsManager() {
     // connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
 }
 
-void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
-{
+void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg) {
     // static LogsManager logsManager;
     // emit logsManager.makeLogSignal(context.file, context.line, context.function, msg);
-    switch (type)
-    {
+    switch (type) {
     case QtInfoMsg:
         makeLog(context.file, context.line, context.function, msg);
         break;
@@ -70,8 +67,7 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
         makeLog(context.file, context.line, context.function, "[Fatal Error] " + msg);
 
         QFile file("logs/extrachain-fatal.log");
-        if (file.open(QFile::Append))
-        {
+        if (file.open(QFile::Append)) {
             QJsonObject json;
             json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
 #ifdef LOG_FILENAME
@@ -92,8 +88,10 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     }
 }
 
-void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg)
-{
+void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg) {
+    Q_UNUSED(file)
+    Q_UNUSED(line)
+    Q_UNUSED(function)
     static QFile logFile("logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss")
                          + ".log");
 
@@ -108,12 +106,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     QString fileName = normalizeFileName(file);
     bool isPrint = !filesFilter.length();
 
-    if (!isPrint)
-    {
-        for (auto&& file : filesFilter)
-        {
-            if (antiFilter ? !fileName.contains(file) : fileName.contains(file))
-            {
+    if (!isPrint) {
+        for (auto&& file : filesFilter) {
+            if (antiFilter ? !fileName.contains(file) : fileName.contains(file)) {
                 isPrint = true;
                 break;
             }
@@ -124,16 +119,14 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         return;
 
     QString fileNameQrc, lineRow;
-    if (fileName.right(3) == "qml")
-    {
-#ifdef Q_OS_WIN
+    if (fileName.right(3) == "qml") {
+    #ifdef Q_OS_WIN
         fileNameQrc = QString("%1:%2").arg(fileName).arg(line);
-#else
+    #else
         fileNameQrc = QString("qrc:/%1:%2").arg(fileName).arg(line);
-#endif
+    #endif
 
-        if (message.left(fileNameQrc.length()) == fileNameQrc)
-        {
+        if (message.left(fileNameQrc.length()) == fileNameQrc) {
             lineRow = message.mid(fileNameQrc.length(),
                                   message.length()
                                       - (message.length() - message.indexOf(":", fileNameQrc.length() + 1))
@@ -161,16 +154,14 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 #endif
         + message;
 
-    if (LogsManager::toConsole)
-    {
+    if (LogsManager::toConsole) {
 #ifdef LOG_FILENAME
         if (isPrint)
 #endif
             print(logStr.toStdString());
     }
 
-    if (LogsManager::toModel)
-    {
+    if (LogsManager::toModel) {
         static QMutex mutex;
         mutex.lock();
         logs.append({ { "text", msg },
@@ -185,8 +176,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         mutex.unlock();
     }
 
-    if (LogsManager::toFile && logFile.isWritable())
-    {
+    if (LogsManager::toFile && logFile.isWritable()) {
         static QMutex mutex;
         mutex.lock();
         logFile.write(QString("%1 %2\n").arg(currentDateTime.toString("yyyy-MM-dd"), logStr).toUtf8());
@@ -195,71 +185,62 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     }
 }
 
-QString LogsManager::normalizeFileName(const QString& file)
-{
+QString LogsManager::normalizeFileName(const QString& file) {
 #ifdef LOG_FILENAME
     // TODO: to std::string
     QString fileName = file;
     if (fileName.isEmpty())
         fileName = "global";
 
-#if defined(Q_OS_WIN) && !defined(__GNUC__)
+    #if defined(Q_OS_WIN) && !defined(__GNUC__)
     return fileName.right(fileName.size() - fileName.lastIndexOf("\\") - 1);
-#else
+    #else
     return fileName.right(fileName.size() - fileName.lastIndexOf("/") - 1);
-#endif
+    #endif
 #else
+    Q_UNUSED(file)
     return "";
 #endif
 }
 
-void LogsManager::on()
-{
+void LogsManager::on() {
     LogsManager::toConsole = true;
     LogsManager::toFile = true;
     LogsManager::toModel = true;
 }
 
-void LogsManager::off()
-{
+void LogsManager::off() {
     LogsManager::toConsole = false;
     LogsManager::toFile = false;
     LogsManager::toModel = false;
 }
 
-void LogsManager::onConsole()
-{
+void LogsManager::onConsole() {
     LogsManager::toConsole = true;
 }
 
-void LogsManager::offConsole()
-{
+void LogsManager::offConsole() {
     LogsManager::toConsole = false;
 }
 
-void LogsManager::onFile()
-{
+void LogsManager::onFile() {
     QDir().mkpath("logs");
     LogsManager::toFile = true;
 }
 
-void LogsManager::offFile()
-{
+void LogsManager::offFile() {
     LogsManager::toFile = false;
 }
 
-void LogsManager::onQml()
-{
+void LogsManager::onQml() {
     LogsManager::toModel = true;
 }
 
-void LogsManager::offQml()
-{
+void LogsManager::offQml() {
     LogsManager::toModel = false;
 }
 
-void LogsManager::etHandler()
-{
+void LogsManager::etHandler() {
     std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
 
@@ -271,13 +252,11 @@ void LogsManager::etHandler()
 #endif
 }
 
-void LogsManager::qtHandler()
-{
+void LogsManager::qtHandler() {
     qInstallMessageHandler(nullptr);
 }
 
-void LogsManager::emptyHandler()
-{
+void LogsManager::emptyHandler() {
     qInstallMessageHandler([](QtMsgType type, const QMessageLogContext& context, const QString& msg) {
         Q_UNUSED(type)
         Q_UNUSED(context)
@@ -285,28 +264,24 @@ void LogsManager::emptyHandler()
     });
 }
 
-void LogsManager::print(const std::string& log)
-{
+void LogsManager::print(const std::string& log) {
 #ifdef Q_OS_ANDROID
     __android_log_print(ANDROID_LOG_DEBUG, "ExtraChain", "%s", log.c_str());
 #else
-#if defined(Q_OS_WIN)
-    if (IsDebuggerPresent())
-    {
+    #if defined(Q_OS_WIN)
+    if (IsDebuggerPresent()) {
         OutputDebugStringA(log.c_str());
         OutputDebugStringA("\n");
     }
-#endif
+    #endif
     std::cout << log << std::endl;
 #endif
 }
 
-void LogsManager::setAntiFilter(bool value)
-{
+void LogsManager::setAntiFilter(bool value) {
     antiFilter = value;
 }
 
-void LogsManager::setFilesFilter(const QStringList& value)
-{
+void LogsManager::setFilesFilter(const QStringList& value) {
     filesFilter = value;
 }

@@ -18,164 +18,62 @@
  */
 
 #include "enc/key_private.h"
+#include "enc/enc_tools.h"
+
+#include <QJsonObject>
 
 using std::string, std::vector;
 
-KeyPrivate::KeyPrivate()
-{
-    secKey = string();
-    pubKey = string();
+KeyPrivate::KeyPrivate() {
+    generate();
 }
 
-KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate)
-{
-    secKey = keyPrivate.getSecKey();
-    pubKey = keyPrivate.getPubKey();
+KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
+    m_secretKey = secret_key;
+    m_publicKey = public_key;
 }
 
-KeyPrivate::KeyPrivate(const QJsonObject &json)
-{
-    secKey = json["privateKey"].toString().toStdString();
-    pubKey = json["publicKey"].toString().toStdString();
+KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {
+    m_secretKey = keyPrivate.secretKey();
+    m_publicKey = keyPrivate.publicKey();
 }
 
-KeyPrivate::~KeyPrivate()
-{
+KeyPrivate::KeyPrivate(const QJsonObject &json) {
+    m_secretKey = json["privateKey"].toString().toStdString();
+    m_publicKey = json["publicKey"].toString().toStdString();
 }
 
-void KeyPrivate::generate()
-{
-    vector<unsigned char> sk(crypto_sign_SECRETKEYBYTES);
-    vector<unsigned char> pk(crypto_sign_PUBLICKEYBYTES);
-    crypto_sign_keypair(pk.data(), sk.data());
-    secKey = Utils::byteToHexString(sk);
-    secKey.erase(--secKey.end());
-    pubKey = Utils::byteToHexString(pk);
-    pubKey.erase(--pubKey.end());
+void KeyPrivate::generate() {
+    auto keys = SecretKey::createAsymmetricPair();
+    m_secretKey = keys.first;
+    m_publicKey = keys.second;
 }
 
-QByteArray KeyPrivate::encrypt(const QByteArray &data, const string &publicKeyReceiver, const string &nonce)
-{
-    if (data.isEmpty() || publicKeyReceiver.empty())
-        qFatal("[KeyPrivate::encrypt] msg or secret is empty. msg: %s, secret: %s", data.data(),
-               publicKeyReceiver.data());
-
-    string sdata = data.toStdString();
-    unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-    string pkrs = Utils::hexStringToByte(publicKeyReceiver);
-    vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
-    string sk = Utils::hexStringToByte(secKey);
-    vector<unsigned char> sks(sk.begin(), sk.end());
-
-    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
-
-    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
-    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
-    (void)conv_res;
-
-    vector<unsigned char> enc_msg(enc_size);
-    vector<unsigned char> dec_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> vnonce;
-    vnonce.resize(crypto_box_NONCEBYTES);
-    if (nonce.size() == crypto_box_NONCEBYTES)
-    {
-        vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
-    }
-    else
-    {
-        randombytes_buf(vnonce.data(), vnonce.size());
-    }
-    int r = crypto_box_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), vnonce.data(), xpkr.data(),
-                            xsks.data());
-    string res;
-    if (r == 0)
-    {
-        if (nonce.size() != crypto_box_NONCEBYTES)
-        {
-            enc_msg.insert(enc_msg.begin(), vnonce.begin(), vnonce.end());
-        }
-        res = Utils::byteToHexString(enc_msg);
-        res.erase(--res.end());
-    }
-    if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty. msg:" << data.data()
-                 << "| secret:" << publicKeyReceiver.data() << "| nonce:" << nonce.data();
+QByteArray KeyPrivate::encrypt(const QByteArray &data, const std::string &receiverPublicKey,
+                               const string &nonce) {
+    auto res = SecretKey::encryptAsymmetric(data.toStdString(), m_secretKey, receiverPublicKey, nonce);
     return QByteArray::fromStdString(res);
 }
 
-QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &publicKeySender, const string &nonce)
-{
-    if (data.isEmpty() || publicKeySender.empty())
-        qFatal("[KeyPrivate::decrypt] msg or secret is empty. msg: %s, secret: %s", data.data(),
-               publicKeySender.data());
-
-    string sdata = Utils::hexStringToByte(data.toStdString());
-    string pksr = Utils::hexStringToByte(publicKeySender);
-    string sk = Utils::hexStringToByte(secKey);
-    vector<unsigned char> vnonce;
-    if (nonce.size() == crypto_box_NONCEBYTES)
-    {
-        vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
-    }
-    else
-    {
-        string s_nonce = sdata.substr(0, crypto_box_NONCEBYTES);
-        sdata.erase(0, crypto_box_NONCEBYTES);
-        vnonce = vector<unsigned char>(s_nonce.begin(), s_nonce.end());
-    }
-
-    if (sdata.size() < crypto_secretbox_MACBYTES)
-    {
-        qCritical() << "Critical: [KeyPrivate::decrypt] Incorrect msg" << sdata.size()
-                    << crypto_secretbox_MACBYTES;
-        return "";
-        qFatal("[KeyPrivate::decrypt] Incorrect msg");
-    }
-
-    vector<unsigned char> skr(sk.begin(), sk.end());
-    vector<unsigned char> pks(pksr.begin(), pksr.end());
-
-    vector<unsigned char> xskr(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xskr.data(), skr.data());
-
-    vector<unsigned char> xpks(crypto_scalarmult_curve25519_BYTES);
-    int res_ed_to_curve = crypto_sign_ed25519_pk_to_curve25519(xpks.data(), pks.data());
-    (void)res_ed_to_curve; // unused
-
-    vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> dec_msg(enc_msg.size() - crypto_box_MACBYTES);
-
-    int r = crypto_box_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), vnonce.data(), xpks.data(),
-                                 xskr.data());
-    string res;
-    if (r == 0)
-    {
-        res = string(dec_msg.begin(), dec_msg.end());
-    }
-    if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty." /*msg:" << data.data()*/
-                 << "| secret:" << publicKeySender.data() << "| nonce:" << nonce.data();
+QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &senderPublicKey, const string &nonce) {
+    auto res = SecretKey::decryptAsymmetric(data.toStdString(), m_secretKey, senderPublicKey, nonce);
     return QByteArray::fromStdString(res);
 }
 
-QByteArray KeyPrivate::encryptSelf(const QByteArray &data)
-{
-    string sk = Utils::hexStringToByte(secKey);
+QByteArray KeyPrivate::encryptSelf(const QByteArray &data) {
+    string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
-    return this->encrypt(data, this->pubKey, pnonce);
+    return this->encrypt(data, this->m_publicKey, pnonce);
 }
 
-QByteArray KeyPrivate::decryptSelf(const QByteArray &data)
-{
-    string sk = Utils::hexStringToByte(secKey);
+QByteArray KeyPrivate::decryptSelf(const QByteArray &data) {
+    string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
-    return this->decrypt(data, this->pubKey, pnonce);
+    return this->decrypt(data, this->m_publicKey, pnonce);
 }
 
-QByteArray KeyPrivate::sign(const QByteArray &data)
-{
-    string sks = Utils::hexStringToByte(secKey);
+QByteArray KeyPrivate::sign(const QByteArray &data) {
+    string sks = Utils::hexStringToByte(m_secretKey);
     vector<unsigned char> sk(sks.begin(), sks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(crypto_sign_BYTES);
@@ -185,29 +83,20 @@ QByteArray KeyPrivate::sign(const QByteArray &data)
     return QByteArray::fromStdString(sig);
 }
 
-bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex)
-{
-    string pks = Utils::hexStringToByte(this->pubKey);
+bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex) {
+    string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
-    if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    return res == 0;
 }
 
-std::string KeyPrivate::getSecKey() const
-{
-    return secKey;
+const std::string &KeyPrivate::secretKey() const {
+    return m_secretKey;
 }
 
-std::string KeyPrivate::getPubKey() const
-{
-    return pubKey;
+const std::string &KeyPrivate::publicKey() const {
+    return m_publicKey;
 }

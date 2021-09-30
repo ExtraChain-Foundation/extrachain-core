@@ -1,16 +1,17 @@
 #ifndef WEBSOCKETSERVICE_H
 #define WEBSOCKETSERVICE_H
 
-#include <QWebSocket>
 #include "network/isocket_service.h"
 #include "network/socket_pair.h"
 #include "utils/exc_utils.h"
+#include <QWebSocket>
+
+#include "extrachain_global.h"
 
 class NetworkManager;
 class ActorIndex;
 
-class WebSocketService : public SocketService
-{
+class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
     Q_OBJECT
 
 public:
@@ -21,12 +22,10 @@ public:
     QWebSocket *socket() const;
     bool isActive() const override;
     void open(const QString &ip, quint16 port);
-    virtual QString protocolString() const override
-    {
+    virtual QString protocolString() const override {
         return "WebSocket";
     }
-    virtual Network::Protocol protocol() const override
-    {
+    virtual Network::Protocol protocol() const override {
         return Network::Protocol::WebSocket;
     }
 
@@ -39,12 +38,13 @@ private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
     void sendMessage(const QByteArray &data);
+    void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;
 
 private:
     void connections();
-    void sendFirstMessage();
+    void handshake();
 
     QWebSocket *m_ws = nullptr;
 };

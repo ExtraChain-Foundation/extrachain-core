@@ -18,84 +18,39 @@
  */
 
 #include "enc/key_public.h"
+#include "enc/enc_tools.h"
+
+#include <QJsonObject>
 
 using std::string, std::vector;
 
-KeyPublic::KeyPublic(const string &publicKey)
-{
-    pubKey = publicKey;
+KeyPublic::KeyPublic(const string &publicKey) {
+    m_publicKey = publicKey;
 }
 
-KeyPublic::KeyPublic(const QJsonObject &json)
-{
-    pubKey = json["publicKey"].toString().toStdString();
+KeyPublic::KeyPublic(const QJsonObject &json) {
+    m_publicKey = json["publicKey"].toString().toStdString();
 }
 
-KeyPublic::KeyPublic(const KeyPublic &keyPublic)
-{
-    pubKey = keyPublic.getPubKey();
+KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
+    m_publicKey = keyPublic.publicKey();
 }
 
-KeyPublic::~KeyPublic()
-{
-}
-
-QByteArray KeyPublic::encrypt(const QByteArray &data, const string &privateKeySender)
-{
-    string sdata = data.toStdString();
-    unsigned long long enc_size = crypto_box_MACBYTES + sdata.length();
-    string pkrs = Utils::hexStringToByte(pubKey);
-    vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
-    string sk = Utils::hexStringToByte(privateKeySender);
-    vector<unsigned char> sks(sk.begin(), sk.end());
-
-    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
-
-    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
-    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
-    (void)conv_res; // unused
-    //    if (conv_res)
-    vector<unsigned char> enc_msg(enc_size);
-    vector<unsigned char> dec_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> nonce;
-    nonce.resize(crypto_box_NONCEBYTES);
-    randombytes_buf(nonce.data(), nonce.size());
-    int r = crypto_box_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), nonce.data(), xpkr.data(),
-                            xsks.data());
-    string res;
-    if (r == 0)
-    {
-        enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
-        res = Utils::byteToHexString(enc_msg);
-        res.erase(--res.end());
-    }
+QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey) {
+    auto res = SecretKey::encryptAsymmetric(data.toStdString(), senderPrivateKey, m_publicKey);
     return QByteArray::fromStdString(res);
 }
 
-bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex)
-{
-    string pks = Utils::hexStringToByte(this->pubKey);
+bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) {
+    string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
-    if (crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data()) == 0)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    return res == 0;
 }
 
-bool KeyPublic::isEmpty()
-{
-    return pubKey.empty();
-}
-
-string KeyPublic::getPubKey() const
-{
-    return pubKey;
+const std::string &KeyPublic::publicKey() const {
+    return m_publicKey;
 }

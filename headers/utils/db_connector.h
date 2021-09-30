@@ -19,30 +19,32 @@
 
 #ifndef DB_CONNECTOR_H
 #define DB_CONNECTOR_H
-#include <QByteArray>
-#include <QDebug>
 
-#include <vector>
+#include <algorithm>
 #include <unordered_map>
 #include <utility>
-#include <algorithm>
+#include <vector>
 
+#include <QByteArray>
+#include <QDebug>
 #include <QMutex>
 
-#include "sqlite3.h"
+#include "extrachain_global.h"
+
+struct sqlite3;
+struct sqlite3_stmt;
+
 static QMutex dbmutex;
 typedef std::unordered_map<std::string, std::string> DBRow;
 
-struct DBColumn
-{
+struct DBColumn {
     std::string name;
     std::string type;
     // bool notNull = false;
     // std::string defaultValue;
     // int primaryKey = -1;
 
-    operator QString() const
-    {
+    operator QString() const {
         return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type)
             + ")";
     }
@@ -50,8 +52,7 @@ struct DBColumn
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 
-class DBConnector
-{
+class EXTRACHAIN_EXPORT DBConnector {
 private:
     std::string m_file;
     bool m_open = false;

@@ -20,21 +20,20 @@
 #ifndef SENDER_H
 #define SENDER_H
 
-#include <QObject>
-#include <QThread>
 #include "dfs/packages/headers/all.h"
 #include "managers/account_controller.h"
-#include <vector>
+#include <QObject>
+#include <QThread>
 #include <type_traits>
+#include <vector>
 
 #ifndef DFS_NETWORK_MANAGER_DEF
-#define DFS_NETWORK_MANAGER_DEF
+    #define DFS_NETWORK_MANAGER_DEF
 class DfsNetworkManager;
-#include "dfs/managers/headers/dfs_networkmanager.h"
+    #include "dfs/managers/headers/dfs_networkmanager.h"
 #endif
 
-class Sender : public QObject
-{
+class Sender : public QObject {
     Q_OBJECT
     const int data_offset = DistFileSystem::dataSize;
     DfsNetworkManager *m_networkManager = nullptr;
@@ -59,19 +58,16 @@ public:
     template <typename T>
     void sendDfsMessage(const T &dfsMessage, const unsigned int &type,
                         const SocketPair &receiver = SocketPair(),
-                        Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default)
-    {
+                        Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default) {
         static_assert(std::is_base_of<Messages::ISmallMessage, T>::value,
                       "Derived not derived from Messages::ISmallMessage");
 
-        if (dfsMessage.isEmpty())
-        {
+        if (dfsMessage.isEmpty()) {
             qDebug() << "Empty dfs message" << typeid(T).name();
             return;
         }
 
-        if (m_networkManager != nullptr)
-        {
+        if (m_networkManager != nullptr) {
             m_networkManager->send(dfsMessage.serialize(), type, receiver, typeSend);
         }
     }

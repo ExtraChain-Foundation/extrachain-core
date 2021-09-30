@@ -24,12 +24,11 @@
 #include <QThread>
 
 //#include "utils/bignumber.h"
-#include "utils/bignumber.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
+#include "utils/bignumber.h"
 
-class CoinService : public QThread
-{
+class EXTRACHAIN_EXPORT CoinService : public QThread {
     Q_OBJECT
 private:
     //	ResolverService *resolver;

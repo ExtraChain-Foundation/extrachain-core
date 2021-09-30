@@ -20,26 +20,23 @@
 #ifndef MEMBLOCK_H
 #define MEMBLOCK_H
 
-#include <QString>
-#include <QDebug>
+#include "actor.h"
+#include "datastorage/transaction.h"
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"
-#include "utils/exc_utils.h"
-#include "datastorage/transaction.h"
-#include "actor.h"
+#include "utils/db_connector.h"
 #include "utils/exc_utils.h"
 #include <QDateTime>
-#include "utils/db_connector.h"
+#include <QDebug>
+#include <QString>
 
 // Block comparison result
-struct forApprovers
-{
+struct forApprovers {
     QByteArray actorId = "";
     QByteArray sign = "";
     bool isApprove = false;
 };
-struct BlockCompare
-{
+struct BlockCompare {
     BigNumber indexDiff;
     BigNumber approverDiff;
     int dataDiff;
@@ -53,9 +50,7 @@ static const QByteArray DATA_BLOCK_TYPE = "data";
 static const QByteArray MERGE_BLOCK = "dataMerge";
 }
 
-class Block
-{
-
+class EXTRACHAIN_EXPORT Block {
 protected:
     const int FIELDS_SIZE = 4;
     QByteArray type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
@@ -164,13 +159,11 @@ public:
     void setType(const QByteArray &value);
 };
 
-inline bool operator<(const Block &l, const Block &r)
-{
+inline bool operator<(const Block &l, const Block &r) {
     return l.getIndex() < r.getIndex() || l.getData() < r.getData();
 }
 
-inline bool operator==(const Block &l, const Block &r)
-{
+inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
         && l.extractTransactions() == r.extractTransactions();
 }

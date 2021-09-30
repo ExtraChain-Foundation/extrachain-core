@@ -20,31 +20,32 @@
 #ifndef ACCOUNT_CONTROLLER_H
 #define ACCOUNT_CONTROLLER_H
 
-#include "enc/enc_tools.h"
-
-#include "utils/bignumber.h"
-#include "datastorage/actor.h"
-#include "datastorage/index/actorindex.h"
-#include "enc/key_private.h"
 #include <QDebug>
 #include <QObject>
+
+//#include "enc/enc_tools.h"
+#include "datastorage/actor.h"
+#include "utils/bignumber.h"
+//#include "datastorage/index/actorindex.h"
+//#include "enc/key_private.h"
+
 class Blockchain;
+class ActorIndex;
+
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-
-class AccountController : public QObject
-{
+class EXTRACHAIN_EXPORT AccountController : public QObject {
     Q_OBJECT
+
 private:
     // Current user, used in AccountController.
     int userNum = 0;
     Blockchain *blockchain;
     QList<Actor<KeyPrivate> *> accounts;
     ActorIndex *actorIndex;
-    QMap<QByteArray, QByteArray> currentState;
 
 public:
     AccountController(ActorIndex *actorIndex);
@@ -65,7 +66,7 @@ public:
      */
     Actor<KeyPrivate> getActor(int number);
 
-    Actor<KeyPrivate> *getMainActor();
+    Actor<KeyPrivate> *mainActor();
     /**
      * @brief Gets current active actor
      * @return actor
@@ -75,8 +76,6 @@ public:
     int getAccountCount() const;
     int getUserNum() const;
     void setUserNum(int value);
-    QMap<QByteArray, QByteArray> getCurrentState() const;
-    void setCurrentState(const QMap<QByteArray, QByteArray> &value);
 
     QList<Actor<KeyPrivate> *> getAccounts() const;
     void setAccounts(const QList<Actor<KeyPrivate> *> &value);

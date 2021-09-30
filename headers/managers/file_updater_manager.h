@@ -20,15 +20,14 @@
 #ifndef FILEUPDATERMANAGER_H
 #define FILEUPDATERMANAGER_H
 
-#include <QList>
 #include <QByteArray>
+#include <QList>
 #include <QObject>
 
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
 
-class FileUpdaterManager : public QObject
-{
+class EXTRACHAIN_EXPORT FileUpdaterManager : public QObject {
     Q_OBJECT
 
 public:

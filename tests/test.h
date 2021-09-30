@@ -22,17 +22,16 @@
 
 #include "managers/extrachain_node.h"
 
-class Test : public QObject
-{
+class Test : public QObject {
     Q_OBJECT
-    Block a;
-    Block b;
-    Block pr;
+    // Block a;
+    // Block b;
+    // Block pr;
 
 public:
     Test(ExtraChainNode *node, QObject *p = nullptr)
-        : QObject(p)
-    {
+        : QObject(p) {
+        Q_UNUSED(node)
         /*
         Transaction tr(node->getAccountController()->getCurrentActor().id(), BigNumber("ddddaaaa332232"),
                        BigNumber(124));
@@ -56,8 +55,7 @@ signals:
     void start1(const QByteArray &a, const QByteArray &b);
 
 public slots:
-    void start()
-    {
+    void start() {
     }
 };
 

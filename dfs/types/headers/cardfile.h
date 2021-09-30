@@ -17,17 +17,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <QString>
 #include <QFile>
+#include <QString>
 
 #include <optional>
 
+#include "dfs/managers/headers/card_manager.h"
 #include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
-#include "dfs/managers/headers/card_manager.h"
 
-class CardFile
-{
+class CardFile {
 public:
     CardFile(QString userId);
 

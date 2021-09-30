@@ -20,39 +20,47 @@
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
+#include <QtCore/QMutex>
+#include <QtCore/QRandomGenerator>
+#include <QtNetwork/QNetworkAddressEntry>
+#include <QtNetwork/QNetworkInterface>
+#include <QtNetwork/QNetworkProxy>
+#include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
-#include <QNetworkInterface>
-#include <QNetworkAddressEntry>
-#include <QWebSocketServer>
-#include <QRandomGenerator>
-#include <QMutex>
 
-#include "utils/exc_utils.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
-#include "managers/thread_pool.h"
-#include "network/upnpconnection.h"
-//#include "network/socket_pair.h"
+#include "network/network_status.h"
+#include "utils/exc_utils.h"
 
 class ResolveManager;
-// class SocketService;
-// class TcpSocketService;
-// class WebSocketService;
-// class TcpServerService;
-#include "network/tcpsocket_service.h"
-#include "network/websocket_service.h"
-#include "network/tcpserver_service.h"
-#include "network/packages/service/all_messages.h"
+class SocketService;
+class TcpSocketService;
+class WebSocketService;
+class TcpServerService;
+class UPNPConnection;
+
+struct NetworkReconnect {
+    QString ip;
+    quint16 port;
+    Network::Protocol protocol;
+    // quint64 lastTry;
+    auto operator==(const NetworkReconnect &reconnect) const {
+        return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
+    }
+};
+
+inline uint qHash(const NetworkReconnect &reconnect) {
+    return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
+}
 
 /**
  * @brief The NetworkManager class
  * Creates Discovery, Resolver, Server and Sockets services
  */
-// static QMutex mutex;
-class NetworkManager : public QObject
-{
+class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
@@ -63,21 +71,17 @@ private:
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};
 
-#ifdef ECLIENT
-    const int SIZE_OF_CONNECTIONS = 5;
-#else
-    const int SIZE_OF_CONNECTIONS = 100;
-#endif
     ActorIndex *m_actorIndex;
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
     TcpServerService *tcpServer = nullptr;
     QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
-    QSet<std::pair<QString, Network::Protocol>> m_reconnections;
+    QSet<NetworkReconnect> m_reconnections;
+    NetworkStatus m_networkStatus;
 
 public:
-    NetworkManager(ActorIndex *actorIndex, const QString &localIp = "");
+    NetworkManager(ActorIndex *actorIndex);
     ~NetworkManager();
 
     // protected:
@@ -119,10 +123,10 @@ protected:
     void sendFromCache();
 
 private slots:
-    void onNewWSConnection();
+    void onNewWsConnection();
 
 protected slots:
-    void addTcpConnectionFromServer(qint64 socketDescriptor);
+    void onNewTcpConnection(qint64 socketDescriptor);
     virtual void checkConnectionsStatus();
     void startDiscovery();
 
@@ -130,6 +134,8 @@ public slots:
     void connectToNode(const QString &ip, Network::Protocol protocol);
     void process();
     void reconnection();
+    void setupProxy(QNetworkProxy::ProxyType type, const QString &hostName, quint16 port, const QString &user,
+                    const QString &password);
 
 private slots:
     /**

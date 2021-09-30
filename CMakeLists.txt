@@ -12,11 +12,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-if (WIN32)
-    set(EXTRACHAIN_STATIC_BUILD true)
-endif()
 if (EXTRACHAIN_STATIC_BUILD)
     message("Build static ExtraChain")
 endif()
@@ -26,7 +22,7 @@ message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTE
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     message("Use flags")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -Werror=implicit-fallthrough")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpedantic -Werror=return-type -Werror=implicit-fallthrough")
     if (UNIX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     endif (UNIX)
@@ -81,7 +77,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/searchfilters.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
@@ -99,8 +94,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/tx_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message_response.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_interface.h
@@ -156,6 +153,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/tx_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message_response.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/connections_message.cpp
@@ -188,6 +186,7 @@ if (EXTRACHAIN_STATIC_BUILD)
         ${EXTRACHAIN_CORE_SOURCES}
         )
 else()
+    add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
     add_library(extrachain SHARED
         ${EXTRACHAIN_CORE_SOURCES}
         )
@@ -215,7 +214,7 @@ string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
-target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ../etalonium-console/headers) # TODO: remove console headers
+target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 target_link_libraries(extrachain
     Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::WebSockets
@@ -233,4 +232,3 @@ if (WIN32) # temp
 endif(WIN32)
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
-message("--- ExtraChain Core ---")

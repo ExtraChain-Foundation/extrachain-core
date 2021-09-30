@@ -57,6 +57,7 @@ SOURCES += \
     $$PWD/dfs/types/sources/dfstruct.cpp \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
+    $$PWD/sources/network/network_status.cpp \
     $$PWD/sources/network/packages/base_message.cpp \
     $$PWD/sources/network/packages/service/get_actor_message.cpp \
     $$PWD/sources/network/packages/service/get_block_message.cpp \
@@ -72,6 +73,7 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/headers/precompiled.h \
+    $$PWD/headers/extrachain_global.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
     $$PWD/dfs/managers/headers/dfs_networkmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
@@ -86,7 +88,6 @@ HEADERS += \
     $$PWD/headers/enc/key_private.h \
     $$PWD/headers/enc/key_public.h \
     $$PWD/headers/enc/sign_interface.h \
-    $$PWD/headers/datastorage/searchfilters.h \
     $$PWD/dfs/packages/headers/dfs_changes.h \
     $$PWD/dfs/types/headers/cardfile.h \
     $$PWD/headers/managers/chat.h \
@@ -130,6 +131,7 @@ HEADERS += \
     $$PWD/dfs/types/headers/dfstruct.h \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
+    $$PWD/headers/network/network_status.h \
     $$PWD/headers/network/packages/base_message.h \
     $$PWD/headers/network/packages/message_interface.h \
     $$PWD/headers/network/packages/service/all_messages.h \
@@ -146,8 +148,7 @@ HEADERS += \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/utils/exc_utils.h \
-    $$PWD/headers/utils/variant_model.h \
-    $$PWD/test.h
+    $$PWD/headers/utils/variant_model.h
 
 gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function  -Wno-deprecated # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
 

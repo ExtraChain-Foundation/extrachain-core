@@ -32,8 +32,7 @@ namespace Messages {
  * Every new message should implement this interface
  */
 const int FIELD_SIZE = 8;
-struct ISmallMessage
-{
+struct ISmallMessage {
     virtual void operator=(QByteArray &serialized) = 0;
 
     virtual bool isEmpty() const = 0;
@@ -51,8 +50,7 @@ struct ISmallMessage
      */
     virtual void deserialize(const QByteArray &serialized) = 0;
 };
-struct IMessage : ISmallMessage
-{
+struct IMessage : ISmallMessage {
     virtual void operator=(QByteArray &serialized) = 0;
 
     virtual void operator=(QList<QByteArray> &list) = 0;

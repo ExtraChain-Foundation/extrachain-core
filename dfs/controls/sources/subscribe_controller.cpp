@@ -18,20 +18,18 @@
  */
 
 #include "dfs/controls/headers/subscribe_controller.h"
+#include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 
 SubscribeController::SubscribeController(QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
 }
 
-SubscribeController::~SubscribeController()
-{
+SubscribeController::~SubscribeController() {
 }
 
-void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
-{
-    QByteArray currentId = extraChainNode->getIdPrivateProfile();
+void SubscribeController::editMySubscribe(QByteArray id, bool isRemove) {
+    QByteArray currentId = extraChainNode->accountController()->mainActor()->id().toByteArray();
     emit sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
                      isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
                      { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
@@ -42,10 +40,9 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove)
         { Config::DataStorage::subscribeFollowerTableName.c_str(), "subscriber", currentId, "sign", "TODO" });
 }
 
-bool SubscribeController::checkSubscribe(QByteArray id)
-{
-    QString path =
-        DfsStruct::ROOT_FOOLDER_NAME + "/" + extraChainNode->getIdPrivateProfile() + "/services/subscribe";
+bool SubscribeController::checkSubscribe(QByteArray id) {
+    QByteArray currentId = extraChainNode->accountController()->mainActor()->id().toByteArray();
+    QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
     std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::subscribeColumnTableName
@@ -53,8 +50,7 @@ bool SubscribeController::checkSubscribe(QByteArray id)
     return !res.empty();
 }
 
-int SubscribeController::checkCountSubscribe(QByteArray id)
-{
+int SubscribeController::checkCountSubscribe(QByteArray id) {
     QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
@@ -64,8 +60,7 @@ int SubscribeController::checkCountSubscribe(QByteArray id)
     return count;
 }
 
-std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
-{
+std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id) {
     QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/services/subscriber";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);
@@ -78,7 +73,6 @@ std::vector<DBRow> SubscribeController::getAllSubscribe(QByteArray id)
     return res;
 }
 
-void SubscribeController::setExtraChainNode(ExtraChainNode *value)
-{
+void SubscribeController::setExtraChainNode(ExtraChainNode *value) {
     extraChainNode = value;
 }

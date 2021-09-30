@@ -21,11 +21,12 @@
 #define DFS_REUEST_H
 
 #include "dfs/packages/headers/dfs_message_interface.h"
+#include "dfs/types/headers/dfstruct.h"
+#include "extrachain_global.h"
 #include "network/packages/message_interface.h"
 
 namespace DistFileSystem {
-struct DfsRequest : Messages::ISmallMessage
-{
+struct DfsRequest : Messages::ISmallMessage {
     const short FIELDS_COUNT = 1;
     QString filePath;
 
@@ -40,8 +41,7 @@ public:
     void deserialize(const QByteArray &serialized) override;
 };
 
-struct DfsRequestFinished : Messages::ISmallMessage
-{
+struct DfsRequestFinished : Messages::ISmallMessage {
     const short FIELDS_COUNT = 1;
     QString filePath;
 

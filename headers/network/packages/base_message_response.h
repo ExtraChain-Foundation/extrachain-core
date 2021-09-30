@@ -23,8 +23,7 @@
 #include "network/packages/base_message.h"
 
 namespace Messages {
-struct BaseMessageResponse : BaseMessage
-{
+struct BaseMessageResponse : BaseMessage {
     QByteArray dataHash;
 
     static const short FIELDS_COUNT = 1;

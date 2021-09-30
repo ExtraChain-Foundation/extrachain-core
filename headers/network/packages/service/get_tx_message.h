@@ -24,8 +24,7 @@
 
 namespace Messages {
 
-struct GetTxMessage : ISmallMessage
-{
+struct GetTxMessage : ISmallMessage {
     static const short FIELD_SIZE = 3;
     static const short FIELDS_COUNT = 2;
 

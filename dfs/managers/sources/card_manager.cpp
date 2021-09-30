@@ -21,14 +21,13 @@
 #include <QMutex>
 #include <QUrl>
 
-std::vector<std::string> CardManager::getFilesByType(const std::string &userId, DfsStruct::Type type)
-{ // ignore "."?
+std::vector<std::string> CardManager::getFilesByType(const std::string &userId,
+                                                     DfsStruct::Type type) { // ignore "."?
     DBConnector dbConnect;
 
     if (!QFile::exists(pathToRoot(userId).c_str()))
         return {};
-    if (!dbConnect.open(pathToRoot(userId)))
-    {
+    if (!dbConnect.open(pathToRoot(userId))) {
         qDebug() << "[Error][Card_Manager][getFilesByType]";
         return {};
     }
@@ -45,8 +44,7 @@ std::vector<std::string> CardManager::getFilesByType(const std::string &userId, 
     return listData;
 }
 
-QStringList CardManager::getAllFiles(const QByteArray &userId)
-{
+QStringList CardManager::getAllFiles(const QByteArray &userId) {
     //    QFile card(dfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/' + dfsStruct::ACTOR_CARD_FILE);
     //    if (!card.exists())
     //        return {};
@@ -62,16 +60,14 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     QString path(DfsStruct::ROOT_FOOLDER_NAME + '/' + userId + '/');
     DBConnector dbConnect;
     QStringList listData;
-    if (!dbConnect.open(path.toStdString() + DfsStruct::ACTOR_CARD_FILE.toStdString()))
-    {
+    if (!dbConnect.open(path.toStdString() + DfsStruct::ACTOR_CARD_FILE.toStdString())) {
         qDebug() << "[Error][Card_Manager][getAllFiles]";
         return QStringList();
     }
     QByteArray query = "SELECT id, type FROM " + QByteArray(Config::DataStorage::cardTableName.c_str());
 
     std::vector<DBRow> data = dbConnect.select(query.toStdString());
-    for (DBRow &temp : data)
-    {
+    for (DBRow &temp : data) {
         std::string path = CardManager::buildPathForFile(userId.toStdString(), temp["id"],
                                                          DfsStruct::Type(std::stoi(temp["type"])));
         listData.append(QByteArray::fromStdString(path));
@@ -80,8 +76,7 @@ QStringList CardManager::getAllFiles(const QByteArray &userId)
     return listData;
 }
 
-DfsStruct::Type CardManager::getTypeByName(const QString &fullPath)
-{
+DfsStruct::Type CardManager::getTypeByName(const QString &fullPath) {
     // QString userId = fullPath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
     QString type = fullPath.mid(20 + DfsStruct::ROOT_FOOLDER_NAME_MID + 1);
     type = type.left(type.indexOf("/"));
@@ -89,20 +84,17 @@ DfsStruct::Type CardManager::getTypeByName(const QString &fullPath)
     return DfsStruct::toDfsType(type.toLatin1());
 }
 
-std::string CardManager::pathToRoot(std::string userId)
-{
+std::string CardManager::pathToRoot(std::string userId) {
     return DfsStruct::ROOT_FOOLDER_NAME.toStdString() + '/' + userId + '/'
         + DfsStruct::ACTOR_CARD_FILE.toStdString();
 }
 
-std::vector<std::string> CardManager::getAll(DfsStruct::Type type)
-{
+std::vector<std::string> CardManager::getAll(DfsStruct::Type type) {
     std::vector<std::string> all;
 
     const QStringList allUserIds =
         QDir(DfsStruct::ROOT_FOOLDER_NAME).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (auto &userId : allUserIds)
-    {
+    for (auto &userId : allUserIds) {
         std::vector<std::string> files = getFilesByType(userId.toStdString(), type);
         for (const std::string &file : files)
             all.push_back(file);
@@ -112,8 +104,7 @@ std::vector<std::string> CardManager::getAll(DfsStruct::Type type)
 }
 
 std::string CardManager::buildPathForFile(const std::string &userId, const std::string &file,
-                                          DfsStruct::Type type, PathStyle pathFormat)
-{
+                                          DfsStruct::Type type, PathStyle pathFormat) {
     if (file.empty())
         return "";
 
@@ -128,8 +119,7 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
         ? fileStr.mid(fileStr.indexOf(".") - 2, 2).toStdString() + "/"
         : QByteArray::fromStdString(file).right(2).toStdString() + "/";
 
-    if (int(type) > 100)
-    {
+    if (int(type) > 100) {
         type = DfsStruct::Type(static_cast<int>(type) - 100);
         section = "";
     }
@@ -142,8 +132,7 @@ std::string CardManager::buildPathForFile(const std::string &userId, const std::
 
 std::vector<std::string> CardManager::buildPathForFiles(const std::string &userId,
                                                         const std::vector<std::string> &files,
-                                                        DfsStruct::Type type, PathStyle pathFormat)
-{
+                                                        DfsStruct::Type type, PathStyle pathFormat) {
     std::vector<std::string> result;
 
     for (const std::string &file : files)
@@ -152,8 +141,7 @@ std::vector<std::string> CardManager::buildPathForFiles(const std::string &userI
     return result;
 }
 
-QString CardManager::cutPath(QString fullPath)
-{
+QString CardManager::cutPath(QString fullPath) {
     // QString userId = fullPath.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20);
     bool hasSection = false;
     // int fromType = fullPath.indexOf("/", 26);
@@ -166,22 +154,19 @@ QString CardManager::cutPath(QString fullPath)
     type = type.left(type.indexOf("/"));
     // qDebug() << type;
 
-    if (fullPath.contains(".comments") || fullPath.contains(".likes"))
-    {
+    if (fullPath.contains(".comments") || fullPath.contains(".likes")) {
         hasSection = false;
     }
 
     return fullPath.mid(hasSection ? fromSection : from);
 }
 
-int CardManager::dfsVersion(QString path)
-{
+int CardManager::dfsVersion(QString path) {
     using namespace DfsStruct;
     QString name = cutPath(path);
     DfsStruct::Type type = getTypeByName(path);
 
-    switch (type)
-    {
+    switch (type) {
     case DfsStruct::Type::Post:
         if (name.contains(".comments"))
             return dfsVersions[DfsVersionType::PostCommentsVersion];
@@ -235,6 +220,5 @@ int CardManager::dfsVersion(QString path)
     return 0;
 }
 
-CardManager::CardManager()
-{
+CardManager::CardManager() {
 }

@@ -21,26 +21,22 @@
 
 #include <QFileInfo>
 
-CardFile::CardFile(QString userId)
-{
+CardFile::CardFile(QString userId) {
     m_userId = userId;
     m_fileName = QString("%1/%2/%3").arg(DfsStruct::ROOT_FOOLDER_NAME, userId, DfsStruct::ACTOR_CARD_FILE);
     m_lastCacheName =
         QString("%1/%2/%3").arg(DfsStruct::ROOT_FOOLDER_NAME, userId, DfsStruct::ACTOR_CARD_LAST);
 }
 
-QString CardFile::userId() const
-{
+QString CardFile::userId() const {
     return m_userId;
 }
 
-QString CardFile::fileName() const
-{
+QString CardFile::fileName() const {
     return m_fileName;
 }
 
-bool CardFile::isExists()
-{
+bool CardFile::isExists() {
     if (m_fileName.isEmpty())
         return false;
 
@@ -51,21 +47,18 @@ bool CardFile::isExists()
     return true;
 }
 
-bool CardFile::open()
-{
+bool CardFile::open() {
     if (!isExists())
         return false;
 
     return m_db.open(m_fileName.toStdString());
 }
 
-bool CardFile::close()
-{
+bool CardFile::close() {
     return m_db.close();
 }
 
-std::optional<DBRow> CardFile::last()
-{
+std::optional<DBRow> CardFile::last() {
     auto result = m_db.select("SELECT * FROM " + Config::DataStorage::cardTableName
                               + " WHERE nextId = '-' ORDER by _rowid_ DESC LIMIT 1");
 
@@ -75,8 +68,7 @@ std::optional<DBRow> CardFile::last()
     return {};
 }
 
-bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bool isFilePath, int key)
-{
+bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bool isFilePath, int key) {
     if (isFilePath)
         fileId = CardManager::cutPath(fileId);
 
@@ -95,8 +87,7 @@ bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bo
     std::string prevId = "-";
     auto lastRes = last();
 
-    if (lastRes)
-    {
+    if (lastRes) {
         auto lastRes2 = *lastRes;
         prevId = lastRes2["id"];
         if (key == 1)
@@ -113,16 +104,14 @@ bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bo
     row.insert({ "sign", sign.toStdString() });
 
     QFile lastCacheFile(m_lastCacheName);
-    if (lastCacheFile.open(QFile::WriteOnly))
-    {
+    if (lastCacheFile.open(QFile::WriteOnly)) {
         lastCacheFile.write(fileId.toLatin1());
         lastCacheFile.close();
     }
 
     bool res = m_db.insert(Config::DataStorage::cardTableName, row);
 
-    if (res && lastRes)
-    {
+    if (res && lastRes) {
         auto lastRow = *lastRes;
         res = m_db.update("UPDATE " + Config::DataStorage::cardTableName + " SET nextId = '"
                           + fileId.toStdString() + "' WHERE id = '" + lastRow["id"] + "'");
@@ -131,16 +120,13 @@ bool CardFile::append(QString fileId, int type, int version, QByteArray sign, bo
     return res;
 }
 
-bool CardFile::updateLastCache()
-{
+bool CardFile::updateLastCache() {
     QFile lastCacheFile(m_lastCacheName);
 
-    if (lastCacheFile.open(QFile::WriteOnly))
-    {
+    if (lastCacheFile.open(QFile::WriteOnly)) {
         std::string fileId = "-";
         auto lastRes = last();
-        if (lastRes)
-        {
+        if (lastRes) {
             auto lastRes2 = *lastRes;
             fileId = lastRes2["id"];
         }
@@ -157,8 +143,7 @@ bool CardFile::updateLastCache()
     return false;
 }
 
-std::vector<DBRow> CardFile::select(int count, int offset)
-{
+std::vector<DBRow> CardFile::select(int count, int offset) {
     return m_db.select("SELECT * FROM " + Config::DataStorage::cardTableName + " ORDER by key LIMIT "
                        + std::to_string(count) + " OFFSET " + std::to_string(offset));
 }

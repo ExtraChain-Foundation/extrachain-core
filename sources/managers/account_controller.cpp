@@ -19,59 +19,41 @@
 
 #include "managers/account_controller.h"
 #include "datastorage/blockchain.h"
+#include "enc/enc_tools.h"
 
-QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
-{
-    return currentState;
-}
-
-void AccountController::setCurrentState(const QMap<QByteArray, QByteArray> &value)
-{
-    currentState = value;
-}
-
-QList<Actor<KeyPrivate> *> AccountController::getAccounts() const
-{
+QList<Actor<KeyPrivate> *> AccountController::getAccounts() const {
     return accounts;
 }
 
-void AccountController::setAccounts(const QList<Actor<KeyPrivate> *> &value)
-{
+void AccountController::setAccounts(const QList<Actor<KeyPrivate> *> &value) {
     accounts = value;
 }
 
-ActorIndex *AccountController::getActorIndex() const
-{
+ActorIndex *AccountController::getActorIndex() const {
     return actorIndex;
 }
 
-void AccountController::setActorIndex(ActorIndex *value)
-{
+void AccountController::setActorIndex(ActorIndex *value) {
     actorIndex = value;
 }
 
-void AccountController::setBlockchain(Blockchain *value)
-{
+void AccountController::setBlockchain(Blockchain *value) {
     blockchain = value;
 }
 
-Blockchain *AccountController::getBlockchain() const
-{
+Blockchain *AccountController::getBlockchain() const {
     return blockchain;
 }
 
-QList<ActorId> AccountController::getListAccounts() const
-{
+QList<ActorId> AccountController::getListAccounts() const {
     QList<ActorId> res;
-    for (const auto &tmp : accounts)
-    {
+    for (const auto &tmp : accounts) {
         res.append(tmp->id());
     }
     return res;
 }
 
-AccountController::AccountController(ActorIndex *actorIndex)
-{
+AccountController::AccountController(ActorIndex *actorIndex) {
     this->actorIndex = actorIndex;
     // when private actor is verified by actor index -> save it locally
     // connect(actorIndex, &ActorIndex::PrivateActorIsVerified, this, &AccountController::savePrivateActor);
@@ -85,16 +67,17 @@ AccountController::AccountController(ActorIndex *actorIndex)
     // loadActors();
 }
 
-QList<QByteArray> AccountController::getAccountID()
-{
+QList<QByteArray> AccountController::getAccountID() {
     QList<QByteArray> list;
     for (int i = 0; i < accounts.size(); i++)
         list.append(accounts[i]->id().toByteArray());
     return list;
 }
 
-Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray hashLogin)
-{
+Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray hashLogin) {
+    if (hashLogin.isEmpty())
+        qFatal("[AccountController] Create actor: hash is empty");
+
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
     actor->create(account);
 
@@ -111,12 +94,11 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     userNum = accounts.size() - 1;
 
     qDebug() << "create actor finished";
-    if (account == ActorType::Account)
-    {
+    if (account == ActorType::Account) {
         qDebug() << "Dfs hash init for me";
         emit initDfs(); //
     }
-    emit newActorIsCreated(this->getMainActor()->id().toByteArray(),
+    emit newActorIsCreated(this->mainActor()->id().toByteArray(),
                            account == ActorType::Account); // TODO: send type
 
     if (!accounts.isEmpty())
@@ -124,12 +106,9 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     return *actor;
 }
 
-Actor<KeyPrivate> AccountController::getActor(const ActorId &id)
-{
-    for (Actor<KeyPrivate> *actor : qAsConst(accounts))
-    {
-        if (id == actor->id())
-        {
+Actor<KeyPrivate> AccountController::getActor(const ActorId &id) {
+    for (Actor<KeyPrivate> *actor : qAsConst(accounts)) {
+        if (id == actor->id()) {
             return *actor;
         }
     }
@@ -138,32 +117,27 @@ Actor<KeyPrivate> AccountController::getActor(const ActorId &id)
     return Actor<KeyPrivate>();
 }
 
-Actor<KeyPrivate> AccountController::getActor(int number)
-{
+Actor<KeyPrivate> AccountController::getActor(int number) {
     //    return actorIndex->getActor(BigNumber(number));
-    if (number >= 0 && !accounts.isEmpty() && number < accounts.size())
-    {
+    if (number >= 0 && !accounts.isEmpty() && number < accounts.size()) {
         return *(accounts.at(number));
     }
     qDebug() << "Can't find actor with index:" << number;
     return Actor<KeyPrivate>();
 }
 
-Actor<KeyPrivate> *AccountController::getMainActor()
-{
-    // assert(!accounts.isEmpty());
+Actor<KeyPrivate> *AccountController::mainActor() {
+    if (accounts.isEmpty())
+        qFatal("[AccountController] No main actor");
     return accounts.isEmpty() ? nullptr : accounts.first();
 }
 
-Actor<KeyPrivate> AccountController::getCurrentActor()
-{
+Actor<KeyPrivate> AccountController::getCurrentActor() {
     return getActor(this->userNum);
 }
 
-void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteArray hashLogin)
-{
-    if (id.isEmpty() || hashLogin.isEmpty())
-    {
+void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteArray hashLogin) {
+    if (id.isEmpty() || hashLogin.isEmpty()) {
         qDebug() << "[loadActors] id or hashLogin is empty";
         Q_ASSERT(!id.isEmpty());
         Q_ASSERT(!hashLogin.isEmpty());
@@ -174,56 +148,46 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
     int loaded = 0;
-    for (const QByteArray &fileName : idList)
-    {
+    for (const QByteArray &fileName : idList) {
         QFile file(path + "/" + fileName + ".key");
-        if (file.exists() && file.open(QIODevice::ReadOnly))
-        {
+        if (file.exists() && file.open(QIODevice::ReadOnly)) {
             std::string hl = hashLogin.toStdString();
             QByteArray serialized =
                 QByteArray::fromStdString(SecretKey::decryptWithPassword(file.readAll().toStdString(), hl));
             qDebug() << serialized;
             file.close();
-            if (!serialized.isEmpty())
-            {
+            if (!serialized.isEmpty()) {
                 Actor<KeyPrivate> *actor = new Actor<KeyPrivate>(serialized);
 
-                qDebug() << "Actor" << actor->id() << "found locally -" << actor->key()->getSecKey().c_str();
+                qDebug() << "Actor" << actor->id() << "found locally -" << actor->key()->secretKey().c_str();
                 this->accounts.append(actor);
                 loaded++;
             }
         }
     }
 
-    if (loaded > 0)
-    {
+    if (loaded > 0) {
         qDebug() << loaded << "accounts have been loaded" << id;
         blockchain->getBlockZero();
         emit loadWallets(id, idList);
-    }
-    else
-    {
+    } else {
         qDebug() << "There no accounts found locally";
     }
 }
 
-int AccountController::getAccountCount() const
-{
+int AccountController::getAccountCount() const {
     return accounts.size();
 }
 
-int AccountController::getUserNum() const
-{
+int AccountController::getUserNum() const {
     return userNum;
 }
 
-void AccountController::setUserNum(int value)
-{
+void AccountController::setUserNum(int value) {
     userNum = value;
 }
 
-void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin)
-{
+void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin) {
     qDebug() << "Attempting to save Private Actor" << actor.id();
     if (!accounts.isEmpty())
         emit editPrivateProfile(actor.id().toByteArray());
@@ -235,15 +199,11 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
     // move to another place
     FileSystem::createFolderIfNotExist(KeyStore::USER_KEYSTORE);
 
-    if (file->open(QIODevice::ReadWrite))
-    {
+    if (file->open(QIODevice::ReadWrite)) {
         QByteArray old = file->readAll();
-        if (old == actor.serialize())
-        {
+        if (old == actor.serialize()) {
             qDebug() << "Private actor with id =" << actor.id() << "already exists";
-        }
-        else
-        {
+        } else {
             qDebug() << "actor serialized: ---- " << actor.serialize();
             std::string hl = hashLogin.toStdString();
             file->write(QByteArray::fromStdString(
@@ -259,8 +219,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
     qDebug() << "Can't save actor" << actor.id();
 }
 
-void AccountController::clearAcc()
-{
+void AccountController::clearAcc() {
     accounts.clear();
     userNum = 0;
     qDebug() << accounts.size() << " acc after LogOut";
@@ -275,14 +234,11 @@ void AccountController::clearAcc()
 //    emit sentActorId(keys.getId());
 //}
 
-void AccountController::changeUserNum(QByteArray wallId)
-{
+void AccountController::changeUserNum(QByteArray wallId) {
     userNum = 0;
-    for (const auto &currAcc : qAsConst(accounts))
-    {
+    for (const auto &currAcc : qAsConst(accounts)) {
         // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
-        if (currAcc->id().toByteArray() == wallId)
-        {
+        if (currAcc->id().toByteArray() == wallId) {
             emit updateTransactionListInModel();
             break;
         }
@@ -290,6 +246,5 @@ void AccountController::changeUserNum(QByteArray wallId)
     }
 }
 
-void AccountController::process()
-{
+void AccountController::process() {
 }

@@ -20,18 +20,67 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
+#include <QCoreApplication>
+#include <QDebug>
 #include <QThread>
 
-class ThreadPool
-{
-
+class ThreadPool {
 private:
     ThreadPool() = default;
     ~ThreadPool() = default;
 
 public:
-    static QThread *addThread(QObject *worker);
-    static QThread *addThread(QList<QObject *> workers);
+    template <class Worker>
+    static QThread *addThread(Worker *worker, QThread *newThread = nullptr) {
+        QThread *thread = newThread == nullptr ? new QThread() : newThread;
+
+        QObject::connect(thread, &QThread::started, worker, &Worker::process);
+        QObject::connect(worker, &Worker::finished, thread, &QThread::quit);
+        // QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
+        // QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+        QObject::connect(thread, &QThread::finished, [thread, worker]() {
+            if (!threads.contains(thread)) {
+                qDebug() << "[ThreadPool] Ignore" << worker;
+                return;
+            }
+            // qDebug() << "[ThreadPool] Remove thread for" << worker;
+            // qDebug() << "[ThreadPool] Remove thread" << thread << "for" << worker <<
+            // threads.removeAll(thread)
+            //          << "to" << threads.length();
+            worker->deleteLater();
+            thread->deleteLater();
+        });
+
+        if (isFirst) {
+            qDebug() << "[ThreadPool] Connected with qApp";
+            QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
+                // qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
+                // for (auto i = threads.size() - 1; i != 0; i--)
+                //     threads[i]->quit();
+                threads.clear();
+            });
+
+            isFirst = false;
+        }
+
+        // qDebug() << "[ThreadPool] Move for" << worker;
+        // qDebug() << "[ThreadPool] Move to thread" << thread << "for" << worker << threads.length();
+        worker->moveToThread(thread);
+
+        if (!thread->isRunning()) {
+            // qDebug() << "[ThreadPool] Start" << thread;
+            threads << thread;
+            thread->start();
+        } else {
+            // qDebug() << "[ThreadPool] Ignore start" << thread;
+        }
+
+        return thread;
+    }
+
+private:
+    static bool isFirst;
+    static QList<QThread *> threads;
 };
 
 #endif // THREAD_POOL_H

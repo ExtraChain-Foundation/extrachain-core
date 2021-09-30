@@ -37,8 +37,7 @@ enum ChainMessage
 };
 Q_ENUM_NS(ChainMessage)
 
-[[maybe_unused]] static bool isChainMessage(unsigned int value)
-{
+[[maybe_unused]] static bool isChainMessage(unsigned int value) {
     if (value >= 100 && value <= 199)
         return true;
     return false;
@@ -56,8 +55,7 @@ enum GeneralRequest
 };
 Q_ENUM_NS(GeneralRequest)
 
-[[maybe_unused]] static bool isGeneralRequest(unsigned int value)
-{
+[[maybe_unused]] static bool isGeneralRequest(unsigned int value) {
     if (value >= 200 && value <= 299)
         return true;
     return false;
@@ -74,8 +72,7 @@ enum GeneralResponse
 };
 Q_ENUM_NS(GeneralResponse)
 
-[[maybe_unused]] static bool isGeneralResponse(unsigned int value)
-{
+[[maybe_unused]] static bool isGeneralResponse(unsigned int value) {
     if (value >= 300 && value <= 399)
         return true;
     else
@@ -106,8 +103,7 @@ enum DFSMessage
 };
 Q_ENUM_NS(DFSMessage)
 
-[[maybe_unused]] static bool isDFSMessage(unsigned int value)
-{
+[[maybe_unused]] static bool isDFSMessage(unsigned int value) {
     if (value >= 400 && value <= 499)
         return true;
     return false;
@@ -119,8 +115,7 @@ enum VerifyRequest
 };
 Q_ENUM_NS(VerifyRequest)
 
-[[maybe_unused]] static bool isVerifyRequest(unsigned int value)
-{
+[[maybe_unused]] static bool isVerifyRequest(unsigned int value) {
     if (value >= 500 && value <= 599)
         return true;
     return false;

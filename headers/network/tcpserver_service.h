@@ -20,11 +20,11 @@
 #ifndef SERVER_SERVICE_H
 #define SERVER_SERVICE_H
 
+#include <QNetworkAddressEntry>
 #include <QObject>
+#include <QThread>
 #include <QtNetwork/QTcpServer>
 #include <QtNetwork/QTcpSocket>
-#include <QNetworkAddressEntry>
-#include <QThread>
 //#include "resolver_service.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
@@ -34,8 +34,7 @@
  * @brief ServerService is responsible for handling incoming sockets connections.
  * All connections is stored in a sockets list.
  */
-class TcpServerService : public QTcpServer
-{
+class EXTRACHAIN_EXPORT TcpServerService : public QTcpServer {
     Q_OBJECT
 private:
     // bool active = false;

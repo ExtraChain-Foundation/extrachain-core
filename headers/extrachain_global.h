@@ -17,27 +17,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef GET_TX_PAIR_MESSAGE_H
-#define GET_TX_PAIR_MESSAGE_H
+#ifndef EXTRACHAIN_GLOBAL_H
+#define EXTRACHAIN_GLOBAL_H
 
-#include "network/packages/base_message.h"
+#include <QtCore/qglobal.h>
 
-namespace Messages {
+//#ifdef EXTRACHAIN_LIBRARY
+//#define EXTRACHAIN_EXPORT Q_DECL_EXPORT
+//#else
+//#define EXTRACHAIN_EXPORT Q_DECL_IMPORT
+//#endif
+#define EXTRACHAIN_EXPORT
 
-struct GetTxPairMessage : IMessage {
-    static const short FIELD_SIZE = 2;
-    static const short FIELDS_COUNT = 2;
-
-    ActorId senderId;
-    ActorId receiverId;
-
-    // IMessage interface
-public:
-    void operator=(QByteArray &serialized) override;
-    short getFieldsCount() const override;
-    QByteArray serialize() const override;
-    void deserialize(const QByteArray &serilaized) override;
-};
-}
-
-#endif // GET_TX_PAIR_MESSAGE_H
+#endif // EXTRACHAIN_GLOBAL_H

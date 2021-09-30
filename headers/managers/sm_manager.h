@@ -20,17 +20,16 @@
 #ifndef SM_CONTROLLER_H
 #define SM_CONTROLLER_H
 
-#include <QObject>
 #include <QDebug>
+#include <QObject>
 
-#include "utils/bignumber.h"
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
-#include "enc/key_private.h"
 #include "datastorage/transaction.h"
+#include "enc/key_private.h"
+#include "utils/bignumber.h"
 
-class SmartContractManager : public QObject
-{
+class EXTRACHAIN_EXPORT SmartContractManager : public QObject {
     Q_OBJECT
 
 private:
@@ -61,7 +60,6 @@ signals:
     //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
     void saveActorInPrivateProfile(const QByteArray &id, const QString &type = "wallet",
                                    const bool &rewrite = false);
-    void initConsoleToken(Transaction tx);
     void finished();
 };
 

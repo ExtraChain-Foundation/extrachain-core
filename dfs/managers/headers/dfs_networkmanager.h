@@ -20,21 +20,14 @@
 #ifndef DFSNETWORKMANAGER_H
 #define DFSNETWORKMANAGER_H
 
-#include "network/network_manager.h"
 #include "dfs/packages/headers/all.h"
+#include "network/network_manager.h"
 #include "resolve/dfs_resolver_service.h"
 #include "utils/exc_utils.h"
 
-#ifdef ECLIENT
-static const short DFS_RESOLVERS_POOL_SIZE = 5;
-#else
-static const short DFS_RESOLVERS_POOL_SIZE = 10;
-#endif
-
 class Dfs;
 
-class DfsNetworkManager : public NetworkManager
-{
+class EXTRACHAIN_EXPORT DfsNetworkManager : public NetworkManager {
     Q_OBJECT
 
 private:
@@ -44,7 +37,7 @@ private:
     QList<DFSResolverService *> dfsResolvers;
 
 public:
-    DfsNetworkManager(ActorIndex *actorIndex, const QString &localIp);
+    DfsNetworkManager(ActorIndex *actorIndex);
     ~DfsNetworkManager() override;
 
 private:

@@ -20,10 +20,13 @@
 #ifndef SOCKET_PAIR_H
 #define SOCKET_PAIR_H
 
-#include "utils/bignumber.h"
+#include "extrachain_global.h"
 
-class SocketPair
-{
+#include <QHash>
+#include <QString>
+class BigNumber;
+
+class EXTRACHAIN_EXPORT SocketPair {
 public:
     std::string ip;
     quint16 port = 0;
@@ -41,13 +44,11 @@ public:
 };
 
 #if QT_VERSION_MAJOR == 6
-inline size_t qHash(const SocketPair &key, size_t seed = 0)
-{
+inline size_t qHash(const SocketPair &key, size_t seed = 0) {
     return qHash(key.serialize(), seed);
 }
 #else
-inline uint qHash(const SocketPair &key, uint seed = 0)
-{
+inline uint qHash(const SocketPair &key, uint seed = 0) {
     return qHash(key.serialize(), seed);
 }
 #endif

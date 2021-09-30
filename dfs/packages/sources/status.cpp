@@ -19,8 +19,7 @@
 
 #include "dfs/packages/headers/status.h"
 
-const QStringList DistFileSystem::Status::deserializeState(const QByteArray &serialized)
-{
+const QStringList DistFileSystem::Status::deserializeState(const QByteArray &serialized) {
     Q_UNUSED(serialized)
     // QList<QByteArray> list = Serialization::deserialize(serialized, stateDelimetr);
     QStringList result;
@@ -29,53 +28,44 @@ const QStringList DistFileSystem::Status::deserializeState(const QByteArray &ser
     return result;
 }
 
-const QByteArray DistFileSystem::Status::serializeState() const
-{
+const QByteArray DistFileSystem::Status::serializeState() const {
     // QList<QByteArray> list;
     // for (const QString &el : currentState)
     //    list << el.toUtf8();
     return ""; // Serialization::serialize(list, stateDelimetr);
 }
 
-const QList<QByteArray> DistFileSystem::Status::serializedParams() const
-{
+const QList<QByteArray> DistFileSystem::Status::serializedParams() const {
     QList<QByteArray> list;
     list << hash << dirOwner << serializeState();
     return list;
 }
 
-void DistFileSystem::Status::calcHash()
-{
+void DistFileSystem::Status::calcHash() {
     QList<QByteArray> lt;
-    for (const auto &s : qAsConst(currentState))
-    {
+    for (const auto &s : qAsConst(currentState)) {
         lt.append(s.toUtf8());
     }
     hash = Utils::calcKeccak(Serialization::serialize(lt));
 }
 
-void DistFileSystem::Status::operator=(QByteArray &serialized)
-{
+void DistFileSystem::Status::operator=(QByteArray &serialized) {
     deserialize(serialized);
 }
 
-bool DistFileSystem::Status::isEmpty() const
-{
+bool DistFileSystem::Status::isEmpty() const {
     return hash.isEmpty() || dirOwner.isEmpty() || currentState.isEmpty();
 }
 
-short DistFileSystem::Status::getFieldsCount() const
-{
+short DistFileSystem::Status::getFieldsCount() const {
     return Status::FIELDS_COUNT;
 }
 
-QByteArray DistFileSystem::Status::serialize() const
-{
+QByteArray DistFileSystem::Status::serialize() const {
     return Serialization::serialize(serializedParams(), DistFileSystem::fieldsSize);
 }
 
-void DistFileSystem::Status::deserialize(const QByteArray &serialized)
-{
+void DistFileSystem::Status::deserialize(const QByteArray &serialized) {
     QList<QByteArray> l = Serialization::deserialize(serialized, DistFileSystem::fieldsSize);
     hash = l.takeFirst();
     dirOwner = l.takeFirst();

@@ -22,24 +22,24 @@
 
 #include <QHostAddress>
 #include <QJsonObject>
+#include <QMap>
+#include <QMutex>
 #include <QObject>
 #include <QThread>
-#include <QMutex>
 #include <QTimer>
-#include <QMap>
-#include <vector>
 #include <queue>
+#include <vector>
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
+#include "datastorage/genesis_block.h"
 #include "datastorage/transaction.h"
-#include "network/packages/service/all_messages.h"
+#include "dfs/packages/headers/all.h"
 #include "network/packages/base_message.h"
 #include "network/packages/base_message_response.h"
-#include "network/socket_pair.h"
-#include "datastorage/genesis_block.h"
-#include "dfs/packages/headers/all.h"
+#include "network/packages/service/all_messages.h"
 #include "network/packages/service/message_types.h"
+#include "network/socket_pair.h"
 
 #include <cassert>
 static QMutex handlerFileMutex;
@@ -58,8 +58,7 @@ class ChatManager;
  * type and deserialize it. There are package definition methods, and signals to
  * ResolveManager.
  */
-class ResolverService : public QObject
-{
+class EXTRACHAIN_EXPORT ResolverService : public QObject {
     Q_OBJECT
 
 private:
@@ -235,7 +234,7 @@ signals:
     void getBlock(const SearchEnum::BlockParam &param, const QByteArray &value, const QByteArray &requestHash,
                   const SocketPair &receiver);
 
-    void coinRequest(BigNumber id, BigNumber amount);
+    void coinRequest(ActorId receiver, BigNumber amount, ActorId plsr);
 
     void getActorsCount(const QByteArray &requestHash, const SocketPair &receiver);
 

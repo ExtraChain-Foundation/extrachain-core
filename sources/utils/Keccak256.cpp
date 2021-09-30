@@ -34,14 +34,12 @@
 /// same as reset()
 Keccak::Keccak(Bits bits)
     : m_blockSize(200 - 2 * (bits / 8))
-    , m_bits(bits)
-{
+    , m_bits(bits) {
     reset();
 }
 
 /// restart
-void Keccak::reset()
-{
+void Keccak::reset() {
     for (size_t i = 0; i < StateSize; i++)
         m_hash[i] = 0;
 
@@ -62,14 +60,12 @@ const uint64_t XorMasks[KeccakRounds] = {
 };
 
 /// rotate left and wrap around to the right
-inline uint64_t rotateLeft(uint64_t x, uint8_t numBits)
-{
+inline uint64_t rotateLeft(uint64_t x, uint8_t numBits) {
     return (x << numBits) | (x >> (64 - numBits));
 }
 
 /// convert litte vs big endian
-[[maybe_unused]] inline uint64_t swap(uint64_t x)
-{
+[[maybe_unused]] inline uint64_t swap(uint64_t x) {
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_bswap64(x);
 #endif
@@ -83,8 +79,7 @@ inline uint64_t rotateLeft(uint64_t x, uint8_t numBits)
 }
 
 /// return x % 5 for 0 <= x <= 9
-unsigned int mod5(unsigned int x)
-{
+unsigned int mod5(unsigned int x) {
     if (x < 5)
         return x;
 
@@ -93,12 +88,11 @@ unsigned int mod5(unsigned int x)
 }
 
 /// process a full block
-void Keccak::processBlock(const void* data)
-{
+void Keccak::processBlock(const void* data) {
 #if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-#define LITTLEENDIAN(x) swap(x)
+    #define LITTLEENDIAN(x) swap(x)
 #else
-#define LITTLEENDIAN(x) (x)
+    #define LITTLEENDIAN(x) (x)
 #endif
 
     const uint64_t* data64 = (const uint64_t*)data;
@@ -107,15 +101,13 @@ void Keccak::processBlock(const void* data)
         m_hash[i] ^= LITTLEENDIAN(data64[i]);
 
     // re-compute state
-    for (unsigned int round = 0; round < KeccakRounds; round++)
-    {
+    for (unsigned int round = 0; round < KeccakRounds; round++) {
         // Theta
         uint64_t coefficients[5];
         for (unsigned int i = 0; i < 5; i++)
             coefficients[i] = m_hash[i] ^ m_hash[i + 5] ^ m_hash[i + 10] ^ m_hash[i + 15] ^ m_hash[i + 20];
 
-        for (unsigned int i = 0; i < 5; i++)
-        {
+        for (unsigned int i = 0; i < 5; i++) {
             uint64_t one = coefficients[mod5(i + 4)] ^ rotateLeft(coefficients[mod5(i + 1)], 1);
             m_hash[i] ^= one;
             m_hash[i + 5] ^= one;
@@ -201,8 +193,7 @@ void Keccak::processBlock(const void* data)
         m_hash[1] = rotateLeft(last, 44);
 
         // Chi
-        for (unsigned int j = 0; j < 25; j += 5)
-        {
+        for (unsigned int j = 0; j < 25; j += 5) {
             // temporaries
             uint64_t one = m_hash[j];
             uint64_t two = m_hash[j + 1];
@@ -220,22 +211,18 @@ void Keccak::processBlock(const void* data)
 }
 
 /// add arbitrary number of bytes
-void Keccak::add(const void* data, size_t numBytes)
-{
+void Keccak::add(const void* data, size_t numBytes) {
     const uint8_t* current = (const uint8_t*)data;
 
-    if (m_bufferSize > 0)
-    {
-        while (numBytes > 0 && m_bufferSize < m_blockSize)
-        {
+    if (m_bufferSize > 0) {
+        while (numBytes > 0 && m_bufferSize < m_blockSize) {
             m_buffer[m_bufferSize++] = *current++;
             numBytes--;
         }
     }
 
     // full buffer
-    if (m_bufferSize == m_blockSize)
-    {
+    if (m_bufferSize == m_blockSize) {
         processBlock((void*)m_buffer);
         m_numBytes += m_blockSize;
         m_bufferSize = 0;
@@ -246,8 +233,7 @@ void Keccak::add(const void* data, size_t numBytes)
         return;
 
     // process full blocks
-    while (numBytes >= m_blockSize)
-    {
+    while (numBytes >= m_blockSize) {
         processBlock(current);
         current += m_blockSize;
         m_numBytes += m_blockSize;
@@ -255,16 +241,14 @@ void Keccak::add(const void* data, size_t numBytes)
     }
 
     // keep remaining bytes in buffer
-    while (numBytes > 0)
-    {
+    while (numBytes > 0) {
         m_buffer[m_bufferSize++] = *current++;
         numBytes--;
     }
 }
 
 /// process everything left in the internal buffer
-void Keccak::processBuffer()
-{
+void Keccak::processBuffer() {
     unsigned int blockSize = 200 - 2 * (m_bits / 8);
 
     // add padding
@@ -282,8 +266,7 @@ void Keccak::processBuffer()
 }
 
 /// return latest hash as 16 hex characters
-QByteArray Keccak::getHash()
-{
+QByteArray Keccak::getHash() {
     // process remaining bytes
     processBuffer();
 
@@ -307,8 +290,7 @@ QByteArray Keccak::getHash()
     // Keccak224's last entry in m_hash provides only 32 bits instead of 64 bits
     unsigned int remainder = m_bits - hashLength * 64;
     unsigned int processed = 0;
-    while (processed < remainder)
-    {
+    while (processed < remainder) {
         // convert a byte to hex
         unsigned char oneByte = (unsigned char)(m_hash[hashLength] >> processed);
         result += dec2hex[oneByte >> 4];
@@ -321,16 +303,14 @@ QByteArray Keccak::getHash()
 }
 
 /// compute Keccak hash of a memory block
-QByteArray Keccak::operator()(const void* data, size_t numBytes)
-{
+QByteArray Keccak::operator()(const void* data, size_t numBytes) {
     reset();
     add(data, numBytes);
     return getHash();
 }
 
 /// compute Keccak hash of a string, excluding final zero
-QByteArray Keccak::operator()(const QByteArray& text)
-{
+QByteArray Keccak::operator()(const QByteArray& text) {
     reset();
     add(text, text.size());
     return getHash();

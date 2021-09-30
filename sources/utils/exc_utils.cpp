@@ -19,37 +19,43 @@
 
 #include "utils/exc_utils.h"
 
+#include <QCborStreamReader>
+#include <QCborStreamWriter>
+#include <QCoreApplication>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
+#include <QRegularExpression>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QTcpSocket>
 
-QByteArray Utils::calcKeccak(const QByteArray &b)
-{
-    Keccak keccak;
-    QByteArray hashmsg = keccak(b);
-    return hashmsg;
+#include "dfs/types/headers/dfstruct.h"
+#include "enc/enc_tools.h"
+#include "utils/Keccak256.h"
+
+QByteArray Utils::calcKeccak(const QByteArray &data) {
+    // Keccak keccak;
+    // QByteArray hash = keccak(data);
+    // return hash;
+    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Keccak_256).toHex();
+    return hash;
 }
 
 // SERIALIZATION //
 
-std::vector<std::string> Utils::split(const std::string &s, char c)
-{
+std::vector<std::string> Utils::split(const std::string &s, char c) {
     auto end = s.cend();
     auto start = end;
 
     std::vector<std::string> v;
-    for (auto it = s.cbegin(); it != end; ++it)
-    {
-        if (*it != c)
-        {
+    for (auto it = s.cbegin(); it != end; ++it) {
+        if (*it != c) {
             if (start == end)
                 start = it;
             continue;
         }
-        if (start != end)
-        {
+        if (start != end) {
             v.emplace_back(start, it);
             start = end;
         }
@@ -59,47 +65,36 @@ std::vector<std::string> Utils::split(const std::string &s, char c)
     return v;
 }
 
-QString KeyStore::makeKeyFileName(QString name)
-{
+QString KeyStore::makeKeyFileName(QString name) {
     return name + KEY_TYPE;
 }
 
-void FileSystem::createFolderIfNotExist(QString path)
-{
+void FileSystem::createFolderIfNotExist(QString path) {
     QDir dir(path);
-    if (!dir.exists())
-    {
+    if (!dir.exists()) {
         dir = QDir();
         dir.mkpath(path);
     }
 }
 
-int Utils::compare(const QByteArray &one, const QByteArray &two)
-{
-    if (one.size() > two.size())
-    {
+int Utils::compare(const QByteArray &one, const QByteArray &two) {
+    if (one.size() > two.size()) {
         return one.size() - two.size();
-    }
-    else if (one.size() == two.size())
-    {
+    } else if (one.size() == two.size()) {
         return static_cast<int>(one == two);
-    }
-    else
+    } else
         return two.size() - one.size();
 }
 
-bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode)
-{
-    if (!file.open(mode))
-    {
+bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode) {
+    if (!file.open(mode)) {
         qDebug().noquote() << QString("[WARNING] Can't open [%1] file").arg(file.fileName());
         return false;
     }
     return true;
 }
 
-QByteArray storedSpace::toByteArray(storedSpace::State state)
-{
+QByteArray storedSpace::toByteArray(storedSpace::State state) {
     if (state == storedSpace::State::NEWSTATE)
         return "NEWSTATE";
     if (state == storedSpace::State::CHANGEDS)
@@ -109,8 +104,7 @@ QByteArray storedSpace::toByteArray(storedSpace::State state)
     return "UNRECOGS";
 }
 
-QString storedSpace::toString(storedSpace::State state)
-{
+QString storedSpace::toString(storedSpace::State state) {
     if (state == storedSpace::State::NEWSTATE)
         return "NEWSTATE";
     if (state == storedSpace::State::CHANGEDS)
@@ -120,8 +114,7 @@ QString storedSpace::toString(storedSpace::State state)
     return "UNRECOGS";
 }
 
-storedSpace::State storedSpace::convertToDFSstate(QByteArray state)
-{
+storedSpace::State storedSpace::convertToDFSstate(QByteArray state) {
     if (state == "NEWSTATE")
         return storedSpace::State::NEWSTATE;
     if (state == "CHANGEDS")
@@ -131,8 +124,7 @@ storedSpace::State storedSpace::convertToDFSstate(QByteArray state)
     return storedSpace::State::UNRECOGS;
 }
 
-QByteArray Utils::intToByteArray(const int &number, const int &size)
-{
+QByteArray Utils::intToByteArray(const int &number, const int &size) {
     QByteArray num = QByteArray::number(number);
     QByteArray res = "";
     if (num.size() < size)
@@ -142,20 +134,17 @@ QByteArray Utils::intToByteArray(const int &number, const int &size)
     return res;
 }
 
-int Utils::qByteArrayToInt(const QByteArray &number)
-{
+int Utils::qByteArrayToInt(const QByteArray &number) {
     QByteArray num = "";
     int i = 0;
     //    bool flag = false;
-    while (i < number.size())
-    {
+    while (i < number.size()) {
         if (number[i] == '0')
             i++;
         else
             break;
     }
-    while (i < number.size())
-    {
+    while (i < number.size()) {
         num += number[i];
         i++;
     }
@@ -163,12 +152,12 @@ int Utils::qByteArrayToInt(const QByteArray &number)
     return res;
 }
 
-QByteArray Utils::calcKeccakForFile(const QString &path)
-{
-    QFile file(path);
+QByteArray Utils::calcKeccakForFile(const QString &fileName) {
+    /*
+    QFile file(fileName);
     if (!file.exists())
     {
-        qDebug() << "Utils::File not exist" << path;
+        qDebug() << "Utils::File not exist" << fileName;
         return "";
     }
     file.open(QIODevice::ReadOnly);
@@ -189,25 +178,34 @@ QByteArray Utils::calcKeccakForFile(const QString &path)
         hash += el;
     file.close();
     return Utils::calcKeccak(hash);
+    */
+
+    QFile file(fileName);
+    if (file.open(QFile::ReadOnly)) {
+        QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
+        if (hash.addData(&file))
+            return hash.result().toHex();
+    }
+
+    qFatal("Utils::calcKeccakForFile");
+    qDebug() << "[KeccakForFile] Can't open file" << fileName;
+    return "";
 }
 
 bool Utils::encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
-                        int blockSize)
-{
+                        int blockSize) {
     QFile orig(originalName);
     if (!orig.exists())
         return false;
     QFile encrypt(encryptName);
     bool origOpen = orig.open(QFile::ReadOnly);
     bool encryptOpen = encrypt.open(QFile::WriteOnly);
-    if (!origOpen || !encryptOpen)
-    {
+    if (!origOpen || !encryptOpen) {
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
     }
     std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
-    while (!orig.atEnd())
-    {
+    while (!orig.atEnd()) {
         QByteArray part = orig.read(blockSize);
         QByteArray encrypted = QByteArray::fromStdString(SecretKey::encrypt(part.toStdString(), rkey));
         encrypt.write(encrypted);
@@ -232,14 +230,12 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
 
     bool encryptOpen = encrypt.open(QFile::ReadOnly);
     bool decryptOpen = decrypt.open(QFile::WriteOnly);
-    if (!encryptOpen || !decryptOpen)
-    {
+    if (!encryptOpen || !decryptOpen) {
         qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
         return false;
     }
     std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
-    while (!encrypt.atEnd())
-    {
+    while (!encrypt.atEnd()) {
         QByteArray part = encrypt.read(blockSize);
         QByteArray decrypted = QByteArray::fromStdString(SecretKey::decrypt(part.toStdString(), rkey));
         decrypt.write(decrypted);
@@ -254,35 +250,29 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
     return QFile::exists(decryptName);
 }
 
-QString Utils::fileMimeType(const QString &filePath)
-{
+QString Utils::fileMimeType(const QString &filePath) {
     QMimeDatabase db;
     QMimeType type = db.mimeTypeForFile(filePath);
     return type.name();
 }
 
-QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fiels_size)
-{
+QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fiels_size) {
     QByteArray serialized = "";
-    for (const QByteArray &param : list)
-    {
+    for (const QByteArray &param : list) {
         serialized += Utils::intToByteArray(param.size(), fiels_size);
         serialized += param;
     }
     return serialized;
 }
 
-QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const int &fiels_size)
-{
-    if (serialized.isEmpty() || serialized.length() <= fiels_size)
-    {
+QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const int &fiels_size) {
+    if (serialized.isEmpty() || serialized.length() <= fiels_size) {
         return {};
     }
 
     QList<QByteArray> list = {};
     int pos = 0;
-    while (pos < serialized.size())
-    {
+    while (pos < serialized.size()) {
         bool ok = true;
         int count = serialized.mid(pos, fiels_size)
                         .toInt(&ok); // Utils::qByteArrayToInt(serialized.mid(pos, fiels_size));
@@ -300,8 +290,7 @@ QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const
     return list;
 }
 
-void Utils::wipeDataFiles()
-{
+void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
@@ -327,22 +316,19 @@ void Utils::wipeDataFiles()
     QDir::setCurrent(current);
 }
 
-qint64 Utils::checkMemoryFree()
-{
+qint64 Utils::checkMemoryFree() {
     QStorageInfo x(qApp->applicationDirPath());
     qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
     return x.bytesFree();
 }
 
-qint64 Utils::checkMemoryTotal()
-{
+qint64 Utils::checkMemoryTotal() {
     QStorageInfo x(qApp->applicationDirPath());
     qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
     return x.bytesTotal();
 }
 
-QString Utils::dataDir(const QString &newDir)
-{
+QString Utils::dataDir(const QString &newDir) {
     static QString current = "extrachain-data";
 
     if (!newDir.isEmpty())
@@ -351,14 +337,12 @@ QString Utils::dataDir(const QString &newDir)
     return current;
 }
 
-QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map)
-{
+QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map) {
     QByteArray cbor;
     QCborStreamWriter writer(&cbor);
 
     writer.startMap(map.count());
-    for (auto it = map.begin(); it != map.end(); ++it)
-    {
+    for (auto it = map.begin(); it != map.end(); ++it) {
         writer.append(it.key());
         writer.append(it.value());
     }
@@ -367,8 +351,7 @@ QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map)
     return cbor;
 }
 
-QByteArray Serialization::fromList(const QByteArrayList &list)
-{
+QByteArray Serialization::fromList(const QByteArrayList &list) {
     QByteArray cbor;
     QCborStreamWriter writer(&cbor);
 
@@ -380,8 +363,7 @@ QByteArray Serialization::fromList(const QByteArrayList &list)
     return cbor;
 }
 
-QByteArrayList Serialization::toList(const QByteArray &data)
-{
+QByteArrayList Serialization::toList(const QByteArray &data) {
     QCborStreamReader reader(data);
     if (!reader.isArray() || !reader.isLengthKnown())
         return {};
@@ -390,8 +372,7 @@ QByteArrayList Serialization::toList(const QByteArray &data)
     list.reserve(reader.length());
 
     reader.enterContainer();
-    while (reader.lastError() == QCborError::NoError && reader.hasNext())
-    {
+    while (reader.lastError() == QCborError::NoError && reader.hasNext()) {
         list << reader.readByteArray().data;
         reader.next();
     }
@@ -402,8 +383,7 @@ QByteArrayList Serialization::toList(const QByteArray &data)
     return list;
 }
 
-QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data)
-{
+QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data) {
     QCborStreamReader reader(data);
     if (!reader.isMap() || !reader.isLengthKnown())
         return {};
@@ -411,8 +391,7 @@ QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data)
     QMap<QString, QByteArray> map;
 
     reader.enterContainer();
-    while (reader.lastError() == QCborError::NoError && reader.hasNext())
-    {
+    while (reader.lastError() == QCborError::NoError && reader.hasNext()) {
         QString key = reader.readString().data;
         if (key.isEmpty())
             break;
@@ -427,8 +406,7 @@ QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data)
     return map;
 }
 
-int Serialization::length(const QByteArray &data)
-{
+int Serialization::length(const QByteArray &data) {
     QByteArrayList list;
 
     QCborStreamReader reader(data);
@@ -438,13 +416,11 @@ int Serialization::length(const QByteArray &data)
     return -1;
 }
 
-QByteArray Serialization::serializeMap(const QMap<QString, QByteArray> &map)
-{
+QByteArray Serialization::serializeMap(const QMap<QString, QByteArray> &map) {
     auto it = map.begin();
     QByteArray res;
 
-    while (it != map.end())
-    {
+    while (it != map.end()) {
         res += Serialization::serialize({ it.key().toUtf8(), it.value() });
         it++;
     }
@@ -452,13 +428,11 @@ QByteArray Serialization::serializeMap(const QMap<QString, QByteArray> &map)
     return res;
 }
 
-QMap<QString, QByteArray> Serialization::deserializeMap(const QByteArray &data)
-{
+QMap<QString, QByteArray> Serialization::deserializeMap(const QByteArray &data) {
     QMap<QString, QByteArray> map;
     QByteArrayList res = Serialization::deserialize(data);
 
-    while (res.size() != 0)
-    {
+    while (res.size() != 0) {
         map.insert(res.at(0), res.at(1));
         res.removeFirst();
         res.removeFirst();
@@ -467,15 +441,13 @@ QMap<QString, QByteArray> Serialization::deserializeMap(const QByteArray &data)
     return map;
 }
 
-QDebug operator<<(QDebug d, const Notification &n)
-{
+QDebug operator<<(QDebug d, const Notification &n) {
     d.noquote().nospace() << "Notification(time: " << QString::number(n.time)
                           << ", type: " << QString::number(n.type) << ", data: \"" << n.data << "\")";
     return d;
 }
 
-std::string Utils::byteToHexString(std::vector<unsigned char> &data)
-{
+std::string Utils::byteToHexString(std::vector<unsigned char> &data) {
     size_t psize = data.size() * 2 + 1;
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
@@ -484,41 +456,37 @@ std::string Utils::byteToHexString(std::vector<unsigned char> &data)
     return s;
 }
 
-std::string Utils::byteToHexString(const std::string &data)
-{
+std::string Utils::byteToHexString(const std::string &data) {
     std::vector<unsigned char> v(data.begin(), data.end());
     return byteToHexString(v);
 }
 
-std::string Utils::hexStringToByte(const std::string &data)
-{
+std::string Utils::hexStringToByte(const std::string &data) {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);
     const char *end;
     size_t size;
     int r = sodium_hex2bin(p.data(), p.size(), data.c_str(), data.length(), NULL, &size, &end);
     std::string res;
-    if (r == 0)
-    {
+    if (r == 0) {
         res = std::string(p.begin(), p.end());
         res.resize(res.size() - 1);
     }
     return res;
 }
 
-QString Utils::detectCompiler()
-{
+QString Utils::detectCompiler() {
 #ifdef __clang__
-#if __clang_major__ < 9
-#error "Clang must be version 9 or higher"
-#endif
+    #if __clang_major__ < 9
+        #error "Clang must be version 9 or higher"
+    #endif
 #elif __GNUC__
-#if __GNUC__ < 8
-#error "GCC must be version 8 or higher"
-#endif
+    #if __GNUC__ < 8
+        #error "GCC must be version 8 or higher"
+    #endif
 #elif _MSC_VER && !__INTEL_COMPILER
 #else
-#error "Compiler not supported"
+    #error "Compiler not supported"
 #endif
 
 #if __GNUC__ > 4
@@ -536,9 +504,9 @@ QString Utils::detectCompiler()
 #ifdef __clang__
     QString compiler =
         QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
-#if _MSC_VER && !__INTEL_COMPILER
+    #if _MSC_VER && !__INTEL_COMPILER
     compiler += " (" + msvcVersion + ")";
-#endif
+    #endif
     return compiler;
 #endif
 
@@ -549,22 +517,17 @@ QString Utils::detectCompiler()
 #endif
 }
 
-QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
-{
+QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
     const auto allInterfaces = QNetworkInterface::allInterfaces();
     const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
     QList<QHostAddress> localIpNotConnect;
 
-    for (const QNetworkInterface &networkInterface : allInterfaces)
-    {
+    for (const QNetworkInterface &networkInterface : allInterfaces) {
         const auto entries = networkInterface.addressEntries();
 
-        for (const QNetworkAddressEntry &address : entries)
-        {
-            if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost)
-            {
-                if (debug == PrintDebug::On)
-                {
+        for (const QNetworkAddressEntry &address : entries) {
+            if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost) {
+                if (debug == PrintDebug::On) {
                     qDebug() << "[FindLocalIp] Find local ip candidate:" << networkInterface;
                 }
 
@@ -573,12 +536,10 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
         }
     }
 
-    for (const QNetworkInterface &networkInterface : allInterfaces)
-    {
+    for (const QNetworkInterface &networkInterface : allInterfaces) {
         const auto entries = networkInterface.addressEntries();
 
-        for (const QNetworkAddressEntry &entry : entries)
-        {
+        for (const QNetworkAddressEntry &entry : entries) {
             const auto flags = networkInterface.flags();
 
             bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
@@ -590,22 +551,19 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
             auto socket = std::make_unique<QTcpSocket>();
             socket->bind(entry.ip());
             socket->connectToHost("8.8.8.8", 53);
-            if (!socket->waitForConnected(1000))
-            {
+            if (!socket->waitForConnected(1000)) {
                 socket->connectToHost("1.1.1.1", 53);
                 if (!socket->waitForConnected(1000))
                     continue;
             }
 
-            if (localIpNotConnect.contains(entry.ip()))
-            {
+            if (localIpNotConnect.contains(entry.ip())) {
                 QString name = networkInterface.name();
 
                 if (name.left(2) == "vm")
                     continue;
                 if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
-                    || name.left(8) == "wireless")
-                {
+                    || name.left(8) == "wireless") {
                     return entry;
                 }
             }
@@ -622,16 +580,14 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug)
 #endif
 }
 
-QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol)
-{
+QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol) {
     QString fixedName = fileName.simplified();
     fixedName = fixedName.replace(QRegularExpression("[+%@!:*?/\"<>|«»]+"), replaceSymbol);
     fixedName = fixedName.replace("\\", replaceSymbol);
     return fixedName;
 }
 
-bool Utils::isValidIp(const QString &ip)
-{
+bool Utils::isValidIp(const QString &ip) {
     QHostAddress address(ip);
     return QAbstractSocket::IPv4Protocol == address.protocol();
 }

@@ -21,29 +21,25 @@
 #include "dfs/managers/headers/dfs_networkmanager.h"
 
 TcpSocketService::TcpSocketService()
-    : SocketService(nullptr, nullptr)
-{
+    : SocketService(nullptr, nullptr) {
     qFatal("tcp test");
 }
 
 TcpSocketService::TcpSocketService(QString address, NetworkManager *networkManager, QObject *parent)
-    : SocketService(networkManager, parent)
-{
+    : SocketService(networkManager, parent) {
     this->m_ip = address;
     // dpBuffer->clear();
 }
 
 TcpSocketService::TcpSocketService(qintptr socketDescriptor, NetworkManager *networkManager, QObject *parent)
-    : SocketService(networkManager, parent)
-{
+    : SocketService(networkManager, parent) {
     this->socketDescriptor = socketDescriptor;
     // dpBuffer->clear();
     qDebug() << "[TCP] Socket Descriptor" << socketDescriptor;
 }
 
 TcpSocketService::TcpSocketService(const TcpSocketService &value)
-    : SocketService(value)
-{
+    : SocketService(value) {
     m_tcp = value.m_tcp;
     socketDescriptor = value.socketDescriptor;
     _blockSize = value._blockSize;
@@ -51,8 +47,7 @@ TcpSocketService::TcpSocketService(const TcpSocketService &value)
     // dpBuffer->clear();
 }
 
-TcpSocketService::~TcpSocketService()
-{
+TcpSocketService::~TcpSocketService() {
     if (m_tcp == nullptr)
         qFatal("[TCP] nullptr socket in destructor");
     m_tcp->close();
@@ -60,18 +55,15 @@ TcpSocketService::~TcpSocketService()
     qDebug() << "[TCP] Remove tcp socket" << m_ip << port() << serverPort();
 }
 
-QTcpSocket *TcpSocketService::socket() const
-{
+QTcpSocket *TcpSocketService::socket() const {
     return m_tcp;
 }
 
-bool TcpSocketService::isActive() const
-{
+bool TcpSocketService::isActive() const {
     return m_activated && m_tcp->isValid();
 }
 
-void TcpSocketService::sendMessage(const QByteArray &data)
-{
+void TcpSocketService::sendMessage(const QByteArray &data) {
     if (!m_tcp->isValid())
         return;
 
@@ -81,10 +73,8 @@ void TcpSocketService::sendMessage(const QByteArray &data)
     m_tcp->waitForBytesWritten();
 }
 
-void TcpSocketService::process()
-{
-    if (m_tcp == nullptr)
-    {
+void TcpSocketService::process() {
+    if (m_tcp == nullptr) {
         this->m_tcp = new QTcpSocket(this);
         connect(this, &TcpSocketService::send, this, &TcpSocketService::sendMessage, Qt::QueuedConnection);
         connect(m_tcp, &QTcpSocket::readyRead, this, &TcpSocketService::doRead, Qt::QueuedConnection);
@@ -101,26 +91,20 @@ void TcpSocketService::process()
             if (this->m_tcp->state() != QTcpSocket::ConnectedState)
                 closeSocket();
         });
-    }
-    else
-    {
+    } else {
         qFatal("[TCP] tcp != nullptr in process");
     }
 
-    if (socketDescriptor != 0)
-    {
+    if (socketDescriptor != 0) {
         this->m_tcp->setSocketDescriptor(socketDescriptor);
         establishConnection();
-    }
-    else
-    {
+    } else {
         qDebug() << "[TCP]" << this->m_tcp << m_ip << m_networkManager->tcpPort;
         this->m_tcp->connectToHost(m_ip, m_networkManager->tcpPort);
     }
 }
 
-void TcpSocketService::establishConnection()
-{
+void TcpSocketService::establishConnection() {
     qDebug() << "[TCP] Thread:" << this->thread() << "| Valid:" << m_tcp->isValid();
     this->m_ip = QHostAddress(this->m_tcp->peerAddress().toIPv4Address()).toString();
     qDebug() << "[TCP]" << serverPort() << "Send first message:" << generateFirstMessage();
@@ -134,61 +118,49 @@ void TcpSocketService::establishConnection()
     qDebug() << "[TCP] Open status:" << m_tcp->isOpen();
 }
 
-void TcpSocketService::closeSocket()
-{
+void TcpSocketService::closeSocket() {
     m_activated = false;
     emit disconnected();
 }
 
-void TcpSocketService::doRead()
-{
-    if (pendMsgSize >= 0)
-    {
+void TcpSocketService::doRead() {
+    if (pendMsgSize >= 0) {
         continueDoRead();
     }
 
-    if (m_tcp->bytesAvailable() >= Messages::FIELD_SIZE)
-    {
+    if (m_tcp->bytesAvailable() >= Messages::FIELD_SIZE) {
         QByteArray data = m_tcp->read(Messages::FIELD_SIZE);
         pendMsgSize = Utils::qByteArrayToInt(data);
 
-        if ((pendMsgSize > 0))
-        {
+        if ((pendMsgSize > 0)) {
             continueDoRead();
         }
     }
 }
 
-void TcpSocketService::continueDoRead()
-{
-    if (m_tcp->bytesAvailable() >= pendMsgSize)
-    {
+void TcpSocketService::continueDoRead() {
+    if (m_tcp->bytesAvailable() >= pendMsgSize) {
         char *pckg = new char[pendMsgSize];
 
         int bytesRead = m_tcp->read(pckg, pendMsgSize);
         QByteArray rpckg(pckg, bytesRead);
         // rpckg.append(pckg);
 
-        if (rpckg.size() > bytesRead)
-        {
+        if (rpckg.size() > bytesRead) {
             rpckg.remove(bytesRead - 1, rpckg.size() - bytesRead);
         }
-        if (pendMsgSize == bytesRead)
-        {
+        if (pendMsgSize == bytesRead) {
             pendMsg.append(rpckg);
 
             // if (pendMsg.isEmpty())
             //     qFatal("tcp omg");
 
-            if (!m_activated /*&& pendMsg.left(2) == "{\""*/)
-            {
+            if (!m_activated /*&& pendMsg.left(2) == "{\""*/) {
                 m_activated = checkFirstMessage(pendMsg);
                 if (m_activated)
                     emit activated();
                 qDebug() << "[TCP] First message" << pendMsg << m_activated;
-            }
-            else if (!pendMsg.isEmpty())
-            {
+            } else if (!pendMsg.isEmpty()) {
                 SocketPair receiver(m_ip.toStdString(), this->port());
                 receiver.setIdentifier(this->identifier().toLatin1());
                 this->gotMessage(prepareReceiveMessage(pendMsg), receiver);
@@ -196,30 +168,25 @@ void TcpSocketService::continueDoRead()
 
             pendMsgSize = -1;
             pendMsg = "";
-        }
-        else
-        {
+        } else {
             pendMsgSize = pendMsgSize - bytesRead;
             pendMsg.append(rpckg);
         }
         delete[] pckg;
-        if (m_tcp->bytesAvailable() >= pendMsgSize)
-        {
+        if (m_tcp->bytesAvailable() >= pendMsgSize) {
             doRead();
         }
     }
 }
 
-void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
-{
+void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair) {
     if (msg.isEmpty())
         return;
 
     Messages::BaseMessage baseMessage;
     baseMessage.deserialize(msg);
 
-    if (baseMessage.isEmpty())
-    {
+    if (baseMessage.isEmpty()) {
         qDebug() << "[TCP] ! Empty base message:" << msg;
         return;
     }
@@ -228,10 +195,8 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
         m_networkManager->messageReceived(msg, pair);
 }
 
-quint16 TcpSocketService::port() const
-{
-    if (m_tcp == nullptr)
-    {
+quint16 TcpSocketService::port() const {
+    if (m_tcp == nullptr) {
         qFatal("TCP port nullptr");
         return m_networkManager->tcpPort;
     }
@@ -241,17 +206,14 @@ quint16 TcpSocketService::port() const
         return m_tcp->localPort();
 }
 
-quint16 TcpSocketService::serverPort() const
-{
+quint16 TcpSocketService::serverPort() const {
     return m_networkManager->tcpPort;
 }
 
-QString TcpSocketService::protocolString() const
-{
+QString TcpSocketService::protocolString() const {
     return "TCP";
 }
 
-Network::Protocol TcpSocketService::protocol() const
-{
+Network::Protocol TcpSocketService::protocol() const {
     return Network::Protocol::Tcp;
 }

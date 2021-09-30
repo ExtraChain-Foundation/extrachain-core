@@ -20,31 +20,27 @@
 #ifndef KEY_PUBLIC_H
 #define KEY_PUBLIC_H
 
-#include <string>
-#include "utils/exc_utils.h"
-#include <sodium.h>
 #include <QDebug>
+#include <string>
 
-class KeyPublic
-{
+#include "extrachain_global.h"
+
+class EXTRACHAIN_EXPORT KeyPublic {
 private:
-    std::string pubKey;
+    std::string m_publicKey;
 
 public:
+    KeyPublic() = default;
     KeyPublic(const std::string &publicKey);
     KeyPublic(const QJsonObject &json);
     KeyPublic(const KeyPublic &keyPublic);
-    ~KeyPublic();
+    ~KeyPublic() = default;
 
-public:
-    QByteArray encrypt(const QByteArray &data, const std::string &privateKeySender);
+    QByteArray encrypt(const QByteArray &data, const std::string &senderPrivateKey);
 
-public:
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
-public:
-    bool isEmpty();
-    std::string getPubKey() const;
+    const std::string &publicKey() const;
 };
 
 #endif // KEY_PUBLIC_H

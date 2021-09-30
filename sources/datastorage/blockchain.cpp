@@ -19,53 +19,43 @@
 
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
+#include "network/packages/service/all_messages.h"
 
 #undef qCritical // temp
 #define qCritical qDebug
 
 Blockchain::Blockchain(AccountController *accountController, bool fileMode)
     : fileMode(fileMode)
-    , accountController(accountController)
-{
+    , accountController(accountController) {
     actorIndex = accountController->getActorIndex();
     genBlockData.clear();
 }
 
-Blockchain::~Blockchain()
-{
+Blockchain::~Blockchain() {
 }
 
-Block Blockchain::getBlockByIndex(const BigNumber &index)
-{
+Block Blockchain::getBlockByIndex(const BigNumber &index) {
     Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
     //        Block block2 = validateAndReturnBlock(block);
     return block;
 }
 
-BigNumber Blockchain::checkIntegrity()
-{
-    if (fileMode)
-    {
+BigNumber Blockchain::checkIntegrity() {
+    if (fileMode) {
         // check in MemIndex: start from second block
-        for (int i = 1; i < memIndex.getRecords(); i++)
-        {
+        for (int i = 1; i < memIndex.getRecords(); i++) {
             Block prev = memIndex.getByPosition(i - 1);
             Block cur = memIndex.getByPosition(i);
-            if (cur.getPrevHash() != prev.getHash())
-            {
+            if (cur.getPrevHash() != prev.getHash()) {
                 return cur.getIndex();
             }
         }
-    }
-    else
-    {
+    } else {
         // check in FileIndex: start from second block
-        for (BigNumber i = 1; i < blockIndex.getRecords(); i++)
-        {
+        for (BigNumber i = 1; i < blockIndex.getRecords(); i++) {
             Block prev = blockIndex.getBlockByPosition(i - 1);
             Block cur = blockIndex.getBlockByPosition(i);
-            if (cur.getPrevHash() != prev.getHash())
-            {
+            if (cur.getPrevHash() != prev.getHash()) {
                 return cur.getIndex();
             }
         }
@@ -73,83 +63,69 @@ BigNumber Blockchain::checkIntegrity()
     return BigNumber();
 }
 
-void Blockchain::setTxManager(TransactionManager *value)
-{
+void Blockchain::setTxManager(TransactionManager *value) {
     txManager = value;
 }
 
 // Blocks //
 
-Block Blockchain::getLastBlock()
-{
+Block Blockchain::getLastBlock() {
     Block block = fileMode ? blockIndex.getLastBlock() : memIndex.getLastBlock();
     return validateAndReturnBlock(block);
 }
 
-QByteArray Blockchain::getBlockDataByIndex(const BigNumber &index)
-{
+QByteArray Blockchain::getBlockDataByIndex(const BigNumber &index) {
     return blockIndex.getBlockDataById(index);
 }
 
-Block Blockchain::getBlockByApprover(const BigNumber &approver)
-{
+Block Blockchain::getBlockByApprover(const BigNumber &approver) {
     Block block = fileMode ? memIndex.getByApprover(approver) : blockIndex.getBlockByApprover(approver);
     return validateAndReturnBlock(block);
 }
 
-Block Blockchain::getBlockByData(const QByteArray &data)
-{
+Block Blockchain::getBlockByData(const QByteArray &data) {
     Block block = fileMode ? blockIndex.getBlockByData(data) : memIndex.getByData(data);
     return validateAndReturnBlock(block);
 }
 
-Block Blockchain::getBlockByHash(const QByteArray &hash)
-{
+Block Blockchain::getBlockByHash(const QByteArray &hash) {
     Block block = fileMode ? blockIndex.getBlockByHash(hash) : memIndex.getByHash(hash);
     return validateAndReturnBlock(block);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &hash, const QByteArray &token)
-{
+std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &hash, const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxByHash(hash, token) : memIndex.getLastTxByHash(hash, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const QByteArray &token)
-{
+std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxBySender(id, token) : memIndex.getLastTxBySender(id, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByReceiver(const BigNumber &id, const QByteArray &token)
-{
+std::pair<Transaction, QByteArray> Blockchain::getTxByReceiver(const BigNumber &id, const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxByReceiver(id, token) : memIndex.getLastTxByReceiver(id, token);
 }
 
 std::pair<Transaction, QByteArray> Blockchain::getTxBySenderOrReceiver(const BigNumber &id,
-                                                                       const QByteArray &token)
-{
+                                                                       const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxBySenderOrReceiver(id, token)
                     : memIndex.getLastTxBySenderOrReceiver(id, token);
 }
 
 std::pair<Transaction, QByteArray> Blockchain::getTxBySenderOrReceiverAndToken(const BigNumber &id,
-                                                                               const QByteArray &token)
-{
+                                                                               const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxBySenderOrReceiverAndToken(id, token)
                     : memIndex.getLastTxBySenderOrReceiverAndToken(id, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByApprover(const BigNumber &id, const QByteArray &token)
-{
+std::pair<Transaction, QByteArray> Blockchain::getTxByApprover(const BigNumber &id, const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, const QByteArray &token)
-{
+std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, const QByteArray &token) {
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-void Blockchain::saveTxInfoInEC(const QByteArray data) const
-{
+void Blockchain::saveTxInfoInEC(const QByteArray data) const {
     QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
     QList<QByteArray> temp;
 
@@ -167,11 +143,9 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
                         "Token     TEXT              NOT NULL, "
                         "Type   TEXT              NOT NULL );");
 
-    for (const auto &i : l)
-    {
+    for (const auto &i : l) {
         temp = Serialization::deserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
-        if (temp.size() != 13)
-        {
+        if (temp.size() != 13) {
             qDebug() << "[Error][" << __FILE__ << __FUNCTION__ << __LINE__ << "]Transaction size !=12";
             return;
         }
@@ -184,14 +158,12 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
         resultData["Token"] = temp[5].toStdString();
         resultData["Type"] = typeS.toStdString();
 
-        if (extractData.empty())
-        {
+        if (extractData.empty()) {
             resultData["State"] = ('-' + temp[2]).toStdString();
             cacheDB.insert("cacheData", resultData);
         }
 
-        else
-        {
+        else {
             resultData["State"] =
                 (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(temp[2]))
                     .toStdString();
@@ -211,15 +183,12 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
         resultData["ActorId"] = temp[1].toStdString();
         resultData["Token"] = temp[5].toStdString();
         resultData["Type"] = typeR.toStdString();
-        if (extractData.empty())
-        {
+        if (extractData.empty()) {
             resultData["State"] = temp[2].toStdString();
             cacheDB.insert("cacheData", resultData);
         }
 
-        else
-        {
-
+        else {
             resultData["State"] =
                 (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(temp[2]))
                     .toStdString();
@@ -232,28 +201,23 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const
 }
 
 QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count,
-                                                             BigNumber token)
-{
+                                                             BigNumber token) {
     return /*fileMode ?*/ blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
     // : memIndex.getLastTxBySenderOrReceiver(id);
 }
 
-void Blockchain::getBlockZero()
-{
+void Blockchain::getBlockZero() {
     Block zero = getBlockByIndex(0);
-    if (zero.isEmpty())
-    {
+    if (zero.isEmpty()) {
         Messages::GetBlockMessage request;
         request.param = SearchEnum::BlockParam::Id;
         request.value = QByteArray::number(0);
         emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
-    }
-    else
+    } else
         actorIndex->setFirstId(zero.getApprover());
 }
 
-BigNumber Blockchain::getSupply(const QByteArray &idToken)
-{
+BigNumber Blockchain::getSupply(const QByteArray &idToken) {
     GenesisBlock gen = blockIndex.getLastGenesisBlock();
     BigNumber id = gen.getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
@@ -261,24 +225,21 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken)
     std::vector<DBRow> extractData =
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "';");
     BigNumber res = 0;
-    for (const auto &tmp : extractData)
-    {
+    for (const auto &tmp : extractData) {
         QByteArray sum(tmp.at("state").c_str());
         res += BigNumber(sum).abs();
     }
     return res;
 }
 
-BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
-{
+BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     BigNumber id = blockIndex.getLastGenesisBlock().getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
     std::vector<DBRow> extractData =
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "' ;");
     BigNumber res = 0;
-    for (const auto &tmp : extractData)
-    {
+    for (const auto &tmp : extractData) {
         QByteArray sum(tmp.at("state").c_str());
         res += BigNumber(sum).abs();
     }
@@ -289,8 +250,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
         /* + "' AND ActorId != '" + actorIndex->m_firstId->toStdString() + "' AND ActorId != '"
          + BigNumber(0).toActorId().toStdString()*/
         + "';");
-    for (const auto &tmp : extractData2)
-    {
+    for (const auto &tmp : extractData2) {
         QByteArray sum(tmp.at("State").c_str());
         if (sum[0] == '-')
             continue;
@@ -299,22 +259,19 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken)
     return res;
 }
 
-QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wallet, const ActorId &token)
-{
+QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wallet, const ActorId &token) {
     QMap<QByteArray, BigNumber> res;
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-    {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
-        for (const auto &tx : listTx)
-        {
+        for (const auto &tx : listTx) {
             if (tx.getData().contains(Fee::FEE))
                 continue;
-            if (tx.getReceiver() == wallet && tx.getToken() == token && tx.getData().contains(Fee::FREEZE_TX))
-            {
+            if (tx.getReceiver() == wallet && tx.getToken() == token
+                && tx.getData().contains(Fee::FREEZE_TX)) {
                 res[tx.getSender().toByteArray()] += tx.getAmount();
             }
-            if (tx.getSender() == wallet && tx.getToken() == token && tx.getData().contains(Fee::UNFREEZE_TX))
-            {
+            if (tx.getSender() == wallet && tx.getToken() == token
+                && tx.getData().contains(Fee::UNFREEZE_TX)) {
                 res[tx.getSender().toByteArray()] -= tx.getAmount();
                 if (res[tx.getSender().toByteArray()] == 0)
                     res.remove(tx.getSender().toByteArray());
@@ -324,19 +281,16 @@ QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wal
     return res;
 }
 
-void Blockchain::stakingReward(const Block &block)
-{
+void Blockchain::stakingReward(const Block &block) {
     QList<Transaction> listTx = block.extractTransactions();
-    for (const auto &tx : listTx)
-    {
+    for (const auto &tx : listTx) {
         if (tx.getData().contains(Fee::FREEZE_TX) || tx.getData().contains(Fee::FEE)
             || tx.getData().contains(Fee::STAKING_REWARD))
             continue;
 
         QList<ActorId> listWallet = accountController->getListAccounts();
 
-        for (const auto &wallet : qAsConst(listWallet))
-        {
+        for (const auto &wallet : qAsConst(listWallet)) {
             BigNumber myFullStaking =
                 getFreezeUserBalance(wallet, tx.getToken(), ActorId(), FreezeBalanceSearch::AllStaking);
 
@@ -345,8 +299,7 @@ void Blockchain::stakingReward(const Block &block)
             if (myFullStaking == 0 && investments.isEmpty())
                 continue;
 
-            for (auto i = investments.begin(); i != investments.end(); i++)
-            {
+            for (auto i = investments.begin(); i != investments.end(); i++) {
                 BigNumber fullSupply = getFullSupply(tx.getToken().toByteArray());
                 BigNumber MSP = Transaction::amountDiv(myFullStaking, fullSupply) * 100;
                 BigNumber RTx = tx.getAmount() / 1000;
@@ -355,8 +308,7 @@ void Blockchain::stakingReward(const Block &block)
                 BigNumber MSP_RTx = Transaction::amountMul(MSP, RTx);
                 BigNumber MSP_RTx_myPercent = Transaction::amountMul(MSP_RTx, myPercent);
 
-                if (MSP_RTx_myPercent == 0)
-                {
+                if (MSP_RTx_myPercent == 0) {
                     qDebug() << "0 on Staking (MSP_RTx_myPercent)";
                     continue;
                 }
@@ -370,14 +322,12 @@ void Blockchain::stakingReward(const Block &block)
                 //                         << Transaction::amountToVisible(StakingReward) << ";\n
                 //                         myFullStaking "
                 //                         << Transaction::amountToVisible(myFullStaking);
-                if (StakingReward == 0)
-                {
+                if (StakingReward == 0) {
                     qDebug() << "0 on Staking";
                     continue;
                 }
 
-                if (StakingReward + fullSupply > Transaction::visibleToAmount("1000000000"))
-                {
+                if (StakingReward + fullSupply > Transaction::visibleToAmount("1000000000")) {
                     qDebug() << "STAKING ENDED";
                     continue;
                 }
@@ -399,15 +349,12 @@ void Blockchain::stakingReward(const Block &block)
     }
 }
 
-std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &receiver, const ActorId &token)
-{
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-    {
+std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &receiver,
+                                                                const ActorId &token) {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
-        for (const auto &tx : listTx)
-        {
-            if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token)
-            {
+        for (const auto &tx : listTx) {
+            if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token) {
                 return { tx.getHash(), i };
             }
         }
@@ -415,16 +362,12 @@ std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &r
     return { 0, 0 };
 }
 
-bool Blockchain::checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver)
-{
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-    {
+bool Blockchain::checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver) {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
-        for (const auto &tx : listTx)
-        {
+        for (const auto &tx : listTx) {
             if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token
-                && tx.getData().contains(hash))
-            {
+                && tx.getData().contains(hash)) {
                 return true;
             }
         }
@@ -432,8 +375,7 @@ bool Blockchain::checkStakingReward(const QByteArray &hash, const ActorId &token
     return false;
 }
 
-Block Blockchain::checkBlock(const Block &block)
-{
+Block Blockchain::checkBlock(const Block &block) {
     if (GenesisBlock::isGenesisBlock(block.serialize()))
         return GenesisBlock(block.serialize());
     else
@@ -441,37 +383,27 @@ Block Blockchain::checkBlock(const Block &block)
 }
 // Genesis block //
 
-bool Blockchain::shouldStartGenesisCreation()
-{
+bool Blockchain::shouldStartGenesisCreation() {
     return Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == this->blocksFromLastGenesis;
 }
 
-void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2)
-{
+void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2) {
     bool b1 = false;
     bool b2 = false;
-    for (int i = 0; i < genBlockData.size(); i++)
-    {
-        if (genBlockData[i].actorId == row1.actorId && genBlockData[i].token == row1.token)
-        {
+    for (int i = 0; i < genBlockData.size(); i++) {
+        if (genBlockData[i].actorId == row1.actorId && genBlockData[i].token == row1.token) {
             b1 = true;
         }
-        if (genBlockData[i].actorId == row2.actorId && genBlockData[i].token == row2.token)
-        {
+        if (genBlockData[i].actorId == row2.actorId && genBlockData[i].token == row2.token) {
             b2 = true;
         }
-        if (b1 && b2)
-        {
+        if (b1 && b2) {
             return;
-        }
-        else
-        {
-            if (!b1)
-            {
+        } else {
+            if (!b1) {
                 genBlockData.append(row1);
             }
-            if (!b2)
-            {
+            if (!b2) {
                 genBlockData.append(row2);
             }
             return;
@@ -479,21 +411,15 @@ void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRo
     }
 }
 
-QByteArray Blockchain::findRecordsInBlock(const Block &block)
-{
-    if (block.getType() == Config::GENESIS_BLOCK_TYPE)
-    {
+QByteArray Blockchain::findRecordsInBlock(const Block &block) {
+    if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
         return block.getHash();
-    }
-    else if (!block.isEmpty())
-    {
+    } else if (!block.isEmpty()) {
         const auto transactions = block.extractTransactions();
-        for (const Transaction &tx : qAsConst(transactions))
-        {
+        for (const Transaction &tx : qAsConst(transactions)) {
             if (tx.getReceiver() == actorIndex->firstId())
                 break;
-            if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX)
-            {
+            if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
                 GenesisDataRow recSender =
                     GenesisDataRow(tx.getSender(),
                                    getFreezeUserBalance(tx.getSender(), tx.getToken(), ActorId(),
@@ -505,9 +431,7 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
                                                         FreezeBalanceSearch::OnlyMyStaking),
                                    tx.getToken(), DataStorage::typeDataRow::STAKING);
                 addRecordsIfNew(recReceiver, recSender);
-            }
-            else
-            {
+            } else {
                 GenesisDataRow recSender =
                     GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender(), tx.getToken()),
                                    tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
@@ -521,26 +445,20 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block)
     return QByteArray();
 }
 
-bool Blockchain::signCheckAdd(Block &block)
-{
+bool Blockchain::signCheckAdd(Block &block) {
     if (block.getIndex() == 0)
         return false;
     QByteArrayList list = block.getListSignatures();
 
     int count = 0;
-    if (block.getType() == "genesis")
-    {
+    if (block.getType() == "genesis") {
         GenesisBlock saved(getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray()));
 
         QByteArrayList savedList = saved.getListSignatures();
-        if (!savedList.isEmpty())
-        {
-            if (list != savedList)
-            {
-                for (int i = 0; i < list.size(); i += 3)
-                {
-                    if (!savedList.contains(list[i]))
-                    {
+        if (!savedList.isEmpty()) {
+            if (list != savedList) {
+                for (int i = 0; i < list.size(); i += 3) {
+                    if (!savedList.contains(list[i])) {
                         DBConnector DB;
                         QString path = blockIndex.buildFilePath(block.getIndex());
                         DB.open(path.toStdString());
@@ -557,14 +475,12 @@ bool Blockchain::signCheckAdd(Block &block)
             }
         }
 
-        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
-        {
+        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->id().toByteArray();
-            if (!list.contains(id))
-            {
-                QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
+            QByteArray id = accountController->mainActor()->id().toByteArray();
+            if (!list.contains(id)) {
+                QByteArray sign = accountController->mainActor()->key()->sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -573,19 +489,13 @@ bool Blockchain::signCheckAdd(Block &block)
         //        {
         //            block.sign(*accountController->getMainActor());
         //        }
-    }
-    else
-    {
+    } else {
         Block saved(getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray()));
         QByteArrayList savedList = saved.getListSignatures();
-        if (!savedList.isEmpty())
-        {
-            if (list != savedList)
-            {
-                for (int i = 0; i < list.size(); i += 3)
-                {
-                    if (!savedList.contains(list[i]))
-                    {
+        if (!savedList.isEmpty()) {
+            if (list != savedList) {
+                for (int i = 0; i < list.size(); i += 3) {
+                    if (!savedList.contains(list[i])) {
                         DBConnector DB;
                         QString path = blockIndex.buildFilePath(block.getIndex());
                         DB.open(path.toStdString());
@@ -597,32 +507,26 @@ bool Blockchain::signCheckAdd(Block &block)
                         count++;
                     }
                 }
-                if (count != 0)
-                {
-                    if ((list.size() / 3) + 1 >= COUNT_UNFROZE_FEE)
-                    {
+                if (count != 0) {
+                    if ((list.size() / 3) + 1 >= COUNT_UNFROZE_FEE) {
                         sendUnFee(block);
                     }
                     return true;
                 }
             }
         }
-        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK)
-        {
-            if ((list.size() / 3) == COUNT_APPROVER_BLOCK)
-            {
+        if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
+            if ((list.size() / 3) == COUNT_APPROVER_BLOCK) {
                 sendFeeUnfreeze(block);
             }
-            if ((list.size() / 3) >= COUNT_UNFROZE_FEE)
-            {
+            if ((list.size() / 3) >= COUNT_UNFROZE_FEE) {
                 sendUnFee(block);
             }
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = accountController->getMainActor()->id().toByteArray();
-            if (!list.contains(id))
-            {
-                QByteArray sign = accountController->getMainActor()->key()->sign(block.getHash());
+            QByteArray id = accountController->mainActor()->id().toByteArray();
+            if (!list.contains(id)) {
+                QByteArray sign = accountController->mainActor()->key()->sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -635,11 +539,9 @@ bool Blockchain::signCheckAdd(Block &block)
     return false;
 }
 
-void Blockchain::sendUnFee(Block &block)
-{
+void Blockchain::sendUnFee(Block &block) {
     QList<Transaction> txList = block.extractTransactions();
-    for (const auto &tmpTx : txList)
-    {
+    for (const auto &tmpTx : txList) {
         if (tmpTx.getData().contains(Fee::FREEZE_TX))
             continue;
         ActorId sender = tmpTx.getSender();
@@ -659,15 +561,12 @@ void Blockchain::sendUnFee(Block &block)
         tx.setPrevBlock(lastBlockId);
         tx.setProducer(producer);
         QByteArray dataForTxFee = "";
-        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-        {
+        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);
             QList<Transaction> listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs)
-            {
+            for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
-                    && tmp.getData().contains(tmpTx.getHash()))
-                {
+                    && tmp.getData().contains(tmpTx.getHash())) {
                     dataForTxFee = Serialization::serialize({ i.toByteArray(), tmpTx.getHash(), Fee::UNFEE });
                     break;
                 }
@@ -681,11 +580,9 @@ void Blockchain::sendUnFee(Block &block)
     }
 }
 
-void Blockchain::sendFeeUnfreeze(Block &block)
-{
+void Blockchain::sendFeeUnfreeze(Block &block) {
     QList<Transaction> txList = block.extractTransactions();
-    for (const auto &tmpTx : txList)
-    {
+    for (const auto &tmpTx : txList) {
         if (tmpTx.getData().contains(Fee::FREEZE_TX))
             continue;
         ActorId sender = tmpTx.getSender();
@@ -705,15 +602,12 @@ void Blockchain::sendFeeUnfreeze(Block &block)
         tx.setPrevBlock(lastBlockId);
         tx.setProducer(producer);
         QByteArray dataForTxFee = "";
-        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-        {
+        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);
             QList<Transaction> listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs)
-            {
+            for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
-                    && tmp.getData().contains(tmpTx.getHash()))
-                {
+                    && tmp.getData().contains(tmpTx.getHash())) {
                     dataForTxFee = Serialization::serialize(
                         { block.getIndex().toByteArray(), tmpTx.getHash(), Fee::FEE_UNFREEZE_TX });
                     break;
@@ -728,46 +622,34 @@ void Blockchain::sendFeeUnfreeze(Block &block)
     }
 }
 
-GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<ActorId, BigNumber> states)
-{
+GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<ActorId, BigNumber> states) {
     qDebug() << "Creating genesis block";
     genBlockData.clear();
     // QByteArray previousGenHash;
     GenesisBlock nb("", Block(), "");
-    if (fileMode)
-    {
-        if (blockIndex.getLastSavedId().isEmpty())
-        {
+    if (fileMode) {
+        if (blockIndex.getLastSavedId().isEmpty()) {
             qCritical() << "Can't create genesis block, there no last saved id";
             return nb;
         }
-        if (blockIndex.getRecords() == 0)
-        {
-
-            if (blockIndex.getFirstSavedId() == 0 && blockIndex.getLastSavedId() == 0)
-            {
-
-                for (auto i = states.begin(); i != states.end(); i++)
-                {
+        if (blockIndex.getRecords() == 0) {
+            if (blockIndex.getFirstSavedId() == 0 && blockIndex.getLastSavedId() == 0) {
+                for (auto i = states.begin(); i != states.end(); i++) {
                     genBlockData.append(
                         GenesisDataRow(i.key(), i.value(), ActorId(), DataStorage::typeDataRow::UNIVERSAL));
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
                 nb.sign(accountController->getActor(actorIndex->firstId()));
-            }
-            else
+            } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return nb;
-        }
-        else
-        {
+        } else {
             Block b;
             BigNumber i = blockIndex.getLastSavedId();
             nb = GenesisBlock("", blockIndex.getBlockById(blockIndex.getLastSavedId()), "");
             while ((blockIndex.getBlockById(i).getType() != Config::GENESIS_BLOCK_TYPE)
-                   && (i >= blockIndex.getFirstSavedId()))
-            {
+                   && (i >= blockIndex.getFirstSavedId())) {
                 b = blockIndex.getBlockById(i);
                 findRecordsInBlock(b);
                 i--;
@@ -787,24 +669,20 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
         genBlockData.clear();
         nb.sign(actor);
         return nb;
-    }
-    else
+    } else
         return GenesisBlock();
 }
 // Merging //
 
-int Blockchain::mergeBlockWithLocal(Block &received)
-{
+int Blockchain::mergeBlockWithLocal(Block &received) {
     Block existed = getBlockByIndex(received.getIndex());
-    if (!canMergeBlocks(received, existed))
-    {
+    if (!canMergeBlocks(received, existed)) {
         qWarning() << "Blocks with id" << received.getIndex() << "can't be merged";
         return Errors::BLOCKS_CANT_MERGE;
     }
 
     qDebug() << "Start merging block" << received.getIndex();
-    if (received == existed)
-    {
+    if (received == existed) {
         qDebug() << QString("Blocks are equal ([%1])").arg(Errors::BLOCKS_ARE_EQUAL);
         return Errors::BLOCKS_ARE_EQUAL;
     }
@@ -825,17 +703,14 @@ int Blockchain::mergeBlockWithLocal(Block &received)
     QList<Block> tmpBlocks; // from existed to last block;
 
     // only if indexes is different
-    if (received.getIndex() != getLastBlock().getIndex())
-    {
+    if (received.getIndex() != getLastBlock().getIndex()) {
         // we should collect temp blocks
         BigNumber lastBlockId = existed.getIndex();
         BigNumber nextBlockId = getLastBlock().getIndex();
-        for (BigNumber i = lastBlockId; i <= nextBlockId; i++)
-        {
+        for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
             tmpBlocks << getBlockByIndex(i);
         }
-        if (tmpBlocks.isEmpty())
-        {
+        if (tmpBlocks.isEmpty()) {
             qWarning() << "Error: There is no blocks found locally while merging block"
                        << received.getIndex();
             return Errors::NO_BLOCKS;
@@ -845,10 +720,8 @@ int Blockchain::mergeBlockWithLocal(Block &received)
     // step 3 - update hash, prevHash and approver for all modified blocks
     QByteArray newHash = merged.getHash();
     QByteArray oldHash = existed.getHash();
-    for (Block &b : tmpBlocks)
-    {
-        if (b.getPrevHash() == oldHash)
-        {
+    for (Block &b : tmpBlocks) {
+        if (b.getPrevHash() == oldHash) {
             oldHash = b.getHash();
             b.setPrevHash(newHash);
             b.setType(Config::MERGE_BLOCK);
@@ -861,19 +734,16 @@ int Blockchain::mergeBlockWithLocal(Block &received)
     // and save updated blocks with new hash
     removeBlock(existed);
     addBlock(merged);
-    for (Block &b : tmpBlocks)
-    {
+    for (Block &b : tmpBlocks) {
         addBlock(b);
     }
     //  emit SendMergedBlock(existed, received, merged);
     return 0;
 }
 
-int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received)
-{
+int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
     GenesisBlock existed = blockIndex.getGenesisBlockById(received.getIndex());
-    if (!existed.isEmpty())
-    {
+    if (!existed.isEmpty()) {
         // saved block with the same id is genesis
         qDebug() << QString("Start merging genesis block [%1] with exising [%2]")
                         .arg(received.toString(), existed.toString());
@@ -885,17 +755,14 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received)
         QList<Block> tmpBlocks; // from existed to last block;
 
         // only if indexes is different
-        if (received.getIndex() != getLastBlock().getIndex())
-        {
+        if (received.getIndex() != getLastBlock().getIndex()) {
             // we should collect temp blocks
             BigNumber lastBlockId = existed.getIndex();
             BigNumber nextBlockId = getLastBlock().getIndex();
-            for (BigNumber i = lastBlockId; i <= nextBlockId; i++)
-            {
+            for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
                 tmpBlocks << getBlockByIndex(i);
             }
-            if (tmpBlocks.isEmpty())
-            {
+            if (tmpBlocks.isEmpty()) {
                 qWarning() << "Error: There is no blocks found locally while merging block"
                            << received.getIndex();
                 return Errors::NO_BLOCKS;
@@ -905,10 +772,8 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received)
         // step 3 - update hash, prevHash and approver for all modified blocks
         QByteArray newHash = merged.getHash();
         QByteArray oldHash = existed.getHash();
-        for (Block &b : tmpBlocks)
-        {
-            if (b.getPrevHash() == oldHash)
-            {
+        for (Block &b : tmpBlocks) {
+            if (b.getPrevHash() == oldHash) {
                 oldHash = b.getHash();
                 b.setPrevHash(newHash);
                 b.setType(Config::GENESIS_BLOCK_MERGE);
@@ -921,24 +786,19 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received)
         // and save updated blocks with new hash
         removeBlock(existed);
         addBlock(merged, true);
-        for (Block &b : tmpBlocks)
-        {
+        for (Block &b : tmpBlocks) {
             addBlock(b);
         }
-    }
-    else
-    {
+    } else {
         qCritical() << "Can't find genesis block with id=" << received.getIndex() << "locally";
         return Errors::NO_BLOCKS;
     }
     return 0;
 }
 
-Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
-{
+Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value) {
     Block res;
-    switch (type)
-    {
+    switch (type) {
     case SearchEnum::BlockParam::Id:
         res = getBlockByIndex(BigNumber(value));
         break;
@@ -958,11 +818,9 @@ Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
     return res;
 }
 
-QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArray &value)
-{
+QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArray &value) {
     QByteArray res = "";
-    switch (type)
-    {
+    switch (type) {
     case SearchEnum::BlockParam::Id:
         res = getBlockDataByIndex(BigNumber(value));
         break;
@@ -973,10 +831,8 @@ QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArra
 }
 
 std::pair<Transaction, QByteArray>
-Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token)
-{
-    switch (type)
-    {
+Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token) {
+    switch (type) {
     case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
         return getTxBySenderOrReceiverAndToken(value, token);
     case SearchEnum::TxParam::Hash:
@@ -997,34 +853,25 @@ Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, co
     }
 }
 
-bool Blockchain::validateBlock(const Block &block)
-{
+bool Blockchain::validateBlock(const Block &block) {
     return actorIndex->validateBlock(block);
 }
 
-Block Blockchain::validateAndReturnBlock(const Block &block)
-{
+Block Blockchain::validateAndReturnBlock(const Block &block) {
     // Get prev block hash and check if it exists in current one :)
     return block;
 }
 
-int Blockchain::addBlock(Block &block, bool isGenesis)
-{
-    if (isGenesis)
-    {
+int Blockchain::addBlock(Block &block, bool isGenesis) {
+    if (isGenesis) {
         qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
-    }
-    else
-    {
+    } else {
         qDebug() << "Adding a block" << block.getIndex() << "to storage";
     }
-    if (!GenesisBlock::isGenesisBlock(block.serialize()))
-    {
-        if (block.getIndex() != 0)
-        {
+    if (!GenesisBlock::isGenesisBlock(block.serialize())) {
+        if (block.getIndex() != 0) {
             BigNumber id = block.getIndex() - 1;
-            if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty())
-            {
+            if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
                 Messages::GetBlockMessage request;
                 request.param = SearchEnum::BlockParam::Id;
                 request.value = id.toByteArray();
@@ -1032,8 +879,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
             }
         }
     }
-    if (block.getIndex() == 0)
-    {
+    if (block.getIndex() == 0) {
         this->actorIndex->setFirstId(block.getApprover());
     }
     if (block.getIndex() < 0)
@@ -1042,8 +888,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
         emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
-    switch (resultCode)
-    {
+    switch (resultCode) {
     case 0: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
@@ -1056,17 +901,12 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     }
     case Errors::FILE_ALREADY_EXISTS: {
         qDebug() << "Block" << block.getIndex() << "is already in blockchain";
-        if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK)
-        {
+        if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK) {
             resultCode = mergeBlockWithLocal(block);
-        }
-        else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
-                 || (block.getType() == Config::GENESIS_BLOCK_MERGE))
-        {
+        } else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
+                   || (block.getType() == Config::GENESIS_BLOCK_MERGE)) {
             resultCode = mergeGenesisBlockWithLocal(dynamic_cast<const GenesisBlock &>(block));
-        }
-        else
-        {
+        } else {
             qCritical() << "Unsupported block type in block: " << block.getIndex();
         }
         break;
@@ -1076,14 +916,11 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     }
 
     // after adding genesis block we don't need to increment counter
-    if (!isGenesis && resultCode == 0)
-    {
+    if (!isGenesis && resultCode == 0) {
         blocksFromLastGenesis++;
-        if (shouldStartGenesisCreation())
-        {
-            GenesisBlock gB = createGenesisBlock(*(accountController->getMainActor()));
-            if (blockIndex.addBlock(gB) == 0)
-            {
+        if (shouldStartGenesisCreation()) {
+            GenesisBlock gB = createGenesisBlock(*(accountController->mainActor()));
+            if (blockIndex.addBlock(gB) == 0) {
                 qDebug() << "Block" << gB.getIndex() << gB.getType() << "is successfully added to blockchain";
                 emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
@@ -1094,43 +931,33 @@ int Blockchain::addBlock(Block &block, bool isGenesis)
     return resultCode;
 }
 
-int Blockchain::removeBlock(const Block &block)
-{
+int Blockchain::removeBlock(const Block &block) {
     return fileMode ? blockIndex.removeById(block.getIndex()) : memIndex.removeById(block.getIndex());
 }
 
-bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB)
-{
+bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB) {
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
     if (!blockA.getDigSig().isEmpty() && !blockB.getDigSig().isEmpty() && blockA.getType() == blockB.getType()
-        && blockA.getIndex() == blockB.getIndex())
-    {
+        && blockA.getIndex() == blockB.getIndex()) {
         if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE))
             return true;
-        else if (blockA.getType() == Config::GENESIS_BLOCK_MERGE)
-        {
+        else if (blockA.getType() == Config::GENESIS_BLOCK_MERGE) {
             // 4) at least one common data row
             QList<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(blockA).extractDataRows();
             QList<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(blockB).extractDataRows();
-            for (const GenesisDataRow &g : rowsA)
-            {
-                if (rowsB.contains(g))
-                {
+            for (const GenesisDataRow &g : rowsA) {
+                if (rowsB.contains(g)) {
                     return true;
                 }
             }
-        }
-        else if (blockA.getType() == Config::MERGE_BLOCK)
-        {
+        } else if (blockA.getType() == Config::MERGE_BLOCK) {
             // 4) at least one common transaction
             QList<Transaction> transactionsA = blockA.extractTransactions();
             QList<Transaction> transactionsB = blockB.extractTransactions();
-            for (const Transaction &tr : transactionsA)
-            {
-                if (transactionsB.contains(tr))
-                {
+            for (const Transaction &tr : transactionsA) {
+                if (transactionsB.contains(tr)) {
                     return true;
                 }
             }
@@ -1139,15 +966,13 @@ bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB)
     return false;
 }
 
-Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
-{
+Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
     qDebug() << "Attempting to merge block:" << blockA.serialize() << "and block:" << blockB.serialize();
 
     if (blockA.getIndex() == BigNumber(0))
         return Block();
     Block prev = getBlockByIndex(blockA.getIndex() - 1);
-    if (prev.isEmpty())
-    {
+    if (prev.isEmpty()) {
         qWarning() << "Can't merge block" << blockA.toString() << "with" << blockB.toString()
                    << " - there no prev block";
         return Block();
@@ -1157,13 +982,11 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
     const QByteArray dataB = blockB.getData();
 
     // Case 1 - equal payload
-    if (dataA == dataB)
-    {
+    if (dataA == dataB) {
         Block merged(dataA, prev);
         signBlock(merged);
         return merged;
-    }
-    else // Case 2 - different payload
+    } else // Case 2 - different payload
     {
         QList<Transaction> transactionsA = blockA.extractTransactions();
         QList<Transaction> transactionsB = blockB.extractTransactions();
@@ -1171,10 +994,8 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
         //        ListContainer<Transaction> txs;
         QList<Transaction> resultList = transactionsA;
 
-        for (const Transaction &tx : qAsConst(transactionsA))
-        {
-            if (!transactionsB.contains(tx))
-            {
+        for (const Transaction &tx : qAsConst(transactionsA)) {
+            if (!transactionsB.contains(tx)) {
                 resultList.append(tx);
             }
         }
@@ -1188,15 +1009,13 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB)
     }
 }
 
-GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB)
-{
+GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB) {
     qDebug() << "Attempting to merge genesis block:" << blockA.serialize()
              << "and block:" << blockB.serialize();
 
     Block prev = getBlockByIndex(blockA.getIndex() - 1);
 
-    if (prev.isEmpty())
-    {
+    if (prev.isEmpty()) {
         qWarning() << "Can't merge genesis block" << blockA.toString() << "with" << blockB.toString()
                    << " - there no prev block";
         return GenesisBlock();
@@ -1206,26 +1025,21 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
     const QByteArray dataB = blockB.getData();
 
     // Case 1 - equal payload
-    if (dataA == dataB)
-    {
+    if (dataA == dataB) {
         GenesisBlock merged(dataA, prev, blockA.getPrevGenHash());
         signBlock(merged);
         return merged;
-    }
-    else // Case 2 - different payload
+    } else // Case 2 - different payload
     {
         // todo: make utils::combine(list, list) function;
         QList<GenesisDataRow> genDataRowsA = blockA.extractDataRows();
         QList<GenesisDataRow> genDataRowsB = blockB.extractDataRows();
         QList<GenesisDataRow> resultList = genDataRowsA;
         int count = 0;
-        for (const GenesisDataRow &r : qAsConst(genDataRowsA))
-        {
-            if (!genDataRowsB.contains(r))
-            {
+        for (const GenesisDataRow &r : qAsConst(genDataRowsA)) {
+            if (!genDataRowsB.contains(r)) {
                 resultList.append(r);
-            }
-            else
+            } else
                 count++;
         }
         QList<QByteArray> list;
@@ -1240,41 +1054,33 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
     }
 }
 
-void Blockchain::signBlock(Block &block) const
-{
+void Blockchain::signBlock(Block &block) const {
     block.sign(accountController->getCurrentActor());
 }
 
-BigNumber Blockchain::getBlockChainLength() const
-{
+BigNumber Blockchain::getBlockChainLength() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-QString Blockchain::getLastBlockData() const
-{
+QString Blockchain::getLastBlockData() const {
     return fileMode ? blockIndex.getLastBlock().getData() : memIndex.getLastBlock().getData();
 }
 
-BigNumber Blockchain::getRecords() const
-{
+BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
-{
+BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
     BigNumber balance;
 
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-    {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
-        {
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize())) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
 
-            for (const auto &row : rows)
-            {
+            for (const auto &row : rows) {
                 if (userId == row.actorId)
                     return balance + row.state;
             }
@@ -1287,16 +1093,12 @@ BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
 
         QList<Transaction> txs = currentBlock.extractTransactions();
 
-        for (auto &tx : txs)
-        {
+        for (auto &tx : txs) {
             if (tx.getSender() == userId && tx.getToken() == tokenId && tx.getData() != Fee::UNFREEZE_TX
-                && !tx.getData().contains(Fee::FEE_UNFREEZE_TX) && !tx.getData().contains(Fee::UNFEE))
-            {
+                && !tx.getData().contains(Fee::FEE_UNFREEZE_TX) && !tx.getData().contains(Fee::UNFEE)) {
                 balance -= tx.getAmount();
-            }
-            else if (tx.getReceiver() == userId && tx.getToken() == tokenId && tx.getData() != Fee::FREEZE_TX
-                     && !tx.getData().contains(Fee::FEE_FREEZE_TX))
-            {
+            } else if (tx.getReceiver() == userId && tx.getToken() == tokenId
+                       && tx.getData() != Fee::FREEZE_TX && !tx.getData().contains(Fee::FEE_FREEZE_TX)) {
                 balance += tx.getAmount();
             }
         }
@@ -1306,21 +1108,17 @@ BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
 }
 
 BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
-                                           FreezeBalanceSearch balanceSearch) const
-{
+                                           FreezeBalanceSearch balanceSearch) const {
     BigNumber balance = 0;
 
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-    {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
-        {
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize())) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
 
-            for (const auto &row : rows)
-            {
+            for (const auto &row : rows) {
                 if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
                     return balance + row.state;
             }
@@ -1333,8 +1131,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
 
         QList<Transaction> txs = currentBlock.extractTransactions();
 
-        for (auto &tx : txs)
-        {
+        for (auto &tx : txs) {
             bool isStaking = tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX;
 
             if (tx.getSender() != userId && tx.getReceiver() != userId)
@@ -1342,44 +1139,28 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
             if (tx.getToken() != tokenId || !isStaking)
                 continue;
 
-            if (balanceSearch == FreezeBalanceSearch::AllStaking)
-            {
-                if (tx.getData() == Fee::FREEZE_TX && tx.getReceiver() == userId)
-                {
+            if (balanceSearch == FreezeBalanceSearch::AllStaking) {
+                if (tx.getData() == Fee::FREEZE_TX && tx.getReceiver() == userId) {
                     balance += tx.getAmount();
-                }
-                else if (tx.getData() == Fee::UNFREEZE_TX && tx.getSender() == userId)
-                {
+                } else if (tx.getData() == Fee::UNFREEZE_TX && tx.getSender() == userId) {
                     balance -= tx.getAmount();
                 }
-            }
-            else if (balanceSearch == FreezeBalanceSearch::AllNotMyStaking)
-            {
-                if (tx.getSender() != userId && tx.getReceiver() == userId && tx.getData() == Fee::FREEZE_TX)
-                {
+            } else if (balanceSearch == FreezeBalanceSearch::AllNotMyStaking) {
+                if (tx.getSender() != userId && tx.getReceiver() == userId
+                    && tx.getData() == Fee::FREEZE_TX) {
                     balance += tx.getAmount();
-                }
-                else if (tx.getReceiver() != userId && tx.getSender() == userId
-                         && tx.getData() == Fee::UNFREEZE_TX)
-                {
+                } else if (tx.getReceiver() != userId && tx.getSender() == userId
+                           && tx.getData() == Fee::UNFREEZE_TX) {
                     balance -= tx.getAmount();
                 }
-            }
-            else if (balanceSearch == FreezeBalanceSearch::OnlySender)
-            {
-                if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX)
-                {
+            } else if (balanceSearch == FreezeBalanceSearch::OnlySender) {
+                if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX) {
                     balance += tx.getAmount();
-                }
-                else if (tx.getReceiver() == sender && tx.getData() == Fee::UNFREEZE_TX)
-                {
+                } else if (tx.getReceiver() == sender && tx.getData() == Fee::UNFREEZE_TX) {
                     balance -= tx.getAmount();
                 }
-            }
-            else if (balanceSearch == FreezeBalanceSearch::OnlyMyStaking)
-            {
-                if (tx.getSender() == userId && tx.getReceiver() == userId)
-                {
+            } else if (balanceSearch == FreezeBalanceSearch::OnlyMyStaking) {
+                if (tx.getSender() == userId && tx.getReceiver() == userId) {
                     if (tx.getData() == Fee::UNFREEZE_TX)
                         balance -= tx.getAmount();
                     else if (tx.getData() == Fee::FREEZE_TX)
@@ -1392,22 +1173,18 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
     return balance;
 }
 
-QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(ActorId userId, ActorId tokenId) const
-{
+QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(ActorId userId, ActorId tokenId) const {
     QMap<QByteArray, BigNumber> res;
     BigNumber balance;
 
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-    {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (GenesisBlock::isGenesisBlock(currentBlock.serialize()))
-        {
+        if (GenesisBlock::isGenesisBlock(currentBlock.serialize())) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
 
-            for (const auto &row : rows)
-            {
+            for (const auto &row : rows) {
                 if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
                     balance += row.state;
             }
@@ -1421,13 +1198,11 @@ QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(ActorId userId, Actor
     return res;
 }
 
-void Blockchain::showBlockchain() const
-{
+void Blockchain::showBlockchain() const {
     qDebug() << "BLOCKCHAIN: showBlockchain()";
     int i = 0;
     Block currentBlock = blockIndex.getBlockById(i);
-    do
-    {
+    do {
         i++;
         currentBlock = blockIndex.getBlockById(i);
     } while (!currentBlock.isEmpty());
@@ -1435,47 +1210,39 @@ void Blockchain::showBlockchain() const
     qDebug() << "Genesis block: ";
 
     auto extra = genBlock.extractDataRows();
-    for (const auto &dataGen : qAsConst(extra))
-    {
+    for (const auto &dataGen : qAsConst(extra)) {
         qDebug() << &dataGen;
     }
 }
 
-bool Blockchain::isSmContractTx(const Block &block) const
-{
+bool Blockchain::isSmContractTx(const Block &block) const {
     if (block.getData().contains("initcontract"))
         return true;
     return false;
 }
 
-void Blockchain::getSmContractMembers(const Block &block) const
-{
+void Blockchain::getSmContractMembers(const Block &block) const {
     if (!isSmContractTx(block))
         return;
     QList<Transaction> txList = block.extractTransactions();
-    for (const Transaction &tx : txList)
-    {
-        if (tx.getData() == "initcontract")
-        {
+    for (const Transaction &tx : txList) {
+        if (tx.getData() == "initcontract") {
             actorIndex->getActor(tx.getSender());
             actorIndex->getActor(tx.getReceiver());
         }
     }
 }
 
-void Blockchain::process()
-{
+void Blockchain::process() {
     //
 }
 
-void Blockchain::updateBlockchain()
-{
+void Blockchain::updateBlockchain() {
     Messages::BlockCount request;
     emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
 }
 
-void Blockchain::checkBlockExistence(Block &block)
-{
+void Blockchain::checkBlockExistence(Block &block) {
     Block last = getLastBlock();
 
     /*
@@ -1483,21 +1250,15 @@ void Blockchain::checkBlockExistence(Block &block)
      * is greater than the coming block id - the last one is already in
      * blockchain. If ids are equals - trying to merge blocks.
      */
-    if (last.getIndex() < block.getIndex() || last.isEmpty())
-    {
+    if (last.getIndex() < block.getIndex() || last.isEmpty()) {
         addBlock(block);
         emit BlockIsMissing(block);
-    }
-    else if (last.getIndex() < block.getIndex())
-    {
+    } else if (last.getIndex() < block.getIndex()) {
         qDebug() << QString("Block [%1] already exists in local blockchain")
                         .arg(QString(block.getIndex().toByteArray()));
-    }
-    else if (last.getIndex() == block.getIndex())
-    {
+    } else if (last.getIndex() == block.getIndex()) {
         // blocks id's are equals -> merge blocks
-        if (canMergeBlocks(last, block))
-        {
+        if (canMergeBlocks(last, block)) {
             Block merged = mergeBlocks(last, block);
             if (merged.isEmpty())
                 return;
@@ -1507,11 +1268,9 @@ void Blockchain::checkBlockExistence(Block &block)
     }
 }
 
-void Blockchain::blockCountResponse(const BigNumber &count)
-{
+void Blockchain::blockCountResponse(const BigNumber &count) {
     if (blockIndex.getLastSavedId() < count
-        || getBlock(SearchEnum::BlockParam::Id, count.toByteArray()).isEmpty())
-    {
+        || getBlock(SearchEnum::BlockParam::Id, count.toByteArray()).isEmpty()) {
         Messages::GetBlockMessage request;
         request.param = SearchEnum::BlockParam::Id;
         request.value = count.toByteArray();
@@ -1520,16 +1279,14 @@ void Blockchain::blockCountResponse(const BigNumber &count)
 }
 
 void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                        const QByteArray &requestHash, const SocketPair &receiver)
-{
+                                        const QByteArray &requestHash, const SocketPair &receiver) {
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
     emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash, receiver);
 }
 
-void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver)
-{
+void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver) {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
     //
@@ -1545,37 +1302,30 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
                        Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
 }
 
-void Blockchain::addBlockToBlockchain(Block block)
-{
+void Blockchain::addBlockToBlockchain(Block block) {
     addBlock(block);
     QList<Transaction> list = block.extractTransactions();
-    for (const auto &tmp : qAsConst(list))
-    {
+    for (const auto &tmp : qAsConst(list)) {
         QList<ActorId> list;
         auto accounts = accountController->getAccounts();
         for (const auto &tmp : qAsConst(accounts))
             list.append(tmp->id());
         QByteArray data = tmp.getData();
         if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
-            && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
-        {
+            && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE)) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
-        }
-        else if (list.contains(tmp.getReceiver()) && !data.contains(Fee::FREEZE_TX)
-                 && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE))
-        {
+        } else if (list.contains(tmp.getReceiver()) && !data.contains(Fee::FREEZE_TX)
+                   && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE)) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToMe,
                              tmp.getSender().toByteArray() });
         }
     }
 }
 
-void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
-{
+void Blockchain::addGenBlockToBlockchain(GenesisBlock block) {
     QMutex mutex;
-    if (block.getIndex() == 0)
-    {
+    if (block.getIndex() == 0) {
         mutex.lock();
         this->actorIndex->setFirstId(block.getApprover().toByteArray());
         mutex.unlock();
@@ -1585,39 +1335,31 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block)
 }
 
 // Actors //
-Actor<KeyPrivate> Blockchain::getApprover() const
-{
+Actor<KeyPrivate> Blockchain::getApprover() const {
     return accountController->getCurrentActor();
 }
 
-void Blockchain::setApprover(const Actor<KeyPrivate> &value)
-{
+void Blockchain::setApprover(const Actor<KeyPrivate> &value) {
     this->accountController->getCurrentActor() = value;
 }
 
 void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                                     const SocketPair &receiver, const QByteArray &request)
-{
+                                     const SocketPair &receiver, const QByteArray &request) {
     Transaction transaction = getTransaction(param, value).first;
-    if (!transaction.isEmpty())
-    {
+    if (!transaction.isEmpty()) {
         emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse, request,
                            receiver);
-    }
-    else
-    {
+    } else {
         qDebug() << "The transaction with" << SearchEnum::toString(param) << "parametr is not found";
     }
 }
 
-void Blockchain::VerifyTx(Transaction tx)
-{
+void Blockchain::VerifyTx(Transaction tx) {
     Block last = getLastBlock();
     QList<Transaction> lastBlockTxs = last.extractTransactions();
 
     // check txs in the last block
-    if (lastBlockTxs.contains(tx))
-    {
+    if (lastBlockTxs.contains(tx)) {
         qDebug() << "New transaction can't be added: previous block contains it";
         return;
     }
@@ -1630,23 +1372,18 @@ bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
                                      const BigNumber &indexBlock) // return true if haven`t
 {
     QList<Transaction> listProve = txManager->getPendingTxs();
-    for (const auto &tmpTx : listProve)
-    {
+    for (const auto &tmpTx : listProve) {
         if (tmpTx.getSender() == tx->getSender() && tmpTx.getReceiver() == tx->getReceiver()
-            && tmpTx.getData() == tx->getData())
-        {
+            && tmpTx.getData() == tx->getData()) {
             return false;
         }
     }
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= indexBlock; i--)
-    {
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= indexBlock; i--) {
         Block tmpBlock = blockIndex.getBlockById(i);
         QList<Transaction> listTxs = tmpBlock.extractTransactions();
-        for (const auto &tmp : listTxs)
-        {
+        for (const auto &tmp : listTxs) {
             if (tmp.getSender() == tx->getSender() && tmp.getReceiver() == tx->getReceiver()
-                && tmp.getData() == tx->getData())
-            {
+                && tmp.getData() == tx->getData()) {
                 return false;
             }
         }
@@ -1654,8 +1391,7 @@ bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
     return true;
 }
 
-void Blockchain::proveTx(Transaction *tx)
-{
+void Blockchain::proveTx(Transaction *tx) {
     qDebug() << "proveTx: started";
 
     ActorId targetSender = tx->getSender();
@@ -1666,67 +1402,54 @@ void Blockchain::proveTx(Transaction *tx)
     Actor<KeyPublic> receiverActor;
     if (!targetReceiver.isEmpty())
         receiverActor = actorIndex->getActor(targetReceiver);
-    if (tx->getAmount() < 0)
-    {
+    if (tx->getAmount() < 0) {
         emit tx->NotApproved(tx);
         return;
     }
-    if (tx->getData().contains(Fee::UNFEE))
-    {
+    if (tx->getData().contains(Fee::UNFEE)) {
         BigNumber fee = tx->getAmount();
         QByteArrayList dataList = Serialization::deserialize(tx->getData());
-        if (dataList.size() != 3)
-        {
+        if (dataList.size() != 3) {
             qDebug() << "TX prove: incorrect data for unfreeze fee";
             return;
         }
         BigNumber indexFreezeTxBlock = dataList.at(0);
         QByteArray hashTx = dataList.at(1);
-        if (!checkHaveUNFreezeTx(tx, indexFreezeTxBlock))
-        {
+        if (!checkHaveUNFreezeTx(tx, indexFreezeTxBlock)) {
             emit tx->NotApproved(tx);
             qDebug() << "ProveTx: have this UNFee Tx";
             return;
         }
-        for (BigNumber i = indexFreezeTxBlock; i <= blockIndex.getLastSavedId(); i++)
-        {
+        for (BigNumber i = indexFreezeTxBlock; i <= blockIndex.getLastSavedId(); i++) {
             Block tmpBlock = blockIndex.getBlockById(i);
             QList<Transaction> listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs)
-            {
+            for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == tx->getSender() && tmp.getData().contains(Fee::FEE_UNFREEZE_TX)
-                    && tmp.getData().contains(hashTx))
-                {
+                    && tmp.getData().contains(hashTx)) {
                     fee -= tmp.getAmount();
                 }
             }
         }
 
         auto producerActor = actorIndex->getActor(tx->getProducer());
-        if (producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
-        {
+        if (producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig())) {
             tx->setAmount(fee);
             tx->sign(accountController->getCurrentActor());
             emit tx->Approved(tx);
-        }
-        else
+        } else
             emit tx->NotApproved(tx);
-    }
-    else if (tx->getData().contains(Fee::FEE_FREEZE_TX))
-    {
+    } else if (tx->getData().contains(Fee::FEE_FREEZE_TX)) {
         BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
 
         senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
-        if (tx->getAmount() <= 0)
-        {
+        if (tx->getAmount() <= 0) {
             emit tx->NotApproved(tx);
             qDebug() << "Transaction Freeze not approved: amount <= 0";
             return;
         }
 
-        if ((senderCurrentBalance - tx->getAmount()) < 0)
-        {
+        if ((senderCurrentBalance - tx->getAmount()) < 0) {
             qDebug() << "Transaction Freeze "
                         "not approved: sender's balance will be < 0";
             emit tx->NotApproved(tx);
@@ -1734,64 +1457,46 @@ void Blockchain::proveTx(Transaction *tx)
         }
         emit tx->Approved(tx);
         return;
-    }
-    else if (tx->getData().contains(Fee::FEE_UNFREEZE_TX))
-    {
+    } else if (tx->getData().contains(Fee::FEE_UNFREEZE_TX)) {
         QByteArrayList dataList = Serialization::deserialize(tx->getData());
-        if (dataList.size() != 3)
-        {
+        if (dataList.size() != 3) {
             qDebug() << "TX prove: incorrect data for unfreeze fee";
             return;
         }
         BigNumber indexApBlock = dataList.at(0);
         QByteArray hashTx = dataList.at(1);
-        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--)
-        {
+        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);
             QList<Transaction> listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs)
-            {
+            for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == tx->getSender() && tmp.getData().contains(Fee::FEE_FREEZE_TX)
-                    && tmp.getData().contains(hashTx))
-                {
+                    && tmp.getData().contains(hashTx)) {
                     Block approverBlock = blockIndex.getBlockById(indexApBlock);
                     QByteArrayList signs = approverBlock.getListSignatures();
-                    if (signs.contains(tx->getReceiver().toByteArray()))
-                    {
+                    if (signs.contains(tx->getReceiver().toByteArray())) {
                         int index = signs.indexOf(tx->getReceiver().toByteArray());
-                        if (signs[index + 2] == "1")
-                        {
+                        if (signs[index + 2] == "1") {
                             auto producerActor = actorIndex->getActor(tx->getProducer());
-                            if (producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
-                            {
-                                if (checkHaveUNFreezeTx(tx, indexApBlock))
-                                {
+                            if (producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig())) {
+                                if (checkHaveUNFreezeTx(tx, indexApBlock)) {
                                     emit tx->Approved(tx);
                                     return;
-                                }
-                                else
-                                {
+                                } else {
                                     qDebug() << "ProveTx: We have this unFreeze tx";
                                     emit tx->NotApproved(tx);
                                     return;
                                 }
-                            }
-                            else
-                            {
+                            } else {
                                 qDebug() << "TX prove: incorrect sign for unfreeze fee";
                                 emit tx->NotApproved(tx);
                                 return;
                             }
-                        }
-                        else
-                        {
+                        } else {
                             qDebug() << "TX prove error: it`s checker -> not approver for unfreeze fee";
                             emit tx->NotApproved(tx);
                             return;
                         }
-                    }
-                    else
-                    {
+                    } else {
                         qDebug() << "TX prove: haven`t approver in block for unfreeze fee";
                         emit tx->NotApproved(tx);
                         return;
@@ -1799,22 +1504,18 @@ void Blockchain::proveTx(Transaction *tx)
                 }
             }
         }
-    }
-    else if (tx->getData() == Fee::FREEZE_TX)
-    {
+    } else if (tx->getData() == Fee::FREEZE_TX) {
         BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
 
         senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
-        if (tx->getAmount() <= 0)
-        {
+        if (tx->getAmount() <= 0) {
             emit tx->NotApproved(tx);
             qDebug() << "Transaction Freeze not approved: amount <= 0";
             return;
         }
 
-        if ((senderCurrentBalance - tx->getAmount()) < 0)
-        {
+        if ((senderCurrentBalance - tx->getAmount()) < 0) {
             qDebug() << "Transaction Freeze "
                         "not approved: sender's balance will be < 0";
             emit tx->NotApproved(tx);
@@ -1824,14 +1525,11 @@ void Blockchain::proveTx(Transaction *tx)
         tx->sign(accountController->getCurrentActor());
         emit tx->Approved(tx);
         return;
-    }
-    else if (tx->getData() == Fee::UNFREEZE_TX)
-    {
+    } else if (tx->getData() == Fee::UNFREEZE_TX) {
         BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender(),
                                                               FreezeBalanceSearch::OnlySender);
         ActorId sender = tx->getSender();
-        if ((senderCurrentBalance - tx->getAmount()) < 0)
-        {
+        if ((senderCurrentBalance - tx->getAmount()) < 0) {
             qDebug() << "Transaction UNFreeze "
                         "not approved: sender's balance will be < 0";
             emit tx->NotApproved(tx);
@@ -1843,8 +1541,7 @@ void Blockchain::proveTx(Transaction *tx)
         emit tx->Approved(tx);
         return;
     }
-    if (targetSender == targetReceiver)
-    {
+    if (targetSender == targetReceiver) {
         emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: sender == receiver";
         return;
@@ -1853,32 +1550,27 @@ void Blockchain::proveTx(Transaction *tx)
     // if receiver is not exist
 
     if ((receiverActor.empty() && !targetReceiver.isEmpty())
-        || (senderActor.empty() && !targetSender.isEmpty()))
-    {
+        || (senderActor.empty() && !targetSender.isEmpty())) {
         emit tx->NotApproved(tx);
         qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }
 
-    if (targetSender.isEmpty())
-    {
+    if (targetSender.isEmpty()) {
         Actor<KeyPublic> producerActor;
         if (!tx->getProducer().isEmpty())
             producerActor = actorIndex->getActor(tx->getProducer());
-        else
-        {
+        else {
             qDebug() << "Tx" << tx->getHash() << "producer 0";
             emit tx->NotApproved(tx);
             return;
         }
-        if (!producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
-        {
+        if (!producerActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig())) {
             qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
             emit tx->NotApproved(tx);
             return;
         }
-        if (tx->getAmount() <= 0)
-        {
+        if (tx->getAmount() <= 0) {
             qDebug() << "Tx" << tx->getHash() << "fee amount <= 0";
             emit tx->NotApproved(tx);
             return;
@@ -1888,23 +1580,19 @@ void Blockchain::proveTx(Transaction *tx)
     }
 
     // if !sig
-    if (!senderActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig()))
-    {
+    if (!senderActor.key()->verify(tx->getDataForDigSig(), tx->getDigSig())) {
         qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
         emit tx->NotApproved(tx);
         return;
     }
 
-    if (targetReceiver.isEmpty())
-    {
-        if (Serialization::deserialize(tx->getData()).size() != 2)
-        {
+    if (targetReceiver.isEmpty()) {
+        if (Serialization::deserialize(tx->getData()).size() != 2) {
             qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
             emit tx->NotApproved(tx);
             return;
         }
-        if (tx->getAmount() <= 0)
-        {
+        if (tx->getAmount() <= 0) {
             qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
             emit tx->NotApproved(tx);
             return;
@@ -1914,14 +1602,11 @@ void Blockchain::proveTx(Transaction *tx)
     }
 
     // if current transaction not fee
-    else
-    {
-        if (tx->getData() == "initcontract")
-        {
+    else {
+        if (tx->getData() == "initcontract") {
             QByteArrayList profile = senderActor.profile().getListProfile();
             if (profile[0] == "6" && ActorId(profile[5]) == targetReceiver
-                && (targetSender == tx->getToken()))
-            {
+                && (targetSender == tx->getToken())) {
                 qDebug() << "Contract tx proved";
                 tx->sign(accountController->getCurrentActor());
                 emit tx->Approved(tx);
@@ -1933,20 +1618,17 @@ void Blockchain::proveTx(Transaction *tx)
             return;
         }
 
-        if (targetSender != actorIndex->firstId())
-        {
+        if (targetSender != actorIndex->firstId()) {
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
-            if (tx->getAmount() <= 0)
-            {
+            if (tx->getAmount() <= 0) {
                 emit tx->NotApproved(tx);
                 qDebug() << "Transaction not approved: amount <= 0";
                 return;
             }
 
-            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0)
-            {
+            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0) {
                 qDebug() << senderCurrentBalance << tx->getAmount();
                 qDebug() << "Transaction "
                             "not approved: sender's or receiver's balance will be < 0";
@@ -1955,9 +1637,7 @@ void Blockchain::proveTx(Transaction *tx)
             }
 
             emit tx->Approved(tx);
-        }
-        else
-        {
+        } else {
             tx->sign(accountController->getCurrentActor());
             emit tx->Approved(tx);
             return;
@@ -1972,28 +1652,23 @@ void Blockchain::proveTx(Transaction *tx)
 
 // Other //
 
-void Blockchain::setMode(bool fileMode)
-{
+void Blockchain::setMode(bool fileMode) {
     this->fileMode = fileMode;
 }
 
-ActorIndex *Blockchain::getActorIndex()
-{
+ActorIndex *Blockchain::getActorIndex() {
     return actorIndex;
 }
 
-MemIndex &Blockchain::getMemIndex()
-{
+MemIndex &Blockchain::getMemIndex() {
     return memIndex;
 }
 
-BlockIndex &Blockchain::getBlockIndex()
-{
+BlockIndex &Blockchain::getBlockIndex() {
     return blockIndex;
 }
 
-void Blockchain::removeAll()
-{
+void Blockchain::removeAll() {
     this->actorIndex->removeAll();
     this->memIndex.removeAll();
     this->blockIndex.removeAll();

@@ -20,22 +20,21 @@
 #ifndef UPNPCONNECTION_H
 #define UPNPCONNECTION_H
 
-#include <QObject>
-#include <QUdpSocket>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QUrl>
-#include <QNetworkAddressEntry>
-#include <QHostAddress>
-#include <QTimer>
-#include <QTextStream>
 #include <QDateTime>
-#include <QXmlStreamReader>
+#include <QHostAddress>
+#include <QNetworkAccessManager>
+#include <QNetworkAddressEntry>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QObject>
 #include <QRandomGenerator>
+#include <QTextStream>
+#include <QTimer>
+#include <QUdpSocket>
+#include <QUrl>
+#include <QXmlStreamReader>
 
-class UPNPConnection : public QObject
-{
+class UPNPConnection : public QObject {
     Q_OBJECT
 public:
     enum State

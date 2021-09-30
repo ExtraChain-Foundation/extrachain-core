@@ -20,18 +20,10 @@
 #ifndef PUBLIC_PROFILE_H
 #define PUBLIC_PROFILE_H
 
-#include "utils/exc_utils.h"
 #include "utils/db_connector.h"
+#include "utils/exc_utils.h"
 
-struct indexList
-{
-    indexList(long long curPos, int _size);
-    long long currentPosition;
-    int size;
-};
-
-class PublicProfile
-{
+class EXTRACHAIN_EXPORT PublicProfile {
 public:
     PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id);
     PublicProfile(const QByteArray &serialize);

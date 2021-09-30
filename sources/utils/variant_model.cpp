@@ -3,24 +3,20 @@
 #include <QDebug>
 
 VariantModel::VariantModel(QAbstractListModel *parent, const QList<QByteArray> &list)
-    : QAbstractListModel(parent)
-{
+    : QAbstractListModel(parent) {
     setModelRoles(list);
 }
 
-int VariantModel::rowCount(const QModelIndex &parent) const
-{
+int VariantModel::rowCount(const QModelIndex &parent) const {
     Q_UNUSED(parent)
-    return datas.length();
+    return m_datas.length();
 }
 
-int VariantModel::count() const
-{
+int VariantModel::count() const {
     return m_count;
 }
 
-void VariantModel::setCount(int count)
-{
+void VariantModel::setCount(int count) {
     if (m_count == count)
         return;
 
@@ -28,122 +24,105 @@ void VariantModel::setCount(int count)
     emit countChanged(m_count);
 }
 
-QHash<int, QByteArray> VariantModel::roleNames() const
-{
-    return roles;
+QHash<int, QByteArray> VariantModel::roleNames() const {
+    return m_roles;
 }
 
-QVariant VariantModel::data(const QModelIndex &index, int role) const
-{
-    QVariantMap variants = datas[index.row()];
-    return variants[roles[role]];
+QVariant VariantModel::data(const QModelIndex &index, int role) const {
+    QVariantMap variants = m_datas[index.row()];
+    return variants[m_roles[role]];
 }
 
-bool VariantModel::setData(const QModelIndex &index, const QVariant &value, int role)
-{
-    set(index.row(), roles[role], value);
+bool VariantModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+    set(index.row(), m_roles[role], value);
 
     return true;
 }
 
-void VariantModel::prepend(const QVariantMap &variant)
-{
+void VariantModel::prepend(const QVariantMap &variant) {
     insert(0, variant);
 }
 
-void VariantModel::append(const QVariantMap &variant)
-{
+void VariantModel::append(const QVariantMap &variant) {
     // qDebug() << "append" << variant;
-    insert(datas.length(), variant);
+    insert(m_datas.length(), variant);
 }
 
-void VariantModel::insert(int i, const QVariantMap &variant)
-{
+void VariantModel::insert(int i, const QVariantMap &variant) {
     beginInsertRows(QModelIndex(), i, i);
 
-    datas.insert(i, variant);
+    m_datas.insert(i, variant);
 
     endInsertRows();
-    setCount(datas.length());
+    setCount(m_datas.length());
 }
 
-void VariantModel::inserts(int i, const QVariantList &variants)
-{
+void VariantModel::inserts(int i, const QVariantList &variants) {
     beginInsertRows(QModelIndex(), i, i + variants.length() - 1);
 
     int tempI = i;
     for (auto &&variant : variants)
-        datas.insert(tempI++, variant.toMap());
+        m_datas.insert(tempI++, variant.toMap());
 
-    setCount(datas.length());
+    setCount(m_datas.length());
 
     endInsertRows();
     emit dataChanged(index(i), index(i + variants.length() - 1));
 }
 
-void VariantModel::remove(int index, int count = 0)
-{
+void VariantModel::remove(int index, int count = 0) {
     beginRemoveRows(QModelIndex(), index, index + count - 1);
     while (count--)
-        datas.removeAt(index);
+        m_datas.removeAt(index);
     endRemoveRows();
-    setCount(datas.count());
+    setCount(m_datas.count());
 }
 
-QVariantMap VariantModel::get(int index)
-{
+QVariantMap VariantModel::get(int index) {
     // qDebug() << "GET" << index << m_count - 1 << (index > m_count - 1);
     if (index > m_count - 1 || index < 0)
-        return QVariantMap();
-    return datas[index];
+        return {};
+    return m_datas[index];
 }
 
-void VariantModel::set(int indx, const QByteArray &role, const QVariant &value)
-{
-    auto &val = datas[indx];
+void VariantModel::set(int indx, const QByteArray &role, const QVariant &value) {
+    auto &val = m_datas[indx];
     val[role] = value;
-    emit dataChanged(index(indx, 0), index(indx, 0), QVector<int>() << roles.key(role));
+    emit dataChanged(index(indx, 0), index(indx, 0), QVector<int>() << m_roles.key(role));
 }
 
-void VariantModel::move(int from, int to, int n)
-{
+void VariantModel::move(int from, int to, int n) {
     if (from >= m_count || from < 0 || to < 0 || to >= m_count
         || !beginMoveRows(QModelIndex(), from, from + n - 1, QModelIndex(), to > from ? to + 1 : to))
         return;
-    if (n > 1 && from + n < to && to + n < m_count)
-    {
+    if (n > 1 && from + n < to && to + n < m_count) {
         qDebug() << "n > 1";
         for (int i = 0; i < n; i++)
-            datas.move(from + i, to + i);
-    }
-    else
-        datas.move(from, to);
+            m_datas.move(from + i, to + i);
+    } else
+        m_datas.move(from, to);
     endMoveRows();
 }
 
-QList<QByteArray> VariantModel::getModelRoles() const
-{
-    return modelRoles;
+QList<QByteArray> VariantModel::modelRoles() const {
+    return m_modelRoles;
 }
 
-void VariantModel::setModelRoles(const QList<QByteArray> &value)
-{
-    modelRoles = value;
+void VariantModel::setModelRoles(const QList<QByteArray> &value) {
+    m_modelRoles = value;
 
     int roleCount = Qt::UserRole;
-    for (auto &&role : modelRoles)
-        roles[++roleCount] = role;
+    for (auto &&role : m_modelRoles)
+        m_roles[++roleCount] = role;
 }
 
-void VariantModel::appendFromJson(const QString &fileName)
-{
+void VariantModel::appendFromJson(const QString &fileName) {
     QFile file(fileName);
 
     if (!file.exists())
         return;
 
-    if (file.open(QFile::ReadOnly))
-    {
+    if (file.open(QFile::ReadOnly)) {
         QString json = file.readAll();
         auto doc = QJsonDocument::fromJson(json.toUtf8());
         auto var = doc.toVariant().toMap();
@@ -154,15 +133,13 @@ void VariantModel::appendFromJson(const QString &fileName)
     file.close();
 }
 
-void VariantModel::insertFromJson(int index, const QString &fileName)
-{
+void VariantModel::insertFromJson(int index, const QString &fileName) {
     QFile file(fileName);
 
     if (!file.exists())
         return;
 
-    if (file.open(QFile::ReadOnly))
-    {
+    if (file.open(QFile::ReadOnly)) {
         QString json = file.readAll();
         auto doc = QJsonDocument::fromJson(json.toUtf8());
         auto var = doc.toVariant().toMap();
@@ -173,13 +150,11 @@ void VariantModel::insertFromJson(int index, const QString &fileName)
     file.close();
 }
 
-QVariantMap VariantModel::loadJson(const QString &fileName)
-{
+QVariantMap VariantModel::loadJson(const QString &fileName) {
     QFile file(fileName);
     QVariantMap map;
 
-    if (file.open(QFile::ReadOnly))
-    {
+    if (file.open(QFile::ReadOnly)) {
         QString json = file.readAll();
         map = QJsonDocument::fromJson(json.toUtf8()).toVariant().toMap();
         file.close();
@@ -188,15 +163,13 @@ QVariantMap VariantModel::loadJson(const QString &fileName)
     return map;
 }
 
-QList<QVariantMap> &VariantModel::list()
-{
-    return datas;
+QList<QVariantMap> &VariantModel::list() {
+    return m_datas;
 }
 
-void VariantModel::clear()
-{
+void VariantModel::clear() {
     beginResetModel();
-    datas.clear();
+    m_datas.clear();
     setCount(0);
     endResetModel();
 }

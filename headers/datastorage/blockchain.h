@@ -31,9 +31,9 @@
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QHostAddress>
+#include <QMutex>
 #include <QObject>
 #include <QString>
-#include <QMutex>
 #include <QTemporaryFile>
 #include <cassert>
 // database
@@ -59,8 +59,7 @@ enum class FreezeBalanceSearch
     OnlySender
 };
 
-class Blockchain : public QObject
-{
+class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");

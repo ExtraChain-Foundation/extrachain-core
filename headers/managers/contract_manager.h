@@ -20,11 +20,11 @@
 #ifndef CONTRACT_MANAGER_H
 #define CONTRACT_MANAGER_H
 
-#include <QObject>
 #include "datastorage/contract.h"
-#include <QDir>
-#include "managers/account_controller.h"
 #include "dfs/types/headers/dfstruct.h"
+#include "managers/account_controller.h"
+#include <QDir>
+#include <QObject>
 
 // class AccountController;
 // class Blockchain;

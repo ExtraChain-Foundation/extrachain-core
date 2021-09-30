@@ -20,15 +20,14 @@
 #ifndef CHAT_H
 #define CHAT_H
 #include "datastorage/index/actorindex.h"
+#include "dfs/types/headers/dfstruct.h"
 #include "managers/account_controller.h"
 #include "utils/db_connector.h"
-#include "dfs/types/headers/dfstruct.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QObject>
 
-struct ChatMessageInfo
-{
+struct ChatMessageInfo {
     QString messId;
     QString userId;
     QString message;
@@ -36,15 +35,13 @@ struct ChatMessageInfo
     QDateTime date;
 };
 
-struct ChatInfo
-{
+struct ChatInfo {
     QStringList users;
     QString chatId;
     ChatMessageInfo lastMessage;
 };
 
-struct ChatFileSender
-{
+struct ChatFileSender {
     QString chatId;
     QString dfsName;
     QString originName;
@@ -54,8 +51,7 @@ struct ChatFileSender
 
 class ChatManager;
 
-class Chat : public QObject
-{
+class Chat : public QObject {
     Q_OBJECT
 private:
     QByteArray ownerID = "-1";

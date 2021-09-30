@@ -21,14 +21,13 @@
 #define KEY_PRIVATE_H
 
 #include <QDebug>
-#include <sodium.h>
-#include "utils/exc_utils.h"
 
-class KeyPrivate
-{
+#include "extrachain_global.h"
+
+class EXTRACHAIN_EXPORT KeyPrivate {
 private:
-    std::string secKey;
-    std::string pubKey;
+    std::string m_secretKey;
+    std::string m_publicKey;
 
 public:
     /**
@@ -39,28 +38,27 @@ public:
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
+    KeyPrivate(const std::string &secret_key, const std::string &public_key);
     KeyPrivate(const QJsonObject &json);
     KeyPrivate(const KeyPrivate &keyPrivate);
-    ~KeyPrivate();
+    ~KeyPrivate() = default;
 
-public:
+private:
     void generate();
 
 public:
-    QByteArray encrypt(const QByteArray &data, const std::string &publicKeyReceiver,
+    QByteArray encrypt(const QByteArray &data, const std::string &receiverPublicKey,
                        const std::string &nonce = "");
-    QByteArray decrypt(const QByteArray &data, const std::string &publicKeySender,
+    QByteArray decrypt(const QByteArray &data, const std::string &senderPublicKey,
                        const std::string &nonce = "");
     QByteArray encryptSelf(const QByteArray &data);
     QByteArray decryptSelf(const QByteArray &data);
 
-public:
     QByteArray sign(const QByteArray &data);
     bool verify(const QByteArray &data, const QByteArray &dsignHex);
 
-public:
-    std::string getSecKey() const;
-    std::string getPubKey() const;
+    const std::string &secretKey() const;
+    const std::string &publicKey() const;
 };
 
 #endif // KEY_PRIVATE_H

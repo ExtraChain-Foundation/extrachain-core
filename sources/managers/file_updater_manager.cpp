@@ -20,33 +20,27 @@
 #include "managers/file_updater_manager.h"
 
 FileUpdaterManager::FileUpdaterManager(QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
 }
 
-FileUpdaterManager::~FileUpdaterManager()
-{
+FileUpdaterManager::~FileUpdaterManager() {
 }
 
-void FileUpdaterManager::checkAllFiles()
-{
+void FileUpdaterManager::checkAllFiles() {
     QDir dir(DfsStruct::ROOT_FOOLDER_NAME);
     QStringList listUsers = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const auto &userId : listUsers)
-    {
+    for (const auto &userId : listUsers) {
         checkUserFiles(userId.toUtf8());
     }
 }
 
-void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
-{
+void FileUpdaterManager::checkUserFiles(const QByteArray &userId) {
     // Chats
     {
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/chats/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto &tmpUserFolder : listDataUser)
-        {
+        for (const auto &tmpUserFolder : listDataUser) {
             QString nameFile(folder + tmpUserFolder + "/users");
             sendEditDB(nameFile.toUtf8(), "Users", userId, "users", DfsStruct::Type::Chat, chatUser);
             nameFile = folder + tmpUserFolder + "/0/msg";
@@ -58,39 +52,29 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/events/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto &tmpUserFolder : listDataUser)
-        {
+        for (const auto &tmpUserFolder : listDataUser) {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
-            for (const auto &tmp : listFileEvent)
-            {
-                if (!tmp.contains("."))
-                {
+            for (const auto &tmp : listFileEvent) {
+                if (!tmp.contains(".")) {
                     QString nameFile(folder + tmpUserFolder + "/" + tmp);
                     sendEditDB(nameFile.toUtf8(), "Properties", userId, tmp, DfsStruct::Type::Event,
                                eventProperties);
                     sendEditDB(nameFile.toUtf8(), "Attachments", userId, tmp, DfsStruct::Type::Event,
                                attachPost);
                     sendEditDB(nameFile.toUtf8(), "Text", userId, tmp, DfsStruct::Type::Event, textPost);
-                }
-                else if (!tmp.contains("stored"))
-                {
-                    if (tmp.contains(".comments"))
-                    {
+                } else if (!tmp.contains("stored")) {
+                    if (tmp.contains(".comments")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         sendEditDB(nameFile.toUtf8(), "Comments", userId, tmp + ".comments",
                                    DfsStruct::Type::Event, commentsPost);
                         sendEditDB(nameFile.toUtf8(), "Likes", userId, tmp + ".comments",
                                    DfsStruct::Type::Event, commentsLikesPost);
-                    }
-                    else if (tmp.contains(".likes"))
-                    {
+                    } else if (tmp.contains(".likes")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         sendEditDB(nameFile.toUtf8(), "Likes", userId, tmp + ".likes", DfsStruct::Type::Event,
                                    likesPost);
-                    }
-                    else if (tmp.contains(".users"))
-                    {
+                    } else if (tmp.contains(".users")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         sendEditDB(nameFile.toUtf8(), "Users", userId, tmp + ".users", DfsStruct::Type::Event,
                                    eventUser);
@@ -104,14 +88,11 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/posts/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto &tmpUserFolder : listDataUser)
-        {
+        for (const auto &tmpUserFolder : listDataUser) {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
-            for (const auto &tmp : listFileEvent)
-            {
-                if (!tmp.contains("."))
-                {
+            for (const auto &tmp : listFileEvent) {
+                if (!tmp.contains(".")) {
                     QString nameFile(folder + tmpUserFolder + "/" + tmp);
                     sendEditDB(nameFile.toUtf8(), "Properties", userId, tmp, DfsStruct::Type::Post,
                                eventProperties);
@@ -120,19 +101,14 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
                     sendEditDB(nameFile.toUtf8(), "Text", userId, tmp, DfsStruct::Type::Post, textPost);
                     sendEditDB(nameFile.toUtf8(), "UsersMarked", userId, tmp, DfsStruct::Type::Post,
                                usersMarked);
-                }
-                else if (!tmp.contains("stored"))
-                {
-                    if (tmp.contains(".comments"))
-                    {
+                } else if (!tmp.contains("stored")) {
+                    if (tmp.contains(".comments")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         sendEditDB(nameFile.toUtf8(), "Comments", userId, tmp + ".comments",
                                    DfsStruct::Type::Post, commentsPost);
                         sendEditDB(nameFile.toUtf8(), "Likes", userId, tmp + ".comments",
                                    DfsStruct::Type::Post, commentsLikesPost);
-                    }
-                    else if (tmp.contains(".likes"))
-                    {
+                    } else if (tmp.contains(".likes")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         sendEditDB(nameFile.toUtf8(), "Likes", userId, tmp + ".likes", DfsStruct::Type::Post,
                                    likesPost);
@@ -169,15 +145,13 @@ void FileUpdaterManager::checkUserFiles(const QByteArray &userId)
     }
 }
 
-void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
-{
+void FileUpdaterManager::verifyMyFiles(const QByteArray &userId) {
     // Chats
     {
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/chats/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto &tmpUserFolder : listDataUser)
-        {
+        for (const auto &tmpUserFolder : listDataUser) {
             QString nameFile(folder + tmpUserFolder + "/users");
             checkVersionFile(nameFile.toUtf8(), "Users", chatUser);
             nameFile = folder + tmpUserFolder + "/0/msg";
@@ -189,34 +163,24 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/events/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto &tmpUserFolder : listDataUser)
-        {
+        for (const auto &tmpUserFolder : listDataUser) {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
-            for (const auto &tmp : listFileEvent)
-            {
-                if (!tmp.contains("."))
-                {
+            for (const auto &tmp : listFileEvent) {
+                if (!tmp.contains(".")) {
                     QString nameFile(folder + tmpUserFolder + "/" + tmp);
                     checkVersionFile(nameFile.toUtf8(), "Properties", eventProperties);
                     checkVersionFile(nameFile.toUtf8(), "Attachments", attachPost);
                     checkVersionFile(nameFile.toUtf8(), "Text", textPost);
-                }
-                else if (!tmp.contains("stored"))
-                {
-                    if (tmp.contains(".comments"))
-                    {
+                } else if (!tmp.contains("stored")) {
+                    if (tmp.contains(".comments")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         checkVersionFile(nameFile.toUtf8(), "Comments", commentsPost);
                         checkVersionFile(nameFile.toUtf8(), "Likes", commentsLikesPost);
-                    }
-                    else if (tmp.contains(".likes"))
-                    {
+                    } else if (tmp.contains(".likes")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         checkVersionFile(nameFile.toUtf8(), "Likes", likesPost);
-                    }
-                    else if (tmp.contains(".users"))
-                    {
+                    } else if (tmp.contains(".users")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         checkVersionFile(nameFile.toUtf8(), "Users", eventUser);
                     }
@@ -229,30 +193,22 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
         QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/posts/";
         QDir folderUser(folder);
         QStringList listDataUser = folderUser.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const auto &tmpUserFolder : listDataUser)
-        {
+        for (const auto &tmpUserFolder : listDataUser) {
             QDir folderEvent(folder);
             QStringList listFileEvent = folderEvent.entryList(QDir::Files);
-            for (const auto &tmp : listFileEvent)
-            {
-                if (!tmp.contains("."))
-                {
+            for (const auto &tmp : listFileEvent) {
+                if (!tmp.contains(".")) {
                     QString nameFile(folder + tmpUserFolder + "/" + tmp);
                     checkVersionFile(nameFile.toUtf8(), "Properties", eventProperties);
                     checkVersionFile(nameFile.toUtf8(), "Attachments", attachPost);
                     checkVersionFile(nameFile.toUtf8(), "Text", textPost);
                     checkVersionFile(nameFile.toUtf8(), "UsersMarked", usersMarked);
-                }
-                else if (!tmp.contains("stored"))
-                {
-                    if (tmp.contains(".comments"))
-                    {
+                } else if (!tmp.contains("stored")) {
+                    if (tmp.contains(".comments")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         checkVersionFile(nameFile.toUtf8(), "Comments", commentsPost);
                         checkVersionFile(nameFile.toUtf8(), "Likes", commentsLikesPost);
-                    }
-                    else if (tmp.contains(".likes"))
-                    {
+                    } else if (tmp.contains(".likes")) {
                         QString nameFile(folder + tmpUserFolder + "/" + tmp);
                         checkVersionFile(nameFile.toUtf8(), "Likes", likesPost);
                     }
@@ -288,32 +244,24 @@ void FileUpdaterManager::verifyMyFiles(const QByteArray &userId)
 
 void FileUpdaterManager::sendEditDB(const QByteArray &filePath, const QByteArray &nameTable,
                                     const QString &userId, const QString &nameFile,
-                                    const DfsStruct::Type &type, const QByteArrayList &listProve)
-{
+                                    const DfsStruct::Type &type, const QByteArrayList &listProve) {
     // TODO: maybe add type new column
-    if (QFile().exists(filePath))
-    {
+    if (QFile().exists(filePath)) {
         DBConnector db;
-        if (db.open(filePath.toStdString()))
-        {
+        if (db.open(filePath.toStdString())) {
             std::vector<DBRow> res = db.select("PRAGMA table_info('" + nameTable.toStdString() + "')");
-            if (res.size() != 0)
-            {
+            if (res.size() != 0) {
                 QByteArrayList listExist;
                 for (auto &tmp : res)
                     listExist.append(tmp["name"].c_str());
-                for (const auto &tmp : listExist)
-                {
-                    if (!listProve.contains(tmp))
-                    {
+                for (const auto &tmp : listExist) {
+                    if (!listProve.contains(tmp)) {
                         emit editDB(userId, nameFile, type, DfsStruct::ChangeType::RemoveColumn,
                                     { nameTable, tmp });
                     }
                 }
-                for (const auto &tmp : listProve)
-                {
-                    if (!listExist.contains(tmp))
-                    {
+                for (const auto &tmp : listProve) {
+                    if (!listExist.contains(tmp)) {
                         emit editDB(userId, nameFile, type, DfsStruct::ChangeType::NewColumn,
                                     { nameTable, tmp });
                     }
@@ -325,16 +273,12 @@ void FileUpdaterManager::sendEditDB(const QByteArray &filePath, const QByteArray
 }
 
 void FileUpdaterManager::checkVersionFile(const QByteArray &filePath, const QByteArray &nameTable,
-                                          const QByteArrayList &listVerify)
-{
-    if (QFile().exists(filePath))
-    {
+                                          const QByteArrayList &listVerify) {
+    if (QFile().exists(filePath)) {
         DBConnector db;
-        if (db.open(filePath.toStdString()))
-        {
+        if (db.open(filePath.toStdString())) {
             std::vector<DBRow> res = db.select("PRAGMA table_info('" + nameTable.toStdString() + "')");
-            if (res.size() != 0)
-            {
+            if (res.size() != 0) {
                 QByteArrayList listExist;
                 for (auto &tmp : res)
                     listExist.append(tmp["name"].c_str());
@@ -346,17 +290,13 @@ void FileUpdaterManager::checkVersionFile(const QByteArray &filePath, const QByt
     }
 }
 
-void FileUpdaterManager::checkRoot(const QString &userId, const QString &ver)
-{
-
+void FileUpdaterManager::checkRoot(const QString &userId, const QString &ver) {
     QString folder = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/root";
     DBConnector db(folder.toStdString());
-    if (db.open("Items"))
-    {
+    if (db.open("Items")) {
         auto res = db.select("SELECT * FROM Items WHERE version = '" + ver.toStdString() + "'");
         QByteArrayList list;
-        for (auto &tmp : res)
-        {
+        for (auto &tmp : res) {
             list.append(tmp["type"].c_str());
             list.append(tmp["id"].c_str());
         }

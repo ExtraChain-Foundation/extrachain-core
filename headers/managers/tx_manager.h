@@ -20,17 +20,17 @@
 #ifndef TX_MANAGER_H
 #define TX_MANAGER_H
 
+#include <QByteArray>
+#include <QDebug>
 #include <QList>
 #include <QObject>
 #include <QThread>
-#include <QByteArray>
-#include <QDebug>
 #include <QTimer>
 
-#include "datastorage/blockchain.h"
 #include "datastorage/block.h"
-#include "datastorage/transaction.h"
+#include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
+#include "datastorage/transaction.h"
 #include "network/packages/service/message_types.h"
 #include "utils/coinprocess.h"
 
@@ -40,8 +40,7 @@ class ExtraChainNode;
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
  */
-class TransactionManager : public QObject
-{
+class EXTRACHAIN_EXPORT TransactionManager : public QObject {
     Q_OBJECT
 
 private:

@@ -24,8 +24,7 @@
 
 namespace Messages {
 
-struct GetBlockMessage : ISmallMessage
-{
+struct GetBlockMessage : ISmallMessage {
     static const short FIELD_SIZE = 2;
     static const short FIELDS_COUNT = 2;
 

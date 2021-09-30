@@ -20,17 +20,16 @@
 #ifndef SUBSCRIBE_CONTROLLER_H
 #define SUBSCRIBE_CONTROLLER_H
 
-#include <QObject>
 #include <QByteArray>
+#include <QObject>
 
+#include "dfs/types/headers/dfstruct.h"
 #include "utils/db_connector.h"
 #include "utils/exc_utils.h"
-#include "dfs/types/headers/dfstruct.h"
 
 class ExtraChainNode;
 
-class SubscribeController : public QObject
-{
+class SubscribeController : public QObject {
     Q_OBJECT
 
 public:

@@ -25,22 +25,16 @@ class ResolverService;
 class ExtraChainNode;
 class ChatManager;
 
+#include "datastorage/blockchain.h"
+#include "datastorage/index/actorindex.h"
+#include "dfs/controls/headers/dfs.h"
+#include "extrachain_global.h"
+#include "managers/tx_manager.h"
 #include <QObject>
 #include <queue>
 #include <vector>
-#include "datastorage/blockchain.h"
-#include "datastorage/index/actorindex.h"
-#include "managers/tx_manager.h"
-#include "dfs/controls/headers/dfs.h"
 
-#ifdef ECLIENT
-static const short ResolverServicePoolMaxSize = 5;
-#else
-static const short ResolverServicePoolMaxSize = 100;
-#endif
-
-class ResolveManager : public QObject
-{
+class EXTRACHAIN_EXPORT ResolveManager : public QObject {
     Q_OBJECT
 
 private:

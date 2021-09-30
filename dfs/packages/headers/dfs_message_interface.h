@@ -20,11 +20,11 @@
 #ifndef DFS_MESSAGE_INTERFACE_H
 #define DFS_MESSAGE_INTERFACE_H
 
+#include "utils/exc_utils.h"
 #include <QByteArray>
-#include <QString>
 #include <QDebug>
 #include <QObject>
-#include "utils/exc_utils.h"
+#include <QString>
 
 namespace DistFileSystem {
 

@@ -19,30 +19,29 @@
 
 #ifndef DFS_RESOVLER_SERVICE_H
 #define DFS_RESOVLER_SERVICE_H
-#include <QHostAddress>
-#include <QJsonObject>
-#include <QObject>
-#include <QThread>
-#include <QMutex>
-#include <QTimer>
-#include <QMap>
-#include <vector>
-#include <queue>
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/transaction.h"
+#include "dfs/packages/headers/all.h"
+#include "dfs/packages/headers/title_message.h"
 #include "network/packages/base_message.h"
 #include "network/packages/base_message_response.h"
 #include "network/socket_pair.h"
-#include "dfs/packages/headers/all.h"
-#include "dfs/packages/headers/title_message.h"
+#include <QHostAddress>
+#include <QJsonObject>
+#include <QMap>
+#include <QMutex>
+#include <QObject>
+#include <QThread>
+#include <QTimer>
+#include <queue>
+#include <vector>
 
 class AccountController;
 class ActorIndex;
 class Dfs;
 
-class DFSResolverService : public QObject
-{
+class EXTRACHAIN_EXPORT DFSResolverService : public QObject {
     Q_OBJECT
 
 public:

@@ -18,64 +18,54 @@
  */
 
 #include "network/socket_pair.h"
+#include "utils/bignumber.h"
 
-SocketPair::SocketPair()
-{
+SocketPair::SocketPair() {
     ip = "0.0.0.0";
 }
 
-SocketPair::SocketPair(const std::string &ip, const quint16 &port)
-{
+SocketPair::SocketPair(const std::string &ip, const quint16 &port) {
     this->ip = ip;
     this->port = port;
 }
 
-SocketPair::SocketPair(const SocketPair &pair)
-{
+SocketPair::SocketPair(const SocketPair &pair) {
     ip = pair.ip;
     port = pair.port;
     m_identifier = pair.m_identifier;
 }
 
-SocketPair::~SocketPair()
-{
+SocketPair::~SocketPair() {
 }
 
-const QString SocketPair::serialize() const
-{
+const QString SocketPair::serialize() const {
     return QString::fromStdString(ip) + QString::number(port) + QString(m_identifier);
 }
 
-const SocketPair SocketPair::operator=(const SocketPair &v)
-{
+const SocketPair SocketPair::operator=(const SocketPair &v) {
     ip = v.ip;
     port = v.port;
     m_identifier = v.m_identifier;
     return *this;
 }
 
-bool SocketPair::operator==(const SocketPair &v) const
-{
+bool SocketPair::operator==(const SocketPair &v) const {
     return ((ip == v.ip) && (port == v.port) && (m_identifier == v.m_identifier));
 }
 
-BigNumber SocketPair::identifier() const
-{
+BigNumber SocketPair::identifier() const {
     return m_identifier;
 }
 
-void SocketPair::setIdentifier(const QByteArray &value)
-{
+void SocketPair::setIdentifier(const QByteArray &value) {
     m_identifier = value;
 }
 
-bool SocketPair::isEmpty() const
-{
+bool SocketPair::isEmpty() const {
     return ip == "0.0.0.0" && port == 0 && m_identifier.isEmpty();
 }
 
-QDebug operator<<(QDebug d, const SocketPair &pair)
-{
+QDebug operator<<(QDebug d, const SocketPair &pair) {
     d.noquote().nospace() << "Pair(ip: " << QString::fromStdString(pair.ip) << ", port: " << pair.port
                           << ", identifier: " << pair.m_identifier << ")";
     return d;

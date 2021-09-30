@@ -24,8 +24,7 @@
 
 namespace Messages {
 
-struct GetAllActorMessage : ISmallMessage
-{
+struct GetAllActorMessage : ISmallMessage {
     static const short FIELD_SIZE = 2;
     static const short FIELDS_COUNT = 1;
     QByteArray actorId;
