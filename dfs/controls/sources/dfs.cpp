@@ -648,6 +648,14 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
         }
     }
 
+    if (!needStored) {
+        bool card = appendToCard(dfsPath, userId, DfsStruct::Type(static_cast<int>(type) + 100), true);
+        if (!card) {
+            qDebug() << "Dfs::saveStaticFile: Can't append to card file";
+            return;
+        }
+    }
+
     CardFile cardFile(userId);
     if (!cardFile.open()) {
         qDebug() << "VAH";
