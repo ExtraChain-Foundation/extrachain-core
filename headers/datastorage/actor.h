@@ -178,7 +178,10 @@ public:
 
         this->m_id = json["id"].toString().toLatin1();
         this->m_key = new T(json);
-        this->m_type = ActorType(json["account"].toInt());
+        if (json.contains("type"))
+            this->m_type = ActorType(json["type"].toInt());
+        else // TODO: remove
+            this->m_type = ActorType(json["account"].toInt());
 
         if (empty()) {
             qDebug() << "Incorrect actor init";
@@ -237,7 +240,7 @@ public:
 
         QString publicKey = QString::fromStdString(m_key->publicKey());
 
-        QJsonObject json = { { "id", actorId }, { "account", type }, { "publicKey", publicKey } };
+        QJsonObject json = { { "id", actorId }, { "type", type }, { "publicKey", publicKey } };
 
         if (isPrivate()) {
             KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(m_key);
@@ -276,7 +279,7 @@ public:
 
         actor.setId(m_id);
         actor.setPublicKey(m_key->publicKey());
-        actor.setAccount(m_type);
+        actor.setType(m_type);
 
         return actor;
     }
@@ -290,8 +293,8 @@ public:
         m_key = new KeyPublic(key);
     }
 
-    void setAccount(const ActorType &account) {
-        m_type = account;
+    void setType(const ActorType &type) {
+        m_type = type;
     }
 };
 
