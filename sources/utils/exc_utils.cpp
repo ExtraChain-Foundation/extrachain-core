@@ -22,6 +22,7 @@
 #include <QCborStreamReader>
 #include <QCborStreamWriter>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
