@@ -1460,11 +1460,15 @@ void Dfs::save(DfsStruct::DfsSave saveType, QString file, QByteArray data, const
 
 void Dfs::searchTmp() {
     qint64 current = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    decltype(m_reqFiles) toRemove;
 
     for (auto it = m_reqFiles.begin(); it != m_reqFiles.end(); it++) {
         qint64 reqDate = it->first;
         if (reqDate + 5000 <= current)
-            m_reqFiles.erase(it--);
+            toRemove.append(*it);
+    }
+    for (auto &el : toRemove) {
+        m_reqFiles.removeAll(el);
     }
 
     // qDebug() << "search tmp" << m_reqFiles.length();
