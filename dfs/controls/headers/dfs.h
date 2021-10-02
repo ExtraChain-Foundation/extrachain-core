@@ -31,7 +31,6 @@
 #include "utils/exc_utils.h"
 #include <QDirIterator>
 #include <QTimer>
-#include <QVector>
 #include <iterator>
 #ifdef ECLIENT
     #include <QImage>
@@ -145,7 +144,7 @@ private:
     QSet<QString> ignoredIds;
     QTimer *timerTmpFiles;
     QStringList m_tmpFiles;
-    QVector<std::pair<qint64, QString>> m_reqFiles;
+    QList<std::pair<qint64, QString>> m_reqFiles;
 };
 
 #endif // DFS_H
