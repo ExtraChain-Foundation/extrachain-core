@@ -57,10 +57,8 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    auto status = m_networkStatus.status();
-    qDebug() << "[NetworkManager] Current:" << m_networkStatus.status();
-
     if (status == NetworkStatus::Status::Online) {
+        // TODO: move to slot or process
         local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
         qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
     }
