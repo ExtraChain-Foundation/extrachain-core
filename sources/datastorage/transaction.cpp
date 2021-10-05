@@ -309,8 +309,8 @@ QString Transaction::toString() const {
 QByteArray Transaction::serialize() const {
     QList<QByteArray> list;
     list << sender.toByteArray() << receiver.toByteArray() << amount.toByteArray() << QByteArray::number(date)
-         << data << token.toByteArray() << prevBlock.toByteArray() << QString::number(gas).toLocal8Bit()
-         << QString::number(hop).toLocal8Bit() << hash << approver.toByteArray() << digSig
+         << data << token.toByteArray() << prevBlock.toByteArray() << QString::number(gas).toLatin1()
+         << QString::number(hop).toLatin1() << hash << approver.toByteArray() << digSig
          << producer.toByteArray();
     //    return Serialization::serialize(list, Serialization::TX_FIELD_SPLITTER);
 

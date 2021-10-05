@@ -73,6 +73,7 @@ private:
      * @return
      */
     int add(const ActorId &id, const QByteArray &data);
+    void sendGetActorMessage(const ActorId &actorId);
 
 public:
     /**

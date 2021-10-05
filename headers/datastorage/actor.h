@@ -42,7 +42,8 @@ enum class ActorType
 {
     Wallet = 0,
     Account = 1,
-    First = 2
+    Token = 2,
+    First = 3
 };
 
 class EXTRACHAIN_EXPORT ActorId {

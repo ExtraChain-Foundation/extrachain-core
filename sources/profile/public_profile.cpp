@@ -136,7 +136,6 @@ bool PublicProfile::saveProfileFromNet(QByteArray newProfile) {
 }
 
 QByteArrayList PublicProfile::getListProfile() {
-    // QDir().mkdir(idPath);
     QString pathProfile = idPath;
     QFile profile(pathProfile);
     if (!profile.exists()) {
@@ -148,9 +147,12 @@ QByteArrayList PublicProfile::getListProfile() {
     profile.flush();
     profile.close();
     int signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
-    QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
+    // QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
     serializeData = serializeData.mid(0, serializeData.size() - 4 - signSize);
     QByteArrayList listProfile = deserialize(serializeData);
+
+    if (listProfile.isEmpty())
+        qFatal("Empty public profile");
 
     return listProfile;
 }
@@ -167,14 +169,13 @@ QByteArray PublicProfile::getProfile() {
     profile.flush();
     profile.close();
     int signSize = Utils::qByteArrayToInt(serializeData.mid(serializeData.size() - 4, 4));
-    QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
+    // QByteArray sign = serializeData.mid(serializeData.size() - 4 - signSize, signSize);
     serializeData = serializeData.mid(0, serializeData.size() - 4 - signSize);
 
     return serializeData;
 }
 
 QByteArray PublicProfile::serialize(QByteArrayList profileList) {
-    QByteArray data = "";
     QByteArray actorData = "";
     int count = -1;
     QByteArray index = "";

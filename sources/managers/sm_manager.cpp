@@ -67,7 +67,7 @@ void SmartContractManager::process() {
 void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
                                                   QByteArray quantity) {
     Transaction tx(sender->id(), receiver, Transaction::visibleToAmount(quantity));
-    tx.setData("initcontract");
+    tx.setData("InitContract");
 
     tx.setToken(sender->id());
     tx.sign(*sender);
@@ -78,7 +78,7 @@ void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QBy
 Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName) {
     Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
 
-    actor->create(ActorType::Wallet);
+    actor->create(ActorType::Token);
 
     emit verifyActor(actor->convertToPublic());
     actorIndex->addActor(actor->convertToPublic());

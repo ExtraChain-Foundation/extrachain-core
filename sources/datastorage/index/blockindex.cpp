@@ -671,7 +671,7 @@ BigNumber BlockIndex::loadFirstId() {
 BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,
                                           std::function<QString(const QStringList &files)> getFile) {
     auto asBigNumComparator = [](const QString &file1, const QString &file2) {
-        return BigNumber(file1.toLocal8Bit()) < BigNumber(file2.toLocal8Bit());
+        return BigNumber(file1.toLatin1()) < BigNumber(file2.toLatin1());
     };
 
     QDir folder(getFolderPath());
@@ -703,8 +703,8 @@ BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringLis
 
     qDebug() << "FILE INDEX:"
              << "loadFileFromSection(): lastId -"
-             << (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLocal8Bit()));
-    return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLocal8Bit());
+             << (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLatin1()));
+    return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toLatin1());
 }
 
 BigNumber BlockIndex::loadLastId() {

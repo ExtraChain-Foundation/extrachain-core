@@ -57,7 +57,7 @@ signals:
     // void sendTokenBalance(QMap<BigNumber,QMap<BigNumber,BigNumber>> tokenBalance);
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(const QByteArray &data, const unsigned int &type);
-    //    void addContractActorInActorIndex(Actor<KeyPublic> actor);
+    // void addContractActorInActorIndex(Actor<KeyPublic> actor);
     void saveActorInPrivateProfile(const QByteArray &id, const QString &type = "wallet",
                                    const bool &rewrite = false);
     void finished();

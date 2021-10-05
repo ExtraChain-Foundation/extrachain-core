@@ -38,7 +38,7 @@ short DistFileSystem::DfsRequest::getFieldsCount() const {
 }
 
 QByteArray DistFileSystem::DfsRequest::serialize() const {
-    return Serialization::serialize({ filePath.toLocal8Bit() }, DistFileSystem::fieldsSize);
+    return Serialization::serialize({ filePath.toLatin1() }, DistFileSystem::fieldsSize);
 }
 
 void DistFileSystem::DfsRequest::deserialize(const QByteArray &serialized) {

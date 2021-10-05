@@ -57,17 +57,14 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty()) {
         auto actor = Actor<KeyPublic>(serializedActor);
-        if (actor.type() == ActorType::Account && actor.profile().sign.isEmpty()) {
-            Messages::GetActorMessage msg;
-            msg.actorId = id;
-            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        if ((actor.type() == ActorType::Account || actor.type() == ActorType::Token)
+            && actor.profile().sign.isEmpty()) {
+            sendGetActorMessage(id);
         }
 
         return actor;
     } else {
-        Messages::GetActorMessage msg;
-        msg.actorId = id;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        sendGetActorMessage(id);
         // emit sendMessage(msg.serialize(), getActorMessage);
         qDebug() << "[ActorIndex] There no actor with id:" << id;
         return Actor<KeyPublic>();
@@ -85,9 +82,7 @@ void ActorIndex::removeActor(const ActorId &id, bool resend) {
     QFile::remove(filePath + "/profile/" + id.toByteArray() + ".profile");
 
     if (resend) {
-        Messages::GetActorMessage msg;
-        msg.actorId = id;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        sendGetActorMessage(id);
     }
 }
 
@@ -117,6 +112,8 @@ void ActorIndex::process() {
 void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver) {
     // receive id
     // create response message
+    if (actorId.isEmpty())
+        qFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
         // emit responseReady(actor.serialize(), Messages::GET_ACTOR_RESPONSE_MESSAGE, reqHash, receiver);
@@ -138,17 +135,13 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
             if (tempCheck[actorIdBytes] < current - 10) {
                 qDebug() << "[ActorIndex] Send get actor if no profile:" << actorId;
                 tempCheck[actorIdBytes] = current;
-                Messages::GetActorMessage msg;
-                msg.actorId = actorId;
-                resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+                sendGetActorMessage(actorId);
             }
         }
 
         // emit sendMessage(actor.profile().serialize(), Messages::PROFILE_FILE);
     } else {
-        Messages::GetActorMessage msg;
-        msg.actorId = actorId;
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+        sendGetActorMessage(actorId);
     }
 }
 
@@ -186,7 +179,8 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
             << QString("[ActorIndex] New actor [%1] is successfully saved").arg(QString(actor.serialize()));
 
         // TODO: remove me?
-        if (actor.type() == ActorType::Account && profilesHandle.contains(actor.id().toByteArray())) {
+        if ((actor.type() == ActorType::Account || actor.type() == ActorType::Token)
+            && profilesHandle.contains(actor.id().toByteArray())) {
             saveProfileFromNetwork(profilesHandle[actor.id().toByteArray()]);
         }
         break;
@@ -299,9 +293,7 @@ QByteArrayList ActorIndex::getProfile(QString id) {
     if (pProfile.sign == "" || pList.isEmpty()) {
         if (actor.type() != ActorType::Wallet && actor.type() != ActorType::First
             && resolveManager != nullptr) {
-            Messages::GetActorMessage msg;
-            msg.actorId = id.toLocal8Bit();
-            resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+            sendGetActorMessage(id.toLatin1());
         }
 
         return QByteArrayList();
@@ -391,6 +383,15 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
 
     qDebug() << "[ActorIndex] Can't save the file" << path << "(file is not opened)";
     return Errors::FILE_IS_NOT_OPENED;
+}
+
+void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
+    Messages::GetActorMessage msg;
+    msg.actorId = actorId;
+    if (actorId.isEmpty()) {
+        qFatal("Can't send get empty actor");
+    }
+    resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {

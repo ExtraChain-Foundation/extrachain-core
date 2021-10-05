@@ -291,7 +291,7 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
     };
 
     if (!allActive()) {
-        qDebug() << "[NetworkManager] Saved message to cache";
+        // qDebug() << "[NetworkManager] Saved message to cache";
         saveToCache(message, msgType, receiver, send);
     }
 

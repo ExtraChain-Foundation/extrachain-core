@@ -1216,7 +1216,7 @@ void Blockchain::showBlockchain() const {
 }
 
 bool Blockchain::isSmContractTx(const Block &block) const {
-    if (block.getData().contains("initcontract"))
+    if (block.getData().contains("InitContract"))
         return true;
     return false;
 }
@@ -1226,7 +1226,7 @@ void Blockchain::getSmContractMembers(const Block &block) const {
         return;
     QList<Transaction> txList = block.extractTransactions();
     for (const Transaction &tx : txList) {
-        if (tx.getData() == "initcontract") {
+        if (tx.getData() == "InitContract") {
             actorIndex->getActor(tx.getSender());
             actorIndex->getActor(tx.getReceiver());
         }
@@ -1603,8 +1603,20 @@ void Blockchain::proveTx(Transaction *tx) {
 
     // if current transaction not fee
     else {
-        if (tx->getData() == "initcontract") {
+        if (tx->getData() == "InitContract") {
             QByteArrayList profile = senderActor.profile().getListProfile();
+            if (profile.length() < 6) {
+                qDebug() << "Transaction not approved: no profile for" << senderActor.id();
+
+                // TODO: temp
+                actorIndex->getActor(senderActor.id());
+                QTimer::singleShot(3000, this, [this, tx] {
+                    qDebug() << "Transaction initcontract";
+                    this->proveTx(tx);
+                });
+
+                return;
+            }
             if (profile[0] == "6" && ActorId(profile[5]) == targetReceiver
                 && (targetSender == tx->getToken())) {
                 qDebug() << "Contract tx proved";
@@ -1612,8 +1624,9 @@ void Blockchain::proveTx(Transaction *tx) {
                 emit tx->Approved(tx);
                 return;
             }
-            emit tx->NotApproved(tx);
+
             qDebug() << "Transaction not approved: sender != token in genesis block";
+            emit tx->NotApproved(tx);
 
             return;
         }
