@@ -1,4 +1,5 @@
 #include "network/isocket_service.h"
+
 #include "enc/enc_tools.h"
 #include "network/network_manager.h"
 
@@ -36,6 +37,10 @@ const QString &SocketService::ip() const {
     return m_ip;
 }
 
+const SocketService::SendType SocketService::sendType() const {
+    return m_sendType;
+}
+
 int SocketService::bytesCompressed() const {
     return m_bytesCompressed;
 }
@@ -58,7 +63,8 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
-    pub = KeyPublic(json["key"].toString().toStdString());
+    pub = KeyPublic(json["key"].toString().toStdString()); // TODO: remove after tcp handshake
+    m_sendType = SendType(json["sendType"].toInt());
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
     ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
@@ -99,7 +105,8 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     qDebug() << "[Socket] Activated" << this << protocol();
-    // m_activated = true;
+    m_activated = true;
+    emit activated();
     return true;
 }
 
@@ -112,7 +119,8 @@ QByteArray SocketService::generateFirstMessage() {
     json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["key"] = QString::fromStdString(priv.publicKey());
+    json["key"] = QString::fromStdString(priv.publicKey()); // TODO: remove after tcp handshake
+    json["sendType"] = QString::number(int(m_sendType));
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;

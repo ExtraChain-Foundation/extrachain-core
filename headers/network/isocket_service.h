@@ -11,6 +11,14 @@ class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:
+    enum class SendType
+    {
+        All,
+        None,
+        // OnlySubNetwork
+    };
+    Q_ENUM(SendType)
+
     explicit SocketService(NetworkManager *networkManager, QObject *parent = nullptr);
     SocketService(const SocketService &socket);
     const QString &identifier() const;
@@ -20,6 +28,7 @@ public:
     virtual quint16 port() const = 0;
     virtual quint16 serverPort() const = 0;
     const QString &ip() const;
+    const SendType sendType() const;
     int bytesCompressed() const;
     int bytesOutgoing() const;
     int bytesIncoming() const;
@@ -48,6 +57,8 @@ protected:
     int m_bytesIncoming = 0;
     int m_bytesOutgoing = 0;
     int m_bytesCompressed = 0;
+    SendType m_sendType = SendType::All;
+    // ActorId subNetwork;
 
     KeyPrivate priv;
     KeyPublic pub;

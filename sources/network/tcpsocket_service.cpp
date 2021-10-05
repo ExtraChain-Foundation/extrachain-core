@@ -156,9 +156,7 @@ void TcpSocketService::continueDoRead() {
             //     qFatal("tcp omg");
 
             if (!m_activated /*&& pendMsg.left(2) == "{\""*/) {
-                m_activated = checkFirstMessage(pendMsg);
-                if (m_activated)
-                    emit activated();
+                checkFirstMessage(pendMsg);
                 qDebug() << "[TCP] First message" << pendMsg << m_activated;
             } else if (!pendMsg.isEmpty()) {
                 SocketPair receiver(m_ip.toStdString(), this->port());

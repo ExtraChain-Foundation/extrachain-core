@@ -77,9 +77,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         return;
 
     qDebug() << "[WS] First message:" << message;
-    m_activated = checkFirstMessage(prepareReceiveMessage(message.toLatin1()));
-    if (m_activated)
-        emit activated();
+    checkFirstMessage(prepareReceiveMessage(message.toLatin1()));
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {

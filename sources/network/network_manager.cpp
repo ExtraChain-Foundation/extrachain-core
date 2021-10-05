@@ -57,14 +57,14 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    if (status == NetworkStatus::Status::Online) {
-        // TODO: move to slot or process
-        local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
-        qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    }
+    // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
+    // TODO: move to slot or process
+    local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
+    qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
+    // }
 
     if (local == nullptr) {
-        qDebug() << "Local not found";
+        qDebug() << "[NetworkManager] Local not found";
         return;
     }
 
@@ -89,7 +89,8 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 }
 
-void NetworkManager::process() {
+void NetworkManager::process() { // TODO: move to start slot after status online and after start signal from
+                                 // client
     startNetwork();
 
     auto tempTimer = new QTimer(this);
@@ -289,8 +290,10 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         return false;
     };
 
-    if (!allActive())
-        saveToCache(message, msgType, receiver, send); // TODO: check ws
+    if (!allActive()) {
+        qDebug() << "[NetworkManager] Saved message to cache";
+        saveToCache(message, msgType, receiver, send);
+    }
 
     auto isSendCheck = [](Config::Net::TypeSend send, std::string_view socketIp, quint16 socketPort,
                           const SocketPair &pair) {
@@ -314,7 +317,7 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
         bool isSend = isSendCheck(send, service->ip().toStdString(), service->port(), receiver);
         if (!isSend)
             continue;
-        if (service->isActive())
+        if (service->isActive() && service->sendType() == SocketService::SendType::All)
             emit service->send(message);
     }
 }
