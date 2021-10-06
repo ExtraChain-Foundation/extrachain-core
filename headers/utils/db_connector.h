@@ -27,6 +27,7 @@
 
 #include <QByteArray>
 #include <QDebug>
+#include <QJsonDocument>
 #include <QMutex>
 
 #include "extrachain_global.h"
@@ -84,6 +85,8 @@ public:
 
 public:
     bool query(std::string query);
+    QJsonObject toJsonObject();
+    QJsonDocument toJsonDocument();
 
 public:
     sqlite3 *getDb() const;

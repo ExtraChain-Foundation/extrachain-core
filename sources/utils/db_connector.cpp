@@ -299,6 +299,34 @@ bool DBConnector::query(std::string query) {
     return res == SQLITE_DONE;
 }
 
+QJsonObject DBConnector::toJsonObject() {
+    QJsonObject json;
+
+    const auto tables = tableNames();
+    for (const auto &table : tables) {
+        auto result = selectAll(table);
+
+        QJsonArray array;
+        for (const auto &row : result) {
+            QJsonObject obj;
+            for (const auto &[key, value] : row) {
+                obj[key.c_str()] = value.c_str();
+            }
+            array << obj;
+        }
+
+        json[table.c_str()] = array;
+    }
+
+    return json;
+}
+
+QJsonDocument DBConnector::toJsonDocument() {
+    auto object = toJsonObject();
+    auto json = QJsonDocument(std::move(object));
+    return json;
+}
+
 sqlite3 *DBConnector::getDb() const {
     return db;
 }
