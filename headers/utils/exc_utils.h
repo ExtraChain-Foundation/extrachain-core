@@ -508,6 +508,7 @@ EXTRACHAIN_EXPORT QString detectCompiler();
 EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
 EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
 EXTRACHAIN_EXPORT bool isValidIp(const QString &ip);
+EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
 } // namespace Utils
 
 namespace DataStorage {

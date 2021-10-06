@@ -592,3 +592,14 @@ bool Utils::isValidIp(const QString &ip) {
     QHostAddress address(ip);
     return QAbstractSocket::IPv4Protocol == address.protocol();
 }
+
+void Utils::benchmark(std::function<void()> func, int count) {
+    while (true) {
+        QElapsedTimer timer;
+        timer.start();
+        for (int i = 0; i != count; i++) {
+            func();
+        }
+        qDebug() << timer.elapsed() << "ms";
+    }
+}
