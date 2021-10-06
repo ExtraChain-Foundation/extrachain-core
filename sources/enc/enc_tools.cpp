@@ -127,7 +127,7 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
     Q_UNUSED(conv_res)
 
     vector<unsigned char> enc_msg(enc_size);
-    // vector<unsigned char> dec_msg(data.begin(), data.end());
+    vector<unsigned char> dec_msg(data.begin(), data.end());
     vector<unsigned char> vnonce;
     vnonce.resize(crypto_box_NONCEBYTES);
 
@@ -137,8 +137,8 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
         randombytes_buf(vnonce.data(), vnonce.size());
     }
 
-    int r = crypto_box_easy(enc_msg.data(), reinterpret_cast<const unsigned char *>(data.data()), data.size(),
-                            vnonce.data(), xpkr.data(), xsks.data());
+    int r =
+        crypto_box_easy(enc_msg.data(), dec_msg.data(), data.size(), vnonce.data(), xpkr.data(), xsks.data());
 
     string res;
     if (r == 0) {
@@ -221,4 +221,50 @@ QByteArray SecretKey::decryptAsymmetric(const QByteArray &data, const QByteArray
     auto res = decryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
                                  nonce.toStdString());
     return QByteArray::fromStdString(res);
+}
+
+QByteArray SecretKey::encryptAsymmetric2(const QByteArray &data, const QByteArray &secret_key,
+                                         const QByteArray &public_key, const QByteArray &nonce) {
+    if (data.isEmpty() || secret_key.isEmpty() || public_key.isEmpty())
+        qFatal("[SecretKey::encryptAsymmetric] data, secret or public is empty");
+
+    auto pkrs = QByteArray::fromHex(public_key.data());
+    auto sk = QByteArray::fromHex(secret_key.data());
+
+    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
+    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), reinterpret_cast<const unsigned char *>(sk.data()));
+
+    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
+    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(),
+                                                        reinterpret_cast<const unsigned char *>(pkrs.data()));
+    Q_UNUSED(conv_res)
+
+    QByteArray enc_msg;
+    enc_msg.resize(crypto_box_MACBYTES + data.length());
+    QByteArray vnonce;
+
+    if (nonce.size() == crypto_box_NONCEBYTES) {
+        vnonce = nonce;
+    } else {
+        vnonce.resize(crypto_box_NONCEBYTES);
+        randombytes_buf(vnonce.data(), vnonce.size());
+    }
+
+    int r = crypto_box_easy(reinterpret_cast<unsigned char *>(enc_msg.data()),
+                            reinterpret_cast<const unsigned char *>(data.data()), data.size(),
+                            reinterpret_cast<const unsigned char *>(vnonce.data()), xpkr.data(), xsks.data());
+
+    QByteArray res;
+    if (r == 0) {
+        if (nonce.size() != crypto_box_NONCEBYTES) {
+            enc_msg.prepend(vnonce);
+        }
+        res = enc_msg.toHex();
+    }
+
+    if (res.isEmpty())
+        qDebug() << "[SecretKey::encryptAsymmetric] res is empty. msg:" << data.data()
+                 << "| secret:" << secret_key.data() << "| public:" << public_key.data()
+                 << "| nonce:" << nonce.data();
+    return res;
 }

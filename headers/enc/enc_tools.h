@@ -25,5 +25,8 @@ QByteArray encryptAsymmetric(const QByteArray &data, const QByteArray &secret_ke
                              const QByteArray &public_key, const QByteArray &nonce = "");
 QByteArray decryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
                              const QByteArray &public_key, const QByteArray &nonce = "");
+
+QByteArray encryptAsymmetric2(const QByteArray &data, const QByteArray &secret_key,
+                              const QByteArray &public_key, const QByteArray &nonce);
 }
 #endif // ENC_TOOLS_H
