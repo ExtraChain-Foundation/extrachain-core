@@ -662,4 +662,9 @@ struct Notification {
 
 QDebug operator<<(QDebug d, const Notification &n);
 
+#define TIMER_START(name) \
+    QElapsedTimer name;   \
+    name.start();
+#define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
+
 #endif // UTILS_H
