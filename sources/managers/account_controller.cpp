@@ -148,12 +148,13 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
     int loaded = 0;
+    std::string decryptKey = SecretKey::getKeyFromPass(hashLogin.toStdString());
+
     for (const QByteArray &fileName : idList) {
         QFile file(path + "/" + fileName + ".key");
         if (file.exists() && file.open(QIODevice::ReadOnly)) {
-            std::string hl = hashLogin.toStdString();
             QByteArray serialized =
-                QByteArray::fromStdString(SecretKey::decryptWithPassword(file.readAll().toStdString(), hl));
+                QByteArray::fromStdString(SecretKey::decrypt(file.readAll().toStdString(), decryptKey));
             qDebug() << serialized;
             file.close();
             if (!serialized.isEmpty()) {
