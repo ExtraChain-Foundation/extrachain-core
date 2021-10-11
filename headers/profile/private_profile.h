@@ -61,7 +61,7 @@ private:
     const QString PathProfile = "keystore/profile";
     QByteArray m_hash;
 
-    AccountController *accController;
+    AccountController *m_accountController;
     Dfs *dfs;
 };
 

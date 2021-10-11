@@ -25,7 +25,7 @@
 using std::string;
 
 void PrivateProfile::setAccountController(AccountController *value) {
-    accController = value;
+    m_accountController = value;
 }
 
 void PrivateProfile::setDfs(Dfs *value) {
@@ -130,6 +130,7 @@ void PrivateProfile::profile(const QByteArray &hash) {
     }
 
     bool success = false;
+    std::string decryptKey = SecretKey::getKeyFromPass(hash.toStdString());
 
     for (QString &fileName : users) {
         QFile file(PathProfile + "/" + fileName);
@@ -137,8 +138,7 @@ void PrivateProfile::profile(const QByteArray &hash) {
         QByteArray data = file.readAll();
         file.flush();
         file.close();
-        string h = hash.toStdString();
-        data = QByteArray::fromStdString(SecretKey::decryptWithPassword(data.toStdString(), h));
+        data = QByteArray::fromStdString(SecretKey::decrypt(data.toStdString(), decryptKey));
         QByteArray secureLoginFile = data.mid(0, 64);
 
         if (secureLoginFile == hash) {
@@ -149,8 +149,8 @@ void PrivateProfile::profile(const QByteArray &hash) {
             QList<QByteArray> idList = get(map, "wallet").split('|');
             idList.first();
             qDebug() << "Load private profile with id" << idList.first();
-            accController->loadActors(idList.first(), idList, hash);
-            if (accController->mainActor() != nullptr)
+            m_accountController->loadActors(idList.first(), idList, hash, decryptKey);
+            if (m_accountController->mainActor() != nullptr)
                 dfs->initMyLocalStorage();
             emit initActorChatM();
             success = true;

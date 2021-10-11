@@ -91,7 +91,8 @@ public slots:
     /**
      * @brief Loads actors from local disk to memory: QList accounts;
      */
-    void loadActors(QByteArray id = "", QByteArrayList idList = {}, QByteArray hashLogin = "");
+    void loadActors(const QByteArray &id, const QByteArrayList &idList, const QByteArray &hashLogin,
+                    const std::string &decryptKey);
     /**
      * @brief Saves Private actor on local disk in serialized form
      * @param private actor

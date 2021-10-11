@@ -136,7 +136,8 @@ Actor<KeyPrivate> AccountController::getCurrentActor() {
     return getActor(this->userNum);
 }
 
-void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteArray hashLogin) {
+void AccountController::loadActors(const QByteArray &id, const QByteArrayList &idList,
+                                   const QByteArray &hashLogin, const std::string &decryptKey) {
     if (id.isEmpty() || hashLogin.isEmpty()) {
         qDebug() << "[loadActors] id or hashLogin is empty";
         Q_ASSERT(!id.isEmpty());
@@ -148,7 +149,6 @@ void AccountController::loadActors(QByteArray id, QByteArrayList idList, QByteAr
     qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
     QString path = KeyStore::USER_KEYSTORE;
     int loaded = 0;
-    std::string decryptKey = SecretKey::getKeyFromPass(hashLogin.toStdString());
 
     for (const QByteArray &fileName : idList) {
         QFile file(path + "/" + fileName + ".key");
