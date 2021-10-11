@@ -126,7 +126,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
         if (isProfile) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
         } else if (actor.type() != ActorType::Wallet
-                   && actor.type() != ActorType::First) { // if profile not exist
+                   && actor.type() != ActorType::Token) { // if profile not exist
             static QMap<QByteArray, qint64> tempCheck;
             qDebug() << "[ActorIndex] No profile for actor" << actorId;
 
@@ -291,7 +291,7 @@ QByteArrayList ActorIndex::getProfile(QString id) {
     PublicProfile pProfile = actor.profile();
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty()) {
-        if (actor.type() != ActorType::Wallet && actor.type() != ActorType::First
+        if (actor.type() != ActorType::Wallet && actor.type() != ActorType::Token
             && resolveManager != nullptr) {
             sendGetActorMessage(id.toLatin1());
         }
@@ -410,10 +410,6 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
     int result = this->add(actor.id(), actor.serialize());
     auto actorId = actor.id().toByteArray();
-
-    if (actor.type() == ActorType::First) {
-        setFirstId(actorId);
-    }
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
         this->records++;

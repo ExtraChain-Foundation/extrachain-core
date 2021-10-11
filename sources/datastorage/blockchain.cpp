@@ -1327,7 +1327,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block) {
     QMutex mutex;
     if (block.getIndex() == 0) {
         mutex.lock();
-        this->actorIndex->setFirstId(block.getApprover().toByteArray());
+        this->actorIndex->setFirstId(block.getApprover());
         mutex.unlock();
     }
     if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
