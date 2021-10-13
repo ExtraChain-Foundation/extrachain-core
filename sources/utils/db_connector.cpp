@@ -22,6 +22,8 @@
 #include "sqlite3.h"
 #include <QDir>
 #include <QRegularExpression>
+#include <QJsonObject>
+#include <QJsonArray>
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
