@@ -6,6 +6,11 @@ NetworkStatus::NetworkStatus(QObject *parent)
     : QObject(parent) {
     QNetworkInformation::load(QNetworkInformation::Feature::Reachability);
     auto networkInfo = QNetworkInformation::instance();
+    if (networkInfo == nullptr) {
+        qDebug() << "[NetworkStatus] Can't detect network status";
+        setNetworkStatus(Status::Unknown);
+        return;
+    }
     onReachabilityChanged(networkInfo->reachability());
     connect(networkInfo, &QNetworkInformation::reachabilityChanged, this,
             &NetworkStatus::onReachabilityChanged);

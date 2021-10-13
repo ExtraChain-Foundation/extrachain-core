@@ -10,6 +10,7 @@ class NetworkStatus : public QObject {
 public:
     enum class Status
     {
+        Unknown,
         Online,
         Offline,
         Local
