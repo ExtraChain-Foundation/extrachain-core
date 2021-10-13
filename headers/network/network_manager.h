@@ -52,7 +52,7 @@ struct NetworkReconnect {
     }
 };
 
-inline uint qHash(const NetworkReconnect &reconnect) {
+inline size_t qHash(const NetworkReconnect &reconnect) {
     return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
 }
 
