@@ -28,8 +28,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     endif (UNIX)
 endif()
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Network Concurrent WebSockets REQUIRED)
+find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
@@ -215,9 +214,7 @@ add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHA
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
-target_link_libraries(extrachain
-    Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network
-    Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::WebSockets
+target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
 
 if (UNIX AND NOT APPLE)
