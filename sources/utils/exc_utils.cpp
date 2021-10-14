@@ -505,6 +505,9 @@ QString Utils::detectCompiler() {
 #ifdef __clang__
     QString compiler =
         QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
+    #if __APPLE__
+    compiler.prepend("Apple ");
+    #endif
     #if _MSC_VER && !__INTEL_COMPILER
     compiler += " (" + msvcVersion + ")";
     #endif
