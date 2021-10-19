@@ -72,6 +72,10 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
 
+    if (currentFirstId.isEmpty() && !jsonFirstId.isEmpty()) { // TODO: remove hack
+        m_networkManager->actorIndex()->setFirstId(jsonFirstId);
+    }
+
     if (version != EXTRACHAIN_VERSION) {
         qDebug() << "[Socket] Close, because version incompatible";
         emit error(Network::SocketServiceError::IncompatibleVersion, version);
