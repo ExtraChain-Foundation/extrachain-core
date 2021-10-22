@@ -288,6 +288,11 @@ public:
         m_id = id;
     }
 
+    void setPrivateKey(std::string secretKey, std::string publicKey) {
+        Q_ASSERT(isPrivate());
+        m_key = new KeyPrivate(secretKey, publicKey);
+    }
+
     void setPublicKey(std::string key) {
         Q_ASSERT(!isPrivate());
         m_key = new KeyPublic(key);

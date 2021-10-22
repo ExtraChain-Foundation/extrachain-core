@@ -20,7 +20,7 @@
 #ifndef ACTORINDEX_H
 #define ACTORINDEX_H
 
-#include <QHostAddress>
+#include <QtNetwork/QHostAddress>
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"

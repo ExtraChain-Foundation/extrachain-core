@@ -145,10 +145,10 @@ public:
      * @brief 1 * 10e18 from BigNumber to number -> 1
      * @param number
      */
-    static QString amountToVisible(BigNumber number);
-    static BigNumber amountNormalizeMul(BigNumber number);
-    static BigNumber amountMul(BigNumber number1, BigNumber number2);
-    static BigNumber amountDiv(BigNumber number1, BigNumber number2);
+    static QString amountToVisible(const BigNumber &number);
+    static BigNumber amountNormalizeMul(const BigNumber &number);
+    static BigNumber amountMul(const BigNumber &number1, const BigNumber &number2);
+    static BigNumber amountDiv(const BigNumber &number1, const BigNumber &number2);
     static BigNumber amountPercent(BigNumber number, uint percent);
     void setAmount(const BigNumber &value);
     void setSender(const ActorId &value);

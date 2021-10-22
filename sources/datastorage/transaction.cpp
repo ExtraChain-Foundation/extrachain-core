@@ -331,7 +331,7 @@ BigNumber Transaction::visibleToAmount(QByteArray amount) {
     return BigNumber(amount, 10);
 }
 
-QString Transaction::amountToVisible(BigNumber number) {
+QString Transaction::amountToVisible(const BigNumber &number) {
     if (number == 0)
         return "0";
 
@@ -355,14 +355,14 @@ QString Transaction::amountToVisible(BigNumber number) {
     return (minus ? "-" : "") + numberDec;
 }
 
-BigNumber Transaction::amountNormalizeMul(BigNumber number) {
+BigNumber Transaction::amountNormalizeMul(const BigNumber &number) {
     QByteArray n = number.toByteArray(10);
     if (n.length() < 36)
         return number;
     return BigNumber(n.chopped(18), 10);
 }
 
-BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2) {
+BigNumber Transaction::amountMul(const BigNumber &number1, const BigNumber &number2) {
     QByteArray one = Transaction::amountToVisible(number1).toLatin1();
     QByteArray two = Transaction::amountToVisible(number1).toLatin1();
     int index1 = one.indexOf(".");
@@ -377,7 +377,7 @@ BigNumber Transaction::amountMul(BigNumber number1, BigNumber number2) {
     return amountNormalizeMul(number) / returned1 / returned2;
 }
 
-BigNumber Transaction::amountDiv(BigNumber number1, BigNumber number2) {
+BigNumber Transaction::amountDiv(const BigNumber &number1, const BigNumber &number2) {
     QByteArray two = Transaction::amountToVisible(number2).toLatin1();
     int index = two.indexOf(".");
     int div = two.size() - index - 1;

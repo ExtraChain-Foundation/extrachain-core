@@ -29,6 +29,7 @@
 #include <sstream>
 #include <string>
 
+#include "extrachain_global.h"
 #include "gmpxx.h"
 
 #ifdef QT_DEBUG
@@ -48,7 +49,7 @@ const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
  */
-class BigNumber {
+class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
     BigNumber(const QByteArray &bigNumber, int base = 16);

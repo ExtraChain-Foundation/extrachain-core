@@ -202,3 +202,7 @@ const QByteArray &PrivateProfile::hash() const {
         qFatal("[PrivateProfile] Hash is empty");
     return m_hash;
 }
+
+void PrivateProfile::setHash(const QByteArray &hash) {
+    m_hash = hash;
+}

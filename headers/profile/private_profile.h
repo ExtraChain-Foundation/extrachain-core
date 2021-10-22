@@ -43,6 +43,7 @@ public:
     void setAccountController(AccountController *value);
     void setDfs(Dfs *value);
     const QByteArray &hash() const;
+    void setHash(const QByteArray &hash);
 
 signals:
     void initActorChatM();
