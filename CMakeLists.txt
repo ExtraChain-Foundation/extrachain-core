@@ -4,6 +4,7 @@ file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/extrachain_version" EXTRACHAIN_VERSION)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
     project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
+    add_compile_definitions(EXTRACHAIN_LIBRARY_ACTIVATE)
 endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -178,6 +179,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+
+    ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h
+    ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
     )
 
 if (EXTRACHAIN_STATIC_BUILD)
