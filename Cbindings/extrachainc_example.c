@@ -1,7 +1,14 @@
 #include "extrachainc.h"
 
+#include <string.h>
+
 int main(int argc, char *argv[]) {
     setvbuf(stdout, NULL, _IONBF, 0);
+    const char *version = extrachain_version();
+    printf("ExtraChain version: %s\n", version);
+    extrachain_free_char_str(version);
+    extrachain_manage_logs(3);
+
     extrachain_wipe();
     extrachain_init(argc, argv);
     extrachain_auth("1", "1");
@@ -35,13 +42,26 @@ int main(int argc, char *argv[]) {
 
     bool verify3 = extrachain_verify("KEK", 3, sig, actor_getted);
     printf("[ExtraChainC] Sign: %i\n", verify3);
-
     extrachain_free_char_str(sig);
+
+    const char *encrypted = extrachain_encrypt("EXC", 3, actor_private, actor_getted);
+    const char *decrypted = extrachain_decrypt(encrypted, strlen(encrypted), actor_private, actor_getted);
+    const char *encrypted_self = extrachain_encrypt_self("EXC", 3, actor_private);
+    const char *decrypted_self =
+        extrachain_decrypt_self(encrypted_self, strlen(encrypted_self), actor_private);
+
+    printf("[ExtraChainC] Encrypted: %s\n", encrypted);
+    printf("[ExtraChainC] Decrypted: %s\n", decrypted);
+    printf("[ExtraChainC] Encrypted self: %s\n", encrypted_self);
+    printf("[ExtraChainC] Decrypted self: %s\n", decrypted_self);
+    extrachain_free_char_str(encrypted);
+    extrachain_free_char_str(decrypted);
+
     extrachain_free_actor_private(actor_private);
     extrachain_free_actor_public(actor_public);
     extrachain_free_actor_public(actor_getted);
-    printf("All done\n");
 
+    printf("All done\n");
     extrachain_stop();
     so_sleep(10);
 

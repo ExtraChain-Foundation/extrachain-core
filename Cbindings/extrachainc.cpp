@@ -6,8 +6,9 @@
 
 #include <datastorage/actor.h>
 #include <datastorage/index/actorindex.h>
-#include <extrachain>
+#include <enc/enc_tools.h>
 #include <managers/account_controller.h>
+#include <managers/extrachain_node.h>
 #include <managers/logs_manager.h>
 #include <profile/private_profile.h>
 
@@ -23,6 +24,16 @@ void copy_char(char *&dest, const char *orig, size_t size) {
     // res[size] = '\0';
     // qDebug() << "[ExtraChainC] After" << res << std::string(res).length();
     dest = res;
+}
+
+template <class T>
+void copy_char(char *&dest, const T &str) {
+    copy_char(dest, str.data(), str.size());
+}
+
+void copy_char(char *&dest, const QString &str) {
+    QByteArray temp = str.toUtf8();
+    copy_char(dest, temp.data(), temp.size());
 }
 
 ActorPrivate *actor_private_from_ActorKeyPrivate(const Actor<KeyPrivate> &actor) {
@@ -51,7 +62,7 @@ Actor<KeyPrivate> ActorKeyPrivate_from_actor_private(const ActorPrivate *actor_p
     Actor<KeyPrivate> actor;
     actor.setId(ActorId(QByteArray(actor_private->id)));
     actor.setType(ActorType(actor_private->type));
-    actor.setPrivateKey(actor_private->secret_key, actor_private->public_key);
+    actor.setSecretKey(actor_private->secret_key, actor_private->public_key);
     return actor;
 }
 
@@ -64,7 +75,7 @@ Actor<KeyPublic> ActorKeyPublic_from_actor_public(const ActorPublic *actor_publi
     return actor;
 }
 
-void extrachain_free_char_str(char *str) {
+void extrachain_free_char_str(const char *str) {
     delete[] str;
 }
 
@@ -86,8 +97,32 @@ void so_sleep(unsigned long secs) {
     QThread::sleep(secs);
 }
 
+char *extrachain_version() {
+    char *version;
+    copy_char(version, Utils::extrachainVersion());
+    return version;
+}
+
 void extrachain_wipe() {
     Utils::wipeDataFiles();
+}
+
+void extrachain_manage_logs(int log_type) {
+    switch (log_type) {
+    case 1:
+        LogsManager::qtHandler();
+        break;
+    case 2:
+        LogsManager::etHandler();
+        break;
+    case 3:
+        LogsManager::etHandler();
+        LogsManager::setDebugLogs(true);
+        break;
+    case 4:
+        LogsManager::emptyHandler();
+        break;
+    }
 }
 
 void extrachain_init(int argc, char *argv[]) {
@@ -181,4 +216,42 @@ bool extrachain_verify(const char *data, size_t size, const char *sign, const Ac
     auto actor = ActorKeyPublic_from_actor_public(actor_public);
     bool verify = actor.key()->verify(QByteArray::fromRawData(data, size), sign);
     return verify;
+}
+
+char *extrachain_encrypt(const char *data, size_t size, const ActorPrivate *actor_private,
+                         const ActorPublic *actor_public) {
+    auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
+    auto actorPublic = ActorKeyPublic_from_actor_public(actor_public);
+    auto encrypted = SecretKey::encryptAsymmetric(std::string(data, size), actorPrivate.key()->secretKey(),
+                                                  actorPublic.key()->publicKey());
+    char *res;
+    copy_char(res, encrypted);
+    return res;
+}
+
+char *extrachain_decrypt(const char *data, size_t size, const ActorPrivate *actor_private,
+                         const ActorPublic *actor_public) {
+    auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
+    auto actorPublic = ActorKeyPublic_from_actor_public(actor_public);
+    auto decrypted = SecretKey::decryptAsymmetric(std::string(data, size), actorPrivate.key()->secretKey(),
+                                                  actorPublic.key()->publicKey());
+    char *res;
+    copy_char(res, decrypted);
+    return res;
+}
+
+char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate *actor_private) {
+    auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
+    auto encrypted = actorPrivate.key()->encryptSelf(QByteArray(data, size));
+    char *res;
+    copy_char(res, encrypted);
+    return res;
+}
+
+char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate *actor_private) {
+    auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
+    auto decrypted = actorPrivate.key()->decryptSelf(QByteArray(data, size));
+    char *res;
+    copy_char(res, decrypted);
+    return res;
 }
