@@ -20,6 +20,8 @@
 #include "enc/key_public.h"
 #include "enc/enc_tools.h"
 
+#include <sodium.h>
+
 #include <QJsonObject>
 
 using std::string, std::vector;

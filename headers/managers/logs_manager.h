@@ -47,6 +47,7 @@ public:
     static void qtHandler();
     static void emptyHandler();
     static void print(const std::string& log);
+    static void setDebugLogs(bool debugLogs);
 
     static bool toConsole;
     static bool toFile;

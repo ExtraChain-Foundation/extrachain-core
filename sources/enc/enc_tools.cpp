@@ -1,5 +1,7 @@
 #include "enc/enc_tools.h"
 
+#include <sodium.h>
+
 using std::string, std::vector;
 
 string SecretKey::keygen() {

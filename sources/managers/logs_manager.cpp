@@ -278,6 +278,10 @@ void LogsManager::print(const std::string& log) {
 #endif
 }
 
+void LogsManager::setDebugLogs(bool debugLogs) {
+    LogsManager::debugLogs = debugLogs;
+}
+
 void LogsManager::setAntiFilter(bool value) {
     antiFilter = value;
 }

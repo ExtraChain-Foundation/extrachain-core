@@ -18,7 +18,10 @@
  */
 
 #include "managers/chatmanager.h"
+#include "network/network_manager.h"
 using std::string, std::vector;
+
+#include <sodium.h>
 
 /////////////////////////////////////////////////
 ///      D   E   S   C   R   I   B   E    ///////

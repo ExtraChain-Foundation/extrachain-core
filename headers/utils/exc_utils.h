@@ -462,6 +462,7 @@ namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
+EXTRACHAIN_EXPORT QString extrachainVersion();
 
 enum PrintDebug
 {
@@ -489,10 +490,10 @@ std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
 std::string hexStringToByte(const std::string &data);
 
-bool encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
-                 int blockSize = 60007);
-bool decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
-                 int blockSize = 60007);
+EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
+                                   const QByteArray &key, int blockSize = 60007);
+EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
+                                   const QByteArray &key, int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
@@ -548,16 +549,6 @@ namespace SmartContractStorage {
 static const QString CONTRACTSTORE = "keystore/contracts/";
 static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
 } // namespace SmartContractStorage
-namespace FileSystem {
-void createFolderIfNotExist(QString path);
-/**
- * @brief Attempts to open file
- * @param file
- * @param mode
- * @return true if file is opened successfully
- */
-bool tryToOpen(QFile &file, QIODevice::OpenMode mode);
-} // namespace FileSystem
 
 namespace SearchEnum {
 enum class BlockParam
@@ -644,7 +635,7 @@ enum class TxParam
 }
 } // namespace SearchEnum
 
-struct Notification {
+struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType
     {
         TxToUser,

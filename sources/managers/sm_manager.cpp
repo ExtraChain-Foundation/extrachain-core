@@ -29,7 +29,7 @@ SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *pare
 void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArray tokenName,
                                                  QByteArray relAddress, QByteArray color) {
     tokenBalance[relAddress] = { { tokenName, tokenCount } };
-    FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTPROFILE);
+    QDir().mkpath(SmartContractStorage::CONTRACTPROFILE);
     Actor<KeyPrivate> *actor = createContract(tokenName);
 
     QByteArrayList profileList;
@@ -97,7 +97,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor) {
     QFile file(path);
 
     // move to another place
-    FileSystem::createFolderIfNotExist(SmartContractStorage::CONTRACTSTORE);
+    QDir().mkpath(SmartContractStorage::CONTRACTSTORE);
 
     // TODO: encrypt
     if (file.open(QIODevice::ReadWrite)) {

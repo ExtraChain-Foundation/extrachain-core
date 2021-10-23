@@ -31,6 +31,8 @@
 #include <QStorageInfo>
 #include <QTcpSocket>
 
+#include <sodium.h>
+
 #include "dfs/types/headers/dfstruct.h"
 #include "enc/enc_tools.h"
 #include "utils/Keccak256.h"
@@ -70,14 +72,6 @@ QString KeyStore::makeKeyFileName(QString name) {
     return name + KEY_TYPE;
 }
 
-void FileSystem::createFolderIfNotExist(QString path) {
-    QDir dir(path);
-    if (!dir.exists()) {
-        dir = QDir();
-        dir.mkpath(path);
-    }
-}
-
 int Utils::compare(const QByteArray &one, const QByteArray &two) {
     if (one.size() > two.size()) {
         return one.size() - two.size();
@@ -85,14 +79,6 @@ int Utils::compare(const QByteArray &one, const QByteArray &two) {
         return static_cast<int>(one == two);
     } else
         return two.size() - one.size();
-}
-
-bool FileSystem::tryToOpen(QFile &file, QIODevice::OpenMode mode) {
-    if (!file.open(mode)) {
-        qDebug().noquote() << QString("[WARNING] Can't open [%1] file").arg(file.fileName());
-        return false;
-    }
-    return true;
 }
 
 QByteArray storedSpace::toByteArray(storedSpace::State state) {
@@ -605,4 +591,8 @@ void Utils::benchmark(std::function<void()> func, int count) {
         }
         qDebug() << timer.elapsed() << "ms";
     }
+}
+
+QString Utils::extrachainVersion() {
+    return EXTRACHAIN_VERSION;
 }

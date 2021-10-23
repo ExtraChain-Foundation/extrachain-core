@@ -18,34 +18,22 @@
  */
 
 #ifndef CHATMANAGER_H
-    #define CHATMANAGER_H
+#define CHATMANAGER_H
 
-    #include "chat.h"
-    #include "dfs/types/headers/dfstruct.h"
-    #include "enc/enc_tools.h"
-    #include "network/packages/base_message.h"
-    #include "utils/db_connector.h"
-    #include <QList>
-    #include <QObject>
-    #include <QTimer>
+#include "chat.h"
+#include "dfs/types/headers/dfstruct.h"
+#include "enc/enc_tools.h"
+#include "network/packages/base_message.h"
+#include "utils/db_connector.h"
+#include <QList>
+#include <QObject>
+#include <QTimer>
 
-// blockhain/index/actor/[myId]/myChats/[chatId]   /[chatId]+".dat"   file that consist reference to chat (as
-// path) blockhain/index/actor/[myId]/myChats/[chatId]   /currentSession       file that consist current
-// session for this chat blockhain/index/actor/[myId]/myChats/[chatId]   /keystore/key[SessionNumb]   //
-// locale. Consist key for all chats
-
-// blockhain/index/actor/[ownerId]/chatStorage/[chatId]  /users/[IdAddedUsers]     //files that contain sign
-// of inviter and it id blockhain/index/actor/[ownerId]/chatStorage/[chatId]  /[sessionNumb]            //file
-// that content user messages
-
-    #ifndef NETWORK_MANAGER_DEF
-        #define NETWORK_MANAGER_DEF
 class NetworkManager;
-        #include "network/network_manager.h"
-    #endif
 
 class EXTRACHAIN_EXPORT ChatManager : public QObject {
     Q_OBJECT
+
 private:
     const QByteArray _salt = "invitetochat";
     AccountController *_accController;
@@ -117,14 +105,3 @@ signals:
 };
 
 #endif // CHATMANAGER_H
-
-/*
-    get chat list
-    // chatId
-    // actorId, если диалог
-    // chatType = 1 - диалог, 2 - группа
-    // last message
-    // last message time
-
-
-*/

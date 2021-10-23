@@ -195,26 +195,25 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
     QString fileName = KeyStore::makeKeyFileName(actor.id().toByteArray());
     QString path = KeyStore::USER_KEYSTORE + fileName;
     qDebug() << "Path=" << path;
-    QFile *file = new QFile(path);
 
-    // move to another place
-    FileSystem::createFolderIfNotExist(KeyStore::USER_KEYSTORE);
+    QDir().mkpath(KeyStore::USER_KEYSTORE);
+    QFile file(path);
 
-    if (file->open(QIODevice::ReadWrite)) {
-        QByteArray old = file->readAll();
+    if (file.open(QIODevice::ReadWrite)) {
+        QByteArray old = file.readAll();
+
         if (old == actor.serialize()) {
             qDebug() << "Private actor with id =" << actor.id() << "already exists";
         } else {
             qDebug() << "actor serialized: ---- " << actor.serialize();
             std::string hl = hashLogin.toStdString();
-            file->write(QByteArray::fromStdString(
+            file.write(QByteArray::fromStdString(
                 SecretKey::encryptWithPassword(actor.serialize().toStdString(), hl)));
-            file->flush();
+            file.flush();
             qDebug() << "Private Actor" << actor.id() << "is successfully saved";
         }
-        file->close();
-        delete file;
-        return;
+
+        file.close();
     }
 
     qDebug() << "Can't save actor" << actor.id();

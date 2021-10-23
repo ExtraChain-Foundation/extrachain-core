@@ -39,6 +39,8 @@
 #include "profile/private_profile.h"
 #include "resolve/resolve_manager.h"
 
+#include <sodium.h>
+
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
     if (!singleton)
@@ -446,12 +448,11 @@ void ExtraChainNode::prepareFolders() {
     qDebug() << "Preparing folders";
     qDebug() << "Working directory:" << QDir::currentPath();
 
-    FileSystem::createFolderIfNotExist(KeyStore::USER_KEYSTORE);
-    FileSystem::createFolderIfNotExist(DataStorage::TMP_FOLDER);
-    FileSystem::createFolderIfNotExist(DataStorage::BLOCKCHAIN_INDEX + "/"
-                                       + DataStorage::ACTOR_INDEX_FOLDER_NAME);
-    FileSystem::createFolderIfNotExist(DataStorage::BLOCKCHAIN_INDEX + "/"
-                                       + DataStorage::BLOCK_INDEX_FOLDER_NAME);
+    QDir().mkpath(KeyStore::USER_KEYSTORE);
+    QDir().mkpath(DataStorage::TMP_FOLDER);
+    QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
+    QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
+
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
 }
