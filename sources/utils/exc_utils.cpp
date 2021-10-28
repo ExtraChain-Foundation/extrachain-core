@@ -37,6 +37,10 @@
 #include "enc/enc_tools.h"
 #include "utils/Keccak256.h"
 
+#ifndef EXTRACHAIN_CMAKE
+    #include "preconfig.h"
+#endif
+
 QByteArray Utils::calcKeccak(const QByteArray &data) {
     // Keccak keccak;
     // QByteArray hash = keccak(data);
