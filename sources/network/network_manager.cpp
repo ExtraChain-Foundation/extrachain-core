@@ -80,7 +80,7 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
 
     upnpDis = new UPNPConnection(*local);
     upnpNet = new UPNPConnection(*local);
-    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::startNetwork);
+    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
     // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
     connect(upnpNet, &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
@@ -92,8 +92,6 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
 }
 
 void NetworkManager::process() {
-    startNetwork();
-
     auto tempTimer = new QTimer(this);
     connect(tempTimer, &QTimer::timeout, [this] { this->reconnection(); });
     tempTimer->start(5000);
@@ -189,7 +187,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    qDebug() << "[NetworkManager] Start servers...";
+    qDebug() << "[NetworkManager] Start servers..." << (wsPort == 2233 ? "Network" : "DFS");
 
     if (local == nullptr) {
         qDebug() << "[NetworkManager] Can't detect local ip";

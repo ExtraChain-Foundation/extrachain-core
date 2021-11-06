@@ -31,6 +31,7 @@
 
 class Blockchain;
 class ActorIndex;
+class ExtraChainNode;
 
 /**
  * @brief The AccountController class
@@ -46,9 +47,10 @@ private:
     Blockchain *blockchain;
     QList<Actor<KeyPrivate> *> accounts;
     ActorIndex *actorIndex;
+    ExtraChainNode *m_node;
 
 public:
-    AccountController(ActorIndex *actorIndex);
+    AccountController(ActorIndex *actorIndex, ExtraChainNode *node);
     QList<QByteArray> getAccountID();
 
 public:

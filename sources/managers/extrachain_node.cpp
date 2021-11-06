@@ -55,7 +55,7 @@ ExtraChainNode::ExtraChainNode() {
     m_actorIndex = new ActorIndex();
     m_privateProfile = new PrivateProfile();
     m_smartContractManager = new SmartContractManager(m_actorIndex);
-    m_accountController = new AccountController(m_actorIndex);
+    m_accountController = new AccountController(m_actorIndex, this);
     m_networkManager = new NetworkManager(m_actorIndex);
     m_subscribeController = new SubscribeController();
     m_subscribeController->setExtraChainNode(this);
@@ -144,7 +144,11 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 }
 
 void ExtraChainNode::start() {
-    QTimer::singleShot(500, this, &ExtraChainNode::ready);
+    if (!started) {
+        QTimer::singleShot(500, this, &ExtraChainNode::ready);
+        // emit startNetwork();
+        started = true;
+    }
 }
 
 void ExtraChainNode::showMessage(QString from, QString message) {
@@ -409,7 +413,7 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
-    // connect(this, &ExtraChainNode::ready, networkManager, &NetworkManager::startNetwork);
+    connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
     connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
