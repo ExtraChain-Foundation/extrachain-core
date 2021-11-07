@@ -22,6 +22,7 @@ typedef struct {
     int type;
 } ActorPublic;
 
+void *extrachain_node_pointer();
 void extrachain_free_char_str(const char *str);
 void extrachain_free_actor_private(ActorPrivate *actor_private);
 void extrachain_free_actor_public(ActorPublic *actor_public);
@@ -51,6 +52,9 @@ char *extrachain_decrypt(const char *data, size_t size, const ActorPrivate *acto
                          const ActorPublic *actor_public);
 char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate *actor_private);
 char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate *actor_private);
+
+void extrachain_network_connect(const char *ip, int type);   // type: 1 - tcp, 2 - ws
+void extrachain_network_send(const char *data, size_t size); // TODO: package num
 
 // void extrachain_create_profile
 

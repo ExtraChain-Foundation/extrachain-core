@@ -10,6 +10,7 @@
 #include <managers/account_controller.h>
 #include <managers/extrachain_node.h>
 #include <managers/logs_manager.h>
+#include <network/network_manager.h>
 #include <profile/private_profile.h>
 
 QCoreApplication *app;
@@ -254,4 +255,19 @@ char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate 
     char *res;
     copy_char(res, decrypted);
     return res;
+}
+
+void *extrachain_node_pointer() {
+    return node;
+}
+
+void extrachain_network_connect(const char *ip, int type) {
+    if (type != 1 && type != 2)
+        return;
+
+    node->networkManager()->connectToNode(ip, Network::Protocol(type));
+}
+
+void extrachain_network_send(const char *data, size_t size) {
+    node->networkManager()->send(data, 0, SocketPair(), Config::Net::TypeSend(0));
 }
