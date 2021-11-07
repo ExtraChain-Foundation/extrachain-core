@@ -40,7 +40,8 @@ void copy_char(char *&dest, const QString &str) {
 ActorPrivate *actor_private_from_ActorKeyPrivate(const Actor<KeyPrivate> &actor) {
     if (actor.empty()) { } // TODO
 
-    ActorPrivate *actor_private = new ActorPrivate { .type = int(actor.type()) };
+    ActorPrivate *actor_private = new ActorPrivate;
+    actor_private->type = int(actor.type());
     copy_char(actor_private->id, actor.id().toByteArray().data(), 20);
     copy_char(actor_private->secret_key, actor.key()->secretKey().data(), 128);
     copy_char(actor_private->public_key, actor.key()->publicKey().data(), 64);
@@ -51,7 +52,8 @@ ActorPrivate *actor_private_from_ActorKeyPrivate(const Actor<KeyPrivate> &actor)
 ActorPublic *actor_public_from_ActorKeyPublic(const Actor<KeyPublic> &actor) {
     // TODO: checks
 
-    ActorPublic *actor_public = new ActorPublic { .type = int(actor.type()) };
+    ActorPublic *actor_public = new ActorPublic;
+    actor_public->type = int(actor.type());
     copy_char(actor_public->id, actor.id().toByteArray().data(), 20);
     copy_char(actor_public->public_key, actor.key()->publicKey().c_str(), 64);
     return actor_public;
@@ -105,6 +107,7 @@ char *extrachain_version() {
 }
 
 void extrachain_wipe() {
+    qDebug() << "Wipe...";
     Utils::wipeDataFiles();
 }
 
@@ -172,7 +175,8 @@ ActorPublic *extrachain_get_actor(char actor_id[]) {
     auto actor = node->actorIndex()->getActor(actorId);
 
     if (actor.empty()) {
-        ActorPublic *actor_public = new ActorPublic { .type = -1 };
+        ActorPublic *actor_public = new ActorPublic;
+        actor_public->type = int(actor.type());
         return actor_public;
     }
 

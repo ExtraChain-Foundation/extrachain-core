@@ -80,6 +80,11 @@
     // #include <cstdbool>
     #include <optional>
 
+    #include <sodium.h>
+
+    #ifdef Q_OS_WINDOWS
+        #define UINT32_C(c) (c##ULL)
+    #endif
     #include <QtConcurrent>
     #include <QtCore>
     #include <QtNetwork>

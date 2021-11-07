@@ -179,19 +179,23 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
-
-    ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h
-    ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/rextrachain/rextrachain.h
     )
 
 if (EXTRACHAIN_STATIC_BUILD)
     add_library(extrachain
         ${EXTRACHAIN_CORE_SOURCES}
         )
+    add_library(extrachainc
+        ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
+        )
 else()
     add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
     add_library(extrachain SHARED
         ${EXTRACHAIN_CORE_SOURCES}
+        )
+    add_library(extrachainc
+        ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
         )
 endif()
 
@@ -208,6 +212,17 @@ if (EXTRACHAIN_ENABLE_LTO)
     endif(lto_supported)
 endif(EXTRACHAIN_ENABLE_LTO)
 
+# rust
+#if (EXTRACHAIN_ENABLE_RUST)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../corrosion ${CMAKE_CURRENT_BINARY_DIR}/corrosion)
+    corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_LIST_DIR}/rextrachain/Cargo.toml)
+    corrosion_link_libraries(rextrachain extrachainc)
+    execute_process(COMMAND rustc --version OUTPUT_VARIABLE RUST_VERSION)
+    string(STRIP "${RUST_VERSION}" RUST_VERSION)
+    string(SUBSTRING "${RUST_VERSION}" 6 6 RUST_VERSION)
+    add_compile_definitions(EXTRACHAIN_RUST_VERSION="${RUST_VERSION}")
+#endif(EXTRACHAIN_ENABLE_RUST)
+
 # git
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
@@ -218,8 +233,16 @@ add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHA
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+
+
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 extrachainc)
+target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
+# if (EXTRACHAIN_ENABLE_RUST)
+    target_link_libraries(extrachain rextrachain extrachainc)
+# endif (EXTRACHAIN_ENABLE_RUST)
 
 if (UNIX AND NOT APPLE)
     target_link_libraries(extrachain gmp)
