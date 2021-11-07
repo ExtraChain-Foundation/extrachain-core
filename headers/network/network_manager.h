@@ -103,7 +103,6 @@ signals:
     void finished(); // ThreadPool
 
 protected:
-    void startNetwork();
     /**
      * @brief Creates new tcp socket connection and adds it to connections
      * @param ip
@@ -131,6 +130,7 @@ protected slots:
     void startDiscovery();
 
 public slots:
+    void startNetwork();
     void connectToNode(const QString &ip, Network::Protocol protocol);
     void process();
     void reconnection();

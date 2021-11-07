@@ -52,6 +52,7 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 private:
     // common object for
     bool fileMode = true;
+    bool started = false;
     Dfs *m_dfs;
     ActorIndex *m_actorIndex;
     Blockchain *m_blockchain;

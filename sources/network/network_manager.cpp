@@ -78,7 +78,7 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
 
     upnpDis = new UPNPConnection(*local);
     upnpNet = new UPNPConnection(*local);
-    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::startNetwork);
+    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
     // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
     connect(upnpNet, &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
@@ -89,10 +89,7 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 }
 
-void NetworkManager::process() { // TODO: move to start slot after status online and after start signal from
-                                 // client
-    startNetwork();
-
+void NetworkManager::process() {
     auto tempTimer = new QTimer(this);
     connect(tempTimer, &QTimer::timeout, [this] { this->reconnection(); });
     tempTimer->start(5000);
@@ -188,7 +185,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    qDebug() << "[NetworkManager] Start servers...";
+    qDebug() << "[NetworkManager] Start servers..." << (wsPort == 2233 ? "Network" : "DFS");
 
     if (local == nullptr) {
         qDebug() << "[NetworkManager] Can't detect local ip";

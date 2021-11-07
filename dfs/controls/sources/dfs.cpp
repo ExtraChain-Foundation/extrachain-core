@@ -595,6 +595,8 @@ Dfs::~Dfs() {
 void Dfs::initDfsNetwork() {
     m_networkManager = new DfsNetworkManager(actorIndex);
     m_networkManager->setDfs(this);
+
+    connect(this, &Dfs::networkCreated, m_networkManager, &NetworkManager::startNetwork);
     connect(this, &Dfs::connectToNode, m_networkManager, &DfsNetworkManager::connectToNode);
     connect(this, &Dfs::removeConnection, m_networkManager, &DfsNetworkManager::removeConnection);
 
@@ -1080,6 +1082,12 @@ QList<QByteArray> Dfs::dfsValidateAll() {
 }
 
 void Dfs::process() {
+    initDfsNetwork();
+    if (sender == nullptr) {
+        sender = new Sender();
+        sender->setNetworkManager(m_networkManager);
+        ThreadPool::addThread(sender);
+    }
 }
 
 void Dfs::startDFS() {
@@ -1093,13 +1101,6 @@ void Dfs::startDFS() {
         }
 
         initDfs(actor);
-    }
-
-    initDfsNetwork();
-    if (sender == nullptr) {
-        sender = new Sender();
-        sender->setNetworkManager(m_networkManager);
-        ThreadPool::addThread(sender);
     }
 
     timerTmpFiles = new QTimer(this);

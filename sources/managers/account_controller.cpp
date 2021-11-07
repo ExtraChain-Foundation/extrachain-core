@@ -53,8 +53,9 @@ QList<ActorId> AccountController::getListAccounts() const {
     return res;
 }
 
-AccountController::AccountController(ActorIndex *actorIndex) {
+AccountController::AccountController(ActorIndex *actorIndex, ExtraChainNode *node) {
     this->actorIndex = actorIndex;
+    this->m_node = node;
     // when private actor is verified by actor index -> save it locally
     // connect(actorIndex, &ActorIndex::PrivateActorIsVerified, this, &AccountController::savePrivateActor);
     //    if (!QFile(KeyStore::user_actor_state).exists())
@@ -100,6 +101,8 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     }
     emit newActorIsCreated(this->mainActor()->id().toByteArray(),
                            account == ActorType::Account); // TODO: send type
+
+    m_node->start();
 
     if (!accounts.isEmpty())
         blockchain->getBlockZero();
@@ -171,6 +174,7 @@ void AccountController::loadActors(const QByteArray &id, const QByteArrayList &i
         qDebug() << loaded << "accounts have been loaded" << id;
         blockchain->getBlockZero();
         emit loadWallets(id, idList);
+        m_node->start();
     } else {
         qDebug() << "There no accounts found locally";
     }
