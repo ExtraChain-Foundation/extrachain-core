@@ -1,0 +1,14 @@
+[package]
+name = "rextrachain"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+name = "rextrachain"
+crate-type = ["staticlib"]
+
+[dependencies]
+
+[build-dependencies.corrosion-build]
+path = "../../corrosion/integrator"
