@@ -44,6 +44,11 @@ DBConnector::~DBConnector() {
     // close();
 }
 
+QString DBConnector::sqlite_version()
+{
+    return sqlite3_libversion();
+}
+
 bool DBConnector::open(const std::string &name) {
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc) {

@@ -30,11 +30,11 @@
 #include "managers/account_controller.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
-#include <QHostAddress>
 #include <QMutex>
 #include <QObject>
 #include <QString>
 #include <QTemporaryFile>
+#include <QtNetwork/QHostAddress>
 #include <cassert>
 // database
 #include "utils/db_connector.h"

@@ -7,6 +7,7 @@
 #include <utils/exc_utils.h>
 
 namespace SecretKey {
+EXTRACHAIN_EXPORT std::string sodium_version();
 EXTRACHAIN_EXPORT std::string keygen();
 EXTRACHAIN_EXPORT std::string getKeyFromPass(const std::string &pass, const std::string &salt = "");
 EXTRACHAIN_EXPORT std::string encrypt(const std::string &msg, const std::string &secret_key);

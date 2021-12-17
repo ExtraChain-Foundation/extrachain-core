@@ -65,6 +65,8 @@ public:
     ~DBConnector();
 
 public:
+    static QString sqlite_version();
+
     bool open(const std::string &name);
     bool close();
     std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});

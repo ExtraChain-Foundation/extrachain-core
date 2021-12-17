@@ -176,4 +176,4 @@ include(../extrachain-3rdparty/extrachain-3rdparty.pri)
 
 lessThan(QT_MAJOR_VERSION, 6): error("requires Qt 6.2+")
 equals(QT_MAJOR_VERSION, 6): lessThan(QT_MINOR_VERSION, 2): error("requires Qt 6.2+")
-# lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.15+")
+equals(QT_MAJOR_VERSION, 6): equals(QT_MINOR_VERSION, 2): lessThan(QT_PATCH_VERSION, 2): error("requires Qt 6.2.2+")
