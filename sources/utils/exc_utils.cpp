@@ -33,6 +33,9 @@
 
 #include <sodium.h>
 
+#include "boost/asio.hpp"
+#include "boost/version.hpp"
+
 #include "dfs/types/headers/dfstruct.h"
 #include "enc/enc_tools.h"
 #include "utils/Keccak256.h"
@@ -599,4 +602,18 @@ void Utils::benchmark(std::function<void()> func, int count) {
 
 QString Utils::extrachainVersion() {
     return EXTRACHAIN_VERSION;
+}
+
+QString Utils::boostVersion() {
+    int major = BOOST_VERSION / 100000;
+    int minor = BOOST_VERSION / 100 % 1000;
+    int patch = BOOST_VERSION % 100;
+    return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
+}
+
+QString Utils::boostAsioVersion() {
+    int major = BOOST_ASIO_VERSION / 100000;
+    int minor = BOOST_ASIO_VERSION / 100 % 1000;
+    int patch = BOOST_ASIO_VERSION % 100;
+    return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
 }

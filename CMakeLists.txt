@@ -32,6 +32,7 @@ endif()
 find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system thread)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
@@ -188,9 +189,11 @@ add_library(extrachainc
     )
 
 if (EXTRACHAIN_STATIC_BUILD)
+    message("ExtraChain: static build")
     add_library(extrachain ${EXTRACHAIN_CORE_SOURCES})
 else()
     add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
+    message("ExtraChain: library build")
     add_library(extrachain SHARED ${EXTRACHAIN_CORE_SOURCES})
 endif()
 
@@ -231,9 +234,9 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 extrachainc)
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 Boost::boost Boost::system Boost::thread extrachainc)
 target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3)
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 Boost::boost Boost::system Boost::thread)
 if (EXTRACHAIN_ENABLE_RUST)
     target_link_libraries(extrachain rextrachain extrachainc)
 endif (EXTRACHAIN_ENABLE_RUST)

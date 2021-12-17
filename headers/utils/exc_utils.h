@@ -463,6 +463,8 @@ namespace Utils {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 EXTRACHAIN_EXPORT QString extrachainVersion();
+EXTRACHAIN_EXPORT QString boostVersion();
+EXTRACHAIN_EXPORT QString boostAsioVersion();
 
 enum PrintDebug
 {
