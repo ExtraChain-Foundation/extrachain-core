@@ -19,6 +19,7 @@
 
 #include "managers/extrachain_node.h"
 
+#include "datastorage/dfs/DFSController.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -101,6 +102,14 @@ ExtraChainNode::ExtraChainNode() {
     // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
     // FileUpdaterManager fl;
     // fl.verifyMyFiles("02c9b394cf3785389f82");
+
+    // Mock actor create
+    const QString userEmail = "test@test.com";
+    const QString userPass = "12345678";
+    const QByteArray userHash = Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+
+    DFSController dfsController(actor.id());
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
