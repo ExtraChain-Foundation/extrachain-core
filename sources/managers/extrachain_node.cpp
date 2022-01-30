@@ -104,11 +104,10 @@ ExtraChainNode::ExtraChainNode() {
     // fl.verifyMyFiles("02c9b394cf3785389f82");
 
     // Mock actor create
-    const QString userEmail = "test@test.com";
-    const QString userPass = "12345678";
-    const QByteArray userHash = Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    const std::string userEmail = "test@test.com";
+    const std::string userPass = "12345678";
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
     auto actor = m_accountController->createActor(ActorType::Account, userHash);
-
     DFSController dfsController(actor.id());
 }
 

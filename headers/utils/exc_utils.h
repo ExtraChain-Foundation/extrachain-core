@@ -390,6 +390,15 @@ namespace DataStorage {
           "type INT              NOT NULL  "
           ");";
 
+    static const std::string filesTable = "FilesTable";
+    static const std::string filesTableCreate = "CREATE TABLE IF NOT EXISTS " + filesTable
+        + " ("
+          "fileHash     TEXT PRIMARY KEY NOT NULL, "
+          "fileHashPrev TEXT             NOT NULL, "
+          "filePath     TEXT             NOT NULL"
+          ");";
+    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
