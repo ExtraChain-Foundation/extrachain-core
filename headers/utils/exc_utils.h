@@ -646,6 +646,11 @@ enum class TxParam
 }
 } // namespace SearchEnum
 
+namespace FileSystem {
+inline static QString pathConcat(const QString& pl, const QString& pr) { return QDir::cleanPath(pl + "/" + pr); };
+QString createSubDirectory(const QString& parentDirStr, const QString& subDirStr);
+} // namespace FileSystem
+
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType
     {

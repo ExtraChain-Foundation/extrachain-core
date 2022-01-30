@@ -617,3 +617,14 @@ QString Utils::boostAsioVersion() {
     int patch = BOOST_ASIO_VERSION % 100;
     return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
 }
+
+QString FileSystem::createSubDirectory(const QString &parentDirStr, const QString &subDirStr) {
+    QString destPathStr = FileSystem::pathConcat(parentDirStr, subDirStr);
+    QDir parentDir(parentDirStr);
+    if (!parentDir.exists(subDirStr)) {
+        if (!parentDir.mkdir(subDirStr)) {
+            destPathStr = "";
+        }
+    }
+    return destPathStr;
+}
