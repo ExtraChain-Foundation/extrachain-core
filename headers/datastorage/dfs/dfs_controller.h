@@ -18,14 +18,14 @@ public:
     DFSController(QObject* parent = nullptr);
     ~DFSController();
 
-    QString createDirectory(const Actor<KeyPrivate> & actor);
-    void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     bool addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
 
 private:
     static const QString DFSRootDirName;
     static const QString DFSDBName;
 
+    QString createDirectory(const Actor<KeyPrivate> & actor);
+    void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
     std::optional<DBRow> lastRow();
     QString lastHash();

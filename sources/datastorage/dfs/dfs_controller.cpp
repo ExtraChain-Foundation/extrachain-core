@@ -22,6 +22,42 @@ DFSController::~DFSController() {
     }
 }
 
+bool DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath) {
+    if (!QFileInfo::exists(filePath)) {
+        qDebug() << "DFSController: addFile: Failed, file does not exists:" << filePath;
+        return false;
+    }
+
+    const QString actorDirPath = createDirectory(actor);
+    initDB(actor, actorDirPath);
+
+    if (!m_db.isOpen()) {
+        qDebug() << "DFSController: addFile: Failed, DB is not open:" << m_db.file().c_str();
+        return false;
+    }
+
+    const QByteArray fileHash = Utils::calcKeccakForFile(filePath);
+    const QString fileHashPrev = lastHash();
+    const QString fileName = FileSystem::pathConcat(DFSRootDirName, QFileInfo(filePath).fileName());
+    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, fileName);
+
+    const QString destFilePath = FileSystem::pathConcat(actorDirPath, fileHash);
+    bool fileEnctrypted = Utils::encryptFile(filePath,
+                                             destFilePath,
+                                             QByteArray::fromStdString(actor.key()->secretKey())); // Review here
+    if (!fileEnctrypted) {
+        qDebug() << "DFSController: addFile: Failed encryptFile:" << filePath;
+        return false;
+    }
+
+    if (!m_db.insert(Config::DataStorage::filesTable, rowData)) {
+        qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :" << Config::DataStorage::filesTable.c_str();
+        return false;
+    }
+
+    return true;
+}
+
 QString DFSController::createDirectory(const Actor<KeyPrivate> & actor) {
     qDebug() << "DFSController: createDirectory";
 
@@ -58,42 +94,6 @@ void DFSController::initDB(const Actor<KeyPrivate> & actor, const QString & sqli
             QCoreApplication::exit(DBCreateTableError);
         }
     }
-}
-
-bool DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath) {
-    if (!QFileInfo::exists(filePath)) {
-        qDebug() << "DFSController: addFile: Failed, file does not exists:" << filePath;
-        return false;
-    }
-
-    const QString actorDirPath = createDirectory(actor);
-    initDB(actor, actorDirPath);
-
-    if (!m_db.isOpen()) {
-        qDebug() << "DFSController: addFile: Failed, DB is not open:" << m_db.file().c_str();
-        return false;
-    }
-
-    const QByteArray fileHash = Utils::calcKeccakForFile(filePath);
-    const QString fileHashPrev = lastHash();
-    const QString fileName = FileSystem::pathConcat(DFSRootDirName, QFileInfo(filePath).fileName());
-    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, fileName);
-
-    const QString destFilePath = FileSystem::pathConcat(actorDirPath, fileHash);
-    bool fileEnctrypted = Utils::encryptFile(filePath,
-                                             destFilePath,
-                                             QByteArray::fromStdString(actor.key()->secretKey())); // Review here
-    if (!fileEnctrypted) {
-        qDebug() << "DFSController: addFile: Failed encryptFile:" << filePath;
-        return false;
-    }
-
-    if (!m_db.insert(Config::DataStorage::filesTable, rowData)) {
-        qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :" << Config::DataStorage::filesTable.c_str();
-        return false;
-    }
-
-    return true;
 }
 
 DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath) {
