@@ -19,7 +19,7 @@
 
 #include "managers/extrachain_node.h"
 
-#include "datastorage/dfs/DFSController.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"

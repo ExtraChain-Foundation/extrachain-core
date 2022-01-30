@@ -1,4 +1,4 @@
-#include "datastorage/dfs/DFSController.h"
+#include "datastorage/dfs/dfs_controller.h"
 
 #include "utils/exc_utils.h"
 
@@ -61,7 +61,7 @@ void DFSController::initDB(const Actor<KeyPrivate> & actor, const QString & sqli
 }
 
 bool DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath) {
-    if (QFileInfo::exists(filePath)) {
+    if (!QFileInfo::exists(filePath)) {
         qDebug() << "DFSController: addFile: Failed, file does not exists:" << filePath;
         return false;
     }
