@@ -102,28 +102,6 @@ ExtraChainNode::ExtraChainNode() {
     // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
     // FileUpdaterManager fl;
     // fl.verifyMyFiles("02c9b394cf3785389f82");
-
-    // Mock actor create
-    const std::string userEmail = "test@test.com";
-    const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor = m_accountController->createActor(ActorType::Account, userHash);
-
-    DFSController dfsController;
-
-    QStringList testFiles = {
-        FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-2.jpg"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-3-not-exists.txt")
-    };
-
-    for (const auto & f : testFiles) {
-        if (dfsController.addFile(actor, f)) {
-            qDebug() << "addFile succeeded:" << f;
-        } else {
-            qDebug() << "addFile failed:" << f;
-        }
-    }
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -532,4 +510,30 @@ ChatManager *ExtraChainNode::chatManager() const {
 
 Dfs *ExtraChainNode::dfs() const {
     return m_dfs;
+}
+
+void ExtraChainNode::test() const {
+    // Mock actor create
+    const std::string userEmail = "test@test.com";
+    const std::string userPass = "12345678";
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+
+    DFSController dfsController;
+    // TODO: Verify / Clean zombies / DIR file contains entry, but file system does not contain physical file.
+
+    QStringList testFiles = {
+        FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
+        FileSystem::pathConcat(QDir::homePath(), "test-file-2.jpg"),
+        FileSystem::pathConcat(QDir::homePath(), "test-file-3-not-exists.txt")
+    };
+
+    for (const auto & f : testFiles) {
+        const QByteArray fHash = dfsController.addFile(actor, f);
+        if (!fHash.isEmpty()) {
+            qDebug() << "addFile succeeded:" << f << fHash;
+        } else {
+            qDebug() << "addFile failed:" << f;
+        }
+    }
 }
