@@ -30,6 +30,7 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
 
     const QString actorDirPath = createDirectory(actor);
     initDB(actor, actorDirPath);
+    flushDirContent(actor);
 
     if (!m_db.isOpen()) {
         qDebug() << "DFSController: addFile: Failed, DB is not open:" << m_db.file().c_str();
@@ -58,6 +59,32 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     return fileHash;
 }
 
+bool DFSController::flushDirContent(const Actor<KeyPrivate> & actor) {
+    qDebug() << "DFSController: createDirectory";
+
+    const QString actorDirPath = makeActorDirPath(actor);
+    const auto actorFilesTable = m_db.select(Config::DataStorage::filesTableFull);
+    const QSet<QString> actorFilesListHashTable = [&] () {
+        QSet<QString> result;
+        for (auto r : actorFilesTable) {
+            result.insert(QString::fromStdString(r["fileHash"]));
+        }
+        return std::move(result);
+    } ();
+    const QList<std::tuple<QString, QString>> actorDirList = FileSystem::listFiles(actorDirPath, QStringList() << ".dir");
+    for (const std::tuple<QString, QString> & f : actorDirList) {
+        if (!actorFilesListHashTable.contains(std::get<0>(f))) {
+            const QString & fRemove = std::get<1>(f);
+            if (!QFile().remove(fRemove)) {
+                qDebug() << "DFSController: validateDirectory: Remove file failed:" << fRemove;
+                // To discuss: Shoud the function return false is a single file removal has failed?
+                // return false;
+            }
+        }
+    }
+    return true;
+}
+
 QString DFSController::makeActorDirPath(const Actor<KeyPrivate> &actor) {
     return FileSystem::pathConcat(
                 FileSystem::pathConcat(QCoreApplication::applicationDirPath(), DFSRootDirName),
@@ -74,16 +101,6 @@ QString DFSController::createDirectory(const Actor<KeyPrivate> & actor) {
     }
 
     return actorDirPath;
-}
-
-bool DFSController::validateDirectory(const Actor<KeyPrivate> & actor) {
-    qDebug() << "DFSController: createDirectory";
-
-    QString actorDirPath = makeActorDirPath(actor);
-
-    // TODO Validate...
-
-    return true;
 }
 
 void DFSController::initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath) {

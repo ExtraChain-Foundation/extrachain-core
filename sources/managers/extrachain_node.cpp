@@ -536,4 +536,6 @@ void ExtraChainNode::test() const {
             qDebug() << "addFile failed:" << f;
         }
     }
+
+    dfsController.flushDirContent(actor);
 }

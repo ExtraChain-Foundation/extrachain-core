@@ -398,6 +398,7 @@ namespace DataStorage {
           "filePath     TEXT             NOT NULL"
           ");";
     static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
+    static const std::string filesTableFull = "SELECT * FROM " + filesTable;
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
@@ -647,8 +648,9 @@ enum class TxParam
 } // namespace SearchEnum
 
 namespace FileSystem {
-inline static QString pathConcat(const QString& pl, const QString& pr) { return QDir::cleanPath(pl + "/" + pr); };
-QString createSubDirectory(const QString& parentDirStr, const QString& subDirStr);
+inline static QString pathConcat(const QString &pl, const QString &pr) { return QDir::cleanPath(pl + "/" + pr); };
+QString createSubDirectory(const QString &parentDirStr, const QString &subDirStr);
+QList<std::tuple<QString, QString>> listFiles(const QString &dirPath, const QStringList &ignoreList = QStringList());
 } // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {

@@ -628,3 +628,19 @@ QString FileSystem::createSubDirectory(const QString &parentDirStr, const QStrin
     }
     return destPathStr;
 }
+
+QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString & dirPath, const QStringList & ignoreList) {
+    QList<std::tuple<QString, QString>> dirList;
+
+    QDir dir (dirPath, QString::fromLatin1("*"), QDir::SortFlag::Name, QDir::Files | QDir::NoDotAndDotDot);
+    QDirIterator dirItor (dir, QDirIterator::Subdirectories);
+    while (dirItor.hasNext()) {
+        dirItor.next();
+        const QFileInfo & fi = dirItor.fileInfo();
+        if (fi.isFile() && !ignoreList.contains(fi.fileName())) {
+            dirList.emplaceBack(std::make_tuple<QString, QString>(fi.fileName(), fi.filePath()));
+        }
+    }
+
+    return dirList;
+}
