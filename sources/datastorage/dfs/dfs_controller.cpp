@@ -58,22 +58,32 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     return fileHash;
 }
 
+QString DFSController::makeActorDirPath(const Actor<KeyPrivate> &actor) {
+    return FileSystem::pathConcat(
+                FileSystem::pathConcat(QCoreApplication::applicationDirPath(), DFSRootDirName),
+                actor.id().toString());
+}
+
 QString DFSController::createDirectory(const Actor<KeyPrivate> & actor) {
     qDebug() << "DFSController: createDirectory";
 
-    QString dfsRootDirPath = FileSystem::createSubDirectory(QCoreApplication::applicationDirPath(), DFSRootDirName);
-    if (dfsRootDirPath.isEmpty()) {
-        qDebug() << "DFSController: createDirectory: DFS root dir create error:" << dfsRootDirPath;
-        QCoreApplication::exit(RootDirCreateError);
-    }
-
-    QString actorDirPath = FileSystem::createSubDirectory(dfsRootDirPath, actor.id().toString());
-    if (actorDirPath.isEmpty()) {
+    QString actorDirPath = makeActorDirPath(actor);
+    if (!QDir().mkpath(actorDirPath)) {
         qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << actorDirPath;
         QCoreApplication::exit(ActorDirCreateError);
     }
 
     return actorDirPath;
+}
+
+bool DFSController::validateDirectory(const Actor<KeyPrivate> & actor) {
+    qDebug() << "DFSController: createDirectory";
+
+    QString actorDirPath = makeActorDirPath(actor);
+
+    // TODO Validate...
+
+    return true;
 }
 
 void DFSController::initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath) {

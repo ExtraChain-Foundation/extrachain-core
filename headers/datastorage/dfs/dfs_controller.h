@@ -24,7 +24,9 @@ private:
     static const QString DFSRootDirName;
     static const QString DFSDBName;
 
+    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
     QString createDirectory(const Actor<KeyPrivate> & actor);
+    bool validateDirectory(const Actor<KeyPrivate> & actor);
     void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
     std::optional<DBRow> lastRow();
