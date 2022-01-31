@@ -18,7 +18,7 @@ public:
     DFSController(QObject* parent = nullptr);
     ~DFSController();
 
-    bool addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
+    QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
 
 private:
     static const QString DFSRootDirName;
