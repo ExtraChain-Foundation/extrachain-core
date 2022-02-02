@@ -4,7 +4,6 @@
 
 #include <QDir>
 #include <QFileInfo>
-
 #include <QDebug>
 
 const QString DFSController::DFSRootDirName = "dfs";
@@ -59,6 +58,69 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     return fileHash;
 }
 
+//
+// [Before]
+//
+//    | fileHash | fileHashPrev | filePath
+// ------------------------------------------
+//  0 | 11111111 |              | filePath_1
+//  1 | 22222222 | 11111111     | filePath_2
+//  2 | 33333333 | 22222222     | filePath_3
+//
+// Remove by hash: 22222222
+//
+// [After]
+//
+//    | fileHash | fileHashPrev | filePath
+// ------------------------------------------
+//  0 | 11111111 |              | filePath_1
+//  1 | 33333333 | 11111111     | filePath_3
+
+bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & fileHash) {
+    qDebug() << "DFSController: removeFile";
+    const std::string fileHashS = fileHash.toStdString();
+    const std::string selectQuery = (std::stringstream()
+                                     << "SELECT * FROM " << Config::DataStorage::filesTable
+                                     << " WHERE fileHash = '" << fileHashS << "' OR fileHashPrev = '" << fileHashS << "'").str();
+    auto result = m_db.select(selectQuery);
+
+    if (result.empty()) {
+        qDebug() << "DFSController: removeFile: Query select skipped because of empty result: Query" << selectQuery.c_str();
+        return false;
+    }
+
+    if (result.size() > 2) {
+        qDebug() << "DFSController: removeFile: Query select failed: Query result has unsupported size:" << result.size() << ": Query:" << selectQuery.c_str();
+        return false;
+    }
+
+    if (result.size() == 1 && result[0]["fileHashPrev"] == fileHashS) {
+        qDebug() << "DFSController: removeFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:" << fileHash << "; Query:" << selectQuery.c_str();
+        return false;
+    }
+
+    if (result.size() == 2) {
+        const std::string & updateRow_fileHash = result[1]["fileHash"];
+        const std::string & updateRow_fileHashPrev = result[0]["fileHashPrev"];
+        const std::string & updateQuery = (std::stringstream ()
+                                           << "UPDATE " << Config::DataStorage::filesTable
+                                           << " SET fileHashPrev = '" << updateRow_fileHashPrev
+                                           << "' WHERE fileHash = '" << updateRow_fileHash << "'").str();
+        if (!m_db.update(updateQuery)) {
+            qDebug() << "DFSController: removeFile: Query update failed: New fileHash:" << updateRow_fileHash.c_str() << ", new fileHashPrev:" << updateRow_fileHashPrev.c_str() << ", Query:" << updateQuery.c_str();
+            return false;
+        }
+    }
+
+    if (!m_db.deleteRow(Config::DataStorage::filesTable, result[0])) {
+        qDebug() << "DFSController: removeFile: deleteRow filed:" << toString(result[0]);
+        return false;
+    }
+
+    return true;
+}
+
+// Verify / Clean zombies / DIR file contains entry, but file system does not contain physical file.
 bool DFSController::flushDirContent(const Actor<KeyPrivate> & actor) {
     qDebug() << "DFSController: createDirectory";
 

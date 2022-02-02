@@ -19,6 +19,7 @@ public:
     ~DFSController();
 
     QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
+    bool removeFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
 
 private:
@@ -31,6 +32,16 @@ private:
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
     std::optional<DBRow> lastRow();
     QString lastHash();
+    std::string toStdString(DBRow & r) const;
+    QString toString(DBRow & r) const;
 
     DBConnector m_db;
 };
+
+inline std::string DFSController::toStdString(DBRow &r) const {
+    return "(" + r["fileHash"] + ", " + r["fileHashPrev"] + ", " + r["filePath"] + ")";
+}
+
+inline QString DFSController::toString(DBRow &r) const {
+    return QString("(%1, %2, %3)").arg(r["fileHash"].c_str(), r["fileHashPrev"].c_str(), r["filePath"].c_str());
+}
