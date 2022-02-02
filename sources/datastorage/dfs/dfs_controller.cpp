@@ -77,7 +77,8 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
 //  1 | 33333333 | 11111111     | filePath_3
 
 bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & fileHash) {
-    qDebug() << "DFSController: removeFile";
+    qDebug() << "DFSController: removeFile:" << fileHash;
+
     const std::string fileHashS = fileHash.toStdString();
     const std::string selectQuery = (std::stringstream()
                                      << "SELECT * FROM " << Config::DataStorage::filesTable
@@ -114,6 +115,17 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
 
     if (!m_db.deleteRow(Config::DataStorage::filesTable, result[0])) {
         qDebug() << "DFSController: removeFile: deleteRow filed:" << toString(result[0]);
+        return false;
+    }
+
+    const QString filePathRemove = FileSystem::pathConcat(makeActorDirPath(actor), fileHash);
+    if (!QFileInfo::exists(filePathRemove)) {
+        qDebug() << "DFSController: removeFile: File does not exists:" << filePathRemove;
+        return false;
+    }
+
+    if (!QFile().remove(filePathRemove)) {
+        qDebug() << "DFSController: removeFile: Remove file failed:" << filePathRemove;
         return false;
     }
 

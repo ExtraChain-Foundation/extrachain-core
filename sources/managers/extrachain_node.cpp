@@ -528,7 +528,7 @@ void ExtraChainNode::test() const {
         FileSystem::pathConcat(QDir::homePath(), "test-file-3.txt"),
         FileSystem::pathConcat(QDir::homePath(), "test-file-3-not-exists.txt")
     };
-
+    
     QString removeFileHash;
     for (const auto & f : testFiles) {
         const QByteArray fHash = dfsController.addFile(actor, f);
