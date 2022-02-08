@@ -20,6 +20,8 @@ public:
 
     QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
     bool removeFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
+    QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
+    bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
 
 private:
@@ -30,6 +32,8 @@ private:
     QString createDirectory(const Actor<KeyPrivate> & actor);
     void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
+    DBRow findDBRow(const QString & fileHash);
+    std::vector<DBRow> findDBRows(const std::string & fileHash);
     std::optional<DBRow> lastRow();
     QString lastHash();
     std::string toStdString(DBRow & r) const;

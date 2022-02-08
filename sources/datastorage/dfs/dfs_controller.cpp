@@ -132,6 +132,160 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
     return true;
 }
 
+QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString &fileHash) {
+    qDebug() << "DFSController: readFile:" << fileHash;
+
+    const std::string fileHashS = fileHash.toStdString();
+    auto result = findDBRows(fileHashS);
+
+    if (result.empty()) {
+        qDebug() << "DFSController: readFile: Skipped because of empty result";
+        return QByteArray();
+    }
+
+    if (result.size() > 2) {
+        qDebug() << "DFSController: readFile: Query select failed: Query result has unsupported size:" << result.size();
+        return QByteArray();
+    }
+
+    if (result.size() == 1 && result[0]["fileHashPrev"] == fileHashS) {
+        qDebug() << "DFSController: readFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:" << fileHash;
+        return QByteArray();
+    }
+
+    const QString actorDirPathStr = makeActorDirPath(actor);
+    const QString filePathStr = FileSystem::pathConcat(actorDirPathStr, fileHash);
+
+    if (!QFileInfo::exists(filePathStr)) {
+        qDebug() << "DFSController: editFile: readFile: File not found:" << filePathStr;
+        return QByteArray();
+    }
+
+    QByteArray fileDecryptedContent = Utils::decryptFileIntoByteArray(filePathStr, QByteArray::fromStdString(actor.key()->secretKey()));
+    return fileDecryptedContent;
+}
+
+//
+// [Before]
+//
+//    | fileHash | fileHashPrev | filePath
+// ------------------------------------------
+//  0 | 11111111 |              | filePath_1
+//  1 | 22222222 | 11111111     | filePath_2
+//  2 | 33333333 | 22222222     | filePath_3
+//
+// Edit by hash: 22222222: decrypt -> edit -> encrypt: 55555555
+//
+// [After]
+//
+//    | fileHash | fileHashPrev | filePath
+// ------------------------------------------
+//  0 | 11111111 |              | filePath_1
+//  1 | 55555555 | 11111111     | filePath_2
+//  2 | 33333333 | 55555555     | filePath_3
+//
+
+bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &fileHash, const QByteArray &fileContent) {
+    qDebug() << "DFSController: editFile:" << fileHash;
+
+    const std::string fileHashS = fileHash.toStdString();
+    auto result = findDBRows(fileHashS);
+
+    if (result.empty()) {
+        qDebug() << "DFSController: editFile: Skipped because of empty result";
+        return false;
+    }
+
+    if (result.size() > 2) {
+        qDebug() << "DFSController: editFile: Query select failed: Query result has unsupported size:" << result.size();
+        return false;
+    }
+
+    if (result.size() == 1 && result[0]["fileHashPrev"] == fileHashS) {
+        qDebug() << "DFSController: editFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:" << fileHash;
+        return false;
+    }
+
+    const QString actorDirPathStr = makeActorDirPath(actor);
+
+    //
+    // Encrypt new content
+    //
+    const QByteArray fileContentKeccak = Utils::calcKeccak(fileContent);
+    const QString fileNameNewOrigin = fileContentKeccak + "_origin";
+    const QString filePathNewOrigin = FileSystem::pathConcat(actorDirPathStr, fileNameNewOrigin);
+    const QString filePathNew = FileSystem::pathConcat(actorDirPathStr, fileContentKeccak);
+
+    if (QFileInfo::exists(filePathNewOrigin)) {
+        qDebug() << "DFSController: editFile: Failed: New encrypt file name already exists:" << filePathNewOrigin;
+        return false;
+    }
+
+    QFile fileNewOrigin(filePathNewOrigin);
+    if (!fileNewOrigin.open(QFile::WriteOnly)) {
+        qDebug() << "DFSController: editFile: File opening error:" << filePathNewOrigin << fileNewOrigin.errorString();
+        return false;
+    }
+
+    if (fileNewOrigin.write(fileContent) == -1) {
+        qDebug() << "DFSController: editFile: File write error:" << filePathNewOrigin << fileNewOrigin.errorString();
+        return false;
+    }
+
+    if (!Utils::encryptFile(filePathNew, filePathNewOrigin, QByteArray::fromStdString(actor.key()->secretKey()))) {
+        qDebug() << "DFSController: editFile: Failed encryptFile:" << filePathNewOrigin << "->" << filePathNew;
+        QFile().remove(filePathNew);
+        QFile().remove(filePathNewOrigin);
+        return false;
+    }
+
+    //
+    // Remove previous content from file system
+    //
+    const QString filePathPrev = FileSystem::pathConcat(actorDirPathStr, QString::fromStdString(fileHashS));
+    if (!QFileInfo::exists(filePathPrev)) {
+        qDebug() << "DFSController: editFile: Previous file not found:" << filePathPrev;
+        return true; // Nothing to delete.
+    }
+
+    QFile filePrev(filePathPrev);
+    if (!filePrev.remove()) {
+        qDebug() << "DFSController: editFile: Failed remove old data:" << filePathPrev << filePrev.errorString();
+        return false;
+    }
+
+    //
+    // Update .dir entry
+    //
+    auto _update = [&] (const std::string & columnName = "fileHash", const std::string & oldValue = "old_value", const std::string & newValue = "new_value") -> bool {
+        const std::string & updateQuery = (std::stringstream ()
+                                           << "UPDATE " << Config::DataStorage::filesTable
+                                           << " SET " << columnName << " = '" << newValue
+                                           << "' WHERE " << columnName << " = '" << oldValue << "'").str();
+        if (!m_db.update(updateQuery)) {
+            qDebug() << "DFSController: removeFile: Query update failed: columnName:" << columnName.c_str()
+                     << ", oldValue:" << oldValue.c_str() << ", newValue:" << newValue.c_str()
+                     << ", query:" << updateQuery.c_str();
+            return false;
+        }
+        return true;
+    };
+
+    // If a single row returned, the fileHash column has to be modified. Happens, when the row is the first or the last in the table.
+    if (!_update("fileHash", fileHashS, fileContentKeccak.toStdString())) {
+        return false;
+    }
+
+    // The second row should update fileHashPrev column where previous has to be updated.
+    if (result.size() == 2) {
+        if (!_update("fileHashPrev", fileHashS, fileContentKeccak.toStdString())) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Verify / Clean zombies / DIR file contains entry, but file system does not contain physical file.
 bool DFSController::flushDirContent(const Actor<KeyPrivate> & actor) {
     qDebug() << "DFSController: createDirectory";
@@ -203,6 +357,22 @@ DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHas
         { "fileHashPrev", fileHashPrev.toStdString() },
         { "filePath", filePath.toStdString() }
     };
+}
+
+DBRow DFSController::findDBRow(const QString &fileHash) {
+    const std::string fileHashS = fileHash.toStdString();
+    const std::string selectQuery = (std::stringstream()
+                                     << "SELECT * FROM " << Config::DataStorage::filesTable
+                                     << " WHERE fileHash = '" << fileHashS << "' OR fileHashPrev = '" << fileHashS << "'").str();
+    auto result = m_db.select(selectQuery);
+    return result.size() ? result[0] : DBRow();
+}
+
+std::vector<DBRow> DFSController::findDBRows(const std::string &fileHash) {
+    const std::string selectQuery = (std::stringstream()
+                                     << "SELECT * FROM " << Config::DataStorage::filesTable
+                                     << " WHERE fileHash = '" << fileHash << "' OR fileHashPrev = '" << fileHash << "'").str();
+    return m_db.select(selectQuery);
 }
 
 std::optional<DBRow> DFSController::lastRow() {
