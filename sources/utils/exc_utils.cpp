@@ -119,12 +119,16 @@ storedSpace::State storedSpace::convertToDFSstate(QByteArray state) {
 }
 
 QByteArray Utils::intToByteArray(const int &number, const int &size) {
-    QByteArray num = QByteArray::number(number);
-    QByteArray res = "";
-    if (num.size() < size)
-        for (int i = 0; i < size - num.size(); i++)
-            res += "0";
-    res += num;
+    auto num = QByteArray::number(number);
+    Q_ASSERT(num.size() <= size);
+    auto res = QByteArray(size - num.size(), '0') + num;
+    return res;
+}
+
+std::string Utils::intToStdString(const int &number, const int &size) {
+    auto num = std::to_string(number);
+    Q_ASSERT(num.size() <= size);
+    auto res = std::string(size - num.size(), '0') + num;
     return res;
 }
 
@@ -254,6 +258,15 @@ QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fi
     QByteArray serialized = "";
     for (const QByteArray &param : list) {
         serialized += Utils::intToByteArray(param.size(), fiels_size);
+        serialized += param;
+    }
+    return serialized;
+}
+
+std::string Serialization::serializeStd(const std::vector<std::string> &list, const int &fiels_size) {
+    std::string serialized = "";
+    for (const std::string &param : list) {
+        serialized += Utils::intToStdString(param.size(), fiels_size);
         serialized += param;
     }
     return serialized;
