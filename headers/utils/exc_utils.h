@@ -446,6 +446,8 @@ static const int DEFAULT_FIELD_SIZE = 8;
 
 EXTRACHAIN_EXPORT QByteArray serialize(const QList<QByteArray> &list,
                                        const int &fiels_size = DEFAULT_FIELD_SIZE);
+EXTRACHAIN_EXPORT std::string serializeStd(const std::vector<std::string> &list,
+                                           const int &fiels_size = DEFAULT_FIELD_SIZE);
 EXTRACHAIN_EXPORT QList<QByteArray> deserialize(const QByteArray &serialized,
                                                 const int &fiels_size = DEFAULT_FIELD_SIZE);
 EXTRACHAIN_EXPORT QByteArray serializeMap(const QMap<QString, QByteArray> &map);
@@ -483,6 +485,7 @@ EXTRACHAIN_EXPORT qint64 checkMemoryFree();  // MB
 EXTRACHAIN_EXPORT qint64 checkMemoryTotal(); // MB
 
 QByteArray intToByteArray(const int &number, const int &size);
+std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
 EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
