@@ -244,6 +244,32 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
     return QFile::exists(decryptName);
 }
 
+QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize) {
+    blockSize = (blockSize / 8 + 1) * 8;
+
+    if (!QFileInfo::exists(encryptName)) {
+        return QByteArray();
+    }
+
+    QFile encrypt(encryptName);
+    if (!encrypt.open(QFile::ReadOnly)) {
+        qDebug() << "[Utils::encryptFile] Error while loading file:" << encrypt.error() << encrypt.errorString();
+        return QByteArray();
+    }
+
+    QByteArray result;
+    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
+
+    while (!encrypt.atEnd()) {
+        QByteArray part = encrypt.read(blockSize);
+        QByteArray decrypted = QByteArray::fromStdString(SecretKey::decrypt(part.toStdString(), rkey));
+        result.append(decrypted);
+        qDebug() << "decrypted" << part.size() << decrypted.size();
+    }
+
+    return result;
+}
+
 QString Utils::fileMimeType(const QString &filePath) {
     QMimeDatabase db;
     QMimeType type = db.mimeTypeForFile(filePath);

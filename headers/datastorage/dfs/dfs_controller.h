@@ -19,6 +19,9 @@ public:
     ~DFSController();
 
     QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
+    bool removeFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
+    QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
+    bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
 
 private:
@@ -29,8 +32,20 @@ private:
     QString createDirectory(const Actor<KeyPrivate> & actor);
     void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
+    DBRow findDBRow(const QString & fileHash);
+    std::vector<DBRow> findDBRows(const std::string & fileHash);
     std::optional<DBRow> lastRow();
     QString lastHash();
+    std::string toStdString(DBRow & r) const;
+    QString toString(DBRow & r) const;
 
     DBConnector m_db;
 };
+
+inline std::string DFSController::toStdString(DBRow &r) const {
+    return "(" + r["fileHash"] + ", " + r["fileHashPrev"] + ", " + r["filePath"] + ")";
+}
+
+inline QString DFSController::toString(DBRow &r) const {
+    return QString("(%1, %2, %3)").arg(r["fileHash"].c_str(), r["fileHashPrev"].c_str(), r["filePath"].c_str());
+}

@@ -520,22 +520,31 @@ void ExtraChainNode::test() const {
     auto actor = m_accountController->createActor(ActorType::Account, userHash);
 
     DFSController dfsController;
-    // TODO: Verify / Clean zombies / DIR file contains entry, but file system does not contain physical file.
+    dfsController.flushDirContent(actor);
 
     QStringList testFiles = {
         FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
         FileSystem::pathConcat(QDir::homePath(), "test-file-2.jpg"),
+        FileSystem::pathConcat(QDir::homePath(), "test-file-3.txt"),
         FileSystem::pathConcat(QDir::homePath(), "test-file-3-not-exists.txt")
     };
-
+    
+    QString removeFileHash;
     for (const auto & f : testFiles) {
         const QByteArray fHash = dfsController.addFile(actor, f);
         if (!fHash.isEmpty()) {
             qDebug() << "addFile succeeded:" << f << fHash;
+            if (f.contains("test-file-2.jpg")) {
+                removeFileHash = fHash;
+            }
         } else {
             qDebug() << "addFile failed:" << f;
         }
     }
 
-    dfsController.flushDirContent(actor);
+    bool result = dfsController.removeFile(actor, removeFileHash);
+    qDebug() << "Remove file:" << removeFileHash << ", status:" << result;
+
+    result = dfsController.removeFile(actor, removeFileHash + "unkownhash");
+    qDebug() << "Remove file:" << removeFileHash << ", status:" << result;
 }
