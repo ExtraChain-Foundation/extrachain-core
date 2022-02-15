@@ -15,13 +15,21 @@ public:
         DBCreateTableError = -5,
     };
 
+    enum SecurityLevel
+    {
+        Private = 0,
+        Public = 1
+    };
+
+    const QStringList SecurityLevelName = { "private", "public" };
+
     DFSController(QObject* parent = nullptr);
     ~DFSController();
 
-    QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath);
-    bool removeFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
-    QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
-    bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent);
+    QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath, SecurityLevel securityLevel);
+    bool removeFile(const Actor<KeyPrivate> & actor, const QString &fileHash, SecurityLevel securityLevel);
+    QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash, SecurityLevel securityLevel);
+    bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
 
 private:
@@ -29,7 +37,8 @@ private:
     static const QString DFSDBName;
 
     QString makeActorDirPath(const Actor<KeyPrivate> & actor);
-    QString createDirectory(const Actor<KeyPrivate> & actor);
+    QString makeSecurityDirPath(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
+    QString createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
     void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
     DBRow findDBRow(const QString & fileHash);

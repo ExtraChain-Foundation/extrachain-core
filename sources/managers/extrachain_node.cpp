@@ -524,27 +524,37 @@ void ExtraChainNode::test() const {
 
     QStringList testFiles = {
         FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-2.jpg"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-3.txt"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-3-not-exists.txt")
+        FileSystem::pathConcat(QDir::homePath(), "test-file-2.txt")
     };
-    
-    QString removeFileHash;
-    for (const auto & f : testFiles) {
-        const QByteArray fHash = dfsController.addFile(actor, f);
-        if (!fHash.isEmpty()) {
-            qDebug() << "addFile succeeded:" << f << fHash;
-            if (f.contains("test-file-2.jpg")) {
-                removeFileHash = fHash;
-            }
-        } else {
-            qDebug() << "addFile failed:" << f;
-        }
-    }
 
-    bool result = dfsController.removeFile(actor, removeFileHash);
-    qDebug() << "Remove file:" << removeFileHash << ", status:" << result;
+    auto orgFilePublic = QFile(testFiles[0]);
+    orgFilePublic.open(QIODevice::ReadOnly);
+    auto orgFilePrivate = QFile(testFiles[1]);
+    orgFilePrivate.open(QIODevice::ReadOnly);
 
-    result = dfsController.removeFile(actor, removeFileHash + "unkownhash");
-    qDebug() << "Remove file:" << removeFileHash << ", status:" << result;
+
+    const QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
+    const QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
+    if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
+        qDebug() << "addFile succeeded";
+    else
+        qDebug() << "addFile failed";
+
+    auto fileContentPublic = dfsController.readFile(actor, fHashPublic, DFSController::Public);
+    if(fileContentPublic == orgFilePublic.readAll())
+        qDebug() << "Files are equal";
+    else
+        qDebug() << "Files are different, read or write doesn't works";
+
+    auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate, DFSController::Private);
+    if(fileContentPrivate == orgFilePrivate.readAll())
+        qDebug() << "Files are equal";
+    else
+        qDebug() << "Files are different, enc/dec doesn't works";
+
+    bool result = dfsController.removeFile(actor, fHashPublic, DFSController::Public);
+    qDebug() << "Remove file:" << fHashPublic << ", status:" << result;
+
+    result = dfsController.removeFile(actor, fHashPrivate, DFSController::Private);
+    qDebug() << "Remove file:" << fHashPrivate << ", status:" << result;
 }

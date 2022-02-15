@@ -21,13 +21,13 @@ DFSController::~DFSController() {
     }
 }
 
-QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath) {
+QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath, SecurityLevel securityLevel) {
     if (!QFileInfo::exists(filePath)) {
         qDebug() << "DFSController: addFile: Failed, file does not exists:" << filePath;
         return QByteArray();
     }
 
-    const QString actorDirPath = createDirectory(actor);
+    const QString actorDirPath = createDirectory(actor, securityLevel);
     initDB(actor, actorDirPath);
     flushDirContent(actor);
 
@@ -36,19 +36,55 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
         return QByteArray();
     }
 
-    const QByteArray fileHash = Utils::calcKeccakForFile(filePath);
+    QByteArray fileHash = Utils::calcKeccakForFile(filePath);
     const QString fileHashPrev = lastHash();
     const QString fileName = FileSystem::pathConcat(DFSRootDirName, QFileInfo(filePath).fileName());
-    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, fileName);
 
-    const QString destFilePath = FileSystem::pathConcat(actorDirPath, fileHash);
-    bool fileEnctrypted = Utils::encryptFile(filePath,
-                                             destFilePath,
-                                             QByteArray::fromStdString(actor.key()->secretKey())); // Review here
-    if (!fileEnctrypted) {
-        qDebug() << "DFSController: addFile: Failed encryptFile:" << filePath;
+    const QString secureFilePath = makeSecurityDirPath(actor, securityLevel);
+    const QString destFilePath = FileSystem::pathConcat(secureFilePath, fileHash);
+
+    switch(securityLevel)
+    {
+    case SecurityLevel::Private:
+    {
+        bool fileEnctrypted = Utils::encryptFile(filePath,
+                                                 destFilePath,
+                                                 QByteArray::fromStdString(actor.key()->secretKey())); // Review here
+        if (!fileEnctrypted) {
+            qDebug() << "DFSController: addFile: Failed encryptFile:" << filePath;
+            return QByteArray();
+        }
+
+        // Rename private file because the content has changed after the encription
+        fileHash = Utils::calcKeccakForFile(destFilePath);
+        const QString encrFilePath = FileSystem::pathConcat(secureFilePath, fileHash);
+
+        if(!QFile::rename(destFilePath, encrFilePath)){
+            qDebug() << "DFSController: addFile: Failed rename: " << destFilePath << " to " << encrFilePath;
+            return QByteArray();
+        }
+
+        break;
+    }
+    case SecurityLevel::Public:
+    {
+        bool fileCopied = QFile::copy(filePath, destFilePath);
+
+        if(!fileCopied){
+            qDebug() << "DFSController: addFile: Failed to copy file: " << filePath;
+            return QByteArray();
+        }
+
+        break;
+    }
+    default:
+    {
+        qDebug() << "DFSController: addFile: unsupported security level: " << securityLevel;
         return QByteArray();
     }
+    }
+
+    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, SecurityLevelName[securityLevel] + "/" + fileName);
 
     if (!m_db.insert(Config::DataStorage::filesTable, rowData)) {
         qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :" << Config::DataStorage::filesTable.c_str();
@@ -76,7 +112,7 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
 //  0 | 11111111 |              | filePath_1
 //  1 | 33333333 | 11111111     | filePath_3
 
-bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & fileHash) {
+bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & fileHash, SecurityLevel securityLevel) {
     qDebug() << "DFSController: removeFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -118,7 +154,7 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
         return false;
     }
 
-    const QString filePathRemove = FileSystem::pathConcat(makeActorDirPath(actor), fileHash);
+    const QString filePathRemove = FileSystem::pathConcat(makeSecurityDirPath(actor, securityLevel), fileHash);
     if (!QFileInfo::exists(filePathRemove)) {
         qDebug() << "DFSController: removeFile: File does not exists:" << filePathRemove;
         return false;
@@ -132,7 +168,7 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
     return true;
 }
 
-QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString &fileHash) {
+QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString &fileHash, SecurityLevel securityLevel) {
     qDebug() << "DFSController: readFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -153,16 +189,42 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
         return QByteArray();
     }
 
-    const QString actorDirPathStr = makeActorDirPath(actor);
-    const QString filePathStr = FileSystem::pathConcat(actorDirPathStr, fileHash);
+    const QString securityDirPathStr = makeSecurityDirPath(actor, securityLevel);
+    const QString filePathStr = FileSystem::pathConcat(securityDirPathStr, fileHash);
 
     if (!QFileInfo::exists(filePathStr)) {
         qDebug() << "DFSController: editFile: readFile: File not found:" << filePathStr;
         return QByteArray();
     }
 
-    QByteArray fileDecryptedContent = Utils::decryptFileIntoByteArray(filePathStr, QByteArray::fromStdString(actor.key()->secretKey()));
-    return fileDecryptedContent;
+    QByteArray fileContent;
+
+    switch(securityLevel)
+    {
+    case SecurityLevel::Private:
+    {
+        fileContent = Utils::decryptFileIntoByteArray(filePathStr, QByteArray::fromStdString(actor.key()->secretKey()));
+
+        break;
+    }
+    case SecurityLevel::Public:
+    {
+        auto file = QFile(filePathStr);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qDebug() << "DFSController: readFile: File opening error: " << filePathStr;
+            return QByteArray();
+        }
+        fileContent = file.readAll();
+        break;
+    }
+    default:
+    {
+        qDebug() << "DFSController: ReadFile: unsupported security level: " << securityLevel;
+        return QByteArray();
+    }
+    }
+
+    return fileContent;
 }
 
 //
@@ -185,7 +247,7 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
 //  2 | 33333333 | 55555555     | filePath_3
 //
 
-bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &fileHash, const QByteArray &fileContent) {
+bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel) {
     qDebug() << "DFSController: editFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -206,15 +268,13 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
         return false;
     }
 
-    const QString actorDirPathStr = makeActorDirPath(actor);
+    const QString securityDirPathStr = makeSecurityDirPath(actor, securityLevel);
+    //const QString filePath = FileSystem::pathConcat(securityDirPathStr, fileHash);
 
-    //
-    // Encrypt new content
-    //
     const QByteArray fileContentKeccak = Utils::calcKeccak(fileContent);
     const QString fileNameNewOrigin = fileContentKeccak + "_origin";
-    const QString filePathNewOrigin = FileSystem::pathConcat(actorDirPathStr, fileNameNewOrigin);
-    const QString filePathNew = FileSystem::pathConcat(actorDirPathStr, fileContentKeccak);
+    const QString filePathNewOrigin = FileSystem::pathConcat(securityDirPathStr, fileNameNewOrigin);
+    const QString filePathNew = FileSystem::pathConcat(securityDirPathStr, fileContentKeccak);
 
     if (QFileInfo::exists(filePathNewOrigin)) {
         qDebug() << "DFSController: editFile: Failed: New encrypt file name already exists:" << filePathNewOrigin;
@@ -232,17 +292,39 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
         return false;
     }
 
-    if (!Utils::encryptFile(filePathNew, filePathNewOrigin, QByteArray::fromStdString(actor.key()->secretKey()))) {
-        qDebug() << "DFSController: editFile: Failed encryptFile:" << filePathNewOrigin << "->" << filePathNew;
-        QFile().remove(filePathNew);
-        QFile().remove(filePathNewOrigin);
+    switch(securityLevel)
+    {
+    case SecurityLevel::Private:
+    {
+        if (!Utils::encryptFile(filePathNewOrigin, filePathNew, QByteArray::fromStdString(actor.key()->secretKey()))) {
+            qDebug() << "DFSController: editFile: Failed encryptFile:" << filePathNewOrigin << "->" << filePathNew;
+            QFile().remove(filePathNew);
+            QFile().remove(filePathNewOrigin);
+            return false;
+        }
+        break;
+    }
+    case SecurityLevel::Public:
+    {
+        if (!fileNewOrigin.rename(filePathNew)) {
+            qDebug() << "DFSController: readFile: File opening error: " << filePathNew;
+            return false;
+        }
+
+        break;
+    }
+    default:
+    {
+        qDebug() << "DFSController: ReadFile: unsupported security level: " << securityLevel;
         return false;
     }
+    }
+
 
     //
     // Remove previous content from file system
     //
-    const QString filePathPrev = FileSystem::pathConcat(actorDirPathStr, QString::fromStdString(fileHashS));
+    const QString filePathPrev = FileSystem::pathConcat(securityDirPathStr, QString::fromStdString(fileHashS));
     if (!QFileInfo::exists(filePathPrev)) {
         qDebug() << "DFSController: editFile: Previous file not found:" << filePathPrev;
         return true; // Nothing to delete.
@@ -319,11 +401,16 @@ QString DFSController::makeActorDirPath(const Actor<KeyPrivate> &actor) {
                 actor.id().toString());
 }
 
-QString DFSController::createDirectory(const Actor<KeyPrivate> & actor) {
+QString DFSController::makeSecurityDirPath(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
+    return FileSystem::pathConcat(makeActorDirPath(actor), SecurityLevelName[securityLevel]);
+}
+
+// Creates <root>/<user>/<security_level> dir but returns <root>/<user>
+QString DFSController::createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
     qDebug() << "DFSController: createDirectory";
 
     QString actorDirPath = makeActorDirPath(actor);
-    if (!QDir().mkpath(actorDirPath)) {
+    if (!QDir().mkpath(actorDirPath + "/" + SecurityLevelName[securityLevel])) {
         qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << actorDirPath;
         QCoreApplication::exit(ActorDirCreateError);
     }
