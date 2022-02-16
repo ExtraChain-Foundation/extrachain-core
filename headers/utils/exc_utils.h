@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include <msgpack.hpp>
+
 #include "extrachain_global.h"
 #include "network/socket_pair.h"
 
@@ -458,7 +460,27 @@ QByteArray fromList(const QByteArrayList &list);
 QByteArrayList toList(const QByteArray &data);
 QMap<QString, QByteArray> toMap(const QByteArray &data);
 int length(const QByteArray &data);
-} // namespace Serialization
+} // namespace Seralization
+
+namespace MessagePack {
+template <class T>
+std::string serialize(const T &t) {
+    std::stringstream buffer;
+    msgpack::pack(buffer, t);
+    buffer.seekg(0);
+    return buffer.str();
+}
+
+template <class T>
+T deserialize(const std::string &str, std::size_t size = 0) {
+    try {
+        msgpack::object_handle oh = msgpack::unpack(str.data(), str.size());
+        msgpack::object deserialized = oh.get();
+        auto dst2 = deserialized.as<T>();
+        return dst2;
+    } catch (std::exception e) { qFatal("Incorrect MessagePack deserialize"); }
+}
+} // namespace MessagePack
 
 namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
