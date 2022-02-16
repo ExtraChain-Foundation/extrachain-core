@@ -19,6 +19,7 @@
 
 #include "managers/extrachain_node.h"
 
+#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -509,4 +510,51 @@ ChatManager *ExtraChainNode::chatManager() const {
 
 Dfs *ExtraChainNode::dfs() const {
     return m_dfs;
+}
+
+void ExtraChainNode::test() const {
+    // Mock actor create
+    const std::string userEmail = "test@test.com";
+    const std::string userPass = "12345678";
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+
+    DFSController dfsController;
+    dfsController.flushDirContent(actor);
+
+    QStringList testFiles = {
+        FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
+        FileSystem::pathConcat(QDir::homePath(), "test-file-2.txt")
+    };
+
+    auto orgFilePublic = QFile(testFiles[0]);
+    orgFilePublic.open(QIODevice::ReadOnly);
+    auto orgFilePrivate = QFile(testFiles[1]);
+    orgFilePrivate.open(QIODevice::ReadOnly);
+
+
+    const QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
+    const QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
+    if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
+        qDebug() << "addFile succeeded";
+    else
+        qDebug() << "addFile failed";
+
+    auto fileContentPublic = dfsController.readFile(actor, fHashPublic, DFSController::Public);
+    if(fileContentPublic == orgFilePublic.readAll())
+        qDebug() << "Files are equal";
+    else
+        qDebug() << "Files are different, read or write doesn't works";
+
+    auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate, DFSController::Private);
+    if(fileContentPrivate == orgFilePrivate.readAll())
+        qDebug() << "Files are equal";
+    else
+        qDebug() << "Files are different, enc/dec doesn't works";
+
+    bool result = dfsController.removeFile(actor, fHashPublic, DFSController::Public);
+    qDebug() << "Remove file:" << fHashPublic << ", status:" << result;
+
+    result = dfsController.removeFile(actor, fHashPrivate, DFSController::Private);
+    qDebug() << "Remove file:" << fHashPrivate << ", status:" << result;
 }
