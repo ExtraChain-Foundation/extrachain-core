@@ -8,16 +8,22 @@
 
 const QString DFSController::DFSRootDirName = "dfs";
 const QString DFSController::DFSDBName = ".dir";
+const QString DFSController::DFSService = "Service";
 
 DFSController::DFSController(QObject* parent)
-    : QObject(parent)
-    , m_db()
+    : QObject(parent),
+      m_db(),
+      m_db_local()
 {
 }
 
 DFSController::~DFSController() {
     if (m_db.isOpen()) {
         m_db.close();
+    }
+
+    if (m_db_local.isOpen()) {
+        m_db_local.close();
     }
 }
 
@@ -395,6 +401,69 @@ bool DFSController::flushDirContent(const Actor<KeyPrivate> & actor) {
     return true;
 }
 
+// Copy and extend the User DB / Neccessary initialization step
+bool DFSController::createLocalDB(const Actor<KeyPrivate> & actor)
+{
+    qDebug() << "DFSController: Instantiate local DB";
+
+    // Step 1: copy User's DB; if there is a legacy local DB, replacy it with the global one
+
+    const QString & localDBFileName = actor.id().toString();
+    const QString & localDBDirPath = makeServiceDirPath(actor);
+    const QString & localDBFilePath = FileSystem::pathConcat(localDBDirPath, localDBFileName);
+
+    if (!QDir().mkpath(localDBDirPath)) {
+        qDebug() << "DFSController: createLocalDB: DFS Service dir create error:" << localDBDirPath;
+        return false;
+    }
+
+    const QString & actorDirPath = makeActorDirPath(actor);
+    const QString & actorDBFilePath = FileSystem::pathConcat(actorDirPath, DFSDBName);
+
+    if (QFile::exists(localDBFilePath))
+    {
+        if(!QFile::remove(localDBFilePath))
+        {
+            qDebug() << "DFSController: createLocalDB: Remove legacy local DB error:" << localDBFilePath;
+            return false;
+        }
+    }
+
+    if (!QFile::copy(actorDBFilePath, localDBFilePath))
+    {
+        qDebug() << "DFSController: createLocalDB: Can't copy DB from: " << actorDBFilePath << " to: " << localDBFilePath;
+        return false;
+    }
+
+    // Step 2: extend the local DB with `begSegment` and `endSegment` columns
+    // Note: fill columns with `-1`, actual values will be written when
+    // actual files will be downloaded
+
+    if(!m_db_local.open(localDBFilePath.toStdString()))
+    {
+        qDebug() << "DFSController: createLocalDB: Can't open the DB: " << localDBDirPath;
+        return false;
+    }
+
+    const std::vector<std::string> queryList = {(std::stringstream ()
+                                       << "ALTER TABLE " << Config::DataStorage::filesTable
+                                       << " ADD begSegment BIGINT(255) NOT NULL DEFAULT(-1) '").str(),
+                                                (std::stringstream ()
+                                       << "ALTER TABLE " << Config::DataStorage::filesTable
+                                       << " ADD endSegment BIGINT(255) NOT NULL DEFAULT(-1) '").str()};
+
+    for (auto& query: queryList)
+    {
+        if(!m_db_local.update(query))
+        {
+            qDebug() << "DFSController: createLocalDB: Can't execute query: " << query.c_str();
+            return false;
+        }
+    }
+
+    return true;
+}
+
 QString DFSController::makeActorDirPath(const Actor<KeyPrivate> &actor) {
     return FileSystem::pathConcat(
                 FileSystem::pathConcat(QCoreApplication::applicationDirPath(), DFSRootDirName),
@@ -404,7 +473,9 @@ QString DFSController::makeActorDirPath(const Actor<KeyPrivate> &actor) {
 QString DFSController::makeSecurityDirPath(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
     return FileSystem::pathConcat(makeActorDirPath(actor), SecurityLevelName[securityLevel]);
 }
-
+QString DFSController::makeServiceDirPath(const Actor<KeyPrivate> & actor) {
+    return FileSystem::pathConcat(DFSRootDirName, DFSService);
+}
 // Creates <root>/<user>/<security_level> dir but returns <root>/<user>
 QString DFSController::createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
     qDebug() << "DFSController: createDirectory";

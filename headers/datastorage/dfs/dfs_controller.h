@@ -31,13 +31,16 @@ public:
     QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash, SecurityLevel securityLevel);
     bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
-
+    bool createLocalDB(const Actor<KeyPrivate> & actor);
 private:
     static const QString DFSRootDirName;
     static const QString DFSDBName;
+    static const QString DFSService;
 
     QString makeActorDirPath(const Actor<KeyPrivate> & actor);
     QString makeSecurityDirPath(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
+    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
+
     QString createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
     void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
@@ -49,6 +52,7 @@ private:
     QString toString(DBRow & r) const;
 
     DBConnector m_db;
+    DBConnector m_db_local;
 };
 
 inline std::string DFSController::toStdString(DBRow &r) const {
