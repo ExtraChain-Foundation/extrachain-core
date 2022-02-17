@@ -72,6 +72,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dfs/types/headers/dfstruct.h
     ${CMAKE_CURRENT_LIST_DIR}/dfs/types/sources/cardfile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dfs/types/sources/dfstruct.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
@@ -132,6 +133,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
     # ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/contract.cpp

@@ -392,6 +392,16 @@ namespace DataStorage {
           "type INT              NOT NULL  "
           ");";
 
+    static const std::string filesTable = "FilesTable";
+    static const std::string filesTableCreate = "CREATE TABLE IF NOT EXISTS " + filesTable
+        + " ("
+          "fileHash     TEXT PRIMARY KEY NOT NULL, "
+          "fileHashPrev TEXT             NOT NULL, "
+          "filePath     TEXT             NOT NULL"
+          ");";
+    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
+    static const std::string filesTableFull = "SELECT * FROM " + filesTable;
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
@@ -521,6 +531,8 @@ EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &e
                                    const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
                                    const QByteArray &key, int blockSize = 60007);
+EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName,
+                                                      const QByteArray &key, int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
@@ -661,6 +673,12 @@ enum class TxParam
     return TxParam::Null;
 }
 } // namespace SearchEnum
+
+namespace FileSystem {
+inline static QString pathConcat(const QString &pl, const QString &pr) { return QDir::cleanPath(pl + "/" + pr); };
+QString createSubDirectory(const QString &parentDirStr, const QString &subDirStr);
+QList<std::tuple<QString, QString>> listFiles(const QString &dirPath, const QStringList &ignoreList = QStringList());
+} // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType

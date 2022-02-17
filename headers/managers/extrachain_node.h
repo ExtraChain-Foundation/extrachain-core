@@ -84,6 +84,9 @@ public:
     ChatManager *chatManager() const;
     Dfs *dfs() const;
 
+    // Remove this function before merge
+    void test() const;
+
     /**
      * @brief Create new transaction from current user
      * @param tx
