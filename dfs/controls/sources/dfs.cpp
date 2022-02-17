@@ -359,7 +359,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountController->mainActor()->key()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountController->mainActor()->key().sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
             if (!stored) {
@@ -413,7 +413,7 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
 
 bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                        bool isFilePath) {
-    QByteArray sign = accountController->mainActor()->key()->sign(
+    QByteArray sign = accountController->mainActor()->key().sign(
         (isFilePath ? CardManager::cutPath(path) : path).toLatin1() + QByteArray::number(type));
 
     CardFile cardFile(userId);
@@ -635,7 +635,7 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountController->mainActor()->key()->sign(dfsChanges.prepareSign());
+            dfsChanges.sign = accountController->mainActor()->key().sign(dfsChanges.prepareSign());
 
             bool stored = appendToStored(dfsChanges, true);
 
@@ -763,7 +763,7 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges) {
         auto actor = actorIndex->getActor(dfsChanges.userId);
         if (actor.empty())
             return false;
-        bool verify = actor.key()->verify(dfsChanges.prepareSign(), dfsChanges.sign);
+        bool verify = actor.key().verify(dfsChanges.prepareSign(), dfsChanges.sign);
         qDebug() << "DfsChanges Verify applyChanges:" << verify << dfsChanges.prepareSign()
                  << dfsChanges.sign;
     }
@@ -1197,7 +1197,7 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init) {
         if (!res.size())
             return false;
         dfsChanges.prevHash = QByteArray::fromStdString(res[0]["hash"]);
-        dfsChanges.sign = accountController->mainActor()->key()->sign(dfsChanges.prepareSign());
+        dfsChanges.sign = accountController->mainActor()->key().sign(dfsChanges.prepareSign());
     }
 
     DBRow row = { { "version", std::to_string(dfsChanges.fileVersion) },

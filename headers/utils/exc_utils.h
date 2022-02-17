@@ -482,13 +482,16 @@ std::string serialize(const T &t) {
 }
 
 template <class T>
-T deserialize(const std::string &str, std::size_t size = 0) {
+std::pair<T, bool> deserialize(const std::string &str, std::size_t size = 0) {
     try {
         msgpack::object_handle oh = msgpack::unpack(str.data(), str.size());
         msgpack::object deserialized = oh.get();
-        auto dst2 = deserialized.as<T>();
-        return dst2;
-    } catch (std::exception e) { qFatal("Incorrect MessagePack deserialize"); }
+        auto t = deserialized.as<T>();
+        return { t, true };
+    } catch (std::exception e) {
+        qFatal("Incorrect MessagePack deserialize");
+        return { T(), false };
+    }
 }
 } // namespace MessagePack
 
@@ -531,8 +534,8 @@ EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &e
                                    const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
                                    const QByteArray &key, int blockSize = 60007);
-EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName,
-                                                      const QByteArray &key, int blockSize = 60007);
+EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
+                                                      int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
@@ -675,9 +678,12 @@ enum class TxParam
 } // namespace SearchEnum
 
 namespace FileSystem {
-inline static QString pathConcat(const QString &pl, const QString &pr) { return QDir::cleanPath(pl + "/" + pr); };
+inline static QString pathConcat(const QString &pl, const QString &pr) {
+    return QDir::cleanPath(pl + "/" + pr);
+};
 QString createSubDirectory(const QString &parentDirStr, const QString &subDirStr);
-QList<std::tuple<QString, QString>> listFiles(const QString &dirPath, const QStringList &ignoreList = QStringList());
+QList<std::tuple<QString, QString>> listFiles(const QString &dirPath,
+                                              const QStringList &ignoreList = QStringList());
 } // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {

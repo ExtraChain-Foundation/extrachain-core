@@ -163,7 +163,7 @@ void AccountController::loadActors(const QByteArray &id, const QByteArrayList &i
             if (!serialized.isEmpty()) {
                 Actor<KeyPrivate> *actor = new Actor<KeyPrivate>(serialized);
 
-                qDebug() << "Actor" << actor->id() << "found locally -" << actor->key()->secretKey().c_str();
+                qDebug() << "Actor" << actor->id() << "found locally -" << actor->key().secretKey().c_str();
                 this->accounts.append(actor);
                 loaded++;
             }

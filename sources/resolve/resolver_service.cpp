@@ -454,7 +454,7 @@ bool ResolverService::validateBlock(const Block &block) {
 
 bool ResolverService::validate(const Transaction &tx) {
     qDebug() << "[ResolverService] validate(Transaction):";
-    if (tx.getSender() == ActorId(0) && tx.getData().contains(Fee::STAKING_REWARD))
+    if (tx.getSender() == ActorId() && tx.getData().contains(Fee::STAKING_REWARD))
         return true;
     if (actorIndex->getActor(tx.getSender()).empty()) {
         this->thread()->sleep(5);

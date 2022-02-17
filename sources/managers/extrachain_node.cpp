@@ -396,12 +396,12 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto mainKey = m_accountController->mainActor()->key();
-    auto publicKey = first.key()->publicKey();
+    auto &mainKey = m_accountController->mainActor()->key();
+    auto &publicKey = first.key().publicKey();
 
     QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },
-                                      { "token", mainKey->encrypt(token.toLatin1(), publicKey) },
-                                      { "os", mainKey->encrypt(os.toLatin1(), publicKey) } };
+                                      { "token", mainKey.encrypt(token.toLatin1(), publicKey) },
+                                      { "os", mainKey.encrypt(os.toLatin1(), publicKey) } };
 
     emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }

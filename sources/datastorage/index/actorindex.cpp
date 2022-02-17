@@ -231,7 +231,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {
         return;
     }
 
-    if (actor.key()->verify(profileData, profile.sign)) {
+    if (actor.key().verify(profileData, profile.sign)) {
         qDebug() << "[ActorIndex] Save public profile with id:" << profile.id;
         bool isSaved = actor.profile().saveProfileFromNet(profile.dataToProfile);
 
@@ -253,7 +253,7 @@ void ActorIndex::saveProfile(Actor<KeyPrivate> *actor, QByteArrayList newProfile
 
     qDebug() << "[ActorIndex] Save public profile with id" << newProfile.at(2);
     QByteArray path = buildPathPubProfile(ActorId(newProfile.at(2)).toByteArray()).toUtf8();
-    QByteArray sign = actor->key()->sign(PublicProfile::serialize(newProfile));
+    QByteArray sign = actor->key().sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
 
     if (pubProfile.sign == "") {
@@ -271,7 +271,7 @@ void ActorIndex::requestProfile(QString id) {
         return;
     if (actor.profile().getProfile() == "")
         return;
-    // if (actor.getKey()->verify(actor.profile().getProfile(), actor.profile().sign))
+    // if (actor.key().verify(actor.profile().getProfile(), actor.profile().sign))
 
     QByteArrayList list = actor.profile().getListProfile();
 
@@ -299,7 +299,7 @@ QByteArrayList ActorIndex::getProfile(QString id) {
         return QByteArrayList();
     }
 
-    // if (actor.getKey()->verify(key.profile().getProfile(), pProfile.sign))
+    // if (actor.key().verify(key.profile().getProfile(), pProfile.sign))
     return pList;
     // else
     // {

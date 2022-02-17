@@ -26,11 +26,11 @@ void BaseMessage::setMsgData(const QByteArray &data) {
 
 void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor) {
     signer = actor.id();
-    digSig = actor.key()->sign(concatenateAllData());
+    digSig = actor.key().sign(concatenateAllData());
 }
 
 bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const {
-    return actor.key()->verify(concatenateAllData(), digSig);
+    return actor.key().verify(concatenateAllData(), digSig);
 }
 
 void BaseMessage::operator=(BaseMessage b) {

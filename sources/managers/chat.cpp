@@ -102,11 +102,11 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
         this->ownerID = _ownerId;
     }
 
-    auto mainActor = _accountController->mainActor()->key();
+    auto &mainActor = _accountController->mainActor()->key();
     emit _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
                                    { Config::DataStorage::chatIdTableName.c_str(), "chatId",
-                                     mainActor->encryptSelf(_chatId), "key", mainActor->encryptSelf(key),
-                                     "owner", mainActor->encryptSelf(_ownerId) });
+                                     mainActor.encryptSelf(_chatId), "key", mainActor.encryptSelf(key),
+                                     "owner", mainActor.encryptSelf(_ownerId) });
 
     saveChatsId(_chatId);
 }
@@ -154,19 +154,19 @@ QByteArray Chat::getChatKey() {
     if (!QFile::exists(filePath))
         return "";
 
-    auto mainActor = _accountController->mainActor()->key();
+    auto &mainActor = _accountController->mainActor()->key();
     DBConnector DB(filePath.toStdString());
     std::vector<DBRow> res =
         DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName + " WHERE chatId = ?",
                   Config::DataStorage::chatIdTableName,
-                  { { "chatId", mainActor->encryptSelf(_chatId).toStdString() } });
+                  { { "chatId", mainActor.encryptSelf(_chatId).toStdString() } });
     if (res.size() == 0) {
         qDebug() << "[Error] Chat manager can't open file to load the key";
         return "0";
     }
 
-    _encryptionKey = mainActor->decryptSelf(QByteArray::fromStdString(res[0]["key"]));
-    this->ownerID = mainActor->decryptSelf(QByteArray::fromStdString(res[0]["owner"]));
+    _encryptionKey = mainActor.decryptSelf(QByteArray::fromStdString(res[0]["key"]));
+    this->ownerID = mainActor.decryptSelf(QByteArray::fromStdString(res[0]["owner"]));
     return _encryptionKey;
 }
 

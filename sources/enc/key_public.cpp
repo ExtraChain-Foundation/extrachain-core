@@ -30,20 +30,16 @@ KeyPublic::KeyPublic(const string &publicKey) {
     m_publicKey = publicKey;
 }
 
-KeyPublic::KeyPublic(const QJsonObject &json) {
-    m_publicKey = json["publicKey"].toString().toStdString();
-}
-
 KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
     m_publicKey = keyPublic.publicKey();
 }
 
-QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey) {
+QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey) const {
     auto res = SecretKey::encryptAsymmetric(data.toStdString(), senderPrivateKey, m_publicKey);
     return QByteArray::fromStdString(res);
 }
 
-bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) {
+bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) const {
     string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
@@ -55,4 +51,8 @@ bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) {
 
 const std::string &KeyPublic::publicKey() const {
     return m_publicKey;
+}
+
+bool KeyPublic::empty() const {
+    return m_publicKey.empty();
 }

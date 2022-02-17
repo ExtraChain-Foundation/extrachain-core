@@ -26,6 +26,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <msgpack.hpp>
+
 #include "dfs/types/headers/dfstruct.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
@@ -44,6 +46,7 @@ enum class ActorType
     Account = 1,
     Token = 2
 };
+MSGPACK_ADD_ENUM(ActorType)
 
 class EXTRACHAIN_EXPORT ActorId {
 public:
@@ -55,12 +58,20 @@ public:
         if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
             qFatal("ActorId not valid"); // TODO: remove after tests
 
-        m_id = !actorId.isEmpty() ? actorId : QByteArray("00000000000000000000");
+        m_id = !actorId.isEmpty() ? actorId.toStdString() : "00000000000000000000";
+        normalize();
+    }
+
+    ActorId(const std::string &actorId) {
+        if (!actorId.empty() && !BigNumber::isValid(QByteArray::fromStdString(actorId)))
+            qFatal("ActorId not valid"); // TODO: remove after tests
+
+        m_id = !actorId.empty() ? actorId : "00000000000000000000";
         normalize();
     }
 
     ActorId &operator=(const QByteArray &actorId) {
-        this->m_id = actorId;
+        this->m_id = actorId.toStdString();
         normalize();
         return *this;
     }
@@ -77,22 +88,22 @@ public:
         return m_id < actorId.m_id;
     }
 
-    const QByteArray &toByteArray() const {
-        return m_id;
+    QByteArray toByteArray() const {
+        return QByteArray::fromStdString(m_id);
     }
 
     QString toString() const {
-        return toByteArray();
+        return QString::fromStdString(m_id);
     }
 
-    std::string toStdString() const {
-        return toByteArray().toStdString();
+    const std::string &toStdString() const {
+        return m_id;
     }
 
     bool isEmpty() const {
         if (m_id == "000000000000000000-1")
             qFatal("ActorId: WTF");
-        return m_id.isEmpty() || m_id == "00000000000000000000";
+        return m_id.empty() || m_id == "00000000000000000000";
     }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId) {
@@ -100,36 +111,37 @@ public:
         return d;
     }
 
-private:
-    void normalize() {
-        m_id = QByteArray("0").repeated(20 - m_id.length()) + m_id;
-        // while (m_id.length() < 20)
-        //     m_id.push_front('0');
+    static bool empty(const std::string &actorId) {
+        ActorId actor(actorId);
+        return actor.isEmpty();
     }
 
-    QByteArray m_id;
+private:
+    void normalize() {
+        m_id = QByteArray("0").repeated(20 - m_id.length()).toStdString() + m_id;
+    }
+
+    std::string m_id;
 };
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
                   "Your type is not supported. Only Keys are supported");
-    const int FIELDS_SIZE = 4;
 
 private:
-    ActorId m_id;
-    T *m_key;
+    std::string m_id;
+    T m_key;
     ActorType m_type;
 
 public:
     Actor() {
-        m_key = nullptr;
         m_type = ActorType::Wallet;
     }
 
     Actor(const Actor<T> &copyActor) {
-        m_id = copyActor.id();
-        m_key = new T(*(copyActor.key()));
+        m_id = copyActor.id().toStdString();
+        m_key = copyActor.key();
         m_type = ActorType(copyActor.type());
     }
 
@@ -137,19 +149,13 @@ public:
         this->deserialize(serialized);
     }
 
-    ~Actor() {
-        delete m_key;
-    }
+    ~Actor() = default;
 
     Actor operator=(const Actor<T> &copyActor) {
-        m_id = copyActor.id();
-        m_key = new T(*(copyActor.key()));
-        m_type = ActorType(copyActor.type());
+        m_id = copyActor.id().toStdString();
+        m_key = copyActor.key();
+        m_type = copyActor.type();
         return *this;
-    }
-
-    bool isPrivate() const {
-        return std::is_same<T, KeyPrivate>::value;
     }
 
 public:
@@ -157,38 +163,9 @@ public:
      * @brief initial construction
      * @param serialized
      */
-    bool deserialize(const QByteArray &serialized) {
-        auto json = QJsonDocument::fromJson(serialized).object();
-
-        if (serialized.isEmpty()) {
-            qFatal("Error! Actor::init(QByteArray): serialized is empty");
-        }
-
-        if (isPrivate()) {
-            if (json.length() != 4) {
-                qDebug() << "Incorrect actor init json length for private:" << json.length();
-                return false;
-            }
-        } else {
-            if (json.length() != 3) {
-                qDebug() << "Incorrect actor init json length for public:" << json.length();
-                return false;
-            }
-        }
-
-        this->m_id = json["id"].toString().toLatin1();
-        this->m_key = new T(json);
-        if (json.contains("type"))
-            this->m_type = ActorType(json["type"].toInt());
-        else // TODO: remove
-            this->m_type = ActorType(json["account"].toInt());
-
-        if (empty()) {
-            qDebug() << "Incorrect actor init";
-            return false;
-        }
-
-        return true;
+    void deserialize(const QByteArray &serialized) {
+        auto [actor, _] = MessagePack::deserialize<Actor<T>>(serialized.toStdString());
+        *this = actor;
     }
 
     /**
@@ -199,10 +176,9 @@ public:
         static_assert(std::is_same<T, KeyPrivate>::value,
                       "Сannot be created with a public key. Only private is supported");
 
-        this->m_key = new T();
         this->m_type = type;
-
-        auto publicKey = this->m_key->publicKey();
+        this->m_key.generate();
+        auto publicKey = this->m_key.publicKey();
         auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
 
         if (hash.size() >= 20)
@@ -212,15 +188,10 @@ public:
     }
 
     bool empty() const {
-        if (m_key == nullptr)
+        if (m_key.empty())
             return true;
 
-        if (!isPrivate()) {
-            KeyPublic *pbKey = reinterpret_cast<KeyPublic *>(m_key);
-            return pbKey->publicKey().empty();
-        }
-
-        return m_id.isEmpty();
+        return ActorId::empty(m_id);
     }
 
     /**
@@ -230,31 +201,13 @@ public:
      * @return serialized actors
      */
     QByteArray serialize() const {
-        QString actorId = QString(this->m_id.toByteArray());
-        int type = static_cast<uint32_t>(m_type);
-
-        if (m_key == nullptr || empty()) {
-            qDebug() << "Serialize empty actor";
-            Q_ASSERT(!empty());
-        }
-
-        QString publicKey = QString::fromStdString(m_key->publicKey());
-
-        QJsonObject json = { { "id", actorId }, { "type", type }, { "publicKey", publicKey } };
-
-        if (isPrivate()) {
-            KeyPrivate *keyPrivate = reinterpret_cast<KeyPrivate *>(m_key);
-            QString privateKey = QString::fromStdString(keyPrivate->secretKey());
-            json["privateKey"] = privateKey;
-        }
-
-        QByteArray result = QJsonDocument(json).toJson(QJsonDocument::Compact);
-        return result;
+        std::string serialized = MessagePack::serialize(*this);
+        return QByteArray::fromStdString(serialized);
     }
 
     PublicProfile profile() {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toByteArray() + "/profile/";
-        return PublicProfile(m_id.toByteArray(), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + ActorId(m_id).toString() + "/profile/";
+        return PublicProfile(QByteArray::fromStdString(m_id), pathToFolder);
     }
 
 public:
@@ -262,11 +215,15 @@ public:
         return this->m_id == other.m_id && *m_key == *other.m_key && m_type == other.m_type;
     }
 
-    const ActorId &id() const {
+    ActorId id() const { // TODO
+        return ActorId(m_id);
+    }
+
+    const std::string &idStd() const {
         return m_id;
     }
 
-    T *key() const {
+    const T &key() const {
         return m_key;
     }
 
@@ -278,29 +235,33 @@ public:
         Actor<KeyPublic> actor;
 
         actor.setId(m_id);
-        actor.setPublicKey(m_key->publicKey());
+        actor.setPublicKey(m_key.publicKey());
         actor.setType(m_type);
 
         return actor;
     }
 
     void setId(const ActorId &id) {
-        m_id = id;
+        m_id = id.toStdString();
     }
 
     void setSecretKey(const std::string &secretKey, const std::string &publicKey) {
-        Q_ASSERT(isPrivate());
-        m_key = new KeyPrivate(secretKey, publicKey);
+        bool isPrivate = std::is_same<T, KeyPrivate>::value;
+        Q_ASSERT(isPrivate);
+        m_key = KeyPrivate(secretKey, publicKey);
     }
 
     void setPublicKey(const std::string &key) {
-        Q_ASSERT(!isPrivate());
-        m_key = new KeyPublic(key);
+        bool isPrivate = std::is_same<T, KeyPrivate>::value;
+        Q_ASSERT(!isPrivate);
+        m_key = KeyPublic(key);
     }
 
     void setType(const ActorType &type) {
         m_type = type;
     }
+
+    MSGPACK_DEFINE(m_id, m_type, m_key)
 };
 
 #endif // ACTOR_H

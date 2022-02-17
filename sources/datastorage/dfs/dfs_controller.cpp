@@ -49,7 +49,7 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     {
         bool fileEnctrypted = Utils::encryptFile(filePath,
                                                  destFilePath,
-                                                 QByteArray::fromStdString(actor.key()->secretKey())); // Review here
+                                                 QByteArray::fromStdString(actor.key().secretKey())); // Review here
         if (!fileEnctrypted) {
             qDebug() << "DFSController: addFile: Failed encryptFile:" << filePath;
             return QByteArray();
@@ -203,7 +203,7 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
     {
     case SecurityLevel::Private:
     {
-        fileContent = Utils::decryptFileIntoByteArray(filePathStr, QByteArray::fromStdString(actor.key()->secretKey()));
+        fileContent = Utils::decryptFileIntoByteArray(filePathStr, QByteArray::fromStdString(actor.key().secretKey()));
 
         break;
     }
@@ -296,7 +296,7 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
     {
     case SecurityLevel::Private:
     {
-        if (!Utils::encryptFile(filePathNewOrigin, filePathNew, QByteArray::fromStdString(actor.key()->secretKey()))) {
+        if (!Utils::encryptFile(filePathNewOrigin, filePathNew, QByteArray::fromStdString(actor.key().secretKey()))) {
             qDebug() << "DFSController: editFile: Failed encryptFile:" << filePathNewOrigin << "->" << filePathNew;
             QFile().remove(filePathNew);
             QFile().remove(filePathNewOrigin);
