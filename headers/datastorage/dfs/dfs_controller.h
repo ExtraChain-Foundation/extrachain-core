@@ -29,7 +29,7 @@ public:
     QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath, SecurityLevel securityLevel);
     bool removeFile(const Actor<KeyPrivate> & actor, const QString &fileHash, SecurityLevel securityLevel);
     QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash, SecurityLevel securityLevel);
-    bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel);
+    QByteArray editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
     bool initDB(const Actor<KeyPrivate> & actor);
 

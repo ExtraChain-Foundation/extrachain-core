@@ -231,7 +231,7 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
     const QString filePathStr = FileSystem::pathConcat(securityDirPathStr, fileHash);
 
     if (!QFileInfo::exists(filePathStr)) {
-        qDebug() << "DFSController: editFile: readFile: File not found:" << filePathStr;
+        qDebug() << "DFSController: readFile: File not found:" << filePathStr;
         return QByteArray();
     }
 
@@ -285,7 +285,7 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
 //  2 | 33333333 | 55555555     | filePath_3
 //
 
-bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel) {
+QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel) {
     qDebug() << "DFSController: editFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -293,42 +293,44 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
 
     if (result.empty()) {
         qDebug() << "DFSController: editFile: Skipped because of empty result";
-        return false;
+        return QByteArray();
     }
 
     if (result.size() > 2) {
         qDebug() << "DFSController: editFile: Query select failed: Query result has unsupported size:" << result.size();
-        return false;
+        return QByteArray();
     }
 
     if (result.size() == 1 && result[0]["fileHashPrev"] == fileHashS) {
         qDebug() << "DFSController: editFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:" << fileHash;
-        return false;
+        return QByteArray();
     }
 
     const QString securityDirPathStr = makeSecurityDirPath(actor, securityLevel);
     //const QString filePath = FileSystem::pathConcat(securityDirPathStr, fileHash);
 
-    const QByteArray fileContentKeccak = Utils::calcKeccak(fileContent);
+    QByteArray fileContentKeccak = Utils::calcKeccak(fileContent);
     const QString fileNameNewOrigin = fileContentKeccak + "_origin";
     const QString filePathNewOrigin = FileSystem::pathConcat(securityDirPathStr, fileNameNewOrigin);
     const QString filePathNew = FileSystem::pathConcat(securityDirPathStr, fileContentKeccak);
 
     if (QFileInfo::exists(filePathNewOrigin)) {
         qDebug() << "DFSController: editFile: Failed: New encrypt file name already exists:" << filePathNewOrigin;
-        return false;
+        return QByteArray();
     }
 
     QFile fileNewOrigin(filePathNewOrigin);
     if (!fileNewOrigin.open(QFile::WriteOnly)) {
         qDebug() << "DFSController: editFile: File opening error:" << filePathNewOrigin << fileNewOrigin.errorString();
-        return false;
+        return QByteArray();
     }
 
     if (fileNewOrigin.write(fileContent) == -1) {
         qDebug() << "DFSController: editFile: File write error:" << filePathNewOrigin << fileNewOrigin.errorString();
-        return false;
+        return QByteArray();
     }
+
+    fileNewOrigin.close();
 
     switch(securityLevel)
     {
@@ -338,15 +340,30 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
             qDebug() << "DFSController: editFile: Failed encryptFile:" << filePathNewOrigin << "->" << filePathNew;
             QFile().remove(filePathNew);
             QFile().remove(filePathNewOrigin);
-            return false;
+            return QByteArray();
         }
+
+        if (!fileNewOrigin.remove(filePathNewOrigin)) {
+            qDebug() << "DFSController: editFile: Failed remove temporary data:" << filePathNewOrigin;
+            return QByteArray();
+        }
+
+        // Rename private file because the content has changed after the encription
+        fileContentKeccak = Utils::calcKeccakForFile(filePathNew);
+        const QString & encrFilePath = FileSystem::pathConcat(securityDirPathStr, fileContentKeccak);
+
+        if(!QFile::rename(filePathNew, encrFilePath)){
+            qDebug() << "DFSController: addFile: Failed rename: " << filePathNew << " to " << encrFilePath;
+            return QByteArray();
+        }
+
         break;
     }
     case SecurityLevel::Public:
     {
         if (!fileNewOrigin.rename(filePathNew)) {
             qDebug() << "DFSController: readFile: File opening error: " << filePathNew;
-            return false;
+            return QByteArray();
         }
 
         break;
@@ -354,7 +371,7 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
     default:
     {
         qDebug() << "DFSController: ReadFile: unsupported security level: " << securityLevel;
-        return false;
+        return QByteArray();
     }
     }
 
@@ -365,45 +382,65 @@ bool DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &file
     const QString filePathPrev = FileSystem::pathConcat(securityDirPathStr, QString::fromStdString(fileHashS));
     if (!QFileInfo::exists(filePathPrev)) {
         qDebug() << "DFSController: editFile: Previous file not found:" << filePathPrev;
-        return true; // Nothing to delete.
+        return QByteArray(); // Nothing to delete.
     }
 
     QFile filePrev(filePathPrev);
     if (!filePrev.remove()) {
         qDebug() << "DFSController: editFile: Failed remove old data:" << filePathPrev << filePrev.errorString();
-        return false;
+        return QByteArray();
     }
+
+    std::map<std::string, DBConnector *> dbList;
+    dbList[Config::DataStorage::filesTable] = &m_db;
+    dbList[Config::DataStorage::fileSegmentsTable] = &m_db_local;
 
     //
-    // Update .dir entry
+    // Update main .dir entry and local copy
     //
-    auto _update = [&] (const std::string & columnName = "fileHash", const std::string & oldValue = "old_value", const std::string & newValue = "new_value") -> bool {
-        const std::string & updateQuery = (std::stringstream ()
-                                           << "UPDATE " << Config::DataStorage::filesTable
-                                           << " SET " << columnName << " = '" << newValue
-                                           << "' WHERE " << columnName << " = '" << oldValue << "'").str();
-        if (!m_db.update(updateQuery)) {
-            qDebug() << "DFSController: removeFile: Query update failed: columnName:" << columnName.c_str()
-                     << ", oldValue:" << oldValue.c_str() << ", newValue:" << newValue.c_str()
-                     << ", query:" << updateQuery.c_str();
-            return false;
-        }
-        return true;
-    };
+    for (const auto& [tableName, db]: dbList)
+    {
+        auto _update = [&, tableName=tableName, db=db] (const std::string & columnName = "fileHash",
+                const std::string & oldValue = "old_value", const std::string & newValue = "new_value") -> bool {
+            const std::string & updateQuery = (std::stringstream ()
+                                               << "UPDATE " << tableName
+                                               << " SET " << columnName << " = '" << newValue
+                                               << "' WHERE " << columnName << " = '" << oldValue << "'").str();
+            if (!db->update(updateQuery)) {
+                qDebug() << "DFSController: removeFile: Query update failed: columnName:" << columnName.c_str()
+                         << ", oldValue:" << oldValue.c_str() << ", newValue:" << newValue.c_str()
+                         << ", query:" << updateQuery.c_str();
+                return false;
+            }
+            return true;
+        };
 
-    // If a single row returned, the fileHash column has to be modified. Happens, when the row is the first or the last in the table.
-    if (!_update("fileHash", fileHashS, fileContentKeccak.toStdString())) {
-        return false;
+        // If a single row returned, the fileHash column has to be modified. Happens, when the row is the first or the last in the table.
+        if (!_update("fileHash", fileHashS, fileContentKeccak.toStdString())) {
+            return QByteArray();
+        }
+
+        // The second row should update fileHashPrev column where previous has to be updated.
+        if (result.size() == 2) {
+            if (!_update("fileHashPrev", fileHashS, fileContentKeccak.toStdString())) {
+                return QByteArray();
+            }
+        }
     }
 
-    // The second row should update fileHashPrev column where previous has to be updated.
-    if (result.size() == 2) {
-        if (!_update("fileHashPrev", fileHashS, fileContentKeccak.toStdString())) {
-            return false;
-        }
+    // Update fileSegmentEnd in the local DB
+    const uint64_t lastByteIndex = fileContent.size() - 1;
+    const std::string & updateSegmentsInfo = (std::stringstream ()
+                                       << "UPDATE " << Config::DataStorage::fileSegmentsTable
+                                       << " SET fileSegmentEnd = '" << lastByteIndex
+                                       << "' WHERE fileHash = '" << fileContentKeccak.toStdString() << "'").str();
+    qDebug() << updateSegmentsInfo.c_str();
+    if (!m_db_local.update(updateSegmentsInfo)) {
+        qDebug() << "DFSController: removeFile: Query update failed, query:" << updateSegmentsInfo.c_str();
+        return QByteArray();
     }
 
-    return true;
+    return fileContentKeccak;
 }
 
 // Verify / Clean zombies / DIR file contains entry, but file system does not contain physical file.
@@ -601,4 +638,17 @@ QString DFSController::lastHash() {
             ? QString::fromStdString((*prevRowOpt)["fileHash"])
             : QString::fromStdString("");
     return fileHashPrev;
+}
+
+void DFSController::downloadFile(ActorId actor, const QString &filePath, const QByteArray &fileContent, uint64_t fileSegmentBegin, uint64_t fileSegmentEnd)
+{
+    if (!m_db.isOpen()) {
+        qDebug() << "DFSController: addFile: Failed, DB is not open:" << m_db.file().c_str();
+        return;
+    }
+
+    if (!m_db_local.isOpen()) {
+        qDebug() << "DFSController: addFile: Failed, DB is not open:" << m_db_local.file().c_str();
+        return;
+    }
 }
