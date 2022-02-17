@@ -33,18 +33,25 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
         return QByteArray();
     }
 
-    const QString actorDirPath = createDirectory(actor, securityLevel);
-    initDB(actor, actorDirPath);
-    flushDirContent(actor);
-
-    if (!m_db.isOpen()) {
-        qDebug() << "DFSController: addFile: Failed, DB is not open:" << m_db.file().c_str();
+    if (!m_db.isOpen())
+    {
+        qDebug() << "DFSController: addFile: DB open failure:" << m_db.file().c_str();
         return QByteArray();
     }
 
+    if (!m_db_local.isOpen())
+    {
+        qDebug() << "DFSController: addFile: DB open failure:" << m_db_local.file().c_str();
+        return QByteArray();
+    }
+
+    const QString actorDirPath = makeActorDirPath(actor);
+
+    createDirectory(actor, securityLevel);
+    flushDirContent(actor);
+
     QByteArray fileHash = Utils::calcKeccakForFile(filePath);
     const QString fileHashPrev = lastHash();
-    const QString fileName = FileSystem::pathConcat(DFSRootDirName, QFileInfo(filePath).fileName());
 
     const QString secureFilePath = makeSecurityDirPath(actor, securityLevel);
     const QString destFilePath = FileSystem::pathConcat(secureFilePath, fileHash);
@@ -90,10 +97,24 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     }
     }
 
-    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, SecurityLevelName[securityLevel] + "/" + fileName);
+    // Virtual file path `<root> / <private/public> / <human-readable file name>`
+    const QString virtualFilePath = FileSystem::pathConcat(FileSystem::pathConcat(DFSRootDirName,
+                                                                                  SecurityLevelName[securityLevel]),
+                                                           QFileInfo(filePath).fileName());
+    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, virtualFilePath);
 
     if (!m_db.insert(Config::DataStorage::filesTable, rowData)) {
-        qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :" << Config::DataStorage::filesTable.c_str();
+        qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :"
+                 << Config::DataStorage::filesTable.c_str();
+        return QByteArray();
+    }
+
+    uint64_t lastByteIndex = QFile(filePath).size() - 1;
+    const DBRow rowDataWithSegments = makeDBRow(fileHash, fileHashPrev, virtualFilePath, QString::number(0), QString::number(lastByteIndex));
+
+    if (!m_db_local.insert(Config::DataStorage::fileSegmentsTable, rowDataWithSegments)) {
+        qDebug() << "DFSController: addFile: insert failed:" << m_db_local.file().c_str() << " :"
+                 << Config::DataStorage::fileSegmentsTable.c_str();
         return QByteArray();
     }
 
@@ -122,42 +143,54 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
     qDebug() << "DFSController: removeFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
-    const std::string selectQuery = (std::stringstream()
-                                     << "SELECT * FROM " << Config::DataStorage::filesTable
+
+    std::map<std::string, DBConnector *> dbList;
+    dbList[Config::DataStorage::filesTable] = &m_db;
+    dbList[Config::DataStorage::fileSegmentsTable] = &m_db_local;
+
+    for (const auto& [tableName, db]: dbList)
+    {
+        const std::string selectQuery = (std::stringstream()
+                                     << "SELECT * FROM " << tableName
                                      << " WHERE fileHash = '" << fileHashS << "' OR fileHashPrev = '" << fileHashS << "'").str();
-    auto result = m_db.select(selectQuery);
 
-    if (result.empty()) {
-        qDebug() << "DFSController: removeFile: Query select skipped because of empty result: Query" << selectQuery.c_str();
-        return false;
-    }
+        auto result = db->select(selectQuery);
 
-    if (result.size() > 2) {
-        qDebug() << "DFSController: removeFile: Query select failed: Query result has unsupported size:" << result.size() << ": Query:" << selectQuery.c_str();
-        return false;
-    }
-
-    if (result.size() == 1 && result[0]["fileHashPrev"] == fileHashS) {
-        qDebug() << "DFSController: removeFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:" << fileHash << "; Query:" << selectQuery.c_str();
-        return false;
-    }
-
-    if (result.size() == 2) {
-        const std::string & updateRow_fileHash = result[1]["fileHash"];
-        const std::string & updateRow_fileHashPrev = result[0]["fileHashPrev"];
-        const std::string & updateQuery = (std::stringstream ()
-                                           << "UPDATE " << Config::DataStorage::filesTable
-                                           << " SET fileHashPrev = '" << updateRow_fileHashPrev
-                                           << "' WHERE fileHash = '" << updateRow_fileHash << "'").str();
-        if (!m_db.update(updateQuery)) {
-            qDebug() << "DFSController: removeFile: Query update failed: New fileHash:" << updateRow_fileHash.c_str() << ", new fileHashPrev:" << updateRow_fileHashPrev.c_str() << ", Query:" << updateQuery.c_str();
+        if (result.empty()) {
+            qDebug() << "DFSController: removeFile: Query select skipped because of empty result: Query" << selectQuery.c_str();
             return false;
         }
-    }
 
-    if (!m_db.deleteRow(Config::DataStorage::filesTable, result[0])) {
-        qDebug() << "DFSController: removeFile: deleteRow filed:" << toString(result[0]);
-        return false;
+        if (result.size() > 2) {
+            qDebug() << "DFSController: removeFile: Query select failed: Query result has unsupported size:" << result.size()
+                     << ": Query:" << selectQuery.c_str();
+            return false;
+        }
+
+        if (result.size() == 1 && result[0]["fileHashPrev"] == fileHashS) {
+            qDebug() << "DFSController: removeFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:"
+                     << fileHash << "; Query:" << selectQuery.c_str();
+            return false;
+        }
+
+        if (result.size() == 2) {
+            const std::string & updateRow_fileHash = result[1]["fileHash"];
+            const std::string & updateRow_fileHashPrev = result[0]["fileHashPrev"];
+            const std::string & updateQuery = (std::stringstream ()
+                                               << "UPDATE " << tableName
+                                               << " SET fileHashPrev = '" << updateRow_fileHashPrev
+                                               << "' WHERE fileHash = '" << updateRow_fileHash << "'").str();
+            if (!db->update(updateQuery)) {
+                qDebug() << "DFSController: removeFile: Query update failed: New fileHash:" << updateRow_fileHash.c_str()
+                         << ", new fileHashPrev:" << updateRow_fileHashPrev.c_str() << ", Query:" << updateQuery.c_str();
+                return false;
+            }
+        }
+
+        if (!db->deleteRow(tableName, result[0])) {
+            qDebug() << "DFSController: removeFile: deleteRow filed:" << toString(result[0]);
+            return false;
+        }
     }
 
     const QString filePathRemove = FileSystem::pathConcat(makeSecurityDirPath(actor, securityLevel), fileHash);
@@ -165,7 +198,6 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
         qDebug() << "DFSController: removeFile: File does not exists:" << filePathRemove;
         return false;
     }
-
     if (!QFile().remove(filePathRemove)) {
         qDebug() << "DFSController: removeFile: Remove file failed:" << filePathRemove;
         return false;
@@ -402,11 +434,24 @@ bool DFSController::flushDirContent(const Actor<KeyPrivate> & actor) {
 }
 
 // Copy and extend the User DB / Neccessary initialization step
-bool DFSController::createLocalDB(const Actor<KeyPrivate> & actor)
+bool DFSController::initDB(const Actor<KeyPrivate> & actor)
 {
     qDebug() << "DFSController: Instantiate local DB";
 
-    // Step 1: copy User's DB; if there is a legacy local DB, replacy it with the global one
+    // Step 1: If there is no DB in the User's folder, instantiate new DB
+
+    const QString & actorDirPath = makeActorDirPath(actor);
+    const QString & actorDBFilePath = FileSystem::pathConcat(actorDirPath, DFSDBName);
+
+    createDirectory(actor, Private);
+    createDirectory(actor, Public);
+
+    if (!QFile::exists(actorDBFilePath))
+    {
+        initGlobalDB(actor, actorDirPath);
+    }
+
+    // Step 2: copy User's DB; if there is a legacy copy DB, replacy it with the global one
 
     const QString & localDBFileName = actor.id().toString();
     const QString & localDBDirPath = makeServiceDirPath(actor);
@@ -416,9 +461,6 @@ bool DFSController::createLocalDB(const Actor<KeyPrivate> & actor)
         qDebug() << "DFSController: createLocalDB: DFS Service dir create error:" << localDBDirPath;
         return false;
     }
-
-    const QString & actorDirPath = makeActorDirPath(actor);
-    const QString & actorDBFilePath = FileSystem::pathConcat(actorDirPath, DFSDBName);
 
     if (QFile::exists(localDBFilePath))
     {
@@ -435,9 +477,7 @@ bool DFSController::createLocalDB(const Actor<KeyPrivate> & actor)
         return false;
     }
 
-    // Step 2: extend the local DB with `begSegment` and `endSegment` columns
-    // Note: fill columns with `-1`, actual values will be written when
-    // actual files will be downloaded
+    // Step 3: extend the local DB with `fileSegmentBegin` and `fileSegmentEnd` columns
 
     if(!m_db_local.open(localDBFilePath.toStdString()))
     {
@@ -445,12 +485,16 @@ bool DFSController::createLocalDB(const Actor<KeyPrivate> & actor)
         return false;
     }
 
-    const std::vector<std::string> queryList = {(std::stringstream ()
-                                       << "ALTER TABLE " << Config::DataStorage::filesTable
-                                       << " ADD begSegment BIGINT(255) NOT NULL DEFAULT(-1) '").str(),
-                                                (std::stringstream ()
-                                       << "ALTER TABLE " << Config::DataStorage::filesTable
-                                       << " ADD endSegment BIGINT(255) NOT NULL DEFAULT(-1) '").str()};
+    const std::vector<std::string> queryList = {
+            // Rename table
+        (std::stringstream () << "ALTER TABLE " << Config::DataStorage::filesTable
+        << " RENAME TO " << Config::DataStorage::fileSegmentsTable).str(),
+            // Add begin segment column
+        (std::stringstream () << "ALTER TABLE " << Config::DataStorage::fileSegmentsTable
+        << " ADD fileSegmentBegin TEXT NOT NULL DEFAULT(-1)").str(),
+            // Add end segment column
+        (std::stringstream () << "ALTER TABLE " << Config::DataStorage::fileSegmentsTable
+        << " ADD fileSegmentEnd TEXT NOT NULL DEFAULT(-1)").str()};
 
     for (auto& query: queryList)
     {
@@ -474,22 +518,25 @@ QString DFSController::makeSecurityDirPath(const Actor<KeyPrivate> & actor, Secu
     return FileSystem::pathConcat(makeActorDirPath(actor), SecurityLevelName[securityLevel]);
 }
 QString DFSController::makeServiceDirPath(const Actor<KeyPrivate> & actor) {
-    return FileSystem::pathConcat(DFSRootDirName, DFSService);
+    return FileSystem::pathConcat(
+                FileSystem::pathConcat(QCoreApplication::applicationDirPath(), DFSRootDirName),
+                DFSService);
 }
-// Creates <root>/<user>/<security_level> dir but returns <root>/<user>
+
 QString DFSController::createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
     qDebug() << "DFSController: createDirectory";
 
-    QString actorDirPath = makeActorDirPath(actor);
-    if (!QDir().mkpath(actorDirPath + "/" + SecurityLevelName[securityLevel])) {
-        qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << actorDirPath;
+    QString targetDirPath = FileSystem::pathConcat(makeActorDirPath(actor), SecurityLevelName[securityLevel]);
+    if (!QDir().mkpath(targetDirPath)) {
+        qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << targetDirPath;
         QCoreApplication::exit(ActorDirCreateError);
     }
 
-    return actorDirPath;
+    return targetDirPath;
 }
 
-void DFSController::initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath) {
+// Init the DB in the User's folder
+void DFSController::initGlobalDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath) {
     qDebug() << "DFSController: initDB:" << sqliteDBTargetPath;
 
     QString sqliteDBFilePath = FileSystem::pathConcat(sqliteDBTargetPath, DFSDBName);
@@ -514,6 +561,16 @@ DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHas
         { "fileHash", fileHash.toStdString() },
         { "fileHashPrev", fileHashPrev.toStdString() },
         { "filePath", filePath.toStdString() }
+    };
+}
+DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath,
+                const QString & fileSegmentBegin, const QString & fileSegmentEnd){
+    return {
+        { "fileHash", fileHash.toStdString() },
+        { "fileHashPrev", fileHashPrev.toStdString() },
+        { "filePath", filePath.toStdString() },
+        { "fileSegmentBegin", fileSegmentBegin.toStdString() },
+        { "fileSegmentEnd", fileSegmentEnd.toStdString() }
     };
 }
 

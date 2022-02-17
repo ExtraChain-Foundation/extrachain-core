@@ -520,6 +520,7 @@ void ExtraChainNode::test() const {
     auto actor = m_accountController->createActor(ActorType::Account, userHash);
 
     DFSController dfsController;
+    dfsController.initDB(actor);
     dfsController.flushDirContent(actor);
 
     QStringList testFiles = {

@@ -31,7 +31,8 @@ public:
     QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash, SecurityLevel securityLevel);
     bool editFile(const Actor<KeyPrivate> & actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel);
     bool flushDirContent(const Actor<KeyPrivate> & actor);
-    bool createLocalDB(const Actor<KeyPrivate> & actor);
+    bool initDB(const Actor<KeyPrivate> & actor);
+
 private:
     static const QString DFSRootDirName;
     static const QString DFSDBName;
@@ -42,8 +43,10 @@ private:
     QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
 
     QString createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
-    void initDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
+    void initGlobalDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
+    DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath,
+                    const QString & fileSegmentBegin, const QString & fileSegmentEnd);
     DBRow findDBRow(const QString & fileHash);
     std::vector<DBRow> findDBRows(const std::string & fileHash);
     std::optional<DBRow> lastRow();
