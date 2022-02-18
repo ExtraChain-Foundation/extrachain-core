@@ -150,7 +150,7 @@ void PrivateProfile::profile(const QByteArray &hash) {
             idList.first();
             qDebug() << "Load private profile with id" << idList.first();
             m_accountController->loadActors(idList.first(), idList, hash, decryptKey);
-            if (m_accountController->mainActor() != nullptr)
+            if (!m_accountController->mainActor().empty())
                 dfs->initMyLocalStorage();
             emit initActorChatM();
             success = true;

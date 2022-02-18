@@ -30,21 +30,21 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
                                                  QByteArray relAddress, QByteArray color) {
     tokenBalance[relAddress] = { { tokenName, tokenCount } };
     QDir().mkpath(SmartContractStorage::CONTRACTPROFILE);
-    Actor<KeyPrivate> *actor = createContract(tokenName);
+    Actor<KeyPrivate> actor = createContract(tokenName);
 
     QByteArrayList profileList;
     profileList.clear();
     profileList.append("6");
     profileList.append("1");
-    profileList.append(actor->id().toByteArray());
+    profileList.append(actor.id().toByteArray());
     profileList.append(tokenName);
     profileList.append(tokenCount);
     profileList.append(relAddress);
     profileList.append(color);
     actorIndex->saveProfile(actor, profileList);
-    profileList.insert(2, actor->key().sign(Serialization::serialize(profileList, 4)));
+    profileList.insert(2, actor.key().sign(Serialization::serialize(profileList, 4)));
 
-    QFile file(SmartContractStorage::CONTRACTPROFILE + actor->id().toByteArray() + ".profile");
+    QFile file(SmartContractStorage::CONTRACTPROFILE + actor.id().toByteArray() + ".profile");
     if (file.exists()) {
         qDebug() << "[SmartContractManager][createContractProfile] Error. Contract profile already exist";
         return;
@@ -64,27 +64,25 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
 void SmartContractManager::process() {
 }
 
-void SmartContractManager::sendInitialTransaction(Actor<KeyPrivate> *sender, QByteArray receiver,
+void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sender, QByteArray receiver,
                                                   QByteArray quantity) {
-    Transaction tx(sender->id(), receiver, Transaction::visibleToAmount(quantity));
+    Transaction tx(sender.id(), receiver, Transaction::visibleToAmount(quantity));
     tx.setData("InitContract");
 
-    tx.setToken(sender->id());
-    tx.sign(*sender);
+    tx.setToken(sender.id());
+    tx.sign(sender);
 
     emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::ContractMessage);
 }
 
-Actor<KeyPrivate> *SmartContractManager::createContract(QByteArray tokenName) {
-    Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-
-    actor->create(ActorType::Token);
-
-    emit verifyActor(actor->convertToPublic());
-    actorIndex->addActor(actor->convertToPublic());
+Actor<KeyPrivate> SmartContractManager::createContract(QByteArray tokenName) {
+    Actor<KeyPrivate> actor;
+    actor.create(ActorType::Token);
+    // emit verifyActor(actor.convertToPublic());
+    actorIndex->addActor(actor.convertToPublic());
     // emit addContractActorInActorIndex(actor->convertToPublic());
     // emit saveActorInPrivateProfile(actor->getId().toActorId()); // TODO: not to wallet
-    savePrivateActor(*actor);
+    savePrivateActor(actor);
     return actor;
 }
 
@@ -103,12 +101,12 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor) {
     if (file.open(QIODevice::ReadWrite)) {
         QByteArray old;
         old = file.readAll();
-        if (old == actor.serialize()) {
+        if (old == actor.serializeQt()) {
             qDebug() << "Private actor with id =" << actor.id() << "already exists";
         } else {
             file.resize(0);
-            qDebug() << "actor serial: ---- " << actor.serialize();
-            file.write(actor.serialize());
+            qDebug() << "actor serial: ---- " << actor.serializeQt();
+            file.write(actor.serializeQt());
             file.flush();
             qDebug() << "Private Actor" << actor.id() << "is successfully saved";
         }

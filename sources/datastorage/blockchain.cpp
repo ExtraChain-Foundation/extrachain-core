@@ -478,9 +478,9 @@ bool Blockchain::signCheckAdd(Block &block) {
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = accountController->mainActor()->id().toByteArray();
+            QByteArray id = accountController->mainActor().id().toByteArray();
             if (!list.contains(id)) {
-                QByteArray sign = accountController->mainActor()->key().sign(block.getHash());
+                QByteArray sign = accountController->mainActor().key().sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -524,9 +524,9 @@ bool Blockchain::signCheckAdd(Block &block) {
             }
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = accountController->mainActor()->id().toByteArray();
+            QByteArray id = accountController->mainActor().id().toByteArray();
             if (!list.contains(id)) {
-                QByteArray sign = accountController->mainActor()->key().sign(block.getHash());
+                QByteArray sign = accountController->mainActor().key().sign(block.getHash());
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -919,7 +919,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     if (!isGenesis && resultCode == 0) {
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation()) {
-            GenesisBlock gB = createGenesisBlock(*(accountController->mainActor()));
+            GenesisBlock gB = createGenesisBlock(accountController->mainActor());
             if (blockIndex.addBlock(gB) == 0) {
                 qDebug() << "Block" << gB.getIndex() << gB.getType() << "is successfully added to blockchain";
                 emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
@@ -1307,9 +1307,9 @@ void Blockchain::addBlockToBlockchain(Block block) {
     QList<Transaction> list = block.extractTransactions();
     for (const auto &tmp : qAsConst(list)) {
         QList<ActorId> list;
-        auto accounts = accountController->getAccounts();
+        auto accounts = accountController->accounts();
         for (const auto &tmp : qAsConst(accounts))
-            list.append(tmp->id());
+            list.append(tmp.id());
         QByteArray data = tmp.getData();
         if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
             && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE)) {

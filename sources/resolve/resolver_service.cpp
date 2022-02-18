@@ -238,7 +238,7 @@ void ResolverService::resolveGeneralTask() {
         break;
     }
     case Messages::ChainMessage::ActorMessage: {
-        Actor<KeyPublic> actor(message.data);
+        auto actor = MessagePack::deserializeQt<Actor<KeyPublic>>(message.data);
         actorIndex->handleNewActor(actor);
         // emit newActor(actor);
         finishWork();
@@ -274,7 +274,7 @@ void ResolverService::resolveGeneralTask() {
         auto plsr = list.length() > 2 ? list[2] : ActorId();
 
         if (plsr.isEmpty()) {
-            auto mainId = node->accountController()->mainActor()->id();
+            auto mainId = node->accountController()->mainActor().id();
             auto firstId = node->actorIndex()->firstId();
             if (mainId == firstId)
                 node->createTransactionFrom(firstId, message.signer, amount, ActorId());
@@ -356,7 +356,7 @@ void ResolverService::resolveGeneralTask() {
         if (checkResponseHandler(responseMessage.dataHash))
             return;
 
-        actorIndex->handleNewActor(Actor<KeyPublic>(responseMessage.data));
+        actorIndex->handleNewActor(MessagePack::deserializeQt<Actor<KeyPublic>>(responseMessage.data));
         finishWork();
         break;
     }

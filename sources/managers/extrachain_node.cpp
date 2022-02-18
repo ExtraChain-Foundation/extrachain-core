@@ -120,7 +120,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     }
 
     if (m_blockchain->getRecords() <= 0) {
-        auto first = *m_accountController->mainActor();
+        auto &first = m_accountController->mainActor();
         QString firstId = first.id().toString();
 
         QMap<ActorId, BigNumber> tm;
@@ -179,7 +179,7 @@ void ExtraChainNode::connectSmContractManager() {
     //            &ExtraChainNode::addActorInActorIndex);
     connect(m_smartContractManager, &SmartContractManager::saveActorInPrivateProfile,
             [this](const QByteArray &id, const QString &type, const bool &rewrite) { // TODO?
-                auto mainId = m_accountController->mainActor()->id().toByteArray();
+                auto mainId = m_accountController->mainActor().id().toByteArray();
                 emit nodeEditPrivateProfile({ m_privateProfile->hash(), mainId }, type, id, rewrite);
             });
 
@@ -372,7 +372,7 @@ void ExtraChainNode::getAllActors() {
 
 void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->getAccountCount() > 0 && m_networkManager->connections().length() > 0) {
-        ActorId actorId = m_accountController->mainActor()->id();
+        ActorId actorId = m_accountController->mainActor().id();
 
         if (!actorId.isEmpty())
             emit getAllActorsNode(actorId, true);
@@ -396,7 +396,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto &mainKey = m_accountController->mainActor()->key();
+    auto &mainKey = m_accountController->mainActor().key();
     auto &publicKey = first.key().publicKey();
 
     QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },

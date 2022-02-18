@@ -132,24 +132,17 @@ class EXTRACHAIN_EXPORT Actor final {
 private:
     std::string m_id;
     T m_key;
-    ActorType m_type;
+    ActorType m_type = ActorType::Wallet;
 
 public:
-    Actor() {
-        m_type = ActorType::Wallet;
-    }
+    Actor() = default;
+    ~Actor() = default;
 
     Actor(const Actor<T> &copyActor) {
         m_id = copyActor.id().toStdString();
         m_key = copyActor.key();
         m_type = ActorType(copyActor.type());
     }
-
-    Actor(const QByteArray &serialized) {
-        this->deserialize(serialized);
-    }
-
-    ~Actor() = default;
 
     Actor operator=(const Actor<T> &copyActor) {
         m_id = copyActor.id().toStdString();
@@ -159,15 +152,6 @@ public:
     }
 
 public:
-    /**
-     * @brief initial construction
-     * @param serialized
-     */
-    void deserialize(const QByteArray &serialized) {
-        auto [actor, _] = MessagePack::deserialize<Actor<T>>(serialized.toStdString());
-        *this = actor;
-    }
-
     /**
      * @brief initial construction of new Actor
      * @param id
@@ -192,17 +176,6 @@ public:
             return true;
 
         return ActorId::empty(m_id);
-    }
-
-    /**
-     * @brief serialize actor to QByteArray
-     * ecdsa_private - has pubkey and prkey
-     * ecdsa_public - has pubkey only
-     * @return serialized actors
-     */
-    QByteArray serialize() const {
-        std::string serialized = MessagePack::serialize(*this);
-        return QByteArray::fromStdString(serialized);
     }
 
     PublicProfile profile() {
@@ -261,7 +234,36 @@ public:
         m_type = type;
     }
 
+    friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
+        QDebugStateSaver saver(d);
+        d << "Actor( id:" << actor.id() << ", type: " << int(actor.type()) << ", key: ";
+        d << actor.key();
+        d << ")";
+        return d;
+    }
+
     MSGPACK_DEFINE(m_id, m_type, m_key)
+
+    std::string serialize() const {
+        return MessagePack::serialize(*this);
+    }
+
+    bool deserialize(const std::string &serialized) {
+        auto deserialized = MessagePack::deserialize<decltype(*this)>(serialized);
+        if (deserialized.second) {
+            *this = deserialized.first;
+        }
+
+        return deserialized.second;
+    }
+
+    QByteArray serializeQt() const {
+        return MessagePack::serializeQt(*this);
+    }
+
+    void deserializeQt(const std::string &serialized) {
+        *this = MessagePack::deserializeQt<decltype(*this)>(serialized);
+    }
 };
 
 #endif // ACTOR_H

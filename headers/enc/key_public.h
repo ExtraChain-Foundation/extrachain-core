@@ -43,6 +43,12 @@ public:
     const std::string &publicKey() const;
     bool empty() const;
 
+    friend QDebug operator<<(QDebug debug, const KeyPublic &key) {
+        QDebugStateSaver saver(debug);
+        debug << "KeyPublic( public: " << key.publicKey().c_str() << " )";
+        return debug;
+    }
+
     MSGPACK_DEFINE(m_publicKey)
 };
 

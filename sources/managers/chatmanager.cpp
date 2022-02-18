@@ -94,14 +94,14 @@ void ChatManager::InitializeChatList() {
     std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
     for (DBRow temp : chats) {
         QByteArray chatId =
-            _accController->mainActor()->key().decryptSelf(QByteArray::fromStdString(temp["chatId"]));
+            _accController->mainActor().key().decryptSelf(QByteArray::fromStdString(temp["chatId"]));
 
         Chat *chat = getChatMemory(chatId);
         if (chat == nullptr) {
             QByteArray ownerId =
-                _accController->mainActor()->key().decryptSelf(QByteArray::fromStdString(temp["owner"]));
+                _accController->mainActor().key().decryptSelf(QByteArray::fromStdString(temp["owner"]));
             QByteArray key =
-                _accController->mainActor()->key().decryptSelf(QByteArray::fromStdString(temp["key"]));
+                _accController->mainActor().key().decryptSelf(QByteArray::fromStdString(temp["key"]));
             Chat *temp_ =
                 new Chat(this, chatId, key, BigNumber("0"), _actorIndex, _accController, {}, ownerId, false);
 
@@ -149,7 +149,7 @@ void ChatManager::parseInvite() {
     if (!QFile::exists(path))
         return;
 
-    auto &mainActor = _accController->mainActor()->key();
+    auto &mainActor = _accController->mainActor().key();
     DBConnector db;
     db.open(path.toStdString());
     std::vector<DBRow> invites = db.select("SELECT * from " + Config::DataStorage::chatInviteTableName);
@@ -262,8 +262,8 @@ QByteArray ChatManager::CreateNewChat() {
 }
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId) {
-    auto main = _accController->mainActor();
-    auto &publicKey = _actorIndex->getActor(actorId).key().publicKey();
+    auto mainActor = _accController->mainActor();
+    auto publicKey = _actorIndex->getActor(actorId).key().publicKey();
 
     Chat *chat = getChatMemory(chatId);
     if (chat == nullptr) {
@@ -274,9 +274,9 @@ void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId) {
 
     QByteArrayList query = { Config::DataStorage::chatInviteTableName.c_str(),
                              "chatId",
-                             main->key().encrypt(chatId, publicKey),
+                             mainActor.key().encrypt(chatId, publicKey),
                              "message",
-                             main->key().encrypt(chat->getChatKey(), publicKey),
+                             mainActor.key().encrypt(chat->getChatKey(), publicKey),
                              "owner",
                              _currentActorId };
     emit sendEditSql(actorId, "chatinvite", DfsStruct::Type::Service, DfsStruct::ChangeType::Insert, query);
@@ -501,7 +501,7 @@ void ChatManager::initChat(bool status, int type) {
 
         DBConnector DB(filePath.toStdString());
         std::vector<DBRow> chats = DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName);
-        auto mainActor = _accController->mainActor()->key();
+        auto mainActor = _accController->mainActor().key();
 
         for (DBRow &tmp : chats) {
             QString owner = mainActor.decryptSelf(QByteArray::fromStdString(tmp["owner"]));
@@ -539,7 +539,7 @@ ChatManager::~ChatManager() {
 }
 
 void ChatManager::ActorInit() {
-    this->_currentActorId = this->_accController->mainActor()->id().toByteArray();
+    this->_currentActorId = this->_accController->mainActor().id().toByteArray();
     /*
     QFile file("keystore/personal/currentID");
     file.open(QIODevice::ReadWrite);

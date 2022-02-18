@@ -62,6 +62,13 @@ public:
 
     bool empty() const;
 
+    friend QDebug operator<<(QDebug debug, const KeyPrivate &key) {
+        QDebugStateSaver saver(debug);
+        debug << "KeyPrivate( secret: " << key.secretKey().c_str() << ", public: " << key.publicKey().c_str()
+              << " )";
+        return debug;
+    }
+
     MSGPACK_DEFINE(m_secretKey, m_publicKey)
 };
 

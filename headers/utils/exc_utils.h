@@ -399,7 +399,8 @@ namespace DataStorage {
           "fileHashPrev TEXT             NOT NULL, "
           "filePath     TEXT             NOT NULL"
           ");";
-    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
+    static const std::string filesTableLast =
+        "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + filesTable;
 
     // How many files one section folder will store
@@ -492,6 +493,18 @@ std::pair<T, bool> deserialize(const std::string &str, std::size_t size = 0) {
         qFatal("Incorrect MessagePack deserialize");
         return { T(), false };
     }
+}
+
+template <class T>
+QByteArray serializeQt(const T &t) {
+    auto serialized = QByteArray::fromStdString(MessagePack::serialize(t));
+    return serialized;
+}
+
+template <class T>
+T deserializeQt(const QByteArray &str, std::size_t size = 0) {
+    auto deserialized = MessagePack::deserialize<T>(str.toStdString(), size);
+    return deserialized.first;
 }
 } // namespace MessagePack
 
