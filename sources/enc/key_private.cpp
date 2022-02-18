@@ -26,10 +26,6 @@
 
 using std::string, std::vector;
 
-KeyPrivate::KeyPrivate() {
-    generate();
-}
-
 KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
     m_secretKey = secret_key;
     m_publicKey = public_key;
@@ -40,11 +36,6 @@ KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {
     m_publicKey = keyPrivate.publicKey();
 }
 
-KeyPrivate::KeyPrivate(const QJsonObject &json) {
-    m_secretKey = json["privateKey"].toString().toStdString();
-    m_publicKey = json["publicKey"].toString().toStdString();
-}
-
 void KeyPrivate::generate() {
     auto keys = SecretKey::createAsymmetricPair();
     m_secretKey = keys.first;
@@ -52,29 +43,30 @@ void KeyPrivate::generate() {
 }
 
 QByteArray KeyPrivate::encrypt(const QByteArray &data, const std::string &receiverPublicKey,
-                               const string &nonce) {
+                               const string &nonce) const {
     auto res = SecretKey::encryptAsymmetric(data.toStdString(), m_secretKey, receiverPublicKey, nonce);
     return QByteArray::fromStdString(res);
 }
 
-QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &senderPublicKey, const string &nonce) {
+QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &senderPublicKey,
+                               const string &nonce) const {
     auto res = SecretKey::decryptAsymmetric(data.toStdString(), m_secretKey, senderPublicKey, nonce);
     return QByteArray::fromStdString(res);
 }
 
-QByteArray KeyPrivate::encryptSelf(const QByteArray &data) {
+QByteArray KeyPrivate::encryptSelf(const QByteArray &data) const {
     string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
     return this->encrypt(data, this->m_publicKey, pnonce);
 }
 
-QByteArray KeyPrivate::decryptSelf(const QByteArray &data) {
+QByteArray KeyPrivate::decryptSelf(const QByteArray &data) const {
     string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
     return this->decrypt(data, this->m_publicKey, pnonce);
 }
 
-QByteArray KeyPrivate::sign(const QByteArray &data) {
+QByteArray KeyPrivate::sign(const QByteArray &data) const {
     string sks = Utils::hexStringToByte(m_secretKey);
     vector<unsigned char> sk(sks.begin(), sks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
@@ -85,7 +77,7 @@ QByteArray KeyPrivate::sign(const QByteArray &data) {
     return QByteArray::fromStdString(sig);
 }
 
-bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex) {
+bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex) const {
     string pks = Utils::hexStringToByte(this->m_publicKey);
     string signature = Utils::hexStringToByte(dsignHex.toStdString());
     vector<unsigned char> pk(pks.begin(), pks.end());
@@ -101,4 +93,8 @@ const std::string &KeyPrivate::secretKey() const {
 
 const std::string &KeyPrivate::publicKey() const {
     return m_publicKey;
+}
+
+bool KeyPrivate::empty() const {
+    return m_secretKey.empty() && m_publicKey.empty();
 }

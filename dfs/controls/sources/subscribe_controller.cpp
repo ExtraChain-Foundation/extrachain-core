@@ -29,7 +29,7 @@ SubscribeController::~SubscribeController() {
 }
 
 void SubscribeController::editMySubscribe(QByteArray id, bool isRemove) {
-    QByteArray currentId = extraChainNode->accountController()->mainActor()->id().toByteArray();
+    auto currentId = extraChainNode->accountController()->mainActor().id().toByteArray();
     emit sendEditSql(currentId, "subscribe", DfsStruct::Type::Service,
                      isRemove ? DfsStruct::ChangeType::Delete : DfsStruct::ChangeType::Insert,
                      { Config::DataStorage::subscribeColumnTableName.c_str(), "subscription", id });
@@ -41,7 +41,7 @@ void SubscribeController::editMySubscribe(QByteArray id, bool isRemove) {
 }
 
 bool SubscribeController::checkSubscribe(QByteArray id) {
-    QByteArray currentId = extraChainNode->accountController()->mainActor()->id().toByteArray();
+    auto currentId = extraChainNode->accountController()->mainActor().id().toByteArray();
     QString path = DfsStruct::ROOT_FOOLDER_NAME + "/" + currentId + "/services/subscribe";
     DBConnector DB(path.toStdString());
     DB.createTable(Config::DataStorage::tableMySubscribeCreation);

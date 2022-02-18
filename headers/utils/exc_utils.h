@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include <msgpack.hpp>
+
 #include "extrachain_global.h"
 #include "network/socket_pair.h"
 
@@ -397,7 +399,8 @@ namespace DataStorage {
           "fileHashPrev TEXT             NOT NULL, "
           "filePath     TEXT             NOT NULL"
           ");";
-    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
+    static const std::string filesTableLast =
+        "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + filesTable;
 
     // How many files one section folder will store
@@ -468,7 +471,42 @@ QByteArray fromList(const QByteArrayList &list);
 QByteArrayList toList(const QByteArray &data);
 QMap<QString, QByteArray> toMap(const QByteArray &data);
 int length(const QByteArray &data);
-} // namespace Serialization
+} // namespace Seralization
+
+namespace MessagePack {
+template <class T>
+std::string serialize(const T &t) {
+    std::stringstream buffer;
+    msgpack::pack(buffer, t);
+    buffer.seekg(0);
+    return buffer.str();
+}
+
+template <class T>
+std::pair<T, bool> deserialize(const std::string &str, std::size_t size = 0) {
+    try {
+        msgpack::object_handle oh = msgpack::unpack(str.data(), str.size());
+        msgpack::object deserialized = oh.get();
+        auto t = deserialized.as<T>();
+        return { t, true };
+    } catch (std::exception e) {
+        qFatal("Incorrect MessagePack deserialize");
+        return { T(), false };
+    }
+}
+
+template <class T>
+QByteArray serializeQt(const T &t) {
+    auto serialized = QByteArray::fromStdString(MessagePack::serialize(t));
+    return serialized;
+}
+
+template <class T>
+T deserializeQt(const QByteArray &str, std::size_t size = 0) {
+    auto deserialized = MessagePack::deserialize<T>(str.toStdString(), size);
+    return deserialized.first;
+}
+} // namespace MessagePack
 
 namespace Utils {
 // QByteArray encodeHex(const QByteArray &dec);
@@ -509,8 +547,8 @@ EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &e
                                    const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
                                    const QByteArray &key, int blockSize = 60007);
-EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName,
-                                                      const QByteArray &key, int blockSize = 60007);
+EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
+                                                      int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
@@ -653,9 +691,12 @@ enum class TxParam
 } // namespace SearchEnum
 
 namespace FileSystem {
-inline static QString pathConcat(const QString &pl, const QString &pr) { return QDir::cleanPath(pl + "/" + pr); };
+inline static QString pathConcat(const QString &pl, const QString &pr) {
+    return QDir::cleanPath(pl + "/" + pr);
+};
 QString createSubDirectory(const QString &parentDirStr, const QString &subDirStr);
-QList<std::tuple<QString, QString>> listFiles(const QString &dirPath, const QStringList &ignoreList = QStringList());
+QList<std::tuple<QString, QString>> listFiles(const QString &dirPath,
+                                              const QStringList &ignoreList = QStringList());
 } // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {
@@ -680,5 +721,24 @@ QDebug operator<<(QDebug d, const Notification &n);
     QElapsedTimer name;   \
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
+
+#define AUTO_SERIALIZE(...)                                                        \
+    std::string serialize() const {                                                \
+        return MessagePack::serialize(*this);                                      \
+    }                                                                              \
+    bool deserialize(const std::string &serialized) {                              \
+        auto deserialized = MessagePack::deserialize<decltype(*this)>(serialized); \
+        if (deserialized.second) {                                                 \
+            *this = deserialized.first;                                            \
+        }                                                                          \
+        return deserialized.second;                                                \
+    }                                                                              \
+    QByteArray serializeQt() const {                                               \
+        return MessagePack::serializeQt(*this);                                    \
+    }                                                                              \
+    void deserializeQt(const std::string &serialized) {                            \
+        *this = MessagePack::deserializeQt<decltype(*this)>(serialized);           \
+    }                                                                              \
+    MSGPACK_DEFINE(__VA_ARGS__)
 
 #endif // UTILS_H

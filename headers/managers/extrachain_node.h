@@ -140,7 +140,7 @@ signals:
     void sendKey(QByteArray key);
     void sendPrivateKey(QByteArray prKey);
     // public:
-    void saveProfile(Actor<KeyPrivate> *key, QByteArrayList profile);
+    void saveProfile(Actor<KeyPrivate> key, QByteArrayList profile);
     void sendTransactionContract(Transaction tx);
     // void addActorInActorIndex(Actor<KeyPublic> actor);
     void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,

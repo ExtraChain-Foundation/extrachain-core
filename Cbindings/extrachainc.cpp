@@ -43,8 +43,8 @@ ActorPrivate *actor_private_from_ActorKeyPrivate(const Actor<KeyPrivate> &actor)
     ActorPrivate *actor_private = new ActorPrivate;
     actor_private->type = int(actor.type());
     copy_char(actor_private->id, actor.id().toByteArray().data(), 20);
-    copy_char(actor_private->secret_key, actor.key()->secretKey().data(), 128);
-    copy_char(actor_private->public_key, actor.key()->publicKey().data(), 64);
+    copy_char(actor_private->secret_key, actor.key().secretKey().data(), 128);
+    copy_char(actor_private->public_key, actor.key().publicKey().data(), 64);
 
     return actor_private;
 }
@@ -55,7 +55,7 @@ ActorPublic *actor_public_from_ActorKeyPublic(const Actor<KeyPublic> &actor) {
     ActorPublic *actor_public = new ActorPublic;
     actor_public->type = int(actor.type());
     copy_char(actor_public->id, actor.id().toByteArray().data(), 20);
-    copy_char(actor_public->public_key, actor.key()->publicKey().c_str(), 64);
+    copy_char(actor_public->public_key, actor.key().publicKey().c_str(), 64);
     return actor_public;
 }
 
@@ -204,7 +204,7 @@ void extrachain_login() {
 
 char *extrachain_sign(const char *data, size_t size, const ActorPrivate *actor_private) {
     auto actor = ActorKeyPrivate_from_actor_private(actor_private);
-    auto sig = actor.key()->sign(QByteArray::fromRawData(data, size));
+    auto sig = actor.key().sign(QByteArray::fromRawData(data, size));
     char *res;
     copy_char(res, sig.data(), sig.length());
     return res;
@@ -213,13 +213,13 @@ char *extrachain_sign(const char *data, size_t size, const ActorPrivate *actor_p
 bool extrachain_verify_private(const char *data, size_t size, const char *sign,
                                const ActorPrivate *actor_private) {
     auto actor = ActorKeyPrivate_from_actor_private(actor_private);
-    bool verify = actor.key()->verify(QByteArray::fromRawData(data, size), sign);
+    bool verify = actor.key().verify(QByteArray::fromRawData(data, size), sign);
     return verify;
 }
 
 bool extrachain_verify(const char *data, size_t size, const char *sign, const ActorPublic *actor_public) {
     auto actor = ActorKeyPublic_from_actor_public(actor_public);
-    bool verify = actor.key()->verify(QByteArray::fromRawData(data, size), sign);
+    bool verify = actor.key().verify(QByteArray::fromRawData(data, size), sign);
     return verify;
 }
 
@@ -227,8 +227,8 @@ char *extrachain_encrypt(const char *data, size_t size, const ActorPrivate *acto
                          const ActorPublic *actor_public) {
     auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
     auto actorPublic = ActorKeyPublic_from_actor_public(actor_public);
-    auto encrypted = SecretKey::encryptAsymmetric(std::string(data, size), actorPrivate.key()->secretKey(),
-                                                  actorPublic.key()->publicKey());
+    auto encrypted = SecretKey::encryptAsymmetric(std::string(data, size), actorPrivate.key().secretKey(),
+                                                  actorPublic.key().publicKey());
     char *res;
     copy_char(res, encrypted);
     return res;
@@ -238,8 +238,8 @@ char *extrachain_decrypt(const char *data, size_t size, const ActorPrivate *acto
                          const ActorPublic *actor_public) {
     auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
     auto actorPublic = ActorKeyPublic_from_actor_public(actor_public);
-    auto decrypted = SecretKey::decryptAsymmetric(std::string(data, size), actorPrivate.key()->secretKey(),
-                                                  actorPublic.key()->publicKey());
+    auto decrypted = SecretKey::decryptAsymmetric(std::string(data, size), actorPrivate.key().secretKey(),
+                                                  actorPublic.key().publicKey());
     char *res;
     copy_char(res, decrypted);
     return res;
@@ -247,7 +247,7 @@ char *extrachain_decrypt(const char *data, size_t size, const ActorPrivate *acto
 
 char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate *actor_private) {
     auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
-    auto encrypted = actorPrivate.key()->encryptSelf(QByteArray(data, size));
+    auto encrypted = actorPrivate.key().encryptSelf(QByteArray(data, size));
     char *res;
     copy_char(res, encrypted);
     return res;
@@ -255,7 +255,7 @@ char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate 
 
 char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate *actor_private) {
     auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
-    auto decrypted = actorPrivate.key()->decryptSelf(QByteArray(data, size));
+    auto decrypted = actorPrivate.key().decryptSelf(QByteArray(data, size));
     char *res;
     copy_char(res, decrypted);
     return res;
