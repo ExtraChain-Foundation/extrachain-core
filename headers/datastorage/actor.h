@@ -242,28 +242,7 @@ public:
         return d;
     }
 
-    MSGPACK_DEFINE(m_id, m_type, m_key)
-
-    std::string serialize() const {
-        return MessagePack::serialize(*this);
-    }
-
-    bool deserialize(const std::string &serialized) {
-        auto deserialized = MessagePack::deserialize<decltype(*this)>(serialized);
-        if (deserialized.second) {
-            *this = deserialized.first;
-        }
-
-        return deserialized.second;
-    }
-
-    QByteArray serializeQt() const {
-        return MessagePack::serializeQt(*this);
-    }
-
-    void deserializeQt(const std::string &serialized) {
-        *this = MessagePack::deserializeQt<decltype(*this)>(serialized);
-    }
+    AUTO_SERIALIZE(m_id, m_type, m_key)
 };
 
 #endif // ACTOR_H

@@ -722,4 +722,23 @@ QDebug operator<<(QDebug d, const Notification &n);
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 
+#define AUTO_SERIALIZE(...)                                                        \
+    std::string serialize() const {                                                \
+        return MessagePack::serialize(*this);                                      \
+    }                                                                              \
+    bool deserialize(const std::string &serialized) {                              \
+        auto deserialized = MessagePack::deserialize<decltype(*this)>(serialized); \
+        if (deserialized.second) {                                                 \
+            *this = deserialized.first;                                            \
+        }                                                                          \
+        return deserialized.second;                                                \
+    }                                                                              \
+    QByteArray serializeQt() const {                                               \
+        return MessagePack::serializeQt(*this);                                    \
+    }                                                                              \
+    void deserializeQt(const std::string &serialized) {                            \
+        *this = MessagePack::deserializeQt<decltype(*this)>(serialized);           \
+    }                                                                              \
+    MSGPACK_DEFINE(__VA_ARGS__)
+
 #endif // UTILS_H
