@@ -156,12 +156,12 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
             break;
         }
         case SearchEnum::BlockParam::Data: {
-            if (lastBlock.getData() == id)
+            if (lastBlock.getData() == id.toStdString())
                 return lastBlock;
             break;
         }
         case SearchEnum::BlockParam::Hash: {
-            if (lastBlock.getHash() == id)
+            if (lastBlock.getHash() == id.toStdString())
                 return lastBlock;
             break;
         }
@@ -394,13 +394,13 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
             DB.createTable(Config::DataStorage::SignBlockTableCreate);
             DBRow row;
 
-            row.insert({ "type", block.getType().toStdString() });
+            row.insert({ "type", block.getType() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
             row.insert({ "data", "" });
-            row.insert({ "prevHash", block.getPrevHash().toStdString() });
-            row.insert({ "hash", block.getHash().toStdString() });
-            row.insert({ "prevGenHash", block.getPrevGenHash().toStdString() });
+            row.insert({ "prevHash", block.getPrevHash() });
+            row.insert({ "hash", block.getHash() });
+            row.insert({ "prevGenHash", block.getPrevGenHash() });
             DB.insert(Config::DataStorage::GenesisBlockTable, row);
 
             QList<GenesisDataRow> rows = block.extractDataRows();
@@ -427,12 +427,12 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
             DB.createTable(Config::DataStorage::SignBlockTableCreate);
             DBRow row;
 
-            row.insert({ "type", block.getType().toStdString() });
+            row.insert({ "type", block.getType() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
             row.insert({ "data", "" });
-            row.insert({ "prevHash", block.getPrevHash().toStdString() });
-            row.insert({ "hash", block.getHash().toStdString() });
+            row.insert({ "prevHash", block.getPrevHash() });
+            row.insert({ "hash", block.getHash() });
             DB.insert(Config::DataStorage::BlockTable, row);
 
             QList<Transaction> rows = block.extractTransactions();

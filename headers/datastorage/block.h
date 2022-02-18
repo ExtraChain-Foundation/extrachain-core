@@ -31,11 +31,12 @@
 #include <QString>
 
 // Block comparison result
-struct forApprovers {
-    QByteArray actorId = "";
-    QByteArray sign = "";
+struct Approvers {
+    std::string actorId = "";
+    std::string sign = "";
     bool isApprove = false;
 };
+
 struct BlockCompare {
     BigNumber indexDiff;
     BigNumber approverDiff;
@@ -46,23 +47,23 @@ struct BlockCompare {
 };
 
 namespace Config {
-static const QByteArray DATA_BLOCK_TYPE = "data";
-static const QByteArray MERGE_BLOCK = "dataMerge";
+static const std::string DATA_BLOCK_TYPE = "data";
+static const std::string MERGE_BLOCK = "dataMerge";
 }
 
 class EXTRACHAIN_EXPORT Block {
 protected:
     const int FIELDS_SIZE = 4;
-    QByteArray type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
-    QByteArray data;                           // payload (serialized tx's, or other)
-    BigNumber index = BigNumber(-1);           // block id
+    std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
+    std::string data;                             // payload (serialized tx's, or other)
+    BigNumber index = BigNumber(-1);              // block id
     //    BigNumber approver = BigNumber(-1);        // block approver id
 
     long long date;
-    QByteArray prevHash; // previous block hash
-    QByteArray hash;     // this block hash (from all previous fields)
+    std::string prevHash; // previous block hash
+    std::string hash;     // this block hash (from all previous fields)
     //    QByteArray digSig;   // digital signature (from all fields)
-    QList<forApprovers> signatures;
+    std::vector<Approvers> signatures;
 
 public:
     Block();
@@ -101,7 +102,7 @@ protected:
      * @return digSig data
      */
     virtual QByteArray getDataForHash() const;
-    virtual QByteArray getDataForDigSig() const;
+    virtual const std::string &getDataForDigSig() const;
 
 public:
     // data operations
@@ -140,14 +141,14 @@ public:
 public:
     virtual void initFields(QList<QByteArray> &list);
     QList<Block> getDataFromAllBlocks(QList<QByteArray>);
-    void setPrevHash(const QByteArray &value);
-    QByteArray getType() const;
+    void setPrevHash(const std::string &value);
+    std::string getType() const;
     ActorId getApprover() const;
     BigNumber getIndex() const;
-    QByteArray getData() const;
-    QByteArray getHash() const;
-    QByteArray getPrevHash() const;
-    QByteArray getDigSig() const;
+    std::string getData() const;
+    std::string getHash() const;
+    std::string getPrevHash() const;
+    std::string getDigSig() const;
     QByteArray getSignatures() const;
     QByteArrayList getListSignatures() const;
     void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
@@ -155,8 +156,7 @@ public:
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
-
-    void setType(const QByteArray &value);
+    void setType(const std::string &value);
 };
 
 inline bool operator<(const Block &l, const Block &r) {

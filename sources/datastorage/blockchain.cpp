@@ -413,7 +413,7 @@ void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRo
 
 QByteArray Blockchain::findRecordsInBlock(const Block &block) {
     if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
-        return block.getHash();
+        return QByteArray::fromStdString(block.getHash());
     } else if (!block.isEmpty()) {
         const auto transactions = block.extractTransactions();
         for (const Transaction &tx : qAsConst(transactions)) {
@@ -480,7 +480,8 @@ bool Blockchain::signCheckAdd(Block &block) {
                 return false;
             QByteArray id = accountController->mainActor().id().toByteArray();
             if (!list.contains(id)) {
-                QByteArray sign = accountController->mainActor().key().sign(block.getHash());
+                QByteArray sign =
+                    accountController->mainActor().key().sign(QByteArray::fromStdString(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -526,7 +527,8 @@ bool Blockchain::signCheckAdd(Block &block) {
                 return false;
             QByteArray id = accountController->mainActor().id().toByteArray();
             if (!list.contains(id)) {
-                QByteArray sign = accountController->mainActor().key().sign(block.getHash());
+                QByteArray sign =
+                    accountController->mainActor().key().sign(QByteArray::fromStdString(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -718,8 +720,8 @@ int Blockchain::mergeBlockWithLocal(Block &received) {
     }
 
     // step 3 - update hash, prevHash and approver for all modified blocks
-    QByteArray newHash = merged.getHash();
-    QByteArray oldHash = existed.getHash();
+    std::string newHash = merged.getHash();
+    std::string oldHash = existed.getHash();
     for (Block &b : tmpBlocks) {
         if (b.getPrevHash() == oldHash) {
             oldHash = b.getHash();
@@ -770,8 +772,8 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
         }
 
         // step 3 - update hash, prevHash and approver for all modified blocks
-        QByteArray newHash = merged.getHash();
-        QByteArray oldHash = existed.getHash();
+        std::string newHash = merged.getHash();
+        std::string oldHash = existed.getHash();
         for (Block &b : tmpBlocks) {
             if (b.getPrevHash() == oldHash) {
                 oldHash = b.getHash();
@@ -891,11 +893,12 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     switch (resultCode) {
     case 0: {
         emit updateLastTransactionList(); // TODO: ?
-        qDebug() << "Block" << block.getIndex() << block.getType() << "is successfully added to blockchain";
+        qDebug() << "Block" << block.getIndex() << QByteArray::fromStdString(block.getType())
+                 << "is successfully added to blockchain";
         getSmContractMembers(block);
 
         emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-        saveTxInfoInEC(block.getData());
+        saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
         stakingReward(block);
         break;
     }
@@ -921,7 +924,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         if (shouldStartGenesisCreation()) {
             GenesisBlock gB = createGenesisBlock(accountController->mainActor());
             if (blockIndex.addBlock(gB) == 0) {
-                qDebug() << "Block" << gB.getIndex() << gB.getType() << "is successfully added to blockchain";
+                qDebug() << "Block" << gB.getIndex() << QByteArray::fromStdString(gB.getType())
+                         << "is successfully added to blockchain";
                 emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
             }
@@ -939,7 +943,7 @@ bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB) {
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
-    if (!blockA.getDigSig().isEmpty() && !blockB.getDigSig().isEmpty() && blockA.getType() == blockB.getType()
+    if (!blockA.getDigSig().empty() && !blockB.getDigSig().empty() && blockA.getType() == blockB.getType()
         && blockA.getIndex() == blockB.getIndex()) {
         if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE))
             return true;
@@ -978,12 +982,12 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
         return Block();
     }
 
-    const QByteArray dataA = blockA.getData();
-    const QByteArray dataB = blockB.getData();
+    const std::string dataA = blockA.getData();
+    const std::string dataB = blockB.getData();
 
     // Case 1 - equal payload
     if (dataA == dataB) {
-        Block merged(dataA, prev);
+        Block merged(QByteArray::fromStdString(dataA), prev);
         signBlock(merged);
         return merged;
     } else // Case 2 - different payload
@@ -1021,12 +1025,12 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         return GenesisBlock();
     }
 
-    const QByteArray dataA = blockA.getData();
-    const QByteArray dataB = blockB.getData();
+    QByteArray dataA = QByteArray::fromStdString(blockA.getData());
+    const QByteArray dataB = QByteArray::fromStdString(blockB.getData());
 
     // Case 1 - equal payload
     if (dataA == dataB) {
-        GenesisBlock merged(dataA, prev, blockA.getPrevGenHash());
+        GenesisBlock merged(dataA, prev, QByteArray::fromStdString(blockA.getPrevGenHash()));
         signBlock(merged);
         return merged;
     } else // Case 2 - different payload
@@ -1048,7 +1052,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         for (const GenesisDataRow &gn : resultList)
             list << gn.serialize();
         QByteArray genData = Serialization::serialize(list);
-        GenesisBlock mergedBlock(genData, prev, blockA.getPrevGenHash());
+        GenesisBlock mergedBlock(genData, prev, QByteArray::fromStdString(blockA.getPrevGenHash()));
         signBlock(mergedBlock);
         return mergedBlock;
     }
@@ -1063,7 +1067,8 @@ BigNumber Blockchain::getBlockChainLength() const {
 }
 
 QString Blockchain::getLastBlockData() const {
-    return fileMode ? blockIndex.getLastBlock().getData() : memIndex.getLastBlock().getData();
+    return fileMode ? QString::fromStdString(blockIndex.getLastBlock().getData())
+                    : QString::fromStdString(memIndex.getLastBlock().getData());
 }
 
 BigNumber Blockchain::getRecords() const {
@@ -1216,7 +1221,7 @@ void Blockchain::showBlockchain() const {
 }
 
 bool Blockchain::isSmContractTx(const Block &block) const {
-    if (block.getData().contains("InitContract"))
+    if (block.getData() == "InitContract")
         return true;
     return false;
 }
