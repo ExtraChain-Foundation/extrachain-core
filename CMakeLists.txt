@@ -102,6 +102,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message_response.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_interface.h
