@@ -1094,7 +1094,7 @@ void Dfs::startDFS() {
     QByteArrayList actors = actorIndex->allActors();
     for (const QByteArray &actor : actors) {
         auto actorAccount = actorIndex->getActor(actor).type();
-        if (actorAccount == ActorType::Wallet) {
+        if (actorAccount == ActorType::User) {
             // qDebug() << "add to ignored" << actor;
             ignoredIds << actor;
             continue;
@@ -1419,7 +1419,7 @@ void Dfs::initMyLocalStorage() {
 
 void Dfs::initUser(ActorId userId) {
     auto actorAccount = actorIndex->getActor(userId).type();
-    if (actorAccount == ActorType::Wallet) {
+    if (actorAccount == ActorType::User) {
         // qDebug() << "initUser add to ignored" << actor;
         ignoredIds << userId.toByteArray();
         return;

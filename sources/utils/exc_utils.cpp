@@ -33,7 +33,7 @@
 
 #include <sodium.h>
 
-#include "boost/asio.hpp"
+// #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
 #include "dfs/types/headers/dfstruct.h"
@@ -257,7 +257,8 @@ QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QBy
 
     QFile encrypt(encryptName);
     if (!encrypt.open(QFile::ReadOnly)) {
-        qDebug() << "[Utils::encryptFile] Error while loading file:" << encrypt.error() << encrypt.errorString();
+        qDebug() << "[Utils::encryptFile] Error while loading file:" << encrypt.error()
+                 << encrypt.errorString();
         return QByteArray();
     }
 
@@ -651,10 +652,11 @@ QString Utils::boostVersion() {
 }
 
 QString Utils::boostAsioVersion() {
-    int major = BOOST_ASIO_VERSION / 100000;
-    int minor = BOOST_ASIO_VERSION / 100 % 1000;
-    int patch = BOOST_ASIO_VERSION % 100;
-    return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
+    return "";
+    // int major = BOOST_ASIO_VERSION / 100000;
+    // int minor = BOOST_ASIO_VERSION / 100 % 1000;
+    // int patch = BOOST_ASIO_VERSION % 100;
+    // return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
 }
 
 QString FileSystem::createSubDirectory(const QString &parentDirStr, const QString &subDirStr) {
@@ -668,14 +670,15 @@ QString FileSystem::createSubDirectory(const QString &parentDirStr, const QStrin
     return destPathStr;
 }
 
-QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString & dirPath, const QStringList & ignoreList) {
+QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString &dirPath,
+                                                          const QStringList &ignoreList) {
     QList<std::tuple<QString, QString>> dirList;
 
-    QDir dir (dirPath, QString::fromLatin1("*"), QDir::SortFlag::Name, QDir::Files | QDir::NoDotAndDotDot);
-    QDirIterator dirItor (dir, QDirIterator::Subdirectories);
+    QDir dir(dirPath, QString::fromLatin1("*"), QDir::SortFlag::Name, QDir::Files | QDir::NoDotAndDotDot);
+    QDirIterator dirItor(dir, QDirIterator::Subdirectories);
     while (dirItor.hasNext()) {
         dirItor.next();
-        const QFileInfo & fi = dirItor.fileInfo();
+        const QFileInfo &fi = dirItor.fileInfo();
         if (fi.isFile() && !ignoreList.contains(fi.fileName())) {
             dirList.emplaceBack(std::make_tuple<QString, QString>(fi.fileName(), fi.filePath()));
         }
