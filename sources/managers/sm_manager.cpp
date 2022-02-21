@@ -77,7 +77,7 @@ void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sende
 
 Actor<KeyPrivate> SmartContractManager::createContract(QByteArray tokenName) {
     Actor<KeyPrivate> actor;
-    actor.create(ActorType::Token);
+    actor.create(ActorType::ServiceProvider);
     // emit verifyActor(actor.convertToPublic());
     actorIndex->addActor(actor.convertToPublic());
     // emit addContractActorInActorIndex(actor->convertToPublic());
