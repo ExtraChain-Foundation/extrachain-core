@@ -10,9 +10,11 @@
 SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
     : QObject(parent) {
     m_networkManager = networkManager;
+    priv.generate();
 }
 
 SocketService::SocketService(const SocketService &socket) {
+    qFatal("SocketService copy TODO");
     m_identifier = socket.m_identifier;
     m_ip = socket.m_ip;
     m_activated = socket.m_activated;
@@ -131,7 +133,7 @@ QByteArray SocketService::generateFirstMessage() {
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
-    if (pub.publicKey().empty())
+    if (pub.empty())
         qFatal("Socket encrypt error");
 
     auto result = priv.encrypt(message, pub.publicKey());
@@ -141,7 +143,7 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
 }
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
-    if (pub.publicKey().empty())
+    if (pub.empty())
         qFatal("Socket decrypt error");
 
     auto result = priv.decrypt(message, pub.publicKey());

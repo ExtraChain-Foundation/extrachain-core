@@ -60,13 +60,19 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 
 void WebSocketService::onTextMessage(const QString &message) // for first message
 {
-    if (pub.publicKey().empty()) {
+    if (message.isEmpty())
+        return;
+
+    if (pub.empty()) {
         if (message == "StatusOnly") {
             m_ws->sendTextMessage(generateFirstMessage());
             return;
         }
 
         pub = KeyPublic(message.toStdString());
+        if (pub.empty()) { // or incorrect
+            qFatal("Incorrect public key in socket");
+        }
 
         auto firstMessage = prepareSendMessage(generateFirstMessage());
         m_ws->sendTextMessage(firstMessage);
