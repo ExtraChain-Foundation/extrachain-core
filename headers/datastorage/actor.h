@@ -42,9 +42,10 @@
 
 enum class ActorType
 {
-    Wallet = 0,
-    Account = 1,
-    Token = 2
+    User = 0,
+    ServiceProvider = 1,
+    Service = 2,
+    Account = 3, // TODO: remove. blockers: user profile and legacy dfs
 };
 MSGPACK_ADD_ENUM(ActorType)
 
@@ -132,7 +133,7 @@ class EXTRACHAIN_EXPORT Actor final {
 private:
     std::string m_id;
     T m_key;
-    ActorType m_type = ActorType::Wallet;
+    ActorType m_type = ActorType::User;
 
 public:
     Actor() = default;

@@ -57,7 +57,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty()) {
         auto actor = MessagePack::deserializeQt<Actor<KeyPublic>>(serializedActor);
-        if ((actor.type() == ActorType::Account || actor.type() == ActorType::Token)
+        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
             && actor.profile().sign.isEmpty()) {
             sendGetActorMessage(id);
         }
@@ -125,8 +125,8 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
 
         if (isProfile) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
-        } else if (actor.type() != ActorType::Wallet
-                   && actor.type() != ActorType::Token) { // if profile not exist
+        } else if (actor.type() != ActorType::User
+                   && actor.type() != ActorType::ServiceProvider) { // if profile not exist
             static QMap<QByteArray, qint64> tempCheck;
             qDebug() << "[ActorIndex] No profile for actor" << actorId;
 
@@ -178,7 +178,7 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
         qDebug() << "[ActorIndex] New actor" << actor << "is successfully saved";
 
         // TODO: remove me?
-        if ((actor.type() == ActorType::Account || actor.type() == ActorType::Token)
+        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
             && profilesHandle.contains(actor.id().toByteArray())) {
             saveProfileFromNetwork(profilesHandle[actor.id().toByteArray()]);
         }
@@ -288,7 +288,7 @@ QByteArrayList ActorIndex::getProfile(QString id) {
     PublicProfile pProfile = actor.profile();
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty()) {
-        if (actor.type() != ActorType::Wallet && actor.type() != ActorType::Token
+        if (actor.type() != ActorType::User && actor.type() != ActorType::ServiceProvider
             && resolveManager != nullptr) {
             sendGetActorMessage(id.toLatin1());
         }
