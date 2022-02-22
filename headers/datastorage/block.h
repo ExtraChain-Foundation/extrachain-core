@@ -35,6 +35,8 @@ struct Approvers {
     std::string actorId = "";
     std::string sign = "";
     bool isApprove = false;
+
+    MSGPACK_DEFINE(actorId, sign, isApprove)
 };
 
 struct BlockCompare {
@@ -157,6 +159,21 @@ public:
     void setDate(long long value);
     Block operator=(const Block &block);
     void setType(const std::string &value);
+
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        std::string index_str = index.toStdString();
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+            .msgpack_pack(msgpack_pk);
+    }
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        std::string index_str;
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+            .msgpack_unpack(msgpack_o);
+        index = QByteArray::fromStdString(index_str);
+    }
+
+    // AUTO_SERIALIZE(m_type, data, index, date, prevHash, hash, signatures)
 };
 
 inline bool operator<(const Block &l, const Block &r) {

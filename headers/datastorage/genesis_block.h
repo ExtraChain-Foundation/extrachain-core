@@ -113,6 +113,21 @@ public:
 public:
     std::string getPrevGenHash() const;
     void setPrevGenHash(const std::string &value);
+
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        std::string index_str = index.toStdString();
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
+                                         prevGenHash)
+            .msgpack_pack(msgpack_pk);
+    }
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        std::string index_str;
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
+                                         prevGenHash)
+            .msgpack_unpack(msgpack_o);
+        index = QByteArray::fromStdString(index_str);
+    }
 };
 
 #endif // GENESIS_BLOCK_H

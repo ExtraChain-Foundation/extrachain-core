@@ -1307,7 +1307,7 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
                        Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
 }
 
-void Blockchain::addBlockToBlockchain(Block block) {
+void Blockchain::addBlockToBlockchain(Block &block) {
     addBlock(block);
     QList<Transaction> list = block.extractTransactions();
     for (const auto &tmp : qAsConst(list)) {

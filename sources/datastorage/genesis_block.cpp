@@ -52,21 +52,12 @@ QByteArray GenesisBlock::getDataForHash() const {
 }
 
 bool GenesisBlock::deserialize(const QByteArray &serialized) {
-    QList<QByteArray> l = Serialization::deserialize(serialized, FIELDS_SIZE);
-    if (l.length() == 8) {
-        initFields(l);
-        return true;
-    }
-    return false;
+    *this = MessagePack::deserializeQt<GenesisBlock>(serialized);
+    return true;
 }
 
 QByteArray GenesisBlock::serialize() const {
-    QList<QByteArray> list;
-    list << QByteArray::fromStdString(getType()) << getIndex().toByteArray() << QByteArray::number(getDate())
-         << QByteArray::fromStdString(getData()) << QByteArray::fromStdString(getPrevHash())
-         << QByteArray::fromStdString(getHash()) << QByteArray::fromStdString(getPrevGenHash())
-         << getSignatures();
-    return Serialization::serialize(list, FIELDS_SIZE);
+    return MessagePack::serializeQt(*this);
 }
 
 void GenesisBlock::initFields(QList<QByteArray> &list) {

@@ -484,13 +484,18 @@ std::string serialize(const T &t) {
 
 template <class T>
 std::pair<T, bool> deserialize(const std::string &str, std::size_t size = 0) {
+    if (str.empty()) {
+        qDebug() << "[MessagePack] Empty deserialize" << typeid(T).name();
+        return { T(), false };
+    }
+
     try {
         msgpack::object_handle oh = msgpack::unpack(str.data(), str.size());
         msgpack::object deserialized = oh.get();
         auto t = deserialized.as<T>();
         return { t, true };
     } catch (std::exception e) {
-        qFatal("Incorrect MessagePack deserialize");
+        qFatal("[MessagePack] Incorrect deserialize");
         return { T(), false };
     }
 }

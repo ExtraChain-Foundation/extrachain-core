@@ -245,13 +245,24 @@ void ResolverService::resolveGeneralTask() {
         break;
     }
     case Messages::ChainMessage::BlockMessage: {
-        Block block(message.data);
-        if (!validateBlock(block)) {
-            qDebug() << "Received block" << block.getIndex() << "is not valid";
-            finishWork();
-            return;
+        if (GenesisBlock::isGenesisBlock(message.data)) {
+            GenesisBlock block(message.data);
+            if (!validateBlock(block)) {
+                qDebug() << "Received block" << block.getIndex() << "is not valid";
+                finishWork();
+                return;
+            }
+            blockchain->addBlockToBlockchain(block);
+        } else {
+            Block block(message.data);
+            if (!validateBlock(block)) {
+                qDebug() << "Received block" << block.getIndex() << "is not valid";
+                finishWork();
+                return;
+            }
+            blockchain->addBlockToBlockchain(block);
         }
-        blockchain->addBlockToBlockchain(block);
+
         // emit newBlock(block);
         finishWork();
         break;

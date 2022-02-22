@@ -117,33 +117,8 @@ bool Block::verify(const Actor<KeyPublic> &actor) const {
 }
 
 bool Block::deserialize(const QByteArray &serialized) {
-    QList<QByteArray> list = Serialization::deserialize(serialized, FIELDS_SIZE);
-
-    if (list.length() == 7) {
-        m_type = list.at(0);
-        index = BigNumber(list.at(1));
-        date = list.at(2).toLongLong();
-        data = list.at(3);
-        prevHash = list.at(4);
-        hash = list.at(5);
-        QByteArray signs = list.at(6);
-        QByteArrayList lists = Serialization::deserialize(signs, FIELDS_SIZE);
-
-        for (const auto &tmp : lists) {
-            QByteArrayList tmps = Serialization::deserialize(tmp, FIELDS_SIZE);
-            if (tmps.length() == 3)
-                signatures.push_back(
-                    { tmps.at(0).toStdString(), tmps.at(1).toStdString(), bool(tmps.at(2).toInt()) });
-        }
-
-        if (isEmpty()) {
-            qDebug() << "Can't deserialize, block" << getIndex() << "is empty";
-            return false;
-        }
-
-        return true;
-    }
-    return false;
+    *this = MessagePack::deserializeQt<Block>(serialized);
+    return true;
 }
 
 bool Block::equals(const Block &block) const {
@@ -199,25 +174,11 @@ bool Block::contain(Block &from) const {
 }
 
 QByteArray Block::serialize() const {
-    QList<QByteArray> list;
-
-    list << QByteArray::fromStdString(getType()) << getIndex().toByteArray() << QByteArray::number(date)
-         << QByteArray::fromStdString(getData()) << QByteArray::fromStdString(getPrevHash())
-         << QByteArray::fromStdString(getHash()) << getSignatures();
-    // return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
-    return Serialization::serialize(list, FIELDS_SIZE);
+    return MessagePack::serializeQt(*this);
 }
 
 QString Block::toString() const {
-    QList<QByteArray> list;
-
-    list << QByteArray::fromStdString(getType()) << getIndex().toByteArray() << getApprover().toByteArray()
-         << QByteArray::number(date) << QByteArray::fromStdString(getData())
-         << QByteArray::fromStdString(getPrevHash()) << QByteArray::fromStdString(getHash())
-         << QByteArray::fromStdString(getDigSig());
-
-    // return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
-    return Serialization::serialize(list, FIELDS_SIZE);
+    return this->serialize();
 }
 
 bool Block::isEmpty() const {

@@ -340,7 +340,7 @@ signals:
     void finished();
 
 public:
-    void addBlockToBlockchain(Block block);
+    void addBlockToBlockchain(Block &block);
     void addGenBlockToBlockchain(GenesisBlock block);
     void setTxManager(TransactionManager *value);
 
