@@ -569,6 +569,8 @@ void ExtraChainNode::testPermissions() const
         {actor1, actor.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::Write, true},
         {actor1, actor.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::Delete, true},
 
+        {actor, actor.idStd().c_str(), ".perm",      PermissionManager::Edit, PermissionManager::Read, false},
+
         {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Read, PermissionManager::Edit, false},
         {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false},
 
@@ -576,7 +578,7 @@ void ExtraChainNode::testPermissions() const
         {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false},
 
         {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Delete, PermissionManager::Edit, false},
-        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, true},
+        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false}
 
     };
 
