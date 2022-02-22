@@ -55,7 +55,7 @@ static const std::string MERGE_BLOCK = "dataMerge";
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    const int FIELDS_SIZE = 4;
+    const int FIELDS_SIZE = Serialization::DEFAULT_FIELD_SIZE;
     std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
     std::string data;                             // payload (serialized tx's, or other)
     BigNumber index = BigNumber(-1);              // block id
