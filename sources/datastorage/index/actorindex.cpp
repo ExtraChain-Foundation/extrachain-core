@@ -120,7 +120,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
         auto profileData = actor.profile().serialize();
         bool isProfile = !profileData.isEmpty();
 
-        resolveManager->sendMessageResponse(actor.serializeQt(), Messages::GeneralResponse::GetActorResponse,
+        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::GetActorResponse,
                                             reqHash, receiver);
 
         if (isProfile) {
@@ -405,7 +405,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 }
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
-    int result = this->add(actor.id(), actor.serializeQt());
+    int result = this->add(actor.id(), actor.serialize());
     auto actorId = actor.id().toByteArray();
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
@@ -419,7 +419,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
             qFatal("db actor insert error");
 
         qDebug() << "[ActorIndex] Actor " << actor.id() << "was added";
-        resolveManager->registrateMsg(MessagePack::serializeQt(actor), Messages::ChainMessage::ActorMessage);
+        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::ActorMessage);
         // emit sendMessage(actor.serialize(), classType);
         // qDebug() << "emit signal for init dfs for user" << actorId;
         emit initDfs(actor.id());

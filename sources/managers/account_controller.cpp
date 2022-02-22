@@ -201,12 +201,13 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
     if (file.open(QIODevice::ReadWrite)) {
         QByteArray old = file.readAll();
 
-        if (old == actor.serializeQt()) {
+        if (old == actor.serialize()) {
             qDebug() << "Private actor with id =" << actor.id() << "already exists";
         } else {
-            qDebug() << "actor serialized: ---- " << actor.serializeQt();
+            qDebug() << "actor serialized: ---- " << actor.serialize();
             std::string hl = hashLogin.toStdString();
-            file.write(QByteArray::fromStdString(SecretKey::encryptWithPassword(actor.serialize(), hl)));
+            file.write(QByteArray::fromStdString(
+                SecretKey::encryptWithPassword(actor.serialize().toStdString(), hl)));
             file.flush();
             qDebug() << "Private Actor" << actor.id() << "is successfully saved";
         }

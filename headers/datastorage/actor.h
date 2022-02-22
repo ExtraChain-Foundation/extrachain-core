@@ -241,6 +241,10 @@ public:
         m_type = type;
     }
 
+    QByteArray serialize() const {
+        return MessagePack::serializeQt(*this);
+    }
+
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
         d << "Actor( id:" << actor.id() << ", type: " << int(actor.type()) << ", key: ";
@@ -249,7 +253,7 @@ public:
         return d;
     }
 
-    AUTO_SERIALIZE(m_id, m_type, m_key)
+    MSGPACK_DEFINE(m_id, m_type, m_key)
 };
 
 #endif // ACTOR_H
