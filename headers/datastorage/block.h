@@ -166,14 +166,13 @@ public:
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
             .msgpack_pack(msgpack_pk);
     }
+
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string index_str;
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
             .msgpack_unpack(msgpack_o);
         index = QByteArray::fromStdString(index_str);
     }
-
-    // AUTO_SERIALIZE(m_type, data, index, date, prevHash, hash, signatures)
 };
 
 inline bool operator<(const Block &l, const Block &r) {

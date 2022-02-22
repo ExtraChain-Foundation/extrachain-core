@@ -117,6 +117,16 @@ public:
         return actor.isEmpty();
     }
 
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        msgpack_pk.pack_str(m_id.size());
+        msgpack_pk.pack_str_body(m_id.data(), m_id.size());
+    }
+
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        m_id = msgpack_o.as<std::string>();
+    }
+
 private:
     void normalize() {
         m_id = QByteArray("0").repeated(20 - m_id.length()).toStdString() + m_id;
@@ -131,7 +141,7 @@ class EXTRACHAIN_EXPORT Actor final {
                   "Your type is not supported. Only Keys are supported");
 
 private:
-    std::string m_id;
+    ActorId m_id;
     T m_key;
     ActorType m_type = ActorType::User;
 
@@ -140,13 +150,13 @@ public:
     ~Actor() = default;
 
     Actor(const Actor<T> &copyActor) {
-        m_id = copyActor.id().toStdString();
+        m_id = copyActor.id();
         m_key = copyActor.key();
         m_type = ActorType(copyActor.type());
     }
 
     Actor operator=(const Actor<T> &copyActor) {
-        m_id = copyActor.id().toStdString();
+        m_id = copyActor.id();
         m_key = copyActor.key();
         m_type = copyActor.type();
         return *this;
@@ -176,12 +186,12 @@ public:
         if (m_key.empty())
             return true;
 
-        return ActorId::empty(m_id);
+        return m_id.isEmpty();
     }
 
     PublicProfile profile() {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + ActorId(m_id).toString() + "/profile/";
-        return PublicProfile(QByteArray::fromStdString(m_id), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toString() + "/profile/";
+        return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
 public:
@@ -189,11 +199,7 @@ public:
         return this->m_id == other.m_id && *m_key == *other.m_key && m_type == other.m_type;
     }
 
-    ActorId id() const { // TODO
-        return ActorId(m_id);
-    }
-
-    const std::string &idStd() const {
+    const ActorId &id() const {
         return m_id;
     }
 
@@ -216,7 +222,7 @@ public:
     }
 
     void setId(const ActorId &id) {
-        m_id = id.toStdString();
+        m_id = id;
     }
 
     void setSecretKey(const std::string &secretKey, const std::string &publicKey) {
