@@ -353,7 +353,7 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
         const QString & encrFilePath = FileSystem::pathConcat(securityDirPathStr, fileContentKeccak);
 
         if(!QFile::rename(filePathNew, encrFilePath)){
-            qDebug() << "DFSController: addFile: Failed rename: " << filePathNew << " to " << encrFilePath;
+            qDebug() << "DFSController: editFile: Failed rename: " << filePathNew << " to " << encrFilePath;
             return QByteArray();
         }
 
@@ -362,7 +362,7 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
     case SecurityLevel::Public:
     {
         if (!fileNewOrigin.rename(filePathNew)) {
-            qDebug() << "DFSController: readFile: File opening error: " << filePathNew;
+            qDebug() << "DFSController: editFile: File opening error: " << filePathNew;
             return QByteArray();
         }
 
@@ -370,7 +370,7 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
     }
     default:
     {
-        qDebug() << "DFSController: ReadFile: unsupported security level: " << securityLevel;
+        qDebug() << "DFSController: EditFile: unsupported security level: " << securityLevel;
         return QByteArray();
     }
     }

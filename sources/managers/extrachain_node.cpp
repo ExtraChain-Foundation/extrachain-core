@@ -20,6 +20,7 @@
 #include "managers/extrachain_node.h"
 
 #include "datastorage/dfs/dfs_controller.h"
+#include "datastorage/dfs/permission_manager.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -510,6 +511,84 @@ ChatManager *ExtraChainNode::chatManager() const {
 
 Dfs *ExtraChainNode::dfs() const {
     return m_dfs;
+}
+
+void ExtraChainNode::testPermissions() const
+{
+    // Mock actor create
+    const std::string userEmail = "test@test.com";
+    const std::string userPass = "12345678";
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+
+    // Mock actor create
+    const std::string userEmail1 = "test@test.com";
+    const std::string userPass1 = "12345678";
+    const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    auto actor1 = m_accountController->createActor(ActorType::Account, userHash1);
+
+    DFSController dfsController;
+    dfsController.initDB(actor);
+    dfsController.flushDirContent(actor);
+
+    QStringList testFiles = {
+        FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
+        FileSystem::pathConcat(QDir::homePath(), "test-file-2.txt")
+    };
+
+    auto orgFilePublic = QFile(testFiles[0]);
+    orgFilePublic.open(QIODevice::ReadOnly);
+    auto orgFilePrivate = QFile(testFiles[1]);
+    orgFilePrivate.open(QIODevice::ReadOnly);
+
+    QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
+    QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
+
+    PermissionManager permManager;
+    permManager.initPermissionDB(actor);
+
+    struct TestSet {
+        Actor<KeyPrivate> actor;
+        QString userId;
+        QString fileHash;
+        PermissionManager::Permission permission;
+        PermissionManager::Permission resultGet;
+        bool resultSet;
+    };
+
+    std::vector<TestSet> testSet = {
+        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Edit, PermissionManager::Read, true},
+        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::NoPermission, true},
+        {actor, actor1.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::NoPermission, true},
+        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::Write, true},
+        {actor, actor1.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::Delete, true},
+
+        {actor1, actor.idStd().c_str(), ".perm",      PermissionManager::Read, PermissionManager::Edit, true},
+        {actor1, actor.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::NoPermission, true},
+        {actor1, actor.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::NoPermission, true},
+        {actor1, actor.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::Write, true},
+        {actor1, actor.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::Delete, true},
+
+        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Read, PermissionManager::Edit, false},
+        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false},
+
+        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Write, PermissionManager::Edit, false},
+        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false},
+
+        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Delete, PermissionManager::Edit, false},
+        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, true},
+
+    };
+
+    for(auto & test: testSet)
+    {
+        auto permission = permManager.getPermission(test.actor, test.userId, test.fileHash);
+        assert(permission == test.resultGet);
+
+        auto setPassed = permManager.setPermission(test.actor, test.userId, test.fileHash, test.permission);
+        assert(setPassed == test.resultSet);
+    }
+
 }
 
 void ExtraChainNode::test() const {

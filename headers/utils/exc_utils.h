@@ -410,6 +410,15 @@ namespace DataStorage {
           "fileSegmentEnd   TEXT             NOT NULL, "
           ");";
 
+    static const std::string permissionTable = "PermissionTable";
+    static const std::string permissionTableCreate = "CREATE TABLE IF NOT EXISTS " + permissionTable
+        + " ("
+          "fileHash   TEXT NOT NULL, "
+          "permission TEXT NOT NULL, "
+          "userId     TEXT NOT NULL,"
+          "signature  TEXT NOT NULL"
+          ");";
+
     static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + filesTable;
 

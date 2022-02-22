@@ -86,6 +86,7 @@ public:
 
     // Remove this function before merge
     void test() const;
+    void testPermissions() const;
 
     /**
      * @brief Create new transaction from current user
