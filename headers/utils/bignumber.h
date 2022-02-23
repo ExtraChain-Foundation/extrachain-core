@@ -125,13 +125,12 @@ public:
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
         std::string num = toStdString();
-        msgpack_pk.pack_str(num.size());
-        msgpack_pk.pack_str_body(num.data(), num.size());
+        msgpack::type::make_define_array(num).msgpack_pack(msgpack_pk);
     }
-
     void msgpack_unpack(msgpack::object const &msgpack_o) {
-        std::string num = msgpack_o.as<std::string>();
-        *this = BigNumber(QByteArray::fromStdString(num));
+        std::string num;
+        msgpack::type::make_define_array(num).msgpack_unpack(msgpack_o);
+        *this = BigNumber(num.c_str());
     }
 };
 
