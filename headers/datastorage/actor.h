@@ -117,7 +117,15 @@ public:
         return actor.isEmpty();
     }
 
-    MSGPACK_DEFINE(m_id)
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        msgpack_pk.pack_str(m_id.size());
+        msgpack_pk.pack_str_body(m_id.data(), m_id.size());
+    }
+
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        m_id = msgpack_o.as<std::string>();
+    }
 
 private:
     void normalize() {
