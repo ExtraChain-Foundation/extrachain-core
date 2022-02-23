@@ -8,6 +8,7 @@ INCLUDEPATH += $$PWD
 SOURCES += \
     $$PWD/dfs/controls/sources/subscribe_controller.cpp \
     $$PWD/dfs/managers/sources/dfs_networkmanager.cpp \
+    $$PWD/sources/datastorage/dfs/dfs_controller.cpp \
     $$PWD/dfs/managers/sources/sender.cpp \
     $$PWD/dfs/managers/sources/card_manager.cpp \
     $$PWD/dfs/packages/sources/hash_operations.cpp \
@@ -75,6 +76,7 @@ HEADERS += \
     $$PWD/headers/precompiled.h \
     $$PWD/headers/extrachain_global.h \
     $$PWD/dfs/controls/headers/subscribe_controller.h \
+    $$PWD/headers/datastorage/dfs/dfs_controller.h \
     $$PWD/dfs/managers/headers/dfs_networkmanager.h \
     $$PWD/dfs/managers/headers/sender.h \
     $$PWD/dfs/packages/headers/all.h \

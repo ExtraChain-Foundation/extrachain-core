@@ -81,6 +81,7 @@
     #include <optional>
 
     #include <sodium.h>
+    #include <msgpack.hpp>
 
 //    #ifdef Q_OS_WINDOWS
         #define UINT32_C(c) (c##ULL)

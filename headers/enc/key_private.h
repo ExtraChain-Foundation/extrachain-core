@@ -22,6 +22,8 @@
 
 #include <QDebug>
 
+#include <msgpack.hpp>
+
 #include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT KeyPrivate {
@@ -33,32 +35,41 @@ public:
     /**
      * @brief New keys
      */
-    KeyPrivate();
+    KeyPrivate() = default;
     /**
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
     KeyPrivate(const std::string &secret_key, const std::string &public_key);
-    KeyPrivate(const QJsonObject &json);
     KeyPrivate(const KeyPrivate &keyPrivate);
     ~KeyPrivate() = default;
 
-private:
+public:
     void generate();
 
-public:
     QByteArray encrypt(const QByteArray &data, const std::string &receiverPublicKey,
-                       const std::string &nonce = "");
+                       const std::string &nonce = "") const;
     QByteArray decrypt(const QByteArray &data, const std::string &senderPublicKey,
-                       const std::string &nonce = "");
-    QByteArray encryptSelf(const QByteArray &data);
-    QByteArray decryptSelf(const QByteArray &data);
+                       const std::string &nonce = "") const;
+    QByteArray encryptSelf(const QByteArray &data) const;
+    QByteArray decryptSelf(const QByteArray &data) const;
 
-    QByteArray sign(const QByteArray &data);
-    bool verify(const QByteArray &data, const QByteArray &dsignHex);
+    QByteArray sign(const QByteArray &data) const;
+    bool verify(const QByteArray &data, const QByteArray &dsignHex) const;
 
     const std::string &secretKey() const;
     const std::string &publicKey() const;
+
+    bool empty() const;
+
+    friend QDebug operator<<(QDebug debug, const KeyPrivate &key) {
+        QDebugStateSaver saver(debug);
+        debug << "KeyPrivate( secret: " << key.secretKey().c_str() << ", public: " << key.publicKey().c_str()
+              << " )";
+        return debug;
+    }
+
+    MSGPACK_DEFINE(m_secretKey, m_publicKey)
 };
 
 #endif // KEY_PRIVATE_H

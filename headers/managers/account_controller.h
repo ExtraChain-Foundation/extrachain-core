@@ -45,7 +45,7 @@ private:
     // Current user, used in AccountController.
     int userNum = 0;
     Blockchain *blockchain;
-    QList<Actor<KeyPrivate> *> accounts;
+    QList<Actor<KeyPrivate>> m_accounts;
     ActorIndex *actorIndex;
     ExtraChainNode *m_node;
 
@@ -61,14 +61,15 @@ public:
     Actor<KeyPrivate> createActor(ActorType account, QByteArray hashLogin);
     //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(const ActorId &id);
+
     /**
      * @brief Gets Actor by public key
      * @param pubkey - serialized public key
      * @return actor
      */
     Actor<KeyPrivate> getActor(int number);
+    const Actor<KeyPrivate> &mainActor();
 
-    Actor<KeyPrivate> *mainActor();
     /**
      * @brief Gets current active actor
      * @return actor
@@ -79,15 +80,14 @@ public:
     int getUserNum() const;
     void setUserNum(int value);
 
-    QList<Actor<KeyPrivate> *> getAccounts() const;
-    void setAccounts(const QList<Actor<KeyPrivate> *> &value);
-
-    ActorIndex *getActorIndex() const;
-    void setActorIndex(ActorIndex *value);
-
-    void setBlockchain(Blockchain *value);
-    Blockchain *getBlockchain() const;
+    const QList<Actor<KeyPrivate>> &accounts() const;
     QList<ActorId> getListAccounts() const;
+
+    Blockchain *getBlockchain() const;
+    ActorIndex *getActorIndex() const;
+
+    void setActorIndex(ActorIndex *value);
+    void setBlockchain(Blockchain *value);
 
 public slots:
     /**
@@ -100,17 +100,17 @@ public slots:
      * @param private actor
      */
     void savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin);
-    //    void regNewUser(bool account);
     void clearAcc();
     void changeUserNum(QByteArray);
     void process();
+
 signals:
     /**
      * @brief verifyActor
      * @param serialized private actor
      */
-    void addActorInActorIndex(Actor<KeyPublic> actor);
     void verifyActor(Actor<KeyPublic> actor);
+    void addActorInActorIndex(Actor<KeyPublic> actor);
     //
     void sentActorId(BigNumber actorId);
     void loadWallets(QByteArray id, QByteArrayList idList);

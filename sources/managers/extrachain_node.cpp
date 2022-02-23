@@ -111,7 +111,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-        auto first = m_accountController->createActor(ActorType::Token, consoleHash);
+        auto first = m_accountController->createActor(ActorType::ServiceProvider, consoleHash);
         emit savePrivateProfile(consoleHash, first.id());
         m_actorIndex->setFirstId(first.id());
     } else {
@@ -120,7 +120,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     }
 
     if (m_blockchain->getRecords() <= 0) {
-        auto first = *m_accountController->mainActor();
+        auto &first = m_accountController->mainActor();
         QString firstId = first.id().toString();
 
         QMap<ActorId, BigNumber> tm;
@@ -179,7 +179,7 @@ void ExtraChainNode::connectSmContractManager() {
     //            &ExtraChainNode::addActorInActorIndex);
     connect(m_smartContractManager, &SmartContractManager::saveActorInPrivateProfile,
             [this](const QByteArray &id, const QString &type, const bool &rewrite) { // TODO?
-                auto mainId = m_accountController->mainActor()->id().toByteArray();
+                auto mainId = m_accountController->mainActor().id().toByteArray();
                 emit nodeEditPrivateProfile({ m_privateProfile->hash(), mainId }, type, id, rewrite);
             });
 
@@ -372,7 +372,7 @@ void ExtraChainNode::getAllActors() {
 
 void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->getAccountCount() > 0 && m_networkManager->connections().length() > 0) {
-        ActorId actorId = m_accountController->mainActor()->id();
+        ActorId actorId = m_accountController->mainActor().id();
 
         if (!actorId.isEmpty())
             emit getAllActorsNode(actorId, true);
@@ -396,12 +396,12 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto mainKey = m_accountController->mainActor()->key();
-    auto publicKey = first.key()->publicKey();
+    auto &mainKey = m_accountController->mainActor().key();
+    auto &publicKey = first.key().publicKey();
 
     QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },
-                                      { "token", mainKey->encrypt(token.toLatin1(), publicKey) },
-                                      { "os", mainKey->encrypt(os.toLatin1(), publicKey) } };
+                                      { "token", mainKey.encrypt(token.toLatin1(), publicKey) },
+                                      { "os", mainKey.encrypt(os.toLatin1(), publicKey) } };
 
     emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
@@ -517,7 +517,7 @@ void ExtraChainNode::test() const {
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
     const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+    auto actor = m_accountController->createActor(ActorType::ServiceProvider, userHash);
 
     DFSController dfsController;
     dfsController.initDB(actor);
