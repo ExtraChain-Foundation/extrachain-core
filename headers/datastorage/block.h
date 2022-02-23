@@ -55,7 +55,7 @@ static const std::string MERGE_BLOCK = "dataMerge";
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    const int FIELDS_SIZE = Serialization::DEFAULT_FIELD_SIZE;
+    const int FIELDS_SIZE = 4;
     std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
     std::string data;                             // payload (serialized tx's, or other)
     BigNumber index = BigNumber(-1);              // block id
@@ -118,7 +118,7 @@ public:
      * @brief extract non-empty transactions from data
      * @return transaction list
      */
-    QList<Transaction> extractTransactions() const;
+    std::vector<Transaction> extractTransactions() const;
     Transaction getTransactionByHash(QByteArray hash) const;
 
     bool contain(Block &from) const;
@@ -151,7 +151,6 @@ public:
     std::string getHash() const;
     std::string getPrevHash() const;
     std::string getDigSig() const;
-    QByteArray getSignatures() const;
     QByteArrayList getListSignatures() const;
     void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
     // void setType(QByteArray type);

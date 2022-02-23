@@ -127,8 +127,6 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
 
 void Blockchain::saveTxInfoInEC(const QByteArray data) const {
     QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
-    QList<QByteArray> temp;
-
     std::vector<DBRow> extractData;
     DBRow resultData;
 
@@ -144,28 +142,24 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const {
                         "Type   TEXT              NOT NULL );");
 
     for (const auto &i : l) {
-        temp = Serialization::deserialize(i, Serialization::TRANSACTION_FIELD_SIZE);
-        if (temp.size() != 13) {
-            qDebug() << "[Error][" << __FILE__ << __FUNCTION__ << __LINE__ << "]Transaction size !=12";
-            return;
-        }
+        auto q = MessagePack::deserializeQt<Transaction>(i);
 
         // modify sender data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + temp[0].toStdString()
-                                     + "' AND Token='" + temp[5].toStdString() + "';");
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.sender.toStdString()
+                                     + "' AND Token='" + q.token.toStdString() + "';");
 
-        resultData["ActorId"] = temp[0].toStdString();
-        resultData["Token"] = temp[5].toStdString();
+        resultData["ActorId"] = q.sender.toStdString();
+        resultData["Token"] = q.token.toStdString();
         resultData["Type"] = typeS.toStdString();
 
         if (extractData.empty()) {
-            resultData["State"] = ('-' + temp[2]).toStdString();
+            resultData["State"] = '-' + q.amount.toStdString();
             cacheDB.insert("cacheData", resultData);
         }
 
         else {
             resultData["State"] =
-                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(temp[2]))
+                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(q.amount))
                     .toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
@@ -177,20 +171,20 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const {
         resultData.clear();
 
         // modify receiver data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + temp[1].toStdString()
-                                     + "' AND Token='" + temp[5].toStdString() + "';");
+        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.receiver.toStdString()
+                                     + "' AND Token='" + q.token.toStdString() + "';");
 
-        resultData["ActorId"] = temp[1].toStdString();
-        resultData["Token"] = temp[5].toStdString();
+        resultData["ActorId"] = q.receiver.toStdString();
+        resultData["Token"] = q.token.toStdString();
         resultData["Type"] = typeR.toStdString();
         if (extractData.empty()) {
-            resultData["State"] = temp[2].toStdString();
+            resultData["State"] = q.amount.toStdString();
             cacheDB.insert("cacheData", resultData);
         }
 
         else {
             resultData["State"] =
-                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(temp[2]))
+                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(q.amount))
                     .toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
@@ -262,7 +256,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
 QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wallet, const ActorId &token) {
     QMap<QByteArray, BigNumber> res;
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
+        auto listTx = blockIndex.getBlockById(i).extractTransactions();
         for (const auto &tx : listTx) {
             if (tx.getData().contains(Fee::FEE))
                 continue;
@@ -282,7 +276,7 @@ QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wal
 }
 
 void Blockchain::stakingReward(const Block &block) {
-    QList<Transaction> listTx = block.extractTransactions();
+    auto listTx = block.extractTransactions();
     for (const auto &tx : listTx) {
         if (tx.getData().contains(Fee::FREEZE_TX) || tx.getData().contains(Fee::FEE)
             || tx.getData().contains(Fee::STAKING_REWARD))
@@ -352,7 +346,7 @@ void Blockchain::stakingReward(const Block &block) {
 std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &receiver,
                                                                 const ActorId &token) {
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
+        auto listTx = blockIndex.getBlockById(i).extractTransactions();
         for (const auto &tx : listTx) {
             if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token) {
                 return { tx.getHash(), i };
@@ -364,7 +358,7 @@ std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &r
 
 bool Blockchain::checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver) {
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        QList<Transaction> listTx = blockIndex.getBlockById(i).extractTransactions();
+        auto listTx = blockIndex.getBlockById(i).extractTransactions();
         for (const auto &tx : listTx) {
             if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token
                 && tx.getData().contains(hash)) {
@@ -542,7 +536,7 @@ bool Blockchain::signCheckAdd(Block &block) {
 }
 
 void Blockchain::sendUnFee(Block &block) {
-    QList<Transaction> txList = block.extractTransactions();
+    auto txList = block.extractTransactions();
     for (const auto &tmpTx : txList) {
         if (tmpTx.getData().contains(Fee::FREEZE_TX))
             continue;
@@ -565,7 +559,7 @@ void Blockchain::sendUnFee(Block &block) {
         QByteArray dataForTxFee = "";
         for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);
-            QList<Transaction> listTxs = tmpBlock.extractTransactions();
+            auto listTxs = tmpBlock.extractTransactions();
             for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
                     && tmp.getData().contains(tmpTx.getHash())) {
@@ -583,7 +577,7 @@ void Blockchain::sendUnFee(Block &block) {
 }
 
 void Blockchain::sendFeeUnfreeze(Block &block) {
-    QList<Transaction> txList = block.extractTransactions();
+    auto txList = block.extractTransactions();
     for (const auto &tmpTx : txList) {
         if (tmpTx.getData().contains(Fee::FREEZE_TX))
             continue;
@@ -606,7 +600,7 @@ void Blockchain::sendFeeUnfreeze(Block &block) {
         QByteArray dataForTxFee = "";
         for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);
-            QList<Transaction> listTxs = tmpBlock.extractTransactions();
+            auto listTxs = tmpBlock.extractTransactions();
             for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
                     && tmp.getData().contains(tmpTx.getHash())) {
@@ -958,10 +952,10 @@ bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB) {
             }
         } else if (blockA.getType() == Config::MERGE_BLOCK) {
             // 4) at least one common transaction
-            QList<Transaction> transactionsA = blockA.extractTransactions();
-            QList<Transaction> transactionsB = blockB.extractTransactions();
+            auto transactionsA = blockA.extractTransactions();
+            auto transactionsB = blockB.extractTransactions();
             for (const Transaction &tr : transactionsA) {
-                if (transactionsB.contains(tr)) {
+                if (std::find(transactionsB.begin(), transactionsB.end(), tr) != transactionsB.end()) {
                     return true;
                 }
             }
@@ -992,16 +986,14 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
         return merged;
     } else // Case 2 - different payload
     {
-        QList<Transaction> transactionsA = blockA.extractTransactions();
-        QList<Transaction> transactionsB = blockB.extractTransactions();
-
-        //        ListContainer<Transaction> txs;
-        QList<Transaction> resultList = transactionsA;
+        auto transactionsA = blockA.extractTransactions();
+        auto transactionsB = blockB.extractTransactions();
+        // ListContainer<Transaction> txs;
+        auto resultList = transactionsA;
 
         for (const Transaction &tx : qAsConst(transactionsA)) {
-            if (!transactionsB.contains(tx)) {
-                resultList.append(tx);
-            }
+            if (std::find(transactionsB.begin(), transactionsB.end(), tx) == transactionsB.end())
+                resultList.push_back(tx);
         }
         QList<QByteArray> list;
         for (const Transaction &tx : resultList)
@@ -1096,7 +1088,7 @@ BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
         if (currentBlock.isEmpty())
             break;
 
-        QList<Transaction> txs = currentBlock.extractTransactions();
+        auto txs = currentBlock.extractTransactions();
 
         for (auto &tx : txs) {
             if (tx.getSender() == userId && tx.getToken() == tokenId && tx.getData() != Fee::UNFREEZE_TX
@@ -1134,7 +1126,7 @@ BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, Acto
         if (currentBlock.isEmpty())
             break;
 
-        QList<Transaction> txs = currentBlock.extractTransactions();
+        auto txs = currentBlock.extractTransactions();
 
         for (auto &tx : txs) {
             bool isStaking = tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX;
@@ -1198,7 +1190,7 @@ QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(ActorId userId, Actor
         if (currentBlock.isEmpty())
             break;
 
-        // QList<Transaction> txs = currentBlock.extractTransactions();
+        // auto txs = currentBlock.extractTransactions();
     }
     return res;
 }
@@ -1229,7 +1221,7 @@ bool Blockchain::isSmContractTx(const Block &block) const {
 void Blockchain::getSmContractMembers(const Block &block) const {
     if (!isSmContractTx(block))
         return;
-    QList<Transaction> txList = block.extractTransactions();
+    auto txList = block.extractTransactions();
     for (const Transaction &tx : txList) {
         if (tx.getData() == "InitContract") {
             actorIndex->getActor(tx.getSender());
@@ -1309,7 +1301,7 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
 
 void Blockchain::addBlockToBlockchain(Block &block) {
     addBlock(block);
-    QList<Transaction> list = block.extractTransactions();
+    auto list = block.extractTransactions();
     for (const auto &tmp : qAsConst(list)) {
         QList<ActorId> list;
         auto accounts = accountController->accounts();
@@ -1361,10 +1353,10 @@ void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QBy
 
 void Blockchain::VerifyTx(Transaction tx) {
     Block last = getLastBlock();
-    QList<Transaction> lastBlockTxs = last.extractTransactions();
+    auto lastBlockTxs = last.extractTransactions();
 
     // check txs in the last block
-    if (lastBlockTxs.contains(tx)) {
+    if (std::find(lastBlockTxs.begin(), lastBlockTxs.end(), tx) != lastBlockTxs.end()) {
         qDebug() << "New transaction can't be added: previous block contains it";
         return;
     }
@@ -1376,7 +1368,7 @@ void Blockchain::VerifyTx(Transaction tx) {
 bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
                                      const BigNumber &indexBlock) // return true if haven`t
 {
-    QList<Transaction> listProve = txManager->getPendingTxs();
+    auto listProve = txManager->getPendingTxs();
     for (const auto &tmpTx : listProve) {
         if (tmpTx.getSender() == tx->getSender() && tmpTx.getReceiver() == tx->getReceiver()
             && tmpTx.getData() == tx->getData()) {
@@ -1385,7 +1377,7 @@ bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
     }
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= indexBlock; i--) {
         Block tmpBlock = blockIndex.getBlockById(i);
-        QList<Transaction> listTxs = tmpBlock.extractTransactions();
+        auto listTxs = tmpBlock.extractTransactions();
         for (const auto &tmp : listTxs) {
             if (tmp.getSender() == tx->getSender() && tmp.getReceiver() == tx->getReceiver()
                 && tmp.getData() == tx->getData()) {
@@ -1427,7 +1419,7 @@ void Blockchain::proveTx(Transaction *tx) {
         }
         for (BigNumber i = indexFreezeTxBlock; i <= blockIndex.getLastSavedId(); i++) {
             Block tmpBlock = blockIndex.getBlockById(i);
-            QList<Transaction> listTxs = tmpBlock.extractTransactions();
+            auto listTxs = tmpBlock.extractTransactions();
             for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == tx->getSender() && tmp.getData().contains(Fee::FEE_UNFREEZE_TX)
                     && tmp.getData().contains(hashTx)) {
@@ -1472,7 +1464,7 @@ void Blockchain::proveTx(Transaction *tx) {
         QByteArray hashTx = dataList.at(1);
         for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);
-            QList<Transaction> listTxs = tmpBlock.extractTransactions();
+            auto listTxs = tmpBlock.extractTransactions();
             for (const auto &tmp : listTxs) {
                 if (tmp.getSender() == tx->getSender() && tmp.getData().contains(Fee::FEE_FREEZE_TX)
                     && tmp.getData().contains(hashTx)) {

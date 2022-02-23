@@ -228,7 +228,7 @@ BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, con
     // iterating from last to first block
     while (lastBlockId >= getFirstSavedId()) {
         Block lastBlock = getBlockById(lastBlockId);
-        QList<Transaction> txs = lastBlock.extractTransactions();
+        auto txs = lastBlock.extractTransactions();
 
         for (const Transaction &tx : txs) {
             if (tx.getToken().toByteArray() != tokenActor)
@@ -295,7 +295,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
             break;
 
         Block lastBlock = getBlockById(lastBlockId);
-        QList<Transaction> txs = lastBlock.extractTransactions();
+        auto txs = lastBlock.extractTransactions();
 
         for (const Transaction &tx : txs) {
             if (BigNumber(tx.getToken().toByteArray()) != token)
@@ -435,7 +435,7 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
             row.insert({ "hash", block.getHash() });
             DB.insert(Config::DataStorage::BlockTable, row);
 
-            QList<Transaction> rows = block.extractTransactions();
+            auto rows = block.extractTransactions();
             for (const auto &tmp : rows) {
                 DBRow rowRow;
                 rowRow.insert({ "sender", tmp.getSender().toByteArray().toStdString() });
@@ -633,22 +633,21 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
         std::vector<DBRow> rows = DB.select("SELECT * FROM " + Config::DataStorage::TxBlockTable + " ;");
         for (const auto &tmp : rows) {
             QByteArrayList list;
-            QByteArray sender = tmp.at("sender").c_str();
-            QByteArray receiver = tmp.at("receiver").c_str();
-            QByteArray amount = tmp.at("amount").c_str();
-            QByteArray date = tmp.at("date").c_str();
-            QByteArray data = tmp.at("data").c_str();
-            QByteArray token = tmp.at("token").c_str();
-            QByteArray prevBlock = tmp.at("prevBlock").c_str();
-            QByteArray gas = tmp.at("gas").c_str();
-            QByteArray hop = tmp.at("hop").c_str();
-            QByteArray hash = tmp.at("hash").c_str();
-            QByteArray approver = tmp.at("approver").c_str();
-            QByteArray digSig = tmp.at("digSig").c_str();
-            QByteArray producer = tmp.at("producer").c_str();
-            list << sender << receiver << amount << date << data << token << prevBlock << gas << hop << hash
-                 << approver << digSig << producer;
-            b.addData(Serialization::serialize(list, Serialization::TRANSACTION_FIELD_SIZE));
+            Transaction tx;
+            tx.sender = ActorId(tmp.at("sender"));
+            tx.receiver = ActorId(tmp.at("receiver"));
+            tx.amount = BigNumber(tmp.at("amount").c_str());
+            tx.date = std::stoll(tmp.at("date"));
+            tx.data = QByteArray::fromStdString(tmp.at("data"));
+            tx.token = ActorId(tmp.at("token"));
+            tx.prevBlock = BigNumber(tmp.at("prevBlock").c_str());
+            tx.gas = std::stoi(tmp.at("gas"));
+            tx.hop = std::stoi(tmp.at("hop"));
+            tx.hash = tmp.at("hash").c_str();
+            tx.approver = tmp.at("approver").c_str();
+            tx.digSig = tmp.at("digSig").c_str();
+            tx.producer = tmp.at("producer").c_str();
+            b.addData(tx.serialize());
         }
 
         return b.serialize();

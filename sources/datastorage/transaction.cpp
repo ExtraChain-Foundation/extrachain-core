@@ -34,6 +34,11 @@ Transaction::Transaction(QObject *parent)
 
 Transaction::Transaction(const QByteArray &serialized, QObject *parent)
     : QObject(parent) {
+    if (serialized.isEmpty()) {
+        qDebug() << "Incorrect TX";
+        return;
+    }
+
     auto ser = serialized.toStdString();
     *this = MessagePack::deserialize<Transaction>(ser).first;
     calcHash();
@@ -282,7 +287,20 @@ void Transaction::operator=(const Transaction &other) {
 
 QByteArray Transaction::serialize() const {
     auto serialized = MessagePack::serializeQt(*this);
-    auto tra = MessagePack::deserializeQt<Transaction>(serialized);
+    auto deserialized = MessagePack::deserializeQt<Transaction>(serialized);
+
+    // tests: start
+    auto serializedAgain = MessagePack::serializeQt(deserialized);
+
+    auto deserialized2 = Transaction(serialized);
+    auto serializedAgain2 = MessagePack::serializeQt(deserialized2);
+
+    if (serialized != serializedAgain)
+        qFatal("TX SER ERROR 1");
+    if (serialized != serializedAgain2)
+        qFatal("TX SER ERROR 2");
+    // test: end
+
     return serialized;
 }
 

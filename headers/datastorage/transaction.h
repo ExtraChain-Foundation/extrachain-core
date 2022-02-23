@@ -48,7 +48,7 @@ public:
 
     Transaction(const Transaction &other);
 
-private:
+public: // make private
     ActorId sender;
     ActorId receiver;
     BigNumber amount; // coin amount

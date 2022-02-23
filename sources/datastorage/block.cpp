@@ -89,8 +89,8 @@ void Block::setType(const std::string &value) {
 
 QByteArray Block::getDataForHash() const {
     QByteArray idHash = Utils::calcKeccak(getIndex().toByteArray());
-    QList<Transaction> list = extractTransactions();
-    if (list.isEmpty())
+    auto list = extractTransactions();
+    if (list.empty())
         return idHash;
     QByteArray txHash = Utils::calcKeccak(list[0].serialize());
     for (int i = 1; i < list.size(); i++) {
@@ -138,25 +138,25 @@ BlockCompare Block::compareBlock(const Block &b) const {
 }
 
 void Block::addData(const QByteArray &data) {
-    this->data = QByteArray::fromStdString(this->data) + Serialization::serialize({ data }, FIELDS_SIZE);
+    this->data += Serialization::serialize({ data }, FIELDS_SIZE).toStdString();
 }
 
-QList<Transaction> Block::extractTransactions() const {
+std::vector<Transaction> Block::extractTransactions() const {
     if (m_type != Config::DATA_BLOCK_TYPE)
-        return QList<Transaction>();
+        return {};
 
     QList<QByteArray> txsData = Serialization::deserialize(QByteArray::fromStdString(data), FIELDS_SIZE);
-    QList<Transaction> transactions;
+    std::vector<Transaction> transactions;
     for (const QByteArray &trData : txsData) {
         Transaction tx(trData);
         if (!tx.isEmpty())
-            transactions.append(tx);
+            transactions.push_back(tx);
     }
     return transactions;
 }
 
 Transaction Block::getTransactionByHash(QByteArray hash) const {
-    QList<Transaction> txList = extractTransactions();
+    auto txList = extractTransactions();
     for (const auto &i : txList)
         if (i.getHash() == hash)
             return i;
@@ -164,11 +164,12 @@ Transaction Block::getTransactionByHash(QByteArray hash) const {
 }
 
 bool Block::contain(Block &from) const {
-    QList<Transaction> ourTx = this->extractTransactions();
-    QList<Transaction> fromTx = from.extractTransactions();
+    auto ourTx = this->extractTransactions();
+    auto fromTx = from.extractTransactions();
     for (const auto &i : fromTx) {
-        if (!ourTx.contains(i))
+        if (std::find(ourTx.begin(), ourTx.end(), i) == ourTx.end()) {
             return false;
+        }
     }
     return true;
 }
@@ -191,20 +192,6 @@ std::string Block::getType() const {
 
 std::string Block::getDigSig() const {
     return signatures.empty() ? "" : this->signatures.begin()->sign;
-}
-
-QByteArray Block::getSignatures() const {
-    QByteArray res = "";
-
-    for (const auto &signature : signatures) {
-        QByteArray data = Serialization::serialize({ QByteArray::fromStdString(signature.actorId),
-                                                     QByteArray::fromStdString(signature.sign),
-                                                     signature.isApprove ? "1" : "0" },
-                                                   FIELDS_SIZE);
-        res += Serialization::serialize({ data }, FIELDS_SIZE);
-    }
-
-    return res;
 }
 
 QByteArrayList Block::getListSignatures() const {
