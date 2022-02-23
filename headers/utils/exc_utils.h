@@ -399,8 +399,18 @@ namespace DataStorage {
           "fileHashPrev TEXT             NOT NULL, "
           "filePath     TEXT             NOT NULL"
           ");";
-    static const std::string filesTableLast =
-        "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
+
+    static const std::string fileSegmentsTable = "FileSegmentsTable";
+    static const std::string fileSegmentsTableCreate = "CREATE TABLE IF NOT EXISTS " + fileSegmentsTable
+        + " ("
+          "fileHash         TEXT PRIMARY KEY NOT NULL, "
+          "fileHashPrev     TEXT             NOT NULL, "
+          "filePath         TEXT             NOT NULL, "
+          "fileSegmentBegin TEXT             NOT NULL, "
+          "fileSegmentEnd   TEXT             NOT NULL, "
+          ");";
+
+    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + filesTable;
 
     // How many files one section folder will store

@@ -520,6 +520,7 @@ void ExtraChainNode::test() const {
     auto actor = m_accountController->createActor(ActorType::ServiceProvider, userHash);
 
     DFSController dfsController;
+    dfsController.initDB(actor);
     dfsController.flushDirContent(actor);
 
     QStringList testFiles = {
@@ -533,24 +534,79 @@ void ExtraChainNode::test() const {
     orgFilePrivate.open(QIODevice::ReadOnly);
 
 
-    const QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
-    const QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
+    QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
+    QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
     if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
         qDebug() << "addFile succeeded";
     else
         qDebug() << "addFile failed";
 
-    auto fileContentPublic = dfsController.readFile(actor, fHashPublic, DFSController::Public);
-    if(fileContentPublic == orgFilePublic.readAll())
-        qDebug() << "Files are equal";
-    else
-        qDebug() << "Files are different, read or write doesn't works";
+    auto validate = [&](const QString & publicCompare, const QString & privateCompare){
+        auto fileContentPublic = dfsController.readFile(actor, fHashPublic, DFSController::Public);
+        if(fileContentPublic == publicCompare)
+            qDebug() << "Files are equal";
+        else
+            qDebug() << "Files are different '" << fileContentPublic << "' != '" << publicCompare << "'";
 
-    auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate, DFSController::Private);
-    if(fileContentPrivate == orgFilePrivate.readAll())
-        qDebug() << "Files are equal";
+        auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate, DFSController::Private);
+        if(fileContentPrivate == privateCompare)
+            qDebug() << "Files are equal";
+        else
+            qDebug() << "Files are different '" << fileContentPrivate << "' != '" << privateCompare << "'";
+    };
+
+    validate(orgFilePublic.readAll(), orgFilePrivate.readAll());
+
+    QByteArray newContent = "Completely new content!";
+    fHashPublic = dfsController.editFile(actor, fHashPublic,
+                                                   newContent, DFSController::Public);
+    fHashPrivate = dfsController.editFile(actor, fHashPrivate,
+                                                   newContent, DFSController::Private);
+    if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
+        qDebug() << "editFile succeeded";
     else
-        qDebug() << "Files are different, enc/dec doesn't works";
+        qDebug() << "editFile failed";
+
+    validate(newContent, newContent);
+
+    // Add segment tests
+    newContent.insert(0, "qwe");
+
+    fHashPublic = dfsController.addFileSegment(actor, fHashPublic, DFSController::Public, "qwe", 0);
+    fHashPrivate = dfsController.addFileSegment(actor, fHashPrivate, DFSController::Private, "qwe", 0);
+
+    qDebug() << "New value: " << newContent;
+    validate(newContent, newContent);
+
+    //
+
+    newContent.insert(10, "qwe");
+
+    fHashPublic = dfsController.addFileSegment(actor, fHashPublic, DFSController::Public, "qwe", 10);
+    fHashPrivate = dfsController.addFileSegment(actor, fHashPrivate, DFSController::Private, "qwe", 10);
+
+    qDebug() << "New value: " << newContent;
+    validate(newContent, newContent);
+
+    //
+
+
+    fHashPublic = dfsController.addFileSegment(actor, fHashPublic, DFSController::Public, "qwe", newContent.size());
+    fHashPrivate = dfsController.addFileSegment(actor, fHashPrivate, DFSController::Private, "qwe", newContent.size());
+
+    newContent.insert(newContent.size(), "qwe");
+    qDebug() << "New value: " << newContent;
+    validate(newContent, newContent);
+
+    // Delete segment tests
+
+    newContent = newContent.toStdString().erase(0, 10).c_str();
+
+    fHashPublic = dfsController.deleteFileSegment(actor, fHashPublic, DFSController::Public, 0, 10);
+    fHashPrivate = dfsController.deleteFileSegment(actor, fHashPrivate, DFSController::Private, 0, 10);
+
+    qDebug() << "New value: " << newContent;
+    validate(newContent, newContent);
 
     bool result = dfsController.removeFile(actor, fHashPublic, DFSController::Public);
     qDebug() << "Remove file:" << fHashPublic << ", status:" << result;
