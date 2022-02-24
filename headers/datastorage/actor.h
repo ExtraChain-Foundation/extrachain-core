@@ -145,7 +145,7 @@ public:
         m_type = ActorType(copyActor.type());
     }
 
-    Actor operator=(const Actor<T> &copyActor) {
+    Actor& operator=(const Actor<T> &copyActor) {
         m_id = copyActor.id().toStdString();
         m_key = copyActor.key();
         m_type = copyActor.type();

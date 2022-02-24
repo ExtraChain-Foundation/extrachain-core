@@ -513,6 +513,31 @@ Dfs *ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
+
+void ExtraChainNode::testSerializer() const
+{
+    // Mock actor create
+    const std::string userEmail = "test@test.com";
+    const std::string userPass = "12345678";
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
+    auto actor1 = m_accountController->createActor(ActorType::Account, userHash);
+
+    auto actor2 = m_accountController->createActor(ActorType::Account, "random");
+    auto actor3 = m_accountController->createActor(ActorType::Account, "random");
+
+    assert(actor1.idStd() != actor2.idStd());
+    assert(actor1.idStd() != actor3.idStd());
+
+    auto msg = actor1.serialize();
+    if(actor2.deserialize(msg))
+        assert(actor1.idStd() == actor2.idStd());
+    else
+        qDebug() << "TEST message serializer: can't deserialize Actor instance";
+
+    auto msgQt = actor1.serializeQt();
+    actor3.deserializeQt(msgQt);
+    assert(actor1.idStd() == actor3.idStd());
+}
 void ExtraChainNode::testPermissions() const
 {
     // Mock actor create
