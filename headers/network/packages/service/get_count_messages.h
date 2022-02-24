@@ -38,21 +38,6 @@ struct BlockCount {
         return request;
     }
 };
-
-struct ActorCount {
-    QByteArray request;
-
-    ActorCount() {
-        request = QByteArray::number(Messages::GeneralRequest::GetActorCount); /*GET_ACTOR_COUNT_MESSAGE;*/
-    }
-    ActorCount(const QByteArray &serialized) {
-        request = serialized;
-    }
-
-    const QByteArray serialize() const {
-        return request;
-    }
-};
 }
 
 #endif // SIMPLE_MESSAGE_H

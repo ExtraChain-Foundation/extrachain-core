@@ -27,7 +27,6 @@ Q_NAMESPACE
 
 enum ChainMessage
 {
-    ActorMessage = 100,
     BlockMessage = 101,
     GenesisBlockMessage = 102,
     TxMessage = 103,
@@ -45,12 +44,8 @@ Q_ENUM_NS(ChainMessage)
 enum GeneralRequest
 {
     GetBlockCount = 200,
-    GetActorCount = 201,
-    GetActor = 202,
     GetBlock = 203,
     GetTx = 204,
-    GetTxPair = 205,
-    GetAllActors = 206,
     Notification = 270
 };
 Q_ENUM_NS(GeneralRequest)
@@ -63,12 +58,8 @@ Q_ENUM_NS(GeneralRequest)
 enum GeneralResponse
 {
     GetBlockCountResponse = 300,
-    GetActorCountResponse = 301,
-    GetActorResponse = 302,
     GetBlockResponse = 303,
     GetTxResponse = 304,
-    GetTxPairResponse = 305,
-    GetAllActorsResponse = 306
 };
 Q_ENUM_NS(GeneralResponse)
 
@@ -105,18 +96,6 @@ Q_ENUM_NS(DFSMessage)
 
 [[maybe_unused]] static bool isDFSMessage(unsigned int value) {
     if (value >= 400 && value <= 499)
-        return true;
-    return false;
-}
-enum VerifyRequest
-{
-    verifyActor = 501,
-    verifyActorResponse = 502
-};
-Q_ENUM_NS(VerifyRequest)
-
-[[maybe_unused]] static bool isVerifyRequest(unsigned int value) {
-    if (value >= 500 && value <= 599)
         return true;
     return false;
 }

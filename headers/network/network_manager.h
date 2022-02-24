@@ -33,6 +33,7 @@
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "network/network_status.h"
+#include "network/packages/message_body.h"
 #include "utils/exc_utils.h"
 
 class ResolveManager;
@@ -55,6 +56,11 @@ struct NetworkReconnect {
 inline size_t qHash(const NetworkReconnect &reconnect) {
     return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
 }
+
+struct MessageIdData {
+    std::string ind;
+    qint64 time;
+};
 
 /**
  * @brief The NetworkManager class
@@ -79,6 +85,8 @@ private:
     QList<SocketService *> m_connections;
     QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
+
+    std::map<std::string, MessageIdData> m_sended_messages;
 
 public:
     NetworkManager(ActorIndex *actorIndex);
@@ -159,6 +167,13 @@ public:
     void setResolveManager(ResolveManager *value);
 
     ActorIndex *actorIndex() const;
+
+    template <class T>
+    void send_message(T data, QString receiver, Config::Net::TypeSend typeSend) {
+        MessageBody<T> message = make_message(data, MessageType::ActorGetResponse, typeSend);
+        auto serialized = message.serialize();
+        this->sendMessage(QByteArray::fromStdString("ExCNew" + serialized), 1000, receiver);
+    }
 
 signals:
     void newSocket();

@@ -108,15 +108,11 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_interface.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/all_messages.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/connections_message.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/get_actor_message.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/get_all_actor_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/get_block_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/get_count_messages.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/get_tx_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/get_tx_pair_message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/message_types.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/ping_pong_message.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/verify_messages.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpserver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
@@ -163,8 +159,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message_response.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/connections_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_actor_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_all_actor_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_block_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/service/get_tx_pair_message.cpp

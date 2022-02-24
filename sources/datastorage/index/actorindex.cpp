@@ -120,8 +120,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
         auto profileData = actor.profile().serialize();
         bool isProfile = !profileData.isEmpty();
 
-        resolveManager->sendMessageResponse(actor.serialize(), Messages::GeneralResponse::GetActorResponse,
-                                            reqHash, receiver);
+        // TODONEW: Send GetActorResponse
 
         if (isProfile) {
             resolveManager->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
@@ -152,10 +151,7 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
     QByteArrayList result = allActors();
     if (!result.isEmpty()) {
         QByteArray data = Serialization::serialize(result, 4);
-        resolveManager->sendMessageResponse(data, Messages::GeneralResponse::GetAllActorsResponse, reqHash,
-                                            receiver);
-        //        emit responseReady(Serialization::serialize(result, 4),
-        //                           Messages::GET_ALL_ACTORS_RESPONSE_MESSAGE, reqHash, receiver);
+        // TODONEW: Send GetAllActorResponse
     }
     return;
 }
@@ -164,9 +160,8 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
     if (accController->getAccountCount() > 0) {
-        Messages::GetAllActorMessage msg;
-        msg.actorId = id.toByteArray();
-        resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetAllActors);
+        std::string actorId = id.toStdString();
+        // TODONEW: Send GetAllActors
         qDebug() << "[ActorIndex] Get all actors request";
         // emit sendMessage(msg.serialize(), getAllActorMessage);
     }
@@ -205,9 +200,10 @@ void ActorIndex::setResolveManager(ResolveManager *value) {
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &receiver) {
     qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
-    resolveManager->sendMessageResponse(QByteArray::number(this->getRecords()),
-                                        Messages::GeneralResponse::GetActorCountResponse, requestHash,
-                                        receiver);
+
+    //    resolveManager->network()->send_message();
+    // TODONEW: Send GetФctorCountResponse
+
     //    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
     //                       requestHash, receiver);
 }
@@ -383,12 +379,11 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
 }
 
 void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
-    Messages::GetActorMessage msg;
-    msg.actorId = actorId;
+    std::string neededActor = actorId.toStdString();
     if (actorId.isEmpty()) {
-        qFatal("Can't send get empty actor");
+        qFatal("Can't get actor by empty id");
     }
-    resolveManager->registrateMsg(msg.serialize(), Messages::GeneralRequest::GetActor);
+    // TODONEW: Send GetActor
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
@@ -418,8 +413,8 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         if (!dbInsert)
             qFatal("db actor insert error");
 
-        qDebug() << "[ActorIndex] Actor " << actor.id() << "was added";
-        resolveManager->registrateMsg(actor.serialize(), Messages::ChainMessage::ActorMessage);
+        qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
+        // TODONEW: Send ActorMessage
         // emit sendMessage(actor.serialize(), classType);
         // qDebug() << "emit signal for init dfs for user" << actorId;
         emit initDfs(actor.id());

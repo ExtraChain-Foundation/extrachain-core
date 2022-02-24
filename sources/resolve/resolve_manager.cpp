@@ -128,14 +128,13 @@ void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &m
     msg.type = msgType;
     msg.data = data;
 
-    if (msgType != Messages::ChainMessage::ActorMessage) {
-        if (accountControler->getAccountCount() == 0)
-            return;
-        msg.calcDigSig(accountControler->mainActor());
-    }
-    //    qDebug() << "msg signature:" << msg.getDigSig();
+    if (accountControler->getAccountCount() == 0)
+        return;
+    msg.calcDigSig(accountControler->mainActor());
 
+    //    qDebug() << "msg signature:" << msg.getDigSig();
     //    qDebug() << "send " << msgType;
+
     QByteArray message = msg.serialize();
     if (Messages::isGeneralRequest(msgType)) {
         handlerFileMutex.lock();
@@ -157,8 +156,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     rmsg.data = data;
     rmsg.type = msgType;
     rmsg.dataHash = requestHash;
-    if (msgType != Messages::GeneralResponse::GetActorResponse)
-        rmsg.calcDigSig(accountControler->mainActor());
+    rmsg.calcDigSig(accountControler->mainActor());
 
     //    qDebug() << "NetworkManager: send " << msgType;
     // if (msgType == Messages::GeneralResponse::getAllActorsResponse)
