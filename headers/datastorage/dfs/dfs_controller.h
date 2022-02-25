@@ -46,8 +46,9 @@ private:
     QString createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
     void initGlobalDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath);
+    DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath, const QString & fileSize);
     DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath,
-                    const QString & fileSegmentBegin, const QString & fileSegmentEnd);
+                    const QString & fileSegmentBegin, const QString & fileSegmentEnd, const QString & fileSize);
     DBRow findDBRow(DBConnector & db, const QString & tableName, const QString & fileHash);
     std::vector<DBRow> findDBRows(const std::string & fileHash);
     std::optional<DBRow> lastRow();

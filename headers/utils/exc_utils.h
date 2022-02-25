@@ -397,7 +397,8 @@ namespace DataStorage {
         + " ("
           "fileHash     TEXT PRIMARY KEY NOT NULL, "
           "fileHashPrev TEXT             NOT NULL, "
-          "filePath     TEXT             NOT NULL"
+          "filePath     TEXT             NOT NULL, "
+          "fileSize     TEXT             NOT NULL"
           ");";
 
     static const std::string fileSegmentsTable = "FileSegmentsTable";
@@ -408,6 +409,7 @@ namespace DataStorage {
           "filePath         TEXT             NOT NULL, "
           "fileSegmentBegin TEXT             NOT NULL, "
           "fileSegmentEnd   TEXT             NOT NULL, "
+          "fileSize         TEXT             NOT NULL"
           ");";
 
     static const std::string permissionTable = "PermissionTable";

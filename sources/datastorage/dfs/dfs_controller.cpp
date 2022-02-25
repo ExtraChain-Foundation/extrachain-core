@@ -101,7 +101,7 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     const QString virtualFilePath = FileSystem::pathConcat(FileSystem::pathConcat(DFSRootDirName,
                                                                                   SecurityLevelName[securityLevel]),
                                                            QFileInfo(filePath).fileName());
-    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, virtualFilePath);
+    const DBRow rowData = makeDBRow(fileHash, fileHashPrev, virtualFilePath, QString::number(fileSize));
 
     if (!m_db.insert(Config::DataStorage::filesTable, rowData)) {
         qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :"
@@ -110,7 +110,7 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
     }
 
     uint64_t lastByteIndex = QFile(filePath).size() - 1;
-    const DBRow rowDataWithSegments = makeDBRow(fileHash, fileHashPrev, virtualFilePath, QString::number(0), QString::number(lastByteIndex));
+    const DBRow rowDataWithSegments = makeDBRow(fileHash, fileHashPrev, virtualFilePath, QString::number(0), QString::number(lastByteIndex), QString::number(fileSize));
 
     if (!m_db_local.insert(Config::DataStorage::fileSegmentsTable, rowDataWithSegments)) {
         qDebug() << "DFSController: addFile: insert failed:" << m_db_local.file().c_str() << " :"
@@ -400,6 +400,9 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
     //
     for (const auto& [tableName, db]: dbList)
     {
+        if (!setDBFieldValue(*db, tableName.c_str(), "fileHash", fileHash, "fileSize", QString::number(fileContent.size()))) {
+            return QByteArray();
+        }
         if (!setDBFieldValue(*db, tableName.c_str(), "fileHash", fileHash, "fileHash", fileContentKeccak)) {
             return QByteArray();
         }
@@ -573,21 +576,23 @@ void DFSController::initGlobalDB(const Actor<KeyPrivate> & actor, const QString 
     }
 }
 
-DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath) {
+DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath, const QString & fileSize) {
     return {
         { "fileHash", fileHash.toStdString() },
         { "fileHashPrev", fileHashPrev.toStdString() },
-        { "filePath", filePath.toStdString() }
+        { "filePath", filePath.toStdString() },
+        { "fileSize", fileSize.toStdString() }
     };
 }
 DBRow DFSController::makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath,
-                const QString & fileSegmentBegin, const QString & fileSegmentEnd){
+                const QString & fileSegmentBegin, const QString & fileSegmentEnd, const QString & fileSize){
     return {
         { "fileHash", fileHash.toStdString() },
         { "fileHashPrev", fileHashPrev.toStdString() },
         { "filePath", filePath.toStdString() },
         { "fileSegmentBegin", fileSegmentBegin.toStdString() },
-        { "fileSegmentEnd", fileSegmentEnd.toStdString() }
+        { "fileSegmentEnd", fileSegmentEnd.toStdString() },
+        { "fileSize", fileSize.toStdString() }
     };
 }
 
