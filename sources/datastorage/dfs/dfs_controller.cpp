@@ -27,11 +27,12 @@ DFSController::~DFSController() {
     }
 }
 
-QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath, SecurityLevel securityLevel) {
-    if (!QFileInfo::exists(filePath)) {
-        qDebug() << "DFSController: addFile: Failed, file does not exists:" << filePath;
-        return QByteArray();
-    }
+QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const AddFileMsg & msg)
+{
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+    const QString & virtualPath = msg.path.c_str();
+    const QString & fileSize = msg.size.c_str();
 
     if (!m_db.isOpen())
     {
@@ -45,16 +46,62 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
         return QByteArray();
     }
 
-    const QString actorDirPath = makeActorDirPath(actor);
+    const auto & securityLevel = getSecurityLevel(virtualPath);
+    const QString & targetDirPath = makeSecurityDirPath(actor, securityLevel);
 
-    createDirectory(actor, securityLevel);
-    flushDirContent(actor);
+    if (!QDir().mkpath(targetDirPath)) {
+        qDebug() << "DFSController: addFile: DFS actor dir create error:" << targetDirPath;
+        QCoreApplication::exit(ActorDirCreateError);
+    }
+
+    const QString & lastFileHash = lastHash();
+
+    const DBRow rowData = makeDBRow(fileHash, lastFileHash, virtualPath, fileSize);
+
+    if (!m_db.insert(Config::DataStorage::filesTable, rowData)) {
+        qDebug() << "DFSController: addFile: insert failed:" << m_db.file().c_str() << " :"
+                 << Config::DataStorage::filesTable.c_str();
+        return QByteArray();
+    }
+
+    const DBRow rowDataWithSegments = makeDBRow(fileHash, lastFileHash, virtualPath, "-1", "-1", fileSize);
+
+    if (!m_db_local.insert(Config::DataStorage::fileSegmentsTable, rowDataWithSegments)) {
+        qDebug() << "DFSController: addFile: insert failed:" << m_db_local.file().c_str() << " :"
+                 << Config::DataStorage::fileSegmentsTable.c_str();
+        return QByteArray();
+    }
+
+    return fileHash.toStdString().c_str();
+}
+
+QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString & filePath, SecurityLevel securityLevel) {
+    if (!m_db.isOpen())
+    {
+        qDebug() << "DFSController: addFile: DB open failure:" << m_db.file().c_str();
+        return QByteArray();
+    }
+
+    if (!m_db_local.isOpen())
+    {
+        qDebug() << "DFSController: addFile: DB open failure:" << m_db_local.file().c_str();
+        return QByteArray();
+    }
+
+    const QString & actorId = actor.idStd().c_str();
+
+    const QString & actorDirPath = makeActorDirPath(actorId);
+    const QString & securityDirPath = FileSystem::pathConcat(actorDirPath, SecurityLevelName[securityLevel]);
+
+    createDirectory(securityDirPath);
+    flushDirContent(actorId);
+
+    const uint64_t fileSize = QFile(filePath).size();
 
     QByteArray fileHash = Utils::calcKeccakForFile(filePath);
     const QString fileHashPrev = lastHash();
 
-    const QString secureFilePath = makeSecurityDirPath(actor, securityLevel);
-    const QString destFilePath = FileSystem::pathConcat(secureFilePath, fileHash);
+    const QString destFilePath = FileSystem::pathConcat(securityDirPath, fileHash);
 
     switch(securityLevel)
     {
@@ -70,7 +117,7 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
 
         // Rename private file because the content has changed after the encription
         fileHash = Utils::calcKeccakForFile(destFilePath);
-        const QString encrFilePath = FileSystem::pathConcat(secureFilePath, fileHash);
+        const QString encrFilePath = FileSystem::pathConcat(securityDirPath, fileHash);
 
         if(!QFile::rename(destFilePath, encrFilePath)){
             qDebug() << "DFSController: addFile: Failed rename: " << destFilePath << " to " << encrFilePath;
@@ -139,7 +186,10 @@ QByteArray DFSController::addFile(const Actor<KeyPrivate> & actor, const QString
 //  0 | 11111111 |              | filePath_1
 //  1 | 33333333 | 11111111     | filePath_3
 
-bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & fileHash, SecurityLevel securityLevel) {
+bool DFSController::removeFile(const Actor<KeyPrivate> & actor, const RemoveFileMsg & msg) {
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+
     qDebug() << "DFSController: removeFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -147,6 +197,8 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
     std::map<std::string, DBConnector *> dbList;
     dbList[Config::DataStorage::filesTable] = &m_db;
     dbList[Config::DataStorage::fileSegmentsTable] = &m_db_local;
+
+    QString virtualFilePath;
 
     for (const auto& [tableName, db]: dbList)
     {
@@ -160,6 +212,8 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
             qDebug() << "DFSController: removeFile: Query select skipped because of empty result: Query" << selectQuery.c_str();
             return false;
         }
+
+        virtualFilePath = result[0]["filePath"].c_str();
 
         if (result.size() > 2) {
             qDebug() << "DFSController: removeFile: Query select failed: Query result has unsupported size:" << result.size()
@@ -193,7 +247,9 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
         }
     }
 
-    const QString filePathRemove = FileSystem::pathConcat(makeSecurityDirPath(actor, securityLevel), fileHash);
+    const QString & securityDirPathStr = makeGlobalPath(virtualFilePath, userId);
+    const QString & filePathRemove = FileSystem::pathConcat(securityDirPathStr, fileHash);
+
     if (!QFileInfo::exists(filePathRemove)) {
         qDebug() << "DFSController: removeFile: File does not exists:" << filePathRemove;
         return false;
@@ -206,7 +262,7 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const QString & f
     return true;
 }
 
-QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString &fileHash, SecurityLevel securityLevel) {
+QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString &fileHash) {
     qDebug() << "DFSController: readFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -226,8 +282,10 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
         qDebug() << "DFSController: readFile: Query select failed: fileHashPrev could not be the only field containing the fileHash:" << fileHash;
         return QByteArray();
     }
+    const QString virtualFilePath = result[0]["filePath"].c_str();
+    const auto & securityLevel = getSecurityLevel(virtualFilePath);
+    const QString & securityDirPathStr = makeSecurityDirPath(actor, securityLevel);
 
-    const QString securityDirPathStr = makeSecurityDirPath(actor, securityLevel);
     const QString filePathStr = FileSystem::pathConcat(securityDirPathStr, fileHash);
 
     if (!QFileInfo::exists(filePathStr)) {
@@ -285,7 +343,12 @@ QByteArray DFSController::readFile(const Actor<KeyPrivate> &actor, const QString
 //  2 | 33333333 | 55555555     | filePath_3
 //
 
-QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString &fileHash, const QByteArray &fileContent, SecurityLevel securityLevel, uint64_t segmentOffset) {
+QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const EditFileMsg & msg) {
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+    const QByteArray & fileContent = msg.data.c_str();
+    uint64_t segmentOffset = std::stoll(msg.offset);
+
     qDebug() << "DFSController: editFile:" << fileHash;
 
     const std::string fileHashS = fileHash.toStdString();
@@ -306,8 +369,9 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
         return QByteArray();
     }
 
+    const QString virtualPath = result[0]["filePath"].c_str();
+    const SecurityLevel securityLevel = getSecurityLevel(virtualPath);
     const QString securityDirPathStr = makeSecurityDirPath(actor, securityLevel);
-    //const QString filePath = FileSystem::pathConcat(securityDirPathStr, fileHash);
 
     QByteArray fileContentKeccak = Utils::calcKeccak(fileContent);
     const QString fileNameNewOrigin = fileContentKeccak + "_origin";
@@ -375,22 +439,6 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
     }
     }
 
-
-    //
-    // Remove previous content from file system
-    //
-    const QString filePathPrev = FileSystem::pathConcat(securityDirPathStr, fileHash);
-    if (!QFileInfo::exists(filePathPrev)) {
-        qDebug() << "DFSController: editFile: Previous file not found:" << filePathPrev;
-        return QByteArray(); // Nothing to delete.
-    }
-
-    QFile filePrev(filePathPrev);
-    if (!filePrev.remove()) {
-        qDebug() << "DFSController: editFile: Failed remove old data:" << filePathPrev << filePrev.errorString();
-        return QByteArray();
-    }
-
     std::map<std::string, DBConnector *> dbList;
     dbList[Config::DataStorage::filesTable] = &m_db;
     dbList[Config::DataStorage::fileSegmentsTable] = &m_db_local;
@@ -426,14 +474,27 @@ QByteArray DFSController::editFile(const Actor<KeyPrivate> &actor, const QString
         return QByteArray();
     }
 
+    //
+    // Remove previous content from file system
+    //
+    const QString filePathPrev = FileSystem::pathConcat(securityDirPathStr, fileHash);
+    if (QFileInfo::exists(filePathPrev))
+    {
+        QFile filePrev(filePathPrev);
+        if (!filePrev.remove()) {
+            qDebug() << "DFSController: editFile: Failed remove old data:" << filePathPrev << filePrev.errorString();
+            return QByteArray();
+        }
+    }
+
     return fileContentKeccak;
 }
 
 // Verify / Clean zombies / DIR file contains entry, but file system does not contain physical file.
-bool DFSController::flushDirContent(const Actor<KeyPrivate> & actor) {
+bool DFSController::flushDirContent(const QString & userId) {
     qDebug() << "DFSController: createDirectory";
 
-    const QString actorDirPath = makeActorDirPath(actor);
+    const QString actorDirPath = makeActorDirPath(userId);
     const auto actorFilesTable = m_db.select(Config::DataStorage::filesTableFull);
     const QSet<QString> actorFilesListHashTable = [&] () {
         QSet<QString> result;
@@ -463,13 +524,12 @@ bool DFSController::initDB(const Actor<KeyPrivate> & actor)
 
     // Step 1: If there is no DB in the User's folder, instantiate new DB
 
-    const QString & actorDirPath = makeActorDirPath(actor);
+    const QString & actorDirPath = makeActorDirPath(actor.idStd().c_str());
     const QString & actorDBFilePath = FileSystem::pathConcat(actorDirPath, DFSDBName);
 
-    createDirectory(actor, Private);
-    createDirectory(actor, Public);
+    createDirectory(actorDirPath);
 
-    initGlobalDB(actor, actorDirPath);
+    initGlobalDB(actorDirPath);
 
     // Step 2: copy User's DB; if there is a legacy copy DB, replacy it with the global one
 
@@ -528,14 +588,13 @@ bool DFSController::initDB(const Actor<KeyPrivate> & actor)
     return true;
 }
 
-QString DFSController::makeActorDirPath(const Actor<KeyPrivate> &actor) {
+QString DFSController::makeActorDirPath(const QString & actorId) {
     return FileSystem::pathConcat(
-                FileSystem::pathConcat(QCoreApplication::applicationDirPath(), DFSRootDirName),
-                actor.id().toString());
+                FileSystem::pathConcat(QCoreApplication::applicationDirPath(), DFSRootDirName), actorId);
 }
 
 QString DFSController::makeSecurityDirPath(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
-    return FileSystem::pathConcat(makeActorDirPath(actor), SecurityLevelName[securityLevel]);
+    return FileSystem::pathConcat(makeActorDirPath(actor.idStd().c_str()), SecurityLevelName[securityLevel]);
 }
 QString DFSController::makeServiceDirPath(const Actor<KeyPrivate> & actor) {
     return FileSystem::pathConcat(
@@ -543,20 +602,51 @@ QString DFSController::makeServiceDirPath(const Actor<KeyPrivate> & actor) {
                 DFSService);
 }
 
-QString DFSController::createDirectory(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel) {
-    qDebug() << "DFSController: createDirectory";
+QString DFSController::makeGlobalPath(const QString & virtualPath, const QString & userId)
+{
+    qDebug() << virtualPath.split('/')[0] << " " << virtualPath.split('/')[1];
+    QString dirName = virtualPath.split('/')[0];
+    QString securityLevel = virtualPath.split('/')[1];
 
-    QString targetDirPath = FileSystem::pathConcat(makeActorDirPath(actor), SecurityLevelName[securityLevel]);
-    if (!QDir().mkpath(targetDirPath)) {
-        qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << targetDirPath;
+    qDebug() << FileSystem::pathConcat(QCoreApplication::applicationDirPath(), dirName);
+    qDebug() << FileSystem::pathConcat(userId, securityLevel);
+
+    return FileSystem::pathConcat(FileSystem::pathConcat(QCoreApplication::applicationDirPath(), dirName),
+                                  FileSystem::pathConcat(userId, securityLevel));
+}
+
+DFSController::SecurityLevel DFSController::getSecurityLevel(const QString &virtualPath)
+{
+    for (const auto& word: virtualPath.split('/'))
+    {
+        for (const auto& securityWord: SecurityLevelName)
+        {
+            if(word == securityWord)
+            {
+                const auto & wordIndex = SecurityLevelName.indexOf(securityWord);
+                return static_cast<SecurityLevel>(wordIndex);
+            }
+        }
+    }
+
+    qDebug() << __FUNCTION__ << " Invalid path, has to contain the securityLevel";
+    return SecurityLevel::Public;
+
+}
+
+bool DFSController::createDirectory(const QString & path) {
+    qDebug() << "DFSController: createDirectory: " << path.toShort();
+
+    if (!QDir().mkpath(path)) {
+        qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << path;
         QCoreApplication::exit(ActorDirCreateError);
     }
 
-    return targetDirPath;
+    return true;
 }
 
 // Init the DB in the User's folder
-void DFSController::initGlobalDB(const Actor<KeyPrivate> & actor, const QString & sqliteDBTargetPath) {
+void DFSController::initGlobalDB(const QString & sqliteDBTargetPath) {
     qDebug() << "DFSController: initDB:" << sqliteDBTargetPath;
 
     QString sqliteDBFilePath = FileSystem::pathConcat(sqliteDBTargetPath, DFSDBName);
@@ -649,9 +739,13 @@ bool DFSController::setDBFieldValue(DBConnector & db,
 }
 
 
-QByteArray DFSController::addFileSegment(const Actor<KeyPrivate> & actor, const QString & fileHash,
-                                   const SecurityLevel securityLevel, const QByteArray &newSegment, uint64_t newSegmentOffset)
+QByteArray DFSController::addFileSegment(const Actor<KeyPrivate> & actor, const AddSegmentMsg & msg)
 {
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+    const QByteArray & newSegment = msg.data.c_str();
+    uint64_t newSegmentOffset = std::stoll(msg.offset);
+
     if (!m_db.isOpen()) {
         qDebug() << "DFSController: addFileSegment: Failed, DB is not open:" << m_db.file().c_str();
         return QByteArray();
@@ -662,18 +756,18 @@ QByteArray DFSController::addFileSegment(const Actor<KeyPrivate> & actor, const 
         return QByteArray();
     }
 
-    const QString & securityDirPath = makeSecurityDirPath(actor, securityLevel);
-    const QString & filePath = FileSystem::pathConcat(securityDirPath, fileHash);
-
     // Get dir file info and check
     auto fileInfo = findDBRow(m_db_local, Config::DataStorage::fileSegmentsTable.c_str(), fileHash);
 
     if(fileInfo.empty())
     {
         // If there is no such file in the DB, you can't download it
-        qDebug() << "DFSController: addFileSegment: there is no such file in th DB: " << filePath;
+        qDebug() << "DFSController: addFileSegment: there is no such file in th DB: " << fileHash;
         return QByteArray();
     }
+
+    const QString & securityDirPath = makeGlobalPath(fileInfo["filePath"].c_str(), userId);
+    const QString & filePath = FileSystem::pathConcat(securityDirPath, fileHash);
 
     uint64_t fileBeginOffset = std::stoi(fileInfo["fileSegmentBegin"]);
     uint64_t fileEndOffset = std::stoi(fileInfo["fileSegmentEnd"]);
@@ -686,17 +780,11 @@ QByteArray DFSController::addFileSegment(const Actor<KeyPrivate> & actor, const 
             return QByteArray();
         }
 
-        if(!QFile(filePath).open(QIODevice::WriteOnly))
-        {
-            qDebug() << "DFSController: addFileSegment: can't create file: " << filePath;
-            return QByteArray();
-        }
-
-        return editFile(actor, fileHash, newSegment, securityLevel, newSegmentOffset);
+        return editFile(actor, {userId.toStdString(), fileHash.toStdString(), newSegment.toStdString(), std::to_string(newSegmentOffset)});
     }
     else
     {
-        const QString & fileContent = readFile(actor, fileHash, securityLevel);
+        const QString & fileContent = readFile(actor, fileHash);
         if(fileContent.isEmpty())
         {
             qDebug() << "DFSController: addFileSegment: read file error: " << filePath;
@@ -716,13 +804,17 @@ QByteArray DFSController::addFileSegment(const Actor<KeyPrivate> & actor, const 
         resultSegment.insert(fileBeginOffset - resultBeginOffset, fileContent.toStdString());
         resultSegment.insert(newSegmentOffset - resultBeginOffset, newSegment);
 
-        return editFile(actor, fileHash, resultSegment.c_str(), securityLevel, resultBeginOffset);
+        return editFile(actor, {userId.toStdString(), fileHash.toStdString(), resultSegment, std::to_string(resultBeginOffset)});
     }
 }
 
-QByteArray DFSController::deleteFileSegment(const Actor<KeyPrivate> &actor, const QString &fileHash,
-                                      const SecurityLevel securityLevel, uint64_t segmentOffset, uint64_t segmentSize)
+QByteArray DFSController::deleteFileSegment(const Actor<KeyPrivate> &actor, const DeleteSegmentMsg & msg)
 {
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+    uint64_t segmentOffset = std::stoll(msg.offset);
+    uint64_t segmentSize = std::stoll(msg.size);
+
     if (!m_db.isOpen()) {
         qDebug() << "DFSController: deleteFileSegment: Failed, DB is not open:" << m_db.file().c_str();
         return QByteArray();
@@ -733,18 +825,18 @@ QByteArray DFSController::deleteFileSegment(const Actor<KeyPrivate> &actor, cons
         return QByteArray();
     }
 
-    const QString & securityDirPath = makeSecurityDirPath(actor, securityLevel);
-    const QString & filePath = FileSystem::pathConcat(securityDirPath, fileHash);
-
     // Get dir file info and check
     auto fileInfo = findDBRow(m_db_local, Config::DataStorage::fileSegmentsTable.c_str(), fileHash);
 
     if(fileInfo.empty())
     {
         // If there is no such file in the DB, you can't download it
-        qDebug() << "DFSController: deleteFileSegment: there is no such file in th DB: " << filePath;
+        qDebug() << "DFSController: deleteFileSegment: there is no such file in th DB: " << fileHash;
         return QByteArray();
     }
+
+    const QString & securityDirPath = makeGlobalPath(fileInfo["filePath"].c_str(), userId);
+    const QString & filePath = FileSystem::pathConcat(securityDirPath, fileHash);
 
     uint64_t fileBeginOffset = std::stoi(fileInfo["fileSegmentBegin"]);
     uint64_t fileEndOffset = std::stoi(fileInfo["fileSegmentEnd"]);
@@ -762,7 +854,7 @@ QByteArray DFSController::deleteFileSegment(const Actor<KeyPrivate> &actor, cons
             return QByteArray();
         }
 
-        const QString & fileContent = readFile(actor, fileHash, securityLevel);
+        const QString & fileContent = readFile(actor, fileHash);
         if(fileContent.isEmpty())
         {
             qDebug() << "DFSController: deleteFileSegment: read file error: " << filePath;
@@ -773,7 +865,7 @@ QByteArray DFSController::deleteFileSegment(const Actor<KeyPrivate> &actor, cons
         auto & resultSegment = prevSegment.erase(segmentOffset, segmentSize);
 
         uint64_t newFileOffset = segmentOffset == fileBeginOffset ? segmentOffset + segmentSize : fileBeginOffset;
-        return editFile(actor, fileHash, resultSegment.c_str(), securityLevel, newFileOffset);
+        return editFile(actor, {userId.toStdString(), fileHash.toStdString(), resultSegment, std::to_string(newFileOffset)});
     }
 }
 

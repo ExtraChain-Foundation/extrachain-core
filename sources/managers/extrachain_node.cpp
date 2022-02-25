@@ -538,6 +538,7 @@ void ExtraChainNode::testSerializer() const
     actor3.deserializeQt(msgQt);
     assert(actor1.idStd() == actor3.idStd());
 }
+
 void ExtraChainNode::testPermissions() const
 {
     // Mock actor create
@@ -554,7 +555,6 @@ void ExtraChainNode::testPermissions() const
 
     DFSController dfsController;
     dfsController.initDB(actor);
-    dfsController.flushDirContent(actor);
 
     QStringList testFiles = {
         FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
@@ -627,7 +627,7 @@ void ExtraChainNode::test() const {
 
     DFSController dfsController;
     dfsController.initDB(actor);
-    dfsController.flushDirContent(actor);
+    dfsController.flushDirContent(actor.idStd().c_str());
 
     QStringList testFiles = {
         FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
@@ -636,6 +636,7 @@ void ExtraChainNode::test() const {
 
     auto orgFilePublic = QFile(testFiles[0]);
     orgFilePublic.open(QIODevice::ReadOnly);
+
     auto orgFilePrivate = QFile(testFiles[1]);
     orgFilePrivate.open(QIODevice::ReadOnly);
 
@@ -648,13 +649,13 @@ void ExtraChainNode::test() const {
         qDebug() << "addFile failed";
 
     auto validate = [&](const QString & publicCompare, const QString & privateCompare){
-        auto fileContentPublic = dfsController.readFile(actor, fHashPublic, DFSController::Public);
+        auto fileContentPublic = dfsController.readFile(actor, fHashPublic);
         if(fileContentPublic == publicCompare)
             qDebug() << "Files are equal";
         else
             qDebug() << "Files are different '" << fileContentPublic << "' != '" << publicCompare << "'";
 
-        auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate, DFSController::Private);
+        auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate);
         if(fileContentPrivate == privateCompare)
             qDebug() << "Files are equal";
         else
@@ -663,11 +664,30 @@ void ExtraChainNode::test() const {
 
     validate(orgFilePublic.readAll(), orgFilePrivate.readAll());
 
+    DFSController::AddFileMsg addFileMsg;
+    addFileMsg.userId = actor.idStd();
+    addFileMsg.fileHash = "test_file_hash";
+    addFileMsg.path = "dfs/public/test_file_name";
+    addFileMsg.size = "123";
+
+    dfsController.addFile(actor, addFileMsg);
+
+    addFileMsg.fileHash = "test_file_hash_private";
+    addFileMsg.path = "dfs/private/test_file_name_private";
+    addFileMsg.size = "321";
+
+    dfsController.addFile(actor, addFileMsg);
     QByteArray newContent = "Completely new content!";
-    fHashPublic = dfsController.editFile(actor, fHashPublic,
-                                                   newContent, DFSController::Public);
-    fHashPrivate = dfsController.editFile(actor, fHashPrivate,
-                                                   newContent, DFSController::Private);
+
+    DFSController::EditFileMsg editFileMsg;
+    editFileMsg.userId = actor.idStd();
+    editFileMsg.fileHash = fHashPublic;
+    editFileMsg.data = newContent;
+    editFileMsg.offset = "0";
+    fHashPublic = dfsController.editFile(actor, editFileMsg);
+
+    editFileMsg.fileHash = fHashPrivate;
+    fHashPrivate = dfsController.editFile(actor, editFileMsg);
     if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
         qDebug() << "editFile succeeded";
     else
@@ -678,8 +698,15 @@ void ExtraChainNode::test() const {
     // Add segment tests
     newContent.insert(0, "qwe");
 
-    fHashPublic = dfsController.addFileSegment(actor, fHashPublic, DFSController::Public, "qwe", 0);
-    fHashPrivate = dfsController.addFileSegment(actor, fHashPrivate, DFSController::Private, "qwe", 0);
+    DFSController::AddSegmentMsg addSegmentMsg;
+    addSegmentMsg.userId = actor.idStd();
+    addSegmentMsg.fileHash = fHashPublic;
+    addSegmentMsg.data = "qwe";
+    addSegmentMsg.offset = "0";
+    fHashPublic = dfsController.addFileSegment(actor, addSegmentMsg);
+
+    addSegmentMsg.fileHash = fHashPrivate;
+    fHashPrivate = dfsController.addFileSegment(actor, addSegmentMsg);
 
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
@@ -688,17 +715,24 @@ void ExtraChainNode::test() const {
 
     newContent.insert(10, "qwe");
 
-    fHashPublic = dfsController.addFileSegment(actor, fHashPublic, DFSController::Public, "qwe", 10);
-    fHashPrivate = dfsController.addFileSegment(actor, fHashPrivate, DFSController::Private, "qwe", 10);
+    addSegmentMsg.offset = "10";
+    addSegmentMsg.fileHash = fHashPublic;
+    fHashPublic = dfsController.addFileSegment(actor, addSegmentMsg);
+
+    addSegmentMsg.fileHash = fHashPrivate;
+    fHashPrivate = dfsController.addFileSegment(actor, addSegmentMsg);
 
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
     //
 
+    addSegmentMsg.offset = std::to_string(newContent.size());
+    addSegmentMsg.fileHash = fHashPublic;
+    fHashPublic = dfsController.addFileSegment(actor, addSegmentMsg);
 
-    fHashPublic = dfsController.addFileSegment(actor, fHashPublic, DFSController::Public, "qwe", newContent.size());
-    fHashPrivate = dfsController.addFileSegment(actor, fHashPrivate, DFSController::Private, "qwe", newContent.size());
+    addSegmentMsg.fileHash = fHashPrivate;
+    fHashPrivate = dfsController.addFileSegment(actor, addSegmentMsg);
 
     newContent.insert(newContent.size(), "qwe");
     qDebug() << "New value: " << newContent;
@@ -708,15 +742,27 @@ void ExtraChainNode::test() const {
 
     newContent = newContent.toStdString().erase(0, 10).c_str();
 
-    fHashPublic = dfsController.deleteFileSegment(actor, fHashPublic, DFSController::Public, 0, 10);
-    fHashPrivate = dfsController.deleteFileSegment(actor, fHashPrivate, DFSController::Private, 0, 10);
+    DFSController::DeleteSegmentMsg delSegmentMsg;
+    delSegmentMsg.userId = actor.idStd();
+    delSegmentMsg.fileHash = fHashPublic;
+    delSegmentMsg.offset = "0";
+    delSegmentMsg.size = "10";
 
+    fHashPublic = dfsController.deleteFileSegment(actor, delSegmentMsg);
+
+    delSegmentMsg.fileHash = fHashPrivate;
+    fHashPrivate = dfsController.deleteFileSegment(actor, delSegmentMsg);
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    bool result = dfsController.removeFile(actor, fHashPublic, DFSController::Public);
+    DFSController::RemoveFileMsg removeFileMsg;
+    removeFileMsg.userId = actor.idStd().c_str();
+    removeFileMsg.fileHash = fHashPublic;
+
+    bool result = dfsController.removeFile(actor, removeFileMsg);
     qDebug() << "Remove file:" << fHashPublic << ", status:" << result;
 
-    result = dfsController.removeFile(actor, fHashPrivate, DFSController::Private);
+    removeFileMsg.fileHash = fHashPrivate;
+    result = dfsController.removeFile(actor, removeFileMsg);
     qDebug() << "Remove file:" << fHashPrivate << ", status:" << result;
 }
