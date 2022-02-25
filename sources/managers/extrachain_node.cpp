@@ -573,49 +573,71 @@ void ExtraChainNode::testPermissions() const
     permManager.initPermissionDB(actor);
 
     struct TestSet {
+        TestSet(){}
+        TestSet(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash) :
+            cmd(cmd),
+            actor(actor),
+            userId(userId),
+            fileHash(fileHash) {}
+        QString cmd;
         Actor<KeyPrivate> actor;
         QString userId;
         QString fileHash;
+    };
+
+    struct SetPermission : public TestSet{
+        SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash, PermissionManager::Permission permission, bool result) :
+            TestSet(cmd, actor, userId, fileHash),
+            permission(permission),
+            resultSet(result) {}
         PermissionManager::Permission permission;
-        PermissionManager::Permission resultGet;
         bool resultSet;
     };
 
-    std::vector<TestSet> testSet = {
-        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Edit, PermissionManager::Read, true},
-        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::NoPermission, true},
-        {actor, actor1.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::NoPermission, true},
-        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::Write, true},
-        {actor, actor1.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::Delete, true},
-
-        {actor1, actor.idStd().c_str(), ".perm",      PermissionManager::Read, PermissionManager::Edit, true},
-        {actor1, actor.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::NoPermission, true},
-        {actor1, actor.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::NoPermission, true},
-        {actor1, actor.idStd().c_str(), fHashPublic,  PermissionManager::Write, PermissionManager::Write, true},
-        {actor1, actor.idStd().c_str(), fHashPrivate, PermissionManager::Delete, PermissionManager::Delete, true},
-
-        {actor, actor.idStd().c_str(), ".perm",      PermissionManager::Edit, PermissionManager::Read, false},
-
-        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Read, PermissionManager::Edit, false},
-        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false},
-
-        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Write, PermissionManager::Edit, false},
-        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false},
-
-        {actor, actor1.idStd().c_str(), ".perm",      PermissionManager::Delete, PermissionManager::Edit, false},
-        {actor, actor1.idStd().c_str(), fHashPublic,  PermissionManager::NoPermission, PermissionManager::Write, false}
-
+    struct GetPermission : public TestSet{
+        GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash, PermissionManager::Permission permission) :
+            TestSet(cmd, actor, userId, fileHash), resultGet(permission) {}
+        PermissionManager::Permission resultGet;
     };
+
+    std::vector<TestSet*> testSet;
+    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Read));
+    testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(), ".perm", PermissionManager::Edit));
+    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission));
+    testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
+
+    testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic", PermissionManager::Edit, false));
+    testSet.emplace_back(new SetPermission("set", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true));
+    testSet.emplace_back(new SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
+
+    testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit));
+    testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(), ".perm", PermissionManager::Edit));
 
     for(auto & test: testSet)
     {
-        auto permission = permManager.getPermission(test.actor, test.userId, test.fileHash);
-        assert(permission == test.resultGet);
-
-        auto setPassed = permManager.setPermission(test.actor, test.userId, test.fileHash, test.permission);
-        assert(setPassed == test.resultSet);
+        if(test->cmd == "get")
+        {
+            GetPermission* getPerm = static_cast<GetPermission*>(test);
+            auto permission = permManager.getPermission(getPerm->actor,
+                                                        {getPerm->userId.toStdString(),
+                                                         getPerm->fileHash.toStdString()});
+            assert(permission == getPerm->resultGet);
+        }
+        else
+        {
+            SetPermission* setPerm = static_cast<SetPermission*>(test);
+            auto permission = permManager.setPermission(setPerm->actor,
+                                                        {setPerm->userId.toStdString(),
+                                                         setPerm->fileHash.toStdString(),
+                                                         permManager.permissions[setPerm->permission].toStdString()});
+            assert(permission == setPerm->resultSet);
+        }
     }
 
+    for(auto & ptr: testSet)
+    {
+        delete ptr;
+    }
 }
 
 void ExtraChainNode::test() const {
