@@ -27,12 +27,6 @@ Q_NAMESPACE
 
 enum ChainMessage
 {
-    BlockMessage = 101,
-    GenesisBlockMessage = 102,
-    TxMessage = 103,
-    ContractMessage = 104,
-    ProfileMessage = 198,
-    CoinRequest = 199,
 };
 Q_ENUM_NS(ChainMessage)
 
@@ -43,10 +37,6 @@ Q_ENUM_NS(ChainMessage)
 }
 enum GeneralRequest
 {
-    GetBlockCount = 200,
-    GetBlock = 203,
-    GetTx = 204,
-    Notification = 270
 };
 Q_ENUM_NS(GeneralRequest)
 
@@ -57,9 +47,6 @@ Q_ENUM_NS(GeneralRequest)
 }
 enum GeneralResponse
 {
-    GetBlockCountResponse = 300,
-    GetBlockResponse = 303,
-    GetTxResponse = 304,
 };
 Q_ENUM_NS(GeneralResponse)
 

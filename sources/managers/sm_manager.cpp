@@ -18,7 +18,9 @@
  */
 
 #include "managers/sm_manager.h"
-#include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/message_types.h"
 
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent) {
@@ -72,7 +74,7 @@ void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sende
     tx.setToken(sender.id());
     tx.sign(sender);
 
-    emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::ContractMessage);
+    // TODONEW emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::TxMessage);
 }
 
 Actor<KeyPrivate> SmartContractManager::createContract(QByteArray tokenName) {

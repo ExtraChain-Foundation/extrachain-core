@@ -18,7 +18,9 @@
  */
 
 #include "datastorage/index/actorindex.h"
-#include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/message_types.h"
 #include "resolve/resolve_manager.h"
 
 ActorId ActorIndex::firstId() {
@@ -123,7 +125,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, messageId);
 
         if (isProfile) {
-            node->resolveManager()->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
+            // TODONEW node->resolveManager()->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
         } else if (actor.type() != ActorType::User
                    && actor.type() != ActorType::ServiceProvider) { // if profile not exist
             static QMap<QByteArray, qint64> tempCheck;
@@ -226,8 +228,8 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {
                 return;
             }
 
-            node->resolveManager()->registrateMsg(profile.serialize(),
-                                                  Messages::ChainMessage::ProfileMessage);
+            // TODONEW node->resolveManager()->registrateMsg(profile.serialize(),
+            //                                       Messages::ChainMessage::ProfileMessage);
             emit profileAvailabled(profile.id, actor.profile().getListProfile());
         }
     } else
@@ -247,8 +249,8 @@ void ActorIndex::saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newP
         qDebug() << "[ActorIndex] Save profile: incorrect profile" << newProfile.at(2);
         return;
     } else {
-        node->resolveManager()->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::ProfileMessage);
-        // emit sendMessage(pubProfile.serialize(), profileType);
+        // TODONEW node->resolveManager()->registrateMsg(pubProfile.serialize(),
+        // Messages::ChainMessage::ProfileMessage); emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
 

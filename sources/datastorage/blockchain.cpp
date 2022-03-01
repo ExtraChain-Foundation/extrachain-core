@@ -19,7 +19,9 @@
 
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
-#include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/message_types.h"
 
 #undef qCritical // temp
 #define qCritical qDebug
@@ -202,10 +204,11 @@ QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id
 void Blockchain::getBlockZero() {
     Block zero = getBlockByIndex(0);
     if (zero.isEmpty()) {
-        Messages::GetBlockMessage request;
-        request.param = SearchEnum::BlockParam::Id;
-        request.value = QByteArray::number(0);
-        emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
+        // TODONEW
+        // Messages::GetBlockMessage request;
+        // request.param = SearchEnum::BlockParam::Id;
+        // request.value = QByteArray::number(0);
+        // emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     } else
         node->actorIndex()->setFirstId(zero.getApprover());
 }
@@ -336,7 +339,7 @@ void Blockchain::stakingReward(const Block &block) {
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(wallet);
                 rtx.sign(node->accountController()->getActor(wallet));
-                emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
+                // TODONEW emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
             }
         }
     }
@@ -571,7 +574,7 @@ void Blockchain::sendUnFee(Block &block) {
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
+        // TODONEW emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
     }
 }
 
@@ -613,7 +616,7 @@ void Blockchain::sendFeeUnfreeze(Block &block) {
             continue;
         tx.setData(dataForTxFee);
         tx.sign(actor);
-        emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
+        // TODONEW emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
     }
 }
 
@@ -867,10 +870,11 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         if (block.getIndex() != 0) {
             BigNumber id = block.getIndex() - 1;
             if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
-                Messages::GetBlockMessage request;
-                request.param = SearchEnum::BlockParam::Id;
-                request.value = id.toByteArray();
-                emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
+                // TODONEW
+                // Messages::GetBlockMessage request;
+                // request.param = SearchEnum::BlockParam::Id;
+                // request.value = id.toByteArray();
+                // emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
             }
         }
     }
@@ -879,8 +883,11 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     }
     if (block.getIndex() < 0)
         return Errors::BLOCK_IS_NOT_VALID;
-    if (signCheckAdd(block))
-        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
+
+    bool check = signCheckAdd(block);
+    if (check) {
+        // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
+    }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
 
     switch (resultCode) {
@@ -890,7 +897,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
                  << "is successfully added to blockchain";
         getSmContractMembers(block);
 
-        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
+        // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
         saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
         stakingReward(block);
         break;
@@ -919,7 +926,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
             if (blockIndex.addBlock(gB) == 0) {
                 qDebug() << "Block" << gB.getIndex() << QByteArray::fromStdString(gB.getType())
                          << "is successfully added to blockchain";
-                emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
+                // TODONEW emit sendMessage(gB.serialize(),
+                // Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
             }
         }
@@ -1234,8 +1242,8 @@ void Blockchain::process() {
 }
 
 void Blockchain::updateBlockchain() {
-    Messages::BlockCount request;
-    emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
+    // TODONEW Messages::BlockCount request;
+    // emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
 }
 
 void Blockchain::checkBlockExistence(Block &block) {
@@ -1267,10 +1275,10 @@ void Blockchain::checkBlockExistence(Block &block) {
 void Blockchain::blockCountResponse(const BigNumber &count) {
     if (blockIndex.getLastSavedId() < count
         || getBlock(SearchEnum::BlockParam::Id, count.toByteArray()).isEmpty()) {
-        Messages::GetBlockMessage request;
-        request.param = SearchEnum::BlockParam::Id;
-        request.value = count.toByteArray();
-        emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
+        // TODONEW Messages::GetBlockMessage request;
+        // request.param = SearchEnum::BlockParam::Id;
+        // request.value = count.toByteArray();
+        // emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
     }
 }
 
@@ -1279,7 +1287,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
-    emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash, receiver);
+    // TODONEW emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash, receiver);
 }
 
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver) {
@@ -1294,8 +1302,8 @@ void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &
     obj["count"] = QString(res.toByteArray());
     // QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
-    emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
-                       Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
+    // TODONEW emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
+    // Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
 }
 
 void Blockchain::addBlockToBlockchain(Block &block) {
@@ -1326,8 +1334,9 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block) {
         node->actorIndex()->setFirstId(block.getApprover());
         mutex.unlock();
     }
-    if (blockIndex.addBlock(block) == 0 || signCheckAdd(block))
-        emit sendMessage(block.serialize(), Messages::ChainMessage::GenesisBlockMessage);
+    if (blockIndex.addBlock(block) == 0 || signCheckAdd(block)) {
+        // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::GenesisBlockMessage);
+    }
 }
 
 // Actors //
@@ -1343,8 +1352,8 @@ void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QBy
                                      const SocketPair &receiver, const QByteArray &request) {
     Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty()) {
-        emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse, request,
-                           receiver);
+        // TODONEW emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse,
+        // request, receiver);
     } else {
         qDebug() << "The transaction with" << SearchEnum::toString(param) << "parametr is not found";
     }

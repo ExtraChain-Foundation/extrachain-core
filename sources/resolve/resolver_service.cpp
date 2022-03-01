@@ -178,6 +178,7 @@ void ResolverService::resolveTask() {
 }
 
 void ResolverService::resolveGeneralTask() {
+    qFatal("Why here?");
     // QList<QByteArray> res = Serialization::deserialize(msg);
     using namespace Messages;
     BaseMessage message;
@@ -189,7 +190,7 @@ void ResolverService::resolveGeneralTask() {
         qDebug() << "[ResolverService] Receive empty message";
     }
 
-    if (message.data.isEmpty() && msgType != Messages::GeneralRequest::GetBlockCount) {
+    if (message.data.isEmpty()) { // && msgType != Messages::GeneralRequest::GetBlockCount) {
         finishWork();
         return;
     }
@@ -215,179 +216,6 @@ void ResolverService::resolveGeneralTask() {
 
     switch (msgType) {
     // spread messages
-    case Messages::ChainMessage::ProfileMessage: {
-        emit newProfile(message.data);
-        finishWork();
-        break;
-    }
-    case Messages::ChainMessage::BlockMessage: {
-        if (GenesisBlock::isGenesisBlock(message.data)) {
-            GenesisBlock block(message.data);
-            if (!validateBlock(block)) {
-                qDebug() << "Received block" << block.getIndex() << "is not valid";
-                finishWork();
-                return;
-            }
-            blockchain->addBlockToBlockchain(block);
-        } else {
-            Block block(message.data);
-            if (!validateBlock(block)) {
-                qDebug() << "Received block" << block.getIndex() << "is not valid";
-                finishWork();
-                return;
-            }
-            blockchain->addBlockToBlockchain(block);
-        }
-
-        // emit newBlock(block);
-        finishWork();
-        break;
-    }
-    case Messages::ChainMessage::GenesisBlockMessage: {
-        GenesisBlock block = message.data;
-        blockchain->addGenBlockToBlockchain(block);
-        // emit newGenesisBlock(block);
-        finishWork();
-        break;
-    }
-    case Messages::ChainMessage::CoinRequest: {
-        auto list = Serialization::deserialize(message.data);
-        if (list.isEmpty()) {
-            finishWork();
-            break;
-        }
-
-        BigNumber amount(list[0]);
-        auto plsr = list.length() > 2 ? list[2] : ActorId();
-
-        if (plsr.isEmpty()) {
-            auto mainId = node->accountController()->mainActor().id();
-            auto firstId = node->actorIndex()->firstId();
-            if (mainId == firstId)
-                node->createTransactionFrom(firstId, message.signer, amount, ActorId());
-        } else {
-            emit coinRequest(message.signer, amount, plsr);
-        }
-
-        finishWork();
-        break;
-    }
-    case Messages::ChainMessage::TxMessage: {
-        Transaction tx(message.data);
-
-        if (!validate(tx)) {
-            qDebug() << "Received tx" << tx.getHash() << "is not valid";
-            return;
-        }
-        // transaction - fee
-
-        emit newTx(tx);
-        finishWork();
-        break;
-    }
-    case Messages::ChainMessage::ContractMessage: { //
-        //        Contract contract(message.getMsg_data());
-        qDebug() << "[ResolverService]"
-                 << "recieveMsg(): type: "
-                 << "CONTRACT_MESSAGE";
-        Transaction tx(message.data);
-        if (!validate(tx)) {
-            qDebug() << "Received tx of contract" << tx.getHash() << "is not valid";
-            return;
-        }
-        emit newTx(tx);
-        finishWork();
-        break;
-    }
-    // request messages
-    case Messages::GeneralRequest::GetTx: {
-        GetTxMessage txMessage;
-        txMessage = message.data;
-        emit getTx(txMessage.param, txMessage.value, receiver, calcHash(msg));
-        finishWork();
-        break;
-    }
-    case Messages::GeneralRequest::GetBlock: {
-        GetBlockMessage blMessage;
-        blMessage = message.data;
-        emit getBlock(blMessage.param, blMessage.value, calcHash(msg), receiver);
-        finishWork();
-        break;
-    }
-    case Messages::GeneralRequest::GetBlockCount: {
-        emit getBlocksCount(calcHash(msg), receiver);
-        finishWork();
-        break;
-    }
-
-    // response messages
-    case Messages::GeneralResponse::GetTxResponse: {
-        qDebug() << "[ResolverService]"
-                 << "recieveMsg(): type: "
-                 << "GET_TX_RESPONSE_MESSAGE";
-        BaseMessageResponse responseMessage;
-        responseMessage = msg;
-        if (checkResponseHandler(responseMessage.dataHash))
-            return;
-        Transaction tx(responseMessage.data);
-        if (!validate(tx)) {
-            qDebug() << "Received tx" << tx.getHash() << "is not valid";
-            return;
-        }
-        emit newTx(tx);
-        finishWork();
-        break;
-    }
-    case Messages::GeneralResponse::GetBlockResponse: {
-        qDebug() << "[ResolverService]"
-                 << "recieveMsg(): type: "
-                 << "GET_BLOCK_RESPONSE_MESSAGE";
-
-        BaseMessageResponse responseMessage;
-        responseMessage = msg;
-        if (checkResponseHandler(responseMessage.dataHash))
-            return;
-        if (GenesisBlock::isGenesisBlock(msg)) {
-            GenesisBlock gblock(responseMessage.data);
-            if (!validateBlock(gblock)) {
-                qDebug() << "Received block" << gblock.getIndex() << "is not valid";
-                return;
-            }
-            emit newGenesisBlock(gblock);
-        } else {
-            Block block(responseMessage.data);
-            if (!validateBlock(block)) {
-                qDebug() << "Received block" << block.getIndex() << "is not valid";
-                return;
-            }
-            blockchain->addBlockToBlockchain(block);
-            //            emit newBlock(block);
-        }
-        finishWork();
-        break;
-    }
-    case Messages::GeneralResponse::GetBlockCountResponse: {
-        BaseMessageResponse responseMessage;
-        responseMessage = msg;
-        if (checkResponseHandler(responseMessage.dataHash))
-            return;
-        qDebug() << "[ResolverService]"
-                 << "recieveMsg(): type:"
-                 << "GET_BLOCK_COUNT_RESPONSE_MESSAGE";
-        BigNumber count(responseMessage.data);
-        emit blockCount(count);
-        finishWork();
-        break;
-    }
-    case Messages::GeneralRequest::Notification: {
-        BaseMessageResponse responseMessage;
-        responseMessage = msg;
-        auto map = Serialization::deserializeMap(responseMessage.data);
-        emit saveNotificationToken(map["os"], ActorId(map["actor"]), ActorId(map["token"]));
-
-        finishWork();
-        break;
-    }
     default: {
         finishWork();
         break;

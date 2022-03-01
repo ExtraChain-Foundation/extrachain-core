@@ -19,7 +19,9 @@
 
 #include "dfs/controls/headers/dfs.h"
 #include "managers/thread_pool.h"
-#include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/message_types.h"
 
 DfsNetworkManager *Dfs::networkManager() const {
     return m_networkManager;

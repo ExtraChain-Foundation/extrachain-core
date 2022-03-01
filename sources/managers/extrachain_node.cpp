@@ -250,7 +250,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
+            // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
         } else {
             BigNumber amountTemp(tx.getAmount());
             if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
@@ -269,8 +269,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
                 }
 
                 // send fee tx
-                emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
-                emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
+                // TODONEW emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
+                // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
             } else {
                 qDebug() << "Not enough money ";
                 return Transaction();
@@ -400,7 +400,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
                                       { "token", mainKey.encrypt(token.toLatin1(), publicKey) },
                                       { "os", mainKey.encrypt(os.toLatin1(), publicKey) } };
 
-    emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
+    // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
 void ExtraChainNode::connectContractManager() {
