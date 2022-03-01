@@ -407,7 +407,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
             qFatal("db actor insert error");
 
         qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
-        node->network()->send_message(actorId, MessageType::Actor, MessageStatus::Response, "",
+        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, "",
                                       Config::Net::TypeSend::All);
         emit initDfs(actor.id());
     }

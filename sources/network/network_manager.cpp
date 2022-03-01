@@ -354,7 +354,7 @@ void NetworkManager::sendFromCache() {
         return;
     }
 
-    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 10);
+    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
     file.close();
     file.remove();
 
@@ -469,7 +469,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     auto type = MessageType(type_int);
-    MessageStatus status = response_int == 194 ? MessageStatus::Response : MessageStatus::Request;
+    MessageStatus status = response_int == 195 ? MessageStatus::Response : MessageStatus::Request;
 
     if (type == MessageType::Actor && status == MessageStatus::Request) { }
 
