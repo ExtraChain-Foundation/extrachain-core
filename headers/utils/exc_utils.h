@@ -427,7 +427,7 @@ namespace Net {
     // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
-    enum TypeSend
+    enum class TypeSend
     {
         All,
         Except,
@@ -436,6 +436,7 @@ namespace Net {
     };
 } // namespace Net
 } // namespace Config
+MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
@@ -482,8 +483,8 @@ std::string serialize(const T &t) {
     return buffer.str();
 }
 
-template <class T>
-std::pair<T, bool> deserialize(const std::string &str, std::size_t size = 0) {
+template <class T, class StringContainer>
+std::pair<T, bool> deserialize(const StringContainer &str, std::size_t size = 0) {
     if (str.empty()) {
         qDebug() << "[MessagePack] Empty deserialize" << typeid(T).name();
         return { T(), false };
@@ -495,7 +496,7 @@ std::pair<T, bool> deserialize(const std::string &str, std::size_t size = 0) {
         auto t = deserialized.as<T>();
         return { t, true };
     } catch (std::exception e) {
-        auto qt_bytes = QByteArray::fromStdString(str);
+        auto qt_bytes = QByteArray::fromStdString(str.data());
         qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
         qFatal("[MessagePack] Incorrect deserialize");
         return { T(), false };

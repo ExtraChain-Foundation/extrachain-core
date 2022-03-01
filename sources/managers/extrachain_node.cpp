@@ -19,10 +19,10 @@
 
 #include "managers/extrachain_node.h"
 
-#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
 #include "dfs/controls/headers/dfs.h"
@@ -55,24 +55,22 @@ ExtraChainNode::ExtraChainNode() {
     }
 
     prepareFolders();
-    m_actorIndex = new ActorIndex();
+    m_actorIndex = new ActorIndex(this);
     m_privateProfile = new PrivateProfile();
     m_smartContractManager = new SmartContractManager(m_actorIndex);
-    m_accountController = new AccountController(m_actorIndex, this);
-    m_networkManager = new NetworkManager(m_actorIndex);
+    m_accountController = new AccountController(this);
+    m_networkManager = new NetworkManager(this);
     m_subscribeController = new SubscribeController();
     m_subscribeController->setExtraChainNode(this);
-    m_actorIndex->setAccController(m_accountController);
     ThreadPool::addThread(m_networkManager);
     // this->thread()->sleep(1);
-    m_blockchain = new Blockchain(m_accountController, fileMode);
-    m_accountController->setBlockchain(m_blockchain);
+    m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
     m_privateProfile->setAccountController(m_accountController);
     m_chatManager = new ChatManager(m_accountController, m_actorIndex);
     m_chatManager->setNetworkManager(m_networkManager);
     // contractManager = new ContractManager(accController, blockchain);
-    m_dfs = new Dfs(m_actorIndex, m_accountController);
+    m_dfs = new Dfs(this, m_actorIndex, m_accountController);
 
     m_resolveManager =
         new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
@@ -82,7 +80,6 @@ ExtraChainNode::ExtraChainNode() {
     m_networkManager->setResolveManager(m_resolveManager);
     // dfs->initDfsNetwork(resolveManager);
     m_privateProfile->setDfs(m_dfs);
-    m_actorIndex->setResolveManager(m_resolveManager);
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -218,7 +215,7 @@ Blockchain *ExtraChainNode::blockchain() {
     return m_blockchain;
 }
 
-NetworkManager *ExtraChainNode::networkManager() {
+NetworkManager *ExtraChainNode::network() {
     return m_networkManager;
 }
 

@@ -26,8 +26,6 @@
 #include "network/socket_pair.h"
 #include "utils/exc_utils.h"
 
-class NetworkManager;
-
 /**
  * @brief SocketService is responsible for message delivery
  */
@@ -36,9 +34,8 @@ class EXTRACHAIN_EXPORT TcpSocketService : public SocketService {
 
 public:
     explicit TcpSocketService();
-    explicit TcpSocketService(QString address, NetworkManager *networkManager, QObject *parent = nullptr);
-    explicit TcpSocketService(qintptr socketDescriptor, NetworkManager *networkManager,
-                              QObject *parent = nullptr);
+    explicit TcpSocketService(QString address, ExtraChainNode *node, QObject *parent = nullptr);
+    explicit TcpSocketService(qintptr socketDescriptor, ExtraChainNode *node, QObject *parent = nullptr);
     TcpSocketService(const TcpSocketService &value);
     ~TcpSocketService();
 

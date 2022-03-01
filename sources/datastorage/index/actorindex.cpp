@@ -21,18 +21,16 @@
 #include "network/packages/service/all_messages.h"
 #include "resolve/resolve_manager.h"
 
-void ActorIndex::setAccController(AccountController *value) {
-    accController = value;
-}
-
 ActorId ActorIndex::firstId() {
     return m_firstId;
 }
 
-ActorIndex::ActorIndex(QObject *parent)
+ActorIndex::ActorIndex(ExtraChainNode *node, QObject *parent)
     : QObject(parent)
 
 {
+    this->node = node;
+
     DBConnector db;
     bool isDbOpen = db.open(folderPath.toStdString() + "actors");
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
@@ -66,6 +64,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     } else {
         sendGetActorMessage(id);
         // emit sendMessage(msg.serialize(), getActorMessage);
+        // resolveManager->network()->send_message()
         qDebug() << "[ActorIndex] There no actor with id:" << id;
         return Actor<KeyPublic>();
     }
@@ -109,7 +108,7 @@ bool ActorIndex::validateTx(const Transaction &tx) {
 void ActorIndex::process() {
 }
 
-void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver) {
+void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messageId) {
     // receive id
     // create response message
     if (actorId.isEmpty())
@@ -121,9 +120,10 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
         bool isProfile = !profileData.isEmpty();
 
         // TODONEW: Send GetActorResponse
+        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, messageId);
 
         if (isProfile) {
-            resolveManager->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
+            node->resolveManager()->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
         } else if (actor.type() != ActorType::User
                    && actor.type() != ActorType::ServiceProvider) { // if profile not exist
             static QMap<QByteArray, qint64> tempCheck;
@@ -144,14 +144,13 @@ void ActorIndex::handleGetActor(const ActorId &actorId, QByteArray reqHash, cons
     }
 }
 
-void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receiver) {
-    if (accController->getAccountCount() == 0)
+void ActorIndex::handleGetAllActor(QByteArray reqHash, const std::string &messageId) {
+    if (node->accountController()->getAccountCount() == 0)
         return;
 
-    QByteArrayList result = allActors();
-    if (!result.isEmpty()) {
-        QByteArray data = Serialization::serialize(result, 4);
-        // TODONEW: Send GetAllActorResponse
+    std::vector<std::string> result = allActorsStd();
+    if (!result.empty()) {
+        node->network()->send_message(result, MessageType::ActorAll, MessageStatus::Response, messageId);
     }
     return;
 }
@@ -159,9 +158,10 @@ void ActorIndex::handleGetAllActor(QByteArray reqHash, const SocketPair &receive
 void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
-    if (accController->getAccountCount() > 0) {
-        std::string actorId = id.toStdString();
-        // TODONEW: Send GetAllActors
+    if (node->accountController()->getAccountCount() > 0) {
+        node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request, "",
+                                      Config::Net::TypeSend::All);
+
         qDebug() << "[ActorIndex] Get all actors request";
         // emit sendMessage(msg.serialize(), getAllActorMessage);
     }
@@ -194,18 +194,11 @@ void ActorIndex::handleNewAllActors(QByteArrayList actors) {
         getActor(actor);
 }
 
-void ActorIndex::setResolveManager(ResolveManager *value) {
-    resolveManager = value;
-}
-
-void ActorIndex::getActorCount(const QByteArray &requestHash, const SocketPair &receiver) {
+void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
 
-    //    resolveManager->network()->send_message();
-    // TODONEW: Send GetФctorCountResponse
-
-    //    emit responseReady(this->getRecords().toByteArray(), Messages::GET_ACTOR_COUNT_RESPONSE_MESSAGE,
-    //                       requestHash, receiver);
+    node->network()->send_message(std::to_string(this->getRecords()), MessageType::ActorCount,
+                                  MessageStatus::Response, messageId);
 }
 
 void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {
@@ -233,7 +226,8 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {
                 return;
             }
 
-            resolveManager->registrateMsg(profile.serialize(), Messages::ChainMessage::ProfileMessage);
+            node->resolveManager()->registrateMsg(profile.serialize(),
+                                                  Messages::ChainMessage::ProfileMessage);
             emit profileAvailabled(profile.id, actor.profile().getListProfile());
         }
     } else
@@ -253,7 +247,7 @@ void ActorIndex::saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newP
         qDebug() << "[ActorIndex] Save profile: incorrect profile" << newProfile.at(2);
         return;
     } else {
-        resolveManager->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::ProfileMessage);
+        node->resolveManager()->registrateMsg(pubProfile.serialize(), Messages::ChainMessage::ProfileMessage);
         // emit sendMessage(pubProfile.serialize(), profileType);
     }
 }
@@ -285,7 +279,7 @@ QByteArrayList ActorIndex::getProfile(QString id) {
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty()) {
         if (actor.type() != ActorType::User && actor.type() != ActorType::ServiceProvider
-            && resolveManager != nullptr) {
+            && node->resolveManager() != nullptr) {
             sendGetActorMessage(id.toLatin1());
         }
 
@@ -379,11 +373,11 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
 }
 
 void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
-    std::string neededActor = actorId.toStdString();
     if (actorId.isEmpty()) {
         qFatal("Can't get actor by empty id");
     }
-    // TODONEW: Send GetActor
+
+    node->network()->send_message(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
@@ -401,22 +395,20 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
     int result = this->add(actor.id(), actor.serialize());
-    auto actorId = actor.id().toByteArray();
+    auto actorId = actor.id().toStdString();
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
         this->records++;
         DBConnector db;
         db.open(folderPath.toStdString() + "actors");
-        bool dbInsert =
-            db.insert(Config::DataStorage::actorsTable,
-                      { { "id", actorId.toStdString() }, { "type", std::to_string(int(actor.type())) } });
+        bool dbInsert = db.insert(Config::DataStorage::actorsTable,
+                                  { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
             qFatal("db actor insert error");
 
         qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
-        // TODONEW: Send ActorMessage
-        // emit sendMessage(actor.serialize(), classType);
-        // qDebug() << "emit signal for init dfs for user" << actorId;
+        node->network()->send_message(actorId, MessageType::Actor, MessageStatus::Response, "",
+                                      Config::Net::TypeSend::All);
         emit initDfs(actor.id());
     }
 
@@ -431,6 +423,19 @@ QByteArrayList ActorIndex::allActors() {
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors) {
         result << actor["id"].data();
+    }
+
+    return result;
+}
+
+std::vector<std::string> ActorIndex::allActorsStd() {
+    std::vector<std::string> result;
+
+    DBConnector db;
+    db.open(folderPath.toStdString() + "actors");
+    auto actors = db.select("SELECT id FROM Actors");
+    for (auto &actor : actors) {
+        result.push_back(actor["id"]);
     }
 
     return result;

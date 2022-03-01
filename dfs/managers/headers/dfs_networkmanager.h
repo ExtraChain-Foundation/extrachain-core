@@ -37,7 +37,7 @@ private:
     QList<DFSResolverService *> dfsResolvers;
 
 public:
-    DfsNetworkManager(ActorIndex *actorIndex);
+    DfsNetworkManager(ExtraChainNode *node);
     ~DfsNetworkManager() override;
 
 private:
@@ -46,7 +46,7 @@ private:
     void createDFSResolver(Network::DataStruct ds);
 
 public:
-    void messageReceived(const QByteArray &msg, const SocketPair &receiver) override;
+    void messageReceivedOld(const QByteArray &msg, const SocketPair &receiver) override;
     void setDfs(Dfs *value);
     bool isLoading(const QString &fileName);
 

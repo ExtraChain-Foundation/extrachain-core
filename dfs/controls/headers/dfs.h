@@ -43,6 +43,7 @@ class EXTRACHAIN_EXPORT Dfs : public QObject {
 
 private:
     // send from nodeManger
+    ExtraChainNode *node;
     AccountController *accountController;
     ActorIndex *actorIndex = nullptr;
     DBConnector uCards;
@@ -72,7 +73,8 @@ private:
     void getDFSStatus();
 
 public:
-    Dfs(ActorIndex *actorIndex, AccountController *accController, QObject *parent = nullptr);
+    Dfs(ExtraChainNode *node, ActorIndex *actorIndex, AccountController *accController,
+        QObject *parent = nullptr);
     ~Dfs();
 
 public:

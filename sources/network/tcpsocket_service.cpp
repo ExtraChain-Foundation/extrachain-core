@@ -25,14 +25,14 @@ TcpSocketService::TcpSocketService()
     qFatal("tcp test");
 }
 
-TcpSocketService::TcpSocketService(QString address, NetworkManager *networkManager, QObject *parent)
-    : SocketService(networkManager, parent) {
+TcpSocketService::TcpSocketService(QString address, ExtraChainNode *node, QObject *parent)
+    : SocketService(node, parent) {
     this->m_ip = address;
     // dpBuffer->clear();
 }
 
-TcpSocketService::TcpSocketService(qintptr socketDescriptor, NetworkManager *networkManager, QObject *parent)
-    : SocketService(networkManager, parent) {
+TcpSocketService::TcpSocketService(qintptr socketDescriptor, ExtraChainNode *node, QObject *parent)
+    : SocketService(node, parent) {
     this->socketDescriptor = socketDescriptor;
     // dpBuffer->clear();
     qDebug() << "[TCP] Socket Descriptor" << socketDescriptor;
@@ -99,8 +99,8 @@ void TcpSocketService::process() {
         this->m_tcp->setSocketDescriptor(socketDescriptor);
         establishConnection();
     } else {
-        qDebug() << "[TCP]" << this->m_tcp << m_ip << m_networkManager->tcpPort;
-        this->m_tcp->connectToHost(m_ip, m_networkManager->tcpPort);
+        qDebug() << "[TCP]" << this->m_tcp << m_ip << node->network()->tcpPort;
+        this->m_tcp->connectToHost(m_ip, node->network()->tcpPort);
     }
 }
 
@@ -189,23 +189,24 @@ void TcpSocketService::gotMessage(const QByteArray &msg, const SocketPair &pair)
         return;
     }
 
-    if (!msg.isEmpty())
-        m_networkManager->messageReceived(msg, pair);
+    if (!msg.isEmpty()) {
+        node->network()->messageReceivedOld(msg, pair);
+    }
 }
 
 quint16 TcpSocketService::port() const {
     if (m_tcp == nullptr) {
         qFatal("TCP port nullptr");
-        return m_networkManager->tcpPort;
+        return node->network()->tcpPort;
     }
-    if (m_tcp->peerPort() != m_networkManager->tcpPort)
+    if (m_tcp->peerPort() != node->network()->tcpPort)
         return m_tcp->peerPort();
     else
         return m_tcp->localPort();
 }
 
 quint16 TcpSocketService::serverPort() const {
-    return m_networkManager->tcpPort;
+    return node->network()->tcpPort;
 }
 
 QString TcpSocketService::protocolString() const {

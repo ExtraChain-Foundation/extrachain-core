@@ -184,21 +184,12 @@ void ResolverService::resolveGeneralTask() {
     message = msg;
 
     unsigned int msgType = message.type;
+
     if (msgType == 0) {
         qDebug() << "[ResolverService] Receive empty message";
     }
-    if (message.data.isEmpty() && msgType != Messages::GeneralRequest::GetBlockCount) {
-        finishWork();
-        return;
-    }
 
-    if (message.data.left(6) == "ExCNew") {
-        qDebug() << "[ResolverService] New message type";
-        std::string mess = message.data.mid(6).toStdString();
-        std::string_view sign(mess.begin(), mess.begin() + 64);
-        std::string_view response(mess.begin() + 65, mess.begin() + 66);
-        bool isResponse = response == "1" ? true : false;
-        std::cout << "[ResolverServiceNew] " << sign << " " << response << " " << mess << std::endl;
+    if (message.data.isEmpty() && msgType != Messages::GeneralRequest::GetBlockCount) {
         finishWork();
         return;
     }

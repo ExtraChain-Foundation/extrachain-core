@@ -58,8 +58,9 @@ inline size_t qHash(const NetworkReconnect &reconnect) {
 }
 
 struct MessageIdData {
-    std::string ind;
+    std::string identifier;
     qint64 time;
+    // msg type
 };
 
 /**
@@ -77,7 +78,7 @@ private:
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};
 
-    ActorIndex *m_actorIndex;
+    ExtraChainNode *node;
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
     TcpServerService *tcpServer = nullptr;
@@ -86,10 +87,10 @@ private:
     QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
 
-    std::map<std::string, MessageIdData> m_sended_messages;
+    std::map<std::string, MessageIdData> m_waiting_messages;
 
 public:
-    NetworkManager(ActorIndex *actorIndex);
+    NetworkManager(ExtraChainNode *node);
     ~NetworkManager();
 
     // protected:
@@ -125,9 +126,9 @@ protected:
      * @return
      */
     bool checkMsgCount(const QByteArray &msg);
-    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
-                     Config::Net::TypeSend typeSend);
-    void sendFromCache();
+    void saveToCacheOld(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
+                        Config::Net::TypeSend typeSend);
+    void sendFromCacheOld();
 
 private slots:
     void onNewWsConnection();
@@ -159,20 +160,42 @@ public:
               const SocketPair &receiver = SocketPair(),
               Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
 
-    virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver = {},
-                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-    virtual void messageReceived(const QByteArray &msg, const SocketPair &receiver);
+    virtual void sendMessageOld(const QByteArray &message, const unsigned int &msgType,
+                                const SocketPair &receiver = {},
+                                Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
+
+    void sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                     const std::string &receiver_identifier);
+    void saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                     const std::string &receiver_identifier);
+    void sendFromCache();
+    bool isActiveConnectionExists();
+
+    virtual void messageReceivedOld(const QByteArray &msg, const SocketPair &receiver);
+    void messageReceived(const std::string &message, const std::string &receiver);
 
     void setResolveManager(ResolveManager *value);
 
-    ActorIndex *actorIndex() const;
-
     template <class T>
-    void send_message(T data, QString receiver, Config::Net::TypeSend typeSend) {
-        MessageBody<T> message = make_message(data, MessageType::ActorGetResponse, typeSend);
+    std::string send_message(T data, MessageType type, MessageStatus status, std::string to_message_id = "",
+                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
+        if (node->accountController()->getAccountCount() == 0) {
+            qFatal("Can't send");
+        }
+
+        auto &mainActor = node->accountController()->mainActor();
+        MessageBody<T> message =
+            make_message(data, type, status, mainActor.id().toStdString(), to_message_id);
         auto serialized = message.serialize();
-        this->sendMessage(QByteArray::fromStdString("ExCNew" + serialized), 1000, receiver);
+        auto sign = mainActor.key().sign(serialized);
+
+        std::string receiver_identifier;
+        this->sendMessage("ExCNew" + serialized + sign, typeSend, receiver_identifier);
+        // if (to_message_id.empty()) { // move to second send part
+        //     this->m_waiting_messages.insert(sended_message_id, MessageIdData {});
+        // }
+
+        return message.message_id;
     }
 
 signals:

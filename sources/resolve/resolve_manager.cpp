@@ -67,9 +67,6 @@ void ResolveManager::connectSignals(ResolverService *resolver) {
     connect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
     connect(resolver, &ResolverService::newProfile, actorIndex, &ActorIndex::saveProfileFromNetwork);
     // request signals
-    connect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-    connect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
-    //    connect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     connect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     connect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     connect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
@@ -84,12 +81,9 @@ void ResolveManager::disconnectSignals(ResolverService *resolver) {
     disconnect(resolver, &ResolverService::newTx, txManager, &TransactionManager::addTransaction);
 
     // request signals
-    disconnect(resolver, &ResolverService::getActor, actorIndex, &ActorIndex::handleGetActor);
-    disconnect(resolver, &ResolverService::handleGetAllActor, actorIndex, &ActorIndex::handleGetAllActor);
     disconnect(resolver, &ResolverService::getTx, blockchain, &Blockchain::getTxFromBlockchain);
     disconnect(resolver, &ResolverService::getBlock, blockchain, &Blockchain::getBlockFromBlockchain);
     disconnect(resolver, &ResolverService::getBlocksCount, blockchain, &Blockchain::getBlockCount);
-    disconnect(resolver, &ResolverService::getActorsCount, actorIndex, &ActorIndex::getActorCount);
     // response signals
     disconnect(resolver, &ResolverService::blockCount, blockchain, &Blockchain::blockCountResponse);
 }
@@ -141,7 +135,7 @@ void ResolveManager::registrateMsg(const QByteArray &data, const unsigned int &m
         requestResponseMap->insert(calcKeccak256(message), Config::Net::NECESSARY_RESPONSE_COUNT);
         handlerFileMutex.unlock();
     }
-    networkManager->sendMessage(message, msgType, SocketPair());
+    networkManager->sendMessageOld(message, msgType, SocketPair());
     //    networkManager->broadcastMsg(message);
     //    emit sendMsg(message);
 }
@@ -163,7 +157,7 @@ void ResolveManager::sendMessageResponse(const QByteArray &data, const unsigned 
     //     qDebug() << "306 is sending";
     //    sendMessage(message, msgType, receiver);
     //    networkManager->distMessage(rmsg.serialize(), receiver);
-    networkManager->sendMessage(rmsg.serialize(), msgType, receiver);
+    networkManager->sendMessageOld(rmsg.serialize(), msgType, receiver);
 }
 
 void ResolveManager::taskFinished() {

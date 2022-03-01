@@ -28,7 +28,7 @@
 #include "extrachain_global.h"
 #include "managers/extrachain_node.h"
 
-class AccountController;
+class ExtraChainNode;
 
 /**
  * @brief Actors that stored in blockchain
@@ -37,8 +37,8 @@ class EXTRACHAIN_EXPORT ActorIndex : public QObject {
     Q_OBJECT
 
 private:
-    AccountController *accController = nullptr;
-    ResolveManager *resolveManager = nullptr;
+    ExtraChainNode *node;
+
     qint64 records = 0;
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
@@ -52,7 +52,7 @@ public:
     /**
      * @brief ActorIndex
      */
-    ActorIndex(QObject *parent = nullptr);
+    ActorIndex(ExtraChainNode *node, QObject *parent = nullptr);
     /**
      * @brief ~ActorIndex
      */
@@ -129,19 +129,15 @@ public:
      */
     int addActor(const Actor<KeyPublic> &actor);
     QByteArrayList allActors();
+    std::vector<std::string> allActorsStd();
     void handleNewAllActors(const QByteArrayList actors);
-
-public:
-    void setResolveManager(ResolveManager *value);
-
-    void setAccController(AccountController *value);
 
 public slots:
     void process();
-    void handleGetActor(const ActorId &actorId, QByteArray reqHash, const SocketPair &receiver);
-    void handleGetAllActor(QByteArray reqHash, const SocketPair &receiver);
+    void handleGetActor(const ActorId &actorId, const std::string &messageId);
+    void handleGetAllActor(QByteArray reqHash, const std::string &messageId);
     void getAllActors(ActorId id, bool isUser);
-    void getActorCount(const QByteArray &requestHash, const SocketPair &receiver);
+    void getActorCount(const QByteArray &requestHash, const std::string &messageId);
 
     void saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newProfile);
     void saveProfileFromNetwork(const QByteArray &newProfile);

@@ -7,9 +7,9 @@
     #include "preconfig.h"
 #endif
 
-SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
+SocketService::SocketService(ExtraChainNode *node, QObject *parent)
     : QObject(parent) {
-    m_networkManager = networkManager;
+    this->node = node;
     priv.generate();
 }
 
@@ -68,14 +68,14 @@ bool SocketService::checkFirstMessage(const QString &message) {
     pub = KeyPublic(json["key"].toString().toStdString()); // TODO: remove after tcp handshake
     m_sendType = SendType(json["sendType"].toInt());
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
-    ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
+    ActorId currentFirstId = node->actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
     qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
 
     if (currentFirstId.isEmpty() && !jsonFirstId.isEmpty()) { // TODO: remove hack
-        m_networkManager->actorIndex()->setFirstId(jsonFirstId);
+        node->actorIndex()->setFirstId(jsonFirstId);
     }
 
     if (version != EXTRACHAIN_VERSION) {
@@ -98,7 +98,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     bool flag = false;
-    auto &connections = m_networkManager->connections();
+    auto &connections = node->network()->connections();
     std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
@@ -122,7 +122,7 @@ void SocketService::closeSocket() {
 
 QByteArray SocketService::generateFirstMessage() {
     QJsonObject json;
-    json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
+    json["firstId"] = node->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
     json["key"] = QString::fromStdString(priv.publicKey()); // TODO: remove after tcp handshake

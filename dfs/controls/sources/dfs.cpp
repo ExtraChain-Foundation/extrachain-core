@@ -580,10 +580,11 @@ void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver) {
     sender->sendFragments(path, CardManager::getTypeByName(path), frags, receiver);
 }
 
-Dfs::Dfs(ActorIndex *actorIndex, AccountController *accountController, QObject *parent)
+Dfs::Dfs(ExtraChainNode *node, ActorIndex *actorIndex, AccountController *accountController, QObject *parent)
     : QObject(parent)
     , accountController(accountController)
     , actorIndex(actorIndex) {
+    this->node = node;
     connect(this, &Dfs::requestFile, this, &Dfs::requestFileHandle);
     connect(this, &Dfs::titleReceived, this, &Dfs::titleReceivedHandle);
 }
@@ -593,7 +594,7 @@ Dfs::~Dfs() {
 }
 
 void Dfs::initDfsNetwork() {
-    m_networkManager = new DfsNetworkManager(actorIndex);
+    m_networkManager = new DfsNetworkManager(node);
     m_networkManager->setDfs(this);
 
     connect(this, &Dfs::networkCreated, m_networkManager, &NetworkManager::startNetwork);

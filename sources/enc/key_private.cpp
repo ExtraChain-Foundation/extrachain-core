@@ -87,6 +87,27 @@ bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex) cons
     return res == 0;
 }
 
+std::string KeyPrivate::sign(const std::string &data) const {
+    string sks = Utils::hexStringToByte(m_secretKey);
+    vector<unsigned char> sk(sks.begin(), sks.end());
+    vector<unsigned char> vmsg(data.begin(), data.end());
+    vector<unsigned char> vsig(crypto_sign_BYTES);
+    crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
+    string sig = Utils::byteToHexString(vsig);
+    sig.erase(--sig.end());
+    return sig;
+}
+
+bool KeyPrivate::verify(const std::string &data, const std::string &dsignHex) const {
+    string pks = Utils::hexStringToByte(this->m_publicKey);
+    string signature = Utils::hexStringToByte(dsignHex);
+    vector<unsigned char> pk(pks.begin(), pks.end());
+    vector<unsigned char> vmsg(data.begin(), data.end());
+    vector<unsigned char> vsig(signature.begin(), signature.end());
+    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    return res == 0;
+}
+
 const std::string &KeyPrivate::secretKey() const {
     return m_secretKey;
 }
