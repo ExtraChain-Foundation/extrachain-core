@@ -82,6 +82,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain/blockchain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_public.h
@@ -143,6 +144,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/memindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain/blockchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/enc_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_public.cpp
