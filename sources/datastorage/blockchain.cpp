@@ -331,7 +331,7 @@ void Blockchain::stakingReward(const Block &block) {
                 if (checkStakingReward(tx.getHash(), tx.getToken(), wallet))
                     continue;
 
-                Transaction rtx(ActorId(), i.key(), StakingReward);
+                Transaction rtx(ActorId(), i.key().toStdString(), StakingReward);
                 rtx.setToken(tx.getToken());
                 auto [hash, blockId] = getLastTxForStaking(wallet, tx.getToken());
                 rtx.setData(
@@ -655,10 +655,9 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
             DBConnector cacheDB("blockchain/cacheEC.db");
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
-                nb.addRow(GenesisDataRow(
-                    QByteArray::fromStdString(i["ActorId"]), BigNumber(QByteArray::fromStdString(i["State"])),
-                    QByteArray::fromStdString(i["Token"]),
-                    DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
+                nb.addRow(
+                    GenesisDataRow(i["ActorId"], BigNumber(QByteArray::fromStdString(i["State"])), i["Token"],
+                                   DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
             cacheDB.query("DELETE FROM cacheData");
             cacheDB.query("VACUUM");
             nb.setPrevGenHash(blockIndex.getBlockById(i).getHash());
@@ -1622,7 +1621,7 @@ void Blockchain::proveTx(Transaction *tx) {
 
                 return;
             }
-            if (profile[0] == "6" && ActorId(profile[5]) == targetReceiver
+            if (profile[0] == "6" && ActorId(profile[5].toStdString()) == targetReceiver
                 && (targetSender == tx->getToken())) {
                 qDebug() << "Contract tx proved";
                 tx->sign(node->accountController()->getCurrentActor());

@@ -57,10 +57,16 @@ inline size_t qHash(const NetworkReconnect &reconnect) {
     return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
 }
 
-struct MessageIdData {
+struct MessageIdDataWaiting {
     std::string identifier;
     qint64 time;
+    std::string cached_message;
     // msg type
+};
+
+struct MessageIdDataReceived {
+    std::string identifier;
+    qint64 time;
 };
 
 /**
@@ -87,7 +93,8 @@ private:
     QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
 
-    std::map<std::string, MessageIdData> m_waiting_messages;
+    std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
+    std::map<std::string, MessageIdDataReceived> m_messages_received;
 
 public:
     NetworkManager(ExtraChainNode *node);

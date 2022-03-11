@@ -146,7 +146,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
     }
 }
 
-void ActorIndex::handleGetAllActor(QByteArray reqHash, const std::string &messageId) {
+void ActorIndex::handleGetAllActor(const std::string &messageId) {
     if (node->accountController()->getAccountCount() == 0)
         return;
 
@@ -193,7 +193,7 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
 
 void ActorIndex::handleNewAllActors(QByteArrayList actors) {
     for (const QByteArray &actor : actors)
-        getActor(actor);
+        getActor(actor.toStdString());
 }
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
@@ -207,7 +207,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {
     PublicProfile profile(newProfile);
     if (profile.sign == "" || newProfile.isEmpty())
         return;
-    Actor<KeyPublic> actor = getActor(profile.id);
+    Actor<KeyPublic> actor = getActor(profile.id.toStdString());
     if (actor.empty()) {
         qDebug() << "[ActorIndex] We don't have actor for profile" << profile.id;
         profilesHandle[profile.id] = newProfile;
@@ -241,7 +241,7 @@ void ActorIndex::saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newP
         return;
 
     qDebug() << "[ActorIndex] Save public profile with id" << newProfile.at(2);
-    QByteArray path = buildPathPubProfile(ActorId(newProfile.at(2)).toByteArray()).toUtf8();
+    QByteArray path = buildPathPubProfile(ActorId(newProfile.at(2).toStdString()).toByteArray()).toUtf8();
     QByteArray sign = actor.key().sign(PublicProfile::serialize(newProfile));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
 
@@ -255,7 +255,7 @@ void ActorIndex::saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newP
 }
 
 void ActorIndex::requestProfile(QString id) {
-    Actor<KeyPublic> actor = getActor(id.toUtf8());
+    Actor<KeyPublic> actor = getActor(id.toStdString());
     if (actor.empty())
         return;
     if (actor.profile().getProfile() == "")
@@ -276,13 +276,13 @@ void ActorIndex::requestProfile(QString id) {
 }
 
 QByteArrayList ActorIndex::getProfile(QString id) {
-    Actor<KeyPublic> actor = getActor(id.toUtf8());
+    Actor<KeyPublic> actor = getActor(id.toStdString());
     PublicProfile pProfile = actor.profile();
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty()) {
         if (actor.type() != ActorType::User && actor.type() != ActorType::ServiceProvider
             && node->resolveManager() != nullptr) {
-            sendGetActorMessage(id.toLatin1());
+            sendGetActorMessage(id.toStdString());
         }
 
         return QByteArrayList();
@@ -306,7 +306,7 @@ QString ActorIndex::getFolderPath() const {
 }
 
 QString ActorIndex::buildFilePath(const QByteArray &id) const {
-    QByteArray Id = ActorId(id).toByteArray();
+    QByteArray Id = ActorId(id.toStdString()).toByteArray();
 
     QByteArray section = Id.right(SECTION_NAME_SIZE);
     QString pathToFolder = folderPath + section;

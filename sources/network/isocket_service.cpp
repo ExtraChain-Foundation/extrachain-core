@@ -67,9 +67,9 @@ bool SocketService::checkFirstMessage(const QString &message) {
     m_identifier = json["identifier"].toString();
     pub = KeyPublic(json["key"].toString().toStdString()); // TODO: remove after tcp handshake
     m_sendType = SendType(json["sendType"].toInt());
-    ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
+    ActorId jsonFirstId = ActorId(json["firstId"].toString().toStdString());
     ActorId currentFirstId = node->actorIndex()->firstId();
-    bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
+    bool isFirstIdsContains = currentFirstId == jsonFirstId;
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
     qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;

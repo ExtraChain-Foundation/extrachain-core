@@ -763,7 +763,7 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges) {
     if (!QFile::exists(dfsChanges.filePath))
         return false;
     if (dfsChanges.userId != accountController->mainActor().id().toByteArray()) {
-        auto actor = actorIndex->getActor(dfsChanges.userId);
+        auto actor = actorIndex->getActor(dfsChanges.userId.toStdString());
         if (actor.empty())
             return false;
         bool verify = actor.key().verify(dfsChanges.prepareSign(), dfsChanges.sign);
@@ -990,7 +990,7 @@ bool Dfs::dfsValidate(QByteArray userId) {
         // qDebug() << "dfsValidate ignore" << userId;
         return true;
     }
-    if (!actorIndex->hasActor(userId))
+    if (!actorIndex->hasActor(userId.toStdString()))
         return false;
 
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE;
@@ -1096,7 +1096,7 @@ void Dfs::process() {
 void Dfs::startDFS() {
     QByteArrayList actors = actorIndex->allActors();
     for (const QByteArray &actor : actors) {
-        auto actorAccount = actorIndex->getActor(actor).type();
+        auto actorAccount = actorIndex->getActor(actor.toStdString()).type();
         if (actorAccount == ActorType::User) {
             // qDebug() << "add to ignored" << actor;
             ignoredIds << actor;

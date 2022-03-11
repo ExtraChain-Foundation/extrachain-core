@@ -60,13 +60,13 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
         return;
     }
 
-    sendInitialTransaction(actor, relAddress, tokenCount);
+    sendInitialTransaction(actor, relAddress.toStdString(), tokenCount);
 }
 
 void SmartContractManager::process() {
 }
 
-void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sender, QByteArray receiver,
+void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sender, const ActorId &receiver,
                                                   QByteArray quantity) {
     Transaction tx(sender.id(), receiver, Transaction::visibleToAmount(quantity));
     tx.setData("InitContract");
@@ -93,7 +93,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor) {
 
     QString fileName = KeyStore::makeKeyFileName(actor.id().toByteArray());
     QString path = SmartContractStorage::CONTRACTSTORE + fileName;
-    qDebug() << "Path=" << path;
+    qDebug() << "Path =" << path;
     QFile file(path);
 
     // move to another place

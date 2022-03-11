@@ -39,7 +39,8 @@ private:
 
 private:
     void savePrivateActor(Actor<KeyPrivate> actor);
-    void sendInitialTransaction(const Actor<KeyPrivate> &sender, QByteArray receiver, QByteArray quantity);
+    void sendInitialTransaction(const Actor<KeyPrivate> &sender, const ActorId &receiver,
+                                QByteArray quantity);
     Actor<KeyPrivate> createContract(QByteArray tokenName);
     void initializeTokenArray();
 

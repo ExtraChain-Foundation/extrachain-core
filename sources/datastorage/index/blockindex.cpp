@@ -216,7 +216,7 @@ QList<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id
 std::pair<Transaction, QByteArray>
 BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, const QByteArray &token) const {
     BigNumber records = getRecords();
-    QByteArray tokenActor = ActorId(token).toByteArray();
+    ActorId tokenActor = token.toStdString();
 
     if (records == 0) {
         qDebug() << "There no tx's in blockIndex";
@@ -231,7 +231,7 @@ BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, con
         auto txs = lastBlock.extractTransactions();
 
         for (const Transaction &tx : txs) {
-            if (tx.getToken().toByteArray() != tokenActor)
+            if (tx.getToken() != tokenActor)
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
@@ -601,8 +601,8 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
             GenesisDataRow dRow;
             dRow.type = DataStorage::typeDataRow(QByteArray(tmp.at("type").c_str()).toInt());
             dRow.state = BigNumber(QByteArray(tmp.at("state").c_str()));
-            dRow.token = QByteArray::fromStdString(tmp.at("token"));
-            dRow.actorId = QByteArray::fromStdString(tmp.at("actorId"));
+            dRow.token = tmp.at("token");
+            dRow.actorId = tmp.at("actorId");
             b.addRow(dRow);
         }
 

@@ -55,24 +55,18 @@ public:
         m_id = "00000000000000000000";
     };
 
-    ActorId(const QByteArray &actorId) {
-        if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
-            qFatal("ActorId not valid"); // TODO: remove after tests
-
-        m_id = !actorId.isEmpty() ? actorId.toStdString() : "00000000000000000000";
-        normalize();
-    }
-
     ActorId(const std::string &actorId) {
+#ifdef QT_DEBUG
         if (!actorId.empty() && !BigNumber::isValid(QByteArray::fromStdString(actorId)))
-            qFatal("ActorId not valid"); // TODO: remove after tests
+            qFatal("ActorId not valid");
+#endif
 
         m_id = !actorId.empty() ? actorId : "00000000000000000000";
         normalize();
     }
 
-    ActorId &operator=(const QByteArray &actorId) {
-        this->m_id = actorId.toStdString();
+    ActorId &operator=(const std::string &actorId) {
+        this->m_id = actorId;
         normalize();
         return *this;
     }
@@ -177,7 +171,7 @@ public:
         auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
 
         if (hash.size() >= 20)
-            m_id = hash.left(20);
+            m_id = hash.left(20).toStdString();
         else
             qFatal("[Actor] Create: error size of hash");
     }

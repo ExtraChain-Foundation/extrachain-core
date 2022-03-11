@@ -156,7 +156,7 @@ void ChatManager::parseInvite() {
 
     for (const auto &invite : invites) {
         QByteArray owner = QByteArray::fromStdString(invite.at("owner"));
-        string ownerPK = _actorIndex->getActor(owner).key().publicKey();
+        std::string ownerPK = _actorIndex->getActor(owner.toStdString()).key().publicKey();
         QByteArray chatIdEncrypted = QByteArray::fromStdString(invite.at("chatId"));
         QByteArray chatId = mainActor.decrypt(chatIdEncrypted, ownerPK);
         QByteArray key = mainActor.decrypt(QByteArray::fromStdString(invite.at("message")), ownerPK);
@@ -263,7 +263,7 @@ QByteArray ChatManager::CreateNewChat() {
 
 void ChatManager::InviteToChat(QByteArray chatId, QByteArray actorId) {
     auto mainActor = _accController->mainActor();
-    auto publicKey = _actorIndex->getActor(actorId).key().publicKey();
+    auto publicKey = _actorIndex->getActor(actorId.toStdString()).key().publicKey();
 
     Chat *chat = getChatMemory(chatId);
     if (chat == nullptr) {

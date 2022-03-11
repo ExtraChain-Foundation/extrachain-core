@@ -58,9 +58,9 @@ public:
     void deserialize(const QByteArray &serialized) {
         QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4) {
-            actorId = l.at(0);
+            actorId = l.at(0).toStdString();
             state = BigNumber(l.at(1));
-            token = l.at(2);
+            token = l.at(2).toStdString();
             type = DataStorage::typeDataRow(l.at(3).toInt());
         }
     }

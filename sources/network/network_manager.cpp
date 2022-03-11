@@ -307,7 +307,7 @@ void NetworkManager::sendMessageOld(const QByteArray &message, const unsigned in
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     if (!isActiveConnectionExists()) {
-        qDebug() << "[NetworkManager] Saved message to cache";
+        qDebug() << "[NetworkManager] Save message to cache";
         saveToCache(serialized_message, typeSend, receiver_identifier);
     }
 
@@ -344,7 +344,7 @@ void NetworkManager::saveToCache(const std::string &serialized_message, Config::
     std::tuple<std::string, Config::Net::TypeSend, std::string> tuple = { serialized_message, typeSend,
                                                                           receiver_identifier };
     std::string package = MessagePack::serialize(tuple);
-    file.write(Utils::intToByteArray(package.length(), 8) + QByteArray::fromStdString(package));
+    file.write(Utils::intToByteArray(int(package.length()), 8) + QByteArray::fromStdString(package));
     file.close();
 }
 
@@ -455,36 +455,66 @@ void NetworkManager::messageReceivedOld(const QByteArray &msg, const SocketPair 
     }
 }
 
-void NetworkManager::messageReceived(const std::string &message, const std::string &receiver) { // message id?
+// template <typename Func>
+// void messageReceivedRunTime(Func f, bool success) {
+//     if (success) {
+//         f();
+//     }
+// }
+
+void NetworkManager::messageReceived(const std::string &message, const std::string &receiver) {
     qDebug() << "[NetworkManager/MsgNew] New message type";
     std::string_view msg(message.begin(), message.end() - 64);
     std::string_view sign(message.end() - 64, message.end());
     std::cout << "[NetworkManager/MsgNew] " << sign << " " << msg << std::endl;
-    // verify
-    auto type_int = int(static_cast<unsigned char>(msg[1]));
-    int response_int = int(static_cast<unsigned char>(msg[2]));
-    if (type_int > 127 || (response_int != 194 && response_int != 195)) {
-        qFatal("Error message receive");
-        return;
+
+    {
+        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
+        auto actor = node->actorIndex()->getActor(sender);
+
+        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
+                                         QByteArray::fromStdString(std::string(sign)));
+        if (!verify) {
+            qFatal("[NetworkManager/messageReceived] Error verify message");
+        } else {
+            qDebug() << "[NetworkManager/MsgNew] Verify good";
+        }
     }
 
-    auto type = MessageType(type_int);
-    MessageStatus status = response_int == 195 ? MessageStatus::Response : MessageStatus::Request;
+    auto type =
+        MessagePack::deserialize<MessageType>(std::string_view(msg.begin() + 1, msg.begin() + 2)).first;
+    auto status =
+        MessagePack::deserialize<MessageStatus>(std::string_view(msg.begin() + 2, msg.begin() + 3)).first;
+    auto serialized = std::string_view(msg.begin() + 40, msg.end());
+    auto messId = std::string(msg.begin() + 4, msg.begin() + 19);
 
     if (type == MessageType::Actor && status == MessageStatus::Request) { }
 
-    // TODO: view only data from message?
     switch (type) {
     case MessageType::Actor: {
-        if (status == MessageStatus::Request) {
-            auto actorId = MessagePack::deserialize<MessageBody<std::string>>(msg).first;
-            node->actorIndex()->handleGetActor(actorId.data, receiver);
+        if (status == MessageStatus::Request) { // actor get
+            auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
+            if (success) {
+                node->actorIndex()->handleGetActor(actorId, receiver);
+            }
         } else if (status == MessageStatus::Response) {
-            auto actor = MessagePack::deserialize<MessageBody<Actor<KeyPublic>>>(msg).first;
-            node->actorIndex()->handleNewActor(actor.data);
+            auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+            if (success) {
+                node->actorIndex()->handleNewActor(actor);
+            }
         }
+        break;
     }
+    case MessageType::ActorAll: {
+        // node->actorIndex()->handleGetAllActor(messId);
+        break;
+    }
+    case MessageType::ActorCount: {
+        break;
+    }
+
     default:
+        qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
         break;
     }
 }
