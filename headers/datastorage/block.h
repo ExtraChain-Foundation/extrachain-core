@@ -119,7 +119,7 @@ public:
      * @return transaction list
      */
     std::vector<Transaction> extractTransactions() const;
-    Transaction getTransactionByHash(QByteArray hash) const;
+    Transaction getTransactionByHash(std::string hash) const;
 
     bool contain(Block &from) const;
 
@@ -135,7 +135,7 @@ public:
     bool equals(const Block &block) const;
     BlockCompare compareBlock(const Block &b) const;
     bool isEmpty() const;
-    QString toString() const;
+    //    QString toString() const;
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
     bool isApprover(const ActorId &) const;

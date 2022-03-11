@@ -33,7 +33,24 @@ int Blockchain2::writeBlock(sfs::path path, const Block &block, bool isGenesis) 
 }
 
 int Blockchain2::writeGenBlock(std::filesystem::path path, const GenesisBlock &block) {
-    //
+    DBConnector DB;
+    if (DB.open(path.string())) {
+        DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
+        DB.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
+        DB.createTable(Config::DataStorage::SignBlockTableCreate);
+
+        DBRow row;
+        row.insert({ "type", block.getType() });
+        row.insert({ "id", block.getIndex().toStdString() });
+        row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
+        row.insert({ "data", "" });
+        row.insert({ "prevHash", block.getPrevHash() });
+        row.insert({ "hash", block.getHash() });
+        row.insert({ "prevGenHash", block.getPrevGenHash() });
+        DB.insert(Config::DataStorage::GenesisBlockTable, row);
+
+        DB.close();
+    }
 }
 
 int Blockchain2::writeOrdBlock(std::filesystem::path path, const Block &block) {
