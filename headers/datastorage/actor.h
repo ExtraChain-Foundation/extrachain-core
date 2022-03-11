@@ -197,6 +197,10 @@ public:
         return m_id;
     }
 
+    const std::string &idStd() const {
+        return m_id.toStdString();
+    }
+
     const T &key() const {
         return m_key;
     }
