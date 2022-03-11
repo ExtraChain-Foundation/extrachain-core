@@ -155,7 +155,7 @@ std::vector<Transaction> Block::extractTransactions() const {
     return transactions;
 }
 
-Transaction Block::getTransactionByHash(QByteArray hash) const {
+Transaction Block::getTransactionByHash(std::string hash) const {
     auto txList = extractTransactions();
     for (const auto &i : txList)
         if (i.getHash() == hash)

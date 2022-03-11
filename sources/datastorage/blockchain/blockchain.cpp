@@ -1,7 +1,8 @@
 #include "datastorage/blockchain/blockchain.h"
 
-Blockchain2::Blockchain2(AccountController &accountController) {
-    //
+Blockchain2::Blockchain2(int mode, AccountController *AccountController, ActorIndex *ActorIndex) {
+    this->accountController = AccountController;
+    this->actorIndex = ActorIndex;
 }
 
 Blockchain2::~Blockchain2() {
@@ -9,74 +10,48 @@ Blockchain2::~Blockchain2() {
 }
 
 int Blockchain2::addBlock(const Block &block, bool isGenesis) {
-    //    if (isGenesis) {
-    //        qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
-    //    } else {
-    //        qDebug() << "Adding a block" << block.getIndex() << "to storage";
-    //    }
-    //    if (!GenesisBlock::isGenesisBlock(block.serialize())) {
-    //        if (block.getIndex() != 0) {
-    //            BigNumber id = block.getIndex() - 1;
-    //            if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
-    //                Messages::GetBlockMessage request;
-    //                request.param = SearchEnum::BlockParam::Id;
-    //                request.value = id.toByteArray();
-    //                emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlock);
-    //            }
-    //        }
-    //    }
-    //    if (block.getIndex() == 0) {
-    //        this->actorIndex->setFirstId(block.getApprover());
-    //    }
-    //    if (block.getIndex() < 0)
-    //        return Errors::BLOCK_IS_NOT_VALID;
-    //    if (signCheckAdd(block))
-    //        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-
-    // HERE!!!
-    int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
-
-    switch (resultCode) {
-    case 0: {
-        emit updateLastTransactionList(); // TODO: ?
-        qDebug() << "Block" << block.getIndex() << QByteArray::fromStdString(block.getType())
-                 << "is successfully added to blockchain";
-        getSmContractMembers(block);
-
-        emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-        saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
-        stakingReward(block);
-        break;
+    int resultCode = Errors::SUCCESS;
+    sfs::path path = buildBlockFilePath(block);
+    if (sfs::exists(path)) {
+        qDebug() << "Can't save the file" << path.c_str() << "(File already exits)";
+        return Errors::FILE_ALREADY_EXISTS;
     }
-    case Errors::FILE_ALREADY_EXISTS: {
-        qDebug() << "Block" << block.getIndex() << "is already in blockchain";
-        if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK) {
-            resultCode = mergeBlockWithLocal(block);
-        } else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
-                   || (block.getType() == Config::GENESIS_BLOCK_MERGE)) {
-            resultCode = mergeGenesisBlockWithLocal(dynamic_cast<const GenesisBlock &>(block));
-        } else {
-            qCritical() << "Unsupported block type in block: " << block.getIndex();
-        }
-        break;
-    }
-    default:
-        qCritical() << "While adding a new block" << block.toString();
+    if (isLimitReached()) {
+        // TODO!!!
     }
 
-    // after adding genesis block we don't need to increment counter
-    if (!isGenesis && resultCode == 0) {
-        blocksFromLastGenesis++;
-        if (shouldStartGenesisCreation()) {
-            GenesisBlock gB = createGenesisBlock(accountController->mainActor());
-            if (blockIndex.addBlock(gB) == 0) {
-                qDebug() << "Block" << gB.getIndex() << QByteArray::fromStdString(gB.getType())
-                         << "is successfully added to blockchain";
-                emit sendMessage(gB.serialize(), Messages::ChainMessage::GenesisBlockMessage);
-                blocksFromLastGenesis = 0;
-            }
-        }
-    }
+    return writeBlock(path, block, isGenesis);
+}
 
-    return resultCode;
+int Blockchain2::writeBlock(sfs::path path, const Block &block, bool isGenesis) {
+    if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
+        const GenesisBlock &genblock = dynamic_cast<const GenesisBlock &>(block);
+        writeGenBlock(path, genblock);
+    } else {
+        writeOrdBlock(path, block);
+    }
+}
+
+int Blockchain2::writeGenBlock(std::filesystem::path path, const GenesisBlock &block) {
+    //
+}
+
+int Blockchain2::writeOrdBlock(std::filesystem::path path, const Block &block) {
+    //
+}
+
+std::string Blockchain2::buildBlockFilePath(const Block &block) {
+    BigNumber section = block.getIndex() / sectionSize;
+    sfs::path path(DataStorage::BLOCKCHAIN_FOLDER + "/" + section.toStdString());
+    if (!sfs::is_directory(path) || !sfs::exists(path)) {
+        sfs::create_directory(path);
+    }
+    return path.generic_string() + block.getIndex().toStdString();
+}
+
+bool Blockchain2::isLimitReached() {
+    if (!sizeLimitBytes.isEmpty()) {
+        //
+    }
+    return false;
 }

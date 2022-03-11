@@ -38,6 +38,20 @@ BigNumber::BigNumber(const QByteArray &bigNumber, int base) {
     UPDATE_DEBUG()
 }
 
+BigNumber::BigNumber(const std::string &bigNumber, int base) {
+    try {
+        if (bigNumber.empty())
+            this->m_data = mpz_class(0);
+        else
+            this->m_data = mpz_class(bigNumber, base);
+    } catch (std::exception &) {
+        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str() << "with base" << base;
+        assert(false);
+    }
+
+    UPDATE_DEBUG()
+}
+
 BigNumber::BigNumber(const BigNumber &other) {
     this->m_data = other.data();
     UPDATE_DEBUG()

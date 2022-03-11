@@ -52,6 +52,15 @@ QByteArray Utils::calcKeccak(const QByteArray &data) {
     return hash;
 }
 
+std::string Utils::calcKeccak(const std::string &data) {
+    // Keccak keccak;
+    // QByteArray hash = keccak(data);
+    // return hash;
+    QByteArray hash =
+        QCryptographicHash::hash(QByteArray::fromStdString(data), QCryptographicHash::Algorithm::Keccak_256)
+            .toHex();
+    return hash.toStdString();
+}
 // SERIALIZATION //
 
 std::vector<std::string> Utils::split(const std::string &s, char c) {
@@ -685,4 +694,14 @@ QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString &dirPath
     }
 
     return dirList;
+}
+
+std::vector<std::string> Utils::splitStdString(std::string string, char delimeter) {
+    std::stringstream ss(string);
+    std::string item;
+    std::vector<std::string> elems;
+    while (std::getline(ss, item, delimeter)) {
+        elems.push_back(std::move(item));
+    }
+    return elems;
 }

@@ -449,6 +449,9 @@ static const int BLOCKS_ARE_EQUAL = 203;
 
 // Mem and Block index
 static const int NO_BLOCKS = 401;
+
+// Universal Result
+static const int SUCCESS = 0;
 } // namespace Errors
 
 namespace Serialization {
@@ -544,6 +547,7 @@ std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
 EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
+EXTRACHAIN_EXPORT std::string calcKeccak(const std::string &data);
 EXTRACHAIN_EXPORT QByteArray calcKeccakForFile(const QString &fileName);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
@@ -572,6 +576,8 @@ EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug
 EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
 EXTRACHAIN_EXPORT bool isValidIp(const QString &ip);
 EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
+
+EXTRACHAIN_EXPORT std::vector<std::string> splitStdString(std::string string, char delimeter);
 } // namespace Utils
 
 namespace DataStorage {
@@ -583,9 +589,9 @@ static const QString TMP_FOLDER = "tmp";
 static const QString TMP_GENESIS_BLOCK = "tmp/genesis_block";
 
 // Folder with blocks
-static const QString BLOCKCHAIN_INDEX = "blockchain/index";
+static const std::string BLOCKCHAIN_FOLDER = "blockchain";
 static const QString ACTOR_INDEX_FOLDER_NAME = "actors";
-static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
+// static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 
 // Dfs
 static const int DATA_OFFSET = 512;

@@ -24,27 +24,23 @@
 #include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
-#include <QByteArray>
-#include <QDateTime>
-#include <QString>
 
-class EXTRACHAIN_EXPORT Transaction : public QObject {
-    Q_OBJECT
+#include <chrono>
 
+class EXTRACHAIN_EXPORT Transaction {
 public:
     // Construct empty transaction
-    Transaction(QObject *parent = nullptr);
+    Transaction();
 
     // Deserialize already created transaction
-    Transaction(const QByteArray &serialized, QObject *parent = nullptr);
+    Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
-                QObject *parent = nullptr);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount);
 
     // Construct transaction with data
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
-                const QByteArray &data, QObject *parent = nullptr);
+                const std::string &data);
 
     Transaction(const Transaction &other);
 
@@ -77,8 +73,8 @@ public:
      * Override in subclasses
      * @return digSig data
      */
-    QByteArray getDataForHash() const;
-    QByteArray getDataForDigSig() const;
+    std::string getDataForHash() const;
+    std::string getDataForDigSig() const;
 
 public:
     // digital signature
@@ -102,11 +98,11 @@ public:
     ActorId getReceiver() const;
     BigNumber getAmount() const;
     BigNumber getPrevBlock() const;
-    QByteArray getData() const;
-    QByteArray getHash() const;
+    std::string getData() const;
+    std::string getHash() const;
     ActorId getToken() const;
     ActorId getApprover() const;
-    QByteArray getDigSig() const;
+    std::string getDigSig() const;
     ActorId getProducer() const;
 
     bool isEmpty() const;
@@ -115,15 +111,15 @@ public:
     void operator=(const Transaction &transaction);
 
 public:
-    QByteArray serialize() const;
-    QString toString() const;
+    std::string serialize() const;
+    std::string toString() const;
 
     long long getDate() const;
     void setDate(long long value);
 
     void setToken(const ActorId &value);
 
-    void setData(const QByteArray &value);
+    void setData(const std::string &value);
 
 signals:
     void ProveMe(Transaction *transaction);
@@ -139,13 +135,13 @@ public:
      * @brief 1.1 -> 1.1 * 10e18 in BigNumber
      * @param amount
      */
-    static BigNumber visibleToAmount(QByteArray amount);
+    static BigNumber visibleToAmount(std::string amount);
 
     /**
      * @brief 1 * 10e18 from BigNumber to number -> 1
      * @param number
      */
-    static QString amountToVisible(const BigNumber &number);
+    static std::string amountToVisible(const BigNumber &number);
     static BigNumber amountNormalizeMul(const BigNumber &number);
     static BigNumber amountMul(const BigNumber &number1, const BigNumber &number2);
     static BigNumber amountDiv(const BigNumber &number1, const BigNumber &number2);
