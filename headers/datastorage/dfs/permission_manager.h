@@ -14,6 +14,7 @@ public:
     enum CriticalErrors {
         RootDirCreateError = -2,
         ActorDirCreateError = -3,
+
         DBOpenError = -4,
         DBCreateTableError = -5,
         DBPermissionEntryDuplicate = -6,
@@ -31,14 +32,17 @@ public:
 
     QStringList permissions {"Read", "Write", "Delete", "Edit", "NoPermission"};
 
+    struct GetPermissionMsg;
+    struct SetPermissionMsg;
+
 public:
     PermissionManager(QObject *parent = nullptr);
     ~PermissionManager();
 
     bool initPermissionDB(const Actor<KeyPrivate> & actor);
 
-    Permission getPermission(const Actor<KeyPrivate> &actor, const QString & userId, const QString &fileHash);
-    bool setPermission(const Actor<KeyPrivate> &actor, const QString & userId, const QString &fileHash, const Permission permission);
+    Permission getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg & msg);
+    bool setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg & msg);
 
 private:
     QString createDirectory(const Actor<KeyPrivate> & actor);
@@ -62,3 +66,22 @@ private:
 private:
     DBConnector m_db;
 };
+
+
+struct PermissionManager::GetPermissionMsg
+{
+    std::string userId;
+    std::string fileHash;
+
+    AUTO_SERIALIZE(userId, fileHash);
+};
+
+struct PermissionManager::SetPermissionMsg
+{
+    std::string userId;
+    std::string fileHash;
+    std::string permission;
+
+    AUTO_SERIALIZE(userId, fileHash, permission)
+};
+

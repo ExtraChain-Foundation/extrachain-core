@@ -102,8 +102,11 @@ PermissionManager::Permission PermissionManager::getHighestPermission(const QStr
     return NoPermission;
 }
 
-PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const QString &userId, const QString &fileHash)
+PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg & msg)
 {
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+
     Permission permFilePermission = getHighestPermission(actor.idStd().c_str(), PermissionFileName);
 
     if(permFilePermission == Read || permFilePermission == Write ||
@@ -118,8 +121,13 @@ PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPr
     return permFilePermission;
 }
 
-bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const QString & userId, const QString &fileHash, const Permission newPermission)
+bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg & msg)
 {
+    const QString & userId = msg.userId.c_str();
+    const QString & fileHash = msg.fileHash.c_str();
+    const QString & permissionStr = msg.permission.c_str();
+    const Permission newPermission = static_cast<Permission>(permissions.indexOf(permissionStr));
+
     if( newPermission != Permission::Read &&
         newPermission != Permission::Write &&
         newPermission != Permission::Delete &&
@@ -132,7 +140,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const QStr
 
     Permission actorPermission = getUserPermission(actor.idStd().c_str(), PermissionFileName);
 
-    Permission userPermission = getPermission(actor, userId, fileHash);
+    Permission userPermission = getPermission(actor, {userId.toStdString(), fileHash.toStdString()});
 
     if(userPermission == newPermission)
     {

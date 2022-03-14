@@ -397,7 +397,8 @@ namespace DataStorage {
         + " ("
           "fileHash     TEXT PRIMARY KEY NOT NULL, "
           "fileHashPrev TEXT             NOT NULL, "
-          "filePath     TEXT             NOT NULL"
+          "filePath     TEXT             NOT NULL, "
+          "fileSize     TEXT             NOT NULL"
           ");";
 
     static const std::string fileSegmentsTable = "FileSegmentsTable";
@@ -408,6 +409,7 @@ namespace DataStorage {
           "filePath         TEXT             NOT NULL, "
           "fileSegmentBegin TEXT             NOT NULL, "
           "fileSegmentEnd   TEXT             NOT NULL, "
+          "fileSize         TEXT             NOT NULL"
           ");";
 
     static const std::string permissionTable = "PermissionTable";
@@ -746,17 +748,19 @@ QDebug operator<<(QDebug d, const Notification &n);
         return MessagePack::serialize(*this);                                      \
     }                                                                              \
     bool deserialize(const std::string &serialized) {                              \
-        auto deserialized = MessagePack::deserialize<decltype(*this)>(serialized); \
+        auto deserialized = MessagePack::deserialize<                              \
+                        std::remove_reference<decltype(*this)>::type>(serialized); \
         if (deserialized.second) {                                                 \
-            *this = deserialized.first;                                            \
+            *this = deserialized.first;                                             \
         }                                                                          \
         return deserialized.second;                                                \
     }                                                                              \
     QByteArray serializeQt() const {                                               \
         return MessagePack::serializeQt(*this);                                    \
     }                                                                              \
-    void deserializeQt(const std::string &serialized) {                            \
-        *this = MessagePack::deserializeQt<decltype(*this)>(serialized);           \
+    void deserializeQt(const QByteArray &serialized) {                             \
+        *this = MessagePack::deserializeQt<                                        \
+                        std::remove_reference<decltype(*this)>::type>(serialized); \
     }                                                                              \
     MSGPACK_DEFINE(__VA_ARGS__)
 
