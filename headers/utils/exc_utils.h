@@ -30,6 +30,7 @@
 
 #include "extrachain_global.h"
 #include "network/socket_pair.h"
+#include "utils/dfs_utils.h"
 
 namespace Network {
 Q_NAMESPACE
@@ -111,7 +112,7 @@ namespace Config {
 
 // Message pattern for qDebug (see
 // http://doc.qt.io/qt-5/qtglobal.html#qSetMessagePattern)
-const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{message}";
+// const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{message}";
 
 const int NECESSARY_SAME_TX = 1;
 
@@ -392,37 +393,37 @@ namespace DataStorage {
           "type INT              NOT NULL  "
           ");";
 
-    static const std::string filesTable = "FilesTable";
-    static const std::string filesTableCreate = "CREATE TABLE IF NOT EXISTS " + filesTable
-        + " ("
-          "fileHash     TEXT PRIMARY KEY NOT NULL, "
-          "fileHashPrev TEXT             NOT NULL, "
-          "filePath     TEXT             NOT NULL, "
-          "fileSize     TEXT             NOT NULL"
-          ");";
+    //    static const std::string filesTable = "FilesTable";
+    //    static const std::string filesTableCreate = "CREATE TABLE IF NOT EXISTS " + filesTable
+    //        + " ("
+    //          "fileHash     TEXT PRIMARY KEY NOT NULL, "
+    //          "fileHashPrev TEXT             NOT NULL, "
+    //          "filePath     TEXT             NOT NULL, "
+    //          "fileSize     TEXT             NOT NULL"
+    //          ");";
 
-    static const std::string fileSegmentsTable = "FileSegmentsTable";
-    static const std::string fileSegmentsTableCreate = "CREATE TABLE IF NOT EXISTS " + fileSegmentsTable
-        + " ("
-          "fileHash         TEXT PRIMARY KEY NOT NULL, "
-          "fileHashPrev     TEXT             NOT NULL, "
-          "filePath         TEXT             NOT NULL, "
-          "fileSegmentBegin TEXT             NOT NULL, "
-          "fileSegmentEnd   TEXT             NOT NULL, "
-          "fileSize         TEXT             NOT NULL"
-          ");";
+    //    static const std::string fileSegmentsTable = "FileSegmentsTable";
+    //    static const std::string fileSegmentsTableCreate = "CREATE TABLE IF NOT EXISTS " + fileSegmentsTable
+    //        + " ("
+    //          "fileHash         TEXT PRIMARY KEY NOT NULL, "
+    //          "fileHashPrev     TEXT             NOT NULL, "
+    //          "filePath         TEXT             NOT NULL, "
+    //          "fileSegmentBegin TEXT             NOT NULL, "
+    //          "fileSegmentEnd   TEXT             NOT NULL, "
+    //          "fileSize         TEXT             NOT NULL"
+    //          ");";
 
-    static const std::string permissionTable = "PermissionTable";
-    static const std::string permissionTableCreate = "CREATE TABLE IF NOT EXISTS " + permissionTable
-        + " ("
-          "fileHash   TEXT NOT NULL, "
-          "permission TEXT NOT NULL, "
-          "userId     TEXT NOT NULL,"
-          "signature  TEXT NOT NULL"
-          ");";
+    //    static const std::string permissionTable = "PermissionTable";
+    //    static const std::string permissionTableCreate = "CREATE TABLE IF NOT EXISTS " + permissionTable
+    //        + " ("
+    //          "fileHash   TEXT NOT NULL, "
+    //          "permission TEXT NOT NULL, "
+    //          "userId     TEXT NOT NULL,"
+    //          "signature  TEXT NOT NULL"
+    //          ");";
 
-    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC LIMIT 1";
-    static const std::string filesTableFull = "SELECT * FROM " + filesTable;
+    //    static const std::string filesTableLast = "SELECT * FROM " + filesTable + " ORDER BY fileHash DESC
+    //    LIMIT 1"; static const std::string filesTableFull = "SELECT * FROM " + filesTable;
 
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
@@ -530,6 +531,14 @@ T deserializeQt(const QByteArray &str, std::size_t size = 0) {
 } // namespace MessagePack
 
 namespace Utils {
+static const std::string getPlatformDelimeter() {
+    char del;
+    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
+    std::string pathDelim;
+    pathDelim.push_back(del);
+    return pathDelim;
+}
+
 // QByteArray encodeHex(const QByteArray &dec);
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
@@ -558,7 +567,7 @@ std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
 EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
-EXTRACHAIN_EXPORT QByteArray calcKeccakForFile(const QString &fileName);
+EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::string &fileName);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
@@ -743,25 +752,34 @@ QDebug operator<<(QDebug d, const Notification &n);
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 
-#define AUTO_SERIALIZE(...)                                                        \
-    std::string serialize() const {                                                \
-        return MessagePack::serialize(*this);                                      \
-    }                                                                              \
-    bool deserialize(const std::string &serialized) {                              \
-        auto deserialized = MessagePack::deserialize<                              \
-                        std::remove_reference<decltype(*this)>::type>(serialized); \
-        if (deserialized.second) {                                                 \
-            *this = deserialized.first;                                             \
-        }                                                                          \
-        return deserialized.second;                                                \
-    }                                                                              \
-    QByteArray serializeQt() const {                                               \
-        return MessagePack::serializeQt(*this);                                    \
-    }                                                                              \
-    void deserializeQt(const QByteArray &serialized) {                             \
-        *this = MessagePack::deserializeQt<                                        \
-                        std::remove_reference<decltype(*this)>::type>(serialized); \
-    }                                                                              \
+#define AUTO_SERIALIZE(...)                                                                           \
+    std::string serialize() const {                                                                   \
+        return MessagePack::serialize(*this);                                                         \
+    }                                                                                                 \
+    bool deserialize(const std::string &serialized) {                                                 \
+        auto deserialized =                                                                           \
+            MessagePack::deserialize<std::remove_reference<decltype(*this)>::type>(serialized);       \
+        if (deserialized.second) {                                                                    \
+            *this = deserialized.first;                                                               \
+        }                                                                                             \
+        return deserialized.second;                                                                   \
+    }                                                                                                 \
+    QByteArray serializeQt() const {                                                                  \
+        return MessagePack::serializeQt(*this);                                                       \
+    }                                                                                                 \
+    void deserializeQt(const QByteArray &serialized) {                                                \
+        *this = MessagePack::deserializeQt<std::remove_reference<decltype(*this)>::type>(serialized); \
+    }                                                                                                 \
     MSGPACK_DEFINE(__VA_ARGS__)
+namespace Tools {
+template <typename T>
+std::vector<unsigned char> typeToByteArray(T integerValue);
+template <typename T>
+T byteArrayToType(std::vector<unsigned char> value);
 
+template <typename T>
+std::string typeToStdStringBytes(T integerValue);
+template <typename T>
+T stdStringBytesToType(std::string value);
+}
 #endif // UTILS_H

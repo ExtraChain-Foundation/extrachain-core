@@ -20,6 +20,8 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
+#include <iostream>
+
 #include <QDebug>
 
 #include <msgpack.hpp>
@@ -47,15 +49,18 @@ public:
 public:
     void generate();
 
-    QByteArray encrypt(const QByteArray &data, const std::string &receiverPublicKey,
-                       const std::string &nonce = "") const;
-    QByteArray decrypt(const QByteArray &data, const std::string &senderPublicKey,
-                       const std::string &nonce = "") const;
-    QByteArray encryptSelf(const QByteArray &data) const;
-    QByteArray decryptSelf(const QByteArray &data) const;
+    std::string encrypt(const std::string &data, const std::string &receiverPublicKey,
+                        const std::string &nonce = "") const;
+    std::string decrypt(const std::string &data, const std::string &senderPublicKey,
+                        const std::string &nonce = "") const;
+    std::string encryptSelf(const std::string &data) const;
+    std::string decryptSelf(const std::string &data) const;
 
-    QByteArray sign(const QByteArray &data) const;
-    bool verify(const QByteArray &data, const QByteArray &dsignHex) const;
+    void encryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const;
+    void decryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const;
+
+    std::string sign(const std::string &data) const;
+    bool verify(const std::string &data, const std::string &dsignHex) const;
 
     const std::string &secretKey() const;
     const std::string &publicKey() const;

@@ -706,10 +706,10 @@ void ExtraChainNode::test() const {
     editFileMsg.fileHash = fHashPublic;
     editFileMsg.data = newContent;
     editFileMsg.offset = "0";
-    fHashPublic = dfsController.editFile(actor, editFileMsg);
+    fHashPublic = dfsController.insertFragment(actor, editFileMsg);
 
     editFileMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.editFile(actor, editFileMsg);
+    fHashPrivate = dfsController.insertFragment(actor, editFileMsg);
     if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
         qDebug() << "editFile succeeded";
     else

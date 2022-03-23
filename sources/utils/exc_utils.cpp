@@ -150,43 +150,16 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-QByteArray Utils::calcKeccakForFile(const QString &fileName) {
-    /*
-    QFile file(fileName);
-    if (!file.exists())
-    {
-        qDebug() << "Utils::File not exist" << fileName;
-        return "";
-    }
-    file.open(QIODevice::ReadOnly);
-    long long _file_size = file.size();
-    long long _data_offset = DataStorage::DATA_OFFSET;
-    long long pos = 0;
-    QList<QByteArray> hashList = {};
-    while ((pos += _data_offset) < _file_size)
-    {
-        char *ch = new char[_data_offset];
-        file.read(ch, _data_offset);
-        hashList.append(Utils::calcKeccak(QByteArray(ch, _data_offset)));
-        delete[] ch;
-    }
-    hashList.append(Utils::calcKeccak(file.read(_file_size - pos)));
-    QByteArray hash;
-    for (QByteArray &el : hashList)
-        hash += el;
-    file.close();
-    return Utils::calcKeccak(hash);
-    */
-
-    QFile file(fileName);
+std::string Utils::calcKeccakForFile(const std::string &fileName) {
+    QFile file(QString::fromStdString(fileName));
     if (file.open(QFile::ReadOnly)) {
         QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
         if (hash.addData(&file))
-            return hash.result().toHex();
+            return hash.result().toHex().toStdString();
     }
 
     qFatal("Utils::calcKeccakForFile");
-    qDebug() << "[KeccakForFile] Can't open file" << fileName;
+    qDebug() << "[KeccakForFile] Can't open file" << fileName.c_str();
     return "";
 }
 
@@ -685,4 +658,36 @@ QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString &dirPath
     }
 
     return dirList;
+}
+
+template <typename T>
+std::vector<unsigned char> Tools::typeToByteArray(T integerValue) {
+    std::vector<unsigned char> res;
+    unsigned char *b = (unsigned char *)(&integerValue);
+    unsigned char *e = b + sizeof(T);
+    std::copy(b, e, back_inserter(res));
+    return res;
+}
+
+template <typename T>
+T Tools::byteArrayToType(std::vector<unsigned char> value) {
+    T *res;
+    res = reinterpret_cast<T *>(value.data());
+    return *res;
+}
+
+template <typename T>
+std::string Tools::typeToStdStringBytes(T integerValue) {
+    std::string res;
+    unsigned char *b = (unsigned char *)(&integerValue);
+    unsigned char *e = b + sizeof(T);
+    std::copy(b, e, back_inserter(res));
+    return res;
+}
+
+template <typename T>
+T Tools::stdStringBytesToType(std::string value) {
+    T *res;
+    res = reinterpret_cast<T *>(value.data());
+    return *res;
 }

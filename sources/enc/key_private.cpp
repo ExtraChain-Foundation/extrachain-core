@@ -42,31 +42,64 @@ void KeyPrivate::generate() {
     m_publicKey = keys.second;
 }
 
-QByteArray KeyPrivate::encrypt(const QByteArray &data, const std::string &receiverPublicKey,
-                               const string &nonce) const {
-    auto res = SecretKey::encryptAsymmetric(data.toStdString(), m_secretKey, receiverPublicKey, nonce);
-    return QByteArray::fromStdString(res);
+std::string KeyPrivate::encrypt(const std::string &data, const std::string &receiverPublicKey,
+                                const string &nonce) const {
+    auto res = SecretKey::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
+    return res;
 }
 
-QByteArray KeyPrivate::decrypt(const QByteArray &data, const string &senderPublicKey,
-                               const string &nonce) const {
-    auto res = SecretKey::decryptAsymmetric(data.toStdString(), m_secretKey, senderPublicKey, nonce);
-    return QByteArray::fromStdString(res);
+std::string KeyPrivate::decrypt(const std::string &data, const string &senderPublicKey,
+                                const string &nonce) const {
+    auto res = SecretKey::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
+    return res;
 }
 
-QByteArray KeyPrivate::encryptSelf(const QByteArray &data) const {
+std::string KeyPrivate::encryptSelf(const std::string &data) const {
     string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
     return this->encrypt(data, this->m_publicKey, pnonce);
 }
 
-QByteArray KeyPrivate::decryptSelf(const QByteArray &data) const {
+std::string KeyPrivate::decryptSelf(const std::string &data) const {
     string sk = Utils::hexStringToByte(m_secretKey);
     string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
     return this->decrypt(data, this->m_publicKey, pnonce);
 }
 
-QByteArray KeyPrivate::sign(const QByteArray &data) const {
+void KeyPrivate::encryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const {
+    std::ifstream sfile(file.string(), std::ios::binary);
+    std::ofstream efile(resultFile.string(), std::ios::binary | std::ios::app);
+    if (sfile && efile) {
+        std::string buf;
+        while (sfile.readsome(buf.data(), Config::Basic::encSectionSize)) {
+            std::string wstring = encryptSelf(buf);
+            wstring = Tools::typeToStdStringBytes<int>(wstring.size()) + wstring;
+            efile << wstring;
+        }
+        return;
+    }
+    qDebug() << "file encryption error";
+}
+
+void KeyPrivate::decryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const {
+    std::ifstream efile(file.string(), std::ios::binary);
+    std::ofstream sfile(resultFile.string(), std::ios::binary | std::ios::app);
+    if (efile && sfile) {
+        std::string buf;
+        std::string sizebuf;
+        int size;
+        while (efile.readsome(sizebuf.data(), sizeof(int))) {
+            size = Tools::stdStringBytesToType<int>(sizebuf);
+            efile.readsome(buf.data(), size);
+            std::string wstring = decryptSelf(buf);
+            sfile << wstring;
+        }
+        return;
+    }
+    qDebug() << "file decryption error";
+}
+
+std::string KeyPrivate::sign(const std::string &data) const {
     string sks = Utils::hexStringToByte(m_secretKey);
     vector<unsigned char> sk(sks.begin(), sks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
@@ -74,12 +107,12 @@ QByteArray KeyPrivate::sign(const QByteArray &data) const {
     crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
     string sig = Utils::byteToHexString(vsig);
     sig.erase(--sig.end());
-    return QByteArray::fromStdString(sig);
+    return sig;
 }
 
-bool KeyPrivate::verify(const QByteArray &data, const QByteArray &dsignHex) const {
+bool KeyPrivate::verify(const std::string &data, const std::string &dsignHex) const {
     string pks = Utils::hexStringToByte(this->m_publicKey);
-    string signature = Utils::hexStringToByte(dsignHex.toStdString());
+    string signature = Utils::hexStringToByte(dsignHex);
     vector<unsigned char> pk(pks.begin(), pks.end());
     vector<unsigned char> vmsg(data.begin(), data.end());
     vector<unsigned char> vsig(signature.begin(), signature.end());
