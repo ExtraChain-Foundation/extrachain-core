@@ -14,23 +14,39 @@ DFSController::DFSController(std::shared_ptr<ActorIndex> ActorIndex,
 DFSController::~DFSController() {
 }
 
-std::string DFSController::secureAddLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
-                                              std::string targetVirtualFilePath,
-                                              DFS::Encryption securityLevel) {
+std::string DFSController::addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
+                                        std::string targetVirtualFilePath, DFS::Encryption securityLevel) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::string newFilePath = filePath;
+    std::string newTargetVirtualFilePath = targetVirtualFilePath;
     if (securityLevel == DFS::Encryption::Encrypted) {
-        std::string fname = std::filesystem::path(newFilePath).stem().generic_string();
+        std::string fname = std::filesystem::path(filePath).stem().generic_string();
         newFilePath = "temp";
         std::filesystem::create_directories(newFilePath);
         newFilePath = newFilePath + pathDelim + fname;
         actor.key().encryptFile(filePath, newFilePath);
-        std::filesystem::copy(filePath, newFilePath);
+
+        std::filesystem::path nvp = targetVirtualFilePath;
+        std::filesystem::path nfn = nvp.filename();
+        nvp.remove_filename();
+        nvp /= "secured";
+        nvp /= nfn;
+        newTargetVirtualFilePath = nvp.string();
     }
-    return this->addLocalFile(actor, newFilePath, targetVirtualFilePath);
+    std::string fileHash = Utils::calcKeccakForFile(newFilePath);
+    std::filesystem::path placeInDFS =
+        DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim + fileHash;
+    std::filesystem::copy(newFilePath, placeInDFS);
+    DFS::Packets::AddFileMessage msg;
+    msg.actorId = actor.id().toStdString();
+    msg.fileHash = fileHash;
+    msg.path = newTargetVirtualFilePath;
+    msg.size = std::filesystem::file_size(newFilePath);
+
+    addFile(msg, false);
 }
 
-std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg) {
+std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
@@ -45,11 +61,20 @@ std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg) {
     std::string realFilePath = DFS::Basic::fsActrRoot + pathDelim + msg.actorId + pathDelim + msg.fileHash;
     std::filesystem::create_directories(DFS::Basic::fsActrRoot + pathDelim + msg.actorId);
 
-    std::string virtualFilePath = msg.actorId + pathDelim + msg.path;
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
+    if (!localDirFile.open(actrDirFilePath)) {
+        exit(EXIT_FAILURE);
+    }
 
+    auto existingRowsActrDirFile = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, msg.fileHash);
+    auto existingRowsLocalDirFile = DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.fileHash);
+    if (existingRowsActrDirFile.size() != 0 && existingRowsLocalDirFile.size() != 0) {
+        actrDirFile.close();
+        localDirFile.close();
+        return msg.fileHash;
+    }
     actrDirFile.query(DFS::Tables::ActorDirFile::CreateTableQuery);
 
     auto result = actrDirFile.select(DFS::Tables::filesTableLast);
@@ -64,77 +89,60 @@ std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg) {
         return "";
     }
     actrDirFile.close();
-    if (!localDirFile.open(actrDirFilePath)) {
-        exit(EXIT_FAILURE);
-    }
+
     localDirFile.query(DFS::Tables::LocalDirFile::CreateTableQuery);
 
-    const DBRow rowDataWithSegments =
-        makeLocalDirDBRow(msg.fileHash, lastFileHash, msg.path, -1, -1, msg.size);
-
+    DBRow rowDataWithSegments;
+    if (loadBytes) {
+        rowDataWithSegments = makeLocalDirDBRow(msg.fileHash, lastFileHash, msg.path, -1, -1, msg.size);
+    } else {
+        rowDataWithSegments = makeLocalDirDBRow(msg.fileHash, lastFileHash, msg.path, 0, msg.size, msg.size);
+    }
     if (!localDirFile.insert(DFS::Tables::LocalDirFile::TableName, rowDataWithSegments)) {
         qDebug() << "DFSController: addFile: insert failed:" << localDirFile.file().c_str() << " :"
                  << DFS::Tables::LocalDirFile::TableName.c_str();
         return "";
     }
     localDirFile.close();
-
-    // TODO: init segment loading
-
+    if (loadBytes) {
+        // TODO: init segment loading
+    }
     return msg.fileHash;
 }
 
-std::string DFSController::addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
-                                        std::string targetVirtualFilePath) {
+std::string DFSController::getFileFromStorage(ActorId owner, std::string fileHash) {
+    Actor<KeyPrivate> localOwner = accountController->getActor(owner);
     std::string pathDelim = Utils::getPlatformDelimeter();
-    std::string fileHash = Utils::calcKeccakForFile(filePath);
+    std::filesystem::path realFilePath =
+        DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileHash;
     DBConnector localDirFile;
     std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + actor.id().toStdString() + pathDelim + DFS::Basic::fsMapName;
-    std::filesystem::create_directories(DFS::Basic::serviceDfsPath + pathDelim + actor.id().toStdString());
-
+        DFS::Basic::serviceDfsPath + pathDelim + owner.toStdString() + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim + DFS::Basic::fsMapName;
-    std::filesystem::create_directories(DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString());
-
-    std::string realFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim + fileHash;
-    std::filesystem::create_directories(DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString());
-    std::filesystem::copy(filePath, realFilePath);
-    long long size = std::filesystem::file_size(realFilePath);
+        DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + DFS::Basic::fsMapName;
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
-
-    actrDirFile.query(DFS::Tables::ActorDirFile::CreateTableQuery);
-
-    auto result = actrDirFile.select(DFS::Tables::filesTableLast);
-    auto prevRowOpt = result.empty() ? std::optional<DBRow> {} : result[0];
-    std::string lastFileHash = prevRowOpt ? prevRowOpt->at("fileHash") : "";
-
-    const DBRow rowData = makeActrDirDBRow(fileHash, lastFileHash, targetVirtualFilePath, size);
-
-    if (!actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, rowData)) {
-        qDebug() << "DFSController: addFile: insert failed:" << actrDirFile.file().c_str() << " :"
-                 << DFS::Tables::ActorDirFile::TableName.c_str();
-        return "";
+    if (!localDirFile.open(actrDirFilePath)) {
+        exit(EXIT_FAILURE);
     }
-    actrDirFile.close();
-
-    localDirFile.query(DFS::Tables::LocalDirFile::CreateTableQuery);
-
-    const DBRow rowDataWithSegments =
-        makeLocalDirDBRow(fileHash, lastFileHash, targetVirtualFilePath, 0, size - 1, size);
-
-    if (!localDirFile.insert(DFS::Tables::LocalDirFile::TableName, rowDataWithSegments)) {
-        qDebug() << "DFSController: addFile: insert failed:" << localDirFile.file().c_str() << " :"
-                 << DFS::Tables::LocalDirFile::TableName.c_str();
-        return "";
+    std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, fileHash);
+    std::vector<DBRow> localDirData = DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, fileHash);
+    std::filesystem::path tempFilePath = "temp" + pathDelim + owner.toStdString();
+    if (actrDirData.size() > 0 && localDirData.size() > 0) {
+        std::filesystem::path virtualFilePath = actrDirData[0].at("filePath");
+        if ((virtualFilePath.end()--)->string() == "secured") {
+            if (!localOwner.empty()) {
+                std::filesystem::create_directories(tempFilePath);
+                tempFilePath /= virtualFilePath.filename();
+                localOwner.key().decryptFile(realFilePath, tempFilePath);
+                return tempFilePath.string();
+            }
+        }
     }
-    localDirFile.close();
 
-    return fileHash;
+    return realFilePath.string();
 }
 
 //

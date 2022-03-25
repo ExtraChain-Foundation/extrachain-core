@@ -36,15 +36,14 @@ public:
     ~DFSController();
 
     // Internal use only
-    std::string secureAddLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
-                                   std::string targetVirtualFilePath, DFS::Encryption securityLevel);
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
-                             std::string targetVirtualFilePath);
+                             std::string targetVirtualFilePath, DFS::Encryption securityLevel);
 
     //    QByteArray readFile(const Actor<KeyPrivate> &actor, const QString &fileHash);
 
     // External interfaces
-    std::string addFile(const DFS::Packets::AddFileMessage &msg);
+    std::string addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes);
+    std::string getFileFromStorage(ActorId owner, std::string fileHash);
     bool removeFile(const Actor<KeyPrivate> &actor, const DFS::Packets::RemoveFileMessage &msg);
     std::string insertFragment(const Actor<KeyPrivate> &actor, const DFS::Packets::EditSegmentMessage &msg);
 
