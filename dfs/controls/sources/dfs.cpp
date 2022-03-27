@@ -361,7 +361,8 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountController->mainActor().key().sign(dfsChanges.prepareSign());
+            dfsChanges.sign = QByteArray::fromStdString(
+                accountController->mainActor().key().sign(dfsChanges.prepareSign().toStdString()));
 
             bool stored = appendToStored(dfsChanges, true);
             if (!stored) {
@@ -415,8 +416,9 @@ void Dfs::saveToDFS(const QString &path, const QByteArray &data, const DfsStruct
 
 bool Dfs::appendToCard(const QString &path, const QByteArray &userId, const DfsStruct::Type &type,
                        bool isFilePath) {
-    QByteArray sign = accountController->mainActor().key().sign(
-        (isFilePath ? CardManager::cutPath(path) : path).toLatin1() + QByteArray::number(type));
+    QByteArray sign = QByteArray::fromStdString(accountController->mainActor().key().sign(
+        ((isFilePath ? CardManager::cutPath(path) : path).toLatin1() + QByteArray::number(type))
+            .toStdString()));
 
     CardFile cardFile(userId);
     if (!cardFile.open())
@@ -638,7 +640,8 @@ void Dfs::saveStaticFile(QString fileName, DfsStruct::Type type, bool needStored
             dfsChanges.messHash = Utils::calcKeccak(QByteArray::number(
                 QRandomGenerator::global()->bounded(50000) + QDateTime::currentMSecsSinceEpoch()));
             dfsChanges.fileVersion = CardManager::dfsVersion(dfsChanges.filePath);
-            dfsChanges.sign = accountController->mainActor().key().sign(dfsChanges.prepareSign());
+            dfsChanges.sign = QByteArray::fromStdString(
+                accountController->mainActor().key().sign(dfsChanges.prepareSign().toStdString()));
 
             bool stored = appendToStored(dfsChanges, true);
 
@@ -1170,7 +1173,9 @@ QString Dfs::buildDfsPath(QString originalFile, QByteArray hash, QByteArray user
     QByteArray sType = DfsStruct::toByteArray(type);
     QString dfsPath = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + sType + "/";
 
-    QByteArray fileHash = hash.isEmpty() ? Utils::calcKeccakForFile(originalFile) : hash;
+    QByteArray fileHash = hash.isEmpty()
+        ? QByteArray::fromStdString(Utils::calcKeccakForFile(originalFile.toStdString()))
+        : hash;
     dfsPath += fileHash.right(2);
     QDir().mkpath(dfsPath);
     dfsPath += "/" + fileHash;
@@ -1200,7 +1205,8 @@ bool Dfs::appendToStored(DistFileSystem::DfsChanges &dfsChanges, bool init) {
         if (!res.size())
             return false;
         dfsChanges.prevHash = QByteArray::fromStdString(res[0]["hash"]);
-        dfsChanges.sign = accountController->mainActor().key().sign(dfsChanges.prepareSign());
+        dfsChanges.sign = QByteArray::fromStdString(
+            accountController->mainActor().key().sign(dfsChanges.prepareSign().toStdString()));
     }
 
     DBRow row = { { "version", std::to_string(dfsChanges.fileVersion) },

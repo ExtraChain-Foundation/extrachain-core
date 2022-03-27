@@ -39,7 +39,7 @@ std::string DFSController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     msg.Path = newTargetVirtualFilePath;
     msg.Size = std::filesystem::file_size(newFilePath);
 
-    addFile(msg, false);
+    return addFile(msg, false);
 }
 
 std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
@@ -220,12 +220,12 @@ std::string DFSController::insertFragment(const DFS::Packets::EditSegmentMessage
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.ActorId + pathDelim + DFS::Basic::fsMapName;
+        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.ActorId + pathDelim + DFS::Basic::fsMapName;
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     std::filesystem::path realFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.ActorId + pathDelim + msg.FileHash;
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
@@ -409,12 +409,12 @@ std::string DFSController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.ActorId + pathDelim + DFS::Basic::fsMapName;
+        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.ActorId + pathDelim + DFS::Basic::fsMapName;
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     std::filesystem::path realFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.ActorId + pathDelim + msg.FileHash;
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }

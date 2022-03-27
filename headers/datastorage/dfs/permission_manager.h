@@ -3,15 +3,14 @@
 #include <QObject>
 
 #include "datastorage/actor.h"
-#include "utils/db_connector.h"
 #include "dfs_controller.h"
+#include "utils/db_connector.h"
 
-
-class EXTRACHAIN_EXPORT PermissionManager : public QObject
-{
+class EXTRACHAIN_EXPORT PermissionManager : public QObject {
     Q_OBJECT
 public:
-    enum CriticalErrors {
+    enum CriticalErrors
+    {
         RootDirCreateError = -2,
         ActorDirCreateError = -3,
 
@@ -21,7 +20,8 @@ public:
         NotSupportedPermission
     };
 
-    enum Permission{
+    enum Permission
+    {
         Read = 0,
         Write = 1,  // Add new entry
         Delete = 2, // Delete any entry
@@ -30,7 +30,7 @@ public:
         NoPermission = 4
     };
 
-    QStringList permissions {"Read", "Write", "Delete", "Edit", "NoPermission"};
+    QStringList permissions { "Read", "Write", "Delete", "Edit", "NoPermission" };
 
     struct GetPermissionMsg;
     struct SetPermissionMsg;
@@ -39,21 +39,22 @@ public:
     PermissionManager(QObject *parent = nullptr);
     ~PermissionManager();
 
-    bool initPermissionDB(const Actor<KeyPrivate> & actor);
+    bool initPermissionDB(const Actor<KeyPrivate> &actor);
 
-    Permission getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg & msg);
-    bool setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg & msg);
+    Permission getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg &msg);
+    bool setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg &msg);
 
 private:
-    QString createDirectory(const Actor<KeyPrivate> & actor);
-    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
-    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
+    //    QString createDirectory(const Actor<KeyPrivate> &actor);
+    //    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
+    //    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
 
-    DBRow makeDBRow(const QString & fileHash, const Permission permission, const QString & userId, const QString & signature);
-    DBRow findDBRow(const QString & userId, const QString & fileHash);
+    DBRow makeDBRow(const QString &fileHash, const Permission permission, const QString &userId,
+                    const QString &signature);
+    //    DBRow findDBRow(const QString & userId, const QString & fileHash);
 
     Permission getUserPermission(const QString &userId, const QString &fileHash);
-    Permission getHighestPermission(const QString & userId, const QString &fileHash);
+    Permission getHighestPermission(const QString &userId, const QString &fileHash);
 
 public:
     static constexpr int32_t sharedId = -1;
@@ -67,21 +68,17 @@ private:
     DBConnector m_db;
 };
 
-
-struct PermissionManager::GetPermissionMsg
-{
+struct PermissionManager::GetPermissionMsg {
     std::string userId;
     std::string fileHash;
 
     MSGPACK_DEFINE(userId, fileHash);
 };
 
-struct PermissionManager::SetPermissionMsg
-{
+struct PermissionManager::SetPermissionMsg {
     std::string userId;
     std::string fileHash;
     std::string permission;
 
     MSGPACK_DEFINE(userId, fileHash, permission)
 };
-

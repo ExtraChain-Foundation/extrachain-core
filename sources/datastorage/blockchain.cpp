@@ -476,8 +476,8 @@ bool Blockchain::signCheckAdd(Block &block) {
                 return false;
             QByteArray id = node->accountController()->mainActor().id().toByteArray();
             if (!list.contains(id)) {
-                QByteArray sign = node->accountController()->mainActor().key().sign(
-                    QByteArray::fromStdString(block.getHash()));
+                QByteArray sign = QByteArray::fromStdString(
+                    node->accountController()->mainActor().key().sign(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -523,8 +523,8 @@ bool Blockchain::signCheckAdd(Block &block) {
                 return false;
             QByteArray id = node->accountController()->mainActor().id().toByteArray();
             if (!list.contains(id)) {
-                QByteArray sign = node->accountController()->mainActor().key().sign(
-                    QByteArray::fromStdString(block.getHash()));
+                QByteArray sign = QByteArray::fromStdString(
+                    node->accountController()->mainActor().key().sign(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -1286,7 +1286,8 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
-    // TODONEW emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash, receiver);
+    // TODONEW emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash,
+    // receiver);
 }
 
 void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver) {

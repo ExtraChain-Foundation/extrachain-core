@@ -125,7 +125,8 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, messageId);
 
         if (isProfile) {
-            // TODONEW node->resolveManager()->registrateMsg(profileData, Messages::ChainMessage::ProfileMessage);
+            // TODONEW node->resolveManager()->registrateMsg(profileData,
+            // Messages::ChainMessage::ProfileMessage);
         } else if (actor.type() != ActorType::User
                    && actor.type() != ActorType::ServiceProvider) { // if profile not exist
             static QMap<QByteArray, qint64> tempCheck;
@@ -242,7 +243,8 @@ void ActorIndex::saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newP
 
     qDebug() << "[ActorIndex] Save public profile with id" << newProfile.at(2);
     QByteArray path = buildPathPubProfile(ActorId(newProfile.at(2).toStdString()).toByteArray()).toUtf8();
-    QByteArray sign = actor.key().sign(PublicProfile::serialize(newProfile));
+    QByteArray sign =
+        QByteArray::fromStdString(actor.key().sign(PublicProfile::serialize(newProfile).toStdString()));
     PublicProfile pubProfile(newProfile, sign, path, newProfile.at(2));
 
     if (pubProfile.sign == "") {

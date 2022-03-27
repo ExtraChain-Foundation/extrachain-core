@@ -141,7 +141,7 @@ QByteArray Transaction::getDataForDigSig() const {
 void Transaction::sign(const Actor<KeyPrivate> &actor) {
     this->approver = actor.id();
     calcHash();
-    this->digSig = actor.key().sign(getDataForDigSig());
+    this->digSig = actor.key().sign(getDataForDigSig().toStdString());
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
