@@ -383,7 +383,7 @@ bool DFSResolverService::createTempFile(const QString &path, const long long &si
 
         QByteArray actorId = path.mid(DfsStruct::ROOT_FOOLDER_NAME_MID, 20).toLatin1();
         qDebug() << "[DfsResolver] Create temp file: actor -" << actorId;
-        Actor<KeyPublic> actor = actorIndex->getActor(actorId);
+        Actor<KeyPublic> actor = actorIndex->getActor(actorId.toStdString());
 
         if (!actor.empty()) {
             if (QDir(DfsStruct::ROOT_FOOLDER_NAME.toUtf8() + '/' + actor.id().toByteArray()).exists())

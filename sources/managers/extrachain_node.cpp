@@ -19,11 +19,11 @@
 
 #include "managers/extrachain_node.h"
 
-#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/dfs/permission_manager.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
 #include "dfs/controls/headers/dfs.h"
@@ -56,24 +56,22 @@ ExtraChainNode::ExtraChainNode() {
     }
 
     prepareFolders();
-    m_actorIndex = new ActorIndex();
+    m_actorIndex = new ActorIndex(this);
     m_privateProfile = new PrivateProfile();
     m_smartContractManager = new SmartContractManager(m_actorIndex);
-    m_accountController = new AccountController(m_actorIndex, this);
-    m_networkManager = new NetworkManager(m_actorIndex);
+    m_accountController = new AccountController(this);
+    m_networkManager = new NetworkManager(this);
     m_subscribeController = new SubscribeController();
     m_subscribeController->setExtraChainNode(this);
-    m_actorIndex->setAccController(m_accountController);
     ThreadPool::addThread(m_networkManager);
     // this->thread()->sleep(1);
-    m_blockchain = new Blockchain(m_accountController, fileMode);
-    m_accountController->setBlockchain(m_blockchain);
+    m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
     m_privateProfile->setAccountController(m_accountController);
     m_chatManager = new ChatManager(m_accountController, m_actorIndex);
     m_chatManager->setNetworkManager(m_networkManager);
     // contractManager = new ContractManager(accController, blockchain);
-    m_dfs = new Dfs(m_actorIndex, m_accountController);
+    m_dfs = new Dfs(this, m_actorIndex, m_accountController);
 
     m_resolveManager =
         new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
@@ -83,7 +81,6 @@ ExtraChainNode::ExtraChainNode() {
     m_networkManager->setResolveManager(m_resolveManager);
     // dfs->initDfsNetwork(resolveManager);
     m_privateProfile->setDfs(m_dfs);
-    m_actorIndex->setResolveManager(m_resolveManager);
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -219,7 +216,7 @@ Blockchain *ExtraChainNode::blockchain() {
     return m_blockchain;
 }
 
-NetworkManager *ExtraChainNode::networkManager() {
+NetworkManager *ExtraChainNode::network() {
     return m_networkManager;
 }
 
@@ -254,7 +251,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
+            // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
         } else {
             BigNumber amountTemp(tx.getAmount());
             if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
@@ -273,8 +270,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
                 }
 
                 // send fee tx
-                emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
-                emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
+                // TODONEW emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
+                // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
             } else {
                 qDebug() << "Not enough money ";
                 return Transaction();
@@ -404,7 +401,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
                                       { "token", mainKey.encrypt(token.toLatin1(), publicKey) },
                                       { "os", mainKey.encrypt(os.toLatin1(), publicKey) } };
 
-    emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
+    // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
 void ExtraChainNode::connectContractManager() {

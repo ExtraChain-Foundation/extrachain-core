@@ -19,7 +19,9 @@
 
 #include "dfs/controls/headers/dfs.h"
 #include "managers/thread_pool.h"
-#include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/message_types.h"
 
 DfsNetworkManager *Dfs::networkManager() const {
     return m_networkManager;
@@ -580,10 +582,11 @@ void Dfs::sendFragments(QString path, QByteArray frags, SocketPair receiver) {
     sender->sendFragments(path, CardManager::getTypeByName(path), frags, receiver);
 }
 
-Dfs::Dfs(ActorIndex *actorIndex, AccountController *accountController, QObject *parent)
+Dfs::Dfs(ExtraChainNode *node, ActorIndex *actorIndex, AccountController *accountController, QObject *parent)
     : QObject(parent)
     , accountController(accountController)
     , actorIndex(actorIndex) {
+    this->node = node;
     connect(this, &Dfs::requestFile, this, &Dfs::requestFileHandle);
     connect(this, &Dfs::titleReceived, this, &Dfs::titleReceivedHandle);
 }
@@ -593,7 +596,7 @@ Dfs::~Dfs() {
 }
 
 void Dfs::initDfsNetwork() {
-    m_networkManager = new DfsNetworkManager(actorIndex);
+    m_networkManager = new DfsNetworkManager(node);
     m_networkManager->setDfs(this);
 
     connect(this, &Dfs::networkCreated, m_networkManager, &NetworkManager::startNetwork);
@@ -760,7 +763,7 @@ bool Dfs::applyChanges(DistFileSystem::DfsChanges &dfsChanges) {
     if (!QFile::exists(dfsChanges.filePath))
         return false;
     if (dfsChanges.userId != accountController->mainActor().id().toByteArray()) {
-        auto actor = actorIndex->getActor(dfsChanges.userId);
+        auto actor = actorIndex->getActor(dfsChanges.userId.toStdString());
         if (actor.empty())
             return false;
         bool verify = actor.key().verify(dfsChanges.prepareSign(), dfsChanges.sign);
@@ -987,7 +990,7 @@ bool Dfs::dfsValidate(QByteArray userId) {
         // qDebug() << "dfsValidate ignore" << userId;
         return true;
     }
-    if (!actorIndex->hasActor(userId))
+    if (!actorIndex->hasActor(userId.toStdString()))
         return false;
 
     QString cardFile = DfsStruct::ROOT_FOOLDER_NAME + "/" + userId + "/" + DfsStruct::ACTOR_CARD_FILE;
@@ -1093,7 +1096,7 @@ void Dfs::process() {
 void Dfs::startDFS() {
     QByteArrayList actors = actorIndex->allActors();
     for (const QByteArray &actor : actors) {
-        auto actorAccount = actorIndex->getActor(actor).type();
+        auto actorAccount = actorIndex->getActor(actor.toStdString()).type();
         if (actorAccount == ActorType::User) {
             // qDebug() << "add to ignored" << actor;
             ignoredIds << actor;

@@ -55,7 +55,7 @@ class EXTRACHAIN_EXPORT Actor final {
                   "Your type is not supported. Only Keys are supported");
 
 private:
-    std::string m_id;
+    ActorId m_id;
     T m_key;
     ActorType m_type = ActorType::User;
 
@@ -64,13 +64,13 @@ public:
     ~Actor() = default;
 
     Actor(const Actor<T> &copyActor) {
-        m_id = copyActor.id().toStdString();
+        m_id = copyActor.id();
         m_key = copyActor.key();
         m_type = ActorType(copyActor.type());
     }
 
     Actor &operator=(const Actor<T> &copyActor) {
-        m_id = copyActor.id().toStdString();
+        m_id = copyActor.id();
         m_key = copyActor.key();
         m_type = copyActor.type();
         return *this;
@@ -91,7 +91,7 @@ public:
         auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
 
         if (hash.size() >= 20)
-            m_id = hash.left(20);
+            m_id = hash.left(20).toStdString();
         else
             qFatal("[Actor] Create: error size of hash");
     }
@@ -100,12 +100,12 @@ public:
         if (m_key.empty())
             return true;
 
-        return ActorId::empty(m_id);
+        return m_id.isEmpty();
     }
 
     PublicProfile profile() {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + ActorId(m_id).toString() + "/profile/";
-        return PublicProfile(QByteArray::fromStdString(m_id), pathToFolder);
+        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toString() + "/profile/";
+        return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
 public:
@@ -113,12 +113,13 @@ public:
         return this->m_id == other.m_id && *m_key == *other.m_key && m_type == other.m_type;
     }
 
-    ActorId id() const { // TODO
-        return ActorId(m_id);
+    const ActorId &id() const {
+        return m_id;
     }
 
+    [[deprecated("Use id().toStdString() instead.")]]
     const std::string &idStd() const {
-        return m_id;
+        return m_id.toStdString();
     }
 
     const T &key() const {
@@ -140,7 +141,7 @@ public:
     }
 
     void setId(const ActorId &id) {
-        m_id = id.toStdString();
+        m_id = id;
     }
 
     void setSecretKey(const std::string &secretKey, const std::string &publicKey) {
@@ -159,6 +160,10 @@ public:
         m_type = type;
     }
 
+    QByteArray serialize() const {
+        return MessagePack::serializeQt(*this);
+    }
+
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
         d << "Actor( id:" << actor.id() << ", type: " << int(actor.type()) << ", key: ";
@@ -167,7 +172,7 @@ public:
         return d;
     }
 
-    AUTO_SERIALIZE(m_id, m_type, m_key)
+    MSGPACK_DEFINE(m_id, m_type, m_key)
 };
 
 #endif // ACTOR_H

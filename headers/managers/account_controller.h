@@ -42,15 +42,14 @@ class EXTRACHAIN_EXPORT AccountController : public QObject {
     Q_OBJECT
 
 private:
+    ExtraChainNode *node;
+
     // Current user, used in AccountController.
     int userNum = 0;
-    Blockchain *blockchain;
     QList<Actor<KeyPrivate>> m_accounts;
-    ActorIndex *actorIndex;
-    ExtraChainNode *m_node;
 
 public:
-    AccountController(ActorIndex *actorIndex, ExtraChainNode *node);
+    AccountController(ExtraChainNode *node);
     QList<QByteArray> getAccountID();
 
 public:
@@ -82,12 +81,6 @@ public:
 
     const QList<Actor<KeyPrivate>> &accounts() const;
     QList<ActorId> getListAccounts() const;
-
-    Blockchain *getBlockchain() const;
-    ActorIndex *getActorIndex() const;
-
-    void setActorIndex(ActorIndex *value);
-    void setBlockchain(Blockchain *value);
 
 public slots:
     /**

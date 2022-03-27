@@ -18,7 +18,9 @@
  */
 
 #include "managers/sm_manager.h"
-#include "network/packages/service/all_messages.h"
+#include "network/packages/base_message.h"
+#include "network/packages/base_message_response.h"
+#include "network/packages/service/message_types.h"
 
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent) {
@@ -58,13 +60,13 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
         return;
     }
 
-    sendInitialTransaction(actor, relAddress, tokenCount);
+    sendInitialTransaction(actor, relAddress.toStdString(), tokenCount);
 }
 
 void SmartContractManager::process() {
 }
 
-void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sender, QByteArray receiver,
+void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sender, const ActorId &receiver,
                                                   QByteArray quantity) {
     Transaction tx(sender.id(), receiver, Transaction::visibleToAmount(quantity));
     tx.setData("InitContract");
@@ -72,7 +74,7 @@ void SmartContractManager::sendInitialTransaction(const Actor<KeyPrivate> &sende
     tx.setToken(sender.id());
     tx.sign(sender);
 
-    emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::ContractMessage);
+    // TODONEW emit sendTransactionCreateContract(tx.serialize(), Messages::ChainMessage::TxMessage);
 }
 
 Actor<KeyPrivate> SmartContractManager::createContract(QByteArray tokenName) {
@@ -91,7 +93,7 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor) {
 
     QString fileName = KeyStore::makeKeyFileName(actor.id().toByteArray());
     QString path = SmartContractStorage::CONTRACTSTORE + fileName;
-    qDebug() << "Path=" << path;
+    qDebug() << "Path =" << path;
     QFile file(path);
 
     // move to another place
@@ -101,12 +103,12 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor) {
     if (file.open(QIODevice::ReadWrite)) {
         QByteArray old;
         old = file.readAll();
-        if (old == actor.serializeQt()) {
+        if (old == actor.serialize()) {
             qDebug() << "Private actor with id =" << actor.id() << "already exists";
         } else {
             file.resize(0);
-            qDebug() << "actor serial: ---- " << actor.serializeQt();
-            file.write(actor.serializeQt());
+            qDebug() << "actor serial: ---- " << actor.serialize();
+            file.write(actor.serialize());
             file.flush();
             qDebug() << "Private Actor" << actor.id() << "is successfully saved";
         }

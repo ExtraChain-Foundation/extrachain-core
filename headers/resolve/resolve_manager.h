@@ -25,14 +25,15 @@ class ResolverService;
 class ExtraChainNode;
 class ChatManager;
 
+#include <QObject>
+#include <queue>
+#include <vector>
+
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "dfs/controls/headers/dfs.h"
 #include "extrachain_global.h"
 #include "managers/tx_manager.h"
-#include <QObject>
-#include <queue>
-#include <vector>
 
 class EXTRACHAIN_EXPORT ResolveManager : public QObject {
     Q_OBJECT
@@ -92,6 +93,10 @@ public:
 
     QMap<QString, QByteArray> *getFileMap() const;
 
+    NetworkManager *network() {
+        return networkManager;
+    }
+
 signals:
     void finished();
     //    void coinRequest(BigNumber id, BigNumber amount);
@@ -102,6 +107,7 @@ signals:
 public slots:
     //    void resolveMessage(const QByteArray &msg, const SocketPair &receiver);
     void registrateMsg(const QByteArray &data, const unsigned int &msgType);
+
     /**
      * @brief sendMessageResponse from resolver
      * @param data

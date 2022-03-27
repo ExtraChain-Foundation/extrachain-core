@@ -32,7 +32,6 @@
 #include <chrono>
 #include <thread>
 
-#include "network/packages/service/ping_pong_message.h"
 #include "utils/exc_utils.h"
 
 class EXTRACHAIN_EXPORT DiscoveryService : public QObject {

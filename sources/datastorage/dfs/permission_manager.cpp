@@ -33,10 +33,10 @@ bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor)
     }
 
     // Allow read file everyone
-    const auto & premReadSig = actor.key().sign(permissions[Permission::Read].toStdString().c_str());
+    const auto & premReadSig = actor.key().sign(permissions[Permission::Read].toLatin1());
 
     // Allow edit file
-    const auto & premEditSig = actor.key().sign(permissions[Permission::Edit].toStdString().c_str());
+    const auto & premEditSig = actor.key().sign(permissions[Permission::Edit].toLatin1());
     const QString & userId = actor.idStd().c_str();
 
     const std::vector<DBRow> rowList = {
@@ -173,7 +173,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
 
     // Update PERMISSION and SIGNATURE for the existing DB entry
     const std::string & newPermissionStr = permissions[newPermission].toStdString();
-    const std::string & newSignatureStr = actor.key().sign(newPermissionStr.c_str()).toStdString().c_str();
+    const std::string & newSignatureStr = actor.key().sign(QByteArray::fromStdString(newPermissionStr)).toStdString();
 
     if(!(actorPermission == Write || actorPermission == Edit))
     {
@@ -186,7 +186,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     {
         qDebug() << __FUNCTION__ << "Add new entry to the Permissions: User " << userId << ", file " << fileHash;
 
-        const auto & signature = actor.key().sign(newPermissionStr.c_str());
+        const auto & signature = actor.key().sign(QByteArray::fromStdString(newPermissionStr));
 
         DBRow row = makeDBRow(fileHash, newPermission, userId, newSignatureStr.c_str());
 
@@ -301,4 +301,3 @@ DBRow PermissionManager::findDBRow(const QString & userId, const QString & fileH
 
     return DBRow();
 }
-

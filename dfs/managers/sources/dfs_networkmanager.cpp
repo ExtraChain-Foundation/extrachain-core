@@ -35,8 +35,8 @@ bool DfsNetworkManager::isLoading(const QString &fileName) {
     return false;
 }
 
-DfsNetworkManager::DfsNetworkManager(ActorIndex *actorIndex)
-    : NetworkManager(actorIndex) {
+DfsNetworkManager::DfsNetworkManager(ExtraChainNode *node)
+    : NetworkManager(node) {
     tcpPort = 2223;
     wsPort = 2234;
 }
@@ -61,7 +61,7 @@ void DfsNetworkManager::disconnectResolver(DFSResolverService *resolver) {
 void DfsNetworkManager::createDFSResolver(Network::DataStruct ds) {
     DFSResolverService *resolver = new DFSResolverService(Resolver::Lifetime::LONG);
     resolver->setDfs(dfs);
-    resolver->setActorIndex(m_actorIndex);
+    resolver->setActorIndex(node->actorIndex());
     resolver->setTask(ds.msg, ds.receiver);
     resolver->setLongReceiver(ds.receiver);
     dfsResolvers.append(resolver);
@@ -69,7 +69,7 @@ void DfsNetworkManager::createDFSResolver(Network::DataStruct ds) {
     ThreadPool::addThread(dfsResolvers.last());
 }
 
-void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair &receiver) {
+void DfsNetworkManager::messageReceivedOld(const QByteArray &msg, const SocketPair &receiver) {
     if (!msg.isEmpty()) {
         Network::DataStruct dStruct;
         dStruct.msg = msg;
@@ -81,7 +81,7 @@ void DfsNetworkManager::messageReceived(const QByteArray &msg, const SocketPair 
 void DfsNetworkManager::process() {
     uResolver = new DFSResolverService(Resolver::Lifetime::SHORT);
     uResolver->setDfs(dfs);
-    uResolver->setActorIndex(m_actorIndex);
+    uResolver->setActorIndex(node->actorIndex());
 
     connectResolver(uResolver);
 

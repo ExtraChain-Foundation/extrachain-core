@@ -51,20 +51,21 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 
 private:
     // common object for
+    Dfs *m_dfs = nullptr;
+    ActorIndex *m_actorIndex = nullptr;
+    Blockchain *m_blockchain = nullptr;
+    NetworkManager *m_networkManager = nullptr;
+    TransactionManager *m_txManager = nullptr;
+    AccountController *m_accountController = nullptr;
+    SmartContractManager *m_smartContractManager = nullptr;
+    ChatManager *m_chatManager = nullptr;
+    ResolveManager *m_resolveManager = nullptr;
+    SubscribeController *m_subscribeController = nullptr;
+    PrivateProfile *m_privateProfile = nullptr;
+    // ContractManager *m_contractManager = nullptr;
+
     bool fileMode = true;
     bool started = false;
-    Dfs *m_dfs;
-    ActorIndex *m_actorIndex;
-    Blockchain *m_blockchain;
-    NetworkManager *m_networkManager;
-    TransactionManager *m_txManager;
-    AccountController *m_accountController;
-    SmartContractManager *m_smartContractManager;
-    ChatManager *m_chatManager;
-    ResolveManager *m_resolveManager;
-    SubscribeController *m_subscribeController;
-    PrivateProfile *m_privateProfile;
-    // ContractManager *m_contractManager;
 
 public:
     ExtraChainNode();
@@ -75,7 +76,7 @@ public:
                           const QString &tokenCount, const QString &tokenColor);
     void start();
     Blockchain *blockchain();
-    NetworkManager *networkManager();
+    NetworkManager *network();
     AccountController *accountController() const;
     ActorIndex *actorIndex() const;
     ResolveManager *resolveManager() const;

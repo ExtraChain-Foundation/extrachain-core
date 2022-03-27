@@ -62,6 +62,9 @@ public:
     std::string sign(const std::string &data) const;
     bool verify(const std::string &data, const std::string &dsignHex) const;
 
+    std::string sign(const std::string &data) const;
+    bool verify(const std::string &data, const std::string &dsignHex) const;
+
     const std::string &secretKey() const;
     const std::string &publicKey() const;
 

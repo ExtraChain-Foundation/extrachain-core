@@ -271,7 +271,6 @@ QByteArray SecretKey::encryptAsymmetric2(const QByteArray &data, const QByteArra
     return res;
 }
 
-std::string SecretKey::sodium_version()
-{
+std::string SecretKey::sodium_version() {
     return sodium_version_string();
 }

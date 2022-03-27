@@ -48,21 +48,21 @@ public:
 
     Transaction(const Transaction &other);
 
-private:
+public: // make private
     ActorId sender;
     ActorId receiver;
     BigNumber amount; // coin amount
     long long date;
-    QByteArray data;     // additional payload field
+    std::string data;    // additional payload field
     ActorId token;       // token contract address
     BigNumber prevBlock; // last block id at the moment of tx creation
     int gas;             // security and reward param
     int hop;             // number of the nodes, through which the transaction will pass before
                          // aprovement
-    QByteArray hash;     // hash from all fields
+    std::string hash;    // hash from all fields
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
-    QByteArray digSig;
+    std::string digSig;
 
 private:
     /**
@@ -153,6 +153,9 @@ public:
     void setAmount(const BigNumber &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
+
+    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
+                   digSig)
 };
 
 #endif // TRANSACTION_H

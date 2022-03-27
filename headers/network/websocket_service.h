@@ -15,7 +15,7 @@ class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
     Q_OBJECT
 
 public:
-    explicit WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent = nullptr);
+    explicit WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent = nullptr);
     WebSocketService(const WebSocketService &);
     ~WebSocketService();
 

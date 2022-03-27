@@ -33,6 +33,7 @@
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "network/network_status.h"
+#include "network/packages/message_body.h"
 #include "utils/exc_utils.h"
 
 class ResolveManager;
@@ -56,6 +57,18 @@ inline size_t qHash(const NetworkReconnect &reconnect) {
     return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
 }
 
+struct MessageIdDataWaiting {
+    std::string identifier;
+    qint64 time;
+    std::string cached_message;
+    // msg type
+};
+
+struct MessageIdDataReceived {
+    std::string identifier;
+    qint64 time;
+};
+
 /**
  * @brief The NetworkManager class
  * Creates Discovery, Resolver, Server and Sockets services
@@ -71,7 +84,7 @@ private:
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};
 
-    ActorIndex *m_actorIndex;
+    ExtraChainNode *node;
     ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
     TcpServerService *tcpServer = nullptr;
@@ -80,8 +93,11 @@ private:
     QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
 
+    std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
+    std::map<std::string, MessageIdDataReceived> m_messages_received;
+
 public:
-    NetworkManager(ActorIndex *actorIndex);
+    NetworkManager(ExtraChainNode *node);
     ~NetworkManager();
 
     // protected:
@@ -117,9 +133,9 @@ protected:
      * @return
      */
     bool checkMsgCount(const QByteArray &msg);
-    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
-                     Config::Net::TypeSend typeSend);
-    void sendFromCache();
+    void saveToCacheOld(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
+                        Config::Net::TypeSend typeSend);
+    void sendFromCacheOld();
 
 private slots:
     void onNewWsConnection();
@@ -151,14 +167,42 @@ public:
               const SocketPair &receiver = SocketPair(),
               Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
 
-    virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver = {},
-                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-    virtual void messageReceived(const QByteArray &msg, const SocketPair &receiver);
+    virtual void sendMessageOld(const QByteArray &message, const unsigned int &msgType,
+                                const SocketPair &receiver = {},
+                                Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
+
+    void sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                     const std::string &receiver_identifier);
+    void saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                     const std::string &receiver_identifier);
+    void sendFromCache();
+    bool isActiveConnectionExists();
+
+    virtual void messageReceivedOld(const QByteArray &msg, const SocketPair &receiver);
+    void messageReceived(const std::string &message, const std::string &receiver);
 
     void setResolveManager(ResolveManager *value);
 
-    ActorIndex *actorIndex() const;
+    template <class T>
+    std::string send_message(T data, MessageType type, MessageStatus status, std::string to_message_id = "",
+                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
+        if (node->accountController()->getAccountCount() == 0) {
+            qFatal("Can't send");
+        }
+
+        auto &mainActor = node->accountController()->mainActor();
+        MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
+        auto serialized = message.serialize();
+        auto sign = mainActor.key().sign(serialized);
+
+        std::string receiver_identifier;
+        this->sendMessage("ExCNew" + serialized + sign, typeSend, receiver_identifier);
+        // if (to_message_id.empty()) { // move to second send part
+        //     this->m_waiting_messages.insert(sended_message_id, MessageIdData {});
+        // }
+
+        return message.message_id;
+    }
 
 signals:
     void newSocket();
