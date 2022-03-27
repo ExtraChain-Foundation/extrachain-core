@@ -73,7 +73,7 @@ struct PermissionManager::GetPermissionMsg
     std::string userId;
     std::string fileHash;
 
-    AUTO_SERIALIZE(userId, fileHash);
+    MSGPACK_DEFINE(userId, fileHash);
 };
 
 struct PermissionManager::SetPermissionMsg
@@ -82,6 +82,6 @@ struct PermissionManager::SetPermissionMsg
     std::string fileHash;
     std::string permission;
 
-    AUTO_SERIALIZE(userId, fileHash, permission)
+    MSGPACK_DEFINE(userId, fileHash, permission)
 };
 
