@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "msgpack.hpp"
+
 #include "utils/db_connector.h"
 
 namespace DFS {
