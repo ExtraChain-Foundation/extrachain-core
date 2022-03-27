@@ -339,12 +339,18 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 
 void NetworkManager::saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
-    QFile file("tmp/network.cache");
-    file.open(QFile::Append);
+    std::ofstream file;
+    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app);
+    if (!file.is_open()) {
+        qFatal("[NetworkManager/saveToCache] Error open cache file");
+    }
+
     std::tuple<std::string, Config::Net::TypeSend, std::string> tuple = { serialized_message, typeSend,
                                                                           receiver_identifier };
     std::string package = MessagePack::serialize(tuple);
-    file.write(Utils::intToByteArray(int(package.length()), 8) + QByteArray::fromStdString(package));
+    file << Utils::intToStdString(int(package.length()), 8);
+    file << package;
+
     file.close();
 }
 
@@ -455,13 +461,6 @@ void NetworkManager::messageReceivedOld(const QByteArray &msg, const SocketPair 
     }
 }
 
-// template <typename Func>
-// void messageReceivedRunTime(Func f, bool success) {
-//     if (success) {
-//         f();
-//     }
-// }
-
 void NetworkManager::messageReceived(const std::string &message, const std::string &receiver) {
     qDebug() << "[NetworkManager/MsgNew] New message type";
     std::string_view msg(message.begin(), message.end() - 64);
@@ -475,7 +474,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
                                          QByteArray::fromStdString(std::string(sign)));
         if (!verify) {
-            qFatal("[NetworkManager/messageReceived] Error verify message");
+            // qFatal("[NetworkManager/messageReceived] Error verify message");
         } else {
             qDebug() << "[NetworkManager/MsgNew] Verify good";
         }
@@ -492,7 +491,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     switch (type) {
     case MessageType::Actor: {
-        if (status == MessageStatus::Request) { // actor get
+        if (status == MessageStatus::Request) { // actor get, test use ActorId
             auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
             if (success) {
                 node->actorIndex()->handleGetActor(actorId, receiver);

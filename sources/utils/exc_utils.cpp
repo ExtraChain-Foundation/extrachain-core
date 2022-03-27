@@ -607,14 +607,10 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
         }
     }
 
-#ifdef QT_DEBUG
-    qFatal("Can't find local ip");
-    return QNetworkAddressEntry();
-#else
+    qCritical() << "[Network] Can't find local ip, set 0.0.0.0";
     QNetworkAddressEntry entry;
     entry.setIp(QHostAddress::AnyIPv4);
     return entry;
-#endif
 }
 
 QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol) {

@@ -191,8 +191,7 @@ public:
         }
 
         auto &mainActor = node->accountController()->mainActor();
-        MessageBody<T> message =
-            make_message(data, type, status, mainActor.id().toStdString(), to_message_id);
+        MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
         auto serialized = message.serialize();
         auto sign = mainActor.key().sign(serialized);
 

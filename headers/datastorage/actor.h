@@ -197,6 +197,7 @@ public:
         return m_id;
     }
 
+    [[deprecated("Use id().toStdString() instead.")]]
     const std::string &idStd() const {
         return m_id.toStdString();
     }

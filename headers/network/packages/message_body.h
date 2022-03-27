@@ -28,7 +28,7 @@ struct MessageBody {
     MessageType message_type;
     MessageStatus status;
     std::string message_id;
-    std::string sender_id;
+    ActorId sender_id;
     T data;
 
     std::string serialize() const {
