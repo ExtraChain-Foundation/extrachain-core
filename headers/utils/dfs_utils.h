@@ -19,55 +19,55 @@ namespace Basic {
 }
 namespace Packets {
     struct AddFileMessage {
-        std::string actorId;
-        std::string fileHash;
-        std::string path;
-        long long size;
+        std::string Actor;
+        std::string FileHash;
+        std::string Path;
+        long long Size;
 
-        AUTO_SERIALIZE(actorId, fileHash, path, size);
+        AUTO_SERIALIZE(Actor, FileHash, Path, Size);
     };
 
     struct RequestFileSegmentMessage {
-        std::string actorId;
-        std::string fileHash;
-        std::string path;
-        long long offset;
+        std::string Actor;
+        std::string FileHash;
+        std::string Path;
+        long long Offset;
 
-        AUTO_SERIALIZE(actorId, fileHash, path, offset);
+        AUTO_SERIALIZE(Actor, FileHash, Path, Offset);
     };
 
     struct RemoveFileMessage {
-        std::string actorId;
-        std::string fileHash;
+        std::string Actor;
+        std::string FileHash;
 
-        AUTO_SERIALIZE(actorId, fileHash);
+        AUTO_SERIALIZE(Actor, FileHash);
     };
 
     struct EditSegmentMessage {
-        std::string actorId;
-        std::string fileHash;
-        std::string data;
-        long long offset;
+        std::string Actor;
+        std::string FileHash;
+        std::string Data;
+        long long Offset;
 
-        AUTO_SERIALIZE(actorId, fileHash, data, offset);
+        AUTO_SERIALIZE(Actor, FileHash, Data, Offset);
     };
 
     struct AddSegmentMessage {
-        std::string actorId;
-        std::string fileHash;
-        std::string data;
-        long long offset;
+        std::string Actor;
+        std::string FileHash;
+        std::string Data;
+        long long Offset;
 
-        AUTO_SERIALIZE(actorId, fileHash, data, offset);
+        AUTO_SERIALIZE(Actor, FileHash, Data, Offset);
     };
 
     struct DeleteSegmentMessage {
-        std::string actorId;
-        std::string fileHash;
-        long long offset;
-        long long size;
+        std::string Actor;
+        std::string FileHash;
+        long long Offset;
+        long long Size;
 
-        AUTO_SERIALIZE(actorId, fileHash, offset, size);
+        AUTO_SERIALIZE(Actor, FileHash, Offset, Size);
     };
 }
 namespace Tables {

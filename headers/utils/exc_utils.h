@@ -26,11 +26,11 @@
 #include <string>
 #include <vector>
 
-#include <msgpack.hpp>
-
 #include "extrachain_global.h"
 #include "network/socket_pair.h"
+
 #include "utils/dfs_utils.h"
+#include <msgpack.hpp>
 
 namespace Network {
 Q_NAMESPACE
@@ -720,14 +720,14 @@ enum class TxParam
 }
 } // namespace SearchEnum
 
-namespace FileSystem {
-inline static QString pathConcat(const QString &pl, const QString &pr) {
-    return QDir::cleanPath(pl + "/" + pr);
-};
-QString createSubDirectory(const QString &parentDirStr, const QString &subDirStr);
-QList<std::tuple<QString, QString>> listFiles(const QString &dirPath,
-                                              const QStringList &ignoreList = QStringList());
-} // namespace FileSystem
+// namespace FileSystem {
+// inline static QString pathConcat(const QString &pl, const QString &pr) {
+//    return QDir::cleanPath(pl + "/" + pr);
+//};
+// QString createSubDirectory(const QString &parentDirStr, const QString &subDirStr);
+// QList<std::tuple<QString, QString>> listFiles(const QString &dirPath,
+//                                              const QStringList &ignoreList = QStringList());
+//} // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType

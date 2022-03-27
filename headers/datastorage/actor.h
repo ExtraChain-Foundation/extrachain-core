@@ -28,13 +28,13 @@
 
 #include <msgpack.hpp>
 
+#include "datastorage/actorid.h"
 #include "dfs/types/headers/dfstruct.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "extrachain_global.h"
 #include "profile/public_profile.h"
 #include "utils/bignumber.h"
-
 /**
  * Acting entity.
  * Users, Smart-contracts
@@ -48,82 +48,6 @@ enum class ActorType
     Account = 3, // TODO: remove. blockers: user profile and legacy dfs
 };
 MSGPACK_ADD_ENUM(ActorType)
-
-class EXTRACHAIN_EXPORT ActorId {
-public:
-    ActorId() {
-        m_id = "00000000000000000000";
-    };
-
-    ActorId(const QByteArray &actorId) {
-        if (!actorId.isEmpty() && !BigNumber::isValid(actorId))
-            qFatal("ActorId not valid"); // TODO: remove after tests
-
-        m_id = !actorId.isEmpty() ? actorId.toStdString() : "00000000000000000000";
-        normalize();
-    }
-
-    ActorId(const std::string &actorId) {
-        if (!actorId.empty() && !BigNumber::isValid(QByteArray::fromStdString(actorId)))
-            qFatal("ActorId not valid"); // TODO: remove after tests
-
-        m_id = !actorId.empty() ? actorId : "00000000000000000000";
-        normalize();
-    }
-
-    ActorId &operator=(const QByteArray &actorId) {
-        this->m_id = actorId.toStdString();
-        normalize();
-        return *this;
-    }
-
-    bool operator==(const ActorId &actorId) const {
-        return m_id == actorId.m_id;
-    }
-
-    bool operator!=(const ActorId &actorId) const {
-        return m_id != actorId.m_id;
-    }
-
-    bool operator<(const ActorId &actorId) const {
-        return m_id < actorId.m_id;
-    }
-
-    QByteArray toByteArray() const {
-        return QByteArray::fromStdString(m_id);
-    }
-
-    QString toString() const {
-        return QString::fromStdString(m_id);
-    }
-
-    const std::string &toStdString() const {
-        return m_id;
-    }
-
-    bool isEmpty() const {
-        if (m_id == "000000000000000000-1")
-            qFatal("ActorId: WTF");
-        return m_id.empty() || m_id == "00000000000000000000";
-    }
-
-    friend QDebug operator<<(QDebug d, const ActorId &actorId) {
-        d.noquote().nospace() << actorId.toByteArray();
-        return d;
-    }
-
-    static bool empty(const std::string &actorId) {
-        ActorId actor(actorId);
-        return actor.isEmpty();
-    }
-
-private:
-    void normalize() {
-        m_id = QByteArray("0").repeated(20 - m_id.length()).toStdString() + m_id;
-    }
-
-    std::string m_id;
-};
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
@@ -145,7 +69,7 @@ public:
         m_type = ActorType(copyActor.type());
     }
 
-    Actor& operator=(const Actor<T> &copyActor) {
+    Actor &operator=(const Actor<T> &copyActor) {
         m_id = copyActor.id().toStdString();
         m_key = copyActor.key();
         m_type = copyActor.type();

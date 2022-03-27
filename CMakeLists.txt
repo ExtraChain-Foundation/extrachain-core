@@ -74,6 +74,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dfs/types/sources/dfstruct.cpp
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actorid.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
     # ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/contract.h
