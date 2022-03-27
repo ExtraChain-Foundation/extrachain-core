@@ -15,8 +15,6 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
-//#include <boost/iostreams/device/mapped_file.hpp>
-
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
@@ -38,8 +36,6 @@ public:
     // Internal use only
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
-
-    //    QByteArray readFile(const Actor<KeyPrivate> &actor, const QString &fileHash);
 
     // External interfaces
     std::string addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes);

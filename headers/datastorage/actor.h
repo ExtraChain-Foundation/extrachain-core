@@ -28,7 +28,6 @@
 
 #include <msgpack.hpp>
 
-#include "datastorage/actorid.h"
 #include "dfs/types/headers/dfstruct.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
@@ -199,8 +198,7 @@ public:
         return m_id;
     }
 
-    [[deprecated("Use id().toStdString() instead.")]]
-    const std::string &idStd() const {
+    [[deprecated("Use id().toStdString() instead.")]] const std::string &idStd() const {
         return m_id.toStdString();
     }
 

@@ -164,12 +164,12 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const DFS::Packet
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.ActorId + pathDelim + DFS::Basic::fsMapName;
+        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.ActorId + pathDelim + DFS::Basic::fsMapName;
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     std::filesystem::path realFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.ActorId + pathDelim + msg.FileHash;
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
