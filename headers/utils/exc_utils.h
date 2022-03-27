@@ -762,14 +762,36 @@ QDebug operator<<(QDebug d, const Notification &n);
 
 namespace Tools {
 template <typename T>
-std::vector<unsigned char> typeToByteArray(T integerValue);
-template <typename T>
-T byteArrayToType(std::vector<unsigned char> value);
+std::vector<unsigned char> typeToByteArray(T integerValue) {
+    std::vector<unsigned char> res;
+    unsigned char *b = (unsigned char *)(&integerValue);
+    unsigned char *e = b + sizeof(T);
+    std::copy(b, e, back_inserter(res));
+    return res;
+}
 
 template <typename T>
-std::string typeToStdStringBytes(T integerValue);
+T byteArrayToType(std::vector<unsigned char> value) {
+    T *res;
+    res = reinterpret_cast<T *>(value.data());
+    return *res;
+}
+
 template <typename T>
-T stdStringBytesToType(std::string value);
+std::string typeToStdStringBytes(T integerValue) {
+    std::string res;
+    unsigned char *b = (unsigned char *)(&integerValue);
+    unsigned char *e = b + sizeof(T);
+    std::copy(b, e, back_inserter(res));
+    return res;
+}
+
+template <typename T>
+T stdStringBytesToType(std::string value) {
+    T *res;
+    res = reinterpret_cast<T *>(value.data());
+    return *res;
+}
 }
 
 #endif // UTILS_H

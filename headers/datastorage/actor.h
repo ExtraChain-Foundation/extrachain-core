@@ -34,7 +34,6 @@
 #include "extrachain_global.h"
 #include "profile/public_profile.h"
 #include "utils/bignumber.h"
-#include "utils/exc_utils.h"
 
 /**
  * Acting entity.

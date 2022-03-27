@@ -44,7 +44,9 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.append(relAddress);
     profileList.append(color);
     actorIndex->saveProfile(actor, profileList);
-    profileList.insert(2, actor.key().sign(Serialization::serialize(profileList, 4)));
+
+    auto sign = QByteArray::fromStdString(actor.key().sign(Serialization::serialize(profileList, 4).toStdString()));
+    profileList.insert(2, sign);
 
     QFile file(SmartContractStorage::CONTRACTPROFILE + actor.id().toByteArray() + ".profile");
     if (file.exists()) {

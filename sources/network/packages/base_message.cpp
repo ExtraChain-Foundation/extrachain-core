@@ -26,7 +26,7 @@ void BaseMessage::setMsgData(const QByteArray &data) {
 
 void BaseMessage::calcDigSig(const Actor<KeyPrivate> &actor) {
     signer = actor.id();
-    digSig = actor.key().sign(concatenateAllData());
+    digSig = QByteArray::fromStdString(actor.key().sign(concatenateAllData().toStdString()));
 }
 
 bool BaseMessage::verifyDigSig(const Actor<KeyPublic> &actor) const {

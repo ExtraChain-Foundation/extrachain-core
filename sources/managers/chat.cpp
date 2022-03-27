@@ -103,10 +103,12 @@ void Chat::saveChatKey(QByteArray key, BigNumber sessionNumb, QByteArray& _owner
     }
 
     auto& mainActorKey = _accountController->mainActor().key();
-    emit _chatManager->sendEditSql(_currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
-                                   { Config::DataStorage::chatIdTableName.c_str(), "chatId",
-                                     mainActorKey.encryptSelf(_chatId), "key", mainActorKey.encryptSelf(key),
-                                     "owner", mainActorKey.encryptSelf(_ownerId) });
+    emit _chatManager->sendEditSql(
+        _currentActorId, "chats", DfsStruct::Type::Private, DfsStruct::Insert,
+        { Config::DataStorage::chatIdTableName.c_str(), "chatId",
+          QByteArray::fromStdString(mainActorKey.encryptSelf(_chatId.toStdString())), "key",
+          QByteArray::fromStdString(mainActorKey.encryptSelf(key.toStdString())), "owner",
+          QByteArray::fromStdString(mainActorKey.encryptSelf(_ownerId.toStdString())) });
 
     saveChatsId(_chatId);
 }
@@ -159,14 +161,16 @@ QByteArray Chat::getChatKey() {
     std::vector<DBRow> res =
         DB.select("SELECT * FROM " + Config::DataStorage::chatIdTableName + " WHERE chatId = ?",
                   Config::DataStorage::chatIdTableName,
-                  { { "chatId", mainActorKey.encryptSelf(_chatId).toStdString() } });
+                  { { "chatId", mainActorKey.encryptSelf(_chatId.toStdString()) } });
     if (res.size() == 0) {
         qDebug() << "[Error] Chat manager can't open file to load the key";
         return "0";
     }
 
-    _encryptionKey = mainActorKey.decryptSelf(QByteArray::fromStdString(res[0]["key"]));
-    this->ownerID = mainActorKey.decryptSelf(QByteArray::fromStdString(res[0]["owner"]));
+    _encryptionKey = QByteArray::fromStdString(
+        mainActorKey.decryptSelf(QByteArray::fromStdString(res[0]["key"]).toStdString()));
+    this->ownerID = QByteArray::fromStdString(
+        mainActorKey.decryptSelf(QByteArray::fromStdString(res[0]["owner"]).toStdString()));
     return _encryptionKey;
 }
 

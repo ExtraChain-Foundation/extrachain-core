@@ -19,11 +19,11 @@
 
 #include "managers/extrachain_node.h"
 
-#include "datastorage/dfs/permission_manager.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/dfs/dfs_controller.h"
+#include "datastorage/dfs/permission_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
 #include "dfs/controls/headers/dfs.h"
@@ -397,9 +397,9 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto &mainKey = m_accountController->mainActor().key();
     auto &publicKey = first.key().publicKey();
 
-    QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },
-                                      { "token", mainKey.encrypt(token.toLatin1(), publicKey) },
-                                      { "os", mainKey.encrypt(os.toLatin1(), publicKey) } };
+    std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
+                                               { "token", mainKey.encrypt(token.toStdString(), publicKey) },
+                                               { "os", mainKey.encrypt(os.toStdString(), publicKey) } };
 
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
@@ -510,10 +510,9 @@ Dfs *ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
-
-void ExtraChainNode::testSerializer() const
-{
-    // Mock actor create
+void ExtraChainNode::testSerializer() const {
+    /*
+   // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
     const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
@@ -534,10 +533,11 @@ void ExtraChainNode::testSerializer() const
     auto msgQt = actor1.serializeQt();
     actor3.deserializeQt(msgQt);
     assert(actor1.idStd() == actor3.idStd());
+    */
 }
 
-void ExtraChainNode::testPermissions() const
-{
+void ExtraChainNode::testPermissions() const {
+    /*
     // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
@@ -635,9 +635,11 @@ void ExtraChainNode::testPermissions() const
     {
         delete ptr;
     }
+    */
 }
 
 void ExtraChainNode::test() const {
+    /*
     // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
@@ -784,4 +786,5 @@ void ExtraChainNode::test() const {
     removeFileMsg.fileHash = fHashPrivate;
     result = dfsController.removeFile(actor, removeFileMsg);
     qDebug() << "Remove file:" << fHashPrivate << ", status:" << result;
+    */
 }

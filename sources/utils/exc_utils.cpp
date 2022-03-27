@@ -628,62 +628,30 @@ QString Utils::boostAsioVersion() {
     // return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
 }
 
-QString FileSystem::createSubDirectory(const QString &parentDirStr, const QString &subDirStr) {
-    QString destPathStr = FileSystem::pathConcat(parentDirStr, subDirStr);
-    QDir parentDir(parentDirStr);
-    if (!parentDir.exists(subDirStr)) {
-        if (!parentDir.mkdir(subDirStr)) {
-            destPathStr = "";
-        }
-    }
-    return destPathStr;
-}
+// QString FileSystem::createSubDirectory(const QString &parentDirStr, const QString &subDirStr) {
+//     QString destPathStr = FileSystem::pathConcat(parentDirStr, subDirStr);
+//     QDir parentDir(parentDirStr);
+//     if (!parentDir.exists(subDirStr)) {
+//         if (!parentDir.mkdir(subDirStr)) {
+//             destPathStr = "";
+//         }
+//     }
+//     return destPathStr;
+// }
 
-QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString &dirPath,
-                                                          const QStringList &ignoreList) {
-    QList<std::tuple<QString, QString>> dirList;
+// QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString &dirPath,
+//                                                           const QStringList &ignoreList) {
+//     QList<std::tuple<QString, QString>> dirList;
 
-    QDir dir(dirPath, QString::fromLatin1("*"), QDir::SortFlag::Name, QDir::Files | QDir::NoDotAndDotDot);
-    QDirIterator dirItor(dir, QDirIterator::Subdirectories);
-    while (dirItor.hasNext()) {
-        dirItor.next();
-        const QFileInfo &fi = dirItor.fileInfo();
-        if (fi.isFile() && !ignoreList.contains(fi.fileName())) {
-            dirList.emplaceBack(std::make_tuple<QString, QString>(fi.fileName(), fi.filePath()));
-        }
-    }
+//    QDir dir(dirPath, QString::fromLatin1("*"), QDir::SortFlag::Name, QDir::Files | QDir::NoDotAndDotDot);
+//    QDirIterator dirItor(dir, QDirIterator::Subdirectories);
+//    while (dirItor.hasNext()) {
+//        dirItor.next();
+//        const QFileInfo &fi = dirItor.fileInfo();
+//        if (fi.isFile() && !ignoreList.contains(fi.fileName())) {
+//            dirList.emplaceBack(std::make_tuple<QString, QString>(fi.fileName(), fi.filePath()));
+//        }
+//    }
 
-    return dirList;
-}
-
-template <typename T>
-std::vector<unsigned char> Tools::typeToByteArray(T integerValue) {
-    std::vector<unsigned char> res;
-    unsigned char *b = (unsigned char *)(&integerValue);
-    unsigned char *e = b + sizeof(T);
-    std::copy(b, e, back_inserter(res));
-    return res;
-}
-
-template <typename T>
-T Tools::byteArrayToType(std::vector<unsigned char> value) {
-    T *res;
-    res = reinterpret_cast<T *>(value.data());
-    return *res;
-}
-
-template <typename T>
-std::string Tools::typeToStdStringBytes(T integerValue) {
-    std::string res;
-    unsigned char *b = (unsigned char *)(&integerValue);
-    unsigned char *e = b + sizeof(T);
-    std::copy(b, e, back_inserter(res));
-    return res;
-}
-
-template <typename T>
-T Tools::stdStringBytesToType(std::string value) {
-    T *res;
-    res = reinterpret_cast<T *>(value.data());
-    return *res;
-}
+//    return dirList;
+//}
