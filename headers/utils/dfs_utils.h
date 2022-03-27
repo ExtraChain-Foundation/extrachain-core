@@ -23,8 +23,7 @@ namespace Packets {
         std::string FileHash;
         std::string Path;
         long long Size;
-
-        AUTO_SERIALIZE(Actor, FileHash, Path, Size);
+        MSGPACK_DEFINE(Actor, FileHash, Path, Size);
     };
 
     struct RequestFileSegmentMessage {
@@ -32,15 +31,13 @@ namespace Packets {
         std::string FileHash;
         std::string Path;
         long long Offset;
-
-        AUTO_SERIALIZE(Actor, FileHash, Path, Offset);
+        MSGPACK_DEFINE(Actor, FileHash, Path, Offset);
     };
 
     struct RemoveFileMessage {
         std::string Actor;
         std::string FileHash;
-
-        AUTO_SERIALIZE(Actor, FileHash);
+        MSGPACK_DEFINE(Actor, FileHash);
     };
 
     struct EditSegmentMessage {
@@ -48,8 +45,7 @@ namespace Packets {
         std::string FileHash;
         std::string Data;
         long long Offset;
-
-        AUTO_SERIALIZE(Actor, FileHash, Data, Offset);
+        MSGPACK_DEFINE(Actor, FileHash, Data, Offset);
     };
 
     struct AddSegmentMessage {
@@ -57,8 +53,7 @@ namespace Packets {
         std::string FileHash;
         std::string Data;
         long long Offset;
-
-        AUTO_SERIALIZE(Actor, FileHash, Data, Offset);
+        MSGPACK_DEFINE(Actor, FileHash, Data, Offset);
     };
 
     struct DeleteSegmentMessage {
@@ -66,8 +61,7 @@ namespace Packets {
         std::string FileHash;
         long long Offset;
         long long Size;
-
-        AUTO_SERIALIZE(Actor, FileHash, Offset, Size);
+        MSGPACK_DEFINE(Actor, FileHash, Offset, Size);
     };
 }
 namespace Tables {
