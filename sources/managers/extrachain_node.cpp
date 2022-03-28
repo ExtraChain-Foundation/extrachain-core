@@ -71,7 +71,7 @@ ExtraChainNode::ExtraChainNode() {
     m_chatManager = new ChatManager(m_accountController, m_actorIndex);
     m_chatManager->setNetworkManager(m_networkManager);
     // contractManager = new ContractManager(accController, blockchain);
-    m_dfs = new Dfs(this, m_actorIndex, m_accountController);
+    m_dfs = new DfsController(*this);
 
     m_resolveManager =
         new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
@@ -80,7 +80,7 @@ ExtraChainNode::ExtraChainNode() {
     m_blockchain->setTxManager(m_txManager);
     m_networkManager->setResolveManager(m_resolveManager);
     // dfs->initDfsNetwork(resolveManager);
-    m_privateProfile->setDfs(m_dfs);
+    // m_privateProfile->setDfs(m_dfs);
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -91,7 +91,7 @@ ExtraChainNode::ExtraChainNode() {
     ThreadPool::addThread(m_actorIndex);
     ThreadPool::addThread(m_txManager);
     // ThreadPool::addThread(contractManager);
-    ThreadPool::addThread(m_dfs);
+    // ThreadPool::addThread(m_dfs);
     ThreadPool::addThread(m_smartContractManager);
     ThreadPool::addThread(m_resolveManager);
     ThreadPool::addThread(m_privateProfile);
@@ -137,7 +137,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(firstId);
         DBConnector usernamesDB(usernamesPath.toStdString());
         usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
-        m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
+        // m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
 
     return true;
@@ -413,10 +413,10 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
-    connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
-    connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
-    connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
-    connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
+    // connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
+    // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
+    // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
+    // connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(networkManager, &NetworkManager::newDfsSocket, dfsNetworkManager,
     //    &DfsNetworkManager::appendSocket);
@@ -438,7 +438,7 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
 
     connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
-    connect(this, &ExtraChainNode::removeConnection, m_dfs, &Dfs::removeConnection);
+    // connect(this, &ExtraChainNode::removeConnection, m_dfs, &Dfs::removeConnection);
     connect(this, &ExtraChainNode::getAllActorsNode, m_actorIndex, &ActorIndex::getAllActors);
     connect(m_accountController, &AccountController::loadWallets, m_blockchain,
             &Blockchain::updateBlockchain);
@@ -506,7 +506,7 @@ ChatManager *ExtraChainNode::chatManager() const {
     return m_chatManager;
 }
 
-Dfs *ExtraChainNode::dfs() const {
+DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
@@ -515,8 +515,9 @@ void ExtraChainNode::testSerializer() const {
    // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor1 = m_accountController->createActor(ActorType::Account, userHash);
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
+   Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
+   m_accountController->createActor(ActorType::Account, userHash);
 
     auto actor2 = m_accountController->createActor(ActorType::Account, "random");
     auto actor3 = m_accountController->createActor(ActorType::Account, "random");
@@ -541,14 +542,16 @@ void ExtraChainNode::testPermissions() const {
     // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
+    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    m_accountController->createActor(ActorType::Account, userHash);
 
     // Mock actor create
     const std::string userEmail1 = "test@test.com";
     const std::string userPass1 = "12345678";
-    const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor1 = m_accountController->createActor(ActorType::Account, userHash1);
+    const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
+    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
+    m_accountController->createActor(ActorType::Account, userHash1);
 
     DFSController dfsController;
     dfsController.initDB(actor);
@@ -583,8 +586,8 @@ void ExtraChainNode::testPermissions() const {
     };
 
     struct SetPermission : public TestSet{
-        SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash, PermissionManager::Permission permission, bool result) :
-            TestSet(cmd, actor, userId, fileHash),
+        SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
+    PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId, fileHash),
             permission(permission),
             resultSet(result) {}
         PermissionManager::Permission permission;
@@ -592,23 +595,26 @@ void ExtraChainNode::testPermissions() const {
     };
 
     struct GetPermission : public TestSet{
-        GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash, PermissionManager::Permission permission) :
-            TestSet(cmd, actor, userId, fileHash), resultGet(permission) {}
-        PermissionManager::Permission resultGet;
+        GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
+    PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash), resultGet(permission)
+    {} PermissionManager::Permission resultGet;
     };
 
     std::vector<TestSet*> testSet;
-    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Read));
-    testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(), ".perm", PermissionManager::Edit));
-    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission));
-    testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
+    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm",
+    PermissionManager::Read)); testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(),
+    ".perm", PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor,
+    actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission)); testSet.emplace_back(new
+    GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
 
-    testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic", PermissionManager::Edit, false));
-    testSet.emplace_back(new SetPermission("set", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true));
-    testSet.emplace_back(new SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
+    testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic",
+    PermissionManager::Edit, false)); testSet.emplace_back(new SetPermission("set", actor,
+    actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true)); testSet.emplace_back(new
+    SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
 
-    testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit));
-    testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(), ".perm", PermissionManager::Edit));
+    testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate",
+    PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(),
+    ".perm", PermissionManager::Edit));
 
     for(auto & test: testSet)
     {
@@ -643,8 +649,9 @@ void ExtraChainNode::test() const {
     // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor = m_accountController->createActor(ActorType::ServiceProvider, userHash);
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
+    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    m_accountController->createActor(ActorType::ServiceProvider, userHash);
 
     DFSController dfsController;
     dfsController.initDB(actor);

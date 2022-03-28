@@ -1407,6 +1407,7 @@ void Dfs::initMyLocalStorage() {
     //    ThreadPool::addThread(resolver);
 
     //    getDFSStatus();
+    return;
     QByteArray userId = accountController->mainActor().id().toByteArray();
     initDfs(userId);
     //    QDir acDir(DfsStruct::ROOT_FOOLDER_NAME);

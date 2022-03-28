@@ -184,7 +184,8 @@ public:
     void setResolveManager(ResolveManager *value);
 
     template <class T>
-    std::string send_message(T data, MessageType type, MessageStatus status, std::string to_message_id = "",
+    std::string send_message(T data, MessageType type, MessageStatus status = MessageStatus::NoStatus,
+                             std::string to_message_id = "",
                              Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
         if (node->accountController()->getAccountCount() == 0) {
             qFatal("Can't send");

@@ -14,6 +14,7 @@
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <filesystem>
 
 #include "datastorage/actor.h"
 #include "datastorage/index/actorindex.h"
@@ -23,25 +24,27 @@
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 
-class EXTRACHAIN_EXPORT DFSController : public QObject {
+class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
+
 private:
-    std::shared_ptr<ExtraChainNode> node;
-    unsigned long long bytesLimit = 2147483648;
-    unsigned long long sizeTaken = 0;
+    ExtraChainNode &node;
+    unsigned long long m_bytesLimit = 8589934592;
+    unsigned long long m_sizeTaken = 0;
 
 public:
-    DFSController(std::shared_ptr<ExtraChainNode> Node, QObject *parent = nullptr);
-    ~DFSController();
+    DfsController(ExtraChainNode &node, QObject *parent = nullptr);
+    ~DfsController();
 
     // Internal use only
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
+    void removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
 
     // External interfaces
     std::string addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes);
     std::string getFileFromStorage(ActorId owner, std::string fileHash);
-    bool removeFile(const Actor<KeyPrivate> &actor, const DFS::Packets::RemoveFileMessage &msg);
+    bool removeFile(const DFS::Packets::RemoveFileMessage &msg);
 
 private:
     bool insertDataChunk(std::string data, long long position, std::filesystem::path file);
@@ -50,17 +53,18 @@ private:
                            long long fileSize);
     DBRow makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                             long long fileSegmentBegin, long long fileSegmentEnd, long long fileSize);
-    unsigned long long calculateSizeTaken();
+    unsigned long long calculateSizeTaken(const std::string &folder = DFS::Basic::fsActrRoot);
     std::string extractNextFragment();
-    std::string extractFragment(boost::interprocess::file_mapping fmapTarget, unsigned long long fragmentSize,
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, unsigned long long fragmentSize,
                                 unsigned long long offset);
 
 public:
+    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg);
     std::string addFragment(const DFS::Packets::AddSegmentMessage &msg);
     std::string insertFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
-    long long getBytesLimit() const;
-    void setBytesLimit(long long newBytesLimit);
+    long long bytesLimit() const;
+    void setBytesLimit(long long bytesLimit);
 };
 
 #endif // DFS_CONTROLLER_H

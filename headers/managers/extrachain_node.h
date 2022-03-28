@@ -27,7 +27,7 @@
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
 
-class Dfs;
+class DfsController;
 class ActorIndex;
 class Blockchain;
 class NetworkManager;
@@ -51,7 +51,7 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 
 private:
     // common object for
-    Dfs *m_dfs = nullptr;
+    DfsController *m_dfs = nullptr;
     ActorIndex *m_actorIndex = nullptr;
     Blockchain *m_blockchain = nullptr;
     NetworkManager *m_networkManager = nullptr;
@@ -83,7 +83,7 @@ public:
     PrivateProfile *privateProfile() const;
     SubscribeController *subscribeController() const;
     ChatManager *chatManager() const;
-    Dfs *dfs() const;
+    DfsController *dfs() const;
 
     // Remove this function before merge
     void test() const;

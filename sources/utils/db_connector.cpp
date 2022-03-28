@@ -21,9 +21,9 @@
 
 #include "sqlite3.h"
 #include <QDir>
-#include <QRegularExpression>
-#include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonObject>
+#include <QRegularExpression>
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
@@ -44,8 +44,7 @@ DBConnector::~DBConnector() {
     // close();
 }
 
-QString DBConnector::sqlite_version()
-{
+QString DBConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
@@ -141,7 +140,7 @@ std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
     if (rs != SQLITE_DONE)
 #endif
         if (QString(query.c_str()).indexOf("SELECT  type") == -1)
-            qDebug().nospace() << "[DBConnector]" << file().c_str() << "("
+            qDebug().nospace() << "[DBConnector] " << file().c_str() << "("
                                << (rs == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
     if (rs != SQLITE_DONE) {
         qDebug() << "[DBConnector]" << file().c_str() << "error: " << sqlite3_errmsg(db);

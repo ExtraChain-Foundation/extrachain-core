@@ -413,7 +413,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
         node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, "",
                                       Config::Net::TypeSend::All);
-        emit initDfs(actor.id());
+        // emit initDfs(actor.id());
+        std::filesystem::create_directories(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
+                                            + actor.id().toStdString());
     }
 
     return result;

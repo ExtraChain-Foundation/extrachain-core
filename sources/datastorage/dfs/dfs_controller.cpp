@@ -1,30 +1,26 @@
 #include "datastorage/dfs/dfs_controller.h"
 
-long long DFSController::getBytesLimit() const {
-    return bytesLimit;
+#include "network/network_manager.h"
+
+DfsController::DfsController(ExtraChainNode &node, QObject *parent)
+    : node(node)
+    , QObject(parent) {
+    std::filesystem::create_directories(DFS::Basic::fsActrRoot);
+    m_sizeTaken = calculateSizeTaken();
+    qDebug() << "[Dfs] Started. Current size:" << m_sizeTaken;
 }
 
-void DFSController::setBytesLimit(long long newBytesLimit) {
-    bytesLimit = newBytesLimit;
+DfsController::~DfsController() {
 }
 
-DFSController::DFSController(std::shared_ptr<ExtraChainNode> Node, QObject *parent)
-    : QObject(parent) {
-    node = Node;
-    sizeTaken = calculateSizeTaken();
-}
-
-DFSController::~DFSController() {
-}
-
-std::string DFSController::addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
+std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
                                         std::string targetVirtualFilePath, DFS::Encryption securityLevel) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::string newFilePath = filePath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
 
     // TODO: error description
-    if (std::filesystem::file_size(newFilePath) >= bytesLimit - sizeTaken) {
+    if (std::filesystem::file_size(newFilePath) >= m_bytesLimit - m_sizeTaken) {
         return "";
     }
 
@@ -42,20 +38,31 @@ std::string DFSController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         nvp /= nfn;
         newTargetVirtualFilePath = nvp.string();
     }
+
     std::string fileHash = Utils::calcKeccakForFile(newFilePath);
+    auto fileSize = std::filesystem::file_size(newFilePath);
     std::filesystem::path placeInDFS =
         DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim + fileHash;
-    std::filesystem::copy(newFilePath, placeInDFS);
-    DFS::Packets::AddFileMessage msg;
-    msg.Actor = actor.id().toStdString();
-    msg.FileHash = fileHash;
-    msg.Path = newTargetVirtualFilePath;
-    msg.Size = std::filesystem::file_size(newFilePath);
+    try {
+        std::filesystem::copy(newFilePath, std::filesystem::absolute(placeInDFS));
+    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
+
+    DFS::Packets::AddFileMessage msg = { .Actor = actor.id().toStdString(),
+                                         .FileHash = fileHash,
+                                         .Path = newTargetVirtualFilePath,
+                                         .Size = fileSize };
+    node.network()->send_message(msg, MessageType::DfsAddFile);
 
     return addFile(msg, false);
 }
 
-std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
+void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
+    std::string fileHash = Utils::calcKeccakForFile(filePath); // TODO: get hash
+    DFS::Packets::RemoveFileMessage msg = { .Actor = actor.id().toStdString(), .FileHash = fileHash };
+    node.network()->send_message(msg, MessageType::DfsRemoveFile);
+}
+
+std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
@@ -93,7 +100,7 @@ std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg, bool
     const DBRow rowData = makeActrDirDBRow(msg.FileHash, lastFileHash, msg.Path, msg.Size);
 
     if (!actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, rowData)) {
-        qDebug() << "DFSController: addFile: insert failed:" << actrDirFile.file().c_str() << " :"
+        qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
                  << DFS::Tables::ActorDirFile::TableName.c_str();
         return "";
     }
@@ -108,24 +115,27 @@ std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg, bool
         rowDataWithSegments = makeLocalDirDBRow(msg.FileHash, lastFileHash, msg.Path, 0, msg.Size, msg.Size);
     }
     if (!localDirFile.insert(DFS::Tables::LocalDirFile::TableName, rowDataWithSegments)) {
-        qDebug() << "DFSController: addFile: insert failed:" << localDirFile.file().c_str() << " :"
+        qDebug() << "[Dfs] addFile: insert failed:" << localDirFile.file().c_str() << " :"
                  << DFS::Tables::LocalDirFile::TableName.c_str();
         return "";
     }
     localDirFile.close();
     if (loadBytes) {
-        if (msg.Size >= bytesLimit - sizeTaken) {
+        if (msg.Size >= m_bytesLimit - m_sizeTaken) {
             return msg.FileHash;
         } else {
-            // request segments
+            DFS::Packets::RequestFileSegmentMessage reqMessage = {
+                .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = msg.Path, .Offset = 0
+            };
+            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
         }
         // TODO: init segment loading
     }
     return msg.FileHash;
 }
 
-std::string DFSController::getFileFromStorage(ActorId owner, std::string fileHash) {
-    Actor<KeyPrivate> localOwner = node->accountController()->getActor(owner);
+std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHash) {
+    Actor<KeyPrivate> localOwner = node.accountController()->getActor(owner);
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::filesystem::path realFilePath =
         DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileHash;
@@ -177,8 +187,8 @@ std::string DFSController::getFileFromStorage(ActorId owner, std::string fileHas
 //  0 | 11111111 |              | filePath_1
 //  1 | 33333333 | 11111111     | filePath_3
 
-bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const DFS::Packets::RemoveFileMessage &msg) {
-    qDebug() << "DFSController: removeFile:" << msg.FileHash.c_str();
+bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
+    qDebug() << "[Dfs] Remove file message:" << msg.FileHash.c_str();
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
@@ -233,8 +243,8 @@ bool DFSController::removeFile(const Actor<KeyPrivate> &actor, const DFS::Packet
     return true;
 }
 
-std::string DFSController::insertFragment(const DFS::Packets::EditSegmentMessage &msg) {
-    qDebug() << "DFSController: editFile:" << msg.FileHash.c_str();
+std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage &msg) {
+    qDebug() << "[Dfs] Edit file:" << msg.FileHash.c_str();
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
@@ -255,12 +265,12 @@ std::string DFSController::insertFragment(const DFS::Packets::EditSegmentMessage
         DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.FileHash);
 
     if (actrDirData.empty() || localDirData.empty()) {
-        qDebug() << "DFSController: editFile: Skipped because of empty result";
+        qDebug() << "[Dfs] editFile: Skipped because of empty result";
         return "";
     }
 
     if ((actrDirData.size() > 2) || (localDirData.size() > 2)) {
-        qDebug() << "DFSController: editFile: Query select failed: Query result has unsupported size:"
+        qDebug() << "[Dfs] editFile: Query select failed: Query result has unsupported size:"
                  << actrDirData.size();
         return "";
     }
@@ -305,7 +315,7 @@ std::string DFSController::insertFragment(const DFS::Packets::EditSegmentMessage
     return newFileHash;
 }
 
-bool DFSController::insertDataChunk(std::string data, long long position, std::filesystem::path file) {
+bool DfsController::insertDataChunk(std::string data, long long position, std::filesystem::path file) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
@@ -355,7 +365,8 @@ bool DFSController::insertDataChunk(std::string data, long long position, std::f
 
     return true;
 }
-bool DFSController::removeDataChunk(long long position, long long length, std::filesystem::path file) {
+
+bool DfsController::removeDataChunk(long long position, long long length, std::filesystem::path file) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
@@ -403,14 +414,15 @@ bool DFSController::removeDataChunk(long long position, long long length, std::f
 
     return true;
 }
-DBRow DFSController::makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
+
+DBRow DfsController::makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                                       long long fileSize) {
     return { { "fileHash", fileHash },
              { "fileHashPrev", fileHashPrev },
              { "filePath", filePath },
              { "fileSize", std::to_string(fileSize) } };
 }
-DBRow DFSController::makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
+DBRow DfsController::makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                                        long long fileSegmentBegin, long long fileSegmentEnd,
                                        long long fileSize) {
     return { { "fileHash", fileHash },
@@ -421,11 +433,21 @@ DBRow DFSController::makeLocalDirDBRow(std::string fileHash, std::string fileHas
              { "fileSize", std::to_string(fileSize) } };
 }
 
-unsigned long long DFSController::calculateSizeTaken() {
-    return std::filesystem::file_size(DFS::Basic::fsActrRoot);
+unsigned long long DfsController::calculateSizeTaken(const std::string &folder) {
+    unsigned long long size = 0;
+
+    for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
+        if (entry.is_regular_file()) {
+            size += entry.file_size();
+        } else if (entry.is_directory()) {
+            size += calculateSizeTaken(entry.path().string());
+        }
+    }
+
+    return size;
 }
 
-std::string DFSController::extractFragment(boost::interprocess::file_mapping fmapTarget,
+std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget,
                                            unsigned long long fragmentSize, unsigned long long offset) {
     boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, offset,
                                                    fragmentSize);
@@ -433,7 +455,26 @@ std::string DFSController::extractFragment(boost::interprocess::file_mapping fma
     return std::string(rr_ptr, fragmentSize);
 }
 
-std::string DFSController::deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg) {
+std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg) {
+    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::filesystem::path realFilePath =
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
+    boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
+
+    std::string data = extractFragment(fmapTarget, DFS::Basic::sectionSize, msg.Offset);
+    DFS::Packets::AddSegmentMessage fragment = {
+        .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = std::move(data), .Offset = msg.Offset
+    };
+
+    node.network()->send_message(fragment, MessageType::DfsAddSegment);
+    return "";
+}
+
+std::string DfsController::addFragment(const DFS::Packets::AddSegmentMessage &msg) {
+    return "";
+}
+
+std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     DBConnector localDirFile;
     std::string localDirFilePath =
@@ -454,12 +495,12 @@ std::string DFSController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
         DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.FileHash);
 
     if (actrDirData.empty() || localDirData.empty()) {
-        qDebug() << "DFSController: editFile: Skipped because of empty result";
+        qDebug() << "[Dfs] editFile: Skipped because of empty result";
         return "";
     }
 
     if ((actrDirData.size() > 2) || (localDirData.size() > 2)) {
-        qDebug() << "DFSController: editFile: Query select failed: Query result has unsupported size:"
+        qDebug() << "[Dfs] editFile: Query select failed: Query result has unsupported size:"
                  << actrDirData.size();
         return "";
     }
@@ -500,3 +541,12 @@ std::string DFSController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
     }
     return newFileHash;
 }
+
+long long DfsController::bytesLimit() const {
+    return m_bytesLimit;
+}
+
+void DfsController::setBytesLimit(long long bytesLimit) {
+    m_bytesLimit = bytesLimit;
+}
+

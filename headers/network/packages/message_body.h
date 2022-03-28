@@ -11,12 +11,20 @@ enum class MessageType
     // ActorBody = 2,
     Actor = 1, // флаг response = true: handle actor, флаг response = false: std::string
     ActorCount = 2,
-    ActorAll = 4
+    ActorAll = 4,
+
+    DfsAddFile = 50,
+    DfsRequestFileSegment = 51,
+    DfsRemoveFile = 52,
+    DfsEditSegment = 53,
+    DfsAddSegment = 54,
+    DfsDeleteSegment = 55
 };
 MSGPACK_ADD_ENUM(MessageType)
 
 enum class MessageStatus
 {
+    NoStatus,
     Request,
     Response,
     InOne

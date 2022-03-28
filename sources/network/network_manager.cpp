@@ -18,6 +18,7 @@
  */
 
 #include "network/network_manager.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "managers/thread_pool.h"
 #include "network/tcpserver_service.h"
 #include "network/tcpsocket_service.h"
@@ -462,10 +463,10 @@ void NetworkManager::messageReceivedOld(const QByteArray &msg, const SocketPair 
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &receiver) {
-    qDebug() << "[NetworkManager/MsgNew] New message type";
+    qDebug() << "[NetworkManager/messageReceived] New message type";
     std::string_view msg(message.begin(), message.end() - 64);
     std::string_view sign(message.end() - 64, message.end());
-    std::cout << "[NetworkManager/MsgNew] " << sign << " " << msg << std::endl;
+    // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
 
     {
         auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
@@ -474,9 +475,9 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
                                          QByteArray::fromStdString(std::string(sign)));
         if (!verify) {
-            // qFatal("[NetworkManager/messageReceived] Error verify message");
+            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
         } else {
-            qDebug() << "[NetworkManager/MsgNew] Verify good";
+            qDebug() << "[NetworkManager/messageReceived] Verify good";
         }
     }
 
@@ -489,33 +490,64 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     if (type == MessageType::Actor && status == MessageStatus::Request) { }
 
-    switch (type) {
-    case MessageType::Actor: {
-        if (status == MessageStatus::Request) { // actor get, test use ActorId
-            auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
-            if (success) {
+    try {
+        switch (type) {
+        case MessageType::Actor: {
+            // actor get, test use ActorId
+            if (status == MessageStatus::Request) {
+                auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
                 node->actorIndex()->handleGetActor(actorId, receiver);
-            }
-        } else if (status == MessageStatus::Response) {
-            auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-            if (success) {
+            } else if (status == MessageStatus::Response) {
+                auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
                 node->actorIndex()->handleNewActor(actor);
             }
+            break;
         }
-        break;
-    }
-    case MessageType::ActorAll: {
-        // node->actorIndex()->handleGetAllActor(messId);
-        break;
-    }
-    case MessageType::ActorCount: {
-        break;
-    }
+        case MessageType::ActorAll: {
+            // node->actorIndex()->handleGetAllActor(messId);
+            break;
+        }
+        case MessageType::ActorCount: {
+            break;
+        }
 
-    default:
-        qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
-        break;
-    }
+        case MessageType::DfsAddFile: {
+            auto [msg, success] = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
+            node->dfs()->addFile(msg, true);
+            break;
+        }
+        case MessageType::DfsRequestFileSegment: {
+            auto [msg, success] =
+                MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
+            node->dfs()->sendFragment(msg);
+            break;
+        }
+        case MessageType::DfsAddSegment: {
+            auto [msg, success] = MessagePack::deserialize<DFS::Packets::AddSegmentMessage>(serialized);
+            node->dfs()->addFragment(msg);
+            break;
+        }
+        case MessageType::DfsEditSegment: {
+            auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+            node->dfs()->insertFragment(msg);
+            break;
+        }
+        case MessageType::DfsDeleteSegment: {
+            auto [msg, success] = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
+            node->dfs()->deleteFragment(msg);
+            break;
+        }
+        case MessageType::DfsRemoveFile: {
+            auto [msg, success] = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
+            node->dfs()->removeFile(msg);
+            break;
+        }
+
+        default:
+            qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
+            break;
+        }
+    } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
 void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port) {

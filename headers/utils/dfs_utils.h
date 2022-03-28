@@ -22,7 +22,7 @@ namespace Packets {
         std::string Actor;
         std::string FileHash;
         std::string Path;
-        long long Size;
+        unsigned long long Size;
         MSGPACK_DEFINE(Actor, FileHash, Path, Size);
     };
 
