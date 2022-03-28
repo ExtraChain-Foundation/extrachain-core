@@ -15,7 +15,6 @@ namespace Basic {
     static const std::string serviceStoragePath = "service";
     static const std::string serviceDfsPath = serviceStoragePath + "/" + DFS::Basic::fsActrRoot;
     static const long long sectionSize = 256;
-    static const long long bytesLimit = 2147483648;
     static const int encSectionSize = 256;
 }
 namespace Packets {

@@ -1,10 +1,17 @@
 #include "datastorage/dfs/dfs_controller.h"
 
-DFSController::DFSController(std::shared_ptr<ActorIndex> ActorIndex,
-                             std::shared_ptr<AccountController> AccountController, QObject *parent)
+long long DFSController::getBytesLimit() const {
+    return bytesLimit;
+}
+
+void DFSController::setBytesLimit(long long newBytesLimit) {
+    bytesLimit = newBytesLimit;
+}
+
+DFSController::DFSController(std::shared_ptr<ExtraChainNode> Node, QObject *parent)
     : QObject(parent) {
-    actorIndex = ActorIndex;
-    accountController = AccountController;
+    node = Node;
+    sizeTaken = calculateSizeTaken();
 }
 
 DFSController::~DFSController() {
@@ -15,6 +22,12 @@ std::string DFSController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::string newFilePath = filePath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
+
+    // TODO: error description
+    if (std::filesystem::file_size(newFilePath) >= bytesLimit - sizeTaken) {
+        return "";
+    }
+
     if (securityLevel == DFS::Encryption::Encrypted) {
         std::string fname = std::filesystem::path(filePath).stem().generic_string();
         newFilePath = "temp";
@@ -101,13 +114,18 @@ std::string DFSController::addFile(const DFS::Packets::AddFileMessage &msg, bool
     }
     localDirFile.close();
     if (loadBytes) {
+        if (msg.Size >= bytesLimit - sizeTaken) {
+            return msg.FileHash;
+        } else {
+            // request segments
+        }
         // TODO: init segment loading
     }
     return msg.FileHash;
 }
 
 std::string DFSController::getFileFromStorage(ActorId owner, std::string fileHash) {
-    Actor<KeyPrivate> localOwner = accountController->getActor(owner);
+    Actor<KeyPrivate> localOwner = node->accountController()->getActor(owner);
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::filesystem::path realFilePath =
         DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileHash;
@@ -297,12 +315,11 @@ bool DFSController::insertDataChunk(std::string data, long long position, std::f
     unsigned long long fz = std::filesystem::file_size(file);
     ofs.write(data.c_str(), data.size()); // add data to new temp file
     ofs.flush();
-    std::size_t regSize = 256;
     std::size_t i = 0;
-    for (i = position; i < fz; i = i + regSize) { // copy old data to new temp file
-        if (i + regSize < fz) {
+    for (i = position; i < fz; i = i + DFS::Basic::sectionSize) { // copy old data to new temp file
+        if (i + DFS::Basic::sectionSize < fz) {
             boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_write, i,
-                                                           regSize);
+                                                           DFS::Basic::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofs.write(rr_ptr, rightRegion.get_size());
             ofs.flush();
@@ -320,10 +337,10 @@ bool DFSController::insertDataChunk(std::string data, long long position, std::f
     boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
     unsigned long long fzres = std::filesystem::file_size(tempFilePath);
 
-    for (i = 0; i < fzres; i = i + regSize) { // copy new data to old file
-        if (i + regSize < fzres) {
+    for (i = 0; i < fzres; i = i + DFS::Basic::sectionSize) { // copy new data to old file
+        if (i + DFS::Basic::sectionSize < fzres) {
             boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i,
-                                                           regSize);
+                                                           DFS::Basic::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofsres.write(rr_ptr, rightRegion.get_size());
         } else {
@@ -346,12 +363,11 @@ bool DFSController::removeDataChunk(long long position, long long length, std::f
     std::ofstream ofs(tempFilePath.string());
     boost::interprocess::file_mapping fmapSource(file.c_str(), boost::interprocess::read_write);
     unsigned long long fz = std::filesystem::file_size(file);
-    std::size_t regSize = 256;
     std::size_t i = 0;
-    for (i = position + length; i < fz; i = i + regSize) { // copy old data to new temp file
-        if (i + regSize < fz) {
+    for (i = position + length; i < fz; i = i + DFS::Basic::sectionSize) { // copy old data to new temp file
+        if (i + DFS::Basic::sectionSize < fz) {
             boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_write, i,
-                                                           regSize);
+                                                           DFS::Basic::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofs.write(rr_ptr, rightRegion.get_size());
             ofs.flush();
@@ -369,10 +385,10 @@ bool DFSController::removeDataChunk(long long position, long long length, std::f
     boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
     unsigned long long fzres = std::filesystem::file_size(tempFilePath);
 
-    for (i = 0; i < fzres; i = i + regSize) { // copy new data to old file
-        if (i + regSize < fzres) {
+    for (i = 0; i < fzres; i = i + DFS::Basic::sectionSize) { // copy new data to old file
+        if (i + DFS::Basic::sectionSize < fzres) {
             boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i,
-                                                           regSize);
+                                                           DFS::Basic::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofsres.write(rr_ptr, rightRegion.get_size());
         } else {
@@ -403,6 +419,18 @@ DBRow DFSController::makeLocalDirDBRow(std::string fileHash, std::string fileHas
              { "fileSegmentBegin", std::to_string(fileSegmentBegin) },
              { "fileSegmentEnd", std::to_string(fileSegmentEnd) },
              { "fileSize", std::to_string(fileSize) } };
+}
+
+unsigned long long DFSController::calculateSizeTaken() {
+    return std::filesystem::file_size(DFS::Basic::fsActrRoot);
+}
+
+std::string DFSController::extractFragment(boost::interprocess::file_mapping fmapTarget,
+                                           unsigned long long fragmentSize, unsigned long long offset) {
+    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, offset,
+                                                   fragmentSize);
+    char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+    return std::string(rr_ptr, fragmentSize);
 }
 
 std::string DFSController::deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg) {
