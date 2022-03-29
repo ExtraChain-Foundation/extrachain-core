@@ -20,7 +20,6 @@
 #ifndef CHAT_H
 #define CHAT_H
 #include "datastorage/index/actorindex.h"
-#include "dfs/types/headers/dfstruct.h"
 #include "managers/account_controller.h"
 #include "utils/db_connector.h"
 #include <QDir>

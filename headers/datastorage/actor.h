@@ -28,7 +28,6 @@
 
 #include <msgpack.hpp>
 
-#include "dfs/types/headers/dfstruct.h"
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "extrachain_global.h"
@@ -184,7 +183,10 @@ public:
     }
 
     PublicProfile profile() {
-        QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + m_id.toString() + "/profile/";
+        // TODO: public profile read to new dfs
+        QString pathToFolder = QString::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
+                                                      + m_id.toStdString() + Utils::getPlatformDelimeter()
+                                                      + "profile" + Utils::getPlatformDelimeter());
         return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 

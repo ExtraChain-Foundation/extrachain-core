@@ -20,6 +20,7 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
+#include <filesystem>
 #include <iostream>
 
 #include <QDebug>

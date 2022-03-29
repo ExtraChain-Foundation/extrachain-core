@@ -1,7 +1,5 @@
 #include "network/websocket_service.h"
 
-#include "dfs/managers/headers/dfs_networkmanager.h"
-
 WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent)
     : SocketService(node, parent) {
     if (ws == nullptr) {

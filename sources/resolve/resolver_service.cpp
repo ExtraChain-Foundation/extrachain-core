@@ -20,9 +20,8 @@
 #include "resolve/resolver_service.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
-#include "dfs/controls/headers/dfs.h"
 #include "managers/account_controller.h"
-#include "managers/chatmanager.h"
+
 #include "managers/extrachain_node.h"
 #include "managers/tx_manager.h"
 #include "resolve/resolve_manager.h"

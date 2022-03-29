@@ -8,12 +8,23 @@
 
 #include "utils/db_connector.h"
 
+namespace Utils {
+static const std::string getPlatformDelimeterDFS() {
+    char del;
+    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
+    std::string pathDelim;
+    pathDelim.push_back(del);
+    return pathDelim;
+}
+}
+
 namespace DFS {
 namespace Basic {
     static const std::string fsActrRoot = "dfs";
     static const std::string fsMapName = ".dir";
     static const std::string serviceStoragePath = "service";
-    static const std::string serviceDfsPath = serviceStoragePath + "/" + DFS::Basic::fsActrRoot;
+    static const std::string serviceDfsPath =
+        serviceStoragePath + Utils::getPlatformDelimeterDFS() + DFS::Basic::fsActrRoot;
     static const long long sectionSize = 256;
     static const int encSectionSize = 256;
 }

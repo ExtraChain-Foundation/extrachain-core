@@ -20,7 +20,6 @@
 #include "resolve/resolve_manager.h"
 
 #include "datastorage/blockchain.h"
-#include "managers/chatmanager.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
 #include "network/network_manager.h"
@@ -28,10 +27,6 @@
 
 void ResolveManager::setNode(ExtraChainNode *value) {
     node = value;
-}
-
-void ResolveManager::setChatManager(ChatManager *value) {
-    chatManager = value;
 }
 
 QMap<QByteArray, int> *ResolveManager::getRequestResponseMap() const {
@@ -96,7 +91,6 @@ void ResolveManager::createNewResolver(const Network::DataStruct &task) {
     l1Res.append(new ResolverService(Resolver::Type::GENERAL, Resolver::Lifetime::SHORT, actorIndex, this));
     l1Res.last()->setNode(node);
     l1Res.last()->setBlockchain(blockchain);
-    l1Res.last()->setChatManager(chatManager);
     connectSignals(l1Res.last());
     // get task from queue
     l1Res.last()->setTask(task.msg, task.receiver);

@@ -42,41 +42,11 @@ set(EXTRACHAIN_CORE_INCLUDES
     )
 
 set(EXTRACHAIN_CORE_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/headers/dfs.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/headers/subscribe_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/sources/dfs.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/controls/sources/subscribe_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/card_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/dfs_networkmanager.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/headers/sender.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/card_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/dfs_networkmanager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/managers/sources/sender.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/all.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/dfs_changes.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/dfs_message_interface.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/dfs_request.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/hash_operations.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/message_struct.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/req_frags_message.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/status.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/headers/title_message.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/dfs_changes.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/dfs_request.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/hash_operations.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/message_struct.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/req_frags_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/status.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/packages/sources/title_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/types/headers/cardfile.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/types/headers/dfstruct.h
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/types/sources/cardfile.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/dfs/types/sources/dfstruct.cpp
+
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
-    # ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/contract.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/genesis_block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
@@ -88,11 +58,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_public.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/sign_interface.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/account_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/chat.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/chatmanager.h
-    # ${CMAKE_CURRENT_LIST_DIR}/headers/managers/coin_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/contract_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_updater_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/sm_manager.h
@@ -108,15 +74,12 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message_response.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_interface.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/message_types.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpserver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/tcpsocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/public_profile.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/resolve/dfs_resolver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/resolve/resolve_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/resolve/resolver_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/Keccak256.h
@@ -129,7 +92,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
-    # ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/contract.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/genesis_block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/actorindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
@@ -140,11 +102,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/chat.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/chatmanager.cpp
-    # ${CMAKE_CURRENT_LIST_DIR}/sources/managers/coin_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/contract_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_updater_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/sm_manager.cpp
@@ -155,15 +113,12 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message_response.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpserver_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/tcpsocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/public_profile.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/resolve/dfs_resolver_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/resolve/resolve_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/resolve/resolver_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/Keccak256.cpp

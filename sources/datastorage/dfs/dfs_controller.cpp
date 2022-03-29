@@ -155,7 +155,7 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHas
     std::vector<DBRow> localDirData = DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, fileHash);
     std::filesystem::path tempFilePath = "temp" + pathDelim + owner.toStdString();
     if (actrDirData.size() > 0 && localDirData.size() > 0) {
-        std::filesystem::path virtualFilePath = actrDirData[0].at("filePath");
+        std::filesystem::path virtualFilePath = actrDirData.at(0).at("filePath");
         if ((virtualFilePath.end()--)->string() == "secured") {
             if (!localOwner.empty()) {
                 std::filesystem::create_directories(tempFilePath);
@@ -549,4 +549,3 @@ long long DfsController::bytesLimit() const {
 void DfsController::setBytesLimit(long long bytesLimit) {
     m_bytesLimit = bytesLimit;
 }
-

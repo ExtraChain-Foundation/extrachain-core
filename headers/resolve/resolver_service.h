@@ -34,7 +34,6 @@
 #include "datastorage/block.h"
 #include "datastorage/genesis_block.h"
 #include "datastorage/transaction.h"
-#include "dfs/packages/headers/all.h"
 #include "network/packages/base_message.h"
 #include "network/packages/base_message_response.h"
 #include "network/packages/service/message_types.h"
@@ -76,7 +75,6 @@ private:
     std::vector<bool> dataChecker;
     //    QString path;
     QFile file;
-    DistFileSystem::TitleMessage title;
 
 private:
     bool active = false;

@@ -28,6 +28,7 @@
 #include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
+#include "managers/extrachain_node.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QMutex>

@@ -36,7 +36,6 @@
 // #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
-#include "dfs/types/headers/dfstruct.h"
 #include "enc/enc_tools.h"
 #include "utils/Keccak256.h"
 
@@ -301,7 +300,7 @@ void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
-    QDir(DfsStruct::ROOT_FOOLDER_NAME).removeRecursively();
+    QDir(QString::fromStdString(DFS::Basic::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile("user.private").remove();

@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "dfs/controls/headers/dfs.h"
+//#include "dfs/controls/headers/dfs.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
 #include <profile/private_profile.h>
@@ -151,8 +151,8 @@ void PrivateProfile::profile(const QByteArray &hash) {
             qDebug() << "Load private profile with id" << idList.first();
             m_accountController->loadActors(idList.first(), idList, hash, decryptKey);
             if (!m_accountController->mainActor().empty())
-                dfs->initMyLocalStorage();
-            emit initActorChatM();
+                //                dfs->initMyLocalStorage();
+                emit initActorChatM();
             success = true;
             break;
         }

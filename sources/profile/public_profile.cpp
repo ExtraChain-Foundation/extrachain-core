@@ -18,7 +18,6 @@
  */
 
 #include "profile/public_profile.h"
-#include "dfs/types/headers/dfstruct.h"
 
 PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id) {
     sign = _sign;
@@ -103,7 +102,9 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
 }
 
 bool PublicProfile::saveProfileFromNet(QByteArray newProfile) {
-    QDir().mkpath(DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/");
+    QDir().mkpath(QByteArray::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
+                                            + id.toStdString() + Utils::getPlatformDelimeter() + "profile"
+                                            + Utils::getPlatformDelimeter()));
     QFile profile(idPath);
     if (profile.exists()) {
         profile.open(QIODevice::ReadOnly);

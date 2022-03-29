@@ -17,11 +17,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "network/network_manager.h"
 #include "datastorage/dfs/dfs_controller.h"
+#include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
-#include "network/tcpserver_service.h"
-#include "network/tcpsocket_service.h"
+#include "network/packages/base_message.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "resolve/resolve_manager.h"
@@ -34,8 +33,6 @@ const QList<SocketService *> &NetworkManager::connections() const {
 
 bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     switch (protocol) {
-    case Network::Protocol::Tcp:
-        return tcpServer == nullptr ? false : tcpServer->isListening();
     case Network::Protocol::WebSocket:
         return wsServer == nullptr ? false : wsServer->isListening();
     case Network::Protocol::Undefined:
@@ -122,20 +119,9 @@ void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &ho
     QNetworkProxy::setApplicationProxy(proxy);
 }
 
-void NetworkManager::connectTcpSocket(TcpSocketService *service) {
-    connect(service, &TcpSocketService::error, this, &NetworkManager::socketError);
-    connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
-    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
-
-    if (!m_connections.contains(service))
-        m_connections.append(service);
-}
-
 void NetworkManager::connectWsService(WebSocketService *service) {
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
-    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
-
     if (!m_connections.contains(service))
         m_connections.append(service);
 }
@@ -155,7 +141,6 @@ NetworkManager::~NetworkManager() {
     delete upnpNet;
     delete upnpDis;
     delete local;
-    delete tcpServer;
     // delete discoveryService;
 
     for (const auto &connection : qAsConst(m_connections)) {
@@ -192,13 +177,6 @@ void NetworkManager::startNetwork() {
 
     if (!Network::isStartedServer)
         return;
-
-    tcpServer = new TcpServerService(tcpPort, local);
-    connect(tcpServer, &TcpServerService::newServerConnection, this, &NetworkManager::onNewTcpConnection,
-            Qt::UniqueConnection);
-    // connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
-    if (tcpServer->startListen()) { }
-
     wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
     if (wsServer->listen(QHostAddress::Any, wsPort)) {
@@ -233,16 +211,13 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
-    const quint16 port = (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
+    const quint16 port = (protocol == wsPort);
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
                                  << ", port: " << port;
     m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
     switch (protocol) {
-    case Protocol::Tcp:
-        connectToTcpSocket(ip.simplified(), port);
-        break;
     case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), port);
         break;
@@ -548,41 +523,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             break;
         }
     } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
-}
-
-void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port) {
-    TcpSocketService *socket = new TcpSocketService(ip, node);
-    connectTcpSocket(socket);
-    qDebug().noquote().nospace() << "[NetworkManager] New TCP connection: " << ip << ":" << port;
-    ThreadPool::addThread(socket);
-}
-
-void NetworkManager::onNewTcpConnection(qint64 socketDescriptor) {
-    if (m_connections.length() >= Network::maxConnections) {
-        qDebug() << "[NetworkManager] Can't connect from tcp server because the maximum number of connections"
-                 << tcpPort << wsPort;
-        return;
-    }
-
-    TcpSocketService *socket = new TcpSocketService(socketDescriptor, node);
-    connectTcpSocket(socket);
-    ThreadPool::addThread(socket);
-}
-
-void NetworkManager::removeTcpConnection() //
-{
-    QObject *sender = QObject::sender();
-
-    if (sender == nullptr)
-        return;
-
-    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
-    auto removed = m_connections.removeAll(connection);
-    if (removed == 0)
-        return;
-    qDebug() << "[TCP] Removed" << connection;
-    emit connection->finished();
-    checkConnectionsStatus();
 }
 
 void NetworkManager::removeWsConnection() //

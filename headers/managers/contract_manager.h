@@ -21,7 +21,6 @@
 #define CONTRACT_MANAGER_H
 
 #include "datastorage/contract.h"
-#include "dfs/types/headers/dfstruct.h"
 #include "managers/account_controller.h"
 #include <QDir>
 #include <QObject>

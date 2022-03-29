@@ -324,7 +324,9 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const {
 }
 
 QString ActorIndex::buildPathPubProfile(const QByteArray &id) {
-    QString pathToFolder = DfsStruct::ROOT_FOOLDER_NAME + "/" + id + "/profile/";
+    QString pathToFolder =
+        QString::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter() + id.toStdString()
+                               + Utils::getPlatformDelimeter() + "profile" + Utils::getPlatformDelimeter());
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {

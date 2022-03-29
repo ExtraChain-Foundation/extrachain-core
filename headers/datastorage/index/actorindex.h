@@ -27,6 +27,7 @@
 
 #include "extrachain_global.h"
 #include "managers/extrachain_node.h"
+#include "network/network_manager.h"
 
 class ExtraChainNode;
 

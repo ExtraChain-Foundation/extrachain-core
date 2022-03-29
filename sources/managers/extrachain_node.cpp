@@ -26,13 +26,10 @@
 #include "datastorage/dfs/permission_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
-#include "dfs/controls/headers/dfs.h"
-#include "dfs/controls/headers/subscribe_controller.h"
-#include "dfs/managers/headers/dfs_networkmanager.h"
 #include "managers/account_controller.h"
-#include "managers/chatmanager.h"
+
 #include "managers/contract_manager.h"
-#include "managers/file_updater_manager.h"
+
 #include "managers/sm_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
@@ -61,26 +58,19 @@ ExtraChainNode::ExtraChainNode() {
     m_smartContractManager = new SmartContractManager(m_actorIndex);
     m_accountController = new AccountController(this);
     m_networkManager = new NetworkManager(this);
-    m_subscribeController = new SubscribeController();
-    m_subscribeController->setExtraChainNode(this);
+
     ThreadPool::addThread(m_networkManager);
-    // this->thread()->sleep(1);
     m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
     m_privateProfile->setAccountController(m_accountController);
-    m_chatManager = new ChatManager(m_accountController, m_actorIndex);
-    m_chatManager->setNetworkManager(m_networkManager);
-    // contractManager = new ContractManager(accController, blockchain);
+
     m_dfs = new DfsController(*this);
 
     m_resolveManager =
         new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
     m_resolveManager->setNode(this);
-    m_resolveManager->setChatManager(m_chatManager);
     m_blockchain->setTxManager(m_txManager);
     m_networkManager->setResolveManager(m_resolveManager);
-    // dfs->initDfsNetwork(resolveManager);
-    // m_privateProfile->setDfs(m_dfs);
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -90,16 +80,9 @@ ExtraChainNode::ExtraChainNode() {
     ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(m_actorIndex);
     ThreadPool::addThread(m_txManager);
-    // ThreadPool::addThread(contractManager);
-    // ThreadPool::addThread(m_dfs);
     ThreadPool::addThread(m_smartContractManager);
     ThreadPool::addThread(m_resolveManager);
     ThreadPool::addThread(m_privateProfile);
-    ThreadPool::addThread(m_chatManager);
-
-    // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
-    // FileUpdaterManager fl;
-    // fl.verifyMyFiles("02c9b394cf3785389f82");
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -129,15 +112,17 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
                                    tokenColor.toLatin1());
 
-        // TODO: usernames: move to console
-        DBConnector dbc(
-            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
-        dbc.createTable(Config::DataStorage::cardTableCreation);
-        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
-        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(firstId);
-        DBConnector usernamesDB(usernamesPath.toStdString());
-        usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
-        // m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
+        //        // TODO: usernames: move to console
+        //        DBConnector dbc(
+        //            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" +
+        //            DfsStruct::ACTOR_CARD_FILE).toStdString());
+        //        dbc.createTable(Config::DataStorage::cardTableCreation);
+        //        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
+        //        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME +
+        //        "/%1/services/usernames").arg(firstId); DBConnector
+        //        usernamesDB(usernamesPath.toStdString());
+        //        usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
+        //        // m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
 
     return true;

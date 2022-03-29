@@ -50,7 +50,6 @@ struct DataStruct {
 enum Protocol
 {
     Undefined = 0,
-    Tcp = 1,
     WebSocket = 2
 };
 Q_ENUM_NS(Protocol)

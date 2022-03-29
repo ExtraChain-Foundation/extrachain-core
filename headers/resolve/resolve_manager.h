@@ -22,7 +22,7 @@
 
 class NetworkManager;
 class ResolverService;
-class ExtraChainNode;
+// class ExtraChainNode;
 class ChatManager;
 
 #include <QObject>
@@ -31,7 +31,6 @@ class ChatManager;
 
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
-#include "dfs/controls/headers/dfs.h"
 #include "extrachain_global.h"
 #include "managers/tx_manager.h"
 
@@ -51,7 +50,6 @@ private:
     TransactionManager *txManager;
     AccountController *accountControler;
     ExtraChainNode *node;
-    ChatManager *chatManager;
 
 public:
     ResolveManager(ActorIndex *actorIndex, Blockchain *blockchain, NetworkManager *networkManager,
@@ -79,7 +77,6 @@ private:
 
 public:
     bool setTask(QByteArray msg, const SocketPair &receiver);
-    void setChatManager(ChatManager *value);
 
     QMap<QByteArray, std::vector<bool>> *getDataCheckers() const;
 

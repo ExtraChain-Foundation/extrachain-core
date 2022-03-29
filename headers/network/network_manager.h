@@ -105,7 +105,6 @@ public:
     quint16 wsPort = 2233;
 
 private:
-    void connectTcpSocket(TcpSocketService *service);
     void connectWsService(WebSocketService *ws);
 
 public:
@@ -119,12 +118,6 @@ signals:
     void finished(); // ThreadPool
 
 protected:
-    /**
-     * @brief Creates new tcp socket connection and adds it to connections
-     * @param ip
-     * @param port
-     */
-    void connectToTcpSocket(const QString &ip, quint16 port);
     void connectToWebSocket(const QString &ip, quint16 port);
 
     /**
@@ -141,7 +134,6 @@ private slots:
     void onNewWsConnection();
 
 protected slots:
-    void onNewTcpConnection(qint64 socketDescriptor);
     virtual void checkConnectionsStatus();
     void startDiscovery();
 
@@ -154,10 +146,6 @@ public slots:
                     const QString &password);
 
 private slots:
-    /**
-     * @brief Remove connections from connection list
-     */
-    void removeTcpConnection();
     void removeWsConnection();
     void socketError(Network::SocketServiceError error, QString errorData);
 
