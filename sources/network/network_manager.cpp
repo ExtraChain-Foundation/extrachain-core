@@ -498,7 +498,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             break;
         }
         case MessageType::DfsAddSegment: {
-            auto [msg, success] = MessagePack::deserialize<DFS::Packets::AddSegmentMessage>(serialized);
+            auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
             node->dfs()->addFragment(msg);
             break;
         }

@@ -129,7 +129,6 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
             };
             node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
         }
-        // TODO: init segment loading
     }
     return msg.FileHash;
 }
@@ -276,10 +275,11 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
     }
     for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
-            if ((std::stoul(it->at("fileSegmentBegin")) > msg.Offset)
-                || (std::stoul(it->at("fileSegmentEnd")) < (msg.Offset + msg.Data.size()))) {
+            if (std::stoul(it->at("fileSegmentBegin")) > msg.Offset) {
                 // TODO: request affected chunks
 
+                return msg.FileHash;
+            } else if ((std::stoul(it->at("fileSegmentEnd")) + 1) != msg.Offset) {
                 return msg.FileHash;
             }
         }
@@ -462,7 +462,7 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
     boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
 
     std::string data = extractFragment(fmapTarget, DFS::Basic::sectionSize, msg.Offset);
-    DFS::Packets::AddSegmentMessage fragment = {
+    DFS::Packets::EditSegmentMessage fragment = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = std::move(data), .Offset = msg.Offset
     };
 
@@ -470,8 +470,34 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
     return "";
 }
 
-std::string DfsController::addFragment(const DFS::Packets::AddSegmentMessage &msg) {
-    return "";
+std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &msg) {
+    std::string hash = insertFragment(msg);
+
+    std::string pathDelim = Utils::getPlatformDelimeter();
+    DBConnector actrDirFile;
+    std::string actrDirFilePath =
+        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
+    if (!actrDirFile.open(actrDirFilePath)) {
+        exit(EXIT_FAILURE);
+    }
+    std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, msg.FileHash);
+    actrDirData = actrDirFile.select("SELECT * FROM " + DFS::Tables::ActorDirFile::TableName
+                                     + " WHERE fileHash = '" + msg.FileHash + "';");
+    std::string virtualPath = actrDirData[0].at("filePath");
+    long long fileSize = std::stoul(actrDirData[0].at("fileSize"));
+    long long offset = fileSize - (msg.Offset + DFS::Basic::sectionSize);
+    if (offset > 0) {
+        offset = msg.Offset + DFS::Basic::sectionSize;
+    } else if (offset == 0) {
+        offset = msg.Offset + DFS::Basic::sectionSize - 1;
+    } else if (offset < 0) {
+        offset = fileSize - msg.Offset;
+    }
+    DFS::Packets::RequestFileSegmentMessage reqMessage = {
+        .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = virtualPath, .Offset = offset
+    };
+    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
+    return hash;
 }
 
 std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg) {
