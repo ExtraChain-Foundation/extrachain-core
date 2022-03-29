@@ -19,8 +19,6 @@
 
 #include "utils/exc_utils.h"
 
-#include <QCborStreamReader>
-#include <QCborStreamWriter>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QHostAddress>
@@ -342,83 +340,16 @@ QString Utils::dataDir(const QString &newDir) {
     return current;
 }
 
-QByteArray Serialization::fromMap(const QMap<QString, QByteArray> &map) {
-    QByteArray cbor;
-    QCborStreamWriter writer(&cbor);
-
-    writer.startMap(map.count());
-    for (auto it = map.begin(); it != map.end(); ++it) {
-        writer.append(it.key());
-        writer.append(it.value());
-    }
-    writer.endMap();
-
-    return cbor;
+bool Serialization::isEmpty(const QByteArray &bytes) {
+    return bytes.isEmpty();
 }
 
-QByteArray Serialization::fromList(const QByteArrayList &list) {
-    QByteArray cbor;
-    QCborStreamWriter writer(&cbor);
-
-    writer.startArray(list.count());
-    for (const QByteArray &el : list)
-        writer.append(el);
-    writer.endArray();
-
-    return cbor;
+bool Serialization::isEmpty(const std::string &str) {
+    return str.empty();
 }
 
-QByteArrayList Serialization::toList(const QByteArray &data) {
-    QCborStreamReader reader(data);
-    if (!reader.isArray() || !reader.isLengthKnown())
-        return {};
-
-    QByteArrayList list;
-    list.reserve(reader.length());
-
-    reader.enterContainer();
-    while (reader.lastError() == QCborError::NoError && reader.hasNext()) {
-        list << reader.readByteArray().data;
-        reader.next();
-    }
-
-    if (reader.lastError() != QCborError::NoError)
-        return {};
-
-    return list;
-}
-
-QMap<QString, QByteArray> Serialization::toMap(const QByteArray &data) {
-    QCborStreamReader reader(data);
-    if (!reader.isMap() || !reader.isLengthKnown())
-        return {};
-
-    QMap<QString, QByteArray> map;
-
-    reader.enterContainer();
-    while (reader.lastError() == QCborError::NoError && reader.hasNext()) {
-        QString key = reader.readString().data;
-        if (key.isEmpty())
-            break;
-        reader.next();
-        QByteArray value = reader.readByteArray().data;
-        map.insert(key, value);
-    }
-
-    if (reader.lastError() != QCborError::NoError)
-        return {};
-
-    return map;
-}
-
-int Serialization::length(const QByteArray &data) {
-    QByteArrayList list;
-
-    QCborStreamReader reader(data);
-    if (reader.isLengthKnown())
-        return reader.length();
-
-    return -1;
+bool Serialization::isEmpty(std::string_view str_view) {
+    return str_view.empty();
 }
 
 QByteArray Serialization::serializeMap(const QMap<QString, QByteArray> &map) {

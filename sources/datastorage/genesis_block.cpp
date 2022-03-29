@@ -52,12 +52,12 @@ QByteArray GenesisBlock::getDataForHash() const {
 }
 
 bool GenesisBlock::deserialize(const QByteArray &serialized) {
-    *this = MessagePack::deserializeQt<GenesisBlock>(serialized);
+    *this = MessagePack::deserialize<GenesisBlock>(serialized);
     return true;
 }
 
 QByteArray GenesisBlock::serialize() const {
-    return MessagePack::serializeQt(*this);
+    return QByteArray::fromStdString(MessagePack::serialize(*this));
 }
 
 void GenesisBlock::initFields(QList<QByteArray> &list) {

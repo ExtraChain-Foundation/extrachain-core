@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -488,53 +488,39 @@ EXTRACHAIN_EXPORT QList<QByteArray> deserialize(const QByteArray &serialized,
 EXTRACHAIN_EXPORT QByteArray serializeMap(const QMap<QString, QByteArray> &map);
 EXTRACHAIN_EXPORT QMap<QString, QByteArray> deserializeMap(const QByteArray &data);
 
-QByteArray fromMap(const QMap<QString, QByteArray> &map);
-QByteArray fromList(const QByteArrayList &list);
-QByteArrayList toList(const QByteArray &data);
-QMap<QString, QByteArray> toMap(const QByteArray &data);
-int length(const QByteArray &data);
+bool isEmpty(const QByteArray &bytes);
+bool isEmpty(const std::string &str);
+bool isEmpty(std::string_view str_view);
 } // namespace Seralization
 
 namespace MessagePack {
 template <class T>
 std::string serialize(const T &t) {
-    std::stringstream buffer;
-    msgpack::pack(buffer, t);
-    buffer.seekg(0);
-    return buffer.str();
+    std::stringstream ss;
+    msgpack::pack(ss, t);
+    ss.seekg(0);
+    return ss.str();
 }
 
 template <class T, class StringContainer>
-std::pair<T, bool> deserialize(const StringContainer &str, std::size_t size = 0) {
-    if (str.empty()) {
+T deserialize(const StringContainer &data, std::size_t size = 0) {
+    if (Serialization::isEmpty(data)) {
         qDebug() << "[MessagePack] Empty deserialize" << typeid(T).name();
-        return { T(), false };
+        qFatal("[MessagePack] Empty deserialize");
+        return T();
     }
 
     try {
-        msgpack::object_handle oh = msgpack::unpack(str.data(), str.size());
+        msgpack::object_handle oh = msgpack::unpack(data.data(), data.size());
         msgpack::object deserialized = oh.get();
         auto t = deserialized.as<T>();
-        return { t, true };
-    } catch (std::exception e) {
-        // throw "Can't deserialize";
-        auto qt_bytes = QByteArray::fromStdString(str.data());
-        qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
-        qFatal("[MessagePack] Incorrect deserialize");
-        return { T(), false };
-    }
-}
+        return t;
+    } catch (std::exception &e) { }
 
-template <class T>
-QByteArray serializeQt(const T &t) {
-    auto serialized = QByteArray::fromStdString(MessagePack::serialize(t));
-    return serialized;
-}
-
-template <class T>
-T deserializeQt(const QByteArray &str, std::size_t size = 0) {
-    auto deserialized = MessagePack::deserialize<T>(str.toStdString(), size);
-    return deserialized.first;
+    auto qt_bytes = QByteArray::fromStdString(data.data());
+    qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
+    qFatal("[MessagePack] Incorrect deserialize");
+    return T();
 }
 } // namespace MessagePack
 

@@ -144,7 +144,7 @@ void AccountController::loadActors(const QByteArray &id, const QByteArrayList &i
             qDebug() << serialized;
             file.close();
             if (!serialized.isEmpty()) {
-                Actor<KeyPrivate> actor = MessagePack::deserializeQt<Actor<KeyPrivate>>(serialized);
+                Actor<KeyPrivate> actor = MessagePack::deserialize<Actor<KeyPrivate>>(serialized);
                 qDebug().noquote() << "Actor" << actor.id()
                                    << "found locally:" << actor.key().secretKey().c_str();
                 this->m_accounts << actor;

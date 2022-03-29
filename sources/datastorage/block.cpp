@@ -117,7 +117,7 @@ bool Block::verify(const Actor<KeyPublic> &actor) const {
 }
 
 bool Block::deserialize(const QByteArray &serialized) {
-    *this = MessagePack::deserializeQt<Block>(serialized);
+    *this = MessagePack::deserialize<Block>(serialized);
     return true;
 }
 
@@ -175,7 +175,7 @@ bool Block::contain(Block &from) const {
 }
 
 QByteArray Block::serialize() const {
-    return MessagePack::serializeQt(*this);
+    return QByteArray::fromStdString(MessagePack::serialize(*this));
 }
 
 QString Block::toString() const {

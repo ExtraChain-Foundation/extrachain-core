@@ -242,7 +242,7 @@ public:
     }
 
     QByteArray serialize() const {
-        return MessagePack::serializeQt(*this);
+        return QByteArray::fromStdString(MessagePack::serialize(*this));
     }
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {

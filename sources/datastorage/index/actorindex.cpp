@@ -52,7 +52,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
 
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty()) {
-        auto actor = MessagePack::deserializeQt<Actor<KeyPublic>>(serializedActor);
+        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serializedActor);
         //        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
         //            && actor.profile().sign.isEmpty()) {
         //            sendGetActorMessage(id);

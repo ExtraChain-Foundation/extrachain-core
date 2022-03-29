@@ -140,7 +140,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const {
                         "Type   TEXT              NOT NULL );");
 
     for (const auto &i : l) {
-        auto q = MessagePack::deserializeQt<Transaction>(i);
+        auto q = MessagePack::deserialize<Transaction>(i);
 
         // modify sender data in db
         extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.sender.toStdString()

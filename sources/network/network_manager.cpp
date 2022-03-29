@@ -267,8 +267,7 @@ void NetworkManager::saveToCache(const std::string &serialized_message, Config::
         qFatal("[NetworkManager/saveToCache] Error open cache file");
     }
 
-    std::tuple<std::string, Config::Net::TypeSend, std::string> tuple = { serialized_message, typeSend,
-                                                                          receiver_identifier };
+    std::tuple tuple = { serialized_message, typeSend, receiver_identifier };
     std::string package = MessagePack::serialize(tuple);
     file << Utils::intToStdString(int(package.length()), 8);
     file << package;
@@ -290,7 +289,7 @@ void NetworkManager::sendFromCache() {
 
     for (const QByteArray &packageData : qAsConst(allPackages)) {
         auto [serialized_message, typeSend, receiver_identifier] =
-            MessagePack::deserializeQt<std::tuple<std::string, Config::Net::TypeSend, std::string>>(
+            MessagePack::deserialize<std::tuple<std::string, Config::Net::TypeSend, std::string>>(
                 packageData);
         sendMessage(serialized_message, typeSend, receiver_identifier);
     }
@@ -359,10 +358,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     //        }
     //    }
 
-    auto type =
-        MessagePack::deserialize<MessageType>(std::string_view(msg.begin() + 1, msg.begin() + 2)).first;
-    auto status =
-        MessagePack::deserialize<MessageStatus>(std::string_view(msg.begin() + 2, msg.begin() + 3)).first;
+    auto type = MessagePack::deserialize<MessageType>(std::string_view(msg.begin() + 1, msg.begin() + 2));
+    auto status = MessagePack::deserialize<MessageStatus>(std::string_view(msg.begin() + 2, msg.begin() + 3));
     auto serialized = std::string_view(msg.begin() + 40, msg.end());
     auto messId = std::string(msg.begin() + 4, msg.begin() + 19);
 
@@ -377,10 +374,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::Actor: {
         // actor get, test use ActorId
         if (status == MessageStatus::Request) {
-            auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
+            auto actorId = MessagePack::deserialize<std::string>(serialized);
             node->actorIndex()->handleGetActor(actorId, identifier); // maybe need message id?
         } else if (status == MessageStatus::Response) {
-            auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+            auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
             node->actorIndex()->handleNewActor(actor);
         }
         break;
@@ -394,32 +391,32 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::DfsAddFile: {
-        auto [msg, success] = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
         node->dfs()->addFile(msg, true);
         break;
     }
     case MessageType::DfsRequestFileSegment: {
-        auto [msg, success] = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
         node->dfs()->sendFragment(msg);
         break;
     }
     case MessageType::DfsAddSegment: {
-        auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
         node->dfs()->addFragment(msg);
         break;
     }
     case MessageType::DfsEditSegment: {
-        auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
         node->dfs()->insertFragment(msg);
         break;
     }
     case MessageType::DfsDeleteSegment: {
-        auto [msg, success] = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
         node->dfs()->deleteFragment(msg);
         break;
     }
     case MessageType::DfsRemoveFile: {
-        auto [msg, success] = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
         node->dfs()->removeFile(msg);
         break;
     }
