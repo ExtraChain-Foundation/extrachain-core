@@ -37,10 +37,6 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
-void NetworkManager::setResolveManager(ResolveManager *value) {
-    resolveManager = value;
-}
-
 NetworkManager::NetworkManager(ExtraChainNode *node) {
     this->node = node;
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
@@ -118,6 +114,8 @@ void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &ho
 void NetworkManager::connectWsService(WebSocketService *service) {
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
+    connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
+
     if (!m_connections.contains(service))
         m_connections.append(service);
 }
@@ -206,7 +204,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
-    const quint16 port = (protocol == wsPort);
+    const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
                                  << ", port: " << port;
     m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
@@ -232,6 +230,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     if (!isActiveConnectionExists()) {
         qDebug() << "[NetworkManager] Save message to cache";
         saveToCache(serialized_message, typeSend, receiver_identifier);
+        return;
     }
 
     auto isSendCheck = [typeSend, receiver_identifier](std::string_view socket_identifier) {
@@ -278,6 +277,8 @@ void NetworkManager::saveToCache(const std::string &serialized_message, Config::
 }
 
 void NetworkManager::sendFromCache() {
+    qDebug() << "[NetworkManager] Load from cache";
+
     QFile file("tmp/network.cache");
     if (!file.exists() || !file.open(QFile::ReadOnly)) {
         return;
@@ -329,29 +330,34 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
-    if (checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
+    if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
         return;
     }
 
     qDebug() << "[NetworkManager/messageReceived] New message type";
+
+    qDebug() << "[Pick]" << QByteArray::fromStdString(message);
+    qDebug() << "[Pick]" << QByteArray::fromStdString(message).remove(message.length() - 64, 64).toBase64();
+
     std::string_view msg(message.begin(), message.end() - 64);
     std::string_view sign(message.end() - 64, message.end());
     // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
 
-    {
-        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
-        auto actor = node->actorIndex()->getActor(sender);
+    // TODO: no check new actor
+    //    {
+    //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
+    //        auto actor = node->actorIndex()->getActor(sender);
 
-        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
-                                         QByteArray::fromStdString(std::string(sign)));
-        if (!verify) {
-            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
-        } else {
-            qDebug() << "[NetworkManager/messageReceived] Verify good";
-        }
-    }
+    //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
+    //                                         QByteArray::fromStdString(std::string(sign)));
+    //        if (!verify) {
+    //            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
+    //        } else {
+    //            qDebug() << "[NetworkManager/messageReceived] Verify good";
+    //        }
+    //    }
 
     auto type =
         MessagePack::deserialize<MessageType>(std::string_view(msg.begin() + 1, msg.begin() + 2)).first;
@@ -360,66 +366,69 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     auto serialized = std::string_view(msg.begin() + 40, msg.end());
     auto messId = std::string(msg.begin() + 4, msg.begin() + 19);
 
+    qDebug() << "[Pick] type" << int(type) << "status" << int(status) << "messId" << messId.c_str();
+    qDebug() << "[Pick]" << QByteArray::fromStdString(std::string(serialized))
+             << QByteArray::fromStdString(std::string(serialized)).toBase64();
+
     if (type == MessageType::Actor && status == MessageStatus::Request) { }
 
-    try {
-        switch (type) {
-        case MessageType::Actor: {
-            // actor get, test use ActorId
-            if (status == MessageStatus::Request) {
-                auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
-                node->actorIndex()->handleGetActor(actorId, identifier); // maybe need message id?
-            } else if (status == MessageStatus::Response) {
-                auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-                node->actorIndex()->handleNewActor(actor);
-            }
-            break;
+    // try {
+    switch (type) {
+    case MessageType::Actor: {
+        // actor get, test use ActorId
+        if (status == MessageStatus::Request) {
+            auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
+            node->actorIndex()->handleGetActor(actorId, identifier); // maybe need message id?
+        } else if (status == MessageStatus::Response) {
+            auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+            node->actorIndex()->handleNewActor(actor);
         }
-        case MessageType::ActorAll: {
-            // node->actorIndex()->handleGetAllActor(messId);
-            break;
-        }
-        case MessageType::ActorCount: {
-            break;
-        }
+        break;
+    }
+    case MessageType::ActorAll: {
+        // node->actorIndex()->handleGetAllActor(messId);
+        break;
+    }
+    case MessageType::ActorCount: {
+        break;
+    }
 
-        case MessageType::DfsAddFile: {
-            auto [msg, success] = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
-            node->dfs()->addFile(msg, true);
-            break;
-        }
-        case MessageType::DfsRequestFileSegment: {
-            auto [msg, success] =
-                MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
-            node->dfs()->sendFragment(msg);
-            break;
-        }
-        case MessageType::DfsAddSegment: {
-            auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
-            node->dfs()->addFragment(msg);
-            break;
-        }
-        case MessageType::DfsEditSegment: {
-            auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
-            node->dfs()->insertFragment(msg);
-            break;
-        }
-        case MessageType::DfsDeleteSegment: {
-            auto [msg, success] = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
-            node->dfs()->deleteFragment(msg);
-            break;
-        }
-        case MessageType::DfsRemoveFile: {
-            auto [msg, success] = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
-            node->dfs()->removeFile(msg);
-            break;
-        }
+    case MessageType::DfsAddFile: {
+        auto [msg, success] = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
+        node->dfs()->addFile(msg, true);
+        break;
+    }
+    case MessageType::DfsRequestFileSegment: {
+        auto [msg, success] = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
+        node->dfs()->sendFragment(msg);
+        break;
+    }
+    case MessageType::DfsAddSegment: {
+        auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        node->dfs()->addFragment(msg);
+        break;
+    }
+    case MessageType::DfsEditSegment: {
+        auto [msg, success] = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        node->dfs()->insertFragment(msg);
+        break;
+    }
+    case MessageType::DfsDeleteSegment: {
+        auto [msg, success] = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
+        node->dfs()->deleteFragment(msg);
+        break;
+    }
+    case MessageType::DfsRemoveFile: {
+        auto [msg, success] = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
+        node->dfs()->removeFile(msg);
+        break;
+    }
 
-        default:
-            qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
-            break;
-        }
-    } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
+    default:
+        qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
+        break;
+    }
+    // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
 void NetworkManager::removeWsConnection() //

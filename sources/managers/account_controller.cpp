@@ -76,7 +76,7 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
 
     userNum = m_accounts.size() - 1;
 
-    qDebug() << "create actor finished";
+    qDebug() << "[AccountController] Create actor finished";
     if (account == ActorType::Account) {
         qDebug() << "Dfs hash init for me";
         emit initDfs(); //

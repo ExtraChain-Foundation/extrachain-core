@@ -53,10 +53,10 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty()) {
         auto actor = MessagePack::deserializeQt<Actor<KeyPublic>>(serializedActor);
-        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
-            && actor.profile().sign.isEmpty()) {
-            sendGetActorMessage(id);
-        }
+        //        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
+        //            && actor.profile().sign.isEmpty()) {
+        //            sendGetActorMessage(id);
+        //        }
 
         return actor;
     } else {
@@ -117,8 +117,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         auto profileData = actor.profile().serialize();
         bool isProfile = !profileData.isEmpty();
 
-        // TODONEW: Send GetActorResponse
-        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, messageId);
+        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response); // messageId
 
         if (isProfile) {
             // TODONEW node->resolveManager()->registrateMsg(profileData,
@@ -133,7 +132,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
             if (tempCheck[actorIdBytes] < current - 10) {
                 qDebug() << "[ActorIndex] Send get actor if no profile:" << actorId;
                 tempCheck[actorIdBytes] = current;
-                sendGetActorMessage(actorId);
+                // sendGetActorMessage(actorId);
             }
         }
 

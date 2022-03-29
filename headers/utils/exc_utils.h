@@ -517,7 +517,7 @@ std::pair<T, bool> deserialize(const StringContainer &str, std::size_t size = 0)
         auto t = deserialized.as<T>();
         return { t, true };
     } catch (std::exception e) {
-        throw "Can't deserialize";
+        // throw "Can't deserialize";
         auto qt_bytes = QByteArray::fromStdString(str.data());
         qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
         qFatal("[MessagePack] Incorrect deserialize");

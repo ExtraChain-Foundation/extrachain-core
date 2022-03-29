@@ -36,7 +36,6 @@
 #include "network/network_status.h"
 #include "utils/exc_utils.h"
 
-class ResolveManager;
 class SocketService;
 class TcpSocketService;
 class WebSocketService;
@@ -71,7 +70,7 @@ struct MessageIdDataReceived {
 
 /**
  * @brief The NetworkManager class
- * Creates Discovery, Resolver, Server and Sockets services
+ * Creates Discovery, Server and Sockets services
  */
 class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
@@ -85,7 +84,6 @@ private:
     QMap<QByteArray, int> msgHashList = {};
 
     ExtraChainNode *node;
-    ResolveManager *resolveManager;
     QNetworkAddressEntry *local = nullptr;
     TcpServerService *tcpServer = nullptr;
     QWebSocketServer *wsServer = nullptr;
@@ -157,8 +155,6 @@ public:
     bool isActiveConnectionExists();
 
     void messageReceived(const std::string &message, const std::string &identifier);
-
-    void setResolveManager(ResolveManager *value);
 
     template <class T>
     std::string send_message(T data, MessageType type, MessageStatus status = MessageStatus::NoStatus,

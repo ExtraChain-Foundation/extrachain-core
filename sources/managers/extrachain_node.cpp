@@ -132,18 +132,18 @@ void ExtraChainNode::showMessage(QString from, QString message) {
 }
 
 // void ExtraChainNode::connectResolveManager() {
-    //    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
-    //    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
-    //    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
-    //    resolveManager,
-    //            &ResolveManager::resolveMessage);
-    // TODO: move
-    //    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
+//    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
+//    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
+//    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
+//    resolveManager,
+//            &ResolveManager::resolveMessage);
+// TODO: move
+//    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
 
-    // connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
-    // connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
-    // connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
-    //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
+// connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
+// connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
+// connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
+//    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 // }
 
 void ExtraChainNode::connectTxManager() {
@@ -365,7 +365,7 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
-    // connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
+    connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
     // connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);

@@ -92,7 +92,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
     if (!mess.isEmpty()) {
         SocketPair pair(m_ip.toStdString(), port());
         pair.setIdentifier(m_identifier.toLatin1());
-        node->network()->messageReceivedOld(mess, pair);
+        node->network()->messageReceived(mess.toStdString(), pair.identifier().toStdString());
     } else {
         qFatal("[WS] Messsage is empty after prepare");
     }
