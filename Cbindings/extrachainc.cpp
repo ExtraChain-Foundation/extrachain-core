@@ -273,5 +273,5 @@ void extrachain_network_connect(const char *ip, int type) {
 }
 
 void extrachain_network_send(const char *data, size_t size) {
-    node->network()->send(data, 0, SocketPair(), Config::Net::TypeSend(0));
+    // node->network()->send(data, 0, SocketPair(), Config::Net::TypeSend(0));
 }

@@ -37,7 +37,6 @@
 #include "boost/version.hpp"
 
 #include "enc/enc_tools.h"
-#include "utils/Keccak256.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"

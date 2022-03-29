@@ -20,12 +20,8 @@
 #include "datastorage/dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
-#include "network/packages/base_message.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
-#include "resolve/resolve_manager.h"
-
-using namespace Messages;
 
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
@@ -163,7 +159,6 @@ void NetworkManager::checkConnectionsStatus() {
 
     if (flag) { // TODO: replace to networkStatusChanged slot
         sendFromCache();
-        sendFromCacheOld();
     }
 }
 
@@ -230,54 +225,6 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
     auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
     connectWsService(service);
-}
-
-void NetworkManager::sendMessageOld(const QByteArray &message, const unsigned int &msgType,
-                                    const SocketPair &receiver, Config::Net::TypeSend typeSend) {
-    Config::Net::TypeSend send;
-
-    if (typeSend == Config::Net::TypeSend::Default) {
-        if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
-            || msgType == 402)
-            send = Config::Net::TypeSend::All;
-        else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
-            send = Config::Net::TypeSend::Focused;
-        else
-            send = Config::Net::TypeSend::Except;
-    } else {
-        send = typeSend;
-    }
-
-    if (!isActiveConnectionExists()) {
-        // qDebug() << "[NetworkManager] Saved message to cache";
-        saveToCacheOld(message, msgType, receiver, send);
-    }
-
-    auto isSendCheck = [](Config::Net::TypeSend send, std::string_view socketIp, quint16 socketPort,
-                          const SocketPair &pair) {
-        switch (send) {
-        case Config::Net::TypeSend::Except:
-            return socketIp != pair.ip && socketPort != pair.port;
-            break;
-        case Config::Net::TypeSend::Focused:
-            return socketIp == pair.ip && socketPort == pair.port;
-            break;
-        case Config::Net::TypeSend::All:
-            return true;
-            break;
-        default:
-            return false;
-            break;
-        }
-    };
-
-    for (const auto &service : qAsConst(m_connections)) {
-        bool isSend = isSendCheck(send, service->ip().toStdString(), service->port(), receiver);
-        if (!isSend)
-            continue;
-        if (service->isActive() && service->sendType() == SocketService::SendType::All)
-            emit service->send(message);
-    }
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
@@ -381,63 +328,13 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
     return flag_result;
 }
 
-void NetworkManager::saveToCacheOld(const QByteArray &message, const unsigned int &msgType,
-                                    const SocketPair &receiver, Config::Net::TypeSend typeSend) {
-    QFile file("tmp/network_old.cache");
-    file.open(QFile::Append);
-    QByteArrayList list = { message,
-                            QByteArray::fromStdString(receiver.ip),
-                            QByteArray::number(receiver.port),
-                            receiver.m_identifier,
-                            QByteArray::number(msgType),
-                            QByteArray::number(int(typeSend)) };
-    QByteArray package = Serialization::serialize(list, 8);
-    file.write(Utils::intToByteArray(package.length(), 8) + package);
-    file.close();
-}
-
-void NetworkManager::sendFromCacheOld() {
-    QFile file("tmp/network_old.cache");
-    if (!file.exists() || !file.open(QFile::ReadOnly)) {
+void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
+    if (checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
+        qDebug()
+            << "[Network Manager] checkMsgCount have returned false: such message has been already added";
         return;
     }
 
-    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
-    file.close();
-    file.remove();
-
-    for (const QByteArray &packageData : qAsConst(allPackages)) {
-        QByteArrayList package = Serialization::deserialize(packageData, 8);
-        if (package.length() != 6)
-            return;
-
-        QByteArray data = package[0];
-        SocketPair socketData;
-        socketData.ip = package[1].toStdString();
-        socketData.port = package[2].toShort();
-        socketData.m_identifier = package[3];
-        // TODO: protocol
-        auto msgType = package[4].toUInt();
-        Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());
-        sendMessageOld(data, msgType, socketData, typeSend);
-    }
-}
-
-void NetworkManager::messageReceivedOld(const QByteArray &msg, const SocketPair &receiver) {
-    if (checkMsgCount(msg)) {
-        if (msg.left(6) == "ExCNew") {
-            messageReceived(msg.mid(6).toStdString(), receiver.m_identifier.toStdString());
-            return;
-        }
-
-        resolveManager->setTask(msg, receiver);
-    } else {
-        qDebug()
-            << "[Network Manager] checkMsgCount have returned false: such message has been already added";
-    }
-}
-
-void NetworkManager::messageReceived(const std::string &message, const std::string &receiver) {
     qDebug() << "[NetworkManager/messageReceived] New message type";
     std::string_view msg(message.begin(), message.end() - 64);
     std::string_view sign(message.end() - 64, message.end());
@@ -471,7 +368,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             // actor get, test use ActorId
             if (status == MessageStatus::Request) {
                 auto [actorId, success] = MessagePack::deserialize<std::string>(serialized);
-                node->actorIndex()->handleGetActor(actorId, receiver);
+                node->actorIndex()->handleGetActor(actorId, identifier); // maybe need message id?
             } else if (status == MessageStatus::Response) {
                 auto [actor, success] = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
                 node->actorIndex()->handleNewActor(actor);
@@ -564,15 +461,6 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
 
 QString NetworkManager::localIp() {
     return local->ip().toString();
-}
-
-void NetworkManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
-                          Config::Net::TypeSend typeSend) {
-    Messages::BaseMessage msg;
-    msg.type = msgType;
-    msg.data = data;
-    QByteArray message = msg.serialize();
-    sendMessageOld(message, msgType, receiver, typeSend);
 }
 
 void NetworkManager::onNewWsConnection() {

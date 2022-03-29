@@ -34,9 +34,7 @@
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
-#include "network/packages/service/message_types.h"
 #include "profile/private_profile.h"
-#include "resolve/resolve_manager.h"
 
 #include <sodium.h>
 
@@ -65,11 +63,7 @@ ExtraChainNode::ExtraChainNode() {
 
     m_dfs = new DfsController(*this);
 
-    m_resolveManager =
-        new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
-    m_resolveManager->setNode(this);
     m_blockchain->setTxManager(m_txManager);
-    m_networkManager->setResolveManager(m_resolveManager);
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -79,7 +73,6 @@ ExtraChainNode::ExtraChainNode() {
     ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(m_actorIndex);
     ThreadPool::addThread(m_txManager);
-    ThreadPool::addThread(m_resolveManager);
     ThreadPool::addThread(m_privateProfile);
 }
 
@@ -138,7 +131,7 @@ void ExtraChainNode::showMessage(QString from, QString message) {
     qDebug() << from << " " << message;
 }
 
-void ExtraChainNode::connectResolveManager() {
+// void ExtraChainNode::connectResolveManager() {
     //    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
     //    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
     //    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
@@ -147,11 +140,11 @@ void ExtraChainNode::connectResolveManager() {
     // TODO: move
     //    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
 
-    connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
-    connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
-    connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
+    // connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
+    // connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
+    // connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
-}
+// }
 
 void ExtraChainNode::connectTxManager() {
     // TODOD delete later (s)
@@ -367,7 +360,7 @@ void ExtraChainNode::connectContractManager() {
 }
 
 void ExtraChainNode::connectActorIndex() {
-    connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
+    // connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
 }
 
 void ExtraChainNode::dfsConnection() {
@@ -384,7 +377,6 @@ void ExtraChainNode::dfsConnection() {
 void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, []() { qInfo() << "Node: started"; });
     connectTxManager();
-    connectResolveManager();
     connectContractManager();
     //    connectAccountController();
     connectActorIndex();
@@ -424,10 +416,6 @@ AccountController *ExtraChainNode::accountController() const {
 
 ActorIndex *ExtraChainNode::actorIndex() const {
     return m_actorIndex;
-}
-
-ResolveManager *ExtraChainNode::resolveManager() const {
-    return m_resolveManager;
 }
 
 PrivateProfile *ExtraChainNode::privateProfile() const {

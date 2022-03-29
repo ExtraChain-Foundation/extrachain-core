@@ -32,8 +32,8 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
+#include "network/message_body.h"
 #include "network/network_status.h"
-#include "network/packages/message_body.h"
 #include "utils/exc_utils.h"
 
 class ResolveManager;
@@ -126,9 +126,6 @@ protected:
      * @return
      */
     bool checkMsgCount(const QByteArray &msg);
-    void saveToCacheOld(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
-                        Config::Net::TypeSend typeSend);
-    void sendFromCacheOld();
 
 private slots:
     void onNewWsConnection();
@@ -151,13 +148,6 @@ private slots:
 
 public:
     QString localIp(); // TODO: remove
-    void send(const QByteArray &message, const unsigned int &msgType,
-              const SocketPair &receiver = SocketPair(),
-              Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-
-    virtual void sendMessageOld(const QByteArray &message, const unsigned int &msgType,
-                                const SocketPair &receiver = {},
-                                Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
 
     void sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                      const std::string &receiver_identifier);
@@ -166,8 +156,7 @@ public:
     void sendFromCache();
     bool isActiveConnectionExists();
 
-    virtual void messageReceivedOld(const QByteArray &msg, const SocketPair &receiver);
-    void messageReceived(const std::string &message, const std::string &receiver);
+    void messageReceived(const std::string &message, const std::string &identifier);
 
     void setResolveManager(ResolveManager *value);
 
@@ -185,7 +174,7 @@ public:
         auto sign = mainActor.key().sign(serialized);
 
         std::string receiver_identifier;
-        this->sendMessage("ExCNew" + serialized + sign, typeSend, receiver_identifier);
+        this->sendMessage(serialized + sign, typeSend, receiver_identifier);
         // if (to_message_id.empty()) { // move to second send part
         //     this->m_waiting_messages.insert(sended_message_id, MessageIdData {});
         // }

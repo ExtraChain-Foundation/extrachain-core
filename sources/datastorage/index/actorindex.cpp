@@ -18,10 +18,6 @@
  */
 
 #include "datastorage/index/actorindex.h"
-#include "network/packages/base_message.h"
-#include "network/packages/base_message_response.h"
-#include "network/packages/service/message_types.h"
-#include "resolve/resolve_manager.h"
 
 ActorId ActorIndex::firstId() {
     return m_firstId;
@@ -282,8 +278,7 @@ QByteArrayList ActorIndex::getProfile(QString id) {
     PublicProfile pProfile = actor.profile();
     QByteArrayList pList = pProfile.getListProfile();
     if (pProfile.sign == "" || pList.isEmpty()) {
-        if (actor.type() != ActorType::User && actor.type() != ActorType::ServiceProvider
-            && node->resolveManager() != nullptr) {
+        if (actor.type() != ActorType::User && actor.type() != ActorType::ServiceProvider) {
             sendGetActorMessage(id.toStdString());
         }
 

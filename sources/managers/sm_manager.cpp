@@ -18,9 +18,6 @@
  */
 
 #include "managers/sm_manager.h"
-#include "network/packages/base_message.h"
-#include "network/packages/base_message_response.h"
-#include "network/packages/service/message_types.h"
 
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent) {
@@ -45,7 +42,8 @@ void SmartContractManager::createContractProfile(QByteArray tokenCount, QByteArr
     profileList.append(color);
     actorIndex->saveProfile(actor, profileList);
 
-    auto sign = QByteArray::fromStdString(actor.key().sign(Serialization::serialize(profileList, 4).toStdString()));
+    auto sign =
+        QByteArray::fromStdString(actor.key().sign(Serialization::serialize(profileList, 4).toStdString()));
     profileList.insert(2, sign);
 
     QFile file(SmartContractStorage::CONTRACTPROFILE + actor.id().toByteArray() + ".profile");

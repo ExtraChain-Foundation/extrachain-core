@@ -152,12 +152,6 @@ public slots:
 
 signals:
     /**
-     * @brief sendMessage to NetworkManager slot: sendMessage
-     * @param data
-     * @param type
-     */
-    void sendMessage(const QByteArray &data, const unsigned int &type);
-    /**
      * @brief responseReady
      * @param data
      * @param msgType

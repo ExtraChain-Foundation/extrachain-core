@@ -69,20 +69,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_body.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/base_message_response.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/message_interface.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/packages/service/message_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/public_profile.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/resolve/resolve_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/resolve/resolver_service.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/Keccak256.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/coinprocess.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
@@ -111,17 +104,12 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/packages/base_message_response.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/public_profile.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/resolve/resolve_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/resolve/resolver_service.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/Keccak256.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/coinprocess.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp

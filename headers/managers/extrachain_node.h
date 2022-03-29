@@ -33,7 +33,6 @@ class Blockchain;
 class NetworkManager;
 class TransactionManager;
 class AccountController;
-class ResolveManager;
 class SubscribeController;
 class PrivateProfile;
 class Transaction;
@@ -55,7 +54,6 @@ private:
     NetworkManager *m_networkManager = nullptr;
     TransactionManager *m_txManager = nullptr;
     AccountController *m_accountController = nullptr;
-    ResolveManager *m_resolveManager = nullptr;
     SubscribeController *m_subscribeController = nullptr;
     PrivateProfile *m_privateProfile = nullptr;
     // ContractManager *m_contractManager = nullptr;
@@ -75,7 +73,6 @@ public:
     NetworkManager *network();
     AccountController *accountController() const;
     ActorIndex *actorIndex() const;
-    ResolveManager *resolveManager() const;
     PrivateProfile *privateProfile() const;
     SubscribeController *subscribeController() const;
     DfsController *dfs() const;
@@ -114,7 +111,6 @@ private:
     /**
      * @brief Connect signals between NetworkManager and Blockchain
      */
-    void connectResolveManager();
     void connectTxManager();
     void connectContractManager();
     void connectBlockchain();

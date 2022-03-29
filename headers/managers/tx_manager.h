@@ -31,7 +31,6 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
-#include "network/packages/service/message_types.h"
 #include "utils/coinprocess.h"
 
 class ExtraChainNode;
