@@ -33,8 +33,6 @@ class Blockchain;
 class NetworkManager;
 class TransactionManager;
 class AccountController;
-class SmartContractManager;
-class ChatManager;
 class ResolveManager;
 class SubscribeController;
 class PrivateProfile;
@@ -57,8 +55,6 @@ private:
     NetworkManager *m_networkManager = nullptr;
     TransactionManager *m_txManager = nullptr;
     AccountController *m_accountController = nullptr;
-    SmartContractManager *m_smartContractManager = nullptr;
-    ChatManager *m_chatManager = nullptr;
     ResolveManager *m_resolveManager = nullptr;
     SubscribeController *m_subscribeController = nullptr;
     PrivateProfile *m_privateProfile = nullptr;
@@ -82,7 +78,6 @@ public:
     ResolveManager *resolveManager() const;
     PrivateProfile *privateProfile() const;
     SubscribeController *subscribeController() const;
-    ChatManager *chatManager() const;
     DfsController *dfs() const;
 
     // Remove this function before merge
@@ -120,7 +115,6 @@ private:
      * @brief Connect signals between NetworkManager and Blockchain
      */
     void connectResolveManager();
-    void connectSmContractManager();
     void connectTxManager();
     void connectContractManager();
     void connectBlockchain();

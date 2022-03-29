@@ -55,7 +55,6 @@ ExtraChainNode::ExtraChainNode() {
     prepareFolders();
     m_actorIndex = new ActorIndex(this);
     m_privateProfile = new PrivateProfile();
-    m_smartContractManager = new SmartContractManager(m_actorIndex);
     m_accountController = new AccountController(this);
     m_networkManager = new NetworkManager(this);
 
@@ -80,7 +79,6 @@ ExtraChainNode::ExtraChainNode() {
     ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(m_actorIndex);
     ThreadPool::addThread(m_txManager);
-    ThreadPool::addThread(m_smartContractManager);
     ThreadPool::addThread(m_resolveManager);
     ThreadPool::addThread(m_privateProfile);
 }
@@ -153,30 +151,6 @@ void ExtraChainNode::connectResolveManager() {
     connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
     connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
     //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
-}
-
-void ExtraChainNode::connectSmContractManager() {
-    //    connect(smContractController, &SmartContractManager::verifyActor, m_networkManager,
-    //    &networkManager::NewActor); TODO!!!
-    //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
-    //            &ExtraChainNode::addActorInActorIndex);
-    connect(m_smartContractManager, &SmartContractManager::saveActorInPrivateProfile,
-            [this](const QByteArray &id, const QString &type, const bool &rewrite) { // TODO?
-                auto mainId = m_accountController->mainActor().id().toByteArray();
-                emit nodeEditPrivateProfile({ m_privateProfile->hash(), mainId }, type, id, rewrite);
-            });
-
-    //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
-    connect(this, &ExtraChainNode::nodeEditPrivateProfile, m_privateProfile,
-            &PrivateProfile::editPrivateProfile);
-
-    connect(this, &ExtraChainNode::generateSmartContract, m_smartContractManager,
-            &SmartContractManager::createContractProfile);
-    connect(m_smartContractManager, &SmartContractManager::sendTransactionCreateContract, m_resolveManager,
-            &ResolveManager::registrateMsg);
-
-    // connect(smContractController, &SmartContractManager::sendCurrentToken, m_networkManager,
-    // &networkManager::NewActor);
 }
 
 void ExtraChainNode::connectTxManager() {
@@ -414,7 +388,6 @@ void ExtraChainNode::connectSignals() {
     connectContractManager();
     //    connectAccountController();
     connectActorIndex();
-    connectSmContractManager();
     dfsConnection();
 
     connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
@@ -466,29 +439,6 @@ SubscribeController *ExtraChainNode::subscribeController() const {
 }
 
 void ExtraChainNode::logOut() {
-}
-
-// void ExtraChainNode::createActorWith
-
-// void ExtraChainNode::makeContractFirstTransaction(Contract &contract)
-//{
-//    qDebug() << "ExtraChainNode::makeContractFirstTransaction";
-//    //    contract.setFirst_transaction_hash(
-//    //        createTransaction(BigNumber(0), contract.getAmount()).getHash());
-//    m_networkManager->shareContract(contract);
-//}
-
-// void ExtraChainNode::makeContractFinalTransaction(Contract &contract)
-//{
-//    contract.setFinal_transaction_hash(
-//        createTransaction(contract.getPerformer(), contract.getAmount()).getHash());
-//    qDebug() << contract.serialize();
-//    contract.setIsCompleted(true);
-//    m_networkManager->shareContract(contract);
-//}
-
-ChatManager *ExtraChainNode::chatManager() const {
-    return m_chatManager;
 }
 
 DfsController *ExtraChainNode::dfs() const {
