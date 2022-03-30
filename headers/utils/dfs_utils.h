@@ -5,8 +5,8 @@
 #include <vector>
 
 #include "msgpack.hpp"
-
 #include "utils/db_connector.h"
+#include <boost/algorithm/string/replace.hpp>
 
 namespace Utils {
 static const std::string getPlatformDelimeterDFS() {
@@ -113,6 +113,9 @@ namespace Tables {
     static const std::string filesTableLast =
         "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
+}
+namespace Path {
+    std::string convertPathToPlatform(std::string path);
 }
 enum Encryption
 {

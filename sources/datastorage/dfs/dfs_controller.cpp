@@ -16,7 +16,8 @@ DfsController::~DfsController() {
 std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
                                         std::string targetVirtualFilePath, DFS::Encryption securityLevel) {
     std::string pathDelim = Utils::getPlatformDelimeter();
-    std::string newFilePath = filePath;
+    std::string fpath = DFS::Path::convertPathToPlatform(filePath);
+    std::string newFilePath = fpath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
 
     // TODO: error description
@@ -25,11 +26,11 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     }
 
     if (securityLevel == DFS::Encryption::Encrypted) {
-        std::string fname = std::filesystem::path(filePath).stem().generic_string();
+        std::string fname = std::filesystem::path(fpath).stem().generic_string();
         newFilePath = "temp";
         std::filesystem::create_directories(newFilePath);
         newFilePath = newFilePath + pathDelim + fname;
-        actor.key().encryptFile(filePath, newFilePath);
+        actor.key().encryptFile(fpath, newFilePath);
 
         std::filesystem::path nvp = targetVirtualFilePath;
         std::filesystem::path nfn = nvp.filename();
@@ -42,9 +43,12 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::string fileHash = Utils::calcKeccakForFile(newFilePath);
     auto fileSize = std::filesystem::file_size(newFilePath);
     std::filesystem::path placeInDFS =
-        DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim + fileHash;
+        DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim;
+
     try {
-        std::filesystem::copy(newFilePath, std::filesystem::absolute(placeInDFS));
+        std::filesystem::create_directories(placeInDFS.c_str());
+        placeInDFS /= fileHash;
+        std::filesystem::copy(newFilePath, placeInDFS);
     } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
 
     DFS::Packets::AddFileMessage msg = { .Actor = actor.id().toStdString(),
@@ -293,6 +297,9 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
             actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " + "'"
                                + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
                                + "'");
+            actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileSize = " + "'"
+                               + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
+                               + it->at("fileHash") + "'");
         }
         if (it->at("fileHashPrev") == msg.FileHash) {
             actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHashPrev = " + "'"
@@ -305,6 +312,9 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
             localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " + "'"
                                 + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
                                 + "'");
+            localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileSize = " + "'"
+                                + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
+                                + it->at("fileHash") + "'");
         }
         if (it->at("fileHashPrev") == msg.FileHash) {
             localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
@@ -312,6 +322,8 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
                                 + "fileHash = " + "'" + it->at("fileHash") + "'");
         }
     }
+    actrDirFile.close();
+    localDirFile.close();
     return newFileHash;
 }
 
@@ -448,11 +460,18 @@ unsigned long long DfsController::calculateSizeTaken(const std::string &folder) 
 }
 
 std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget,
-                                           unsigned long long fragmentSize, unsigned long long offset) {
-    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, offset,
+                                           unsigned long long offset, unsigned long long fragmentSize) {
+    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset,
                                                    fragmentSize);
     char *rr_ptr = static_cast<char *>(rightRegion.get_address());
     return std::string(rr_ptr, fragmentSize);
+}
+
+std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget,
+                                           unsigned long long offset) {
+    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset);
+    char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+    return std::string(rr_ptr, rightRegion.get_size());
 }
 
 std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg) {
@@ -460,8 +479,13 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
     std::filesystem::path realFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
     boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
+    std::string data;
+    if (std::filesystem::file_size(realFilePath) - msg.Offset <= DFS::Basic::sectionSize) {
+        data = extractFragment(fmapTarget, msg.Offset, DFS::Basic::sectionSize);
+    } else {
+        data = extractFragment(fmapTarget, msg.Offset);
+    }
 
-    std::string data = extractFragment(fmapTarget, DFS::Basic::sectionSize, msg.Offset);
     DFS::Packets::EditSegmentMessage fragment = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = std::move(data), .Offset = msg.Offset
     };

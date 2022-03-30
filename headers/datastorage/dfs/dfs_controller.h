@@ -55,8 +55,9 @@ private:
                             long long fileSegmentBegin, long long fileSegmentEnd, long long fileSize);
     unsigned long long calculateSizeTaken(const std::string &folder = DFS::Basic::fsActrRoot);
     std::string extractNextFragment();
-    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget,
-                                unsigned long long fragmentSize, unsigned long long offset);
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, unsigned long long offset,
+                                unsigned long long fragmentSize);
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, unsigned long long offset);
 
 public:
     std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg);
