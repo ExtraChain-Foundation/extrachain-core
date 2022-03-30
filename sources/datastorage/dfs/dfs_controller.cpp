@@ -279,17 +279,21 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
     }
     for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
-            if (std::stoul(it->at("fileSegmentBegin")) > msg.Offset) {
-                // TODO: request affected chunks
+            long fsegb = std::stol(it->at("fileSegmentBegin"));
+            long fsege = std::stol(it->at("fileSegmentEnd"));
+            if (fsegb != -1 && fsege == -1) {
+                if (fsegb > msg.Offset) {
+                    // TODO: request affected chunks
 
-                return msg.FileHash;
-            } else if ((std::stoul(it->at("fileSegmentEnd")) + 1) != msg.Offset) {
-                return msg.FileHash;
+                    return msg.FileHash;
+                } else if ((fsege + 1) != msg.Offset) {
+                    return msg.FileHash;
+                }
             }
+
+            insertDataChunk(msg.Data, msg.Offset, realFilePath);
         }
     }
-
-    insertDataChunk(msg.Data, msg.Offset, realFilePath);
     std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
     unsigned int newFileSize = std::filesystem::file_size(realFilePath);
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
@@ -480,7 +484,7 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
     boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
     std::string data;
-    if (std::filesystem::file_size(realFilePath) - msg.Offset <= DFS::Basic::sectionSize) {
+    if (std::filesystem::file_size(realFilePath) - msg.Offset > DFS::Basic::sectionSize) {
         data = extractFragment(fmapTarget, msg.Offset, DFS::Basic::sectionSize);
     } else {
         data = extractFragment(fmapTarget, msg.Offset);
