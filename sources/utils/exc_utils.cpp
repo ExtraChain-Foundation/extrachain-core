@@ -146,8 +146,8 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-std::string Utils::calcKeccakForFile(const std::string &fileName) {
-    QFile file(QString::fromStdString(fileName));
+std::string Utils::calcKeccakForFile(const std::filesystem::path &fileName) {
+    QFile file(QString::fromStdWString(fileName));
     if (file.open(QFile::ReadOnly)) {
         QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
         if (hash.addData(&file))

@@ -12,10 +12,13 @@ std::vector<DBRow> DFS::Tables::LocalDirFile::getFileDataByHash(DBConnector *db,
     return db->select(query);
 }
 
-std::string DFS::Path::convertPathToPlatform(std::string path) {
-    std::string ret;
-    if (path.find(Utils::getPlatformDelimeterDFS()) == std::string::npos) {
-        ret = boost::replace_all_copy(path, "/", Utils::getPlatformDelimeterDFS());
+std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::path &path) {
+    std::wstring p = path.wstring();
+
+    if (p.find(DFS::Basic::separator) == std::wstring::npos) {
+        boost::replace_all(p, L"/", DFS::Basic::separator);
+        boost::replace_all(p, L"\\", DFS::Basic::separator);
     }
-    return ret;
+
+    return p;
 }

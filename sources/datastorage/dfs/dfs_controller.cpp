@@ -13,11 +13,10 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
 DfsController::~DfsController() {
 }
 
-std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
+std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                                         std::string targetVirtualFilePath, DFS::Encryption securityLevel) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
-    std::string fpath = DFS::Path::convertPathToPlatform(filePath);
-    std::string newFilePath = fpath;
+    std::filesystem::path fpath = DFS::Path::convertPathToPlatform(filePath);
+    std::filesystem::path newFilePath = fpath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
 
     // TODO: error description
@@ -26,10 +25,10 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     }
 
     if (securityLevel == DFS::Encryption::Encrypted) {
-        std::string fname = std::filesystem::path(fpath).stem().generic_string();
-        newFilePath = "temp";
+        std::wstring fname = std::filesystem::path(fpath).stem().wstring();
+        newFilePath = L"temp";
         std::filesystem::create_directories(newFilePath);
-        newFilePath = newFilePath + pathDelim + fname;
+        newFilePath = newFilePath.wstring() + DFS::Basic::separator + fname;
         actor.key().encryptFile(fpath, newFilePath);
 
         std::filesystem::path nvp = targetVirtualFilePath;
@@ -42,14 +41,16 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     std::string fileHash = Utils::calcKeccakForFile(newFilePath);
     auto fileSize = std::filesystem::file_size(newFilePath);
-    std::filesystem::path placeInDFS =
-        DFS::Basic::fsActrRoot + pathDelim + actor.id().toStdString() + pathDelim;
+    std::filesystem::path placeInDFS = DFS::Basic::fsActrRootW + DFS::Basic::separator
+        + actor.id().toString().toStdWString() + DFS::Basic::separator;
 
     try {
         std::filesystem::create_directories(placeInDFS.c_str());
         placeInDFS /= fileHash;
         std::filesystem::copy(newFilePath, placeInDFS);
-    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
+    } catch (std::filesystem::filesystem_error const &err) {
+        qDebug() << "[Dfs] Copy error:" << err.what();
+    }
 
     DFS::Packets::AddFileMessage msg = { .Actor = actor.id().toStdString(),
                                          .FileHash = fileHash,
@@ -341,9 +342,11 @@ bool DfsController::insertDataChunk(std::string data, long long position, std::f
     tempFilePath = tempFilePath.string() + file.stem().string();
     std::ofstream ofs(tempFilePath.string());
 
-    std::fstream fs;
-    fs.open(file, std::ios::out);
-    fs.close();
+    if (!std::filesystem::exists(file)) {
+        std::fstream fs;
+        fs.open(file, std::ios::out);
+        fs.close();
+    }
 
     boost::interprocess::file_mapping fmapSource(file.c_str(), boost::interprocess::read_write);
     unsigned long long fz = std::filesystem::file_size(file);
@@ -526,21 +529,23 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
         offset = msg.Offset + DFS::Basic::sectionSize;
     } else if (offset == 0) {
         offset = msg.Offset + DFS::Basic::sectionSize - 1;
-    } else if (offset < 0) {
-        offset = fileSize - msg.Offset;
+    } else {
+        auto fileName = DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
+        if (msg.FileHash == Utils::calcKeccakForFile(fileName)) {
+            qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+            files.erase(msg.Actor + msg.FileHash);
+            return hash;
+        } else {
+            qFatal("[Dfs] Incorrect file check");
+            return "";
+        }
     }
+
     DFS::Packets::RequestFileSegmentMessage reqMessage = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = virtualPath, .Offset = offset
     };
-
-    auto fileName = DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
-    if (reqMessage.FileHash == Utils::calcKeccakForFile(fileName)) {
-        qDebug() << "[Dfs] File" << fileName.c_str() << "done";
-        files.erase(msg.Actor + msg.FileHash);
-        return hash;
-    }
-
     node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
+
     return hash;
 }
 

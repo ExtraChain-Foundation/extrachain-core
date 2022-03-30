@@ -561,7 +561,7 @@ std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
 EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
-EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::string &fileName);
+EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::filesystem::path &fileName);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);

@@ -21,12 +21,14 @@ static const std::string getPlatformDelimeterDFS() {
 namespace DFS {
 namespace Basic {
     static const std::string fsActrRoot = "dfs";
+    static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
     static const std::string serviceStoragePath = "service";
     static const std::string serviceDfsPath =
         serviceStoragePath + Utils::getPlatformDelimeterDFS() + DFS::Basic::fsActrRoot;
     static const long long sectionSize = 256;
     static const int encSectionSize = 256;
+    static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
 }
 namespace Packets {
     struct AddFileMessage {
@@ -115,7 +117,7 @@ namespace Tables {
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
 }
 namespace Path {
-    std::string convertPathToPlatform(std::string path);
+    std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
 }
 enum Encryption
 {

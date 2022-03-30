@@ -38,7 +38,7 @@ public:
     ~DfsController();
 
     // Internal use only
-    std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath,
+    std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
     void removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
 
