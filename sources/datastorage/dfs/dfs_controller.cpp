@@ -340,11 +340,11 @@ bool DfsController::insertDataChunk(std::string data, long long position, std::f
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + file.stem().string();
-    std::ofstream ofs(tempFilePath.string());
+    std::ofstream ofs(tempFilePath.string(), std::ios::binary);
 
     if (!std::filesystem::exists(file)) {
         std::fstream fs;
-        fs.open(file, std::ios::out);
+        fs.open(file, std::ios::out | std::ios::binary);
         fs.close();
     }
 
