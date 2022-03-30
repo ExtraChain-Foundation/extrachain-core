@@ -31,6 +31,7 @@ private:
     ExtraChainNode &node;
     unsigned long long m_bytesLimit = 8589934592;
     unsigned long long m_sizeTaken = 0;
+    std::map<std::string, DFS::Packets::AddFileMessage> files;
 
 public:
     DfsController(ExtraChainNode &node, QObject *parent = nullptr);

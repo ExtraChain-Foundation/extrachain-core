@@ -134,6 +134,8 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
             node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
         }
     }
+
+    files[msg.Actor + msg.FileHash] = msg;
     return msg.FileHash;
 }
 
@@ -298,32 +300,33 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
     unsigned int newFileSize = std::filesystem::file_size(realFilePath);
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
-            actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " + "'"
-                               + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-                               + "'");
-            actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileSize = " + "'"
-                               + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
-                               + it->at("fileHash") + "'");
+            // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " + "'"
+            //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
+            //                    + "'");
+            // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileSize = " + "'"
+            //                    + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
+            //                    + it->at("fileHash") + "'");
         }
         if (it->at("fileHashPrev") == msg.FileHash) {
-            actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHashPrev = " + "'"
-                               + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-                               + "'");
+            // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHashPrev = " +
+            // "'"
+            //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
+            //                    + "'");
         }
     }
     for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
-            localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " + "'"
-                                + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-                                + "'");
-            localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileSize = " + "'"
-                                + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
-                                + it->at("fileHash") + "'");
+            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " + "'"
+            //                     + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
+            //                     + "'");
+            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileSize = " + "'"
+            //                     + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
+            //                     + it->at("fileHash") + "'");
         }
         if (it->at("fileHashPrev") == msg.FileHash) {
-            localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
-                                + " SET fileHashPrev = " + "'" + newFileHash + "' " + "WHERE "
-                                + "fileHash = " + "'" + it->at("fileHash") + "'");
+            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
+            //                     + " SET fileHashPrev = " + "'" + newFileHash + "' " + "WHERE "
+            //                     + "fileHash = " + "'" + it->at("fileHash") + "'");
         }
     }
     actrDirFile.close();
@@ -337,6 +340,11 @@ bool DfsController::insertDataChunk(std::string data, long long position, std::f
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + file.stem().string();
     std::ofstream ofs(tempFilePath.string());
+
+    std::fstream fs;
+    fs.open(file, std::ios::out);
+    fs.close();
+
     boost::interprocess::file_mapping fmapSource(file.c_str(), boost::interprocess::read_write);
     unsigned long long fz = std::filesystem::file_size(file);
     ofs.write(data.c_str(), data.size()); // add data to new temp file
@@ -524,6 +532,14 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
     DFS::Packets::RequestFileSegmentMessage reqMessage = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = virtualPath, .Offset = offset
     };
+
+    auto fileName = DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
+    if (reqMessage.FileHash == Utils::calcKeccakForFile(fileName)) {
+        qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+        files.erase(msg.Actor + msg.FileHash);
+        return hash;
+    }
+
     node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
     return hash;
 }
@@ -571,26 +587,27 @@ std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
     unsigned int newFileSize = std::filesystem::file_size(realFilePath);
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
-            actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " + "'"
-                               + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-                               + "'");
+            // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " + "'"
+            //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
+            //                    + "'");
         }
         if (it->at("fileHashPrev") == msg.FileHash) {
-            actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHashPrev = " + "'"
-                               + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-                               + "'");
+            // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHashPrev = " +
+            // "'"
+            //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
+            //                    + "'");
         }
     }
     for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
-            localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " + "'"
-                                + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-                                + "'");
+            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " + "'"
+            //                     + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
+            //                     + "'");
         }
         if (it->at("fileHashPrev") == msg.FileHash) {
-            localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
-                                + " SET fileHashPrev = " + "'" + newFileHash + "' " + "WHERE "
-                                + "fileHash = " + "'" + it->at("fileHash") + "'");
+            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
+            //                     + " SET fileHashPrev = " + "'" + newFileHash + "' " + "WHERE "
+            //                     + "fileHash = " + "'" + it->at("fileHash") + "'");
         }
     }
     return newFileHash;
