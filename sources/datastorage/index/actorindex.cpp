@@ -150,7 +150,7 @@ void ActorIndex::handleGetAllActor(const std::string &messageId) {
 
     std::vector<std::string> result = allActorsStd();
     if (!result.empty()) {
-        node->network()->send_message(result, MessageType::ActorAll, MessageStatus::Response, messageId);
+        node->network()->send_message(result, MessageType::ActorAll, MessageStatus::Response);
     }
     return;
 }
@@ -159,8 +159,7 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
     if (node->accountController()->getAccountCount() > 0) {
-        node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request, "",
-                                      Config::Net::TypeSend::All);
+        node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
 
         qDebug() << "[ActorIndex] Get all actors request";
         // emit sendMessage(msg.serialize(), getAllActorMessage);
@@ -189,16 +188,16 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
     }
 }
 
-void ActorIndex::handleNewAllActors(QByteArrayList actors) {
-    for (const QByteArray &actor : actors)
-        getActor(actor.toStdString());
+void ActorIndex::handleNewAllActors(const std::vector<std::string> &actors) {
+    for (const std::string &actor : actors)
+        getActor(actor);
 }
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
 
     node->network()->send_message(std::to_string(this->getRecords()), MessageType::ActorCount,
-                                  MessageStatus::Response, messageId);
+                                  MessageStatus::Response);
 }
 
 void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {

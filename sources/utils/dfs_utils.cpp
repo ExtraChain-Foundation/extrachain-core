@@ -23,11 +23,15 @@ std::string DFS::Tables::ActorDirFile::getLastHash(DBConnector &db) {
 }
 
 DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const std::string &actorId) {
-    std::string pathDelim = Utils::getPlatformDelimeterDFS();
     DBConnector db;
-    std::string path = DFS::Basic::fsActrRoot + pathDelim + actorId + pathDelim + DFS::Basic::fsMapName;
-    db.open(path);
+    db.open(actorDbPath(actorId).string());
     return std::move(db);
+}
+
+std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &actorId) {
+    std::string pathDelim = Utils::getPlatformDelimeterDFS();
+    std::string path = DFS::Basic::fsActrRoot + pathDelim + actorId + pathDelim + DFS::Basic::fsMapName;
+    return path;
 }
 
 std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId) {

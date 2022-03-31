@@ -98,7 +98,9 @@ namespace Tables {
         std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
         std::string getLastHash(DBConnector &db);
 
+        // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);
+        std::filesystem::path actorDbPath(const std::string &actorId);
         DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string fileHash);
         std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId);
         bool addDirRows(const std::string &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);

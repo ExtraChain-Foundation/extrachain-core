@@ -131,7 +131,7 @@ public:
     int addActor(const Actor<KeyPublic> &actor);
     QByteArrayList allActors();
     std::vector<std::string> allActorsStd();
-    void handleNewAllActors(const QByteArrayList actors);
+    void handleNewAllActors(const std::vector<std::string> &actors);
 
 public slots:
     void process();

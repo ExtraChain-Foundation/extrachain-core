@@ -335,10 +335,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         return;
     }
 
-    qDebug() << "[NetworkManager/messageReceived] New message type";
-
-    qDebug() << "[Pick]" << QByteArray::fromStdString(message);
-    qDebug() << "[Pick]" << QByteArray::fromStdString(message).remove(message.length() - 64, 64).toBase64();
+#ifdef NETWORK_MESSAGES_LOGS_ON
+    qDebug() << "[Network Message]" << QByteArray::fromStdString(message);
+    qDebug() << "[Network Message]"
+             << QByteArray::fromStdString(message).remove(message.length() - 64, 64).toBase64();
+#endif
 
     std::string_view msg(message.begin(), message.end() - 64);
     std::string_view sign(message.end() - 64, message.end());
@@ -363,9 +364,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     auto serialized = std::string_view(msg.begin() + 40, msg.end());
     auto messId = std::string(msg.begin() + 4, msg.begin() + 19);
 
-    qDebug() << "[Pick] type" << int(type) << "status" << int(status) << "messId" << messId.c_str();
-    qDebug() << "[Pick]" << QByteArray::fromStdString(std::string(serialized))
+#ifdef NETWORK_MESSAGES_LOGS_ON
+    qDebug() << "[Network Message] type" << int(type) << "status" << int(status) << "messId"
+             << messId.c_str();
+    qDebug() << "[Network Message]" << QByteArray::fromStdString(std::string(serialized))
              << QByteArray::fromStdString(std::string(serialized)).toBase64();
+#endif
 
     if (type == MessageType::Actor && status == MessageStatus::Request) { }
 
@@ -384,19 +388,15 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::ActorAll: {
         if (status == MessageStatus::Request) {
-            // ActorId
+            node->actorIndex()->handleGetAllActor(messId);
         } else if (status == MessageStatus::Response) {
-            // node->actorIndex()->handleGetAllActor(messId);
+            auto actors = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            node->actorIndex()->handleNewAllActors(actors);
         }
         break;
     }
-    case MessageType::ActorCount: {
-        if (status == MessageStatus::Request) {
-        } else if (status == MessageStatus::Response) {
-            // count
-        }
+    case MessageType::ActorCount:
         break;
-    }
 
     case MessageType::DfsDirData: {
         if (status == MessageStatus::Request) {
@@ -417,6 +417,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::DfsRequestFile: {
         auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
         node->dfs()->sendFile(actorId, fileHash);
+        break;
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
