@@ -29,18 +29,21 @@ class EXTRACHAIN_EXPORT DfsController : public QObject {
 
 private:
     ExtraChainNode &node;
-    unsigned long long m_bytesLimit = 8589934592;
-    unsigned long long m_sizeTaken = 0;
+    uint64_t m_bytesLimit = 8589934592;
+    uint64_t m_sizeTaken = 0;
     std::map<std::string, DFS::Packets::AddFileMessage> files;
 
 public:
     DfsController(ExtraChainNode &node, QObject *parent = nullptr);
     ~DfsController();
 
+    void initializeActor(const ActorId &actorId);
+
     // Internal use only
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
     void removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
+    // visualMoveFile
 
     // External interfaces
     std::string addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes);
@@ -48,25 +51,30 @@ public:
     bool removeFile(const DFS::Packets::RemoveFileMessage &msg);
 
 private:
-    bool insertDataChunk(std::string data, long long position, std::filesystem::path file);
-    bool removeDataChunk(long long position, long long length, std::filesystem::path file);
+    bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
+    bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
     DBRow makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
-                           long long fileSize);
+                           uint64_t fileSize);
     DBRow makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
-                            long long fileSegmentBegin, long long fileSegmentEnd, long long fileSize);
-    unsigned long long calculateSizeTaken(const std::string &folder = DFS::Basic::fsActrRoot);
+                            uint64_t fileSegmentBegin, uint64_t fileSegmentEnd, uint64_t fileSize);
+    uint64_t calculateSizeTaken(const std::string &folder = DFS::Basic::fsActrRoot);
     std::string extractNextFragment();
-    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, unsigned long long offset,
-                                unsigned long long fragmentSize);
-    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, unsigned long long offset);
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
+                                uint64_t fragmentSize);
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
 
 public:
+    void requestDirData(const ActorId &actorId);
+    void sendDirData(const ActorId &actorId);
+    void addDirData(const ActorId &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
+    void requestFile(const ActorId &actorId, const std::string &fileHash);
+    void sendFile(const ActorId &actorId, const std::string &fileHash);
     std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg);
     std::string addFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string insertFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
-    long long bytesLimit() const;
-    void setBytesLimit(long long bytesLimit);
+    uint64_t bytesLimit() const;
+    void setBytesLimit(uint64_t bytesLimit);
 };
 
 #endif // DFS_CONTROLLER_H

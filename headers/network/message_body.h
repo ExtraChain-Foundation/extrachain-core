@@ -7,18 +7,18 @@
 enum class MessageType
 {
     Custom = 0,
-    // ActorGet = 1,
-    // ActorBody = 2,
-    Actor = 1, // флаг response = true: handle actor, флаг response = false: std::string
+    Actor = 1,
     ActorCount = 2,
     ActorAll = 4,
 
-    DfsAddFile = 50,
-    DfsRequestFileSegment = 51,
-    DfsRemoveFile = 52,
-    DfsEditSegment = 53,
-    DfsAddSegment = 54,
-    DfsDeleteSegment = 55
+    DfsDirData = 50,
+    DfsAddFile = 51,
+    DfsRequestFile = 52,
+    DfsRequestFileSegment = 53,
+    DfsRemoveFile = 54,
+    DfsEditSegment = 55,
+    DfsAddSegment = 56,
+    DfsDeleteSegment = 57,
 };
 MSGPACK_ADD_ENUM(MessageType)
 
@@ -26,8 +26,7 @@ enum class MessageStatus
 {
     NoStatus,
     Request,
-    Response,
-    InOne
+    Response
 };
 MSGPACK_ADD_ENUM(MessageStatus)
 

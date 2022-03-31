@@ -19,6 +19,8 @@
 
 #include "datastorage/index/actorindex.h"
 
+#include "datastorage/dfs/dfs_controller.h"
+
 ActorId ActorIndex::firstId() {
     return m_firstId;
 }
@@ -406,12 +408,11 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         if (!dbInsert)
             qFatal("db actor insert error");
 
+        node->dfs()->initializeActor(actor.id());
+
         qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
         node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, "",
                                       Config::Net::TypeSend::All);
-        // emit initDfs(actor.id());
-        std::filesystem::create_directories(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
-                                            + actor.id().toStdString());
     }
 
     return result;

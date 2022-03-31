@@ -35,6 +35,16 @@ DBConnector::DBConnector(const std::string &name) {
     this->open(name);
 }
 
+DBConnector::DBConnector(DBConnector &&rhs) {
+    if (this == &rhs)
+        return;
+
+    this->m_file = std::move(rhs.m_file);
+    this->m_open = rhs.m_open;
+    this->db = rhs.db;
+    rhs.db = nullptr;
+}
+
 DBConnector::~DBConnector() {
     // TODO: check if sqlite pointer is active
     if (db != nullptr) {

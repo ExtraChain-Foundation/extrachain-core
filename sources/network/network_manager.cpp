@@ -374,7 +374,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::Actor: {
         // actor get, test use ActorId
         if (status == MessageStatus::Request) {
-            auto actorId = MessagePack::deserialize<std::string>(serialized);
+            auto actorId = MessagePack::deserialize<ActorId>(serialized);
             node->actorIndex()->handleGetActor(actorId, identifier); // maybe need message id?
         } else if (status == MessageStatus::Response) {
             auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
@@ -383,17 +383,40 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
     case MessageType::ActorAll: {
-        // node->actorIndex()->handleGetAllActor(messId);
+        if (status == MessageStatus::Request) {
+            // ActorId
+        } else if (status == MessageStatus::Response) {
+            // node->actorIndex()->handleGetAllActor(messId);
+        }
         break;
     }
     case MessageType::ActorCount: {
+        if (status == MessageStatus::Request) {
+        } else if (status == MessageStatus::Response) {
+            // count
+        }
         break;
     }
 
+    case MessageType::DfsDirData: {
+        if (status == MessageStatus::Request) {
+            auto actorId = MessagePack::deserialize<ActorId>(serialized);
+            node->dfs()->sendDirData(actorId);
+        } else if (status == MessageStatus::Response) {
+            auto [actorId, dirRows] =
+                MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::Packets::DirRow>>>(serialized);
+            node->dfs()->addDirData(actorId, dirRows);
+        }
+        break;
+    }
     case MessageType::DfsAddFile: {
         auto msg = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
         node->dfs()->addFile(msg, true);
         break;
+    }
+    case MessageType::DfsRequestFile: {
+        auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        node->dfs()->sendFile(actorId, fileHash);
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);

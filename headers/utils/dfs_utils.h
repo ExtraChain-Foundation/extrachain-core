@@ -26,8 +26,8 @@ namespace Basic {
     static const std::string serviceStoragePath = "service";
     static const std::string serviceDfsPath =
         serviceStoragePath + Utils::getPlatformDelimeterDFS() + DFS::Basic::fsActrRoot;
-    static const long long sectionSize = 256;
-    static const int encSectionSize = 256;
+    static const uint64_t sectionSize = 2097152;
+    static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
 }
 namespace Packets {
@@ -35,7 +35,7 @@ namespace Packets {
         std::string Actor;
         std::string FileHash;
         std::string Path;
-        unsigned long long Size;
+        uint64_t Size;
         MSGPACK_DEFINE(Actor, FileHash, Path, Size);
     };
 
@@ -43,7 +43,7 @@ namespace Packets {
         std::string Actor;
         std::string FileHash;
         std::string Path;
-        long long Offset;
+        uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileHash, Path, Offset);
     };
 
@@ -57,7 +57,7 @@ namespace Packets {
         std::string Actor;
         std::string FileHash;
         std::string Data;
-        long long Offset;
+        uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileHash, Data, Offset);
     };
 
@@ -65,16 +65,24 @@ namespace Packets {
         std::string Actor;
         std::string FileHash;
         std::string Data;
-        long long Offset;
+        uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileHash, Data, Offset);
     };
 
     struct DeleteSegmentMessage {
         std::string Actor;
         std::string FileHash;
-        long long Offset;
-        long long Size;
+        uint64_t Offset;
+        uint64_t Size;
         MSGPACK_DEFINE(Actor, FileHash, Offset, Size);
+    };
+
+    struct DirRow {
+        std::string fileHash;
+        std::string fileHashPrev;
+        std::string filePath;
+        uint64_t fileSize;
+        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileSize);
     };
 }
 namespace Tables {
@@ -88,7 +96,14 @@ namespace Tables {
               "fileSize     TEXT             NOT NULL"
               ");";
         std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
+        std::string getLastHash(DBConnector &db);
+
+        DBConnector actorDbConnector(const std::string &actorId);
+        DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string fileHash);
+        std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId);
+        bool addDirRows(const std::string &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     }
+
     namespace LocalDirFile {
         static const std::string TableName = "FileSegmentsTable";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
@@ -118,6 +133,8 @@ namespace Tables {
 }
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
+
+    std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
 }
 enum Encryption
 {

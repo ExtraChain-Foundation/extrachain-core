@@ -62,6 +62,7 @@ private:
 public:
     DBConnector();
     DBConnector(const std::string &name);
+    DBConnector(DBConnector &&db);
     ~DBConnector();
 
 public:
