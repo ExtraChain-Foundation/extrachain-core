@@ -17,6 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <QDir>
+
 //#include "dfs/controls/headers/dfs.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"

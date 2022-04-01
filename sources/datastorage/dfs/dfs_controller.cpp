@@ -1,5 +1,7 @@
 #include "datastorage/dfs/dfs_controller.h"
 
+#include <fstream>
+
 #include "network/network_manager.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
@@ -604,7 +606,7 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
     uint64_t fileSize = std::stoull(actrDirData[0].at("fileSize"));
     uint64_t offset = msg.Offset + DFS::Basic::sectionSize;
     if (fileSize > msg.Offset + DFS::Basic::sectionSize) {
-        offset = msg.Offset + DFS::Basic::sectionSize; 
+        offset = msg.Offset + DFS::Basic::sectionSize;
         // } else if (offset == 0) {
         //    offset = msg.Offset + DFS::Basic::sectionSize - 1;
     } else {

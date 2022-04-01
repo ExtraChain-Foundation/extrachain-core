@@ -23,6 +23,8 @@
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 
+#include <fstream>
+
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
 }
@@ -341,8 +343,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
              << QByteArray::fromStdString(message).remove(message.length() - 64, 64).toBase64();
 #endif
 
-    std::string_view msg(message.begin(), message.end() - 64);
-    std::string_view sign(message.end() - 64, message.end());
+    std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
+    std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
     // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
 
     // TODO: no check new actor
@@ -359,10 +361,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     //        }
     //    }
 
-    auto type = MessagePack::deserialize<MessageType>(std::string_view(msg.begin() + 1, msg.begin() + 2));
-    auto status = MessagePack::deserialize<MessageStatus>(std::string_view(msg.begin() + 2, msg.begin() + 3));
-    auto serialized = std::string_view(msg.begin() + 40, msg.end());
-    auto messId = std::string(msg.begin() + 4, msg.begin() + 19);
+    MessageType type = MessagePack::deserialize<MessageType>(std::string_view(msg).substr(1, 1));
+    auto status = MessagePack::deserialize<MessageStatus>(std::string_view(msg).substr(2, 1));
+    auto serialized = std::string_view(msg).substr(40);
+    auto messId = std::string_view(msg).substr(4, 15);
 
 #ifdef NETWORK_MESSAGES_LOGS_ON
     qDebug() << "[Network Message] type" << int(type) << "status" << int(status) << "messId"
@@ -388,7 +390,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::ActorAll: {
         if (status == MessageStatus::Request) {
-            node->actorIndex()->handleGetAllActor(messId);
+            node->actorIndex()->handleGetAllActor("");
         } else if (status == MessageStatus::Response) {
             auto actors = MessagePack::deserialize<std::vector<std::string>>(serialized);
             node->actorIndex()->handleNewAllActors(actors);

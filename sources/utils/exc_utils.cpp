@@ -28,6 +28,8 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTcpSocket>
+#include <string>
+#include <string_view>
 
 #include <sodium.h>
 
@@ -147,7 +149,7 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
 }
 
 std::string Utils::calcKeccakForFile(const std::filesystem::path &fileName) {
-    QFile file(QString::fromStdWString(fileName));
+    QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
         QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
         if (hash.addData(&file))

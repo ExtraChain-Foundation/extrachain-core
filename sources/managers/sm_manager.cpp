@@ -19,6 +19,8 @@
 
 #include "managers/sm_manager.h"
 
+#include <QDir>
+
 SmartContractManager::SmartContractManager(ActorIndex *actorIndex, QObject *parent)
     : QObject(parent) {
     this->actorIndex = actorIndex;

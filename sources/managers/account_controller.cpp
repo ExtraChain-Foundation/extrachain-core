@@ -18,6 +18,9 @@
  */
 
 #include "managers/account_controller.h"
+
+#include <QDir>
+
 #include "datastorage/blockchain.h"
 #include "enc/enc_tools.h"
 #include "profile/private_profile.h"

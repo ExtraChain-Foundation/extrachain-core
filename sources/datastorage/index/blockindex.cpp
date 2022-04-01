@@ -19,6 +19,9 @@
 
 #include "datastorage/index/blockindex.h"
 
+#include <QDir>
+#include <QFileInfoList>
+
 BlockIndex::BlockIndex() {
     this->folderName = DataStorage::BLOCK_INDEX_FOLDER_NAME;
     this->sectionSize = Config::DataStorage::SECTION_SIZE;

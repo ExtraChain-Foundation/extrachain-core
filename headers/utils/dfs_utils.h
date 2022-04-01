@@ -1,6 +1,7 @@
 #ifndef DFS_UTILS_H
 #define DFS_UTILS_H
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -10,15 +11,13 @@
 
 namespace Utils {
 static const std::string getPlatformDelimeterDFS() {
-    std::string pathDelim;
 #ifdef _WIN32
     char del;
     std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
-    pathDelim.push_back(del);
+    return std::string(1, del);
 #else
-    pathDelim.push_back(std::filesystem::path::preferred_separator);
+    return std::string(1, std::filesystem::path::preferred_separator);
 #endif
-    return pathDelim;
 }
 }
 

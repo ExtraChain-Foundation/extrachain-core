@@ -19,6 +19,8 @@
 
 #include "profile/public_profile.h"
 
+#include <QDir>
+
 PublicProfile::PublicProfile(QByteArrayList _profile, QByteArray _sign, QString path, QByteArray _id) {
     sign = _sign;
     id = _id;

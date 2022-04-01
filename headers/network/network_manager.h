@@ -27,6 +27,8 @@
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
+#include <string>
+#include <string_view>
 
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
