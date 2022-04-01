@@ -19,6 +19,7 @@ enum class MessageType
     DfsEditSegment = 55,
     DfsAddSegment = 56,
     DfsDeleteSegment = 57,
+    DfsSendingFileDone = 58,
 };
 MSGPACK_ADD_ENUM(MessageType)
 
@@ -43,6 +44,11 @@ struct MessageBody {
     }
 
     MSGPACK_DEFINE(message_type, status, message_id, sender_id, data)
+};
+
+struct SocketIdentifier {
+    std::string socketIdentifier;
+    std::string messageId;
 };
 
 template <class T>

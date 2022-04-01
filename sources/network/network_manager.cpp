@@ -361,10 +361,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     //        }
     //    }
 
-    MessageType type = MessagePack::deserialize<MessageType>(std::string_view(msg).substr(1, 1));
-    auto status = MessagePack::deserialize<MessageStatus>(std::string_view(msg).substr(2, 1));
-    auto serialized = std::string_view(msg).substr(40);
-    auto messId = std::string_view(msg).substr(4, 15);
+    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
+    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
+    auto serialized = msg.substr(40);
+    std::string messageId = msg.substr(4, 15).data();
+
+    SocketIdentifier socketIdentifier { .socketIdentifier = identifier, .messageId = messageId };
 
 #ifdef NETWORK_MESSAGES_LOGS_ON
     qDebug() << "[Network Message] type" << int(type) << "status" << int(status) << "messId"
@@ -444,6 +446,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::DfsRemoveFile: {
         auto msg = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
         node->dfs()->removeFile(msg);
+        break;
+    }
+    case MessageType::DfsSendingFileDone: {
+        auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        qDebug() << "[Dfs] File done:" << actorId << fileHash.c_str();
         break;
     }
 
