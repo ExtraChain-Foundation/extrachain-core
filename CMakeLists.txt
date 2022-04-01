@@ -189,3 +189,5 @@ if (WIN32) # temp
 endif(WIN32)
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
+
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
