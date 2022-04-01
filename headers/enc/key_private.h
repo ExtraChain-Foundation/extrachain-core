@@ -20,14 +20,14 @@
 #ifndef KEY_PRIVATE_H
 #define KEY_PRIVATE_H
 
-#include <filesystem>
-#include <iostream>
-
 #include <QDebug>
 
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
+
+#include <filesystem>
+#include <iostream>
 
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:
