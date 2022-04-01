@@ -11,15 +11,13 @@
 namespace Utils {
 static const std::string getPlatformDelimeterDFS() {
     std::string pathDelim;
-    auto ps = std::filesystem::path::preferred_separator;
-    if (sizeof(ps) == sizeof(wchar_t)) {
-        char del;
-        std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
-        pathDelim.push_back(del);
-    } else {
-        pathDelim.push_back(std::filesystem::path::preferred_separator);
-    }
-
+#ifdef _WIN32
+    char del;
+    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
+    pathDelim.push_back(del);
+#else
+    pathDelim.push_back(std::filesystem::path::preferred_separator);
+#endif
     return pathDelim;
 }
 }
