@@ -1,5 +1,6 @@
 #include "datastorage/dfs/dfs_controller.h"
 
+#include <chrono>
 #include <fstream>
 
 #include "network/network_manager.h"
@@ -495,11 +496,16 @@ bool DfsController::removeDataChunk(uint64_t position, uint64_t length, std::fil
 
 DBRow DfsController::makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                                       uint64_t fileSize) {
+    using namespace std::chrono;
+    uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+
     return { { "fileHash", fileHash },
              { "fileHashPrev", fileHashPrev },
              { "filePath", filePath },
-             { "fileSize", std::to_string(fileSize) } };
+             { "fileSize", std::to_string(fileSize) },
+             { "lastModified", std::to_string(ms) } };
 }
+
 DBRow DfsController::makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                                        uint64_t fileSegmentBegin, uint64_t fileSegmentEnd,
                                        uint64_t fileSize) {

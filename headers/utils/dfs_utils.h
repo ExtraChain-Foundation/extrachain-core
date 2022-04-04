@@ -33,6 +33,7 @@ namespace Basic {
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
 }
+
 namespace Packets {
     struct AddFileMessage {
         std::string Actor;
@@ -88,15 +89,17 @@ namespace Packets {
         MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileSize);
     };
 }
+
 namespace Tables {
     namespace ActorDirFile {
         static const std::string TableName = "FilesTable";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
-            + " ("
-              "fileHash     TEXT PRIMARY KEY NOT NULL, "
-              "fileHashPrev TEXT             NOT NULL, "
-              "filePath     TEXT             NOT NULL, "
-              "fileSize     TEXT             NOT NULL"
+            + "("
+              "fileHash     TEXT PRIMARY KEY NOT NULL,"
+              "fileHashPrev TEXT             NOT NULL,"
+              "filePath     TEXT             NOT NULL,"
+              "fileSize     INTEGER          NOT NULL,"
+              "lastModified INTEGER          NOT NULL "
               ");";
         std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
         std::string getLastHash(DBConnector &db);
@@ -136,12 +139,14 @@ namespace Tables {
         "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
 }
+
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
 
     std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
 }
-enum Encryption
+
+enum class Encryption
 {
     Public = 0,
     Encrypted = 1
