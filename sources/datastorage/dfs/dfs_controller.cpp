@@ -41,6 +41,14 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::filesystem::path newFilePath = fpath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
 
+#ifdef ANDROID
+    auto tempPath = "dfs/temp"
+        + QString::number(QRandomGenerator::global()->bounded(1000) + QDateTime::currentMSecsSinceEpoch());
+    QFile::copy(newFilePath.string().c_str(), tempPath);
+    fpath = tempPath.toStdString();
+    newFilePath = fpath;
+#endif
+
     // TODO: error description
     if (std::filesystem::file_size(newFilePath) >= m_bytesLimit - m_sizeTaken) {
         return "";
@@ -69,7 +77,11 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     try {
         std::filesystem::create_directories(placeInDFS.c_str());
         placeInDFS /= fileHash;
+#ifdef ANDROID
+        std::filesystem::rename(newFilePath, placeInDFS);
+#else
         std::filesystem::copy(newFilePath, placeInDFS);
+#endif
     } catch (std::filesystem::filesystem_error const &err) {
         qDebug() << "[Dfs] Copy error:" << err.what();
     }
