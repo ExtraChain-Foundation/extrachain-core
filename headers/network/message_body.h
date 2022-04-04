@@ -12,14 +12,15 @@ enum class MessageType
     ActorAll = 4,
 
     DfsDirData = 50,
-    DfsAddFile = 51,
-    DfsRequestFile = 52,
-    DfsRequestFileSegment = 53,
-    DfsRemoveFile = 54,
-    DfsEditSegment = 55,
-    DfsAddSegment = 56,
-    DfsDeleteSegment = 57,
-    DfsSendingFileDone = 58,
+    DfsLastModified = 51,
+    DfsAddFile = 52,
+    DfsRequestFile = 53,
+    DfsRequestFileSegment = 54,
+    DfsRemoveFile = 55,
+    DfsEditSegment = 56,
+    DfsAddSegment = 57,
+    DfsDeleteSegment = 58,
+    DfsSendingFileDone = 59,
 };
 MSGPACK_ADD_ENUM(MessageType)
 

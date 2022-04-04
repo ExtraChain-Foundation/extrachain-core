@@ -9,6 +9,10 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
     , node(node) {
     std::filesystem::create_directories(DFS::Basic::fsActrRoot);
+
+    DBConnector dirsFile(DFS::Basic::dirsPath);
+    dirsFile.query(DFS::Tables::DirsFile::CreateTableQuery);
+
     m_sizeTaken = calculateSizeTaken();
     qDebug() << "[Dfs] Started. Current size:" << m_sizeTaken;
 }
@@ -19,20 +23,10 @@ DfsController::~DfsController() {
 void DfsController::initializeActor(const ActorId &actorId) {
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::filesystem::create_directories(DFS::Basic::fsActrRoot + pathDelim + actorId.toStdString());
-    std::filesystem::create_directories(DFS::Basic::serviceDfsPath + pathDelim + actorId.toStdString());
-
-    DBConnector localDirFile;
-    std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + actorId.toStdString() + pathDelim + DFS::Basic::fsMapName;
-    localDirFile.open(localDirFilePath);
-
     DBConnector actrDirFile = DFS::Tables::ActorDirFile::actorDbConnector(actorId.toStdString());
-
     actrDirFile.query(DFS::Tables::ActorDirFile::CreateTableQuery);
-    localDirFile.query(DFS::Tables::LocalDirFile::CreateTableQuery);
-    actrDirFile.close();
-    localDirFile.close();
 
+    //
     requestDirData(actorId);
 }
 
@@ -97,12 +91,18 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     auto actrDirFile = DFS::Tables::ActorDirFile::actorDbConnector(actor.id().toStdString());
     auto lastFileHash = DFS::Tables::ActorDirFile::getLastHash(actrDirFile);
     const DBRow rowData = makeActrDirDBRow(msg.FileHash, lastFileHash, msg.Path, msg.Size);
+
     if (!actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, rowData)) {
         qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
                  << DFS::Tables::ActorDirFile::TableName.c_str();
         qFatal("Insert failed");
         return "";
     }
+    actrDirFile.close();
+    DBConnector dirsFile(DFS::Basic::dirsPath);
+    dirsFile.replace(
+        DFS::Tables::DirsFile::TableName,
+        { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
 
     sendFile(actor.id(), fileHash);
     return addFile(msg, false);
@@ -116,8 +116,6 @@ void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::s
 
 std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
     std::string pathDelim = Utils::getPlatformDelimeter();
-    std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     std::string realFilePath = DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
@@ -133,24 +131,11 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
         fs.close();
     }
 
-    DBConnector localDirFile;
     DBConnector actrDirFile;
 
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
-    if (!localDirFile.open(localDirFilePath)) {
-        exit(EXIT_FAILURE);
-    }
-
-    //    auto existingRowsActrDirFile = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile,
-    //    msg.FileHash); auto existingRowsLocalDirFile =
-    //    DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.FileHash); if
-    //    (existingRowsActrDirFile.size() != 0 && existingRowsLocalDirFile.size() != 0) {
-    //        actrDirFile.close();
-    //        localDirFile.close();
-    //        return msg.FileHash;
-    //    }
 
     auto result = actrDirFile.select(DFS::Tables::filesTableLast);
     auto prevRowOpt = result.empty() ? std::optional<DBRow> {} : result[0];
@@ -166,19 +151,10 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
     }
     actrDirFile.close();
 
-    DBRow rowDataWithSegments;
-    if (loadBytes) {
-        rowDataWithSegments = makeLocalDirDBRow(msg.FileHash, lastFileHash, msg.Path, 0, 0, msg.Size);
-    } else {
-        rowDataWithSegments = makeLocalDirDBRow(msg.FileHash, lastFileHash, msg.Path, 0, msg.Size, msg.Size);
-    }
-    if (!localDirFile.insert(DFS::Tables::LocalDirFile::TableName, rowDataWithSegments)) {
-        qDebug() << "[Dfs] addFile: insert failed:" << localDirFile.file().c_str() << " :"
-                 << DFS::Tables::LocalDirFile::TableName.c_str();
-        qFatal("Error 3");
-        return "";
-    }
-    localDirFile.close();
+    DBConnector dirsFile(DFS::Basic::dirsPath);
+    dirsFile.replace(DFS::Tables::DirsFile::TableName,
+                     { { "actorId", msg.Actor }, { "lastModified", rowData.at("lastModified") } });
+
     if (loadBytes) {
         if (msg.Size >= m_bytesLimit - m_sizeTaken) {
             return msg.FileHash;
@@ -199,9 +175,6 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHas
     std::string pathDelim = Utils::getPlatformDelimeter();
     std::filesystem::path realFilePath =
         DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileHash;
-    DBConnector localDirFile;
-    std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + owner.toStdString() + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + DFS::Basic::fsMapName;
@@ -209,14 +182,10 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHas
         qFatal("Can't open %s", actrDirFilePath.c_str());
         exit(EXIT_FAILURE);
     }
-    if (!localDirFile.open(localDirFilePath)) {
-        qFatal("Can't open %s", localDirFilePath.c_str());
-        exit(EXIT_FAILURE);
-    }
+
     std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, fileHash);
-    std::vector<DBRow> localDirData = DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, fileHash);
     std::filesystem::path tempFilePath = "temp" + pathDelim + owner.toStdString();
-    if (actrDirData.size() > 0 && localDirData.size() > 0) {
+    if (actrDirData.size() > 0) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("filePath");
         if ((virtualFilePath.end()--)->string() == "secured") {
             if (!localOwner.empty()) {
@@ -252,9 +221,6 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHas
 bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
     qDebug() << "[Dfs] Remove file message:" << msg.FileHash.c_str();
     std::string pathDelim = Utils::getPlatformDelimeter();
-    DBConnector localDirFile;
-    std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
@@ -263,12 +229,7 @@ bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
-    if (!localDirFile.open(localDirFilePath)) {
-        exit(EXIT_FAILURE);
-    }
     std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, msg.FileHash);
-    std::vector<DBRow> localDirData =
-        DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.FileHash);
     std::string prevHash;
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
@@ -284,23 +245,8 @@ bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
                                + prevHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash") + "'");
         }
     }
-    for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
-        if (it->at("fileHash") == msg.FileHash) {
-            prevHash = it->at("fileHashPrev");
-            localDirFile.deleteRow(DFS::Tables::LocalDirFile::TableName, *it);
-            if (!std::filesystem::remove(realFilePath)) {
-                qDebug() << "File removal by path " << realFilePath.c_str() << " failed";
-                return false;
-            }
-        }
-        if ((it->at("fileHashPrev") == msg.FileHash) && (!prevHash.empty())) {
-            localDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName
-                                + " SET fileHashPrev = " + "'" + prevHash + "' " + "WHERE "
-                                + "fileHash = " + "'" + it->at("fileHash") + "'");
-        }
-    }
+
     actrDirFile.close();
-    localDirFile.close();
 
     return true;
 }
@@ -308,9 +254,6 @@ bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
 std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage &msg) {
     qDebug() << "[Dfs] Edit file:" << msg.FileHash.c_str();
     std::string pathDelim = Utils::getPlatformDelimeter();
-    DBConnector localDirFile;
-    std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
@@ -319,42 +262,22 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
-    if (!localDirFile.open(localDirFilePath)) {
-        exit(EXIT_FAILURE);
-    }
     std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, msg.FileHash);
-    std::vector<DBRow> localDirData =
-        DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.FileHash);
 
-    if (actrDirData.empty() || localDirData.empty()) {
+    if (actrDirData.empty()) {
         qDebug() << "[Dfs] editFile: Skipped because of empty result";
         qFatal("actrDirData || localDirData empty");
         return "";
     }
 
-    if ((actrDirData.size() > 2) || (localDirData.size() > 2)) {
+    if (actrDirData.size() > 2) {
         qDebug() << "[Dfs] editFile: Query select failed: Query result has unsupported size:"
                  << actrDirData.size();
         qFatal("Error 4");
         return "";
     }
-    for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
-        if (it->at("fileHash") == msg.FileHash) {
-            uint64_t fsegb = std::stol(it->at("fileSegmentBegin"));
-            uint64_t fsege = std::stol(it->at("fileSegmentEnd"));
-            if (fsegb != 0 && fsege == 0) {
-                if (fsegb > msg.Offset) {
-                    // TODO: request affected chunks
 
-                    return msg.FileHash;
-                } else if ((fsege + 1) != msg.Offset) {
-                    return msg.FileHash;
-                }
-            }
-
-            insertDataChunk(msg.Data, msg.Offset, realFilePath);
-        }
-    }
+    insertDataChunk(msg.Data, msg.Offset, realFilePath);
 
     std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
     unsigned int newFileSize = std::filesystem::file_size(realFilePath);
@@ -374,23 +297,8 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
             //                    + "'");
         }
     }
-    for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
-        if (it->at("fileHash") == msg.FileHash) {
-            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " + "'"
-            //                     + newFileHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash")
-            //                     + "'");
-            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileSize = " + "'"
-            //                     + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
-            //                     + it->at("fileHash") + "'");
-        }
-        if (it->at("fileHashPrev") == msg.FileHash) {
-            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
-            //                     + " SET fileHashPrev = " + "'" + newFileHash + "' " + "WHERE "
-            //                     + "fileHash = " + "'" + it->at("fileHash") + "'");
-        }
-    }
+
     actrDirFile.close();
-    localDirFile.close();
     return newFileHash;
 }
 
@@ -496,25 +404,11 @@ bool DfsController::removeDataChunk(uint64_t position, uint64_t length, std::fil
 
 DBRow DfsController::makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                                       uint64_t fileSize) {
-    using namespace std::chrono;
-    uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-
     return { { "fileHash", fileHash },
              { "fileHashPrev", fileHashPrev },
              { "filePath", filePath },
              { "fileSize", std::to_string(fileSize) },
-             { "lastModified", std::to_string(ms) } };
-}
-
-DBRow DfsController::makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
-                                       uint64_t fileSegmentBegin, uint64_t fileSegmentEnd,
-                                       uint64_t fileSize) {
-    return { { "fileHash", fileHash },
-             { "fileHashPrev", fileHashPrev },
-             { "filePath", filePath },
-             { "fileSegmentBegin", std::to_string(fileSegmentBegin) },
-             { "fileSegmentEnd", std::to_string(fileSegmentEnd) },
-             { "fileSize", std::to_string(fileSize) } };
+             { "lastModified", std::to_string(Utils::currentDateSecs()) } };
 }
 
 uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
@@ -545,15 +439,28 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
     return std::string(rr_ptr, rightRegion.get_size());
 }
 
+void DfsController::requestSync() {
+    node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified);
+}
+
+void DfsController::sendSync(uint64_t lastModified) {
+    DBConnector dirsFile(DFS::Basic::dirsPath);
+    auto actors = dirsFile.select("SELECT actorId FROM " + DFS::Tables::DirsFile::TableName
+                                  + " WHERE lastModified = " + std::to_string(lastModified));
+    for (auto &row : actors) {
+        sendDirData(row["actorId"], lastModified);
+    }
+}
+
 void DfsController::requestDirData(const ActorId &actorId) {
     node.network()->send_message(actorId, MessageType::DfsDirData, MessageStatus::Request);
 }
 
-void DfsController::sendDirData(const ActorId &actorId) {
+void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified) {
     if (!std::filesystem::exists(DFS::Tables::ActorDirFile::actorDbPath(actorId.toStdString()))) {
         return;
     }
-    auto rows = DFS::Tables::ActorDirFile::getDirRows(actorId.toStdString());
+    auto rows = DFS::Tables::ActorDirFile::getDirRows(actorId.toStdString(), lastModified);
     if (!rows.empty()) {
         node.network()->send_message(std::pair { actorId, rows }, MessageType::DfsDirData,
                                      MessageStatus::Response);
@@ -667,9 +574,6 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
 
 std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg) {
     std::string pathDelim = Utils::getPlatformDelimeter();
-    DBConnector localDirFile;
-    std::string localDirFilePath =
-        DFS::Basic::serviceDfsPath + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
@@ -678,36 +582,24 @@ std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
     if (!actrDirFile.open(actrDirFilePath)) {
         exit(EXIT_FAILURE);
     }
-    if (!localDirFile.open(actrDirFilePath)) {
-        exit(EXIT_FAILURE);
-    }
     std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, msg.FileHash);
-    std::vector<DBRow> localDirData =
-        DFS::Tables::LocalDirFile::getFileDataByHash(&localDirFile, msg.FileHash);
 
-    if (actrDirData.empty() || localDirData.empty()) {
+    if (actrDirData.empty()) {
         qDebug() << "[Dfs] editFile: Skipped because of empty result";
         qFatal("Error: actrDirData.empty() || localDirData.empty() in delete");
         return "";
     }
 
-    if ((actrDirData.size() > 2) || (localDirData.size() > 2)) {
+    if (actrDirData.size() > 2) {
         qDebug() << "[Dfs] editFile: Query select failed: Query result has unsupported size:"
                  << actrDirData.size();
         qFatal("Error 1");
         return "";
     }
-    for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
-        if (it->at("fileHash") == msg.FileHash) {
-            if ((std::stoull(it->at("fileSegmentBegin")) > msg.Offset)
-                || (std::stoull(it->at("fileSegmentEnd")) < (msg.Offset + msg.Size))) {
-                return msg.FileHash;
-            }
-        }
-    }
     removeDataChunk(msg.Offset, msg.Size, realFilePath);
     std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
     uint64_t newFileSize = std::filesystem::file_size(realFilePath);
+
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
             // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " +
@@ -725,20 +617,7 @@ std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
             //                    + "'");
         }
     }
-    for (auto it = localDirData.begin(); it < localDirData.end(); it++) {
-        if (it->at("fileHash") == msg.FileHash) {
-            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName + " SET fileHash = " +
-            // "'"
-            //                     + newFileHash + "' " + "WHERE " + "fileHash = " + "'" +
-            //                     it->at("fileHash")
-            //                     + "'");
-        }
-        if (it->at("fileHashPrev") == msg.FileHash) {
-            // localDirFile.update("UPDATE " + DFS::Tables::LocalDirFile::TableName
-            //                     + " SET fileHashPrev = " + "'" + newFileHash + "' " + "WHERE "
-            //                     + "fileHash = " + "'" + it->at("fileHash") + "'");
-        }
-    }
+
     return newFileHash;
 }
 

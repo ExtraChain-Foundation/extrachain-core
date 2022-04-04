@@ -6,12 +6,6 @@ std::vector<DBRow> DFS::Tables::ActorDirFile::getFileDataByHash(DBConnector *db,
     return db->select(query);
 }
 
-std::vector<DBRow> DFS::Tables::LocalDirFile::getFileDataByHash(DBConnector *db, std::string hash) {
-    std::string query = "SELECT * FROM " + TableName + " WHERE fileHash = '" + hash + "' "
-        /*+ "OR fileHashPrev = '" + hash + "' "*/;
-    return db->select(query);
-}
-
 std::string DFS::Tables::ActorDirFile::getLastHash(DBConnector &db) {
     if (!db.isOpen()) {
         qFatal("DB not opened");
@@ -34,18 +28,21 @@ std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &
     return path;
 }
 
-std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId) {
+std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId,
+                                                                        uint64_t lastModified) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         return {};
     }
     std::vector<DFS::Packets::DirRow> dirRows;
-    auto actrDirData = db.select("SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + ";");
+    auto actrDirData = db.select("SELECT * FROM " + DFS::Tables::ActorDirFile::TableName
+                                 + " WHERE lastModified > " + std::to_string(lastModified));
     for (auto &row : actrDirData) {
         DFS::Packets::DirRow dirRow = { .fileHash = row["fileHash"],
                                         .fileHashPrev = row["fileHashPrev"],
                                         .filePath = row["filePath"],
-                                        .fileSize = std::stoull(row["fileSize"]) };
+                                        .fileSize = std::stoull(row["fileSize"]),
+                                        .lastModified = std::stoull(row["lastModified"]) };
         dirRows.push_back(dirRow);
     }
 
@@ -70,7 +67,8 @@ DFS::Packets::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &act
     DFS::Packets::DirRow dirRow = { .fileHash = row["fileHash"],
                                     .fileHashPrev = row["fileHashPrev"],
                                     .filePath = row["filePath"],
-                                    .fileSize = std::stoull(row["fileSize"]) };
+                                    .fileSize = std::stoull(row["fileSize"]),
+                                    .lastModified = std::stoull(row["lastModified"]) };
 
     return dirRow;
 }
@@ -92,7 +90,8 @@ bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
         auto row = DBRow { { "fileHash", dirRow.fileHash },
                            { "fileHashPrev", dirRow.fileHashPrev },
                            { "filePath", dirRow.filePath },
-                           { "fileSize", std::to_string(dirRow.fileSize) } };
+                           { "fileSize", std::to_string(dirRow.fileSize) },
+                           { "lastModified", std::to_string(dirRow.lastModified) } };
         actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, row);
     }
 

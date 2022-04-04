@@ -404,13 +404,18 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::DfsDirData: {
         if (status == MessageStatus::Request) {
-            auto actorId = MessagePack::deserialize<ActorId>(serialized);
-            node->dfs()->sendDirData(actorId);
+            auto actorId = MessagePack::deserialize<ActorId>(serialized); // TODO: add last modified
+            node->dfs()->sendDirData(actorId, 0);
         } else if (status == MessageStatus::Response) {
             auto [actorId, dirRows] =
                 MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::Packets::DirRow>>>(serialized);
             node->dfs()->addDirData(actorId, dirRows);
         }
+        break;
+    }
+    case MessageType::DfsLastModified: {
+        auto msg = MessagePack::deserialize<uint64_t>(serialized);
+        node->dfs()->sendSync(msg);
         break;
     }
     case MessageType::DfsAddFile: {

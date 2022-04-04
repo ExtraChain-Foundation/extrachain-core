@@ -55,8 +55,6 @@ private:
     bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
     DBRow makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
                            uint64_t fileSize);
-    DBRow makeLocalDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
-                            uint64_t fileSegmentBegin, uint64_t fileSegmentEnd, uint64_t fileSize);
     uint64_t calculateSizeTaken(const std::string &folder = DFS::Basic::fsActrRoot);
     std::string extractNextFragment();
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
@@ -64,8 +62,10 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
 
 public:
+    void requestSync();
+    void sendSync(uint64_t lastModified);
     void requestDirData(const ActorId &actorId);
-    void sendDirData(const ActorId &actorId);
+    void sendDirData(const ActorId &actorId, uint64_t lastModified);
     void addDirData(const ActorId &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileHash);
     void sendFile(const ActorId &actorId, const std::string &fileHash);

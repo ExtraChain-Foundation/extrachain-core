@@ -387,6 +387,8 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
 
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
+
     connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
     // connect(this, &ExtraChainNode::removeConnection, m_dfs, &Dfs::removeConnection);
     connect(this, &ExtraChainNode::getAllActorsNode, m_actorIndex, &ActorIndex::getAllActors);

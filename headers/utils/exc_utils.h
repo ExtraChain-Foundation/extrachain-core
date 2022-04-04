@@ -537,6 +537,18 @@ static const std::string getPlatformDelimeter() {
 #endif
 }
 
+static int64_t currentDateSecs() {
+    using namespace std::chrono;
+    uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    return secs;
+}
+
+static int64_t currentDateMs() {
+    using namespace std::chrono;
+    uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    return ms;
+}
+
 // QByteArray encodeHex(const QByteArray &dec);
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);

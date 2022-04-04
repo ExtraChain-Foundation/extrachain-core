@@ -26,9 +26,7 @@ namespace Basic {
     static const std::string fsActrRoot = "dfs";
     static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
-    static const std::string serviceStoragePath = "service";
-    static const std::string serviceDfsPath =
-        serviceStoragePath + Utils::getPlatformDelimeterDFS() + DFS::Basic::fsActrRoot;
+    static const std::string dirsPath = "dfs/.dirs";
     static const uint64_t sectionSize = 2097152;
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
@@ -86,7 +84,8 @@ namespace Packets {
         std::string fileHashPrev;
         std::string filePath;
         uint64_t fileSize;
-        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileSize);
+        uint64_t lastModified;
+        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileSize, lastModified)
     };
 }
 
@@ -108,22 +107,17 @@ namespace Tables {
         DBConnector actorDbConnector(const std::string &actorId);
         std::filesystem::path actorDbPath(const std::string &actorId);
         DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string fileHash);
-        std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId);
+        std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId, uint64_t lastModified = 0);
         bool addDirRows(const std::string &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     }
 
-    namespace LocalDirFile {
-        static const std::string TableName = "FileSegmentsTable";
+    namespace DirsFile {
+        static const std::string TableName = "Dirs";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
-            + " ("
-              "fileHash         TEXT PRIMARY KEY NOT NULL, "
-              "fileHashPrev     TEXT             NOT NULL, "
-              "filePath         TEXT             NOT NULL, "
-              "fileSegmentBegin TEXT             NOT NULL, "
-              "fileSegmentEnd   TEXT             NOT NULL, "
-              "fileSize         TEXT             NOT NULL"
+            + "("
+              "actorId      TEXT PRIMARY KEY NOT NULL,"
+              "lastModified INTEGER          NOT NULL "
               ");";
-        std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
     }
 
     static const std::string permissionTable = "PermissionTable";
@@ -142,7 +136,6 @@ namespace Tables {
 
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
-
     std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
 }
 
