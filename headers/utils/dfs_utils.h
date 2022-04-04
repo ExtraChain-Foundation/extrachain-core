@@ -39,7 +39,7 @@ namespace Packets {
         std::string FileHash;
         std::string Path;
         uint64_t Size;
-        MSGPACK_DEFINE(Actor, FileHash, Path, Size);
+        MSGPACK_DEFINE(Actor, FileHash, Path, Size)
     };
 
     struct RequestFileSegmentMessage {
@@ -47,13 +47,13 @@ namespace Packets {
         std::string FileHash;
         std::string Path;
         uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileHash, Path, Offset);
+        MSGPACK_DEFINE(Actor, FileHash, Path, Offset)
     };
 
     struct RemoveFileMessage {
         std::string Actor;
         std::string FileHash;
-        MSGPACK_DEFINE(Actor, FileHash);
+        MSGPACK_DEFINE(Actor, FileHash)
     };
 
     struct EditSegmentMessage {
@@ -61,7 +61,7 @@ namespace Packets {
         std::string FileHash;
         std::string Data;
         uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileHash, Data, Offset);
+        MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
     };
 
     struct AddSegmentMessage {
@@ -69,7 +69,7 @@ namespace Packets {
         std::string FileHash;
         std::string Data;
         uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileHash, Data, Offset);
+        MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
     };
 
     struct DeleteSegmentMessage {
@@ -77,7 +77,7 @@ namespace Packets {
         std::string FileHash;
         uint64_t Offset;
         uint64_t Size;
-        MSGPACK_DEFINE(Actor, FileHash, Offset, Size);
+        MSGPACK_DEFINE(Actor, FileHash, Offset, Size)
     };
 
     struct DirRow {

@@ -72,7 +72,7 @@ struct PermissionManager::GetPermissionMsg {
     std::string userId;
     std::string fileHash;
 
-    MSGPACK_DEFINE(userId, fileHash);
+    MSGPACK_DEFINE(userId, fileHash)
 };
 
 struct PermissionManager::SetPermissionMsg {

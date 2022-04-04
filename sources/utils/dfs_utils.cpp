@@ -25,7 +25,7 @@ std::string DFS::Tables::ActorDirFile::getLastHash(DBConnector &db) {
 DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const std::string &actorId) {
     DBConnector db;
     db.open(actorDbPath(actorId).string());
-    return std::move(db);
+    return db;
 }
 
 std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &actorId) {
