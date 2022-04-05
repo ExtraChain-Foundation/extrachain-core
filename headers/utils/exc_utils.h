@@ -37,27 +37,22 @@
 namespace Network {
 Q_NAMESPACE
 
-static const unsigned long FRAGMENT_STACK_SIZE = 2048;
-static const int DFS_FILE_STATUS_CHECK_TIME = 1000;
 static bool isStartedServer = true;
 static quint16 maxConnections = 100;
-static quint16 maxResolver = 100;
-static quint16 maxDfsResolver = 10;
 
 struct DataStruct {
     QByteArray msg;
     SocketPair receiver;
 };
 
-enum Protocol
-{
+enum class Protocol {
     Undefined = 0,
+    Udp = 1,
     WebSocket = 2
 };
 Q_ENUM_NS(Protocol)
 
-enum SocketServiceError
-{
+enum class SocketServiceError {
     Unknown = 0,
     IncompatibleVersion = 1,
     IncompatibleNetwork = 2,
@@ -78,36 +73,6 @@ Q_ENUM_NS(SocketServiceError)
     return identifier;
 }
 } // namespace Network
-
-class Transaction;
-namespace storedSpace {
-
-enum State
-{
-    NEWSTATE,
-    DELSTATE,
-    CHANGEDS,
-    UNRECOGS
-};
-QByteArray toByteArray(State state);
-QString toString(State state);
-State convertToDFSstate(QByteArray state);
-} // namespace storedSpace
-
-namespace Resolver {
-enum Lifetime
-{
-    SHORT = 0,
-    LONG = 1
-};
-enum Type
-{
-    BLOCKCHAIN = 0,
-    ACTORS = 1,
-    DFS = 2,
-    GENERAL = 3
-};
-} // namespace Resolver
 
 namespace Config {
 
@@ -450,8 +415,7 @@ namespace Net {
     // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
-    enum class TypeSend
-    {
+    enum class TypeSend {
         All,
         Except,
         Focused,
@@ -553,11 +517,11 @@ static int64_t currentDateMs() {
 // QByteArray encodeHex(byte *dec);
 // QByteArray decodeHex(const QByteArray &hex);
 EXTRACHAIN_EXPORT QString extrachainVersion();
+EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();
 EXTRACHAIN_EXPORT QString boostAsioVersion();
 
-enum PrintDebug
-{
+enum PrintDebug {
     Off = 0,
     On = 1
 };
@@ -623,8 +587,7 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 // Dfs
 static const int DATA_OFFSET = 512;
 
-enum typeDataRow
-{
+enum typeDataRow {
     UNIVERSAL,
     STAKING
 };
@@ -646,8 +609,7 @@ static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
 } // namespace SmartContractStorage
 
 namespace SearchEnum {
-enum class BlockParam
-{
+enum class BlockParam {
     Id = 0,
     Approver,
     Data,
@@ -655,8 +617,7 @@ enum class BlockParam
     Null
 };
 
-enum class TxParam
-{
+enum class TxParam {
     UserSender = 0,
     UserReceiver,
     UserApprover,
@@ -740,8 +701,7 @@ enum class TxParam
 //} // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {
-    enum NotifyType
-    {
+    enum NotifyType {
         TxToUser,
         TxToMe,
         ChatMsg,

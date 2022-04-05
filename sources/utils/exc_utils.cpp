@@ -86,36 +86,6 @@ int Utils::compare(const QByteArray &one, const QByteArray &two) {
         return two.size() - one.size();
 }
 
-QByteArray storedSpace::toByteArray(storedSpace::State state) {
-    if (state == storedSpace::State::NEWSTATE)
-        return "NEWSTATE";
-    if (state == storedSpace::State::CHANGEDS)
-        return "CHANGEDS";
-    if (state == storedSpace::State::DELSTATE)
-        return "DELSTATE";
-    return "UNRECOGS";
-}
-
-QString storedSpace::toString(storedSpace::State state) {
-    if (state == storedSpace::State::NEWSTATE)
-        return "NEWSTATE";
-    if (state == storedSpace::State::CHANGEDS)
-        return "CHANGEDS";
-    if (state == storedSpace::State::DELSTATE)
-        return "DELSTATE";
-    return "UNRECOGS";
-}
-
-storedSpace::State storedSpace::convertToDFSstate(QByteArray state) {
-    if (state == "NEWSTATE")
-        return storedSpace::State::NEWSTATE;
-    if (state == "CHANGEDS")
-        return storedSpace::State::CHANGEDS;
-    if (state == "DELSTATE")
-        return storedSpace::State::DELSTATE;
-    return storedSpace::State::UNRECOGS;
-}
-
 QByteArray Utils::intToByteArray(const int &number, const int &size) {
     auto num = QByteArray::number(number);
     Q_ASSERT(num.size() <= size);
@@ -542,6 +512,10 @@ void Utils::benchmark(std::function<void()> func, int count) {
 
 QString Utils::extrachainVersion() {
     return EXTRACHAIN_VERSION;
+}
+
+std::string Utils::sodiumVersion() {
+    return sodium_version_string();
 }
 
 QString Utils::boostVersion() {

@@ -75,6 +75,13 @@ public:
     std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
     uint64_t bytesLimit() const;
     void setBytesLimit(uint64_t bytesLimit);
+
+signals:
+    void added(ActorId actorId, std::string fileHash);    // TODO: add std::string visualPath
+    void uploaded(ActorId actorId, std::string fileHash); // TODO: loadId
+    void downloaded(ActorId actorId, std::string fileHash);
+    void downloadProgress(ActorId actorId, std::string fileHash, int progress);
+    void uploadProgress(ActorId actorId, std::string fileHash, int progress);
 };
 
 #endif // DFS_CONTROLLER_H

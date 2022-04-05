@@ -96,8 +96,7 @@ void NetworkManager::reconnection() {
         if (finded)
             continue;
 
-        qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
-                           << el.ip << el.protocol;
+        qDebug().noquote() << "[NetworkManager] Reconnection to" << el.ip << el.protocol;
         connectToNode(el.ip, el.protocol);
     }
 }
@@ -133,7 +132,6 @@ void NetworkManager::removeConnection(const QString &identifier) {
 }
 
 NetworkManager::~NetworkManager() {
-    // delete resolverService;
     delete upnpNet;
     delete upnpDis;
     delete local;
@@ -498,7 +496,8 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
         }
     }
 
-    if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion) {
+    if (error == Network::SocketServiceError::IncompatibleNetwork
+        || error == Network::SocketServiceError::IncompatibleVersion) {
         emit connectionError(error, service->identifier(), errorData);
     }
 }

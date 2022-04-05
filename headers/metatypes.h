@@ -34,7 +34,6 @@
 
 class QHostAddress;
 class Block;
-class TcpSocketService;
 
 Q_DECLARE_METATYPE(BigNumber)
 // Q_DECLARE_METATYPE(BigNumber *)

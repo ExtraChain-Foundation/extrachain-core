@@ -65,7 +65,6 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
-    pub = KeyPublic(json["key"].toString().toStdString()); // TODO: remove after tcp handshake
     m_sendType = SendType(json["sendType"].toInt());
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toStdString());
     ActorId currentFirstId = node->actorIndex()->firstId();
@@ -125,7 +124,6 @@ QByteArray SocketService::generateFirstMessage() {
     json["firstId"] = node->actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["key"] = QString::fromStdString(priv.publicKey()); // TODO: remove after tcp handshake
     json["sendType"] = QString::number(int(m_sendType));
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);

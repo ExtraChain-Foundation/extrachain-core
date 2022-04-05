@@ -167,6 +167,7 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
     }
 
     files[msg.Actor + msg.FileHash] = msg;
+    emit added(msg.Actor, msg.FileHash);
     return msg.FileHash;
 }
 
@@ -280,7 +281,7 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
     insertDataChunk(msg.Data, msg.Offset, realFilePath);
 
     std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
-    unsigned int newFileSize = std::filesystem::file_size(realFilePath);
+    // auto newFileSize = std::filesystem::file_size(realFilePath);
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
             // actrDirFile.update("UPDATE " + DFS::Tables::ActorDirFile::TableName + " SET fileHash = " + "'"
@@ -478,6 +479,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFS::Pa
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileHash) {
+    std::filesystem::remove(DFS::Path::filePath(actorId.toStdString(), fileHash));
     node.network()->send_message(std::pair { actorId, fileHash }, MessageType::DfsRequestFile);
 }
 
@@ -497,16 +499,16 @@ void DfsController::sendFile(const ActorId &actorId, const std::string &fileHash
 }
 
 std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
-    std::filesystem::path realFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
+    std::filesystem::path realFilePath = DFS::Path::filePath(msg.Actor, msg.FileHash);
     if (!std::filesystem::exists(realFilePath)) {
         return "";
         qFatal("[Dfs] No file");
     }
+
     boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
     std::string data;
-    if (std::filesystem::file_size(realFilePath) - msg.Offset > DFS::Basic::sectionSize) {
+    auto fileSize = std::filesystem::file_size(realFilePath);
+    if (fileSize - msg.Offset > DFS::Basic::sectionSize) {
         data = extractFragment(fmapTarget, msg.Offset, DFS::Basic::sectionSize);
     } else {
         data = extractFragment(fmapTarget, msg.Offset);
@@ -517,20 +519,21 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
     };
 
     node.network()->send_message(fragment, MessageType::DfsAddSegment);
+    emit uploadProgress(msg.Actor, msg.FileHash, double(msg.Offset) / double(fileSize) * 100);
+    if (msg.Offset + DFS::Basic::sectionSize >= fileSize)
+        emit uploaded(msg.Actor, msg.FileHash);
     return "";
 }
 
 std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &msg) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
-    auto fileName = DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
+    auto fileName = DFS::Path::filePath(msg.Actor, msg.FileHash);
     if (!std::filesystem::exists(fileName)) {
         return "";
     }
 
-    DBConnector actrDirFile;
-    std::string actrDirFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
-    if (!actrDirFile.open(actrDirFilePath)) {
+    DBConnector actrDirFile = DFS::Tables::ActorDirFile::actorDbConnector(msg.Actor);
+    if (!actrDirFile.isOpen()) {
+        qFatal("Error addFragment 1");
         exit(EXIT_FAILURE);
     }
     std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, msg.FileHash);
@@ -541,6 +544,7 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
 
     if (fileSize == std::filesystem::file_size(fileName)) {
         qDebug() << "[Dfs] Skip fragment";
+        qFatal("Error addFragment 2");
         return "";
     }
 
@@ -552,18 +556,19 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             // TODO: send package done
             files.erase(msg.Actor + msg.FileHash);
+            emit downloaded(msg.Actor, msg.FileHash);
             // node.network()->send_message(std::pair(msg.Actor, msg.FileHash),
             // MessageType::DfsSendingFileDone);
-            sendFile(msg.Actor, msg.FileHash);
+            sendFile(msg.Actor, msg.FileHash); // temp
             return hash;
         } else {
-            std::filesystem::remove(fileName);
             requestFile(msg.Actor, msg.FileHash);
             qFatal("[Dfs] Incorrect file check");
             return "";
         }
     }
 
+    emit downloadProgress(msg.Actor, msg.FileHash, double(msg.Offset) / double(fileSize) * 100);
     DFS::Packets::RequestFileSegmentMessage reqMessage = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = virtualPath, .Offset = offset
     };

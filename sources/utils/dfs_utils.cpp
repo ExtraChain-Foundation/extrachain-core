@@ -23,8 +23,8 @@ DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const std::string &actor
 }
 
 std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &actorId) {
-    std::string pathDelim = Utils::getPlatformDelimeterDFS();
-    std::string path = DFS::Basic::fsActrRoot + pathDelim + actorId + pathDelim + DFS::Basic::fsMapName;
+    std::string path = DFS::Basic::fsActrRoot + Utils::getPlatformDelimeterDFS() + actorId
+        + Utils::getPlatformDelimeterDFS() + DFS::Basic::fsMapName;
     return path;
 }
 

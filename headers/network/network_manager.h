@@ -39,9 +39,7 @@
 #include "utils/exc_utils.h"
 
 class SocketService;
-class TcpSocketService;
 class WebSocketService;
-class TcpServerService;
 class UPNPConnection;
 
 struct NetworkReconnect {
@@ -87,7 +85,6 @@ private:
 
     ExtraChainNode *node;
     QNetworkAddressEntry *local = nullptr;
-    TcpServerService *tcpServer = nullptr;
     QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
     QSet<NetworkReconnect> m_reconnections;
@@ -101,7 +98,7 @@ public:
     ~NetworkManager();
 
     // protected:
-    quint16 tcpPort = 2222;
+    // quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
 
 private:
