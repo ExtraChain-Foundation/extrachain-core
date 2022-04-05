@@ -77,7 +77,7 @@ public:
     void setBytesLimit(uint64_t bytesLimit);
 
 signals:
-    void added(ActorId actorId, std::string fileHash);    // TODO: add std::string visualPath
+    void added(ActorId actorId, std::string fileHash, std::string visual, int64_t size);
     void uploaded(ActorId actorId, std::string fileHash); // TODO: loadId
     void downloaded(ActorId actorId, std::string fileHash);
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);

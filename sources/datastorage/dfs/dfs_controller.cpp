@@ -167,7 +167,7 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
     }
 
     files[msg.Actor + msg.FileHash] = msg;
-    emit added(msg.Actor, msg.FileHash);
+    emit added(msg.Actor, msg.FileHash, msg.Path, msg.Size);
     return msg.FileHash;
 }
 
