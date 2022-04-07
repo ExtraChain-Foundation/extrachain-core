@@ -41,7 +41,7 @@ Thumbs.db
 # qtcreator generated files
 *.pro.user*
 *.pro.qtds*
-CMakeLists.txt.user
+CMakeLists.txt.user*
 
 # xemacs temporary files
 *.flc
@@ -83,7 +83,7 @@ lib/
 .vscode/
 .vs/
 .idea/
-cmake-build-debug/
+cmake-build-debug*/
 debug/
 release/
 *.sln

@@ -546,7 +546,6 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
 
     if (fileSize == std::filesystem::file_size(fileName)) {
         qDebug() << "[Dfs] Skip fragment";
-        qFatal("Error addFragment 2");
         return "";
     }
 
