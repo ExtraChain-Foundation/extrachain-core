@@ -519,9 +519,11 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
     };
 
     node.network()->send_message(fragment, MessageType::DfsAddSegment);
-    emit uploadProgress(msg.Actor, msg.FileHash, double(msg.Offset) / double(fileSize) * 100);
-    if (msg.Offset + DFS::Basic::sectionSize >= fileSize)
+    if (msg.Offset + DFS::Basic::sectionSize >= fileSize) {
         emit uploaded(msg.Actor, msg.FileHash);
+        return "";
+    }
+    emit uploadProgress(msg.Actor, msg.FileHash, double(msg.Offset) / double(fileSize) * 100);
     return "";
 }
 
