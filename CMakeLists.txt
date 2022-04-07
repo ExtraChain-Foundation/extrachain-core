@@ -116,9 +116,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/rextrachain/rextrachain.h
     )
-
 
 add_library(extrachainc
     ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
@@ -146,17 +144,6 @@ if (EXTRACHAIN_ENABLE_LTO)
     endif(lto_supported)
 endif(EXTRACHAIN_ENABLE_LTO)
 
-# rust
-if (EXTRACHAIN_ENABLE_RUST)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../corrosion ${CMAKE_CURRENT_BINARY_DIR}/corrosion)
-    corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_LIST_DIR}/rextrachain/Cargo.toml)
-    corrosion_link_libraries(rextrachain extrachainc)
-    execute_process(COMMAND rustc --version OUTPUT_VARIABLE RUST_VERSION)
-    string(STRIP "${RUST_VERSION}" RUST_VERSION)
-    string(SUBSTRING "${RUST_VERSION}" 6 6 RUST_VERSION)
-    add_compile_definitions(EXTRACHAIN_ENABLE_RUST EXTRACHAIN_RUST_VERSION="${RUST_VERSION}")
-endif(EXTRACHAIN_ENABLE_RUST)
-
 # git
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
@@ -173,9 +160,6 @@ target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Web
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread extrachainc)
 target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
-if (EXTRACHAIN_ENABLE_RUST)
-    target_link_libraries(extrachain rextrachain extrachainc)
-endif (EXTRACHAIN_ENABLE_RUST)
 
 if (UNIX AND NOT APPLE)
     target_link_libraries(extrachain gmp)
