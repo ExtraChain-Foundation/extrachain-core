@@ -385,12 +385,12 @@ std::string Utils::hexStringToByte(const std::string &data) {
 
 QString Utils::detectCompiler() {
 #ifdef __clang__
-    #if __clang_major__ < 9
-        #error "Clang must be version 9 or higher"
+    #if __clang_major__ < 11
+        #error "Clang must be version 11 or higher"
     #endif
 #elif __GNUC__
-    #if __GNUC__ < 8
-        #error "GCC must be version 8 or higher"
+    #if __GNUC__ < 11
+        #error "GCC must be version 11 or higher"
     #endif
 #elif _MSC_VER && !__INTEL_COMPILER
 #else
