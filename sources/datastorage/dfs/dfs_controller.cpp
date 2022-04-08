@@ -68,6 +68,14 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     auto fileSize = std::filesystem::file_size(newFilePath);
     std::filesystem::path placeInDFS = DFS::Basic::fsActrRootW + DFS::Basic::separator
         + actor.id().toString().toStdWString() + DFS::Basic::separator;
+    std::filesystem::path dfsPath = DFS::Path::filePath(actor.id().toStdString(), fileHash);
+    if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
+        std::string dfsFileHash = Utils::calcKeccakForFile(dfsPath);
+        if (fileHash == dfsFileHash) {
+            qDebug() << "[DFS] File already in DFS";
+            return "";
+        }
+    }
 
     try {
         std::filesystem::create_directories(placeInDFS.c_str());
