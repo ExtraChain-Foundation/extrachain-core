@@ -161,12 +161,9 @@ target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Web
 target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
 
-if (UNIX AND NOT APPLE)
-    target_link_libraries(extrachain gmp)
-endif (UNIX AND NOT APPLE)
-if (APPLE AND NOT IOS) # temp
+if (UNIX AND NOT IOS) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)
-endif(APPLE AND NOT IOS)
+endif(UNIX AND NOT IOS)
 if (WIN32) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
 endif(WIN32)
