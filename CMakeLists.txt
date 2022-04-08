@@ -165,8 +165,7 @@ if (UNIX AND NOT APPLE)
     target_link_libraries(extrachain gmp)
 endif (UNIX AND NOT APPLE)
 if (APPLE AND NOT IOS) # temp
-    target_include_directories(extrachain PUBLIC /usr/local/Cellar/gmp/6.2.1/include)
-    target_link_libraries(extrachain /usr/local/Cellar/gmp/6.2.1/lib/libgmp.a /usr/local/Cellar/gmp/6.2.1/lib/libgmpxx.a)
+    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)
 endif(APPLE AND NOT IOS)
 if (WIN32) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)

@@ -31,6 +31,8 @@ const QList<SocketService *> &NetworkManager::connections() const {
 
 bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     switch (protocol) {
+    case Network::Protocol::Udp:
+        break;
     case Network::Protocol::WebSocket:
         return wsServer == nullptr ? false : wsServer->isListening();
     case Network::Protocol::Undefined:
@@ -211,6 +213,8 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 
     using Network::Protocol;
     switch (protocol) {
+    case Protocol::Udp:
+        break;
     case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), port);
         break;
