@@ -222,6 +222,12 @@ QString Utils::fileMimeType(const QString &filePath) {
     return type.name();
 }
 
+QString Utils::fileMimeSuffix(const QString &filePath) {
+    QMimeDatabase db;
+    QMimeType type = db.mimeTypeForFile(filePath);
+    return type.preferredSuffix();
+}
+
 QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fiels_size) {
     QByteArray serialized = "";
     for (const QByteArray &param : list) {

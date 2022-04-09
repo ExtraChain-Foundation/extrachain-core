@@ -554,6 +554,7 @@ EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &de
 EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
                                                       int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
+QString fileMimeSuffix(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
 
