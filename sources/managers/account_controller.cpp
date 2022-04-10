@@ -72,7 +72,7 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     node->actorIndex()->addActor(actor.convertToPublic());
     node->privateProfile()->setHash(hashLogin);
     savePrivateActor(actor, hashLogin);
-    m_accounts << actor;
+
     if (m_accounts.size() - 1 == 0) {
         emit savePrivateProfile(actor.id().toByteArray());
     }
@@ -194,7 +194,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
         if (old == actor.toJson()) {
             qDebug() << "[AccountController] Private actor with id =" << actor.id() << "already exists";
         } else {
-            qDebug() << "[AccountController] Actor serialized:" << actor.toJson();
+            qDebug().noquote() << "[AccountController] Actor serialized:" << actor.toJson();
             std::string hl = hashLogin.toStdString();
             file.write(
                 QByteArray::fromStdString(SecretKey::encryptWithPassword(actor.toJson().toStdString(), hl)));
