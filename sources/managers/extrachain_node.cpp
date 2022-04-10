@@ -482,6 +482,8 @@ void ExtraChainNode::connectSignals() {
 
     connect(this, &ExtraChainNode::login, m_privateProfile, &PrivateProfile::loadPrivateProfileLogin);
     connect(this, &ExtraChainNode::savePrivateProfile, m_privateProfile, &PrivateProfile::savePrivateProfile);
+    connect(this, &ExtraChainNode::nodeEditPrivateProfile, m_privateProfile,
+            &PrivateProfile::editPrivateProfile);
 }
 
 void ExtraChainNode::prepareFolders() {
