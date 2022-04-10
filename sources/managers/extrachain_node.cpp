@@ -82,7 +82,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-        auto first = m_accountController->createActor(ActorType::ServiceProvider, consoleHash);
+        auto first = m_accountController->createUser(ActorType::ServiceProvider, consoleHash);
         emit savePrivateProfile(consoleHash, first.id());
         m_actorIndex->setFirstId(first.id());
     } else {

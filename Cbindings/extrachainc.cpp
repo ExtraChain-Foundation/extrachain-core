@@ -155,7 +155,7 @@ ActorPrivate *extrachain_create_actor(int type) {
         std::exit(0);
     }
 
-    auto actor = node->accountController()->createActor(ActorType(type), node->privateProfile()->hash());
+    auto actor = node->accountController()->createUser(ActorType(type), node->privateProfile()->hash());
 
     ActorPrivate *actor_private = actor_private_from_ActorKeyPrivate(actor);
 

@@ -57,7 +57,8 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createActor(ActorType account, QByteArray hashLogin);
+    Actor<KeyPrivate> createUser(ActorType account, QByteArray hashLogin);
+    Actor<KeyPrivate> createWallet();
     //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
     Actor<KeyPrivate> getActor(const ActorId &id);
 
@@ -112,7 +113,6 @@ signals:
     void savePrivateProfile(QByteArray id);
     void finished();
 
-    void initDfs();
     void editPrivateProfile(QByteArray id);
 };
 #endif // ACCOUNT_CONTROLLER_H

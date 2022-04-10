@@ -59,7 +59,7 @@ QList<QByteArray> AccountController::getAccountID() {
     return list;
 }
 
-Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray hashLogin) {
+Actor<KeyPrivate> AccountController::createUser(ActorType account, QByteArray hashLogin) {
     if (hashLogin.isEmpty())
         qFatal("[AccountController] Create actor: hash is empty");
 
@@ -80,17 +80,26 @@ Actor<KeyPrivate> AccountController::createActor(ActorType account, QByteArray h
     userNum = m_accounts.size() - 1;
 
     qDebug() << "[AccountController] Create actor finished";
-    if (account == ActorType::Account) {
-        qDebug() << "Dfs hash init for me";
-        emit initDfs(); //
-    }
-    emit newActorIsCreated(this->mainActor().id().toByteArray(),
-                           account == ActorType::Account); // TODO: send type
 
-    node->start();
+    node->start(); // TODO: remove
 
     if (!m_accounts.isEmpty())
         node->blockchain()->getBlockZero();
+
+    return actor;
+}
+
+Actor<KeyPrivate> AccountController::createWallet() {
+    auto hash = node->privateProfile()->hash();
+    Actor<KeyPrivate> actor;
+    actor.create(ActorType::User);
+    m_accounts << actor;
+    node->actorIndex()->addActor(actor.convertToPublic());
+    savePrivateActor(actor, hash);
+
+    emit node->nodeEditPrivateProfile({ hash, node->accountController()->mainActor().id().toByteArray() },
+                                      "wallet", actor.id().toByteArray(), false);
+
     return actor;
 }
 
