@@ -155,7 +155,6 @@ ExtraChainNode::~ExtraChainNode() {
     emit m_txManager->finished();
     emit m_txManager->finished();
     emit m_blockchain->finished();
-    emit m_accountController->finished();
     emit m_actorIndex->finished();
 }
 
@@ -177,7 +176,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->currentWallet();
     if (!actor.empty()) {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
                         .arg(tx.toString(), QString(actor.id().toByteArray()));
@@ -243,7 +242,7 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->currentWallet();
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
@@ -263,7 +262,7 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
 
 Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
                                                     ActorId token) {
-    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->currentWallet();
 
     if (!actor.empty()) {
         if (receiver.isEmpty()) {
@@ -406,7 +405,7 @@ void ExtraChainNode::getAllActors() {
 }
 
 void ExtraChainNode::getAllActorsTimerCall() {
-    if (m_accountController->getAccountCount() > 0 && m_networkManager->connections().length() > 0) {
+    if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
         ActorId actorId = m_accountController->mainActor().id();
 
         if (!actorId.isEmpty())

@@ -44,13 +44,11 @@ class EXTRACHAIN_EXPORT AccountController : public QObject {
 private:
     ExtraChainNode *node;
 
-    // Current user, used in AccountController.
-    int userNum = 0;
-    QList<Actor<KeyPrivate>> m_accounts;
+    std::vector<Actor<KeyPrivate>> m_accounts;
+    ActorId m_currentWallet;
 
 public:
     AccountController(ExtraChainNode *node);
-    QList<QByteArray> getAccountID();
 
 public:
     /**
@@ -59,29 +57,18 @@ public:
      */
     Actor<KeyPrivate> createUser(ActorType account, QByteArray hashLogin);
     Actor<KeyPrivate> createWallet();
-    //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
-    Actor<KeyPrivate> getActor(const ActorId &id);
-
-    /**
-     * @brief Gets Actor by public key
-     * @param pubkey - serialized public key
-     * @return actor
-     */
-    Actor<KeyPrivate> getActor(int number);
+    const Actor<KeyPrivate> &getActor(const ActorId &id);
     const Actor<KeyPrivate> &mainActor();
 
     /**
      * @brief Gets current active actor
      * @return actor
      */
-    Actor<KeyPrivate> getCurrentActor();
+    const Actor<KeyPrivate> &currentWallet();
 
-    int getAccountCount() const;
-    int getUserNum() const;
-    void setUserNum(int value);
+    int count() const;
 
-    const QList<Actor<KeyPrivate>> &accounts() const;
-    QList<ActorId> getListAccounts() const;
+    const std::vector<Actor<KeyPrivate>> &accounts() const;
 
 public slots:
     /**
@@ -95,24 +82,15 @@ public slots:
      */
     void savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin);
     void clearAcc();
-    void changeUserNum(QByteArray);
-    void process();
+    void changeCurrentWallet(const ActorId &actorId);
 
 signals:
     /**
      * @brief verifyActor
      * @param serialized private actor
      */
-    void verifyActor(Actor<KeyPublic> actor);
-    void addActorInActorIndex(Actor<KeyPublic> actor);
-    //
-    void sentActorId(BigNumber actorId);
     void loadWallets(QByteArray id, QByteArrayList idList);
-    void updateTransactionListInModel();
-    void newActorIsCreated(BigNumber id, bool isUser);
     void savePrivateProfile(QByteArray id);
-    void finished();
-
     void editPrivateProfile(QByteArray id);
 };
 #endif // ACCOUNT_CONTROLLER_H

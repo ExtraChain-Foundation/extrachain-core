@@ -146,7 +146,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
 }
 
 void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId) {
-    if (node->accountController()->getAccountCount() == 0)
+    if (node->accountController()->count() == 0)
         return;
 
     std::vector<std::string> result = allActorsStd();
@@ -163,7 +163,7 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
 void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
-    if (node->accountController()->getAccountCount() > 0) {
+    if (node->accountController()->count() > 0) {
         node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
 
         qDebug() << "[ActorIndex] Get all actors request";
