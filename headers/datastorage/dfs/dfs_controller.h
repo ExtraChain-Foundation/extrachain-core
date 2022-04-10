@@ -63,13 +63,13 @@ private:
 
 public:
     void requestSync();
-    void sendSync(uint64_t lastModified);
+    void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
-    void sendDirData(const ActorId &actorId, uint64_t lastModified);
+    void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);
     void addDirData(const ActorId &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileHash);
-    void sendFile(const ActorId &actorId, const std::string &fileHash);
-    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg);
+    void sendFile(const ActorId &actorId, const std::string &fileHash, const std::string &messageId);
+    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg, const std::string &messageId);
     std::string addFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string insertFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);

@@ -136,7 +136,7 @@ public:
 public slots:
     void process();
     void handleGetActor(const ActorId &actorId, const std::string &messageId);
-    void handleGetAllActor(const std::string &messageId);
+    void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const std::string &messageId);
 

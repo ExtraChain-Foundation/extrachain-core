@@ -119,7 +119,8 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         auto profileData = actor.profile().serialize();
         bool isProfile = !profileData.isEmpty();
 
-        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response); // messageId
+        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, messageId,
+                                      Config::Net::TypeSend::Focused);
 
         if (isProfile) {
             // TODONEW node->resolveManager()->registrateMsg(profileData,
@@ -144,13 +145,17 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
     }
 }
 
-void ActorIndex::handleGetAllActor(const std::string &messageId) {
+void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId) {
     if (node->accountController()->getAccountCount() == 0)
         return;
 
     std::vector<std::string> result = allActorsStd();
+    result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
     if (!result.empty()) {
-        node->network()->send_message(result, MessageType::ActorAll, MessageStatus::Response);
+        node->network()->send_message(result, MessageType::ActorAll, MessageStatus::Response, messageId,
+                                      Config::Net::TypeSend::Focused);
+    } else {
+        // send empty response
     }
     return;
 }
@@ -162,7 +167,6 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
         node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
 
         qDebug() << "[ActorIndex] Get all actors request";
-        // emit sendMessage(msg.serialize(), getAllActorMessage);
     }
 }
 
@@ -410,8 +414,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         node->dfs()->initializeActor(actor.id());
 
         qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
-        node->network()->send_message(actor, MessageType::Actor, MessageStatus::Response, "",
-                                      Config::Net::TypeSend::All);
+        node->network()->send_message(actor, MessageType::NewActor);
     }
 
     return result;

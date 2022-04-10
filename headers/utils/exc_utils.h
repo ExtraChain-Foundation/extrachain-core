@@ -418,8 +418,7 @@ namespace Net {
     enum class TypeSend {
         All,
         Except,
-        Focused,
-        Default
+        Focused
     };
 } // namespace Net
 } // namespace Config

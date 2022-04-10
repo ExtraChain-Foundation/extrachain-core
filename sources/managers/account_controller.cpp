@@ -203,6 +203,7 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
         }
 
         file.close();
+        return;
     }
 
     qDebug() << "[AccountController] Can't save actor" << actor.id();

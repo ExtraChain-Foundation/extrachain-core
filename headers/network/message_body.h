@@ -4,11 +4,11 @@
 #include "datastorage/actor.h"
 #include "utils/exc_utils.h"
 
-enum class MessageType
-{
+enum class MessageType {
     Custom = 0,
-    Actor = 1,
-    ActorCount = 2,
+    NewActor = 1,
+    Actor = 2,
+    ActorCount = 3,
     ActorAll = 4,
 
     DfsDirData = 50,
@@ -24,8 +24,7 @@ enum class MessageType
 };
 MSGPACK_ADD_ENUM(MessageType)
 
-enum class MessageStatus
-{
+enum class MessageStatus {
     NoStatus,
     Request,
     Response
@@ -55,6 +54,10 @@ struct SocketIdentifier {
 template <class T>
 MessageBody<T> make_message(const T data, MessageType type, MessageStatus status, const ActorId &sender,
                             std::string to_message_id) {
+    if (!to_message_id.empty() && to_message_id.length() != 15) {
+        qFatal("make message error: incorrect message id size");
+    }
+
     QByteArray randomId = Utils::calcKeccak(QByteArray::number(QDateTime::currentSecsSinceEpoch())
                                             + QByteArray::number(QRandomGenerator::global()->bounded(100000)))
                               .left(15); // temp

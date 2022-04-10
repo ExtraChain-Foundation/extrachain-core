@@ -90,6 +90,7 @@ private:
     QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
 
+    std::map<std::string, std::string> m_messages;
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
 
@@ -159,6 +160,15 @@ public:
     std::string send_message(T data, MessageType type, MessageStatus status = MessageStatus::NoStatus,
                              std::string to_message_id = "",
                              Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
+        if (status == MessageStatus::Response && to_message_id.empty()) {
+            qFatal("[Network] Send message error: empty message id for response message");
+        }
+        if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
+            qDebug()
+                << "[Network] Send message warning: incorrect type send for response message, set to focused";
+            typeSend = Config::Net::TypeSend::Focused;
+        }
+
         if (node->accountController()->getAccountCount() == 0) {
             return "";
             qFatal("Can't send");
@@ -170,10 +180,14 @@ public:
         auto sign = mainActor.key().sign(serialized);
 
         std::string receiver_identifier;
+        if (!to_message_id.empty()) {
+            receiver_identifier = m_messages[to_message_id];
+            if (receiver_identifier.empty())
+                qFatal("Network send message error: receiver_identifier is empty");
+            m_messages.erase(to_message_id);
+        }
+
         this->sendMessage(serialized + sign, typeSend, receiver_identifier);
-        // if (to_message_id.empty()) { // move to second send part
-        //     this->m_waiting_messages.insert(sended_message_id, MessageIdData {});
-        // }
 
         return message.message_id;
     }

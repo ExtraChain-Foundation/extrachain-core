@@ -112,7 +112,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         DFS::Tables::DirsFile::TableName,
         { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
 
-    sendFile(actor.id(), fileHash);
+    sendFile(actor.id(), fileHash, "");
     return addFile(msg, false);
 }
 
@@ -170,7 +170,8 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
             DFS::Packets::RequestFileSegmentMessage reqMessage = {
                 .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = msg.Path, .Offset = 0
             };
-            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
+            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
+                                         MessageStatus::Request);
         }
     }
 
@@ -449,15 +450,16 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
 }
 
 void DfsController::requestSync() {
-    node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified);
+    node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified,
+                                 MessageStatus::Request);
 }
 
-void DfsController::sendSync(uint64_t lastModified) {
+void DfsController::sendSync(uint64_t lastModified, const std::string &messageId) {
     DBConnector dirsFile(DFS::Basic::dirsPath);
     auto actors = dirsFile.select("SELECT actorId FROM " + DFS::Tables::DirsFile::TableName
                                   + " WHERE lastModified = " + std::to_string(lastModified));
     for (auto &row : actors) {
-        sendDirData(row["actorId"], lastModified);
+        sendDirData(row["actorId"], lastModified, messageId);
     }
 }
 
@@ -465,14 +467,14 @@ void DfsController::requestDirData(const ActorId &actorId) {
     node.network()->send_message(actorId, MessageType::DfsDirData, MessageStatus::Request);
 }
 
-void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified) {
+void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId) {
     if (!std::filesystem::exists(DFS::Tables::ActorDirFile::actorDbPath(actorId.toStdString()))) {
         return;
     }
     auto rows = DFS::Tables::ActorDirFile::getDirRows(actorId.toStdString(), lastModified);
     if (!rows.empty()) {
         node.network()->send_message(std::pair { actorId, rows }, MessageType::DfsDirData,
-                                     MessageStatus::Response);
+                                     MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
     }
 }
 
@@ -488,10 +490,12 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFS::Pa
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileHash) {
     std::filesystem::remove(DFS::Path::filePath(actorId.toStdString(), fileHash));
-    node.network()->send_message(std::pair { actorId, fileHash }, MessageType::DfsRequestFile);
+    node.network()->send_message(std::pair { actorId, fileHash }, MessageType::DfsRequestFile,
+                                 MessageStatus::Request);
 }
 
-void DfsController::sendFile(const ActorId &actorId, const std::string &fileHash) {
+void DfsController::sendFile(const ActorId &actorId, const std::string &fileHash,
+                             const std::string &messageId) {
     if (fileHash.empty()) {
         qFatal("[Dfs] Empty file hash");
     }
@@ -503,10 +507,17 @@ void DfsController::sendFile(const ActorId &actorId, const std::string &fileHash
                                          .Size = dirRow.fileSize };
     qDebug() << "sendFile" << actorId.toString() << dirRow.fileHash.c_str() << dirRow.filePath.c_str()
              << dirRow.fileSize;
-    node.network()->send_message(msg, MessageType::DfsAddFile);
+
+    if (messageId.empty()) {
+        node.network()->send_message(msg, MessageType::DfsAddFile);
+    } else {
+        node.network()->send_message(msg, MessageType::DfsAddFile, MessageStatus::Response, messageId,
+                                     Config::Net::TypeSend::Focused);
+    }
 }
 
-std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg) {
+std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg,
+                                        const std::string &messageId) {
     std::filesystem::path realFilePath = DFS::Path::filePath(msg.Actor, msg.FileHash);
     if (!std::filesystem::exists(realFilePath)) {
         return "";
@@ -526,7 +537,8 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = std::move(data), .Offset = msg.Offset
     };
 
-    node.network()->send_message(fragment, MessageType::DfsAddSegment);
+    node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
+                                 Config::Net::TypeSend::Focused);
     if (msg.Offset + DFS::Basic::sectionSize >= fileSize) {
         emit uploaded(msg.Actor, msg.FileHash);
         return "";
@@ -568,7 +580,7 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
             emit downloaded(msg.Actor, msg.FileHash);
             // node.network()->send_message(std::pair(msg.Actor, msg.FileHash),
             // MessageType::DfsSendingFileDone);
-            sendFile(msg.Actor, msg.FileHash); // temp
+            sendFile(msg.Actor, msg.FileHash, ""); // temp
             return hash;
         } else {
             requestFile(msg.Actor, msg.FileHash);
@@ -581,7 +593,7 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
     DFS::Packets::RequestFileSegmentMessage reqMessage = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = virtualPath, .Offset = offset
     };
-    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment);
+    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
 
     return hash;
 }
