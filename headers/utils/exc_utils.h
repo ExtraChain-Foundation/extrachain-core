@@ -540,6 +540,7 @@ QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
+EXTRACHAIN_EXPORT std::string calcKeccak(const std::string &data);
 EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
 EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::filesystem::path &fileName);
 

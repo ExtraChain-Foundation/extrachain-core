@@ -160,6 +160,7 @@ public:
                              std::string to_message_id = "",
                              Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
         if (node->accountController()->getAccountCount() == 0) {
+            return "";
             qFatal("Can't send");
         }
 

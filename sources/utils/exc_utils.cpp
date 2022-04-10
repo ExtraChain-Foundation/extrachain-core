@@ -42,10 +42,14 @@
     #include "preconfig.h"
 #endif
 
+std::string Utils::calcKeccak(const std::string &data) {
+    QByteArray hash =
+        QCryptographicHash::hash(QByteArray::fromStdString(data), QCryptographicHash::Algorithm::Keccak_256)
+            .toHex();
+    return hash.toStdString();
+}
+
 QByteArray Utils::calcKeccak(const QByteArray &data) {
-    // Keccak keccak;
-    // QByteArray hash = keccak(data);
-    // return hash;
     QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Keccak_256).toHex();
     return hash;
 }

@@ -26,17 +26,16 @@
 #include "datastorage/dfs/permission_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
+#include "enc/enc_tools.h"
 #include "managers/account_controller.h"
-
 #include "managers/contract_manager.h"
-
 #include "managers/sm_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
 #include "profile/private_profile.h"
 
-#include <sodium.h>
+#include <sodium/core.h>
 
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
@@ -286,6 +285,92 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
                     .arg(QString(receiver.toByteArray()));
     return Transaction();
+}
+
+std::string ExtraChainNode::exportUser() {
+    auto hash = m_privateProfile->hash().toStdString();
+
+    QJsonArray array;
+    array << QString("ExtraChain %1").arg(qApp->applicationVersion()); // 0
+    array << QString::number(QDateTime::currentSecsSinceEpoch());      // 1
+    array << m_accountController->mainActor().id().toString();         // 2
+
+    // TODO: redone private profile file to json and reuse here
+    QFile privateProfile("keystore/profile/" + accountController()->mainActor().id().toString() + ".private");
+    privateProfile.open(QFile::ReadOnly);
+    auto privateProfileData = QString(privateProfile.readAll());
+    // QString::fromStdString(SecretKey::decryptWithPassword(privateProfile.readAll().toStdString(), hash));
+    array << privateProfileData; // 3
+    privateProfile.close();
+
+    auto accounts = accountController()->accounts();
+    QJsonArray actors;
+    for (const Actor<KeyPrivate> &actor : accounts) {
+        actors << actor.toJsonArray();
+    }
+    array << actors; // 4
+
+    auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
+    auto data = SecretKey::encryptWithPassword(json, hash);
+    return json;
+}
+
+bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
+                                const std::string &password) {
+    QDir().mkdir("keystore/profile");
+    auto hash = !(login + password).empty() ? Utils::calcKeccak(login + password)
+                                            : m_privateProfile->hash().toStdString();
+
+    auto json = data; // SecretKey::decryptWithPassword(data, hash);
+    if (hash.empty() || json.empty()) {
+        return false;
+    }
+
+    auto array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
+    if (array.count() < 4) {
+        return false;
+    }
+
+    auto extrachain = array[0].toString();
+    auto date = array[1].toInteger();
+    auto mainActor = array[2].toString();
+    auto profile = array[3].toString().toUtf8();
+    auto importActors = array[4].toArray();
+
+    if (importActors.empty()) {
+        return false;
+    }
+
+    Q_UNUSED(extrachain)
+    Q_UNUSED(date)
+
+    auto fileSave = [](QString filePath, QByteArray data) {
+        QFile file(filePath);
+        file.open(QFile::WriteOnly);
+        file.write(data);
+        file.close();
+    };
+
+    QString privateProfile = "keystore/profile/" + mainActor + ".private";
+    fileSave(privateProfile, profile);
+
+    std::vector<Actor<KeyPrivate>> actors;
+    for (const auto &importActor : importActors) {
+        auto json = QJsonDocument(importActor.toArray()).toJson(QJsonDocument::Compact);
+        auto actor = Actor<KeyPrivate>::fromJson(json);
+        if (actor.empty()) {
+            return false;
+        }
+
+        QString actorId = actor.id().toString();
+        QString actorPath = KeyStore::USER_KEYSTORE + actorId + ".key";
+        fileSave(
+            actorPath,
+            QByteArray::fromStdString(SecretKey::encryptWithPassword(actor.toJson().toStdString(), hash)));
+        m_actorIndex->addActor(actor.convertToPublic());
+    }
+
+    return true;
 }
 
 Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,

@@ -241,21 +241,22 @@ public:
     }
 
     QByteArray toJson() const {
-        if (empty()) {
-            qFatal("[Actor] json empty actor");
-        }
-
-        QJsonArray array;
-        array.append(m_id.toString());
-        array.append(int(m_type));
-        array.append(QString::fromStdString(m_key.publicKey()));
-
-        if constexpr (std::is_same_v<T, KeyPrivate>) {
-            array.append(QString::fromStdString(m_key.secretKey()));
-        }
-
+        auto array = toJsonArray();
         QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
         return result;
+    }
+
+    QJsonArray toJsonArray() const {
+        QJsonArray array;
+        auto pub = QString::fromStdString(m_key.publicKey());
+        array << m_id.toString() << int(m_type) << pub;
+
+        if constexpr (std::is_same_v<T, KeyPrivate>) {
+            auto secret = QString::fromStdString(m_key.secretKey());
+            array << secret;
+        }
+
+        return array;
     }
 
     static Actor<T> fromJson(const QByteArray &serialized) {

@@ -106,6 +106,10 @@ public:
      */
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
 
+    std::string exportUser();
+    bool importUser(const std::string &data, const std::string &login = "", const std::string &password = "");
+    // TODO: prepareImportUser: get visual info about file
+
 private:
     void showMessage(QString from, QString message);
     /**
