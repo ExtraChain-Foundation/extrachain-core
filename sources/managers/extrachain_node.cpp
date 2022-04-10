@@ -312,7 +312,7 @@ std::string ExtraChainNode::exportUser() {
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
     auto data = SecretKey::encryptWithPassword(json, hash);
-    return json;
+    return data;
 }
 
 bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
@@ -321,7 +321,7 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
     auto hash = !(login + password).empty() ? Utils::calcKeccak(login + password)
                                             : m_privateProfile->hash().toStdString();
 
-    auto json = data; // SecretKey::decryptWithPassword(data, hash);
+    auto json = SecretKey::decryptWithPassword(data, hash);
     if (hash.empty() || json.empty()) {
         return false;
     }
