@@ -105,12 +105,12 @@ void SmartContractManager::savePrivateActor(Actor<KeyPrivate> actor) {
     if (file.open(QIODevice::ReadWrite)) {
         QByteArray old;
         old = file.readAll();
-        if (old == actor.serialize()) {
+        if (old == actor.toJson()) {
             qDebug() << "Private actor with id =" << actor.id() << "already exists";
         } else {
             file.resize(0);
-            qDebug() << "actor serial: ---- " << actor.serialize();
-            file.write(actor.serialize());
+            qDebug() << "actor serial: ---- " << actor.toJson();
+            file.write(actor.toJson());
             file.flush();
             qDebug() << "Private Actor" << actor.id() << "is successfully saved";
         }

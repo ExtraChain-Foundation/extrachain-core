@@ -54,7 +54,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
 
     QByteArray serializedActor = this->getById(id);
     if (!serializedActor.isEmpty()) {
-        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serializedActor);
+        auto actor = Actor<KeyPublic>::fromJson(serializedActor);
         //        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
         //            && actor.profile().sign.isEmpty()) {
         //            sendGetActorMessage(id);
@@ -395,7 +395,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 }
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
-    int result = this->add(actor.id(), actor.serialize());
+    int result = this->add(actor.id(), actor.toJson());
     auto actorId = actor.id().toStdString();
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {

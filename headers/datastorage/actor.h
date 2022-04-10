@@ -21,8 +21,8 @@
 #define ACTOR_H
 
 #include <QDebug>
+#include <QJsonArray>
 #include <QJsonDocument>
-#include <QJsonObject>
 #include <type_traits>
 #include <utility>
 
@@ -39,8 +39,7 @@
  * Users, Smart-contracts
  */
 
-enum class ActorType
-{
+enum class ActorType {
     User = 0,
     ServiceProvider = 1,
     Service = 2,
@@ -241,8 +240,42 @@ public:
         m_type = type;
     }
 
-    QByteArray serialize() const {
-        return QByteArray::fromStdString(MessagePack::serialize(*this));
+    QByteArray toJson() const {
+        if (empty()) {
+            qFatal("[Actor] json empty actor");
+        }
+
+        QJsonArray array;
+        array.append(m_id.toString());
+        array.append(int(m_type));
+        array.append(QString::fromStdString(m_key.publicKey()));
+
+        if constexpr (std::is_same_v<T, KeyPrivate>) {
+            array.append(QString::fromStdString(m_key.secretKey()));
+        }
+
+        QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
+        return result;
+    }
+
+    static Actor<T> fromJson(const QByteArray &serialized) {
+        if (serialized.isEmpty()) {
+            qFatal("[Actor] json is empty");
+        }
+
+        Actor<T> actor;
+        auto array = QJsonDocument::fromJson(serialized).array();
+        actor.setId(array[0].toString().toStdString());
+        actor.setType(ActorType(array[1].toInt()));
+
+        if constexpr (std::is_same_v<T, KeyPublic>) {
+            actor.setPublicKey(array[2].toString().toStdString());
+        }
+        if constexpr (std::is_same_v<T, KeyPrivate>) {
+            actor.setSecretKey(array[3].toString().toStdString(), array[2].toString().toStdString());
+        }
+
+        return actor;
     }
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {

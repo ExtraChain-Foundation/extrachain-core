@@ -147,7 +147,7 @@ void AccountController::loadActors(const QByteArray &id, const QByteArrayList &i
             qDebug() << serialized;
             file.close();
             if (!serialized.isEmpty()) {
-                Actor<KeyPrivate> actor = MessagePack::deserialize<Actor<KeyPrivate>>(serialized);
+                Actor<KeyPrivate> actor = Actor<KeyPrivate>::fromJson(serialized);
                 qDebug().noquote() << "Actor" << actor.id()
                                    << "found locally:" << actor.key().secretKey().c_str();
                 this->m_accounts << actor;
@@ -191,13 +191,13 @@ void AccountController::savePrivateActor(Actor<KeyPrivate> actor, QByteArray has
     if (file.open(QIODevice::ReadWrite)) {
         QByteArray old = file.readAll();
 
-        if (old == actor.serialize()) {
+        if (old == actor.toJson()) {
             qDebug() << "[AccountController] Private actor with id =" << actor.id() << "already exists";
         } else {
-            qDebug() << "[AccountController] Actor serialized:" << actor.serialize();
+            qDebug() << "[AccountController] Actor serialized:" << actor.toJson();
             std::string hl = hashLogin.toStdString();
-            file.write(QByteArray::fromStdString(
-                SecretKey::encryptWithPassword(actor.serialize().toStdString(), hl)));
+            file.write(
+                QByteArray::fromStdString(SecretKey::encryptWithPassword(actor.toJson().toStdString(), hl)));
             file.flush();
             qDebug() << "[AccountController] Private actor" << actor.id() << "is successfully saved";
         }
