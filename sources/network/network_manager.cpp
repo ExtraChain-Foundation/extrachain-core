@@ -381,13 +381,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
              << QByteArray::fromStdString(std::string(serialized)).toBase64();
 #endif
 
-    if (type == MessageType::Actor && status == MessageStatus::Request) { }
-
     // try {
     switch (type) {
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         node->actorIndex()->handleNewActor(actor);
+        break;
     }
     case MessageType::Actor: {
         // actor get, test use ActorId
