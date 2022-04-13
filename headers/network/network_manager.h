@@ -187,6 +187,16 @@ public:
             m_messages.erase(to_message_id);
         }
 
+#ifdef QT_DEBUG
+        if (Network::networkDebug) {
+            msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
+            msgpack::object deserialized = oh.get();
+            std::cout << "[Network Message] Send: type " << int(message.message_type) << ", status "
+                      << int(message.status) << ", id " << message.message_id << ", type send "
+                      << int(typeSend) << ", body: " << deserialized << std::endl;
+        }
+#endif
+
         this->sendMessage(serialized + sign, typeSend, receiver_identifier);
 
         return message.message_id;

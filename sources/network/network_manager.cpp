@@ -339,12 +339,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         return;
     }
 
-#ifdef NETWORK_MESSAGES_LOGS_ON
-    qDebug() << "[Network Message]" << QByteArray::fromStdString(message);
-    qDebug() << "[Network Message]"
-             << QByteArray::fromStdString(message).remove(message.length() - 64, 64).toBase64();
-#endif
-
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
     // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
@@ -374,11 +368,13 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         // SocketIdentifier socketIdentifier { .socketIdentifier = identifier, .messageId = messageId };
     }
 
-#ifdef NETWORK_MESSAGES_LOGS_ON
-    qDebug() << "[Network Message] type" << int(type) << "status" << int(status) << "messId"
-             << messId.c_str();
-    qDebug() << "[Network Message]" << QByteArray::fromStdString(std::string(serialized))
-             << QByteArray::fromStdString(std::string(serialized)).toBase64();
+#ifdef QT_DEBUG
+    if (Network::networkDebug) {
+        msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
+        msgpack::object deserialized = oh.get();
+        std::cout << "[Network Message] Received: type " << int(type) << ", status " << int(status) << ", id "
+                  << messId << ", body: " << deserialized << std::endl;
+    }
 #endif
 
     // try {
