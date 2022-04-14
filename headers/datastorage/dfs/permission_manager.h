@@ -5,80 +5,55 @@
 #include "datastorage/actor.h"
 #include "dfs_controller.h"
 #include "utils/db_connector.h"
+#include "utils/dfs_utils.h"
+
+typedef std::unordered_map<std::string, std::string> FileDataObject;
+
+using DFS::Permission::Permission;
+using DFS::Basic::CriticalErrors;
 
 class EXTRACHAIN_EXPORT PermissionManager : public QObject {
     Q_OBJECT
-public:
-    enum CriticalErrors
-    {
-        RootDirCreateError = -2,
-        ActorDirCreateError = -3,
-
-        DBOpenError = -4,
-        DBCreateTableError = -5,
-        DBPermissionEntryDuplicate = -6,
-        NotSupportedPermission
-    };
-
-    enum Permission
-    {
-        Read = 0,
-        Write = 1,  // Add new entry
-        Delete = 2, // Delete any entry
-        Edit = 3,   // Write and Delete permissions
-
-        NoPermission = 4
-    };
-
-    QStringList permissions { "Read", "Write", "Delete", "Edit", "NoPermission" };
-
-    struct GetPermissionMsg;
-    struct SetPermissionMsg;
 
 public:
-    PermissionManager(QObject *parent = nullptr);
+    PermissionManager(ExtraChainNode *node);
     ~PermissionManager();
 
-    bool initPermissionDB(const Actor<KeyPrivate> &actor);
+    CriticalErrors initPermission(const std::string& userId, const std::string& fileHash,
+                                  DFS::Permission::PermissionMode &permissionMode);
+    CriticalErrors updatePermission(const DFS::Permission::AddPermission &permissionData);
+    CriticalErrors savePermission(const DFS::Permission::AddPermission &permissionData);
 
-    Permission getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg &msg);
-    bool setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg &msg);
+    void addPermission(DFS::Permission::PermissionMode &permissionMode, const Permission& permission);
+    void removePermission(DFS::Permission::PermissionMode &permissionMode, const Permission& permission);
+
+    bool isServiceable(const DFS::Permission::PermissionMode& permissionMode) const;
+    bool isReadable(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool isWritable(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool isRemovable(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool isEditable(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool isCustomizable(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool noPermission(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool hasPermission(const DFS::Permission::PermissionMode &permissionMode) const;
+
+    std::vector<std::string> searchFileByHash(std::string& dirPath, std::string& partHash);
+    std::vector<std::string> searchFileByName(std::string& dirPath, std::string& userName);
+
+    void sign(const Actor<KeyPrivate> &actor, DFS::Permission::AddPermission &permissionData);
+    bool verify(const Actor<KeyPublic> &actor, const DFS::Permission::AddPermission &permissionData);
+
+protected:
+    FileDataObject makeFileData(const std::string& actor, const std::string& path, const std::string &fileHash,
+                                const DFS::Permission::PermissionMode& permissionMode, const std::string &userId, const std::string &signature);
+    std::string makeFileName(const std::string& userName, const std::string& hashFile);
+    QJsonDocument makePermissionJsonDocument(const DFS::Permission::AddPermission &permissionData);
+    QJsonDocument makePermissionJsonDocument(const std::string& userId, const std::string& fileHash, DFS::Permission::PermissionMode &permissionMode);
+    std::string makeData(const DFS::Permission::AddPermission &permissionData);
 
 private:
-    //    QString createDirectory(const Actor<KeyPrivate> &actor);
-    //    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
-    //    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
-
-    DBRow makeDBRow(const QString &fileHash, const Permission permission, const QString &userId,
-                    const QString &signature);
-    //    DBRow findDBRow(const QString & userId, const QString & fileHash);
-
-    Permission getUserPermission(const QString &userId, const QString &fileHash);
-    Permission getHighestPermission(const QString &userId, const QString &fileHash);
-
-public:
-    static constexpr int32_t sharedId = -1;
-
-private:
-    static const QString PermissionFileName;
-    static const QString ServiceDir;
-    static const QString RootDir;
-
-private:
-    DBConnector m_db;
-};
-
-struct PermissionManager::GetPermissionMsg {
-    std::string userId;
-    std::string fileHash;
-
-    MSGPACK_DEFINE(userId, fileHash)
-};
-
-struct PermissionManager::SetPermissionMsg {
-    std::string userId;
-    std::string fileHash;
-    std::string permission;
-
-    MSGPACK_DEFINE(userId, fileHash, permission)
+    ExtraChainNode *node;
+    DFS::Permission::AddPermission permissionData;
+    std::string lastFoundedPartUserName;
+    std::string lastFoundedPartHashFile;
+    std::vector<std::filesystem::directory_entry> directoryEntry;
 };

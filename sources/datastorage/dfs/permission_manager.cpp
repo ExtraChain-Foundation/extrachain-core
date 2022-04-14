@@ -1,283 +1,304 @@
 #include "datastorage/dfs/permission_manager.h"
+#include <sstream>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <QJsonObject>
 
-const QString PermissionManager::PermissionFileName = ".perm";
-const QString PermissionManager::ServiceDir = "Service";
-const QString PermissionManager::RootDir = "dfs";
+PermissionManager::PermissionManager(ExtraChainNode *node)
+    : node(node)
+{}
 
-PermissionManager::PermissionManager(QObject *parent)
-    : QObject { parent }
-    , m_db() {
-}
+PermissionManager::~PermissionManager() {}
 
-PermissionManager::~PermissionManager() {
-    if (m_db.isOpen())
-        m_db.close();
-}
+CriticalErrors PermissionManager::initPermission(const std::string& userId, const std::string& fileHash, DFS::Permission::PermissionMode &permissionMode)
+{
+    const std::string pathToPermissionFile = makeFileName(userId, fileHash);
 
-bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
-    //    qDebug() << __FUNCTION__ << "DB initialization";
+    if(!std::filesystem::exists(pathToPermissionFile))
+        return CriticalErrors::NoFile;
 
-    //    createDirectory(actor);
-
-    //    QString serviceDirPath = makeServiceDirPath(actor);
-    //    QString permissionFilePath = FileSystem::pathConcat(serviceDirPath, PermissionFileName);
-
-    //    const bool dbExists = QFileInfo::exists(permissionFilePath);
-
-    //    if (!m_db.open(permissionFilePath.toStdString()))
-    //    {
-    //        qDebug() << __FUNCTION__ << "Can't open the permission DB";
-    //        QCoreApplication::exit(DBOpenError);
-    //    }
-
-    //    // Allow read file everyone
-    //    const auto & premReadSig = actor.key().sign(permissions[Permission::Read].toLatin1());
-
-    //    // Allow edit file
-    //    const auto & premEditSig = actor.key().sign(permissions[Permission::Edit].toLatin1());
-    //    const QString & userId = actor.idStd().c_str();
-
-    //    const std::vector<DBRow> rowList = {
-    //        makeDBRow(PermissionFileName, Permission::Read, QString::number(sharedId), premReadSig),
-    //        makeDBRow(PermissionFileName, Permission::Edit, userId, premEditSig)
-    //    };
-
-    //    if(dbExists)
-    //    {
-    //        qDebug() << __FUNCTION__ << " Delete legacy table";
-
-    //        if(getHighestPermission(actor.idStd().c_str(), PermissionFileName) != Permission::Edit)
-    //        {
-    //            // Allow edit file
-    //            if(!m_db.insert(Config::DataStorage::permissionTable, rowList[1]))
-    //            {
-    //                qDebug() << __FUNCTION__ << "Insert row failure";
-    //                return false;
-    //            }
-    //        }
-    //    }
-
-    //    if(!dbExists)
-    //    {
-    //        qDebug() << __FUNCTION__ << "Create permission table";
-
-    //        if(!m_db.createTable(Config::DataStorage::permissionTableCreate))
-    //        {
-    //            qDebug() << __FUNCTION__ << "Create table failure";
-    //            QCoreApplication::exit(DBCreateTableError);
-    //        }
-
-    //        for(const auto & row: rowList)
-    //        {
-    //            if(!m_db.insert(Config::DataStorage::permissionTable, row))
-    //            {
-    //                qDebug() << __FUNCTION__ << "Insert row failure";
-    //                return false;
-    //            }
-    //        }
-    //    }
-    return true;
-}
-
-PermissionManager::Permission PermissionManager::getHighestPermission(const QString &userId,
-                                                                      const QString &fileHash) {
-    Permission permFilePermission = getUserPermission(userId, fileHash);
-
-    Permission sharedFilePermission = getUserPermission(QString::number(sharedId), fileHash);
-
-    if (sharedFilePermission == Edit || permFilePermission == Edit)
-        return Edit;
-
-    if (sharedFilePermission == Delete || permFilePermission == Delete)
-        return Delete;
-
-    if (sharedFilePermission == Write || permFilePermission == Write)
-        return Write;
-
-    if (sharedFilePermission == Read || permFilePermission == Read)
-        return Read;
-
-    return NoPermission;
-}
-
-PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPrivate> &actor,
-                                                               const GetPermissionMsg &msg) {
-    const QString &userId = msg.userId.c_str();
-    const QString &fileHash = msg.fileHash.c_str();
-
-    Permission permFilePermission = getHighestPermission(actor.idStd().c_str(), PermissionFileName);
-
-    if (permFilePermission == Read || permFilePermission == Write || permFilePermission == Delete
-        || permFilePermission == Edit) {
-        Permission targetFilePermission = getHighestPermission(userId, fileHash);
-
-        return targetFilePermission;
+    std::ifstream permissionFile;
+    permissionFile.open(pathToPermissionFile, std::ios_base::in);
+    if (!permissionFile.is_open()) {
+        return CriticalErrors::NotOpenFile;
     }
 
-    qDebug() << __FUNCTION__ << " Actor " << actor.idStd().c_str()
-             << " has no permission to read the Permissions file";
-    return permFilePermission;
+    std::string content;
+    std::string tp;
+    while(getline(permissionFile, tp)) {
+        content.append(tp);
+    }
+    permissionFile.close();
+
+    QJsonParseError readJsonError;
+    const auto document = QJsonDocument::fromJson(content.data(), &readJsonError);
+
+    if(readJsonError.error != QJsonParseError::NoError)
+        return CriticalErrors::ParseError;
+
+    const auto object = document.object();
+
+    permissionData.userId = object[DFS::Permission::userID.c_str()].toString().toStdString();
+    permissionData.fileHash = object[DFS::Permission::fileHash.c_str()].toString().toStdString();
+    permissionData.permissionValue = object[DFS::Permission::permissionValue.c_str()].toString().toInt();
+
+    auto checkPermission = [&](Permission type)
+    {
+        if(permissionData.permissionValue >= type) {
+            addPermission(permissionMode, type);
+            permissionData.permissionValue -= type;
+        }
+    };
+    checkPermission(Permission::Service);
+    checkPermission(Permission::Read);
+    checkPermission(Permission::Write);
+    checkPermission(Permission::Remove);
+    checkPermission(Permission::Edit);
+    checkPermission(Permission::Custom);
+
+    return CriticalErrors::NoError;
 }
 
-bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg &msg) {
-    //    const QString &userId = msg.userId.c_str();
-    //    const QString &fileHash = msg.fileHash.c_str();
-    //    const QString &permissionStr = msg.permission.c_str();
-    //    const Permission newPermission = static_cast<Permission>(permissions.indexOf(permissionStr));
+CriticalErrors PermissionManager::updatePermission(const DFS::Permission::AddPermission &permissionData)
+{
+    const std::string pathToPermissionFile = makeFileName(permissionData.userId, permissionData.fileHash);
 
-    //    if (newPermission != Permission::Read && newPermission != Permission::Write
-    //        && newPermission != Permission::Delete && newPermission != Permission::Edit
-    //        && newPermission != Permission::NoPermission) {
-    //        qDebug() << __FUNCTION__ << " Invalid permission requested";
-    //        return false;
-    //    }
+    std::ofstream permissionFile;
+    permissionFile.open(pathToPermissionFile, std::ios_base::out | std::ios::trunc);
 
-    //    Permission actorPermission = getUserPermission(actor.idStd().c_str(), PermissionFileName);
+         //check file exist
+         //create new file is doesn't exist
 
-    //    Permission userPermission = getPermission(actor, { userId.toStdString(), fileHash.toStdString() });
+    if (!permissionFile.is_open()) {
+        return CriticalErrors::NotOpenFile;
+    }
 
-    //    if (userPermission == newPermission) {
-    //        qDebug() << __FUNCTION__ << " User " << userId << " already has correct permission";
-    //        return true;
-    //    }
+    const auto document = makePermissionJsonDocument(permissionData);
+    permissionFile << document.toJson().toStdString().c_str();
+    permissionFile.close();
 
-    //    DBRow currentPermissionRow = findDBRow(userId, fileHash);
-
-    //    // Delete file from the DB
-    //    if (newPermission == Permission::NoPermission) {
-    //        if (!(actorPermission == Delete || actorPermission == Edit)) {
-    //            qDebug() << __FUNCTION__ << " Actor " << actor.idStd().c_str()
-    //                     << " has no permission to change the Permissions file";
-    //            return false;
-    //        }
-
-    //        if (currentPermissionRow.empty()) {
-    //            qDebug() << __FUNCTION__ << "Permission already deleted from the DB";
-    //            return true;
-    //        }
-
-    //        if (!m_db.deleteRow(Config::DataStorage::permissionTable, currentPermissionRow)) {
-    //            qDebug() << __FUNCTION__ << " Delete DB entry failure.";
-    //            return false;
-    //        }
-    //    }
-
-    //    // Update PERMISSION and SIGNATURE for the existing DB entry
-    //    const std::string &newPermissionStr = permissions[newPermission].toStdString();
-    //    const std::string &newSignatureStr =
-    //        actor.key().sign(QByteArray::fromStdString(newPermissionStr)).toStdString();
-
-    //    if (!(actorPermission == Write || actorPermission == Edit)) {
-    //        qDebug() << __FUNCTION__ << " Actor " << actor.idStd().c_str()
-    //                 << " has no permission to change the Permissions file";
-    //        return false;
-    //    }
-
-    //    // Create new DB entry
-    //    if (currentPermissionRow.empty()) {
-    //        qDebug() << __FUNCTION__ << "Add new entry to the Permissions: User " << userId << ", file "
-    //                 << fileHash;
-
-    //        const auto &signature = actor.key().sign(QByteArray::fromStdString(newPermissionStr));
-
-    //        DBRow row = makeDBRow(fileHash, newPermission, userId, newSignatureStr.c_str());
-
-    //        if (!m_db.insert(Config::DataStorage::permissionTable, row)) {
-    //            qDebug() << __FUNCTION__ << "Insert row failure";
-    //            return false;
-    //        }
-    //    } else // Update existing entry
-    //    {
-    //        const std::string &fileHashStr = currentPermissionRow["fileHash"];
-    //        const std::string &userIdStr = currentPermissionRow["userId"];
-    //        const std::string &signatureStr = currentPermissionRow["signature"];
-
-    //        const std::string &updateQuery =
-    //            (std::stringstream() << "UPDATE " << Config::DataStorage::permissionTable << " SET
-    //            permission = '"
-    //                                 << newPermissionStr << "', signature = '" << newSignatureStr
-    //                                 << "' WHERE fileHash = '" << fileHashStr << "' AND userId = '" <<
-    //                                 userIdStr
-    //                                 << "' AND signature = '" << signatureStr << "'")
-    //                .str();
-
-    //        if (!m_db.update(updateQuery)) {
-    //            qDebug() << __FUNCTION__ << " Update quefy failure: " << updateQuery.c_str();
-    //            return false;
-    //        }
-    //    }
-
-    return true;
+    return std::filesystem::is_empty(pathToPermissionFile) ? CriticalErrors::NoUpdated : CriticalErrors::NoError;
 }
 
-PermissionManager::Permission PermissionManager::getUserPermission(const QString &userId,
-                                                                   const QString &fileHash) {
-    //    DBRow currentPermissionRow = findDBRow(userId, fileHash);
+CriticalErrors PermissionManager::savePermission(const DFS::Permission::AddPermission &permissionData)
+{
+    const std::string pathToPermissionFile = makeFileName(permissionData.userId, permissionData.fileHash);
 
-    //    if (currentPermissionRow.empty()) {
-    //        return Permission::NoPermission;
-    //    }
+    std::ofstream permissionFile;
+    permissionFile.open(pathToPermissionFile, std::ios_base::out | std::ios::trunc);
+    if (!permissionFile.is_open()) {
+        return CriticalErrors::NotOpenFile;
+    }
 
-    //    const QString &currentPermissionStr = currentPermissionRow["permission"].c_str();
-    //    const auto currentPermissionInd = permissions.indexOf(currentPermissionStr);
-    //    const Permission currentPermission = Permission(currentPermissionInd);
+    const QJsonDocument document = makePermissionJsonDocument(permissionData);
+    permissionFile << document.toJson().toStdString().c_str();
+    permissionFile.close();
 
-    //    if (currentPermission != Permission::Read && currentPermission != Permission::Write
-    //        && currentPermission != Permission::Delete && currentPermission != Permission::Edit) {
-    //        qDebug() << __FUNCTION__ << " Invalid permission value '" << currentPermissionStr << "'";
-    //        return Permission::NoPermission;
-    //    }
-
-    //    return currentPermission;
-    return Permission::NoPermission;
+    return std::filesystem::is_empty(pathToPermissionFile) ? CriticalErrors::NoSaved : CriticalErrors::NoError;
 }
 
-// QString PermissionManager::createDirectory(const Actor<KeyPrivate> &actor) {
-//    qDebug() << __FUNCTION__;
-
-//    QString targetDirPath = makeServiceDirPath(actor);
-//    if (!QDir().mkpath(targetDirPath)) {
-//        qDebug() << "DFSController: createDirectory: DFS actor dir create error:" << targetDirPath;
-//        return QString();
-//    }
-
-//    return targetDirPath;
-//}
-
-// QString PermissionManager::makeActorDirPath(const Actor<KeyPrivate> &actor) {
-//    return FileSystem::pathConcat(FileSystem::pathConcat(QCoreApplication::applicationDirPath(), RootDir),
-//                                  actor.id().toString());
-//}
-
-// QString PermissionManager::makeServiceDirPath(const Actor<KeyPrivate> &actor) {
-//    return FileSystem::pathConcat(FileSystem::pathConcat(QCoreApplication::applicationDirPath(), RootDir),
-//                                  ServiceDir);
-//}
-
-DBRow PermissionManager::makeDBRow(const QString &fileHash, const Permission permission,
-                                   const QString &userId, const QString &signature) {
-    return { { "fileHash", fileHash.toStdString() },
-             { "permission", permissions[permission].toStdString() },
-             { "userId", userId.toStdString() },
-             { "signature", signature.toStdString() } };
+void PermissionManager::addPermission(DFS::Permission::PermissionMode &permissionMode, const Permission &permission)
+{
+    permissionMode |= permission;
 }
 
-// DBRow PermissionManager::findDBRow(const QString &userId, const QString &fileHash) {
-//    const std::string selectQuery =
-//        (std::stringstream() << "SELECT * FROM " << Config::DataStorage::permissionTable
-//                             << " WHERE fileHash = '" << fileHash.toStdString() << "' AND userId = '"
-//                             << userId.toStdString() << "'")
-//            .str();
+void PermissionManager::removePermission(DFS::Permission::PermissionMode &permissionMode, const Permission& permission)
+{
+    permissionMode ^= permission;
+}
 
-//    const auto &rowList = m_db.select(selectQuery);
-//    if (rowList.size() > 1) {
-//        qDebug() << __FUNCTION__ << " Invalid DB content, entry can't be duplicated";
-//        QCoreApplication::exit(DBPermissionEntryDuplicate);
-//    } else if (rowList.size() == 1) {
-//        return rowList[0];
-//    }
+bool PermissionManager::isServiceable(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.testFlag(Permission::Service);
+}
 
-//    qDebug() << __FUNCTION__ << "User " << userId << " has no access to the file " << fileHash;
+bool PermissionManager::isReadable(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.testFlag(Permission::Read);
+}
 
-//    return DBRow();
-//}
+bool PermissionManager::isWritable(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.testFlag(Permission::Write);
+}
+
+bool PermissionManager::isRemovable(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.testFlag(Permission::Remove);
+}
+
+bool PermissionManager::isEditable(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.testFlag(Permission::Edit);
+}
+
+bool PermissionManager::isCustomizable(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.testFlag(Permission::Custom);
+}
+
+bool PermissionManager::noPermission(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.toInt() == 0;
+}
+
+bool PermissionManager::hasPermission(const DFS::Permission::PermissionMode &permissionMode) const
+{
+    return permissionMode.toInt() > 0;
+}
+
+std::vector<std::string> PermissionManager::searchFileByHash(std::string& dirPath, std::string &partHash)
+{
+    std::vector<std::string> result;
+    if(partHash.length() == 0) {
+        return result;
+    }
+
+    if(partHash.length() < lastFoundedPartHashFile.length()) {
+        directoryEntry.clear();
+        lastFoundedPartHashFile = partHash;
+
+        for (auto &pathToFile : std::filesystem::recursive_directory_iterator(dirPath)) {
+            if (std::filesystem::is_regular_file(pathToFile) && pathToFile.path().extension() == DFS::Permission::permissionFileExtension) {
+                std::stringstream ss(pathToFile.path().filename());
+                std::string segment;
+                std::vector<std::string> splitList;
+
+                while(std::getline(ss, segment, '_'))
+                {
+                    splitList.emplace_back(segment);
+                }
+
+                const std::string hashCurrentFile = splitList.at(1);
+                if(hashCurrentFile.find(partHash) != std::string::npos) {
+                    result.emplace_back(pathToFile.path());
+                    directoryEntry.emplace_back(pathToFile);
+                }
+            }
+        }
+    } else {
+        lastFoundedPartHashFile = partHash;
+        std::vector<std::filesystem::directory_entry> tmpSavedListOfDirectoryEntry;
+        for (auto &pathToFile : directoryEntry) {
+            std::stringstream ss(pathToFile.path().filename());
+            std::string segment;
+            std::vector<std::string> splitList;
+
+            while(std::getline(ss, segment, '_'))
+            {
+                splitList.emplace_back(segment);
+            }
+
+            const std::string hashCurrentFile = splitList.at(1);
+            if(hashCurrentFile.find(partHash) == std::string::npos) {
+                remove(directoryEntry.begin(), directoryEntry.end(), pathToFile);
+            }
+        }
+
+        for (auto &pathToFile : directoryEntry) {
+            result.push_back(pathToFile.path());
+        }
+    }
+
+    return result;
+}
+
+std::vector<std::string> PermissionManager::searchFileByName(std::string& dirPath, std::string& partUserName) {
+    std::vector<std::string> result;
+    if(partUserName.length() == 0) {
+        return result;
+    }
+
+    if(partUserName.length() < lastFoundedPartUserName.length()) {
+        directoryEntry.clear();
+        lastFoundedPartUserName = partUserName;
+
+        for (auto &pathToFile : std::filesystem::recursive_directory_iterator(dirPath)) {
+            if (std::filesystem::is_regular_file(pathToFile) && pathToFile.path().extension() == DFS::Permission::permissionFileExtension) {
+                const std::string fileName = pathToFile.path().filename();
+
+                std::string fullNameUser = fileName.substr(0, fileName.find("_"));
+                if(fullNameUser.find(partUserName) != std::string::npos) {
+                    result.emplace_back(pathToFile.path());
+                    directoryEntry.emplace_back(pathToFile);
+                }
+            }
+        }
+    } else {
+        lastFoundedPartUserName = partUserName;
+        std::vector<std::filesystem::directory_entry> tmpSavedListOfDirectoryEntry;
+        for (auto &pathToFile : directoryEntry) {
+            const std::string fileName = pathToFile.path().filename();
+            std::string fullNameUser = fileName.substr(0, fileName.find("_"));
+            if(fullNameUser.find(partUserName) == std::string::npos) {
+                remove(directoryEntry.begin(), directoryEntry.end(), pathToFile);
+            }
+        }
+
+        for (auto &pathToFile : directoryEntry) {
+            result.push_back(pathToFile.path());
+        }
+    }
+
+    return result;
+}
+
+void PermissionManager::sign(const Actor<KeyPrivate> &actor, DFS::Permission::AddPermission &permissionData)
+{
+    const auto dataForSign = makeData(permissionData);
+    permissionData.signature = actor.key().sign(dataForSign);
+}
+
+bool PermissionManager::verify(const Actor<KeyPublic> &actor, const DFS::Permission::AddPermission &permissionData)
+{
+    const std::string dataForSign = makeData(permissionData);
+    return actor.key().verify(QByteArray::fromStdString(dataForSign), QByteArray::fromStdString(permissionData.signature));
+}
+
+FileDataObject PermissionManager::makeFileData(const std::string& actor, const std::string& path,
+                                               const std::string &fileHash, const DFS::Permission::PermissionMode& permissionMode,
+                                               const std::string &userId, const std::string &signature)
+{
+    return { { "actor", actor },
+             { "path", path },
+             { "fileHash", fileHash },
+             { "permission_value", std::to_string(permissionMode.toInt()) },
+             { "userId", userId },
+             { "signature", signature } };
+}
+
+std::string PermissionManager::makeFileName(const std::string &userName, const std::string &hashFile)
+{
+    std::stringstream stringStream;
+    stringStream << userName << "_" << hashFile << "." << DFS::Permission::permissionFileExtension;
+    return stringStream.str();
+}
+
+QJsonDocument PermissionManager::makePermissionJsonDocument(const DFS::Permission::AddPermission &permissionData)
+{
+    QJsonObject permissionObject;
+    permissionObject[DFS::Permission::userID.c_str()] = permissionData.userId.c_str();
+    permissionObject[DFS::Permission::fileHash.c_str()] = permissionData.fileHash.c_str();
+    permissionObject[DFS::Permission::permissionValue.c_str()] = std::to_string(permissionData.permissionValue).c_str();
+
+    return QJsonDocument(permissionObject);
+}
+
+QJsonDocument PermissionManager::makePermissionJsonDocument(const std::string &userId, const std::string &fileHash, DFS::Permission::PermissionMode &permissionMode)
+{
+    QJsonObject permissionObject;
+    permissionObject[DFS::Permission::userID.c_str()] = userId.c_str();
+    permissionObject[DFS::Permission::fileHash.c_str()] = fileHash.c_str();
+    permissionObject[DFS::Permission::permissionValue.c_str()] = std::to_string(permissionMode.toInt()).c_str();
+
+    return QJsonDocument(permissionObject);
+}
+
+std::string PermissionManager::makeData(const DFS::Permission::AddPermission &permissionData)
+{
+    std::stringstream stringStream;
+    stringStream << permissionData.actor << permissionData.path << permissionData.userId
+                 << permissionData.fileHash << permissionData.permissionValue;
+    return stringStream.str();
+}

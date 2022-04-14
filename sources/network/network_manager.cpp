@@ -22,6 +22,7 @@
 #include "managers/thread_pool.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
+#include <QTimer>
 
 #include <fstream>
 

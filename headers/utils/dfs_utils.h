@@ -30,6 +30,65 @@ namespace Basic {
     static const uint64_t sectionSize = 2097152;
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
+
+    enum class CriticalErrors
+    {
+        NoError,
+        NoFile,
+        NotOpenFile,
+        ParseError,
+        NoUpdated,
+        NoSaved
+    };
+}
+
+namespace Permission {
+    static const std::string permissionFileExtension = ".perm";
+    static const std::string serviceDir = "Service";
+    static const std::string rootDir = "dfs";
+    static const std::string userID = "userId";
+    static const std::string fileHash = "fileHash";
+    static const std::string permissionValue = "permission_value";
+
+    enum Permission {
+        Service = 0x8000,
+        Read = 0x4000,
+        Write = 0x2000,
+        Remove = 0x0400,
+        Edit = 0x0200,
+        Custom = 0x0040
+    };
+    Q_DECLARE_FLAGS(PermissionMode, Permission)
+
+    struct AddPermission {
+        std::string actor;
+        std::string path;
+        std::string userId;
+        std::string fileHash;
+        std::string signature;
+        int permissionValue;
+        MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
+    };
+
+    struct RemovePermission {
+        std::string actor;
+        std::string path;
+        std::string userId;
+        std::string fileHash;
+        std::string signature;
+        int permissionValue;
+        MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
+    };
+
+    struct UpdatePermission {
+        std::string actor;
+        std::string path;
+        std::string userId;
+        std::string fileHash;
+        std::string signature;
+        int permissionValue;
+        MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
+    };
 }
 
 namespace Packets {
@@ -134,6 +193,7 @@ namespace Tables {
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
 }
 
+
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
     std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
@@ -145,4 +205,7 @@ enum class Encryption
     Encrypted = 1
 };
 }
+
+MSGPACK_ADD_ENUM(DFS::Basic::CriticalErrors)
+MSGPACK_ADD_ENUM(DFS::Permission::Permission)
 #endif // DFS_UTILS_H
