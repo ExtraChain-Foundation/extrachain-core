@@ -176,10 +176,10 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
         qDebug() << "[ActorIndex] New actor" << actor << "is successfully saved";
 
         // TODO: remove me?
-        if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
-            && profilesHandle.contains(actor.id().toByteArray())) {
-            saveProfileFromNetwork(profilesHandle[actor.id().toByteArray()]);
-        }
+        // if ((actor.type() == ActorType::Account || actor.type() == ActorType::ServiceProvider)
+        //     && profilesHandle.contains(actor.id().toByteArray())) {
+        //     saveProfileFromNetwork(profilesHandle[actor.id().toByteArray()]);
+        // }
         break;
     case Errors::FILE_ALREADY_EXISTS:
         qDebug() << "[ActorIndex] New actor" << actor << "can't be added: it is already in storage";
@@ -324,8 +324,8 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const {
 
 QString ActorIndex::buildPathPubProfile(const QByteArray &id) {
     QString pathToFolder =
-        QString::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter() + id.toStdString()
-                               + Utils::getPlatformDelimeter() + "profile" + Utils::getPlatformDelimeter());
+        QString::fromStdString(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + id.toStdString()
+                               + Utils::platformDelimeter() + "profile" + Utils::platformDelimeter());
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {

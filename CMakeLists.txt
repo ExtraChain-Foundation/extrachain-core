@@ -58,7 +58,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_public.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/sign_interface.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/account_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/contract_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/sm_manager.h
@@ -95,7 +94,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/contract_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/sm_manager.cpp
@@ -118,9 +116,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     )
 
-add_library(extrachainc
-    ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
-    )
+# add_library(extrachainc
+#     ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
+#     )
 
 if (EXTRACHAIN_STATIC_BUILD)
     message("ExtraChain: static build")
@@ -154,12 +152,12 @@ add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHA
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
-target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+# target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread extrachainc)
-target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread) # extrachainc
+# target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
+#     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
 
 if (UNIX AND NOT IOS) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)

@@ -282,8 +282,6 @@ void Utils::wipeDataFiles() {
     QDir(QString::fromStdString(DFS::Basic::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
-    QFile("user.private").remove();
-    QFile("user.private.login").remove();
     QFile(".settings").remove();
 
     QDir dir(QDir::currentPath());
@@ -570,3 +568,13 @@ QString Utils::boostAsioVersion() {
 
 //    return dirList;
 //}
+
+std::string Utils::platformDelimeter() {
+#ifdef _WIN32
+    char del;
+    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
+    return std::string(1, del);
+#else
+    return std::string(1, std::filesystem::path::preferred_separator);
+#endif
+}

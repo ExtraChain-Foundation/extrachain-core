@@ -42,8 +42,7 @@
 enum class ActorType {
     User = 0,
     ServiceProvider = 1,
-    Service = 2,
-    Account = 3, // TODO: remove. blockers: user profile and legacy dfs
+    Service = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
 
@@ -183,9 +182,9 @@ public:
 
     PublicProfile profile() {
         // TODO: public profile read to new dfs
-        QString pathToFolder = QString::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
-                                                      + m_id.toStdString() + Utils::getPlatformDelimeter()
-                                                      + "profile" + Utils::getPlatformDelimeter());
+        QString pathToFolder =
+            QString::fromStdString(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + m_id.toStdString()
+                                   + Utils::platformDelimeter() + "profile" + Utils::platformDelimeter());
         return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
@@ -247,6 +246,10 @@ public:
     }
 
     QJsonArray toJsonArray() const {
+        if (empty()) {
+            qFatal("Why actor empty?");
+        }
+
         QJsonArray array;
         auto pub = QString::fromStdString(m_key.publicKey());
         array << m_id.toString() << int(m_type) << pub;

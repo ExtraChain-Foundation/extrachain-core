@@ -491,15 +491,7 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
 } // namespace MessagePack
 
 namespace Utils {
-static const std::string getPlatformDelimeter() {
-#ifdef _WIN32
-    char del;
-    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
-    return std::string(1, del);
-#else
-    return std::string(1, std::filesystem::path::preferred_separator);
-#endif
-}
+EXTRACHAIN_EXPORT std::string platformDelimeter();
 
 static int64_t currentDateSecs() {
     using namespace std::chrono;
@@ -596,15 +588,16 @@ enum typeDataRow {
 } // namespace DataStorage
 
 namespace KeyStore {
-static const QString KEYSTORE = "keystore";
 // To store user private/public keys
-static const QString USER_KEYSTORE = "keystore/personal/";
-static const QString user_actor_state = "keystore/personal/file.dat";
-static const QString KEY_TYPE = ".key";
-static const QString KEY_FILTER = "*.key";
+static const std::string folder = "keystore";
+static const std::string format = ".profile";
+static const std::string profiles = "profiles";
 
+// TODO: remove
+static const QString KEY_TYPE = ".key";
 QString makeKeyFileName(QString name);
-} // namespace KeyStore
+}
+
 namespace SmartContractStorage {
 static const QString CONTRACTSTORE = "keystore/contracts/";
 static const QString CONTRACTPROFILE = "keystore/contracts/profile/";

@@ -104,9 +104,9 @@ void PublicProfile::saveTokenNames(QByteArray id, QByteArray nameToken, QByteArr
 }
 
 bool PublicProfile::saveProfileFromNet(QByteArray newProfile) {
-    QDir().mkpath(QByteArray::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
-                                            + id.toStdString() + Utils::getPlatformDelimeter() + "profile"
-                                            + Utils::getPlatformDelimeter()));
+    QDir().mkpath(QByteArray::fromStdString(DFS::Basic::fsActrRoot + Utils::platformDelimeter()
+                                            + id.toStdString() + Utils::platformDelimeter() + "profile"
+                                            + Utils::platformDelimeter()));
     QFile profile(idPath);
     if (profile.exists()) {
         profile.open(QIODevice::ReadOnly);

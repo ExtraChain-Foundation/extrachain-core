@@ -19,7 +19,6 @@ SOURCES += \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
     $$PWD/sources/managers/account_controller.cpp \
-    $$PWD/sources/managers/contract_manager.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
     $$PWD/sources/managers/extrachain_node.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
@@ -57,7 +56,6 @@ HEADERS += \
     $$PWD/headers/enc/key_public.h \
     $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/managers/account_controller.h \
-    $$PWD/headers/managers/contract_manager.h \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/managers/extrachain_node.h \
     $$PWD/headers/managers/sm_manager.h \
