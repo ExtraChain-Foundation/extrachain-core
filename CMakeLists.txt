@@ -75,6 +75,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/profile/public_profile.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/profile/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/coinprocess.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
@@ -108,6 +109,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/profile/public_profile.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/profile/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/coinprocess.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp

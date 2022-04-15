@@ -23,6 +23,7 @@
 #include <QDebug>
 
 #include "datastorage/actor.h"
+#include "profile/autologinhash.h"
 #include "profile/private_profile.h"
 
 class ExtraChainNode;
@@ -33,16 +34,9 @@ class ExtraChainNode;
  * and provides access to them.
  */
 class EXTRACHAIN_EXPORT AccountController {
-private:
-    ExtraChainNode &node;
-
-    std::vector<PrivateProfile> m_profiles;
-    ActorId m_currentUser;
-
 public:
     AccountController(ExtraChainNode &node);
 
-public:
     /**
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
@@ -73,6 +67,13 @@ public:
 
     static std::vector<ActorId> profilesList();
     void addToProfileList(const ActorId &actorId);
+
+private:
+    ExtraChainNode &node;
+    AutologinHash autologinHash;
+
+    std::vector<PrivateProfile> m_profiles;
+    ActorId m_currentUser;
 };
 
 #endif // ACCOUNT_CONTROLLER_H

@@ -33,6 +33,7 @@ SOURCES += \
     $$PWD/sources/network/upnpconnection.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
+    $$PWD/sources/profile/autologinhash.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/coinprocess.cpp \
     $$PWD/sources/utils/db_connector.cpp \
@@ -73,6 +74,7 @@ HEADERS += \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
+    $$PWD/headers/profile/autologinhash.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/coinprocess.h \
     $$PWD/headers/utils/db_connector.h \

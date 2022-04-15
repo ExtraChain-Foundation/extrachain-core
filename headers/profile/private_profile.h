@@ -34,6 +34,8 @@ public:
     const Actor<KeyPrivate> &getActorConst(const ActorId &actorId) const;
     Actor<KeyPrivate> &getActor(const ActorId &actorId);
     bool loaded();
+    const std::string &hash() const;
+    QJsonObject toJson() const;
 
 private:
     PrivateProfile() = default;

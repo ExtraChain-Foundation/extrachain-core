@@ -97,7 +97,11 @@ bool PrivateProfile::loaded() {
     return !m_main.isEmpty() && !m_actors.empty();
 }
 
-void PrivateProfile::save() {
+const std::string &PrivateProfile::hash() const {
+    return m_hash;
+}
+
+QJsonObject PrivateProfile::toJson() const {
     QJsonObject json;
     json["main"] = m_main.toString();
 
@@ -106,7 +110,11 @@ void PrivateProfile::save() {
         actors.append(actor.toJsonArray());
     }
     json["actors"] = actors;
-    auto jsonBytes = QJsonDocument(json).toJson(QJsonDocument::Compact);
+    return json;
+}
+
+void PrivateProfile::save() {
+    auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact);
     auto data = QByteArray::fromStdString(SecretKey::encryptWithPassword(jsonBytes.toStdString(), m_hash));
 
     QFile file(path().string().c_str());

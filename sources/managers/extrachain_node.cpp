@@ -282,44 +282,23 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
 }
 
 std::string ExtraChainNode::exportUser() {
-    // just read data from private profile
-    /*
-    auto hash = m_privateProfile->hash().toStdString();
+    auto hash = m_accountController->currentUser().hash();
 
     QJsonArray array;
     array << QString("ExtraChain %1").arg(qApp->applicationVersion()); // 0
-    array << QString::number(QDateTime::currentSecsSinceEpoch());      // 1
-    array << m_accountController->mainActor().id().toString();         // 2
+    array << QDateTime::currentSecsSinceEpoch();                       // 1
 
-    // TODO: redone private profile file to json and reuse here
-    QFile privateProfile("keystore/profile/" + accountController()->mainActor().id().toString() + ".private");
-    privateProfile.open(QFile::ReadOnly);
-    auto privateProfileData = QString(privateProfile.readAll());
-    // QString::fromStdString(SecretKey::decryptWithPassword(privateProfile.readAll().toStdString(), hash));
-    array << privateProfileData; // 3
-    privateProfile.close();
-
-    auto accounts = accountController()->accounts();
-    QJsonArray actors;
-    for (const Actor<KeyPrivate> &actor : accounts) {
-        actors << actor.toJsonArray();
-    }
-    array << actors; // 4
+    auto privateProfile = m_accountController->currentUser().toJson();
+    array << privateProfile; // 3
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
     auto data = SecretKey::encryptWithPassword(json, hash);
     return data;
-    */
-    return "";
 }
 
 bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
                                 const std::string &password) {
-    // just copy data from private profile
-    /*
-    QDir().mkdir("keystore/profile");
-    auto hash = !(login + password).empty() ? Utils::calcKeccak(login + password)
-                                            : m_privateProfile->hash().toStdString();
+    auto hash = Utils::calcKeccak(login + password);
 
     auto json = SecretKey::decryptWithPassword(data, hash);
     if (hash.empty() || json.empty()) {
@@ -327,52 +306,30 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
     }
 
     auto array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
-    if (array.count() < 4) {
+    if (array.count() != 3) {
         return false;
     }
 
     auto extrachain = array[0].toString();
     auto date = array[1].toInteger();
-    auto mainActor = array[2].toString();
-    auto profile = array[3].toString().toUtf8();
-    auto importActors = array[4].toArray();
-
-    if (importActors.empty()) {
-        return false;
-    }
+    auto profile = array[2].toObject();
+    auto profileBytes = QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    auto profileBytesEncrypted =
+        QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
 
     Q_UNUSED(extrachain)
     Q_UNUSED(date)
 
-    auto fileSave = [](QString filePath, QByteArray data) {
-        QFile file(filePath);
-        file.open(QFile::WriteOnly);
-        file.write(data);
-        file.close();
-    };
+    QString privateProfile = "keystore/" + profile["main"].toString() + ".profile";
 
-    QString privateProfile = "keystore/profile/" + mainActor + ".private";
-    fileSave(privateProfile, profile);
+    QFile file(privateProfile);
+    file.open(QFile::WriteOnly);
+    file.write(profileBytesEncrypted);
+    file.close();
 
-    std::vector<Actor<KeyPrivate>> actors;
-    for (const auto &importActor : importActors) {
-        auto json = QJsonDocument(importActor.toArray()).toJson(QJsonDocument::Compact);
-        auto actor = Actor<KeyPrivate>::fromJson(json);
-        if (actor.empty()) {
-            return false;
-        }
-
-        QString actorId = actor.id().toString();
-        QString actorPath = KeyStore::USER_KEYSTORE + actorId + ".key";
-        fileSave(
-            actorPath,
-            QByteArray::fromStdString(SecretKey::encryptWithPassword(actor.toJson().toStdString(), hash)));
-        m_actorIndex->addActor(actor.convertToPublic());
-    }
+    m_accountController->addToProfileList(profile["main"].toString().toStdString());
 
     return true;
-    */
-    return false;
 }
 
 Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
@@ -498,9 +455,6 @@ ActorIndex *ExtraChainNode::actorIndex() const {
     return m_actorIndex;
 }
 
-void ExtraChainNode::logout() {
-}
-
 DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
 }
@@ -538,6 +492,12 @@ bool ExtraChainNode::login(const std::string &login, const std::string &password
 
 bool ExtraChainNode::login(const std::string &hash) {
     return m_accountController->load(hash);
+}
+
+void ExtraChainNode::logout() {
+    m_accountController->clear();
+    // auto hash remove
+    std::exit(0);
 }
 
 void ExtraChainNode::testPermissions() const {

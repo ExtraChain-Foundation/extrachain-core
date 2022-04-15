@@ -209,7 +209,7 @@ public:
         return m_type;
     }
 
-    Actor<KeyPublic> convertToPublic() {
+    Actor<KeyPublic> convertToPublic() const {
         Actor<KeyPublic> actor;
 
         actor.setId(m_id);

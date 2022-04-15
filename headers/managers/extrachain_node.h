@@ -78,6 +78,7 @@ public:
 
     bool login(const std::string &login, const std::string &password);
     bool login(const std::string &hash);
+    void logout();
 
     /**
      * @brief Create new transaction from current user
@@ -104,7 +105,7 @@ public:
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
 
     std::string exportUser();
-    bool importUser(const std::string &data, const std::string &login = "", const std::string &password = "");
+    bool importUser(const std::string &data, const std::string &login, const std::string &password);
     // TODO: prepareImportUser: get visual info about file
 
 private:
@@ -147,7 +148,6 @@ signals:
 
 private slots:
     void getAllActorsTimerCall();
-    void logout();
 
     // void makeContractFirstTransaction(Contract &contract);
     // void makeContractFinalTransaction(Contract &contract);

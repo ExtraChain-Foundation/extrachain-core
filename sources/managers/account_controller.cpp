@@ -37,6 +37,7 @@ Actor<KeyPrivate> AccountController::createUser(const std::string &hash) {
     m_currentUser = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
     addToProfileList(actor.id());
+    autologinHash.save(hash); // TODO: add arg
 
     qDebug() << "[Accounts] Created new user" << actor.id();
 
@@ -65,9 +66,17 @@ bool AccountController::load(const std::string &hash) {
     for (auto &actorId : profiles) {
         auto profile = PrivateProfile::loadUser(actorId, hash);
         if (profile.loaded()) {
+            const auto &actors = profile.actors();
+            for (auto &actor : actors) {
+                if (node.actorIndex()->getById(actor.id()).isEmpty()) {
+                    node.actorIndex()->addActor(actor.convertToPublic());
+                }
+            }
+
             m_profiles.push_back(profile);
             m_currentUser = profile.main().id();
             node.start(); // TODO: remove
+            autologinHash.save(hash); // TODO: add arg
             return true;
         }
     }

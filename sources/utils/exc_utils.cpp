@@ -274,6 +274,7 @@ void Utils::wipeDataFiles() {
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile(".settings").remove();
+    QFile(".auth_hash").remove();
 
     QDir dir(QDir::currentPath());
     dir.cdUp();
