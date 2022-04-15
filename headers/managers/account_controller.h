@@ -52,7 +52,7 @@ public:
     // createService
     // createServiceProvider
 
-    void load(const std::string &hash);
+    bool load(const std::string &hash);
 
     const Actor<KeyPrivate> &mainActor();
 
@@ -71,7 +71,7 @@ public:
     const Actor<KeyPrivate> &currentWallet() const;         // temp
     void clear();
 
-    std::vector<ActorId> profilesList();
+    static std::vector<ActorId> profilesList();
     void addToProfileList(const ActorId &actorId);
 };
 

@@ -532,8 +532,12 @@ void ExtraChainNode::testSerializer() const {
     */
 }
 
-void ExtraChainNode::login(const std::string &login, const std::string &password) {
-    m_accountController->load(Utils::calcKeccak(login + password));
+bool ExtraChainNode::login(const std::string &login, const std::string &password) {
+    return m_accountController->load(Utils::calcKeccak(login + password));
+}
+
+bool ExtraChainNode::login(const std::string &hash) {
+    return m_accountController->load(hash);
 }
 
 void ExtraChainNode::testPermissions() const {

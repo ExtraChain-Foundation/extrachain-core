@@ -241,15 +241,6 @@ QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fi
     return serialized;
 }
 
-std::string Serialization::serializeStd(const std::vector<std::string> &list, const int &fiels_size) {
-    std::string serialized = "";
-    for (const std::string &param : list) {
-        serialized += Utils::intToStdString(param.size(), fiels_size);
-        serialized += param;
-    }
-    return serialized;
-}
-
 QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const int &fiels_size) {
     if (serialized.isEmpty() || serialized.length() <= fiels_size) {
         return {};
@@ -330,31 +321,6 @@ bool Serialization::isEmpty(const std::string &str) {
 
 bool Serialization::isEmpty(std::string_view str_view) {
     return str_view.empty();
-}
-
-QByteArray Serialization::serializeMap(const QMap<QString, QByteArray> &map) {
-    auto it = map.begin();
-    QByteArray res;
-
-    while (it != map.end()) {
-        res += Serialization::serialize({ it.key().toUtf8(), it.value() });
-        it++;
-    }
-
-    return res;
-}
-
-QMap<QString, QByteArray> Serialization::deserializeMap(const QByteArray &data) {
-    QMap<QString, QByteArray> map;
-    QByteArrayList res = Serialization::deserialize(data);
-
-    while (res.size() != 0) {
-        map.insert(res.at(0), res.at(1));
-        res.removeFirst();
-        res.removeFirst();
-    }
-
-    return map;
 }
 
 QDebug operator<<(QDebug d, const Notification &n) {

@@ -59,15 +59,20 @@ Actor<KeyPrivate> AccountController::createWallet(const ActorId &userActor) {
     return actor;
 }
 
-void AccountController::load(const std::string &hash) {
+bool AccountController::load(const std::string &hash) {
     auto profiles = profilesList();
 
     for (auto &actorId : profiles) {
         auto profile = PrivateProfile::loadUser(actorId, hash);
-        // (if m_profiles.loaded() && exists in m_profiles
-        m_profiles.push_back(profile);
-        m_currentUser = profile.main().id();
+        if (profile.loaded()) {
+            m_profiles.push_back(profile);
+            m_currentUser = profile.main().id();
+            node.start(); // TODO: remove
+            return true;
+        }
     }
+
+    return false;
 }
 
 const Actor<KeyPrivate> &AccountController::mainActor() {

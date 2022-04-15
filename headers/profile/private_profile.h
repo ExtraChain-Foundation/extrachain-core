@@ -33,6 +33,7 @@ public:
     void addWalet(const Actor<KeyPrivate> &actor);
     const Actor<KeyPrivate> &getActorConst(const ActorId &actorId) const;
     Actor<KeyPrivate> &getActor(const ActorId &actorId);
+    bool loaded();
 
 private:
     PrivateProfile() = default;
