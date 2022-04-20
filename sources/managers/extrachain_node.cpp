@@ -78,7 +78,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         auto consoleHash = Utils::calcKeccak(email.toStdString() + password.toStdString());
-        auto first = m_accountController->createUser(/*ActorType::ServiceProvider, */ consoleHash);
+        auto first = m_accountController->createUser(consoleHash, ActorType::ServiceProvider);
         m_actorIndex->setFirstId(first.id());
     } else {
         qInfo() << "You cannot create a new network, data is not empty";

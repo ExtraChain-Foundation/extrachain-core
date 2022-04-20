@@ -145,7 +145,8 @@ void Transaction::sign(const Actor<KeyPrivate> &actor) {
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    return digSig.empty() ? false : actor.key().verify(getDataForDigSig(), getDigSig());
+    return digSig.empty() ? false
+                          : actor.key().verify(getDataForDigSig().toStdString(), getDigSig().toStdString());
 }
 
 int Transaction::getHop() const {

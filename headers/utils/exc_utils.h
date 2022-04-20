@@ -501,9 +501,6 @@ static int64_t currentDateMs() {
     return ms;
 }
 
-// QByteArray encodeHex(const QByteArray &dec);
-// QByteArray encodeHex(byte *dec);
-// QByteArray decodeHex(const QByteArray &hex);
 EXTRACHAIN_EXPORT QString extrachainVersion();
 EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();

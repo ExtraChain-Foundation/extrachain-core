@@ -26,12 +26,12 @@ AccountController::AccountController(ExtraChainNode &node)
     : node(node) {
 }
 
-Actor<KeyPrivate> AccountController::createUser(const std::string &hash) {
-    if (hash.empty())
+Actor<KeyPrivate> AccountController::createUser(const std::string &hash, ActorType type) {
+    if (hash.empty() || hash.size() != 64)
         qFatal("[Accounts] Create actor: hash is empty");
 
     Actor<KeyPrivate> actor;
-    actor.create(ActorType::User);
+    actor.create(type);
     auto profile = PrivateProfile::createUser(actor, hash);
     m_profiles.push_back(profile);
     m_currentUser = actor.id();
@@ -75,7 +75,7 @@ bool AccountController::load(const std::string &hash) {
 
             m_profiles.push_back(profile);
             m_currentUser = profile.main().id();
-            node.start(); // TODO: remove
+            node.start();             // TODO: remove
             autologinHash.save(hash); // TODO: add arg
             return true;
         }

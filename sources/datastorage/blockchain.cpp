@@ -1436,7 +1436,7 @@ void Blockchain::proveTx(Transaction *tx) {
         }
 
         auto producerActor = node->actorIndex()->getActor(tx->getProducer());
-        if (producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+        if (producerActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
             tx->setAmount(fee);
             tx->sign(node->accountController()->currentWallet());
             emit tx->Approved(tx);
@@ -1481,7 +1481,8 @@ void Blockchain::proveTx(Transaction *tx) {
                         int index = signs.indexOf(tx->getReceiver().toByteArray());
                         if (signs[index + 2] == "1") {
                             auto producerActor = node->actorIndex()->getActor(tx->getProducer());
-                            if (producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+                            if (producerActor.key().verify(tx->getDataForDigSig().toStdString(),
+                                                           tx->getDigSig().toStdString())) {
                                 if (checkHaveUNFreezeTx(tx, indexApBlock)) {
                                     emit tx->Approved(tx);
                                     return;
@@ -1569,7 +1570,8 @@ void Blockchain::proveTx(Transaction *tx) {
             emit tx->NotApproved(tx);
             return;
         }
-        if (!producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+        if (!producerActor.key().verify(tx->getDataForDigSig().toStdString(),
+                                        tx->getDigSig().toStdString())) {
             qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
             emit tx->NotApproved(tx);
             return;
@@ -1584,7 +1586,7 @@ void Blockchain::proveTx(Transaction *tx) {
     }
 
     // if !sig
-    if (!senderActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
         qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
         emit tx->NotApproved(tx);
         return;

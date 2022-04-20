@@ -41,7 +41,7 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createUser(const std::string &hash);
+    Actor<KeyPrivate> createUser(const std::string &hash, ActorType type = ActorType::User);
     Actor<KeyPrivate> createWallet(const ActorId &userActor = ActorId());
     // createService
     // createServiceProvider

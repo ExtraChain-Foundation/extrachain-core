@@ -57,8 +57,8 @@ public:
     std::string encryptSelf(const std::string &data) const;
     std::string decryptSelf(const std::string &data) const;
 
-    void encryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const;
-    void decryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const;
+    void encryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
+    void decryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
 
     std::string sign(const std::string &data) const;
     bool verify(const std::string &data, const std::string &dsignHex) const;

@@ -251,11 +251,13 @@ public:
         }
 
         QJsonArray array;
-        auto pub = QString::fromStdString(m_key.publicKey());
+        auto pub =
+            QString(QByteArray::fromStdString(m_key.publicKey()).toBase64(QByteArray::Base64UrlEncoding));
         array << m_id.toString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto secret = QString::fromStdString(m_key.secretKey());
+            auto secret =
+                QString(QByteArray::fromStdString(m_key.secretKey()).toBase64(QByteArray::Base64UrlEncoding));
             array << secret;
         }
 
@@ -271,12 +273,14 @@ public:
         auto array = QJsonDocument::fromJson(serialized).array();
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
+        auto pub = QByteArray::fromBase64(array[2].toString().toLatin1(), QByteArray::Base64UrlEncoding);
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
-            actor.setPublicKey(array[2].toString().toStdString());
+            actor.setPublicKey(pub.toStdString());
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            actor.setSecretKey(array[3].toString().toStdString(), array[2].toString().toStdString());
+            auto sec = QByteArray::fromBase64(array[3].toString().toLatin1(), QByteArray::Base64UrlEncoding);
+            actor.setSecretKey(sec.toStdString(), pub.toStdString());
         }
 
         return actor;

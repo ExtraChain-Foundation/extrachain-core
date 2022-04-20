@@ -9,6 +9,9 @@
 namespace SecretKey {
 EXTRACHAIN_EXPORT std::string keygen();
 EXTRACHAIN_EXPORT std::string getKeyFromPass(const std::string &pass, const std::string &salt = "");
+EXTRACHAIN_EXPORT std::string sign(const std::string &data, const std::string &secret_key);
+EXTRACHAIN_EXPORT bool verify(const std::string &data, const std::string &public_key,
+                              const std::string &dsignHex);
 EXTRACHAIN_EXPORT std::string encrypt(const std::string &msg, const std::string &secret_key);
 EXTRACHAIN_EXPORT std::string decrypt(const std::string &msg, const std::string &secret_key);
 EXTRACHAIN_EXPORT std::string encryptWithPassword(const std::string &data, const std::string &password);

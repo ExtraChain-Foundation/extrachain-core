@@ -220,7 +220,7 @@ void ActorIndex::saveProfileFromNetwork(const QByteArray &newProfile) {
         return;
     }
 
-    if (actor.key().verify(profileData, profile.sign)) {
+    if (actor.key().verify(profileData.toStdString(), profile.sign.toStdString())) {
         qDebug() << "[ActorIndex] Save public profile with id:" << profile.id;
         bool isSaved = actor.profile().saveProfileFromNet(profile.dataToProfile);
 
