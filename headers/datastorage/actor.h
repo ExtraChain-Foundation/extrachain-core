@@ -42,8 +42,7 @@
 enum class ActorType {
     User = 0,
     ServiceProvider = 1,
-    Service = 2,
-    Account = 3, // TODO: remove. blockers: user profile and legacy dfs
+    Service = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
 
@@ -183,9 +182,9 @@ public:
 
     PublicProfile profile() {
         // TODO: public profile read to new dfs
-        QString pathToFolder = QString::fromStdString(DFS::Basic::fsActrRoot + Utils::getPlatformDelimeter()
-                                                      + m_id.toStdString() + Utils::getPlatformDelimeter()
-                                                      + "profile" + Utils::getPlatformDelimeter());
+        QString pathToFolder =
+            QString::fromStdString(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + m_id.toStdString()
+                                   + Utils::platformDelimeter() + "profile" + Utils::platformDelimeter());
         return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
@@ -210,7 +209,7 @@ public:
         return m_type;
     }
 
-    Actor<KeyPublic> convertToPublic() {
+    Actor<KeyPublic> convertToPublic() const {
         Actor<KeyPublic> actor;
 
         actor.setId(m_id);
@@ -247,12 +246,18 @@ public:
     }
 
     QJsonArray toJsonArray() const {
+        if (empty()) {
+            qFatal("Why actor empty?");
+        }
+
         QJsonArray array;
-        auto pub = QString::fromStdString(m_key.publicKey());
+        auto pub =
+            QString(QByteArray::fromStdString(m_key.publicKey()).toBase64(QByteArray::Base64UrlEncoding));
         array << m_id.toString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto secret = QString::fromStdString(m_key.secretKey());
+            auto secret =
+                QString(QByteArray::fromStdString(m_key.secretKey()).toBase64(QByteArray::Base64UrlEncoding));
             array << secret;
         }
 
@@ -268,12 +273,14 @@ public:
         auto array = QJsonDocument::fromJson(serialized).array();
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
+        auto pub = QByteArray::fromBase64(array[2].toString().toLatin1(), QByteArray::Base64UrlEncoding);
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
-            actor.setPublicKey(array[2].toString().toStdString());
+            actor.setPublicKey(pub.toStdString());
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            actor.setSecretKey(array[3].toString().toStdString(), array[2].toString().toStdString());
+            auto sec = QByteArray::fromBase64(array[3].toString().toLatin1(), QByteArray::Base64UrlEncoding);
+            actor.setSecretKey(sec.toStdString(), pub.toStdString());
         }
 
         return actor;

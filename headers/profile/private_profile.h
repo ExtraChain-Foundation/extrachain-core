@@ -21,49 +21,33 @@
 #define PRIVATE_PROFILE_H
 
 #include "datastorage/actor.h"
-#include "utils/exc_utils.h"
-#include <QByteArray>
 
-class AccountController;
-class Dfs;
-
-class EXTRACHAIN_EXPORT PrivateProfile : public QObject {
-    Q_OBJECT
-
-public slots:
-    void savePrivateProfile(const QByteArray &hash, const ActorId &id);
-    void loadPrivateProfileLogin(const QByteArray &login, const QByteArray &password);
-    void editPrivateProfile(QPair<QByteArray, QByteArray> profile, const QString &type,
-                            const QByteArray &Data, const bool &reWrite);
-    void loadInfoFromPrivateProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void loadPrivateProfileHash(const QByteArray &hash);
-    void process();
-
+class EXTRACHAIN_EXPORT PrivateProfile {
 public:
-    void setAccountController(AccountController *value);
-    void setDfs(Dfs *value);
-    const QByteArray &hash() const;
-    void setHash(const QByteArray &hash);
-
-signals:
-    void initActorChatM();
-    void infoAvailabled(const QByteArray &info, const QString &type);
-    void loginError(int error);
-    void finished();
+    static PrivateProfile createUser(const Actor<KeyPrivate> &actor, const std::string hash);
+    static PrivateProfile loadUser(const ActorId &actorId, const std::string hash);
+    const Actor<KeyPrivate> &main() const;
+    const Actor<KeyPrivate> &current() const;
+    const std::vector<Actor<KeyPrivate>> &actors() const;
+    bool changeCurrent(const ActorId &actorId);
+    void addWalet(const Actor<KeyPrivate> &actor);
+    const Actor<KeyPrivate> &getActorConst(const ActorId &actorId) const;
+    Actor<KeyPrivate> &getActor(const ActorId &actorId);
+    bool loaded();
+    const std::string &hash() const;
+    QJsonObject toJson() const;
 
 private:
-    QByteArray get(QMap<QString, QByteArray> &map, const QString &value);
-    void set(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data);
-    void add(QMap<QString, QByteArray> &map, const QString &value, const QByteArray &data);
-    void profile(const QByteArray &hash);
-    void writeData(QMap<QString, QByteArray> &map, QByteArray &out);
-    void readData(QMap<QString, QByteArray> &map, QByteArray &data);
+    PrivateProfile() = default;
 
-    const QString PathProfile = "keystore/profile";
-    QByteArray m_hash;
+    void save();
+    void load();
+    std::filesystem::path path();
 
-    AccountController *m_accountController;
-    Dfs *dfs;
+    ActorId m_main;
+    ActorId m_current;
+    std::string m_hash;
+    std::vector<Actor<KeyPrivate>> m_actors;
 };
 
 #endif // PRIVATE_PROFILE_H

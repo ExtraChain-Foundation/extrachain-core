@@ -281,7 +281,7 @@ void Blockchain::stakingReward(const Block &block) {
             || tx.getData().contains(Fee::STAKING_REWARD))
             continue;
 
-        auto listWallet = node->accountController()->accounts();
+        auto &listWallet = node->accountController()->accounts();
 
         for (const auto &wallet : qAsConst(listWallet)) {
             BigNumber myFullStaking =
@@ -335,7 +335,7 @@ void Blockchain::stakingReward(const Block &block) {
                     Serialization::serialize({ hash.toByteArray(), blockId.toByteArray(), tx.getHash(),
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(wallet.id());
-                rtx.sign(node->accountController()->getActor(wallet.id()));
+                rtx.sign(node->accountController()->currentUser().getActorConst(wallet.id()));
                 // TODONEW emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
             }
         }
@@ -635,7 +635,8 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
-                nb.sign(node->accountController()->getActor(node->actorIndex()->firstId()));
+                nb.sign(
+                    node->accountController()->currentUser().getActorConst(node->actorIndex()->firstId()));
             } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return nb;
@@ -1435,7 +1436,7 @@ void Blockchain::proveTx(Transaction *tx) {
         }
 
         auto producerActor = node->actorIndex()->getActor(tx->getProducer());
-        if (producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+        if (producerActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
             tx->setAmount(fee);
             tx->sign(node->accountController()->currentWallet());
             emit tx->Approved(tx);
@@ -1480,7 +1481,8 @@ void Blockchain::proveTx(Transaction *tx) {
                         int index = signs.indexOf(tx->getReceiver().toByteArray());
                         if (signs[index + 2] == "1") {
                             auto producerActor = node->actorIndex()->getActor(tx->getProducer());
-                            if (producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+                            if (producerActor.key().verify(tx->getDataForDigSig().toStdString(),
+                                                           tx->getDigSig().toStdString())) {
                                 if (checkHaveUNFreezeTx(tx, indexApBlock)) {
                                     emit tx->Approved(tx);
                                     return;
@@ -1568,7 +1570,8 @@ void Blockchain::proveTx(Transaction *tx) {
             emit tx->NotApproved(tx);
             return;
         }
-        if (!producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+        if (!producerActor.key().verify(tx->getDataForDigSig().toStdString(),
+                                        tx->getDigSig().toStdString())) {
             qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
             emit tx->NotApproved(tx);
             return;
@@ -1583,7 +1586,7 @@ void Blockchain::proveTx(Transaction *tx) {
     }
 
     // if !sig
-    if (!senderActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
         qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
         emit tx->NotApproved(tx);
         return;

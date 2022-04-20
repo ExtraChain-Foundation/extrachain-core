@@ -28,7 +28,6 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
-#include "managers/contract_manager.h"
 #include "managers/sm_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
@@ -51,14 +50,12 @@ ExtraChainNode::ExtraChainNode() {
 
     prepareFolders();
     m_actorIndex = new ActorIndex(this);
-    m_privateProfile = new PrivateProfile();
-    m_accountController = new AccountController(this);
+    m_accountController = new AccountController(*this);
     m_networkManager = new NetworkManager(this);
 
     ThreadPool::addThread(m_networkManager);
     m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
-    m_privateProfile->setAccountController(m_accountController);
 
     m_dfs = new DfsController(*this);
 
@@ -69,10 +66,9 @@ ExtraChainNode::ExtraChainNode() {
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
 
-    ThreadPool::addThread(m_blockchain);
-    ThreadPool::addThread(m_actorIndex);
-    ThreadPool::addThread(m_txManager);
-    ThreadPool::addThread(m_privateProfile);
+    // ThreadPool::addThread(m_blockchain);
+    // ThreadPool::addThread(m_actorIndex);
+    // ThreadPool::addThread(m_txManager);
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -81,9 +77,8 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
-        QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-        auto first = m_accountController->createUser(ActorType::ServiceProvider, consoleHash);
-        emit savePrivateProfile(consoleHash, first.id());
+        auto consoleHash = Utils::calcKeccak(email.toStdString() + password.toStdString());
+        auto first = m_accountController->createUser(consoleHash, ActorType::ServiceProvider);
         m_actorIndex->setFirstId(first.id());
     } else {
         qInfo() << "You cannot create a new network, data is not empty";
@@ -287,27 +282,14 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
 }
 
 std::string ExtraChainNode::exportUser() {
-    auto hash = m_privateProfile->hash().toStdString();
+    auto hash = m_accountController->currentUser().hash();
 
     QJsonArray array;
     array << QString("ExtraChain %1").arg(qApp->applicationVersion()); // 0
-    array << QString::number(QDateTime::currentSecsSinceEpoch());      // 1
-    array << m_accountController->mainActor().id().toString();         // 2
+    array << QDateTime::currentSecsSinceEpoch();                       // 1
 
-    // TODO: redone private profile file to json and reuse here
-    QFile privateProfile("keystore/profile/" + accountController()->mainActor().id().toString() + ".private");
-    privateProfile.open(QFile::ReadOnly);
-    auto privateProfileData = QString(privateProfile.readAll());
-    // QString::fromStdString(SecretKey::decryptWithPassword(privateProfile.readAll().toStdString(), hash));
-    array << privateProfileData; // 3
-    privateProfile.close();
-
-    auto accounts = accountController()->accounts();
-    QJsonArray actors;
-    for (const Actor<KeyPrivate> &actor : accounts) {
-        actors << actor.toJsonArray();
-    }
-    array << actors; // 4
+    auto privateProfile = m_accountController->currentUser().toJson();
+    array << privateProfile; // 3
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
     auto data = SecretKey::encryptWithPassword(json, hash);
@@ -316,9 +298,7 @@ std::string ExtraChainNode::exportUser() {
 
 bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
                                 const std::string &password) {
-    QDir().mkdir("keystore/profile");
-    auto hash = !(login + password).empty() ? Utils::calcKeccak(login + password)
-                                            : m_privateProfile->hash().toStdString();
+    auto hash = Utils::calcKeccak(login + password);
 
     auto json = SecretKey::decryptWithPassword(data, hash);
     if (hash.empty() || json.empty()) {
@@ -326,48 +306,28 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
     }
 
     auto array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
-    if (array.count() < 4) {
+    if (array.count() != 3) {
         return false;
     }
 
     auto extrachain = array[0].toString();
     auto date = array[1].toInteger();
-    auto mainActor = array[2].toString();
-    auto profile = array[3].toString().toUtf8();
-    auto importActors = array[4].toArray();
-
-    if (importActors.empty()) {
-        return false;
-    }
+    auto profile = array[2].toObject();
+    auto profileBytes = QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    auto profileBytesEncrypted =
+        QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
 
     Q_UNUSED(extrachain)
     Q_UNUSED(date)
 
-    auto fileSave = [](QString filePath, QByteArray data) {
-        QFile file(filePath);
-        file.open(QFile::WriteOnly);
-        file.write(data);
-        file.close();
-    };
+    QString privateProfile = "keystore/" + profile["main"].toString() + ".profile";
 
-    QString privateProfile = "keystore/profile/" + mainActor + ".private";
-    fileSave(privateProfile, profile);
+    QFile file(privateProfile);
+    file.open(QFile::WriteOnly);
+    file.write(profileBytesEncrypted);
+    file.close();
 
-    std::vector<Actor<KeyPrivate>> actors;
-    for (const auto &importActor : importActors) {
-        auto json = QJsonDocument(importActor.toArray()).toJson(QJsonDocument::Compact);
-        auto actor = Actor<KeyPrivate>::fromJson(json);
-        if (actor.empty()) {
-            return false;
-        }
-
-        QString actorId = actor.id().toString();
-        QString actorPath = KeyStore::USER_KEYSTORE + actorId + ".key";
-        fileSave(
-            actorPath,
-            QByteArray::fromStdString(SecretKey::encryptWithPassword(actor.toJson().toStdString(), hash)));
-        m_actorIndex->addActor(actor.convertToPublic());
-    }
+    m_accountController->addToProfileList(profile["main"].toString().toStdString());
 
     return true;
 }
@@ -379,7 +339,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->getActor(sender);
+    Actor<KeyPrivate> actor = m_accountController->currentUser().getActorConst(sender);
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
@@ -396,12 +356,6 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
                         .arg(QString(receiver.toByteArray()));
     }
     return Transaction();
-}
-
-void ExtraChainNode::getAllActors() {
-    //    QByteArray res = getIdPrivateProfile();
-    //    if (!res.isEmpty())
-    //        emit getAllActorsNode(res, true);
 }
 
 void ExtraChainNode::getAllActorsTimerCall() {
@@ -476,20 +430,15 @@ void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
     // connect(this, &ExtraChainNode::removeConnection, m_dfs, &Dfs::removeConnection);
     connect(this, &ExtraChainNode::getAllActorsNode, m_actorIndex, &ActorIndex::getAllActors);
-    connect(m_accountController, &AccountController::loadWallets, m_blockchain,
-            &Blockchain::updateBlockchain);
-
-    connect(this, &ExtraChainNode::login, m_privateProfile, &PrivateProfile::loadPrivateProfileLogin);
-    connect(this, &ExtraChainNode::savePrivateProfile, m_privateProfile, &PrivateProfile::savePrivateProfile);
-    connect(this, &ExtraChainNode::nodeEditPrivateProfile, m_privateProfile,
-            &PrivateProfile::editPrivateProfile);
+    // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
+    //         &Blockchain::updateBlockchain);
 }
 
 void ExtraChainNode::prepareFolders() {
     qDebug() << "Preparing folders";
     qDebug() << "Working directory:" << QDir::currentPath();
 
-    QDir().mkpath(KeyStore::USER_KEYSTORE);
+    QDir().mkpath(QString::fromStdString(KeyStore::folder));
     QDir().mkpath(DataStorage::TMP_FOLDER);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
@@ -504,17 +453,6 @@ AccountController *ExtraChainNode::accountController() const {
 
 ActorIndex *ExtraChainNode::actorIndex() const {
     return m_actorIndex;
-}
-
-PrivateProfile *ExtraChainNode::privateProfile() const {
-    return m_privateProfile;
-}
-
-SubscribeController *ExtraChainNode::subscribeController() const {
-    return m_subscribeController;
-}
-
-void ExtraChainNode::logOut() {
 }
 
 DfsController *ExtraChainNode::dfs() const {
@@ -546,6 +484,20 @@ void ExtraChainNode::testSerializer() const {
     actor3.deserializeQt(msgQt);
     assert(actor1.idStd() == actor3.idStd());
     */
+}
+
+bool ExtraChainNode::login(const std::string &login, const std::string &password) {
+    return m_accountController->load(Utils::calcKeccak(login + password));
+}
+
+bool ExtraChainNode::login(const std::string &hash) {
+    return m_accountController->load(hash);
+}
+
+void ExtraChainNode::logout() {
+    m_accountController->clear();
+    // auto hash remove
+    std::exit(0);
 }
 
 void ExtraChainNode::testPermissions() const {

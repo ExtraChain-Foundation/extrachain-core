@@ -19,7 +19,6 @@ SOURCES += \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
     $$PWD/sources/managers/account_controller.cpp \
-    $$PWD/sources/managers/contract_manager.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
     $$PWD/sources/managers/extrachain_node.cpp \
     $$PWD/sources/managers/sm_manager.cpp \
@@ -34,6 +33,7 @@ SOURCES += \
     $$PWD/sources/network/upnpconnection.cpp \
     $$PWD/sources/profile/private_profile.cpp \
     $$PWD/sources/profile/public_profile.cpp \
+    $$PWD/sources/profile/autologinhash.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/coinprocess.cpp \
     $$PWD/sources/utils/db_connector.cpp \
@@ -57,7 +57,6 @@ HEADERS += \
     $$PWD/headers/enc/key_public.h \
     $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/managers/account_controller.h \
-    $$PWD/headers/managers/contract_manager.h \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/managers/extrachain_node.h \
     $$PWD/headers/managers/sm_manager.h \
@@ -75,6 +74,7 @@ HEADERS += \
     $$PWD/headers/network/upnpconnection.h \
     $$PWD/headers/profile/private_profile.h \
     $$PWD/headers/profile/public_profile.h \
+    $$PWD/headers/profile/autologinhash.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/coinprocess.h \
     $$PWD/headers/utils/db_connector.h \

@@ -33,8 +33,6 @@ class Blockchain;
 class NetworkManager;
 class TransactionManager;
 class AccountController;
-class SubscribeController;
-class PrivateProfile;
 class Transaction;
 class ActorId;
 class BigNumber;
@@ -54,8 +52,6 @@ private:
     NetworkManager *m_networkManager = nullptr;
     TransactionManager *m_txManager = nullptr;
     AccountController *m_accountController = nullptr;
-    SubscribeController *m_subscribeController = nullptr;
-    PrivateProfile *m_privateProfile = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
     bool fileMode = true;
@@ -73,14 +69,16 @@ public:
     NetworkManager *network();
     AccountController *accountController() const;
     ActorIndex *actorIndex() const;
-    PrivateProfile *privateProfile() const;
-    SubscribeController *subscribeController() const;
     DfsController *dfs() const;
 
     // Remove this function before merge
     void test() const;
     void testPermissions() const;
     void testSerializer() const;
+
+    bool login(const std::string &login, const std::string &password);
+    bool login(const std::string &hash);
+    void logout();
 
     /**
      * @brief Create new transaction from current user
@@ -107,7 +105,7 @@ public:
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
 
     std::string exportUser();
-    bool importUser(const std::string &data, const std::string &login = "", const std::string &password = "");
+    bool importUser(const std::string &data, const std::string &login, const std::string &password);
     // TODO: prepareImportUser: get visual info about file
 
 private:
@@ -140,12 +138,8 @@ signals:
     void saveProfile(Actor<KeyPrivate> key, QByteArrayList profile);
     void sendTransactionContract(Transaction tx);
     // void addActorInActorIndex(Actor<KeyPublic> actor);
-    void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
-                                const bool &reWrite);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void savePrivateProfile(const QByteArray &hash, const ActorId &id);
     void getAllActorsNode(ActorId id, bool acc);
-    void login(const QByteArray &login, const QByteArray &password);
     void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
                                QByteArray color);
     void removeConnection(QString identifier);
@@ -153,9 +147,7 @@ signals:
     void pushNotification(QString actorId, Notification notification);
 
 private slots:
-    void getAllActors();
     void getAllActorsTimerCall();
-    void logOut();
 
     // void makeContractFirstTransaction(Contract &contract);
     // void makeContractFinalTransaction(Contract &contract);

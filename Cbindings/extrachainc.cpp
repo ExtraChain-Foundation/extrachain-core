@@ -150,6 +150,7 @@ void extrachain_stop() {
 }
 
 ActorPrivate *extrachain_create_actor(int type) {
+    // TODO: add user, wallet functions
     if (type > 2 || type < 0) {
         qDebug() << "[ExtraChainC] Error type for creation actor";
         std::exit(0);

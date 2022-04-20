@@ -38,7 +38,7 @@ public:
     ~KeyPublic() = default;
 
     QByteArray encrypt(const QByteArray &data, const std::string &senderPrivateKey) const;
-    bool verify(const QByteArray &data, const QByteArray &dsignHex) const;
+    bool verify(const std::string &data, const std::string &dsignHex) const;
 
     const std::string &publicKey() const;
     bool empty() const;

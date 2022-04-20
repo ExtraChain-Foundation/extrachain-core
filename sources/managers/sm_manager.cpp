@@ -85,7 +85,6 @@ Actor<KeyPrivate> SmartContractManager::createContract(QByteArray tokenName) {
     // emit verifyActor(actor.convertToPublic());
     actorIndex->addActor(actor.convertToPublic());
     // emit addContractActorInActorIndex(actor->convertToPublic());
-    // emit saveActorInPrivateProfile(actor->getId().toActorId()); // TODO: not to wallet
     savePrivateActor(actor);
     return actor;
 }
