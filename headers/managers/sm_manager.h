@@ -27,7 +27,6 @@
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
 #include "enc/key_private.h"
-#include "utils/bignumber.h"
 
 class EXTRACHAIN_EXPORT SmartContractManager : public QObject {
     Q_OBJECT
@@ -55,7 +54,6 @@ public slots:
     void process();
 
 signals:
-    // void sendTokenBalance(QMap<BigNumber,QMap<BigNumber,BigNumber>> tokenBalance);
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateContract(const QByteArray &data, const unsigned int &type);
     // void addContractActorInActorIndex(Actor<KeyPublic> actor);

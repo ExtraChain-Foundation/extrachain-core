@@ -35,9 +35,7 @@ std::string SecretKey::sign(const std::string &data, const std::string &secret_k
     std::vector<unsigned char> vsig(crypto_sign_BYTES);
     crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
     std::string sig = Utils::byteToHexString(vsig);
-    std::cout << sig << " " << sig.size() << std::endl;
     sig.erase(--sig.end());
-    std::cout << sig << " " << sig.size() << std::endl;
     return sig;
 }
 

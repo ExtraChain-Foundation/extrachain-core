@@ -29,7 +29,6 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
-#include "network/socket_pair.h"
 
 #include "utils/dfs_utils.h"
 #include <msgpack.hpp>
@@ -40,11 +39,6 @@ Q_NAMESPACE
 static bool isStartedServer = true;
 static quint16 maxConnections = 100;
 static bool networkDebug = false;
-
-struct DataStruct {
-    QByteArray msg;
-    SocketPair receiver;
-};
 
 enum class Protocol {
     Undefined = 0,

@@ -69,7 +69,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
@@ -103,7 +102,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp

@@ -1280,7 +1280,7 @@ void Blockchain::blockCountResponse(const BigNumber &count) {
 }
 
 void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                        const QByteArray &requestHash, const SocketPair &receiver) {
+                                        const QByteArray &requestHash, const std::string &messageId) {
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
@@ -1288,7 +1288,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     // receiver);
 }
 
-void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver) {
+void Blockchain::getBlockCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
     //
@@ -1348,7 +1348,7 @@ void Blockchain::setApprover(const Actor<KeyPrivate> &value) {
 }
 
 void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                                     const SocketPair &receiver, const QByteArray &request) {
+                                     const std::string &messageId, const QByteArray &request) {
     Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty()) {
         // TODONEW emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse,

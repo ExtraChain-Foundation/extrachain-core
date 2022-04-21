@@ -69,7 +69,7 @@ private:
     QString buildPathPubProfile(const QByteArray &id);
     /**
      * @brief add
-     * @param BigNumber id actorId for add
+     * @param ActorId id actorId for add
      * @param data
      * @return
      */
@@ -151,16 +151,6 @@ public slots:
     void removeAll();
 
 signals:
-    /**
-     * @brief responseReady
-     * @param data
-     * @param msgType
-     * @param requestHash
-     * @param receiver
-     */
-    void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
-                       const SocketPair &receiver);
-
     void profileAvailabled(QString userId, QByteArrayList profile);
     // void PrivateActorIsVerified(Actor<KeyPrivate> actor);
     void PublicActorIsVerified(Actor<KeyPublic> actor); // unused

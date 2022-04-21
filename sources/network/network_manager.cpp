@@ -341,7 +341,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
-    // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
 
     // TODO: no check new actor
     //    {

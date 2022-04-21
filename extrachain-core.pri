@@ -27,7 +27,6 @@ SOURCES += \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
     $$PWD/sources/network/network_status.cpp \
-    $$PWD/sources/network/socket_pair.cpp \
     $$PWD/sources/network/isocket_service.cpp \
     $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
@@ -68,7 +67,6 @@ HEADERS += \
     $$PWD/headers/network/network_manager.h \
     $$PWD/headers/network/network_status.h \
     $$PWD/headers/network/message_body.h \
-    $$PWD/headers/network/socket_pair.h \
     $$PWD/headers/network/isocket_service.h \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
