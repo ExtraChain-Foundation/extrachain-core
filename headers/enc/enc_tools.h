@@ -11,7 +11,7 @@ EXTRACHAIN_EXPORT std::string keygen();
 EXTRACHAIN_EXPORT std::string getKeyFromPass(const std::string &pass, const std::string &salt = "");
 EXTRACHAIN_EXPORT std::string sign(const std::string &data, const std::string &secret_key);
 EXTRACHAIN_EXPORT bool verify(const std::string &data, const std::string &public_key,
-                              const std::string &dsignHex);
+                              const std::string &signature);
 EXTRACHAIN_EXPORT std::string encrypt(const std::string &msg, const std::string &secret_key);
 EXTRACHAIN_EXPORT std::string decrypt(const std::string &msg, const std::string &secret_key);
 EXTRACHAIN_EXPORT std::string encryptWithPassword(const std::string &data, const std::string &password);
@@ -27,8 +27,6 @@ EXTRACHAIN_EXPORT QByteArray encryptAsymmetric(const QByteArray &data, const QBy
                                                const QByteArray &public_key, const QByteArray &nonce = "");
 EXTRACHAIN_EXPORT QByteArray decryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
                                                const QByteArray &public_key, const QByteArray &nonce = "");
-
-QByteArray encryptAsymmetric2(const QByteArray &data, const QByteArray &secret_key,
-                              const QByteArray &public_key, const QByteArray &nonce);
 }
+
 #endif // ENC_TOOLS_H

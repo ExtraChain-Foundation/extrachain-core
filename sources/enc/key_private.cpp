@@ -22,7 +22,6 @@
 
 #include <sodium.h>
 
-#include <QJsonObject>
 #include <fstream>
 
 KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
@@ -43,14 +42,12 @@ void KeyPrivate::generate() {
 
 std::string KeyPrivate::encrypt(const std::string &data, const std::string &receiverPublicKey,
                                 const std::string &nonce) const {
-    auto res = SecretKey::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
-    return res;
+    return SecretKey::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
 }
 
 std::string KeyPrivate::decrypt(const std::string &data, const std::string &senderPublicKey,
                                 const std::string &nonce) const {
-    auto res = SecretKey::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
-    return res;
+    return SecretKey::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
 }
 
 std::string KeyPrivate::encryptSelf(const std::string &data) const {
@@ -102,8 +99,8 @@ std::string KeyPrivate::sign(const std::string &data) const {
     return SecretKey::sign(data, m_secretKey);
 }
 
-bool KeyPrivate::verify(const std::string &data, const std::string &dsignHex) const {
-    return SecretKey::verify(data, m_publicKey, dsignHex);
+bool KeyPrivate::verify(const std::string &data, const std::string &signature) const {
+    return SecretKey::verify(data, m_publicKey, signature);
 }
 
 const std::string &KeyPrivate::secretKey() const {

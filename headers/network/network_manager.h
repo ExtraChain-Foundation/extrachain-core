@@ -27,6 +27,7 @@
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
+#include <iostream>
 #include <string>
 #include <string_view>
 
