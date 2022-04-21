@@ -41,8 +41,8 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createUser(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate> createWallet(const ActorId &userActor = ActorId());
+    Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
+    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId());
     // createService
     // createServiceProvider
 
@@ -52,13 +52,13 @@ public:
 
     PrivateProfile &getProfile(const ActorId &actorId);
     /**
-     * @brief Gets current active user
+     * @brief Gets current active profile
      * @return actor
      */
-    const PrivateProfile &currentUser() const;
+    const PrivateProfile &currentProfile() const;
 
     int count() const;
-    void changeCurrentUser(const ActorId &actorId);
+    void changeCurrentProfile(const ActorId &actorId);
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
     const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
@@ -73,7 +73,7 @@ private:
     AutologinHash autologinHash;
 
     std::vector<PrivateProfile> m_profiles;
-    ActorId m_currentUser;
+    ActorId m_currentProfile;
 };
 
 #endif // ACCOUNT_CONTROLLER_H

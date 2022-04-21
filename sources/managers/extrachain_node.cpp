@@ -78,7 +78,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
         auto consoleHash = Utils::calcKeccak(email.toStdString() + password.toStdString());
-        auto first = m_accountController->createUser(consoleHash, ActorType::ServiceProvider);
+        auto first = m_accountController->createProfile(consoleHash, ActorType::ServiceProvider);
         m_actorIndex->setFirstId(first.id());
     } else {
         qInfo() << "You cannot create a new network, data is not empty";
@@ -282,13 +282,13 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
 }
 
 std::string ExtraChainNode::exportUser() {
-    auto hash = m_accountController->currentUser().hash();
+    auto hash = m_accountController->currentProfile().hash();
 
     QJsonArray array;
     array << QString("ExtraChain %1").arg(qApp->applicationVersion()); // 0
     array << QDateTime::currentSecsSinceEpoch();                       // 1
 
-    auto privateProfile = m_accountController->currentUser().toJson();
+    auto privateProfile = m_accountController->currentProfile().toJson();
     array << privateProfile; // 3
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
@@ -339,7 +339,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentUser().getActorConst(sender);
+    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActorConst(sender);
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);

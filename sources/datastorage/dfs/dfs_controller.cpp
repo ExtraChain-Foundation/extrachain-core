@@ -181,7 +181,7 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
 }
 
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHash) {
-    Actor<KeyPrivate> localOwner = node.accountController()->currentUser().getActorConst(owner);
+    Actor<KeyPrivate> localOwner = node.accountController()->currentProfile().getActorConst(owner);
     std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::path realFilePath =
         DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileHash;

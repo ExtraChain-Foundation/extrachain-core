@@ -24,8 +24,8 @@
 
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
-    static PrivateProfile createUser(const Actor<KeyPrivate> &actor, const std::string hash);
-    static PrivateProfile loadUser(const ActorId &actorId, const std::string hash);
+    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string hash);
+    static PrivateProfile load(const ActorId &actorId, const std::string hash);
     const Actor<KeyPrivate> &main() const;
     const Actor<KeyPrivate> &current() const;
     const std::vector<Actor<KeyPrivate>> &actors() const;
