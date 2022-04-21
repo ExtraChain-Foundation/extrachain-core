@@ -20,7 +20,6 @@
 #include "managers/account_controller.h"
 
 #include "datastorage/blockchain.h"
-#include "profile/private_profile.h"
 
 AccountController::AccountController(ExtraChainNode &node)
     : node(node) {

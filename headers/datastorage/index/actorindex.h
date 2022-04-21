@@ -44,7 +44,6 @@ private:
     const QString folderPath =
         DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
     short SECTION_NAME_SIZE = 2;
-    QMap<QByteArray, QByteArray> profilesHandle;
     ActorId m_firstId;
 
 public:
@@ -66,7 +65,6 @@ private:
      * @return
      */
     QString buildFilePath(const QByteArray &id) const;
-    QString buildPathPubProfile(const QByteArray &id);
     /**
      * @brief add
      * @param ActorId id actorId for add
@@ -134,30 +132,15 @@ public:
     void handleNewAllActors(const std::vector<std::string> &actors);
 
 public slots:
-    void process();
     void handleGetActor(const ActorId &actorId, const std::string &messageId);
     void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const std::string &messageId);
 
-    void saveProfile(const Actor<KeyPrivate> &actor, QByteArrayList newProfile);
-    void saveProfileFromNetwork(const QByteArray &newProfile);
-    void requestProfile(QString id);
-    QByteArrayList getProfile(QString id);
-
     /**
      * @brief
      */
     void removeAll();
-
-signals:
-    void profileAvailabled(QString userId, QByteArrayList profile);
-    // void PrivateActorIsVerified(Actor<KeyPrivate> actor);
-    void PublicActorIsVerified(Actor<KeyPublic> actor); // unused
-
-    void initDfs(ActorId userId);
-    void initContractList(QVariantMap map);
-    void finished();
 };
 
 #endif // ACTORINDEX_H

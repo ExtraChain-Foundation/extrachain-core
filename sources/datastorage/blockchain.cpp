@@ -1610,6 +1610,7 @@ void Blockchain::proveTx(Transaction *tx) {
     // if current transaction not fee
     else {
         if (tx->getData() == "InitContract") {
+            /*
             QByteArrayList profile = senderActor.profile().getListProfile();
             if (profile.length() < 6) {
                 qDebug() << "Transaction not approved: no profile for" << senderActor.id();
@@ -1633,6 +1634,7 @@ void Blockchain::proveTx(Transaction *tx) {
 
             qDebug() << "Transaction not approved: sender != token in genesis block";
             emit tx->NotApproved(tx);
+            */
 
             return;
         }

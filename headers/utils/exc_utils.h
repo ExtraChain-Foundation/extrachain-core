@@ -585,11 +585,6 @@ static const QString KEY_TYPE = ".key";
 QString makeKeyFileName(QString name);
 }
 
-namespace SmartContractStorage {
-static const QString CONTRACTSTORE = "keystore/contracts/";
-static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
-} // namespace SmartContractStorage
-
 namespace SearchEnum {
 enum class BlockParam {
     Id = 0,

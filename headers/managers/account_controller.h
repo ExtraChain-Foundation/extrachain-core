@@ -23,8 +23,8 @@
 #include <QDebug>
 
 #include "datastorage/actor.h"
-#include "profile/autologinhash.h"
-#include "profile/private_profile.h"
+#include "datastorage/private_profile.h"
+#include "utils/autologinhash.h"
 
 class ExtraChainNode;
 

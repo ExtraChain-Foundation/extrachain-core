@@ -28,11 +28,9 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
-#include "managers/sm_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
-#include "profile/private_profile.h"
 
 #include <sodium/core.h>
 
@@ -67,7 +65,6 @@ ExtraChainNode::ExtraChainNode() {
     getAllActorsTimer.start(30000);
 
     // ThreadPool::addThread(m_blockchain);
-    // ThreadPool::addThread(m_actorIndex);
     // ThreadPool::addThread(m_txManager);
 }
 
@@ -94,8 +91,8 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
         m_blockchain->addBlock(tmp, true);
 
-        emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
-                                   tokenColor.toLatin1());
+        // emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
+        //                            tokenColor.toLatin1());
 
         //        // TODO: usernames: move to console
         //        DBConnector dbc(
@@ -150,7 +147,6 @@ ExtraChainNode::~ExtraChainNode() {
     emit m_txManager->finished();
     emit m_txManager->finished();
     emit m_blockchain->finished();
-    emit m_actorIndex->finished();
 }
 
 // DFSIndex *ExtraChainNode::getDFSIndex(){

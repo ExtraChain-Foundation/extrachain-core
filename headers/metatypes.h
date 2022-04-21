@@ -22,10 +22,8 @@
 
 #include "datastorage/blockchain.h"
 #include "datastorage/contract.h"
-#include "managers/chat.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
-#include "profile/private_profile.h"
 
 Q_DECLARE_METATYPE(BigNumber)
 Q_DECLARE_METATYPE(QHostAddress)
@@ -35,11 +33,7 @@ Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
 Q_DECLARE_METATYPE(std::string)
-Q_DECLARE_METATYPE(PublicProfile)
 Q_DECLARE_METATYPE(GenesisBlock)
-Q_DECLARE_METATYPE(QList<ChatInfo>)
-Q_DECLARE_METATYPE(ChatMessageInfo)
-Q_DECLARE_METATYPE(QList<ChatMessageInfo>)
 Q_DECLARE_METATYPE(Notification)
 Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ActorType)
@@ -55,14 +49,8 @@ void registerMetaTypes() {
     qRegisterMetaType<Actor<KeyPublic>>();
     qRegisterMetaType<Transaction>();
     qRegisterMetaType<SearchEnum::BlockParam>();
-    qRegisterMetaType<PublicProfile>();
-    qRegisterMetaType<ChatInfo>();
-    qRegisterMetaType<QList<ChatInfo>>();
-    qRegisterMetaType<ChatMessageInfo>();
-    qRegisterMetaType<QList<ChatMessageInfo>>();
     qRegisterMetaType<Notification>();
     qRegisterMetaType<QList<Notification>>();
-    qRegisterMetaType<ChatFileSender>();
     qRegisterMetaType<ActorType>();
     qRegisterMetaType<Network::Protocol>();
     qRegisterMetaType<Network::SocketServiceError>();

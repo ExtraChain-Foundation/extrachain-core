@@ -15,13 +15,13 @@ SOURCES += \
     $$PWD/sources/datastorage/index/memindex.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/dfs/permission_manager.cpp \
+    $$PWD/sources/datastorage/private_profile.cpp \
     $$PWD/sources/enc/enc_tools.cpp \
     $$PWD/sources/enc/key_private.cpp \
     $$PWD/sources/enc/key_public.cpp \
     $$PWD/sources/managers/account_controller.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
     $$PWD/sources/managers/extrachain_node.cpp \
-    $$PWD/sources/managers/sm_manager.cpp \
     $$PWD/sources/managers/thread_pool.cpp \
     $$PWD/sources/managers/tx_manager.cpp \
     $$PWD/sources/network/discovery_service.cpp \
@@ -30,9 +30,7 @@ SOURCES += \
     $$PWD/sources/network/isocket_service.cpp \
     $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
-    $$PWD/sources/profile/private_profile.cpp \
-    $$PWD/sources/profile/public_profile.cpp \
-    $$PWD/sources/profile/autologinhash.cpp \
+    $$PWD/sources/utils/autologinhash.cpp \
     $$PWD/sources/utils/bignumber.cpp \
     $$PWD/sources/utils/coinprocess.cpp \
     $$PWD/sources/utils/db_connector.cpp \
@@ -51,14 +49,13 @@ HEADERS += \
     $$PWD/headers/datastorage/index/memindex.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/dfs/permission_manager.h \
+    $$PWD/headers/datastorage/private_profile.h \
     $$PWD/headers/enc/enc_tools.h \
     $$PWD/headers/enc/key_private.h \
     $$PWD/headers/enc/key_public.h \
-    $$PWD/headers/enc/sign_interface.h \
     $$PWD/headers/managers/account_controller.h \
     $$PWD/headers/managers/logs_manager.h \
     $$PWD/headers/managers/extrachain_node.h \
-    $$PWD/headers/managers/sm_manager.h \
     $$PWD/headers/managers/thread_pool.h \
     $$PWD/headers/managers/tx_manager.h \
     $$PWD/headers/metatypes.h \
@@ -70,9 +67,7 @@ HEADERS += \
     $$PWD/headers/network/isocket_service.h \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
-    $$PWD/headers/profile/private_profile.h \
-    $$PWD/headers/profile/public_profile.h \
-    $$PWD/headers/profile/autologinhash.h \
+    $$PWD/headers/utils/autologinhash.h \
     $$PWD/headers/utils/bignumber.h \
     $$PWD/headers/utils/coinprocess.h \
     $$PWD/headers/utils/db_connector.h \

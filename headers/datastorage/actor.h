@@ -31,8 +31,8 @@
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "extrachain_global.h"
-#include "profile/public_profile.h"
 #include "utils/bignumber.h"
+#include "utils/exc_utils.h"
 
 /**
  * Acting entity.
@@ -178,14 +178,6 @@ public:
             return true;
 
         return m_id.isEmpty();
-    }
-
-    PublicProfile profile() {
-        // TODO: public profile read to new dfs
-        QString pathToFolder =
-            QString::fromStdString(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + m_id.toStdString()
-                                   + Utils::platformDelimeter() + "profile" + Utils::platformDelimeter());
-        return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
 public:

@@ -1,4 +1,4 @@
-#include "profile/autologinhash.h"
+#include "utils/autologinhash.h"
 
 #include <QDebug>
 #include <QFile>

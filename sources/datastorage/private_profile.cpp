@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "profile/private_profile.h"
+#include "datastorage/private_profile.h"
 
 #include "enc/enc_tools.h"
 #include "utils/exc_utils.h"

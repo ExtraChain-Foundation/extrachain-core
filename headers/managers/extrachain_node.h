@@ -140,8 +140,6 @@ signals:
     // void addActorInActorIndex(Actor<KeyPublic> actor);
     void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
     void getAllActorsNode(ActorId id, bool acc);
-    void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
-                               QByteArray color);
     void removeConnection(QString identifier);
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
