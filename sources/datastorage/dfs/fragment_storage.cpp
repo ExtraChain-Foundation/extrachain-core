@@ -33,6 +33,24 @@ bool FragmentStorage::removeFragment(DFS::Packets::DeleteSegmentMessage msg) {
     return false;
 }
 
+DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
+    DFSP::SegmentMessage fragment;
+
+    std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
+        + " WHERE pos = " + std::to_string(pos) + "ORDER BY pos DESC LIMIT 1";
+    std::vector<DBRow> array = tmpFile.select(GetStartFragmentQuery);
+    if (!array.empty()) {
+        DBRow fragMap = array[0];
+        std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
+        fragment.Offset = pos;
+        fragment.Data = extract(filePath, pos, std::stoull(fragMap.at("size")));
+        fragment.Actor = this->actor.toStdString();
+        fragment.FileHash = this->fileHash;
+        return fragment;
+    }
+    return fragment;
+}
+
 DBRow FragmentStorage::getPreviousFragment(uint64_t number) {
     DBRow ret;
     std::string GetPrevFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos < "
@@ -191,6 +209,14 @@ uint64_t FragmentStorage::write(std::filesystem::path filePath, uint64_t pos, st
 
     std::filesystem::remove(tempFilePath);
     return pos;
+}
+
+std::string FragmentStorage::extract(std::filesystem::path filePath, uint64_t pos, uint64_t size) {
+    boost::interprocess::file_mapping fmapSource(filePath.c_str(), boost::interprocess::read_only);
+    boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_only, pos, size);
+    char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+    std::string str(rr_ptr, size);
+    return str;
 }
 
 uint64_t FragmentStorage::remove(std::filesystem::path filePath, uint64_t pos, uint64_t size) {

@@ -22,7 +22,7 @@ public:
 public:
     bool insertFragment(DFSP::SegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
-    DFSP::SegmentMessage getFragment(std::string fileHash);
+    DFSP::SegmentMessage getFragment(uint64_t pos);
     bool editData();
 
 private:
@@ -37,6 +37,7 @@ private:
     uint64_t writeFragment(DFSP::SegmentMessage msg);
     void moveRows(DBRow curRow, uint64_t moveSize);
     uint64_t write(std::filesystem::path filePath, uint64_t pos, std::string data);
+    std::string extract(std::filesystem::path filePath, uint64_t pos, uint64_t size);
     uint64_t remove(std::filesystem::path filePath, uint64_t pos, uint64_t size);
 };
 
