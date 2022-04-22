@@ -14,9 +14,12 @@
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 
 #include "datastorage/actor.h"
+#include "datastorage/dfs/fragment_storage.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
@@ -69,12 +72,16 @@ public:
     void addDirData(const ActorId &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileHash);
     void sendFile(const ActorId &actorId, const std::string &fileHash, const std::string &messageId);
-    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg, const std::string &messageId);
-    std::string addFragment(const DFS::Packets::EditSegmentMessage &msg);
-    std::string insertFragment(const DFS::Packets::EditSegmentMessage &msg);
+    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg,
+                             const std::string &messageId);
+    std::string addFragment(const DFS::Packets::SegmentMessage &msg);
+    std::string insertFragment(const DFS::Packets::SegmentMessage &msg);
     std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
     uint64_t bytesLimit() const;
     void setBytesLimit(uint64_t bytesLimit);
+
+public:
+    DFS::Packets::AddFileMessage getFileHeader(const ActorId actor, const std::string fileHash);
 
 signals:
     void added(ActorId actorId, std::string fileHash, std::string visual, int64_t size);

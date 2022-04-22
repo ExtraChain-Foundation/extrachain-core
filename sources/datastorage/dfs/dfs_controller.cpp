@@ -1,8 +1,4 @@
 #include "datastorage/dfs/dfs_controller.h"
-
-#include <chrono>
-#include <fstream>
-
 #include "network/network_manager.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
@@ -85,9 +81,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 #else
         std::filesystem::copy(newFilePath, placeInDFS);
 #endif
-    } catch (std::filesystem::filesystem_error const &err) {
-        qDebug() << "[Dfs] Copy error:" << err.what();
-    }
+    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
 
     DFS::Packets::AddFileMessage msg = { .Actor = actor.id().toStdString(),
                                          .FileHash = fileHash,
@@ -261,7 +255,7 @@ bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
     return true;
 }
 
-std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage &msg) {
+std::string DfsController::insertFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "[Dfs] Edit file:" << msg.FileHash.c_str();
     std::string pathDelim = Utils::platformDelimeter();
     DBConnector actrDirFile;
@@ -533,7 +527,7 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
         data = extractFragment(fmapTarget, msg.Offset);
     }
 
-    DFS::Packets::EditSegmentMessage fragment = {
+    DFS::Packets::SegmentMessage fragment = {
         .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = std::move(data), .Offset = msg.Offset
     };
 
@@ -547,7 +541,7 @@ std::string DfsController::sendFragment(const DFS::Packets::RequestFileSegmentMe
     return "";
 }
 
-std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &msg) {
+std::string DfsController::addFragment(const DFS::Packets::SegmentMessage &msg) {
     auto fileName = DFS::Path::filePath(msg.Actor, msg.FileHash);
     if (!std::filesystem::exists(fileName)) {
         return "";
@@ -653,4 +647,23 @@ uint64_t DfsController::bytesLimit() const {
 
 void DfsController::setBytesLimit(uint64_t bytesLimit) {
     m_bytesLimit = bytesLimit;
+}
+
+DFS::Packets::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std::string fileHash) {
+    DFS::Packets::AddFileMessage ret;
+    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string actrDirFilePath =
+        DFS::Basic::fsActrRoot + pathDelim + actor.toStdString() + pathDelim + DFS::Basic::fsMapName;
+    DBConnector actrDirFile;
+
+    if (!actrDirFile.open(actrDirFilePath)) {
+        exit(EXIT_FAILURE);
+    }
+    std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, fileHash);
+    actrDirFile.close();
+    ret.FileHash = fileHash;
+    ret.Actor = actor.toStdString();
+    ret.Path = actrDirData.at(0).at("filePath");
+    ret.Size = std::stoull(actrDirData.at(0).at("fileSize"));
+    return ret;
 }

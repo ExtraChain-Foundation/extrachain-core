@@ -440,12 +440,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
     case MessageType::DfsAddSegment: {
-        auto msg = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::SegmentMessage>(serialized);
         node->dfs()->addFragment(msg);
         break;
     }
     case MessageType::DfsEditSegment: {
-        auto msg = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFS::Packets::SegmentMessage>(serialized);
         node->dfs()->insertFragment(msg);
         break;
     }

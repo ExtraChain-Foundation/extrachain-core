@@ -5,9 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "msgpack.hpp"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
+#include <msgpack.hpp>
 
 namespace Utils {
 std::string platformDelimeter();
@@ -19,7 +19,7 @@ namespace Basic {
     static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
     static const std::string dirsPath = "dfs/.dirs";
-    static const uint64_t sectionSize = 2097152;
+    static const uint64_t sectionSize = /*2097152*/ 4194304;
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
 }
@@ -46,21 +46,28 @@ namespace Packets {
         std::string FileHash;
         MSGPACK_DEFINE(Actor, FileHash)
     };
-
-    struct EditSegmentMessage {
+    struct SegmentMessage {
         std::string Actor;
         std::string FileHash;
         std::string Data;
         uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
     };
+    enum class SegmentMessageType
+    {
+        add = 0,
+        insert = 1,
+        replace = 2,
 
-    struct AddSegmentMessage {
+    };
+
+    struct EditSegmentMessage {
         std::string Actor;
         std::string FileHash;
         std::string Data;
         uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
+        SegmentMessageType ActionType;
+        MSGPACK_DEFINE(Actor, FileHash, Data, Offset, ActionType)
     };
 
     struct DeleteSegmentMessage {
@@ -80,7 +87,18 @@ namespace Packets {
         MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileSize, lastModified)
     };
 }
+namespace Fragments {
+    std::string Extension = ".storj";
+    std::string TableNameFragments = "Fragments";
+    std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
+        + "("
+          "pos        INTEGER PRIMARY KEY NOT NULL,"
+          "storedPos  INTEGER             NOT NULL,"
+          "size       INTEGER             NOT NULL"
+          ");";
 
+    std::string CreateTableHistoricalChain = "";
+}
 namespace Tables {
     namespace ActorDirFile {
         static const std::string TableName = "FilesTable";
@@ -136,4 +154,5 @@ enum class Encryption {
     Encrypted = 1
 };
 }
+MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 #endif // DFS_UTILS_H
