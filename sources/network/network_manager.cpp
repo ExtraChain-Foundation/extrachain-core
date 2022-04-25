@@ -266,7 +266,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 void NetworkManager::saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     std::ofstream file;
-    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app);
+    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
         qFatal("[NetworkManager/saveToCache] Error open cache file");
     }
