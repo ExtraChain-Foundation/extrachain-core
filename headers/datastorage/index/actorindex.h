@@ -20,12 +20,10 @@
 #ifndef ACTORINDEX_H
 #define ACTORINDEX_H
 
-#include <QtNetwork/QHostAddress>
+#include "extrachain_global.h"
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-
-#include "extrachain_global.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 
@@ -34,29 +32,25 @@ class ExtraChainNode;
 /**
  * @brief Actors that stored in blockchain
  */
-class EXTRACHAIN_EXPORT ActorIndex : public QObject {
-    Q_OBJECT
-
+class EXTRACHAIN_EXPORT ActorIndex {
 private:
     ExtraChainNode *node;
 
-    qint64 records = 0;
-    const QString folderPath =
-        DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME + '/';
-    short SECTION_NAME_SIZE = 2;
+    int64_t records = 0;
+    const std::string folderPath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
+        + DataStorage::ACTOR_INDEX_FOLDER_NAME.toStdString() + '/';
+    int16_t SECTION_NAME_SIZE = 2;
     ActorId m_firstId;
 
 public:
-    ActorId firstId();
-
     /**
      * @brief ActorIndex
      */
-    ActorIndex(ExtraChainNode *node, QObject *parent = nullptr);
+    ActorIndex(ExtraChainNode *node);
     /**
      * @brief ~ActorIndex
      */
-    ~ActorIndex();
+    ~ActorIndex() = default;
 
 private:
     /**
@@ -64,7 +58,8 @@ private:
      * @param id
      * @return
      */
-    QString buildFilePath(const QByteArray &id) const;
+    QString buildFilePath(const ActorId &id) const;
+    std::string actorPath(const ActorId &id) const;
     /**
      * @brief add
      * @param ActorId id actorId for add
@@ -75,6 +70,8 @@ private:
     void sendGetActorMessage(const ActorId &actorId);
 
 public:
+    ActorId firstId();
+
     /**
      * @brief Check actor with actorId exist
      * @param actorId
@@ -88,8 +85,6 @@ public:
      * @return Found actor, or empty actor (if not found)
      */
     Actor<KeyPublic> getActor(const ActorId &id);
-    bool hasActor(const ActorId &id);
-    void removeActor(const ActorId &id, bool resend = false);
 
     /**
      * @brief Validates block digital signature
@@ -114,7 +109,7 @@ public:
 
     qint64 getRecords() const;
     void setFirstId(const ActorId &value);
-    QString getFolderPath() const;
+    std::string getFolderPath() const;
 
     /**
      * @brief Attempts to save actor to local storage
@@ -131,16 +126,10 @@ public:
     std::vector<std::string> allActorsStd();
     void handleNewAllActors(const std::vector<std::string> &actors);
 
-public slots:
     void handleGetActor(const ActorId &actorId, const std::string &messageId);
     void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const std::string &messageId);
-
-    /**
-     * @brief
-     */
-    void removeAll();
 };
 
 #endif // ACTORINDEX_H

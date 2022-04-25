@@ -1686,7 +1686,7 @@ BlockIndex &Blockchain::getBlockIndex() {
 }
 
 void Blockchain::removeAll() {
-    node->actorIndex()->removeAll();
+    // node->actorIndex()->removeAll();
     this->memIndex.removeAll();
     this->blockIndex.removeAll();
     QFile(DataStorage::TMP_GENESIS_BLOCK).remove();

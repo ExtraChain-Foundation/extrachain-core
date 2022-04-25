@@ -25,14 +25,11 @@ ActorId ActorIndex::firstId() {
     return m_firstId;
 }
 
-ActorIndex::ActorIndex(ExtraChainNode *node, QObject *parent)
-    : QObject(parent)
-
-{
+ActorIndex::ActorIndex(ExtraChainNode *node) {
     this->node = node;
 
     DBConnector db;
-    bool isDbOpen = db.open(folderPath.toStdString() + "actors");
+    bool isDbOpen = db.open(folderPath + "actors");
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
@@ -42,10 +39,6 @@ ActorIndex::ActorIndex(ExtraChainNode *node, QObject *parent)
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
 }
-
-ActorIndex::~ActorIndex() {
-}
-
 Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     if (id.isEmpty()) {
         qDebug() << "[ActorIndex] Error: try get actor with id =" << id;
@@ -60,20 +53,6 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
         sendGetActorMessage(id);
         qDebug() << "[ActorIndex] There no actor with id:" << id;
         return Actor<KeyPublic>();
-    }
-}
-
-bool ActorIndex::hasActor(const ActorId &id) {
-    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
-    return QFileInfo(filePath).size() > 0;
-}
-
-void ActorIndex::removeActor(const ActorId &id, bool resend) {
-    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
-    QFile::remove(filePath);
-
-    if (resend) {
-        sendGetActorMessage(id);
     }
 }
 
@@ -168,15 +147,15 @@ bool ActorIndex::actorExist(const ActorId &actorId) {
     return !getById(actorId).isEmpty();
 }
 
-QString ActorIndex::getFolderPath() const {
+std::string ActorIndex::getFolderPath() const {
     return folderPath;
 }
 
-QString ActorIndex::buildFilePath(const QByteArray &id) const {
-    QByteArray Id = ActorId(id.toStdString()).toByteArray();
+QString ActorIndex::buildFilePath(const ActorId &id) const {
+    QByteArray Id = id.toByteArray();
 
     QByteArray section = Id.right(SECTION_NAME_SIZE);
-    QString pathToFolder = folderPath + section;
+    QString pathToFolder = QString::fromStdString(folderPath) + section;
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {
@@ -186,6 +165,11 @@ QString ActorIndex::buildFilePath(const QByteArray &id) const {
     }
 
     return pathToFolder + "/" + Id;
+}
+
+std::string ActorIndex::actorPath(const ActorId &id) const {
+    const std::string &idStd = id.toStdString();
+    return folderPath + idStd.substr(idStd.length() - SECTION_NAME_SIZE) + '/' + idStd;
 }
 
 void ActorIndex::setFirstId(const ActorId &value) {
@@ -207,7 +191,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
     // if (id <= 1000)
     //     qFatal("Try to add actor with id %s", id.toByteArray().constData());
 
-    QString path = buildFilePath(id.toByteArray());
+    QString path = buildFilePath(id);
     QFile file(path);
     qDebug() << "[ActorIndex] Saving the file:" << path;
 
@@ -237,7 +221,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
-    QString filePath = folderPath + id.toByteArray().right(SECTION_NAME_SIZE) + '/' + id.toByteArray();
+    QString filePath = QString::fromStdString(actorPath(id));
     QFile file(filePath);
     if (!file.exists()) {
         qDebug() << "[ActorIndex] File with path" << filePath << "not found";
@@ -256,7 +240,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
         this->records++;
         DBConnector db;
-        db.open(folderPath.toStdString() + "actors");
+        db.open(folderPath + "actors");
         bool dbInsert = db.insert(Config::DataStorage::actorsTable,
                                   { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
@@ -275,7 +259,7 @@ QByteArrayList ActorIndex::allActors() {
     QByteArrayList result;
 
     DBConnector db;
-    db.open(folderPath.toStdString() + "actors");
+    db.open(folderPath + "actors");
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors) {
         result << actor["id"].data();
@@ -288,26 +272,11 @@ std::vector<std::string> ActorIndex::allActorsStd() {
     std::vector<std::string> result;
 
     DBConnector db;
-    db.open(folderPath.toStdString() + "actors");
+    db.open(folderPath + "actors");
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors) {
         result.push_back(actor["id"]);
     }
 
     return result;
-}
-
-void ActorIndex::removeAll() {
-    qDebug() << "[ActorIndex] Clearing file index:" << folderPath;
-
-    QDir folder(folderPath);
-    const auto folders =
-        folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
-    for (const QString &section : qAsConst(folders)) {
-        QDir dir(folderPath + QString("/") + section);
-        dir.removeRecursively();
-    }
-
-    // update state
-    this->records = 0;
 }
