@@ -21,16 +21,11 @@
 #define ACCOUNT_CONTROLLER_H
 
 #include <QDebug>
-#include <QObject>
 
-//#include "enc/enc_tools.h"
 #include "datastorage/actor.h"
-#include "utils/bignumber.h"
-//#include "datastorage/index/actorindex.h"
-//#include "enc/key_private.h"
+#include "datastorage/private_profile.h"
+#include "utils/autologinhash.h"
 
-class Blockchain;
-class ActorIndex;
 class ExtraChainNode;
 
 /**
@@ -38,59 +33,47 @@ class ExtraChainNode;
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-class EXTRACHAIN_EXPORT AccountController : public QObject {
-    Q_OBJECT
-
-private:
-    ExtraChainNode *node;
-
-    std::vector<Actor<KeyPrivate>> m_accounts;
-    ActorId m_currentWallet;
-
+class EXTRACHAIN_EXPORT AccountController {
 public:
-    AccountController(ExtraChainNode *node);
+    AccountController(ExtraChainNode &node);
 
-public:
     /**
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createUser(ActorType account, QByteArray hashLogin);
-    Actor<KeyPrivate> createWallet();
-    const Actor<KeyPrivate> &getActor(const ActorId &id);
+    Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
+    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId());
+    // createService
+    // createServiceProvider
+
+    bool load(const std::string &hash);
+
     const Actor<KeyPrivate> &mainActor();
 
+    PrivateProfile &getProfile(const ActorId &actorId);
     /**
-     * @brief Gets current active actor
+     * @brief Gets current active profile
      * @return actor
      */
-    const Actor<KeyPrivate> &currentWallet();
+    const PrivateProfile &currentProfile() const;
 
     int count() const;
+    void changeCurrentProfile(const ActorId &actorId);
 
-    const std::vector<Actor<KeyPrivate>> &accounts() const;
+    // const std::vector<Actor<KeyPrivate>> &accounts() const;
+    const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
+    const Actor<KeyPrivate> &currentWallet() const;         // temp
+    void clear();
 
-public slots:
-    /**
-     * @brief Loads actors from local disk to memory: QList accounts;
-     */
-    void loadActors(const QByteArray &id, const QByteArrayList &idList, const QByteArray &hashLogin,
-                    const std::string &decryptKey);
-    /**
-     * @brief Saves Private actor on local disk in serialized form
-     * @param private actor
-     */
-    void savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin);
-    void clearAcc();
-    void changeCurrentWallet(const ActorId &actorId);
+    static std::vector<ActorId> profilesList();
+    void addToProfileList(const ActorId &actorId);
 
-signals:
-    /**
-     * @brief verifyActor
-     * @param serialized private actor
-     */
-    void loadWallets(QByteArray id, QByteArrayList idList);
-    void savePrivateProfile(QByteArray id);
-    void editPrivateProfile(QByteArray id);
+private:
+    ExtraChainNode &node;
+    AutologinHash autologinHash;
+
+    std::vector<PrivateProfile> m_profiles;
+    ActorId m_currentProfile;
 };
+
 #endif // ACCOUNT_CONTROLLER_H

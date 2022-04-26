@@ -29,7 +29,6 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
-#include "network/socket_pair.h"
 
 #include "utils/dfs_utils.h"
 #include <msgpack.hpp>
@@ -40,11 +39,6 @@ Q_NAMESPACE
 static bool isStartedServer = true;
 static quint16 maxConnections = 100;
 static bool networkDebug = false;
-
-struct DataStruct {
-    QByteArray msg;
-    SocketPair receiver;
-};
 
 enum class Protocol {
     Undefined = 0,
@@ -447,12 +441,8 @@ static const int DEFAULT_FIELD_SIZE = 8;
 
 EXTRACHAIN_EXPORT QByteArray serialize(const QList<QByteArray> &list,
                                        const int &fiels_size = DEFAULT_FIELD_SIZE);
-EXTRACHAIN_EXPORT std::string serializeStd(const std::vector<std::string> &list,
-                                           const int &fiels_size = DEFAULT_FIELD_SIZE);
 EXTRACHAIN_EXPORT QList<QByteArray> deserialize(const QByteArray &serialized,
                                                 const int &fiels_size = DEFAULT_FIELD_SIZE);
-EXTRACHAIN_EXPORT QByteArray serializeMap(const QMap<QString, QByteArray> &map);
-EXTRACHAIN_EXPORT QMap<QString, QByteArray> deserializeMap(const QByteArray &data);
 
 bool isEmpty(const QByteArray &bytes);
 bool isEmpty(const std::string &str);
@@ -491,15 +481,7 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
 } // namespace MessagePack
 
 namespace Utils {
-static const std::string getPlatformDelimeter() {
-#ifdef _WIN32
-    char del;
-    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
-    return std::string(1, del);
-#else
-    return std::string(1, std::filesystem::path::preferred_separator);
-#endif
-}
+EXTRACHAIN_EXPORT std::string platformDelimeter();
 
 static int64_t currentDateSecs() {
     using namespace std::chrono;
@@ -513,9 +495,6 @@ static int64_t currentDateMs() {
     return ms;
 }
 
-// QByteArray encodeHex(const QByteArray &dec);
-// QByteArray encodeHex(byte *dec);
-// QByteArray decodeHex(const QByteArray &hex);
 EXTRACHAIN_EXPORT QString extrachainVersion();
 EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();
@@ -596,19 +575,15 @@ enum typeDataRow {
 } // namespace DataStorage
 
 namespace KeyStore {
-static const QString KEYSTORE = "keystore";
 // To store user private/public keys
-static const QString USER_KEYSTORE = "keystore/personal/";
-static const QString user_actor_state = "keystore/personal/file.dat";
-static const QString KEY_TYPE = ".key";
-static const QString KEY_FILTER = "*.key";
+static const std::string folder = "keystore";
+static const std::string format = ".profile";
+static const std::string profiles = "profiles";
 
+// TODO: remove
+static const QString KEY_TYPE = ".key";
 QString makeKeyFileName(QString name);
-} // namespace KeyStore
-namespace SmartContractStorage {
-static const QString CONTRACTSTORE = "keystore/contracts/";
-static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
-} // namespace SmartContractStorage
+}
 
 namespace SearchEnum {
 enum class BlockParam {

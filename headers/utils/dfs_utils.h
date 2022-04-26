@@ -10,15 +10,7 @@
 #include <boost/algorithm/string/replace.hpp>
 
 namespace Utils {
-static const std::string getPlatformDelimeterDFS() {
-#ifdef _WIN32
-    char del;
-    std::wcstombs(&del, &std::filesystem::path::preferred_separator, 1);
-    return std::string(1, del);
-#else
-    return std::string(1, std::filesystem::path::preferred_separator);
-#endif
-}
+std::string platformDelimeter();
 }
 
 namespace DFS {
@@ -210,8 +202,7 @@ namespace Path {
     std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
 }
 
-enum class Encryption
-{
+enum class Encryption {
     Public = 0,
     Encrypted = 1
 };

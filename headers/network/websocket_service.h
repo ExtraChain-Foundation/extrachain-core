@@ -1,16 +1,13 @@
 #ifndef WEBSOCKETSERVICE_H
 #define WEBSOCKETSERVICE_H
+
 #include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
 #include "network/network_manager.h"
-#include "network/socket_pair.h"
 #include "utils/exc_utils.h"
 #include <QWebSocket>
 
 #include "extrachain_global.h"
-
-class NetworkManager;
-class ActorIndex;
 
 class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
     Q_OBJECT

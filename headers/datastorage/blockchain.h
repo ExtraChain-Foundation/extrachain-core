@@ -52,8 +52,7 @@ class TransactionManager;
  *
  */
 
-enum class FreezeBalanceSearch
-{
+enum class FreezeBalanceSearch {
     AllStaking,
     AllNotMyStaking,
     OnlyMyStaking,
@@ -317,7 +316,7 @@ signals:
 
     // responses
     void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
-                       const SocketPair &receiver);
+                       const std::string &messageId);
 
     /**
      * @brief There no such block in a local blockchain
@@ -356,11 +355,11 @@ public slots:
     void blockCountResponse(const BigNumber &count);
     // from node manager
     void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                             const SocketPair &receiver, const QByteArray &request);
+                             const std::string &messageId, const QByteArray &request);
 
     void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                const QByteArray &requestHash, const SocketPair &receiver);
-    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
+                                const QByteArray &requestHash, const std::string &messageId);
+    void getBlockCount(const QByteArray &requestHash, const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block

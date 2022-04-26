@@ -27,6 +27,7 @@
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
+#include <iostream>
 #include <string>
 #include <string_view>
 
@@ -78,7 +79,6 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
 private:
     bool reservedActorListUse = false;
     bool active = false;
-    BigNumber maxBlockCount; // latest known block num in the blockchain
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};

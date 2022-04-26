@@ -22,7 +22,7 @@ DfsController::~DfsController() {
 }
 
 void DfsController::initializeActor(const ActorId &actorId) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::create_directories(DFS::Basic::fsActrRoot + pathDelim + actorId.toStdString());
     DBConnector actrDirFile = DFS::Tables::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.query(DFS::Tables::ActorDirFile::CreateTableQuery);
@@ -146,7 +146,7 @@ void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::s
 }
 
 std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
     std::string realFilePath = DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
@@ -204,8 +204,8 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
 }
 
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHash) {
-    Actor<KeyPrivate> localOwner = node.accountController()->getActor(owner);
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    Actor<KeyPrivate> localOwner = node.accountController()->currentProfile().getActorConst(owner);
+    std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::path realFilePath =
         DFS::Basic::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileHash;
     DBConnector actrDirFile;
@@ -253,7 +253,7 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileHas
 
 bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
     qDebug() << "[Dfs] Remove file message:" << msg.FileHash.c_str();
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
@@ -286,7 +286,7 @@ bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
 
 std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage &msg) {
     qDebug() << "[Dfs] Edit file:" << msg.FileHash.c_str();
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;
@@ -336,7 +336,7 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
 }
 
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + file.stem().string();
@@ -387,7 +387,7 @@ bool DfsController::insertDataChunk(std::string data, uint64_t position, std::fi
 }
 
 bool DfsController::removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + file.stem().string();
@@ -622,7 +622,7 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
 }
 
 std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg) {
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFS::Basic::fsMapName;

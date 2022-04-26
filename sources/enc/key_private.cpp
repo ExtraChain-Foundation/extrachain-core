@@ -20,11 +20,9 @@
 #include "enc/key_private.h"
 #include "enc/enc_tools.h"
 
-#include <QJsonObject>
-#include <fstream>
 #include <sodium.h>
 
-using std::string, std::vector;
+#include <fstream>
 
 KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
     m_secretKey = secret_key;
@@ -43,30 +41,27 @@ void KeyPrivate::generate() {
 }
 
 std::string KeyPrivate::encrypt(const std::string &data, const std::string &receiverPublicKey,
-                                const string &nonce) const {
-    auto res = SecretKey::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
-    return res;
+                                const std::string &nonce) const {
+    return SecretKey::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
 }
 
-std::string KeyPrivate::decrypt(const std::string &data, const string &senderPublicKey,
-                                const string &nonce) const {
-    auto res = SecretKey::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
-    return res;
+std::string KeyPrivate::decrypt(const std::string &data, const std::string &senderPublicKey,
+                                const std::string &nonce) const {
+    return SecretKey::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
 }
 
 std::string KeyPrivate::encryptSelf(const std::string &data) const {
-    string sk = Utils::hexStringToByte(m_secretKey);
-    string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
+    std::string pnonce = m_secretKey.substr(0, crypto_box_NONCEBYTES);
     return this->encrypt(data, this->m_publicKey, pnonce);
 }
 
 std::string KeyPrivate::decryptSelf(const std::string &data) const {
-    string sk = Utils::hexStringToByte(m_secretKey);
-    string pnonce = sk.substr(0, crypto_box_NONCEBYTES);
+    std::string pnonce = m_secretKey.substr(0, crypto_box_NONCEBYTES);
     return this->decrypt(data, this->m_publicKey, pnonce);
 }
 
-void KeyPrivate::encryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const {
+void KeyPrivate::encryptFile(const std::filesystem::path &file,
+                             const std::filesystem::path &resultFile) const {
     std::ifstream sfile(file.string(), std::ios::binary);
     std::ofstream efile(resultFile.string(), std::ios::binary | std::ios::app);
     if (sfile && efile) {
@@ -81,7 +76,8 @@ void KeyPrivate::encryptFile(const std::filesystem::path file, const std::filesy
     qDebug() << "file encryption error";
 }
 
-void KeyPrivate::decryptFile(const std::filesystem::path file, const std::filesystem::path resultFile) const {
+void KeyPrivate::decryptFile(const std::filesystem::path &file,
+                             const std::filesystem::path &resultFile) const {
     std::ifstream efile(file.string(), std::ios::binary);
     std::ofstream sfile(resultFile.string(), std::ios::binary | std::ios::app);
     if (efile && sfile) {
@@ -100,24 +96,11 @@ void KeyPrivate::decryptFile(const std::filesystem::path file, const std::filesy
 }
 
 std::string KeyPrivate::sign(const std::string &data) const {
-    string sks = Utils::hexStringToByte(m_secretKey);
-    vector<unsigned char> sk(sks.begin(), sks.end());
-    vector<unsigned char> vmsg(data.begin(), data.end());
-    vector<unsigned char> vsig(crypto_sign_BYTES);
-    crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
-    string sig = Utils::byteToHexString(vsig);
-    sig.erase(--sig.end());
-    return sig;
+    return SecretKey::sign(data, m_secretKey);
 }
 
-bool KeyPrivate::verify(const std::string &data, const std::string &dsignHex) const {
-    string pks = Utils::hexStringToByte(this->m_publicKey);
-    string signature = Utils::hexStringToByte(dsignHex);
-    vector<unsigned char> pk(pks.begin(), pks.end());
-    vector<unsigned char> vmsg(data.begin(), data.end());
-    vector<unsigned char> vsig(signature.begin(), signature.end());
-    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
-    return res == 0;
+bool KeyPrivate::verify(const std::string &data, const std::string &signature) const {
+    return SecretKey::verify(data, m_publicKey, signature);
 }
 
 const std::string &KeyPrivate::secretKey() const {

@@ -67,12 +67,14 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
             return;
         }
 
-        pub = KeyPublic(message.toStdString());
+        auto key = QByteArray::fromBase64(message.toLatin1());
+        pub = KeyPublic(key.toStdString());
         if (pub.empty()) { // or incorrect
             qFatal("Incorrect public key in socket");
         }
 
-        auto firstMessage = prepareSendMessage(generateFirstMessage());
+        auto firstMessage =
+            prepareSendMessage(generateFirstMessage()).toBase64(QByteArray::Base64UrlEncoding);
         m_ws->sendTextMessage(firstMessage);
         return;
     }
@@ -81,7 +83,8 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         return;
 
     qDebug() << "[WS] First message:" << message;
-    checkFirstMessage(prepareReceiveMessage(message.toLatin1()));
+    checkFirstMessage(
+        prepareReceiveMessage(QByteArray::fromBase64(message.toLatin1(), QByteArray::Base64UrlEncoding)));
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
@@ -90,9 +93,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
-        SocketPair pair(m_ip.toStdString(), port());
-        pair.setIdentifier(m_identifier.toLatin1());
-        node->network()->messageReceived(mess.toStdString(), pair.identifier().toStdString());
+        node->network()->messageReceived(mess.toStdString(), m_identifier.toStdString());
     } else {
         qFatal("[WS] Messsage is empty after prepare");
     }
@@ -136,7 +137,8 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::handshake() {
-    m_ws->sendTextMessage(QString::fromStdString(priv.publicKey()));
+    auto key = QByteArray::fromStdString(priv.publicKey()).toBase64();
+    m_ws->sendTextMessage(key);
 }
 
 quint16 WebSocketService::port() const {

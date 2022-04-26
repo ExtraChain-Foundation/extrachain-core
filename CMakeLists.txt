@@ -53,15 +53,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_public.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/enc/sign_interface.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/account_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/contract_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/sm_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/tx_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
@@ -70,12 +68,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/socket_pair.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/profile/private_profile.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/profile/public_profile.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/coinprocess.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
@@ -91,25 +87,22 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/memindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/enc_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/contract_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/sm_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/tx_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/socket_pair.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/profile/private_profile.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/profile/public_profile.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/coinprocess.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
@@ -118,9 +111,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     )
 
-add_library(extrachainc
-    ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
-    )
+# add_library(extrachainc
+#     ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
+#     )
 
 if (EXTRACHAIN_STATIC_BUILD)
     message("ExtraChain: static build")
@@ -154,12 +147,12 @@ add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHA
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
-target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+# target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread extrachainc)
-target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread) # extrachainc
+# target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
+#     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
 
 if (UNIX AND NOT IOS) # temp
     target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)

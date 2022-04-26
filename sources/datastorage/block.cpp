@@ -111,8 +111,7 @@ void Block::sign(const Actor<KeyPrivate> &actor) {
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const {
-    bool res = actor.key().verify(QByteArray::fromStdString(getDataForDigSig()),
-                                  QByteArray::fromStdString(getDigSig()));
+    bool res = actor.key().verify(getDataForDigSig(), getDigSig());
     return signatures.empty() ? false : res;
 }
 

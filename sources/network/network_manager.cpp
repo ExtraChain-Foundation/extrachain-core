@@ -267,7 +267,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 void NetworkManager::saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     std::ofstream file;
-    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app);
+    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
         qFatal("[NetworkManager/saveToCache] Error open cache file");
     }
@@ -342,7 +342,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
-    // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
 
     // TODO: no check new actor
     //    {

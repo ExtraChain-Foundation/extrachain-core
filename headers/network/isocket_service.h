@@ -11,8 +11,7 @@ class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:
-    enum class SendType
-    {
+    enum class SendType {
         All,
         None,
         // OnlySubNetwork

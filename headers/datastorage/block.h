@@ -22,7 +22,6 @@
 
 #include "actor.h"
 #include "datastorage/transaction.h"
-#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/db_connector.h"
 #include "utils/exc_utils.h"
