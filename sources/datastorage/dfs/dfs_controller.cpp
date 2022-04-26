@@ -1,4 +1,5 @@
 #include "datastorage/dfs/dfs_controller.h"
+#include "datastorage/dfs/permission_manager.h"
 
 #include <chrono>
 #include <fstream>
@@ -112,6 +113,21 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         DFS::Tables::DirsFile::TableName,
         { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
 
+    //add permission
+    PermissionManager permissionManager(&node);
+    DFS::Permission::PermissionMode mode = DFS::Permission::PermissionMode(DFS::Permission::Permission::Service);
+    DFS::Permission::AddPermission addpermission = {
+        .actor = actor.id().toStdString(),
+        .path = newTargetVirtualFilePath,
+        .userId = actor.id().toStdString(),
+        .fileHash = fileHash,
+        .permissionValue = static_cast<short>(mode.toInt())
+    };
+
+    permissionManager.sign(actor, addpermission);
+    permissionManager.savePermission(addpermission);
+    node.network()->send_message(addpermission, MessageType::DfsAddPermission);
+
     sendFile(actor.id(), fileHash, "");
     return addFile(msg, false);
 }
@@ -119,7 +135,14 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
     std::string fileHash = Utils::calcKeccakForFile(filePath); // TODO: get hash
     DFS::Packets::RemoveFileMessage msg = { .Actor = actor.id().toStdString(), .FileHash = fileHash };
+    PermissionManager permissionManager(&node);
+    DFS::Permission::RemovePermission rmPermission = {
+        .actor = actor.id().toStdString(),
+        .fileHash = fileHash
+    };
+    permissionManager.remove(rmPermission);
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
+    node.network()->send_message(rmPermission, MessageType::DfsRemovePermission);
 }
 
 std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {

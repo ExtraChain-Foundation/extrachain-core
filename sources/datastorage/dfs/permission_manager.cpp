@@ -1,9 +1,8 @@
 #include "datastorage/dfs/permission_manager.h"
 #include <sstream>
-#include <fstream>
-#include <iostream>
 #include <string>
 #include <QJsonObject>
+
 
 PermissionManager::PermissionManager(ExtraChainNode *node)
     : node(node)
@@ -13,7 +12,7 @@ PermissionManager::~PermissionManager() {}
 
 CriticalErrors PermissionManager::initPermission(const std::string& userId, const std::string& fileHash, DFS::Permission::PermissionMode &permissionMode)
 {
-    const std::string pathToPermissionFile = makeFileName(userId, fileHash);
+    const std::string pathToPermissionFile = makePermissionFileName(userId, fileHash);
 
     if(!std::filesystem::exists(pathToPermissionFile))
         return CriticalErrors::NoFile;
@@ -62,13 +61,13 @@ CriticalErrors PermissionManager::initPermission(const std::string& userId, cons
 
 CriticalErrors PermissionManager::updatePermission(const DFS::Permission::AddPermission &permissionData)
 {
-    const std::string pathToPermissionFile = makeFileName(permissionData.userId, permissionData.fileHash);
+    const std::string pathToPermissionFile = makePermissionFileName(permissionData.userId, permissionData.fileHash);
+
+    if(!std::filesystem::exists(pathToPermissionFile))
+        return savePermission(permissionData);
 
     std::ofstream permissionFile;
     permissionFile.open(pathToPermissionFile, std::ios_base::out | std::ios::trunc);
-
-         //check file exist
-         //create new file is doesn't exist
 
     if (!permissionFile.is_open()) {
         return CriticalErrors::NotOpenFile;
@@ -78,13 +77,13 @@ CriticalErrors PermissionManager::updatePermission(const DFS::Permission::AddPer
     permissionFile << document.toJson().toStdString().c_str();
     permissionFile.close();
 
-    return std::filesystem::is_empty(pathToPermissionFile) ? CriticalErrors::NoUpdated : CriticalErrors::NoError;
+    return std::filesystem::is_empty(pathToPermissionFile) ? CriticalErrors::NoUpdated
+                                                           : CriticalErrors::NoError;
 }
 
 CriticalErrors PermissionManager::savePermission(const DFS::Permission::AddPermission &permissionData)
 {
-    const std::string pathToPermissionFile = makeFileName(permissionData.userId, permissionData.fileHash);
-
+    const std::string pathToPermissionFile = makePermissionFileName(permissionData.userId, permissionData.fileHash);
     std::ofstream permissionFile;
     permissionFile.open(pathToPermissionFile, std::ios_base::out | std::ios::trunc);
     if (!permissionFile.is_open()) {
@@ -96,6 +95,32 @@ CriticalErrors PermissionManager::savePermission(const DFS::Permission::AddPermi
     permissionFile.close();
 
     return std::filesystem::is_empty(pathToPermissionFile) ? CriticalErrors::NoSaved : CriticalErrors::NoError;
+}
+
+CriticalErrors PermissionManager::rename(const std::string &oldFileHash, const DFS::Permission::AddPermission &permissionData)
+{
+    if(oldFileHash != permissionData.fileHash) {
+        const std::string pathToPermissionFile = makePermissionFileName(permissionData.userId, oldFileHash);
+        const std::string newFileName = makePermissionFileName(permissionData.userId, permissionData.fileHash);
+        CriticalErrors error = savePermission(permissionData);
+
+        if(error != CriticalErrors::NoError)
+            return error;
+
+        if(!std::filesystem::remove(pathToPermissionFile))
+            return CriticalErrors::NotRemoveOldFile;
+
+    }
+    return CriticalErrors::NoError;
+}
+
+CriticalErrors PermissionManager::remove(const DFS::Permission::RemovePermission &rmPermission)
+{
+    const std::string pathToPermissionFile = makePermissionFileName(rmPermission.actor, rmPermission.fileHash);
+    if(!std::filesystem::remove(pathToPermissionFile))
+        return CriticalErrors::NotRemovePermissionFile;
+
+    return CriticalErrors::NoError;
 }
 
 void PermissionManager::addPermission(DFS::Permission::PermissionMode &permissionMode, const Permission &permission)
@@ -148,96 +173,20 @@ bool PermissionManager::hasPermission(const DFS::Permission::PermissionMode &per
     return permissionMode.toInt() > 0;
 }
 
-std::vector<std::string> PermissionManager::searchFileByHash(std::string& dirPath, std::string &partHash)
+std::vector<std::string> PermissionManager::searchFile(const std::string& dirPath, const std::string& partFileName)
 {
     std::vector<std::string> result;
-    if(partHash.length() == 0) {
+    if(partFileName.length() == 0) {
         return result;
     }
 
-    if(partHash.length() < lastFoundedPartHashFile.length()) {
-        directoryEntry.clear();
-        lastFoundedPartHashFile = partHash;
-
-        for (auto &pathToFile : std::filesystem::recursive_directory_iterator(dirPath)) {
-            if (std::filesystem::is_regular_file(pathToFile) && pathToFile.path().extension() == DFS::Permission::permissionFileExtension) {
-                std::stringstream ss(pathToFile.path().filename());
-                std::string segment;
-                std::vector<std::string> splitList;
-
-                while(std::getline(ss, segment, '_'))
-                {
-                    splitList.emplace_back(segment);
-                }
-
-                const std::string hashCurrentFile = splitList.at(1);
-                if(hashCurrentFile.find(partHash) != std::string::npos) {
-                    result.emplace_back(pathToFile.path());
-                    directoryEntry.emplace_back(pathToFile);
-                }
-            }
-        }
-    } else {
-        lastFoundedPartHashFile = partHash;
-        std::vector<std::filesystem::directory_entry> tmpSavedListOfDirectoryEntry;
-        for (auto &pathToFile : directoryEntry) {
-            std::stringstream ss(pathToFile.path().filename());
-            std::string segment;
-            std::vector<std::string> splitList;
-
-            while(std::getline(ss, segment, '_'))
-            {
-                splitList.emplace_back(segment);
-            }
-
-            const std::string hashCurrentFile = splitList.at(1);
-            if(hashCurrentFile.find(partHash) == std::string::npos) {
-                remove(directoryEntry.begin(), directoryEntry.end(), pathToFile);
-            }
-        }
-
-        for (auto &pathToFile : directoryEntry) {
-            result.push_back(pathToFile.path());
-        }
-    }
-
-    return result;
-}
-
-std::vector<std::string> PermissionManager::searchFileByName(std::string& dirPath, std::string& partUserName) {
-    std::vector<std::string> result;
-    if(partUserName.length() == 0) {
-        return result;
-    }
-
-    if(partUserName.length() < lastFoundedPartUserName.length()) {
-        directoryEntry.clear();
-        lastFoundedPartUserName = partUserName;
-
-        for (auto &pathToFile : std::filesystem::recursive_directory_iterator(dirPath)) {
-            if (std::filesystem::is_regular_file(pathToFile) && pathToFile.path().extension() == DFS::Permission::permissionFileExtension) {
-                const std::string fileName = pathToFile.path().filename();
-
-                std::string fullNameUser = fileName.substr(0, fileName.find("_"));
-                if(fullNameUser.find(partUserName) != std::string::npos) {
-                    result.emplace_back(pathToFile.path());
-                    directoryEntry.emplace_back(pathToFile);
-                }
-            }
-        }
-    } else {
-        lastFoundedPartUserName = partUserName;
-        std::vector<std::filesystem::directory_entry> tmpSavedListOfDirectoryEntry;
-        for (auto &pathToFile : directoryEntry) {
+    for (auto &pathToFile : std::filesystem::recursive_directory_iterator(dirPath)) {
+        if (std::filesystem::is_regular_file(pathToFile) && pathToFile.path().extension() == DFS::Permission::permissionFileExtension) {
             const std::string fileName = pathToFile.path().filename();
-            std::string fullNameUser = fileName.substr(0, fileName.find("_"));
-            if(fullNameUser.find(partUserName) == std::string::npos) {
-                remove(directoryEntry.begin(), directoryEntry.end(), pathToFile);
-            }
-        }
 
-        for (auto &pathToFile : directoryEntry) {
-            result.push_back(pathToFile.path());
+            if(fileName.find(partFileName) != std::string::npos) {
+                result.emplace_back(pathToFile.path());
+            }
         }
     }
 
@@ -256,6 +205,82 @@ bool PermissionManager::verify(const Actor<KeyPublic> &actor, const DFS::Permiss
     return actor.key().verify(QByteArray::fromStdString(dataForSign), QByteArray::fromStdString(permissionData.signature));
 }
 
+void PermissionManager::serializePermissionData(const std::string data, uint64_t position, DFS::Permission::AddPermission perm) {
+    std::filesystem::path file = makePermissionFileName(perm.userId, perm.fileHash);
+    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::filesystem::path tempFilePath = makeTempFileName(perm.fileHash);
+    std::ofstream ofs(tempFilePath.string(), std::ios::binary | std::ios::trunc);
+
+    ofs.write(perm.actor.c_str(), perm.actor.size());
+    ofs.write(perm.path.c_str(), perm.path.size());
+    ofs.write(perm.userId.c_str(), perm.userId.size());
+    ofs.write(perm.fileHash.c_str(), perm.fileHash.size());
+    ofs.write(perm.signature.c_str(), perm.signature.size());
+    ofs.write(std::to_string(perm.permissionValue).c_str(), sizeof(perm.permissionValue));
+    ofs.flush();
+    ofs.close();
+
+    qDebug() << "read data from to bits";
+    qDebug() << "actor: " << QString::fromStdString(getDataByValue(perm, DFS::Permission::PermissionValue::Actor));
+    qDebug() << "path: " << QString::fromStdString(getDataByValue(perm, DFS::Permission::PermissionValue::Path));
+    qDebug() << "userId: " << QString::fromStdString(getDataByValue(perm, DFS::Permission::PermissionValue::UserID));
+    qDebug() << "file_hash: " << QString::fromStdString(getDataByValue(perm, DFS::Permission::PermissionValue::FileHash));
+    qDebug() << "signature: " << QString::fromStdString(getDataByValue(perm, DFS::Permission::PermissionValue::Signature));
+    qDebug() << "p_value: " << std::stoi(getDataByValue(perm, DFS::Permission::PermissionValue::PermissionValue));
+}
+
+std::string PermissionManager::getDataByValue(const DFS::Permission::AddPermission &addPermission, const int &value) {
+    const auto valueFromByte = [&]()
+    {
+        int res = 0;
+        switch(value) {
+        case DFS::Permission::PermissionValue::Actor: break;
+        case DFS::Permission::PermissionValue::Path: {
+            res = addPermission.actor.size();
+            break;
+        }
+        case DFS::Permission::PermissionValue::UserID: {
+            res = (addPermission.actor.size() + addPermission.path.size());
+            break;
+        }
+        case DFS::Permission::PermissionValue::FileHash: {
+            res = (addPermission.actor.size() + addPermission.path.size() + addPermission.userId.size());
+            break;
+        }
+        case DFS::Permission::PermissionValue::Signature: {
+            res = (addPermission.actor.size() + addPermission.path.size() + addPermission.userId.size() + addPermission.fileHash.size());
+            break;
+        }
+        case DFS::Permission::PermissionValue::PermissionValue: {
+            res = (addPermission.actor.size() + addPermission.path.size() + addPermission.userId.size()
+                   + addPermission.fileHash.size() + addPermission.signature.size());
+            break;
+        }
+        }
+        return res;
+    };
+
+    const auto sizeOfValue = [&]()
+    {
+        switch(value) {
+        case DFS::Permission::PermissionValue::Actor: return addPermission.actor.size();
+        case DFS::Permission::PermissionValue::Path: return addPermission.path.size();
+        case DFS::Permission::PermissionValue::UserID: return addPermission.userId.size();
+        case DFS::Permission::PermissionValue::FileHash: return addPermission.fileHash.size();
+        case DFS::Permission::PermissionValue::Signature: return addPermission.signature.size();
+        case DFS::Permission::PermissionValue::PermissionValue: return sizeof(addPermission.permissionValue);
+        }
+    };
+    std::filesystem::path tempFilePath = makeTempFileName(addPermission.fileHash);
+    std::ofstream ofsres(tempFilePath.c_str(), std::ios::out | std::ios::app | std::ios::binary);
+    boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
+    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, valueFromByte());
+    std::string r = static_cast<char *>(rightRegion.get_address());
+    r.resize(valueFromByte() + sizeOfValue());
+    return r.c_str();
+}
+
+
 FileDataObject PermissionManager::makeFileData(const std::string& actor, const std::string& path,
                                                const std::string &fileHash, const DFS::Permission::PermissionMode& permissionMode,
                                                const std::string &userId, const std::string &signature)
@@ -268,10 +293,19 @@ FileDataObject PermissionManager::makeFileData(const std::string& actor, const s
              { "signature", signature } };
 }
 
-std::string PermissionManager::makeFileName(const std::string &userName, const std::string &hashFile)
+std::string PermissionManager::makePermissionFileName(const std::string &userName, const std::string &hashFile)
 {
     std::stringstream stringStream;
-    stringStream << userName << "_" << hashFile << "." << DFS::Permission::permissionFileExtension;
+    stringStream << DFS::Permission::rootDir << "/" << userName << "/"
+                 << hashFile << DFS::Permission::permissionFileExtension;
+    return stringStream.str();
+}
+
+std::string PermissionManager::makeTempFileName(const std::string &hashFile)
+{
+    std::stringstream stringStream;
+    stringStream << DFS::Permission::tempDir << "/" << "tmp_"
+                 << hashFile << DFS::Permission::permissionFileExtension;
     return stringStream.str();
 }
 
@@ -279,6 +313,9 @@ QJsonDocument PermissionManager::makePermissionJsonDocument(const DFS::Permissio
 {
     QJsonObject permissionObject;
     permissionObject[DFS::Permission::userID.c_str()] = permissionData.userId.c_str();
+    permissionObject[DFS::Permission::actor.c_str()] = permissionData.actor.c_str();
+    permissionObject[DFS::Permission::path.c_str()] = permissionData.path.c_str();
+    permissionObject[DFS::Permission::signature.c_str()] = permissionData.signature.c_str();
     permissionObject[DFS::Permission::fileHash.c_str()] = permissionData.fileHash.c_str();
     permissionObject[DFS::Permission::permissionValue.c_str()] = std::to_string(permissionData.permissionValue).c_str();
 

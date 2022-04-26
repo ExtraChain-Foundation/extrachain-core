@@ -38,7 +38,9 @@ namespace Basic {
         NotOpenFile,
         ParseError,
         NoUpdated,
-        NoSaved
+        NoSaved,
+        NotRemoveOldFile,
+        NotRemovePermissionFile
     };
 }
 
@@ -47,18 +49,31 @@ namespace Permission {
     static const std::string serviceDir = "Service";
     static const std::string rootDir = "dfs";
     static const std::string userID = "userId";
+    static const std::string actor = "actor";
+    static const std::string path = "path";
+    static const std::string signature = "signature";
     static const std::string fileHash = "fileHash";
     static const std::string permissionValue = "permission_value";
+    static const std::string tempDir = "tmp";
 
     enum Permission {
-        Service = 0x8000,
-        Read = 0x4000,
-        Write = 0x2000,
-        Remove = 0x0400,
-        Edit = 0x0200,
-        Custom = 0x0040
+        Service = 0x40,
+        Read = 0x20,
+        Write = 0x08,
+        Remove = 0x04,
+        Edit = 0x02,
+        Custom = 0x01
     };
     Q_DECLARE_FLAGS(PermissionMode, Permission)
+
+    enum PermissionValue{
+        Actor,
+        Path,
+        UserID,
+        FileHash,
+        Signature,
+        PermissionValue
+    };
 
     struct AddPermission {
         std::string actor;
@@ -66,18 +81,14 @@ namespace Permission {
         std::string userId;
         std::string fileHash;
         std::string signature;
-        int permissionValue;
+        short permissionValue;
         MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
     };
 
     struct RemovePermission {
         std::string actor;
-        std::string path;
-        std::string userId;
         std::string fileHash;
-        std::string signature;
-        int permissionValue;
-        MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
+        MSGPACK_DEFINE(actor, fileHash)
     };
 
     struct UpdatePermission {
@@ -86,7 +97,7 @@ namespace Permission {
         std::string userId;
         std::string fileHash;
         std::string signature;
-        int permissionValue;
+        short permissionValue;
         MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
     };
 }
