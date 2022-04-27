@@ -28,6 +28,7 @@
 #include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
+#include "managers/extrachain_node.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QMutex>
@@ -51,8 +52,7 @@ class TransactionManager;
  *
  */
 
-enum class FreezeBalanceSearch
-{
+enum class FreezeBalanceSearch {
     AllStaking,
     AllNotMyStaking,
     OnlyMyStaking,
@@ -65,13 +65,13 @@ class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     Q_OBJECT
 private:
+    ExtraChainNode *node;
+
     // storage //
-    bool fileMode;          // true = block storage mode
-    ActorIndex *actorIndex; // actors
-    BlockIndex blockIndex;  // blocks (if fileMode is true)
-    MemIndex memIndex;      // blocks (if fileMode is false)
-                            //    Actor<KeyPrivate>   approver;       // current user.
-    AccountController *accountController;
+    bool fileMode;         // true = block storage mode
+    BlockIndex blockIndex; // blocks (if fileMode is true)
+    MemIndex memIndex;     // blocks (if fileMode is false)
+                           //    Actor<KeyPrivate>   approver;       // current user.
     TransactionManager *txManager;
     // service //
     QList<GenesisDataRow> genBlockData; // actorid -> token
@@ -80,7 +80,7 @@ private:
     bool launched;
 
 public:
-    Blockchain(AccountController *accountController, bool fileMode = true);
+    Blockchain(ExtraChainNode *node, bool fileMode = true);
     Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
@@ -247,11 +247,6 @@ public:
      * @param memory
      */
     void setMode(bool fileMode);
-    /**
-     * @brief Return's reference to actorIndex
-     * @return ref to actorIndex field
-     */
-    ActorIndex *getActorIndex();
 
     /**
      * @brief Return's reference to memIndex
@@ -321,7 +316,7 @@ signals:
 
     // responses
     void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
-                       const SocketPair &receiver);
+                       const std::string &messageId);
 
     /**
      * @brief There no such block in a local blockchain
@@ -340,7 +335,7 @@ signals:
     void finished();
 
 public:
-    void addBlockToBlockchain(Block block);
+    void addBlockToBlockchain(Block &block);
     void addGenBlockToBlockchain(GenesisBlock block);
     void setTxManager(TransactionManager *value);
 
@@ -360,11 +355,11 @@ public slots:
     void blockCountResponse(const BigNumber &count);
     // from node manager
     void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                             const SocketPair &receiver, const QByteArray &request);
+                             const std::string &messageId, const QByteArray &request);
 
     void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                const QByteArray &requestHash, const SocketPair &receiver);
-    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
+                                const QByteArray &requestHash, const std::string &messageId);
+    void getBlockCount(const QByteArray &requestHash, const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block

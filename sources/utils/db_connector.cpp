@@ -21,9 +21,9 @@
 
 #include "sqlite3.h"
 #include <QDir>
-#include <QRegularExpression>
-#include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonObject>
+#include <QRegularExpression>
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
@@ -35,6 +35,16 @@ DBConnector::DBConnector(const std::string &name) {
     this->open(name);
 }
 
+DBConnector::DBConnector(DBConnector &&rhs) {
+    if (this == &rhs)
+        return;
+
+    this->m_file = std::move(rhs.m_file);
+    this->m_open = rhs.m_open;
+    this->db = rhs.db;
+    rhs.db = nullptr;
+}
+
 DBConnector::~DBConnector() {
     // TODO: check if sqlite pointer is active
     if (db != nullptr) {
@@ -44,8 +54,7 @@ DBConnector::~DBConnector() {
     // close();
 }
 
-QString DBConnector::sqlite_version()
-{
+QString DBConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
@@ -53,6 +62,7 @@ bool DBConnector::open(const std::string &name) {
     int rc = sqlite3_open(name.c_str(), &db);
     if (rc) {
         qDebug() << "[DBConnector]" << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
+        qFatal("Can't open DB");
         return false;
     } else {
         m_file = name;
@@ -141,7 +151,7 @@ std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
     if (rs != SQLITE_DONE)
 #endif
         if (QString(query.c_str()).indexOf("SELECT  type") == -1)
-            qDebug().nospace() << "[DBConnector]" << file().c_str() << "("
+            qDebug().nospace() << "[DBConnector] " << file().c_str() << "("
                                << (rs == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
     if (rs != SQLITE_DONE) {
         qDebug() << "[DBConnector]" << file().c_str() << "error: " << sqlite3_errmsg(db);

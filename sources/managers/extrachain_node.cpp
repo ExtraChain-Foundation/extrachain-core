@@ -19,29 +19,20 @@
 
 #include "managers/extrachain_node.h"
 
-#include "datastorage/dfs/dfs_controller.h"
-#include "datastorage/dfs/permission_manager.h"
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
+#include "datastorage/dfs/dfs_controller.h"
+#include "datastorage/dfs/permission_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
-#include "dfs/controls/headers/dfs.h"
-#include "dfs/controls/headers/subscribe_controller.h"
-#include "dfs/managers/headers/dfs_networkmanager.h"
+#include "enc/enc_tools.h"
 #include "managers/account_controller.h"
-#include "managers/chatmanager.h"
-#include "managers/contract_manager.h"
-#include "managers/file_updater_manager.h"
-#include "managers/sm_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
-#include "network/packages/service/message_types.h"
-#include "profile/private_profile.h"
-#include "resolve/resolve_manager.h"
 
-#include <sodium.h>
+#include <sodium/core.h>
 
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
@@ -56,53 +47,25 @@ ExtraChainNode::ExtraChainNode() {
     }
 
     prepareFolders();
-    m_actorIndex = new ActorIndex();
-    m_privateProfile = new PrivateProfile();
-    m_smartContractManager = new SmartContractManager(m_actorIndex);
-    m_accountController = new AccountController(m_actorIndex, this);
-    m_networkManager = new NetworkManager(m_actorIndex);
-    m_subscribeController = new SubscribeController();
-    m_subscribeController->setExtraChainNode(this);
-    m_actorIndex->setAccController(m_accountController);
-    ThreadPool::addThread(m_networkManager);
-    // this->thread()->sleep(1);
-    m_blockchain = new Blockchain(m_accountController, fileMode);
-    m_accountController->setBlockchain(m_blockchain);
-    m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
-    m_privateProfile->setAccountController(m_accountController);
-    m_chatManager = new ChatManager(m_accountController, m_actorIndex);
-    m_chatManager->setNetworkManager(m_networkManager);
-    // contractManager = new ContractManager(accController, blockchain);
-    m_dfs = new Dfs(m_actorIndex, m_accountController);
+    m_actorIndex = new ActorIndex(this);
+    m_accountController = new AccountController(*this);
+    m_networkManager = new NetworkManager(this);
 
-    m_resolveManager =
-        new ResolveManager(m_actorIndex, m_blockchain, m_networkManager, m_txManager, m_accountController);
-    m_resolveManager->setNode(this);
-    m_resolveManager->setChatManager(m_chatManager);
+    ThreadPool::addThread(m_networkManager);
+    m_blockchain = new Blockchain(this, fileMode);
+    m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
+
+    m_dfs = new DfsController(*this);
+
     m_blockchain->setTxManager(m_txManager);
-    m_networkManager->setResolveManager(m_resolveManager);
-    // dfs->initDfsNetwork(resolveManager);
-    m_privateProfile->setDfs(m_dfs);
-    m_actorIndex->setResolveManager(m_resolveManager);
     connectSignals();
 
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
 
-    ThreadPool::addThread(m_blockchain);
-    ThreadPool::addThread(m_actorIndex);
-    ThreadPool::addThread(m_txManager);
-    // ThreadPool::addThread(contractManager);
-    ThreadPool::addThread(m_dfs);
-    ThreadPool::addThread(m_smartContractManager);
-    ThreadPool::addThread(m_resolveManager);
-    ThreadPool::addThread(m_privateProfile);
-    ThreadPool::addThread(m_chatManager);
-
-    // QTimer::singleShot(2000, qApp, &QCoreApplication::quit);
-    // FileUpdaterManager fl;
-    // fl.verifyMyFiles("02c9b394cf3785389f82");
+    // ThreadPool::addThread(m_blockchain);
+    // ThreadPool::addThread(m_txManager);
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -111,9 +74,8 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
-        QByteArray consoleHash = Utils::calcKeccak(email.toUtf8() + password.toUtf8());
-        auto first = m_accountController->createActor(ActorType::ServiceProvider, consoleHash);
-        emit savePrivateProfile(consoleHash, first.id());
+        auto consoleHash = Utils::calcKeccak(email.toStdString() + password.toStdString());
+        auto first = m_accountController->createProfile(consoleHash, ActorType::ServiceProvider);
         m_actorIndex->setFirstId(first.id());
     } else {
         qInfo() << "You cannot create a new network, data is not empty";
@@ -129,18 +91,20 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
         m_blockchain->addBlock(tmp, true);
 
-        emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
-                                   tokenColor.toLatin1());
+        // emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
+        //                            tokenColor.toLatin1());
 
-        // TODO: usernames: move to console
-        DBConnector dbc(
-            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" + DfsStruct::ACTOR_CARD_FILE).toStdString());
-        dbc.createTable(Config::DataStorage::cardTableCreation);
-        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
-        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME + "/%1/services/usernames").arg(firstId);
-        DBConnector usernamesDB(usernamesPath.toStdString());
-        usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
-        m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
+        //        // TODO: usernames: move to console
+        //        DBConnector dbc(
+        //            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" +
+        //            DfsStruct::ACTOR_CARD_FILE).toStdString());
+        //        dbc.createTable(Config::DataStorage::cardTableCreation);
+        //        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
+        //        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME +
+        //        "/%1/services/usernames").arg(firstId); DBConnector
+        //        usernamesDB(usernamesPath.toStdString());
+        //        usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
+        //        // m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
 
     return true;
@@ -158,44 +122,20 @@ void ExtraChainNode::showMessage(QString from, QString message) {
     qDebug() << from << " " << message;
 }
 
-void ExtraChainNode::connectResolveManager() {
-    //    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
-    //    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
-    //    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
-    //    resolveManager,
-    //            &ResolveManager::resolveMessage);
-    // TODO: move
-    //    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
+// void ExtraChainNode::connectResolveManager() {
+//    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
+//    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
+//    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
+//    resolveManager,
+//            &ResolveManager::resolveMessage);
+// TODO: move
+//    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
 
-    connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
-    connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
-    connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
-    //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
-}
-
-void ExtraChainNode::connectSmContractManager() {
-    //    connect(smContractController, &SmartContractManager::verifyActor, m_networkManager,
-    //    &networkManager::NewActor); TODO!!!
-    //    connect(smContractController, &SmartContractManager::addContractActorInActorIndex, this,
-    //            &ExtraChainNode::addActorInActorIndex);
-    connect(m_smartContractManager, &SmartContractManager::saveActorInPrivateProfile,
-            [this](const QByteArray &id, const QString &type, const bool &rewrite) { // TODO?
-                auto mainId = m_accountController->mainActor().id().toByteArray();
-                emit nodeEditPrivateProfile({ m_privateProfile->hash(), mainId }, type, id, rewrite);
-            });
-
-    //[this](QString userId, Profile profile) { emit profileToUi(userId, profile); });
-    connect(this, &ExtraChainNode::nodeEditPrivateProfile, m_privateProfile,
-            &PrivateProfile::editPrivateProfile);
-
-    connect(this, &ExtraChainNode::generateSmartContract, m_smartContractManager,
-            &SmartContractManager::createContractProfile);
-    connect(m_smartContractManager, &SmartContractManager::sendTransactionCreateContract, m_resolveManager,
-            &ResolveManager::registrateMsg);
-
-    // connect(smContractController, &SmartContractManager::sendCurrentToken, m_networkManager,
-    // &networkManager::NewActor);
-}
+// connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
+// connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
+// connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
+//    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
+// }
 
 void ExtraChainNode::connectTxManager() {
     // TODOD delete later (s)
@@ -207,8 +147,6 @@ ExtraChainNode::~ExtraChainNode() {
     emit m_txManager->finished();
     emit m_txManager->finished();
     emit m_blockchain->finished();
-    emit m_accountController->finished();
-    emit m_actorIndex->finished();
 }
 
 // DFSIndex *ExtraChainNode::getDFSIndex(){
@@ -219,7 +157,7 @@ Blockchain *ExtraChainNode::blockchain() {
     return m_blockchain;
 }
 
-NetworkManager *ExtraChainNode::networkManager() {
+NetworkManager *ExtraChainNode::network() {
     return m_networkManager;
 }
 
@@ -229,7 +167,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->currentWallet();
     if (!actor.empty()) {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
                         .arg(tx.toString(), QString(actor.id().toByteArray()));
@@ -254,7 +192,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
             emit NewTx(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-            emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
+            // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
         } else {
             BigNumber amountTemp(tx.getAmount());
             if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
@@ -273,8 +211,8 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
                 }
 
                 // send fee tx
-                emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
-                emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
+                // TODONEW emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
+                // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
             } else {
                 qDebug() << "Not enough money ";
                 return Transaction();
@@ -295,7 +233,7 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->currentWallet();
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
@@ -315,7 +253,7 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
 
 Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
                                                     ActorId token) {
-    Actor<KeyPrivate> actor = m_accountController->getCurrentActor();
+    Actor<KeyPrivate> actor = m_accountController->currentWallet();
 
     if (!actor.empty()) {
         if (receiver.isEmpty()) {
@@ -339,6 +277,57 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
     return Transaction();
 }
 
+std::string ExtraChainNode::exportUser() {
+    auto hash = m_accountController->currentProfile().hash();
+
+    QJsonArray array;
+    array << QString("ExtraChain %1").arg(qApp->applicationVersion()); // 0
+    array << QDateTime::currentSecsSinceEpoch();                       // 1
+
+    auto privateProfile = m_accountController->currentProfile().toJson();
+    array << privateProfile; // 3
+
+    auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
+    auto data = SecretKey::encryptWithPassword(json, hash);
+    return data;
+}
+
+bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
+                                const std::string &password) {
+    auto hash = Utils::calcKeccak(login + password);
+
+    auto json = SecretKey::decryptWithPassword(data, hash);
+    if (hash.empty() || json.empty()) {
+        return false;
+    }
+
+    auto array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
+    if (array.count() != 3) {
+        return false;
+    }
+
+    auto extrachain = array[0].toString();
+    auto date = array[1].toInteger();
+    auto profile = array[2].toObject();
+    auto profileBytes = QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    auto profileBytesEncrypted =
+        QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
+
+    Q_UNUSED(extrachain)
+    Q_UNUSED(date)
+
+    QString privateProfile = "keystore/" + profile["main"].toString() + ".profile";
+
+    QFile file(privateProfile);
+    file.open(QFile::WriteOnly);
+    file.write(profileBytesEncrypted);
+    file.close();
+
+    m_accountController->addToProfileList(profile["main"].toString().toStdString());
+
+    return true;
+}
+
 Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
                                                   ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
@@ -346,7 +335,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->getActor(sender);
+    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActorConst(sender);
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
@@ -365,18 +354,12 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
     return Transaction();
 }
 
-void ExtraChainNode::getAllActors() {
-    //    QByteArray res = getIdPrivateProfile();
-    //    if (!res.isEmpty())
-    //        emit getAllActorsNode(res, true);
-}
-
 void ExtraChainNode::getAllActorsTimerCall() {
-    if (m_accountController->getAccountCount() > 0 && m_networkManager->connections().length() > 0) {
+    if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
         ActorId actorId = m_accountController->mainActor().id();
 
         if (!actorId.isEmpty())
-            emit getAllActorsNode(actorId, true);
+            m_actorIndex->getAllActors(actorId, true);
     }
 }
 
@@ -400,26 +383,26 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto &mainKey = m_accountController->mainActor().key();
     auto &publicKey = first.key().publicKey();
 
-    QMap<QString, QByteArray> map = { { "actor", actorId.toLatin1() },
-                                      { "token", mainKey.encrypt(token.toLatin1(), publicKey) },
-                                      { "os", mainKey.encrypt(os.toLatin1(), publicKey) } };
+    std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
+                                               { "token", mainKey.encrypt(token.toStdString(), publicKey) },
+                                               { "os", mainKey.encrypt(os.toStdString(), publicKey) } };
 
-    emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
+    // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
 void ExtraChainNode::connectContractManager() {
 }
 
 void ExtraChainNode::connectActorIndex() {
-    connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
+    // connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
 }
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
     connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
-    connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
-    connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
-    connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
+    // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
+    // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
+    // connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
     //    connect(chatManger, &ChatManager::sendDataToBlockhainFromChatManager, dfs, &Dfs::savedNewData);
     //    connect(networkManager, &NetworkManager::newDfsSocket, dfsNetworkManager,
     //    &DfsNetworkManager::appendSocket);
@@ -428,33 +411,25 @@ void ExtraChainNode::dfsConnection() {
 void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, []() { qInfo() << "Node: started"; });
     connectTxManager();
-    connectResolveManager();
     connectContractManager();
     //    connectAccountController();
     connectActorIndex();
-    connectSmContractManager();
     dfsConnection();
 
     connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
-
-    connect(this, &ExtraChainNode::removeConnection, m_networkManager, &NetworkManager::removeConnection);
-    connect(this, &ExtraChainNode::removeConnection, m_dfs, &Dfs::removeConnection);
-    connect(this, &ExtraChainNode::getAllActorsNode, m_actorIndex, &ActorIndex::getAllActors);
-    connect(m_accountController, &AccountController::loadWallets, m_blockchain,
-            &Blockchain::updateBlockchain);
-
-    connect(this, &ExtraChainNode::login, m_privateProfile, &PrivateProfile::loadPrivateProfileLogin);
-    connect(this, &ExtraChainNode::savePrivateProfile, m_privateProfile, &PrivateProfile::savePrivateProfile);
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
+    // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
+    //         &Blockchain::updateBlockchain);
 }
 
 void ExtraChainNode::prepareFolders() {
     qDebug() << "Preparing folders";
     qDebug() << "Working directory:" << QDir::currentPath();
 
-    QDir().mkpath(KeyStore::USER_KEYSTORE);
+    QDir().mkpath(QString::fromStdString(KeyStore::folder));
     QDir().mkpath(DataStorage::TMP_FOLDER);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
@@ -471,56 +446,18 @@ ActorIndex *ExtraChainNode::actorIndex() const {
     return m_actorIndex;
 }
 
-ResolveManager *ExtraChainNode::resolveManager() const {
-    return m_resolveManager;
-}
-
-PrivateProfile *ExtraChainNode::privateProfile() const {
-    return m_privateProfile;
-}
-
-SubscribeController *ExtraChainNode::subscribeController() const {
-    return m_subscribeController;
-}
-
-void ExtraChainNode::logOut() {
-}
-
-// void ExtraChainNode::createActorWith
-
-// void ExtraChainNode::makeContractFirstTransaction(Contract &contract)
-//{
-//    qDebug() << "ExtraChainNode::makeContractFirstTransaction";
-//    //    contract.setFirst_transaction_hash(
-//    //        createTransaction(BigNumber(0), contract.getAmount()).getHash());
-//    m_networkManager->shareContract(contract);
-//}
-
-// void ExtraChainNode::makeContractFinalTransaction(Contract &contract)
-//{
-//    contract.setFinal_transaction_hash(
-//        createTransaction(contract.getPerformer(), contract.getAmount()).getHash());
-//    qDebug() << contract.serialize();
-//    contract.setIsCompleted(true);
-//    m_networkManager->shareContract(contract);
-//}
-
-ChatManager *ExtraChainNode::chatManager() const {
-    return m_chatManager;
-}
-
-Dfs *ExtraChainNode::dfs() const {
+DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
-
-void ExtraChainNode::testSerializer() const
-{
-    // Mock actor create
+void ExtraChainNode::testSerializer() const {
+    /*
+   // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor1 = m_accountController->createActor(ActorType::Account, userHash);
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
+   Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
+   m_accountController->createActor(ActorType::Account, userHash);
 
     auto actor2 = m_accountController->createActor(ActorType::Account, "random");
     auto actor3 = m_accountController->createActor(ActorType::Account, "random");
@@ -537,21 +474,38 @@ void ExtraChainNode::testSerializer() const
     auto msgQt = actor1.serializeQt();
     actor3.deserializeQt(msgQt);
     assert(actor1.idStd() == actor3.idStd());
+    */
 }
 
-void ExtraChainNode::testPermissions() const
-{
+bool ExtraChainNode::login(const std::string &login, const std::string &password) {
+    return m_accountController->load(Utils::calcKeccak(login + password));
+}
+
+bool ExtraChainNode::login(const std::string &hash) {
+    return m_accountController->load(hash);
+}
+
+void ExtraChainNode::logout() {
+    m_accountController->clear();
+    // auto hash remove
+    std::exit(0);
+}
+
+void ExtraChainNode::testPermissions() const {
+    /*
     // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor = m_accountController->createActor(ActorType::Account, userHash);
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
+    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    m_accountController->createActor(ActorType::Account, userHash);
 
     // Mock actor create
     const std::string userEmail1 = "test@test.com";
     const std::string userPass1 = "12345678";
-    const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor1 = m_accountController->createActor(ActorType::Account, userHash1);
+    const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
+    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
+    m_accountController->createActor(ActorType::Account, userHash1);
 
     DFSController dfsController;
     dfsController.initDB(actor);
@@ -586,8 +540,8 @@ void ExtraChainNode::testPermissions() const
     };
 
     struct SetPermission : public TestSet{
-        SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash, PermissionManager::Permission permission, bool result) :
-            TestSet(cmd, actor, userId, fileHash),
+        SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
+    PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId, fileHash),
             permission(permission),
             resultSet(result) {}
         PermissionManager::Permission permission;
@@ -595,23 +549,26 @@ void ExtraChainNode::testPermissions() const
     };
 
     struct GetPermission : public TestSet{
-        GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash, PermissionManager::Permission permission) :
-            TestSet(cmd, actor, userId, fileHash), resultGet(permission) {}
-        PermissionManager::Permission resultGet;
+        GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
+    PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash), resultGet(permission)
+    {} PermissionManager::Permission resultGet;
     };
 
     std::vector<TestSet*> testSet;
-    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Read));
-    testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(), ".perm", PermissionManager::Edit));
-    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission));
-    testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
+    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm",
+    PermissionManager::Read)); testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(),
+    ".perm", PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor,
+    actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission)); testSet.emplace_back(new
+    GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
 
-    testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic", PermissionManager::Edit, false));
-    testSet.emplace_back(new SetPermission("set", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true));
-    testSet.emplace_back(new SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
+    testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic",
+    PermissionManager::Edit, false)); testSet.emplace_back(new SetPermission("set", actor,
+    actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true)); testSet.emplace_back(new
+    SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
 
-    testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit));
-    testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(), ".perm", PermissionManager::Edit));
+    testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate",
+    PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(),
+    ".perm", PermissionManager::Edit));
 
     for(auto & test: testSet)
     {
@@ -638,14 +595,17 @@ void ExtraChainNode::testPermissions() const
     {
         delete ptr;
     }
+    */
 }
 
 void ExtraChainNode::test() const {
+    /*
     // Mock actor create
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); // Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8());
-    auto actor = m_accountController->createActor(ActorType::ServiceProvider, userHash);
+    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
+    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    m_accountController->createActor(ActorType::ServiceProvider, userHash);
 
     DFSController dfsController;
     dfsController.initDB(actor);
@@ -706,10 +666,10 @@ void ExtraChainNode::test() const {
     editFileMsg.fileHash = fHashPublic;
     editFileMsg.data = newContent;
     editFileMsg.offset = "0";
-    fHashPublic = dfsController.editFile(actor, editFileMsg);
+    fHashPublic = dfsController.insertFragment(actor, editFileMsg);
 
     editFileMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.editFile(actor, editFileMsg);
+    fHashPrivate = dfsController.insertFragment(actor, editFileMsg);
     if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
         qDebug() << "editFile succeeded";
     else
@@ -787,4 +747,5 @@ void ExtraChainNode::test() const {
     removeFileMsg.fileHash = fHashPrivate;
     result = dfsController.removeFile(actor, removeFileMsg);
     qDebug() << "Remove file:" << fHashPrivate << ", status:" << result;
+    */
 }

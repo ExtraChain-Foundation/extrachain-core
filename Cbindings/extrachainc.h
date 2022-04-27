@@ -53,7 +53,7 @@ char *extrachain_decrypt(const char *data, size_t size, const ActorPrivate *acto
 char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate *actor_private);
 char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate *actor_private);
 
-void extrachain_network_connect(const char *ip, int type);   // type: 1 - tcp, 2 - ws
+void extrachain_network_connect(const char *ip, int type);   // type: 1 - udp, 2 - ws
 void extrachain_network_send(const char *data, size_t size); // TODO: package num
 
 // void extrachain_create_profile

@@ -1,136 +1,87 @@
-#pragma once
+#ifndef DFS_CONTROLLER_H
+#define DFS_CONTROLLER_H
 
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include <QDebug>
+#include <QDir>
+#include <QFileInfo>
 #include <QObject>
 
+#include <boost/interprocess/file_mapping.hpp>
+#include <boost/interprocess/mapped_region.hpp>
+#include <filesystem>
+
 #include "datastorage/actor.h"
+#include "datastorage/index/actorindex.h"
+#include "managers/account_controller.h"
+#include "managers/extrachain_node.h"
 #include "utils/db_connector.h"
+#include "utils/dfs_utils.h"
+#include "utils/exc_utils.h"
 
-class EXTRACHAIN_EXPORT DFSController : public QObject {
+class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
-public:
-    enum DFSControllerErrors {
-        RootDirCreateError = -2,
-        ActorDirCreateError = -3,
-        DBOpenError = -4,
-        DBCreateTableError = -5,
-    };
-
-    enum SecurityLevel
-    {
-        Private = 0,
-        Public = 1
-    };
-
-    const QStringList SecurityLevelName = { "private", "public" };
-
-
-    struct AddFileMsg;
-    struct RemoveFileMsg;
-    struct EditFileMsg;
-    struct AddSegmentMsg;
-    struct DeleteSegmentMsg;
-
-    DFSController(QObject* parent = nullptr);
-    ~DFSController();
-
-    // Internal use only
-    QByteArray addFile(const Actor<KeyPrivate> & actor, const QString & filePath, SecurityLevel securityLevel);
-    QByteArray readFile(const Actor<KeyPrivate> & actor, const QString &fileHash);
-
-    // External interfaces
-    QByteArray addFile(const Actor<KeyPrivate> & actor, const AddFileMsg & msg);
-    bool removeFile(const Actor<KeyPrivate> & actor, const RemoveFileMsg & msg);
-    QByteArray editFile(const Actor<KeyPrivate> & actor, const EditFileMsg & msg);
-
-    bool flushDirContent(const QString & userId);
-    bool initDB(const Actor<KeyPrivate> & actor);
 
 private:
-    static const QString DFSRootDirName;
-    static const QString DFSDBName;
-    static const QString DFSService;
+    ExtraChainNode &node;
+    uint64_t m_bytesLimit = 8589934592;
+    uint64_t m_sizeTaken = 0;
+    std::map<std::string, DFS::Packets::AddFileMessage> files;
 
-    QString makeActorDirPath(const QString & actorId);
-    QString makeSecurityDirPath(const Actor<KeyPrivate> & actor, SecurityLevel securityLevel);
-    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
-    QString makeGlobalPath(const QString & virtualPath, const QString & userId);
-    SecurityLevel getSecurityLevel(const QString & virtualPath);
+public:
+    DfsController(ExtraChainNode &node, QObject *parent = nullptr);
+    ~DfsController();
 
-    bool createDirectory(const QString & path);
-    void initGlobalDB(const QString & sqliteDBTargetPath);
-    DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath, const QString & fileSize);
-    DBRow makeDBRow(const QString & fileHash, const QString & fileHashPrev, const QString & filePath,
-                    const QString & fileSegmentBegin, const QString & fileSegmentEnd, const QString & fileSize);
-    DBRow findDBRow(DBConnector & db, const QString & tableName, const QString & fileHash);
-    std::vector<DBRow> findDBRows(const std::string & fileHash);
-    std::optional<DBRow> lastRow();
-    QString lastHash();
-    std::string toStdString(DBRow & r) const;
-    QString toString(DBRow & r) const;
+    void initializeActor(const ActorId &actorId);
 
-    bool setDBFieldValue(DBConnector & db,
-                         const QString & tableName,
-                         const QString & searchColumnTitle,
-                         const QString & searchValue,
-                         const QString & changeColumnTitle,
-                         const QString & changeValue);
+    // Internal use only
+    std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+                             std::string targetVirtualFilePath, DFS::Encryption securityLevel);
+    void removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
+    // visualMoveFile
 
-    DBConnector m_db;
-    DBConnector m_db_local;
+    // External interfaces
+    std::string addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes);
+    std::string getFileFromStorage(ActorId owner, std::string fileHash);
+    bool removeFile(const DFS::Packets::RemoveFileMessage &msg);
 
-public slots:
-    QByteArray addFileSegment(const Actor<KeyPrivate> & actor, const AddSegmentMsg & msg);  // Place newSegment after the byteIndex pos
-    QByteArray deleteFileSegment(const Actor<KeyPrivate> &actor, const DeleteSegmentMsg & msg);  // Delete file content from the firstByteIndex
+private:
+    bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
+    bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
+    DBRow makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
+                           uint64_t fileSize);
+    uint64_t calculateSizeTaken(const std::string &folder = DFS::Basic::fsActrRoot);
+    std::string extractNextFragment();
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
+                                uint64_t fragmentSize);
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
+
+public:
+    void requestSync();
+    void sendSync(uint64_t lastModified, const std::string &messageId);
+    void requestDirData(const ActorId &actorId);
+    void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);
+    void addDirData(const ActorId &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
+    void requestFile(const ActorId &actorId, const std::string &fileHash);
+    void sendFile(const ActorId &actorId, const std::string &fileHash, const std::string &messageId);
+    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg, const std::string &messageId);
+    std::string addFragment(const DFS::Packets::EditSegmentMessage &msg);
+    std::string insertFragment(const DFS::Packets::EditSegmentMessage &msg);
+    std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
+    uint64_t bytesLimit() const;
+    void setBytesLimit(uint64_t bytesLimit);
+
+signals:
+    void added(ActorId actorId, std::string fileHash, std::string visual, int64_t size);
+    void uploaded(ActorId actorId, std::string fileHash); // TODO: loadId
+    void downloaded(ActorId actorId, std::string fileHash);
+    void downloadProgress(ActorId actorId, std::string fileHash, int progress);
+    void uploadProgress(ActorId actorId, std::string fileHash, int progress);
 };
 
-inline std::string DFSController::toStdString(DBRow &r) const {
-    return "(" + r["fileHash"] + ", " + r["fileHashPrev"] + ", " + r["filePath"] + ")";
-}
-
-inline QString DFSController::toString(DBRow &r) const {
-    return QString("(%1, %2, %3)").arg(r["fileHash"].c_str(), r["fileHashPrev"].c_str(), r["filePath"].c_str());
-}
-
-
-struct DFSController::AddFileMsg {
-    std::string userId;
-    std::string fileHash;
-    std::string path;
-    std::string size;
-
-    AUTO_SERIALIZE(userId, fileHash, path, size);
-};
-
-struct DFSController::RemoveFileMsg {
-    std::string userId;
-    std::string fileHash;
-
-    AUTO_SERIALIZE(userId, fileHash);
-};
-
-struct DFSController::EditFileMsg {
-    std::string userId;
-    std::string fileHash;
-    std::string data;
-    std::string offset;
-
-    AUTO_SERIALIZE(userId, fileHash, data, offset);
-};
-
-struct DFSController::AddSegmentMsg {
-    std::string userId;
-    std::string fileHash;
-    std::string data;
-    std::string offset;
-
-    AUTO_SERIALIZE(userId, fileHash, data, offset);
-};
-
-struct DFSController::DeleteSegmentMsg {
-    std::string userId;
-    std::string fileHash;
-    std::string offset;
-    std::string size;
-
-    AUTO_SERIALIZE(userId, fileHash, offset, size);
-};
+#endif // DFS_CONTROLLER_H

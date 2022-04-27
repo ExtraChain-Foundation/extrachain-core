@@ -36,7 +36,7 @@
 #endif
 
 bool LogsManager::toConsole = true;
-bool LogsManager::toFile = true;
+bool LogsManager::toFile = false;
 bool LogsManager::toModel =
 #ifdef LOG_FILENAME
     true;
@@ -243,8 +243,6 @@ void LogsManager::offQml() {
 void LogsManager::etHandler() {
     std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
-
-    QDir().mkpath("logs");
     qInstallMessageHandler(LogsManager::messageHandler);
 
 #ifdef Q_OS_WIN

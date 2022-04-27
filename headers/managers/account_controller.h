@@ -21,16 +21,11 @@
 #define ACCOUNT_CONTROLLER_H
 
 #include <QDebug>
-#include <QObject>
 
-//#include "enc/enc_tools.h"
 #include "datastorage/actor.h"
-#include "utils/bignumber.h"
-//#include "datastorage/index/actorindex.h"
-//#include "enc/key_private.h"
+#include "datastorage/private_profile.h"
+#include "utils/autologinhash.h"
 
-class Blockchain;
-class ActorIndex;
 class ExtraChainNode;
 
 /**
@@ -38,88 +33,47 @@ class ExtraChainNode;
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-class EXTRACHAIN_EXPORT AccountController : public QObject {
-    Q_OBJECT
-
-private:
-    // Current user, used in AccountController.
-    int userNum = 0;
-    Blockchain *blockchain;
-    QList<Actor<KeyPrivate>> m_accounts;
-    ActorIndex *actorIndex;
-    ExtraChainNode *m_node;
-
+class EXTRACHAIN_EXPORT AccountController {
 public:
-    AccountController(ActorIndex *actorIndex, ExtraChainNode *node);
-    QList<QByteArray> getAccountID();
+    AccountController(ExtraChainNode &node);
 
-public:
     /**
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createActor(ActorType account, QByteArray hashLogin);
-    //    Actor<KeyPrivate> createActorWithId(BigNumber id, bool account, bool contract = false);
-    Actor<KeyPrivate> getActor(const ActorId &id);
+    Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
+    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId());
+    // createService
+    // createServiceProvider
 
-    /**
-     * @brief Gets Actor by public key
-     * @param pubkey - serialized public key
-     * @return actor
-     */
-    Actor<KeyPrivate> getActor(int number);
+    bool load(const std::string &hash);
+
     const Actor<KeyPrivate> &mainActor();
 
+    PrivateProfile &getProfile(const ActorId &actorId);
     /**
-     * @brief Gets current active actor
+     * @brief Gets current active profile
      * @return actor
      */
-    Actor<KeyPrivate> getCurrentActor();
+    const PrivateProfile &currentProfile() const;
 
-    int getAccountCount() const;
-    int getUserNum() const;
-    void setUserNum(int value);
+    int count() const;
+    void changeCurrentProfile(const ActorId &actorId);
 
-    const QList<Actor<KeyPrivate>> &accounts() const;
-    QList<ActorId> getListAccounts() const;
+    // const std::vector<Actor<KeyPrivate>> &accounts() const;
+    const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
+    const Actor<KeyPrivate> &currentWallet() const;         // temp
+    void clear();
 
-    Blockchain *getBlockchain() const;
-    ActorIndex *getActorIndex() const;
+    static std::vector<ActorId> profilesList();
+    void addToProfileList(const ActorId &actorId);
 
-    void setActorIndex(ActorIndex *value);
-    void setBlockchain(Blockchain *value);
+private:
+    ExtraChainNode &node;
+    AutologinHash autologinHash;
 
-public slots:
-    /**
-     * @brief Loads actors from local disk to memory: QList accounts;
-     */
-    void loadActors(const QByteArray &id, const QByteArrayList &idList, const QByteArray &hashLogin,
-                    const std::string &decryptKey);
-    /**
-     * @brief Saves Private actor on local disk in serialized form
-     * @param private actor
-     */
-    void savePrivateActor(Actor<KeyPrivate> actor, QByteArray hashLogin);
-    void clearAcc();
-    void changeUserNum(QByteArray);
-    void process();
-
-signals:
-    /**
-     * @brief verifyActor
-     * @param serialized private actor
-     */
-    void verifyActor(Actor<KeyPublic> actor);
-    void addActorInActorIndex(Actor<KeyPublic> actor);
-    //
-    void sentActorId(BigNumber actorId);
-    void loadWallets(QByteArray id, QByteArrayList idList);
-    void updateTransactionListInModel();
-    void newActorIsCreated(BigNumber id, bool isUser);
-    void savePrivateProfile(QByteArray id);
-    void finished();
-
-    void initDfs();
-    void editPrivateProfile(QByteArray id);
+    std::vector<PrivateProfile> m_profiles;
+    ActorId m_currentProfile;
 };
+
 #endif // ACCOUNT_CONTROLLER_H

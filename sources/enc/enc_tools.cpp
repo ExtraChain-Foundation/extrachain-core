@@ -7,8 +7,8 @@ using std::string, std::vector;
 string SecretKey::keygen() {
     vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
     crypto_secretbox_keygen(sk.data());
-    string skey = Utils::byteToHexString(sk);
-    skey.erase(--skey.end());
+    string skey = std::string(sk.begin(), sk.end());
+    // skey.erase(--skey.end());
     return skey;
 }
 
@@ -24,9 +24,26 @@ string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
                              crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                              crypto_pwhash_ALG_DEFAULT);
     (void)rst1; // unused warning
-    string skey = Utils::byteToHexString(key);
-    skey.erase(--skey.end());
+    string skey = std::string(key.begin(), key.end());
+    // skey.erase(--skey.end());
     return skey;
+}
+
+std::string SecretKey::sign(const std::string &data, const std::string &secret_key) {
+    std::vector<unsigned char> sk(secret_key.begin(), secret_key.end());
+    std::vector<unsigned char> vmsg(data.begin(), data.end());
+    std::vector<unsigned char> vsig(crypto_sign_BYTES);
+    crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
+    std::string sig = std::string(vsig.begin(), vsig.end());
+    return sig;
+}
+
+bool SecretKey::verify(const std::string &data, const std::string &public_key, const std::string &signature) {
+    std::vector<unsigned char> pk(public_key.begin(), public_key.end());
+    std::vector<unsigned char> vmsg(data.begin(), data.end());
+    std::vector<unsigned char> vsig(signature.begin(), signature.end());
+    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    return res == 0;
 }
 
 string SecretKey::encrypt(const string &msg, const string &secret_key) {
@@ -35,8 +52,7 @@ string SecretKey::encrypt(const string &msg, const string &secret_key) {
                secret_key.data());
 
     unsigned long long enc_size = crypto_secretbox_MACBYTES + msg.length();
-    string sks = Utils::hexStringToByte(secret_key);
-    vector<unsigned char> sk(sks.begin(), sks.end());
+    vector<unsigned char> sk(secret_key.begin(), secret_key.end());
 
     vector<unsigned char> enc_msg(enc_size);
     vector<unsigned char> dec_msg(msg.begin(), msg.end());
@@ -47,8 +63,7 @@ string SecretKey::encrypt(const string &msg, const string &secret_key) {
     string res;
     if (r == 0) {
         enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
-        res = Utils::byteToHexString(enc_msg);
-        res.erase(--res.end());
+        res = std::string(enc_msg.begin(), enc_msg.end());
     }
 
     if (res.empty())
@@ -62,7 +77,7 @@ string SecretKey::decrypt(const string &msg, const string &secret_key) {
         qFatal("[SecretKey::decrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
                secret_key.data());
 
-    string sdata = Utils::hexStringToByte(msg);
+    string sdata = msg;
 
     string s_nonce = sdata.substr(0, crypto_secretbox_NONCEBYTES);
     sdata.erase(0, crypto_secretbox_NONCEBYTES);
@@ -71,8 +86,7 @@ string SecretKey::decrypt(const string &msg, const string &secret_key) {
         qFatal("[SecretKey::decrypt] Incorrect msg: %s", msg.data());
 
     vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
-    string sks = Utils::hexStringToByte(secret_key);
-    vector<unsigned char> sk(sks.begin(), sks.end());
+    vector<unsigned char> sk(secret_key.begin(), secret_key.end());
     vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
     vector<unsigned char> dec_msg(enc_msg.size() - crypto_secretbox_MACBYTES);
 
@@ -100,13 +114,11 @@ string SecretKey::decryptWithPassword(const string &data, const string &password
 }
 
 std::pair<std::string, std::string> SecretKey::createAsymmetricPair() {
-    std::vector<unsigned char> sk(crypto_sign_SECRETKEYBYTES);
-    std::vector<unsigned char> pk(crypto_sign_PUBLICKEYBYTES);
+    std::vector<uint8_t> sk(crypto_sign_SECRETKEYBYTES);
+    std::vector<uint8_t> pk(crypto_sign_PUBLICKEYBYTES);
     crypto_sign_keypair(pk.data(), sk.data());
-    std::string m_secretKey = Utils::byteToHexString(sk);
-    m_secretKey.erase(--m_secretKey.end());
-    std::string m_publicKey = Utils::byteToHexString(pk);
-    m_publicKey.erase(--m_publicKey.end());
+    std::string m_secretKey = std::string(sk.begin(), sk.end());
+    std::string m_publicKey = std::string(pk.begin(), pk.end());
     return { m_secretKey, m_publicKey };
 }
 
@@ -116,10 +128,8 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
         qFatal("[SecretKey::encryptAsymmetric] data, secret or public is empty");
 
     unsigned long long enc_size = crypto_box_MACBYTES + data.length();
-    string pkrs = Utils::hexStringToByte(public_key);
-    vector<unsigned char> pkr(pkrs.begin(), pkrs.end());
-    string sk = Utils::hexStringToByte(secret_key);
-    vector<unsigned char> sks(sk.begin(), sk.end());
+    vector<unsigned char> pkr(public_key.begin(), public_key.end());
+    vector<unsigned char> sks(secret_key.begin(), secret_key.end());
 
     vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
     crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
@@ -147,8 +157,7 @@ std::string SecretKey::encryptAsymmetric(const std::string &data, const std::str
         if (nonce.size() != crypto_box_NONCEBYTES) {
             enc_msg.insert(enc_msg.begin(), vnonce.begin(), vnonce.end());
         }
-        res = Utils::byteToHexString(enc_msg);
-        res.erase(--res.end());
+        res = std::string(enc_msg.begin(), enc_msg.end());
     }
 
     if (res.empty())
@@ -163,9 +172,7 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
     if (data.empty() || secret_key.empty() || public_key.empty())
         qFatal("[SecretKey::decryptAsymmetric] data, secret or public is empty");
 
-    string sdata = Utils::hexStringToByte(data);
-    string pksr = Utils::hexStringToByte(public_key);
-    string sk = Utils::hexStringToByte(secret_key);
+    string sdata = data;
     vector<unsigned char> vnonce;
 
     if (nonce.size() == crypto_box_NONCEBYTES) {
@@ -183,8 +190,8 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
         qFatal("[SecretKey::decryptAsymmetric] Incorrect msg");
     }
 
-    vector<unsigned char> skr(sk.begin(), sk.end());
-    vector<unsigned char> pks(pksr.begin(), pksr.end());
+    vector<unsigned char> skr(secret_key.begin(), secret_key.end());
+    vector<unsigned char> pks(public_key.begin(), public_key.end());
 
     vector<unsigned char> xskr(crypto_scalarmult_curve25519_BYTES);
     crypto_sign_ed25519_sk_to_curve25519(xskr.data(), skr.data());
@@ -223,55 +230,4 @@ QByteArray SecretKey::decryptAsymmetric(const QByteArray &data, const QByteArray
     auto res = decryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
                                  nonce.toStdString());
     return QByteArray::fromStdString(res);
-}
-
-QByteArray SecretKey::encryptAsymmetric2(const QByteArray &data, const QByteArray &secret_key,
-                                         const QByteArray &public_key, const QByteArray &nonce) {
-    if (data.isEmpty() || secret_key.isEmpty() || public_key.isEmpty())
-        qFatal("[SecretKey::encryptAsymmetric] data, secret or public is empty");
-
-    auto pkrs = QByteArray::fromHex(public_key.data());
-    auto sk = QByteArray::fromHex(secret_key.data());
-
-    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), reinterpret_cast<const unsigned char *>(sk.data()));
-
-    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
-    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(),
-                                                        reinterpret_cast<const unsigned char *>(pkrs.data()));
-    Q_UNUSED(conv_res)
-
-    QByteArray enc_msg;
-    enc_msg.resize(crypto_box_MACBYTES + data.length());
-    QByteArray vnonce;
-
-    if (nonce.size() == crypto_box_NONCEBYTES) {
-        vnonce = nonce;
-    } else {
-        vnonce.resize(crypto_box_NONCEBYTES);
-        randombytes_buf(vnonce.data(), vnonce.size());
-    }
-
-    int r = crypto_box_easy(reinterpret_cast<unsigned char *>(enc_msg.data()),
-                            reinterpret_cast<const unsigned char *>(data.data()), data.size(),
-                            reinterpret_cast<const unsigned char *>(vnonce.data()), xpkr.data(), xsks.data());
-
-    QByteArray res;
-    if (r == 0) {
-        if (nonce.size() != crypto_box_NONCEBYTES) {
-            enc_msg.prepend(vnonce);
-        }
-        res = enc_msg.toHex();
-    }
-
-    if (res.isEmpty())
-        qDebug() << "[SecretKey::encryptAsymmetric] res is empty. msg:" << data.data()
-                 << "| secret:" << secret_key.data() << "| public:" << public_key.data()
-                 << "| nonce:" << nonce.data();
-    return res;
-}
-
-std::string SecretKey::sodium_version()
-{
-    return sodium_version_string();
 }

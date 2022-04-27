@@ -100,12 +100,12 @@ Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam para
             break;
         }
         case SearchEnum::BlockParam::Data: {
-            if (byPosition.getData() == id)
+            if (byPosition.getData() == id.toStdString())
                 return byPosition;
             break;
         }
         case SearchEnum::BlockParam::Hash: {
-            if (byPosition.getHash() == id)
+            if (byPosition.getHash() == id.toStdString())
                 return byPosition;
             break;
         }

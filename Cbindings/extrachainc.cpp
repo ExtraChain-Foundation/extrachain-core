@@ -63,7 +63,7 @@ Actor<KeyPrivate> ActorKeyPrivate_from_actor_private(const ActorPrivate *actor_p
     // TODO: checks
 
     Actor<KeyPrivate> actor;
-    actor.setId(ActorId(QByteArray(actor_private->id)));
+    actor.setId(ActorId(std::string(actor_private->id)));
     actor.setType(ActorType(actor_private->type));
     actor.setSecretKey(actor_private->secret_key, actor_private->public_key);
     return actor;
@@ -72,7 +72,7 @@ Actor<KeyPrivate> ActorKeyPrivate_from_actor_private(const ActorPrivate *actor_p
 Actor<KeyPublic> ActorKeyPublic_from_actor_public(const ActorPublic *actor_public) {
     // TODO: checks
     Actor<KeyPublic> actor;
-    actor.setId(ActorId(QByteArray(actor_public->id)));
+    actor.setId(ActorId(std::string(actor_public->id)));
     actor.setType(ActorType(actor_public->type));
     actor.setPublicKey(actor_public->public_key);
     return actor;
@@ -150,12 +150,13 @@ void extrachain_stop() {
 }
 
 ActorPrivate *extrachain_create_actor(int type) {
+    // TODO: add user, wallet functions
     if (type > 2 || type < 0) {
         qDebug() << "[ExtraChainC] Error type for creation actor";
         std::exit(0);
     }
 
-    auto actor = node->accountController()->createActor(ActorType(type), node->privateProfile()->hash());
+    auto actor = node->accountController()->createUser(ActorType(type), node->privateProfile()->hash());
 
     ActorPrivate *actor_private = actor_private_from_ActorKeyPrivate(actor);
 
@@ -171,7 +172,7 @@ void extrachain_auth(char *login, char *password) {
 }
 
 ActorPublic *extrachain_get_actor(char actor_id[]) {
-    ActorId actorId = QString::fromLatin1(actor_id, 20).toLatin1();
+    ActorId actorId = QString::fromLatin1(actor_id, 20).toStdString();
     auto actor = node->actorIndex()->getActor(actorId);
 
     if (actor.empty()) {
@@ -204,7 +205,7 @@ void extrachain_login() {
 
 char *extrachain_sign(const char *data, size_t size, const ActorPrivate *actor_private) {
     auto actor = ActorKeyPrivate_from_actor_private(actor_private);
-    auto sig = actor.key().sign(QByteArray::fromRawData(data, size));
+    auto sig = actor.key().sign(std::string(data, size));
     char *res;
     copy_char(res, sig.data(), sig.length());
     return res;
@@ -213,7 +214,7 @@ char *extrachain_sign(const char *data, size_t size, const ActorPrivate *actor_p
 bool extrachain_verify_private(const char *data, size_t size, const char *sign,
                                const ActorPrivate *actor_private) {
     auto actor = ActorKeyPrivate_from_actor_private(actor_private);
-    bool verify = actor.key().verify(QByteArray::fromRawData(data, size), sign);
+    bool verify = actor.key().verify(std::string(data, size), sign);
     return verify;
 }
 
@@ -247,7 +248,7 @@ char *extrachain_decrypt(const char *data, size_t size, const ActorPrivate *acto
 
 char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate *actor_private) {
     auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
-    auto encrypted = actorPrivate.key().encryptSelf(QByteArray(data, size));
+    auto encrypted = actorPrivate.key().encryptSelf(std::string(data, size));
     char *res;
     copy_char(res, encrypted);
     return res;
@@ -255,7 +256,7 @@ char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate 
 
 char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate *actor_private) {
     auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
-    auto decrypted = actorPrivate.key().decryptSelf(QByteArray(data, size));
+    auto decrypted = actorPrivate.key().decryptSelf(std::string(data, size));
     char *res;
     copy_char(res, decrypted);
     return res;
@@ -269,9 +270,9 @@ void extrachain_network_connect(const char *ip, int type) {
     if (type != 1 && type != 2)
         return;
 
-    node->networkManager()->connectToNode(ip, Network::Protocol(type));
+    node->network()->connectToNode(ip, Network::Protocol(type));
 }
 
 void extrachain_network_send(const char *data, size_t size) {
-    node->networkManager()->send(data, 0, SocketPair(), Config::Net::TypeSend(0));
+    // node->network()->send(data, 0, SocketPair(), Config::Net::TypeSend(0));
 }

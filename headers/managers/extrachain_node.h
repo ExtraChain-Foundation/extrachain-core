@@ -27,17 +27,12 @@
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
 
-class Dfs;
+class DfsController;
 class ActorIndex;
 class Blockchain;
 class NetworkManager;
 class TransactionManager;
 class AccountController;
-class SmartContractManager;
-class ChatManager;
-class ResolveManager;
-class SubscribeController;
-class PrivateProfile;
 class Transaction;
 class ActorId;
 class BigNumber;
@@ -51,20 +46,16 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 
 private:
     // common object for
+    DfsController *m_dfs = nullptr;
+    ActorIndex *m_actorIndex = nullptr;
+    Blockchain *m_blockchain = nullptr;
+    NetworkManager *m_networkManager = nullptr;
+    TransactionManager *m_txManager = nullptr;
+    AccountController *m_accountController = nullptr;
+    // ContractManager *m_contractManager = nullptr;
+
     bool fileMode = true;
     bool started = false;
-    Dfs *m_dfs;
-    ActorIndex *m_actorIndex;
-    Blockchain *m_blockchain;
-    NetworkManager *m_networkManager;
-    TransactionManager *m_txManager;
-    AccountController *m_accountController;
-    SmartContractManager *m_smartContractManager;
-    ChatManager *m_chatManager;
-    ResolveManager *m_resolveManager;
-    SubscribeController *m_subscribeController;
-    PrivateProfile *m_privateProfile;
-    // ContractManager *m_contractManager;
 
 public:
     ExtraChainNode();
@@ -75,19 +66,19 @@ public:
                           const QString &tokenCount, const QString &tokenColor);
     void start();
     Blockchain *blockchain();
-    NetworkManager *networkManager();
+    NetworkManager *network();
     AccountController *accountController() const;
     ActorIndex *actorIndex() const;
-    ResolveManager *resolveManager() const;
-    PrivateProfile *privateProfile() const;
-    SubscribeController *subscribeController() const;
-    ChatManager *chatManager() const;
-    Dfs *dfs() const;
+    DfsController *dfs() const;
 
     // Remove this function before merge
     void test() const;
     void testPermissions() const;
     void testSerializer() const;
+
+    bool login(const std::string &login, const std::string &password);
+    bool login(const std::string &hash);
+    void logout();
 
     /**
      * @brief Create new transaction from current user
@@ -113,13 +104,17 @@ public:
      */
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
 
+    std::string exportUser();
+    bool importUser(const std::string &data, const std::string &login, const std::string &password);
+    // TODO: prepareImportUser: get visual info about file
+
+    void createNetworkIdentifier();
+
 private:
     void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetworkManager and Blockchain
      */
-    void connectResolveManager();
-    void connectSmContractManager();
     void connectTxManager();
     void connectContractManager();
     void connectBlockchain();
@@ -135,38 +130,14 @@ private:
 
 signals:
     void ready();
-    void sendMsg(const QByteArray &data, const unsigned int &type);
-    void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
-    // created keys for chat
-    void sendKey(QByteArray key);
-    void sendPrivateKey(QByteArray prKey);
-    // public:
-    void saveProfile(Actor<KeyPrivate> key, QByteArrayList profile);
-    void sendTransactionContract(Transaction tx);
-    // void addActorInActorIndex(Actor<KeyPublic> actor);
-    void nodeEditPrivateProfile(QPair<QByteArray, QByteArray>, const QString &type, const QByteArray &Data,
-                                const bool &reWrite);
-    void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void savePrivateProfile(const QByteArray &hash, const ActorId &id);
-    void getAllActorsNode(ActorId id, bool acc);
-    void login(const QByteArray &login, const QByteArray &password);
-    void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
-                               QByteArray color);
-    void removeConnection(QString identifier);
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
 
 private slots:
-    void getAllActors();
     void getAllActorsTimerCall();
-    void logOut();
-
-    // void makeContractFirstTransaction(Contract &contract);
-    // void makeContractFinalTransaction(Contract &contract);
 
 public slots:
-    void createNetworkIdentifier();
     void notificationToken(QString os, QString actorId, QString token);
 };
 #endif // EXTRACHAIN_NODE_H

@@ -52,8 +52,8 @@ void DiscoveryService::process() {
                 && broadcastAddress != QHostAddress::LocalHost
                 && broadcastAddress != QHostAddress(QHostAddress::LocalHost)) {
                 qDebug() << broadcastAddress << " " << QHostAddress(QHostAddress::LocalHost);
-                if (broadcastAddress != local->ip())
-                    socket->writeDatagram(Messages::createPingMessage(), broadcastAddress, port);
+                // if (broadcastAddress != local->ip())
+                //    socket->writeDatagram(Messages::createPingMessage(), broadcastAddress, port);
             }
         }
     }
@@ -65,7 +65,7 @@ void DiscoveryService::process() {
             // qDebug() << "DISCOVERY SERVICE: finder";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            socket->writeDatagram(Messages::createPingMessage(), QHostAddress(i /*"ip"*/), port);
+            // socket->writeDatagram(Messages::createPingMessage(), QHostAddress(i /*"ip"*/), port);
             // qDebug() << "udp send message";
         }
     }
@@ -74,6 +74,7 @@ void DiscoveryService::process() {
 void DiscoveryService::recieveMsg() {
     qDebug() << "DISCOVERY SERVICE: recieveMsg";
     QNetworkDatagram datagram = socket->receiveDatagram();
+    /*
     if (Messages::isPing(datagram.data())) {
         qDebug() << "Ping message is received from"
                  << QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
@@ -93,6 +94,7 @@ void DiscoveryService::recieveMsg() {
         emit ClientDiscovered(datagram.senderAddress(), static_cast<quint16>(prt));
         return;
     }
+    */
 }
 
 // void DiscoveryService::enable()

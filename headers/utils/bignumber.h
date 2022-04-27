@@ -31,6 +31,7 @@
 
 #include "extrachain_global.h"
 #include "gmpxx.h"
+#include "msgpack.hpp"
 
 #ifdef QT_DEBUG
     #define UPDATE_DEBUG()                  \
@@ -120,6 +121,18 @@ public:
     static BigNumber random(int n, bool zeroAllowed = true);
     static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
     static BigNumber random(BigNumber max, bool zeroAllowed = true);
+
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        std::string num = toStdString();
+        msgpack_pk.pack_str(num.size());
+        msgpack_pk.pack_str_body(num.data(), num.size());
+    }
+
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        std::string num = msgpack_o.as<std::string>();
+        *this = BigNumber(QByteArray::fromStdString(num));
+    }
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r) {

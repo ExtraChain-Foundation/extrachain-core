@@ -97,7 +97,7 @@ void TransactionManager::addPendingForFeeTxs(Transaction *transaction) {
         if (transaction->getHash() == Serialization::deserialize(i->getData())[1]) {
             if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount()) {
                 pendingFeeTxs.removeOne(i);
-                transaction->sign(accountController->getCurrentActor());
+                transaction->sign(accountController->currentWallet());
                 emit transaction->Approved(transaction);
             } else {
                 qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
@@ -135,7 +135,7 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx) {
 
     if (tempTx.getApprover() == tx->getReceiver()) {
         qDebug() << "Fee approver transaciton successfull approved";
-        tx->sign(accountController->getCurrentActor());
+        tx->sign(accountController->currentWallet());
         emit tx->Approved(tx);
         return;
     } else {
@@ -151,8 +151,8 @@ void TransactionManager::addPendingFeeSenderTxs(Transaction *tx) {
         if (i->getHash() == hashTx) {
             if (i->getAmount() / 100 * Fee::TRANSACTION_FEE == tx->getAmount()) {
                 qDebug() << i->getHash() << " transaction successfull approved";
-                tx->sign(accountController->getCurrentActor());
-                i->sign(accountController->getCurrentActor());
+                tx->sign(accountController->currentWallet());
+                i->sign(accountController->currentWallet());
                 emit i->Approved(i);
                 emit tx->Approved(tx);
             } else {

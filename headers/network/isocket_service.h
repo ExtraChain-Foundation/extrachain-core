@@ -5,21 +5,20 @@
 #include "enc/key_public.h"
 #include "utils/exc_utils.h"
 
-class NetworkManager;
+class ExtraChainNode;
 
 class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:
-    enum class SendType
-    {
+    enum class SendType {
         All,
         None,
         // OnlySubNetwork
     };
     Q_ENUM(SendType)
 
-    explicit SocketService(NetworkManager *networkManager, QObject *parent = nullptr);
+    explicit SocketService(ExtraChainNode *node, QObject *parent = nullptr);
     SocketService(const SocketService &socket);
     const QString &identifier() const;
     virtual QString protocolString() const = 0;
@@ -50,7 +49,7 @@ protected:
     QByteArray prepareSendMessage(const QByteArray &message);
     QByteArray prepareReceiveMessage(const QByteArray &message);
 
-    NetworkManager *m_networkManager = nullptr;
+    ExtraChainNode *node = nullptr;
     QString m_identifier;
     QString m_ip;
     bool m_activated = false;
