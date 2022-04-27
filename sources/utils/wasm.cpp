@@ -5,16 +5,17 @@ extern "C" {
 #include <wasm3.h>
 }
 
-#define FATAL(func, msg)                                       \
-    {                                                          \
-        qDebug() << __LINE__ << "Fatal" << func << ":" << msg; \
-        return;                                                \
+#define FATAL(func, msg)                                                 \
+    {                                                                    \
+        qDebug() << "[WASM] Fatal on" << __LINE__ << func << ":" << msg; \
+        return;                                                          \
     }
+
 #define WASM_STACK_SLOTS (2 * 1024)
 #define NATIVE_STACK_SIZE (32 * 1024)
 //#define WASM_MEMORY_LIMIT 6400000
 
-std::string buf_to_str(const uint8_t* buf, uint32_t len) {
+std::string u8bufToStdString(const uint8_t* buf, uint32_t len) {
     char* test = new char[len];
     for (int i = 0; i != len; i++) {
         test[i] = buf[i];
@@ -25,11 +26,11 @@ std::string buf_to_str(const uint8_t* buf, uint32_t len) {
     return s;
 }
 
-m3ApiRawFunction(m3_arduino_print) {
+m3ApiRawFunction(console_print) {
     m3ApiGetArgMem(const uint8_t*, buf);
     m3ApiGetArg(uint32_t, len);
 
-    auto str = buf_to_str(buf, len);
+    auto str = u8bufToStdString(buf, len);
     qInfo() << "[WASM]" << str.c_str();
 
     m3ApiSuccess();
@@ -48,7 +49,7 @@ m3ApiRawFunction(m3_arduino_print) {
 
 M3Result linkFunctions(IM3Runtime runtime) {
     IM3Module module = runtime->modules;
-    m3_LinkRawFunction(module, "test", "print", "v(*i)", &m3_arduino_print);
+    m3_LinkRawFunction(module, "test", "print", "v(*i)", &console_print);
     // m3_LinkRawFunction(module, "test", "some", "v(*i)", &m3_some);
     // m3_LinkRawFunction(module, "test", "some", "*i()", &m3_some);
     return m3Err_none;
@@ -95,14 +96,12 @@ void wasm::wasm_task(const std::string& filePath) {
     if (result)
         FATAL("FindFunction", result);
 
-    qDebug() << ("Running WebAssembly...");
-
     result = m3_CallV(f, 4);
 
     if (result) {
         M3ErrorInfo info;
         m3_GetErrorInfo(runtime, &info);
-        qDebug() << "Error: " << result << info.message;
+        qDebug() << "[WASM] Error:" << result << info.message;
         if (info.file && strlen(info.file) && info.line) {
             qDebug() << "At" << info.file << info.line;
         }
