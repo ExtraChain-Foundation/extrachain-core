@@ -9,55 +9,60 @@
 
 typedef std::unordered_map<std::string, std::string> FileDataObject;
 
-using DFS::Permission::Permission;
 using DFS::Basic::CriticalErrors;
+using DFS::Permission::Permission;
+using DFS::Permission::AddPermission;
+using DFS::Permission::PermissionMode;
+using DFS::Permission::UpdatePermission;
+using DFS::Permission::RemovePermission;
+using DFS::Permission::PermissionValue;
 
 class EXTRACHAIN_EXPORT PermissionManager : public QObject {
     Q_OBJECT
 
         public:
-                 PermissionManager(ExtraChainNode *node);
+     PermissionManager(ExtraChainNode *node);
     ~PermissionManager();
 
     CriticalErrors initPermission(const std::string& userId, const std::string& fileHash,
-                                  DFS::Permission::PermissionMode &permissionMode);
-    CriticalErrors updatePermission(const DFS::Permission::AddPermission &permissionData);
+                                  PermissionMode &permissionMode,
+                                  DFS::Permission::AddPermission &permissionData);
+    CriticalErrors updatePermission(const DFS::Permission::UpdatePermission &permissionData);
     CriticalErrors savePermission(const DFS::Permission::AddPermission &permissionData);
-    DFS::Basic::CriticalErrors rename(const std::string& oldFileHash, const DFS::Permission::AddPermission &permissionData);
-    CriticalErrors remove(const DFS::Permission::RemovePermission& rmPermission);
-    void addPermission(DFS::Permission::PermissionMode &permissionMode, const Permission& permission);
+    CriticalErrors savePermission(const std::string& userId, const std::string& fileHash, const std::string& document);
+    CriticalErrors rename(const std::string& oldFileHash, const AddPermission &permissionData);
+    CriticalErrors remove(const RemovePermission& rmPermission);
+    void addPermission(PermissionMode &permissionMode, const Permission& permission);
     void removePermission(DFS::Permission::PermissionMode &permissionMode, const Permission& permission);
 
-    bool isServiceable(const DFS::Permission::PermissionMode& permissionMode) const;
-    bool isReadable(const DFS::Permission::PermissionMode &permissionMode) const;
-    bool isWritable(const DFS::Permission::PermissionMode &permissionMode) const;
-    bool isRemovable(const DFS::Permission::PermissionMode &permissionMode) const;
-    bool isEditable(const DFS::Permission::PermissionMode &permissionMode) const;
-    bool isCustomizable(const DFS::Permission::PermissionMode &permissionMode) const;
-    bool noPermission(const DFS::Permission::PermissionMode &permissionMode) const;
-    bool hasPermission(const DFS::Permission::PermissionMode &permissionMode) const;
+    bool isServiceable(const PermissionMode& permissionMode) const;
+    bool isReadable(const PermissionMode& permissionMode) const;
+    bool isWritable(const PermissionMode& permissionMode) const;
+    bool isRemovable(const PermissionMode& permissionMode) const;
+    bool isEditable(const PermissionMode& permissionMode) const;
+    bool isCustomizable(const PermissionMode& permissionMode) const;
+    bool noPermission(const PermissionMode& permissionMode) const;
+    bool hasPermission(const PermissionMode& permissionMode) const;
 
     std::vector<std::string> searchFile(const std::string &dirPath, const std::string &partFileName);
 
-    void sign(const Actor<KeyPrivate> &actor, DFS::Permission::AddPermission &permissionData);
-    bool verify(const Actor<KeyPublic> &actor, const DFS::Permission::AddPermission &permissionData);
+    void sign(const Actor<KeyPrivate> &actor, AddPermission &permissionData);
+    bool verify(const Actor<KeyPublic> &actor, const AddPermission &permissionData);
 
-    void serializePermissionData(const std::string data, uint64_t position, DFS::Permission::AddPermission perm);
+    void serializePermissionData(const std::string data, uint64_t position, AddPermission perm);
 
-    std::string getDataByValue(const DFS::Permission::AddPermission& perm,
-                               const int& value);
+    std::string getDataByValue(const AddPermission& perm, const int& value);
 
+    std::string makePermissionFileName(const std::string& actorId, const std::string& hashFile);
 protected:
     FileDataObject makeFileData(const std::string& actor, const std::string& path, const std::string &fileHash,
-                                const DFS::Permission::PermissionMode& permissionMode, const std::string &userId, const std::string &signature);
-    std::string makePermissionFileName(const std::string& userName, const std::string& hashFile);
+                                const PermissionMode& permissionMode, const std::string &userId, const std::string &signature);
     std::string makeTempFileName(const std::string& hashFile);
-    QJsonDocument makePermissionJsonDocument(const DFS::Permission::AddPermission &permissionData);
-    QJsonDocument makePermissionJsonDocument(const std::string& userId, const std::string& fileHash, DFS::Permission::PermissionMode &permissionMode);
-    std::string makeData(const DFS::Permission::AddPermission &permissionData);
+    QJsonDocument makePermissionJsonDocument(const AddPermission &permissionData);
+    QJsonDocument makePermissionJsonDocument(const UpdatePermission &permissionData);
+    QJsonDocument makePermissionJsonDocument(const std::string& userId, const std::string& fileHash, PermissionMode &permissionMode);
+    std::string makeData(const AddPermission &permissionData);
 
 private:
     ExtraChainNode *node;
-    int i = 0;
-    DFS::Permission::AddPermission permissionData;
 };

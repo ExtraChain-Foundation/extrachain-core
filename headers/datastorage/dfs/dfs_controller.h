@@ -43,12 +43,14 @@ public:
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
     void removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
+    void updatePermissions(const std::vector<DFS::Permission::UpdatePermission>& permissions);
     // visualMoveFile
 
     // External interfaces
     std::string addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes);
     std::string getFileFromStorage(ActorId owner, std::string fileHash);
     bool removeFile(const DFS::Packets::RemoveFileMessage &msg);
+    std::string permissionFilePath(const std::string &actorId, const std::string& hashFile);
 
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);

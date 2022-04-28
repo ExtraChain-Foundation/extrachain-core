@@ -22,7 +22,8 @@ enum class MessageType {
     DfsDeleteSegment = 58,
     DfsSendingFileDone = 59,
     DfsRemovePermission = 60,
-    DfsAddPermission = 61
+    DfsAddPermission = 61,
+    DfsUpdatePermission = 62
 };
 MSGPACK_ADD_ENUM(MessageType)
 

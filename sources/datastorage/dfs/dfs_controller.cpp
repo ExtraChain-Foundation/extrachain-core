@@ -142,7 +142,44 @@ void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::s
     };
     permissionManager.remove(rmPermission);
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
-    node.network()->send_message(rmPermission, MessageType::DfsRemovePermission);
+}
+
+void DfsController::updatePermissions(const std::vector<DFS::Permission::UpdatePermission> &permissions)
+{
+    PermissionManager permissionManager(&node);
+    for(const auto& permission: permissions)
+    {
+        switch (permission.action) {
+        case DFS::Permission::Action::AddAction: {
+            DFS::Permission::AddPermission newPermission = {
+                .actor = permission.actor,
+                .path = permission.path,
+                .userId = permission.userId,
+                .fileHash = permission.fileHash,
+                .permissionValue = permission.permissionValue
+            };
+            const auto actor = node.accountController()->mainActor();
+            permissionManager.sign(actor, newPermission);
+            permissionManager.savePermission(newPermission);
+            node.network()->send_message(newPermission, MessageType::DfsAddPermission);
+            break;
+        }
+
+        case DFS::Permission::Action::RemoveAction: {
+            DFS::Permission::RemovePermission rmPermission = {
+                .actor = permission.actor,
+                .fileHash = permission.fileHash
+            };
+            permissionManager.remove(rmPermission);
+            break;
+        }
+
+        case DFS::Permission::Action::UpdateAction: {
+            permissionManager.updatePermission(permission);
+            break;
+        }
+        }
+    }
 }
 
 std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool loadBytes) {
@@ -282,6 +319,17 @@ bool DfsController::removeFile(const DFS::Packets::RemoveFileMessage &msg) {
     actrDirFile.close();
 
     return true;
+}
+
+std::string DfsController::permissionFilePath(const std::string &actorId, const std::string &hashFile)
+{
+    if(actorId.empty() || hashFile.empty()) {
+        qFatal("ActorId or hashFile is empty");
+        return "";
+    }
+
+    PermissionManager permissionManager(&node);
+    return permissionManager.makePermissionFileName(actorId, hashFile);
 }
 
 std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage &msg) {

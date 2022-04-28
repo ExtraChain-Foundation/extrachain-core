@@ -67,6 +67,12 @@ namespace Permission {
         PermissionValue
     };
 
+    enum Action {
+        AddAction,
+        RemoveAction,
+        UpdateAction
+    };
+
     struct AddPermission {
         std::string actor;
         std::string path;
@@ -90,6 +96,7 @@ namespace Permission {
         std::string fileHash;
         std::string signature;
         short permissionValue;
+        Action action;
         MSGPACK_DEFINE(actor, path, userId, fileHash, signature, permissionValue)
     };
 }
