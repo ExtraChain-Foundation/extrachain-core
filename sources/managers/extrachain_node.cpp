@@ -335,7 +335,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActorConst(sender);
+    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
