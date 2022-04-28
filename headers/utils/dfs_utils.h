@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "utils/db_connector.h"
+#include "utils/exc_utils.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <msgpack.hpp>
 
@@ -53,7 +54,7 @@ namespace Packets {
         uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
     };
-    enum class SegmentMessageType
+    enum SegmentMessageType
     {
         add = 0,
         insert = 1,
@@ -102,13 +103,23 @@ namespace Historical {
     struct FileChange {
         uint64_t pos;
         std::string data;
+
+        std::string toStdString() {
+            return Tools::typeToStdStringBytes<uint64_t>(pos) + data;
+        }
+        void fromStdString(std::string string) {
+            pos = Tools::stdStringBytesToType<uint64_t>(string.substr(0, 8));
+            data = string.substr(8);
+        }
     };
     std::string TableNameHC = "HistoricalChain";
     std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
         + "("
           "num        INTEGER PRIMARY KEY NOT NULL,"
+          "prevNum    INTEGER             NOT NULL,"
           "type       INTEGER             NOT NULL,"
-          "data       BLOB                NOT NULL"
+          "data       BLOB                NOT NULL,"
+          "hash       TEXT                NOT NULL "
           ");";
 }
 namespace Tables {
