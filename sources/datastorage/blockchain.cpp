@@ -335,7 +335,7 @@ void Blockchain::stakingReward(const Block &block) {
                     Serialization::serialize({ hash.toByteArray(), blockId.toByteArray(), tx.getHash(),
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(wallet.id());
-                rtx.sign(node->accountController()->currentProfile().getActorConst(wallet.id()));
+                rtx.sign(node->accountController()->currentProfile().getActor(wallet.id()));
                 // TODONEW emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
             }
         }
@@ -636,7 +636,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
                 nb.sign(
-                    node->accountController()->currentProfile().getActorConst(node->actorIndex()->firstId()));
+                    node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
             } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return nb;

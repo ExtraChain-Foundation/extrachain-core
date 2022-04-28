@@ -31,8 +31,7 @@ public:
     const std::vector<Actor<KeyPrivate>> &actors() const;
     bool changeCurrent(const ActorId &actorId);
     void addWalet(const Actor<KeyPrivate> &actor);
-    const Actor<KeyPrivate> &getActorConst(const ActorId &actorId) const;
-    Actor<KeyPrivate> &getActor(const ActorId &actorId);
+    const Actor<KeyPrivate> &getActor(const ActorId &actorId) const;
     bool loaded();
     const std::string &hash() const;
     QJsonObject toJson() const;

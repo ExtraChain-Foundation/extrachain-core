@@ -15,7 +15,7 @@ string SecretKey::keygen() {
 string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
     vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
     if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES) {
-        std::fill(vsalt.begin(), vsalt.end(), '0');
+        std::fill(vsalt.begin(), vsalt.end(), '\0');
     } else {
         vsalt = vector<unsigned char>(salt.begin(), salt.end());
     }
@@ -23,7 +23,9 @@ string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
     int rst1 = crypto_pwhash(key.data(), key.size(), pass.data(), pass.size(), vsalt.data(),
                              crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                              crypto_pwhash_ALG_DEFAULT);
-    (void)rst1; // unused warning
+    if (rst1 != 0) {
+        qFatal("Incorrect getKeyFromPass");
+    }
     string skey = std::string(key.begin(), key.end());
     // skey.erase(--skey.end());
     return skey;
@@ -216,18 +218,4 @@ std::string SecretKey::decryptAsymmetric(const std::string &data, const std::str
                  << "| nonce:" << nonce.data();
 
     return res;
-}
-
-QByteArray SecretKey::encryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
-                                        const QByteArray &public_key, const QByteArray &nonce) {
-    auto res = encryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
-                                 nonce.toStdString());
-    return QByteArray::fromStdString(res);
-}
-
-QByteArray SecretKey::decryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
-                                        const QByteArray &public_key, const QByteArray &nonce) {
-    auto res = decryptAsymmetric(data.toStdString(), secret_key.toStdString(), public_key.toStdString(),
-                                 nonce.toStdString());
-    return QByteArray::fromStdString(res);
 }
