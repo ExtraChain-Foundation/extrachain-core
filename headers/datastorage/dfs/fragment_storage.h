@@ -10,13 +10,13 @@ namespace DFSP = DFS::Packets;
 namespace DFSF = DFS::Fragments;
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
-    DfsController *dfs;
-    DBConnector tmpFile;
+    //    DfsController *dfs;
+    DBConnector storageFile;
     ActorId actor;
     std::string fileHash;
 
 public:
-    FragmentStorage(DfsController *DFS, ActorId Actor, std::string FileHash);
+    FragmentStorage(ActorId Actor, std::string FileHash /*, DfsController *DFS*/);
     ~FragmentStorage();
 
 public:

@@ -1,21 +1,21 @@
 #include "datastorage/dfs/fragment_storage.h"
 
-FragmentStorage::FragmentStorage(DfsController *DFS, ActorId Actor, std::string FileHash) {
+FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash /*, DfsController *DFS*/) {
     actor = Actor;
     fileHash = FileHash;
-    dfs = DFS;
-    tmpFile.open(actor.toStdString() + Utils::platformDelimeter() + fileHash + DFSF::Extension);
-    tmpFile.query(DFSF::CreateTableQueryFragments);
+    //    dfs = DFS;
+    storageFile.open(actor.toStdString() + Utils::platformDelimeter() + fileHash + DFSF::Extension);
+    storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
 FragmentStorage::~FragmentStorage() {
-    tmpFile.close();
+    storageFile.close();
 }
 
 bool FragmentStorage::insertFragment(DFS::Packets::SegmentMessage msg) {
     uint64_t pos = writeFragment(msg);
     DBRow row = makeFragmentRow(msg, pos);
-    tmpFile.insert(DFSF::TableNameFragments, row);
+    storageFile.insert(DFSF::TableNameFragments, row);
     moveRows(row, msg.Data.size());
     return true;
 }
@@ -23,10 +23,10 @@ bool FragmentStorage::insertFragment(DFS::Packets::SegmentMessage msg) {
 bool FragmentStorage::removeFragment(DFS::Packets::DeleteSegmentMessage msg) {
     std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
         + " WHERE pos = " + std::to_string(msg.Offset) + "ORDER BY pos DESC LIMIT 1";
-    std::vector<DBRow> array = tmpFile.select(GetStartFragmentQuery);
+    std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow frag = array[0];
-        tmpFile.deleteRow(DFSF::TableNameFragments, frag);
+        storageFile.deleteRow(DFSF::TableNameFragments, frag);
         std::filesystem::path filePath(msg.Actor + Utils::platformDelimeter() + msg.FileHash);
         return remove(filePath, std::stoull(frag.at("storedPos")), std::stoull(frag.at("size")));
     }
@@ -38,7 +38,7 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
 
     std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
         + " WHERE pos = " + std::to_string(pos) + "ORDER BY pos DESC LIMIT 1";
-    std::vector<DBRow> array = tmpFile.select(GetStartFragmentQuery);
+    std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow fragMap = array[0];
         std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
@@ -55,7 +55,7 @@ DBRow FragmentStorage::getPreviousFragment(uint64_t number) {
     DBRow ret;
     std::string GetPrevFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos < "
         + std::to_string(number) + "ORDER BY pos DESC LIMIT 1";
-    std::vector<DBRow> array = tmpFile.select(GetPrevFragmentQuery);
+    std::vector<DBRow> array = storageFile.select(GetPrevFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
@@ -66,7 +66,7 @@ DBRow FragmentStorage::getNextFragment(uint64_t number) {
     DBRow ret;
     std::string GetNextFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos > "
         + std::to_string(number) + "ORDER BY pos ASC LIMIT 1";
-    std::vector<DBRow> array = tmpFile.select(GetNextFragmentQuery);
+    std::vector<DBRow> array = storageFile.select(GetNextFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
@@ -77,7 +77,7 @@ DBRow FragmentStorage::getRealPreviousFragment(uint64_t number) {
     DBRow ret;
     std::string GetPrevFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE storedPos < "
         + std::to_string(number) + "ORDER BY pos DESC LIMIT 1";
-    std::vector<DBRow> array = tmpFile.select(GetPrevFragmentQuery);
+    std::vector<DBRow> array = storageFile.select(GetPrevFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
@@ -88,7 +88,7 @@ DBRow FragmentStorage::getRealNextFragment(uint64_t number) {
     DBRow ret;
     std::string GetNextFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE storedPos > "
         + std::to_string(number) + "ORDER BY pos ASC LIMIT 1";
-    std::vector<DBRow> array = tmpFile.select(GetNextFragmentQuery);
+    std::vector<DBRow> array = storageFile.select(GetNextFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
@@ -100,13 +100,13 @@ std::pair<DBRow, DBRow> FragmentStorage::getPrevNextPairFragment(uint64_t number
     std::pair<DBRow, DBRow> ret;
     std::string GetPrevFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos < "
         + std::to_string(number) + "ORDER BY pos DESC LIMIT 1";
-    res = tmpFile.select(GetPrevFragmentQuery);
+    res = storageFile.select(GetPrevFragmentQuery);
     if (!res.empty()) {
         ret.first = res[0];
     }
     std::string GetNextFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos > "
         + std::to_string(number) + "ORDER BY pos ASC LIMIT 1";
-    res = tmpFile.select(GetNextFragmentQuery);
+    res = storageFile.select(GetNextFragmentQuery);
     if (!res.empty()) {
         ret.second = res[0];
     }
@@ -143,8 +143,9 @@ void FragmentStorage::moveRows(DBRow curRow, uint64_t moveSize) {
     if (nextFragment.empty()) {
         return;
     } else {
-        tmpFile.update("UPDATE " + DFSF::TableNameFragments + " SET storedPos = '"
-                       + std::to_string(curPos + moveSize) + "' WHERE pos = '" + nextFragment["pos"] + "'");
+        storageFile.update("UPDATE " + DFSF::TableNameFragments + " SET storedPos = '"
+                           + std::to_string(curPos + moveSize) + "' WHERE pos = '" + nextFragment["pos"]
+                           + "'");
         moveRows(nextFragment, moveSize);
     }
 }

@@ -45,6 +45,7 @@ set(EXTRACHAIN_CORE_SOURCES
 
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/fragment_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/historical_chain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
@@ -85,6 +86,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/genesis_block.cpp

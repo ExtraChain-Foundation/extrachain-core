@@ -97,7 +97,19 @@ namespace Fragments {
           "size       INTEGER             NOT NULL"
           ");";
 
-    std::string CreateTableHistoricalChain = "";
+}
+namespace Historical {
+    struct FileChange {
+        uint64_t pos;
+        std::string data;
+    };
+    std::string TableNameHC = "HistoricalChain";
+    std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
+        + "("
+          "num        INTEGER PRIMARY KEY NOT NULL,"
+          "type       INTEGER             NOT NULL,"
+          "data       BLOB                NOT NULL"
+          ");";
 }
 namespace Tables {
     namespace ActorDirFile {
@@ -149,7 +161,8 @@ namespace Path {
     std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
 }
 
-enum class Encryption {
+enum class Encryption
+{
     Public = 0,
     Encrypted = 1
 };
