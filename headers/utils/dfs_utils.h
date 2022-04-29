@@ -120,9 +120,9 @@ namespace Packets {
     };
 }
 namespace Fragments {
-    std::string Extension = ".storj";
-    std::string TableNameFragments = "Fragments";
-    std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
+    static const std::string Extension = ".storj";
+    static const std::string TableNameFragments = "Fragments";
+    static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
         + "("
           "pos        INTEGER PRIMARY KEY NOT NULL,"
           "storedPos  INTEGER             NOT NULL,"
@@ -143,8 +143,8 @@ namespace Historical {
             data = string.substr(8);
         }
     };
-    std::string TableNameHC = "HistoricalChain";
-    std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
+    static const std::string TableNameHC = "HistoricalChain";
+    static const std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
         + "("
           "num        INTEGER PRIMARY KEY NOT NULL,"
           "prevNum    INTEGER             NOT NULL,"
