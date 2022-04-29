@@ -651,7 +651,7 @@ void DfsController::setBytesLimit(uint64_t bytesLimit) {
 
 DFS::Packets::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std::string fileHash) {
     DFS::Packets::AddFileMessage ret;
-    std::string pathDelim = Utils::getPlatformDelimeter();
+    std::string pathDelim = Utils::platformDelimeter();
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + actor.toStdString() + pathDelim + DFS::Basic::fsMapName;
     DBConnector actrDirFile;

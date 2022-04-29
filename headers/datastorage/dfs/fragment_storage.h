@@ -23,7 +23,7 @@ public:
     bool insertFragment(DFSP::SegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
     DFSP::SegmentMessage getFragment(uint64_t pos);
-    bool editData();
+    bool applyChanges(std::string data, int64_t pos);
 
 private:
     DBRow getPreviousFragment(uint64_t number);

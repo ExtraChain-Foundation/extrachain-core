@@ -46,14 +46,16 @@ struct DataStruct {
     SocketPair receiver;
 };
 
-enum class Protocol {
+enum class Protocol
+{
     Undefined = 0,
     Udp = 1,
     WebSocket = 2
 };
 Q_ENUM_NS(Protocol)
 
-enum class SocketServiceError {
+enum class SocketServiceError
+{
     Unknown = 0,
     IncompatibleVersion = 1,
     IncompatibleNetwork = 2,
@@ -416,7 +418,8 @@ namespace Net {
     // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
-    enum class TypeSend {
+    enum class TypeSend
+    {
         All,
         Except,
         Focused
@@ -506,7 +509,8 @@ EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();
 EXTRACHAIN_EXPORT QString boostAsioVersion();
 
-enum PrintDebug {
+enum PrintDebug
+{
     Off = 0,
     On = 1
 };
@@ -574,7 +578,8 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 // Dfs
 static const int DATA_OFFSET = 512;
 
-enum typeDataRow {
+enum typeDataRow
+{
     UNIVERSAL,
     STAKING
 };
@@ -597,7 +602,8 @@ static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
 } // namespace SmartContractStorage
 
 namespace SearchEnum {
-enum class BlockParam {
+enum class BlockParam
+{
     Id = 0,
     Approver,
     Data,
@@ -605,7 +611,8 @@ enum class BlockParam {
     Null
 };
 
-enum class TxParam {
+enum class TxParam
+{
     UserSender = 0,
     UserReceiver,
     UserApprover,
@@ -689,7 +696,8 @@ enum class TxParam {
 //} // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {
-    enum NotifyType {
+    enum NotifyType
+    {
         TxToUser,
         TxToMe,
         ChatMsg,
@@ -710,38 +718,38 @@ QDebug operator<<(QDebug d, const Notification &n);
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 
-namespace Tools {
-template <typename T>
-std::vector<unsigned char> typeToByteArray(T integerValue) {
-    std::vector<unsigned char> res;
-    unsigned char *b = (unsigned char *)(&integerValue);
-    unsigned char *e = b + sizeof(T);
-    std::copy(b, e, back_inserter(res));
-    return res;
-}
+// namespace Tools {
+// template <typename T>
+// std::vector<unsigned char> typeToByteArray(T integerValue) {
+//    std::vector<unsigned char> res;
+//    unsigned char *b = (unsigned char *)(&integerValue);
+//    unsigned char *e = b + sizeof(T);
+//    std::copy(b, e, back_inserter(res));
+//    return res;
+//}
 
-template <typename T>
-T byteArrayToType(std::vector<unsigned char> value) {
-    T *res;
-    res = reinterpret_cast<T *>(value.data());
-    return *res;
-}
+// template <typename T>
+// T byteArrayToType(std::vector<unsigned char> value) {
+//    T *res;
+//    res = reinterpret_cast<T *>(value.data());
+//    return *res;
+//}
 
-template <typename T>
-std::string typeToStdStringBytes(T integerValue) {
-    std::string res;
-    unsigned char *b = (unsigned char *)(&integerValue);
-    unsigned char *e = b + sizeof(T);
-    std::copy(b, e, back_inserter(res));
-    return res;
-}
+// template <typename T>
+// std::string typeToStdStringBytes(T integerValue) {
+//    std::string res;
+//    unsigned char *b = (unsigned char *)(&integerValue);
+//    unsigned char *e = b + sizeof(T);
+//    std::copy(b, e, back_inserter(res));
+//    return res;
+//}
 
-template <typename T>
-T stdStringBytesToType(std::string value) {
-    T *res;
-    res = reinterpret_cast<T *>(value.data());
-    return *res;
-}
-}
+// template <typename T>
+// T stdStringBytesToType(std::string value) {
+//    T *res;
+//    res = reinterpret_cast<T *>(value.data());
+//    return *res;
+//}
+//}
 
 #endif // UTILS_H

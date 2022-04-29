@@ -6,10 +6,41 @@
 #include <vector>
 
 #include "utils/db_connector.h"
-#include "utils/exc_utils.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <msgpack.hpp>
+namespace Tools {
+template <typename T>
+std::vector<unsigned char> typeToByteArray(T integerValue) {
+    std::vector<unsigned char> res;
+    unsigned char *b = (unsigned char *)(&integerValue);
+    unsigned char *e = b + sizeof(T);
+    std::copy(b, e, back_inserter(res));
+    return res;
+}
 
+template <typename T>
+T byteArrayToType(std::vector<unsigned char> value) {
+    T *res;
+    res = reinterpret_cast<T *>(value.data());
+    return *res;
+}
+
+template <typename T>
+std::string typeToStdStringBytes(T integerValue) {
+    std::string res;
+    unsigned char *b = (unsigned char *)(&integerValue);
+    unsigned char *e = b + sizeof(T);
+    std::copy(b, e, back_inserter(res));
+    return res;
+}
+
+template <typename T>
+T stdStringBytesToType(std::string value) {
+    T *res;
+    res = reinterpret_cast<T *>(value.data());
+    return *res;
+}
+}
 namespace Utils {
 std::string platformDelimeter();
 }

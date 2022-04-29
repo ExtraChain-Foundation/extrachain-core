@@ -51,6 +51,11 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
     return fragment;
 }
 
+bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
+    uint64_t endPos = pos + data.length() - 1;
+    return true;
+}
+
 DBRow FragmentStorage::getPreviousFragment(uint64_t number) {
     DBRow ret;
     std::string GetPrevFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos < "
