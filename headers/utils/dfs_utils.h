@@ -64,7 +64,7 @@ namespace Permission {
         UserID,
         FileHash,
         Signature,
-        PermissionValue
+        Value
     };
 
     enum Action {

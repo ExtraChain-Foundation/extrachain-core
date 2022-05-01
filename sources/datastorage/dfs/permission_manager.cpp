@@ -207,10 +207,10 @@ std::vector<std::string> PermissionManager::searchFile(const std::string& dirPat
 
     for (auto &pathToFile : std::filesystem::recursive_directory_iterator(dirPath)) {
         if (std::filesystem::is_regular_file(pathToFile) && pathToFile.path().extension() == DFS::Permission::permissionFileExtension) {
-            const std::string fileName = pathToFile.path().filename();
+            const auto fileName = pathToFile.path().filename();
 
-            if(fileName.find(partFileName) != std::string::npos) {
-                result.emplace_back(pathToFile.path());
+            if(fileName.string().find(partFileName) != std::string::npos) {
+                result.push_back(pathToFile.path().string());
             }
         }
     }
@@ -251,7 +251,6 @@ void PermissionManager::serializePermissionData(const std::string data, uint64_t
     qDebug() << "userId: " << QString::fromStdString(getDataByValue(permission, DFS::Permission::PermissionValue::UserID));
     qDebug() << "file_hash: " << QString::fromStdString(getDataByValue(permission, DFS::Permission::PermissionValue::FileHash));
     qDebug() << "signature: " << QString::fromStdString(getDataByValue(permission, DFS::Permission::PermissionValue::Signature));
-    qDebug() << "p_value: " << std::stoi(getDataByValue(permission, DFS::Permission::PermissionValue::PermissionValue));
 }
 
 std::string PermissionManager::getDataByValue(const AddPermission &addPermission, const int &value) {
@@ -276,7 +275,7 @@ std::string PermissionManager::getDataByValue(const AddPermission &addPermission
             res = (addPermission.actor.size() + addPermission.path.size() + addPermission.userId.size() + addPermission.fileHash.size());
             break;
         }
-        case PermissionValue::PermissionValue: {
+        case PermissionValue::Value: {
             res = (addPermission.actor.size() + addPermission.path.size() + addPermission.userId.size()
                    + addPermission.fileHash.size() + addPermission.signature.size());
             break;
@@ -293,7 +292,7 @@ std::string PermissionManager::getDataByValue(const AddPermission &addPermission
         case PermissionValue::UserID: return addPermission.userId.size();
         case PermissionValue::FileHash: return addPermission.fileHash.size();
         case PermissionValue::Signature: return addPermission.signature.size();
-        case PermissionValue::PermissionValue: return sizeof(addPermission.permissionValue);
+        case PermissionValue::Value: return sizeof(addPermission.permissionValue);
         }
         return size_t(0);
     };
