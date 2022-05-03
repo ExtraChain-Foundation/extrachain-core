@@ -505,6 +505,12 @@ enum PrintDebug {
     On = 1
 };
 
+enum class HashEncode {
+    None,
+    Base64,
+    Hex,
+};
+
 #ifdef Q_OS_WIN
 static QString filePrefix = "file:///";
 #else
@@ -519,13 +525,16 @@ QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
-EXTRACHAIN_EXPORT std::string calcKeccak(const std::string &data);
-EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
-EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::filesystem::path &fileName);
+EXTRACHAIN_EXPORT std::string calcKeccak(const std::string &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::filesystem::path &fileName,
+                                                HashEncode encode = HashEncode::Base64);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
 std::string hexStringToByte(const std::string &data);
+QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
 EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
                                    const QByteArray &key, int blockSize = 60007);
