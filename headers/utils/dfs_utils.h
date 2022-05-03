@@ -23,8 +23,7 @@ namespace Basic {
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
 
-    enum class CriticalErrors
-    {
+    enum class CriticalErrors {
         NoError,
         NoFile,
         NotOpenFile,
@@ -58,7 +57,7 @@ namespace Permission {
     };
     Q_DECLARE_FLAGS(PermissionMode, Permission)
 
-    enum PermissionValue{
+    enum PermissionValue {
         Actor,
         Path,
         UserID,
@@ -202,7 +201,6 @@ namespace Tables {
         "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileHash DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
 }
-
 
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
