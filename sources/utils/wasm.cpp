@@ -1,5 +1,10 @@
 #include "utils/wasm.h"
 
+#include <QFile>
+#include <QString>
+
+#include "utils/exc_utils.h"
+
 extern "C" {
 #include <m3_env.h>
 #include <wasm3.h>
@@ -11,8 +16,8 @@ extern "C" {
         return;                                                          \
     }
 
-#define WASM_STACK_SLOTS (2 * 1024)
-#define NATIVE_STACK_SIZE (32 * 1024)
+#define WASM_STACK_SLOTS (2 * 1024 * 2)
+#define NATIVE_STACK_SIZE (32 * 1024 * 2)
 //#define WASM_MEMORY_LIMIT 6400000
 
 std::string u8bufToStdString(const uint8_t* buf, uint32_t len) {
@@ -36,22 +41,44 @@ m3ApiRawFunction(console_print) {
     m3ApiSuccess();
 }
 
-// m3ApiRawFunction(m3_some) {
-//     m3ApiReturnType(const uint8_t*);
+m3ApiRawFunction(dfs_file_size) {
+    m3ApiReturnType(int64_t);
+    m3ApiGetArgMem(const uint8_t*, file_name);
+    m3ApiGetArg(uint64_t, file_length);
 
-//    auto q = new uint8_t[2];
-//    q[0] = 57;
-//    q[1] = 58;
+    auto str = u8bufToStdString(file_name, file_length);
+    QFileInfo fileInfo(QString::fromStdString(str));
 
-//    qDebug() << "[WASM] send some";
-//    m3ApiReturn(q);
-//}
+    m3ApiReturn(fileInfo.size())
+}
+
+m3ApiRawFunction(dfs_file_read) {
+    m3ApiReturnType(int32_t);
+
+    m3ApiGetArg(uint64_t, offset);
+    m3ApiGetArgMem(uint8_t*, buf);
+    m3ApiGetArgMem(const uint8_t*, file_name);
+    m3ApiGetArg(uint64_t, file_length);
+
+    auto fileName = u8bufToStdString(file_name, file_length);
+    QFile file(QString::fromStdString(fileName));
+    if (!file.open(QFile::ReadOnly)) {
+        qFatal("wasm file error");
+    }
+    file.seek(offset);
+    auto bytes = file.read(1024);
+    for (int i = 0; i != bytes.size(); i++) {
+        buf[i] = bytes[i];
+    }
+
+    m3ApiReturn(bytes.size());
+}
 
 M3Result linkFunctions(IM3Runtime runtime) {
     IM3Module module = runtime->modules;
     m3_LinkRawFunction(module, "test", "print", "v(*i)", &console_print);
-    // m3_LinkRawFunction(module, "test", "some", "v(*i)", &m3_some);
-    // m3_LinkRawFunction(module, "test", "some", "*i()", &m3_some);
+    m3_LinkRawFunction(module, "test", "dfs_file_size", "I(*i)", &dfs_file_size);
+    m3_LinkRawFunction(module, "test", "dfs_file_read", "i(I**i)", &dfs_file_read);
     return m3Err_none;
 }
 
