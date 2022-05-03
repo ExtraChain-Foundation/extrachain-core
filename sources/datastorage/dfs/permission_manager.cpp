@@ -65,9 +65,11 @@ CriticalErrors PermissionManager::updatePermission(const DFS::Permission::Update
         makePermissionFileName(permissionData.userId, permissionData.fileHash);
 
     QJsonDocument document;
-    if (!std::filesystem::exists(pathToPermissionFile))
+    if (!std::filesystem::exists(pathToPermissionFile)) {
         document = makePermissionJsonDocument(permissionData);
-    return savePermission(permissionData.userId, permissionData.fileHash, document.toJson().toStdString());
+        return savePermission(permissionData.userId, permissionData.fileHash,
+                              document.toJson().toStdString());
+    }
 
     std::ofstream permissionFile;
     permissionFile.open(pathToPermissionFile, std::ios_base::out | std::ios::trunc);
@@ -338,7 +340,9 @@ QJsonDocument PermissionManager::makePermissionJsonDocument(const AddPermission 
     permissionObject[DFS::Permission::userID.c_str()] = permissionData.userId.c_str();
     permissionObject[DFS::Permission::actor.c_str()] = permissionData.actor.c_str();
     permissionObject[DFS::Permission::path.c_str()] = permissionData.path.c_str();
-    permissionObject[DFS::Permission::signature.c_str()] = permissionData.signature.c_str(); //
+    permissionObject[DFS::Permission::signature.c_str()] =
+        QString(QByteArray::fromStdString(permissionData.signature)
+                    .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
     permissionObject[DFS::Permission::fileHash.c_str()] = permissionData.fileHash.c_str();
     permissionObject[DFS::Permission::permissionValue.c_str()] =
         std::to_string(permissionData.permissionValue).c_str();
@@ -351,7 +355,9 @@ QJsonDocument PermissionManager::makePermissionJsonDocument(const UpdatePermissi
     permissionObject[DFS::Permission::userID.c_str()] = permissionData.userId.c_str();
     permissionObject[DFS::Permission::actor.c_str()] = permissionData.actor.c_str();
     permissionObject[DFS::Permission::path.c_str()] = permissionData.path.c_str();
-    permissionObject[DFS::Permission::signature.c_str()] = permissionData.signature.c_str();
+    permissionObject[DFS::Permission::signature.c_str()] =
+        QString(QByteArray::fromStdString(permissionData.signature)
+                    .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
     permissionObject[DFS::Permission::fileHash.c_str()] = permissionData.fileHash.c_str();
     permissionObject[DFS::Permission::permissionValue.c_str()] =
         std::to_string(permissionData.permissionValue).c_str();
