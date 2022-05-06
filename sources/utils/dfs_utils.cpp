@@ -50,7 +50,7 @@ std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const st
 }
 
 DFS::Packets::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId,
-                                                          const std::string fileHash) {
+                                                          const std::string &fileHash) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
@@ -109,7 +109,7 @@ std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::pa
     return p;
 }
 
-std::filesystem::path DFS::Path::filePath(const std::string &actorId, const std::string fileHash) {
+std::filesystem::path DFS::Path::filePath(const std::string &actorId, const std::string &fileHash) {
     return DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter()
         + fileHash;
 }

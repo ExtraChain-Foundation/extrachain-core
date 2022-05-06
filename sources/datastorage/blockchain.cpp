@@ -123,7 +123,7 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-void Blockchain::saveTxInfoInEC(const QByteArray data) const {
+void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
     QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
     std::vector<DBRow> extractData;
     DBRow resultData;
@@ -635,8 +635,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
-                nb.sign(
-                    node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
+                nb.sign(node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
             } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return nb;

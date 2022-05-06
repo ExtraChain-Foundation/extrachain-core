@@ -624,7 +624,7 @@ std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
     }
     removeDataChunk(msg.Offset, msg.Size, realFilePath);
     std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
-    uint64_t newFileSize = std::filesystem::file_size(realFilePath);
+    // uint64_t newFileSize = std::filesystem::file_size(realFilePath);
 
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
