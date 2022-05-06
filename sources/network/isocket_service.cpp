@@ -7,12 +7,13 @@
     #include "preconfig.h"
 #endif
 
-SocketService::SocketService(ExtraChainNode *node, QObject *parent)
-    : QObject(parent) {
-    this->node = node;
+SocketService::SocketService(ExtraChainNode &node, QObject *parent)
+    : node(node)
+    , QObject(parent) {
     priv.generate();
 }
 
+/*
 SocketService::SocketService(const SocketService &socket) {
     qFatal("SocketService copy TODO");
     m_identifier = socket.m_identifier;
@@ -22,6 +23,7 @@ SocketService::SocketService(const SocketService &socket) {
     m_bytesOutgoing = socket.m_bytesOutgoing;
     m_bytesCompressed = socket.m_bytesCompressed;
 }
+*/
 
 const QString &SocketService::identifier() const {
     return m_identifier;
@@ -67,14 +69,14 @@ bool SocketService::checkFirstMessage(const QString &message) {
     m_identifier = json["identifier"].toString();
     m_sendType = SendType(json["sendType"].toInt());
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toStdString());
-    ActorId currentFirstId = node->actorIndex()->firstId();
+    ActorId currentFirstId = node.actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId;
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
     qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
 
     if (currentFirstId.isEmpty() && !jsonFirstId.isEmpty()) { // TODO: remove hack
-        node->actorIndex()->setFirstId(jsonFirstId);
+        node.actorIndex()->setFirstId(jsonFirstId);
     }
 
     if (version != EXTRACHAIN_VERSION) {
@@ -97,7 +99,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     bool flag = false;
-    auto &connections = node->network()->connections();
+    auto &connections = node.network()->connections();
     std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
@@ -121,7 +123,7 @@ void SocketService::closeSocket() {
 
 QByteArray SocketService::generateFirstMessage() {
     QJsonObject json;
-    json["firstId"] = node->actorIndex()->firstId().toString();
+    json["firstId"] = node.actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
     json["sendType"] = QString::number(int(m_sendType));

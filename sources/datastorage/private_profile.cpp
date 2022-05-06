@@ -22,7 +22,7 @@
 #include "enc/enc_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string hash) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
     PrivateProfile user;
     user.m_actors.push_back(actor);
     user.m_main = actor.id();
@@ -31,7 +31,7 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std:
     return user;
 }
 
-PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string hash) {
+PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string &hash) {
     PrivateProfile user;
     user.m_main = actorId;
     user.m_hash = hash;

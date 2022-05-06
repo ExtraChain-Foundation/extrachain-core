@@ -34,7 +34,7 @@ private:
     std::map<std::string, DFS::Packets::AddFileMessage> files;
 
 public:
-    DfsController(ExtraChainNode &node, QObject *parent = nullptr);
+    explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
     ~DfsController();
 
     void initializeActor(const ActorId &actorId);
@@ -69,7 +69,8 @@ public:
     void addDirData(const ActorId &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileHash);
     void sendFile(const ActorId &actorId, const std::string &fileHash, const std::string &messageId);
-    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg, const std::string &messageId);
+    std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg,
+                             const std::string &messageId);
     std::string addFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string insertFragment(const DFS::Packets::EditSegmentMessage &msg);
     std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);

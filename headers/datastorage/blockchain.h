@@ -80,7 +80,7 @@ private:
     bool launched;
 
 public:
-    Blockchain(ExtraChainNode *node, bool fileMode = true);
+    explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
     Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
@@ -101,7 +101,7 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const QByteArray data) const;
+    void saveTxInfoInEC(const QByteArray &data) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();

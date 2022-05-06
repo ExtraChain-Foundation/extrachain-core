@@ -17,8 +17,8 @@ std::string DFS::Tables::ActorDirFile::getLastHash(DBConnector &db) {
 }
 
 DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const std::string &actorId) {
-    DBConnector db;
-    db.open(actorDbPath(actorId).string());
+    DBConnector db(actorDbPath(actorId).string());
+    db.open();
     return db;
 }
 
@@ -50,7 +50,7 @@ std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const st
 }
 
 DFS::Packets::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId,
-                                                          const std::string fileHash) {
+                                                          const std::string &fileHash) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
@@ -76,10 +76,10 @@ DFS::Packets::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &act
 bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
                                            const std::vector<Packets::DirRow> &dirRows) {
     std::string pathDelim = Utils::platformDelimeter();
-    DBConnector actrDirFile;
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + actorId + pathDelim + DFS::Basic::fsMapName;
-    if (!actrDirFile.open(actrDirFilePath)) {
+    DBConnector actrDirFile(actrDirFilePath);
+    if (!actrDirFile.open()) {
         return false;
     }
 
@@ -109,7 +109,7 @@ std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::pa
     return p;
 }
 
-std::filesystem::path DFS::Path::filePath(const std::string &actorId, const std::string fileHash) {
+std::filesystem::path DFS::Path::filePath(const std::string &actorId, const std::string &fileHash) {
     return DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter()
         + fileHash;
 }

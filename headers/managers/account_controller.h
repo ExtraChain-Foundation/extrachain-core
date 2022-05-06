@@ -35,7 +35,7 @@ class ExtraChainNode;
  */
 class EXTRACHAIN_EXPORT AccountController {
 public:
-    AccountController(ExtraChainNode &node);
+    explicit AccountController(ExtraChainNode &node);
 
     /**
      * @brief Generates a new actor and adds it into accounts list

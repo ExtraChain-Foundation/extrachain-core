@@ -34,18 +34,17 @@ public:
     DataStorage::typeDataRow type;
 
 public:
-    GenesisDataRow() {
-    }
+    GenesisDataRow() = default;
 
-    GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
-                   const DataStorage::typeDataRow &type)
+    explicit GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
+                            const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)
         , token(token)
         , type(type) {
     }
 
-    GenesisDataRow(const QByteArray &serialized) {
+    explicit GenesisDataRow(const QByteArray &serialized) {
         deserialize(serialized);
     }
 
@@ -89,10 +88,10 @@ public:
     GenesisBlock(const GenesisBlock &block);
 
     // Deserialize already constructed block
-    GenesisBlock(const QByteArray &serialized);
+    explicit GenesisBlock(const QByteArray &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
+    explicit GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
 
     // Block interface
 public:

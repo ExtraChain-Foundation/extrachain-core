@@ -1,6 +1,6 @@
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent)
+WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject *parent)
     : SocketService(node, parent) {
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
@@ -14,11 +14,11 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
     }
 }
 
-WebSocketService::WebSocketService(const WebSocketService &service)
-    : SocketService(service) {
-    qFatal("[WS] Copy");
-    this->m_ws = service.m_ws;
-}
+// WebSocketService::WebSocketService(const WebSocketService &service)
+//     : SocketService(service) {
+//     qFatal("[WS] Copy");
+//     this->m_ws = service.m_ws;
+// }
 
 WebSocketService::~WebSocketService() {
     qDebug() << "[WS] I'm socket, i'm death";
@@ -91,7 +91,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
-        node->network()->messageReceived(mess.toStdString(), m_identifier.toStdString());
+        node.network()->messageReceived(mess.toStdString(), m_identifier.toStdString());
     } else {
         qFatal("[WS] Messsage is empty after prepare");
     }
@@ -113,7 +113,7 @@ void WebSocketService::onConnected() {
     this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
     handshake();
     qDebug() << "[WS] New service:" << m_ip << port();
-    emit node->network()->newSocket();
+    emit node.network()->newSocket();
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
@@ -140,12 +140,12 @@ void WebSocketService::handshake() {
 }
 
 quint16 WebSocketService::port() const {
-    if (m_ws->peerPort() != node->network()->wsPort)
+    if (m_ws->peerPort() != node.network()->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
 }
 
 quint16 WebSocketService::serverPort() const {
-    return node->network()->wsPort;
+    return node.network()->wsPort;
 }
