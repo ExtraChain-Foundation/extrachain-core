@@ -34,7 +34,7 @@ class ExtraChainNode;
  */
 class EXTRACHAIN_EXPORT ActorIndex {
 private:
-    ExtraChainNode *node;
+    ExtraChainNode &node;
 
     int64_t records = 0;
     const std::string folderPath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
@@ -46,7 +46,7 @@ public:
     /**
      * @brief ActorIndex
      */
-    ActorIndex(ExtraChainNode *node);
+    explicit ActorIndex(ExtraChainNode &node);
     /**
      * @brief ~ActorIndex
      */

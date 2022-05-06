@@ -8,8 +8,7 @@ class NetworkStatus : public QObject {
     Q_OBJECT
 
 public:
-    enum class Status
-    {
+    enum class Status {
         Unknown,
         Online,
         Offline,

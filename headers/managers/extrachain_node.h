@@ -74,7 +74,6 @@ public:
     // Remove this function before merge
     void test() const;
     void testPermissions() const;
-    void testSerializer() const;
 
     bool login(const std::string &login, const std::string &password);
     bool login(const std::string &hash);

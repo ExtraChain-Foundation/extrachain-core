@@ -37,8 +37,7 @@
 class UPNPConnection : public QObject {
     Q_OBJECT
 public:
-    enum State
-    {
+    enum State {
         Opened = 0,
         NotOpened,
         Closed

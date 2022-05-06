@@ -98,7 +98,7 @@ namespace Tables {
         // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);
         std::filesystem::path actorDbPath(const std::string &actorId);
-        DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string fileHash);
+        DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string &fileHash);
         std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId, uint64_t lastModified = 0);
         bool addDirRows(const std::string &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
     }
@@ -128,7 +128,7 @@ namespace Tables {
 
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
-    std::filesystem::path filePath(const std::string &actorId, const std::string fileHash);
+    std::filesystem::path filePath(const std::string &actorId, const std::string &fileHash);
 }
 
 enum class Encryption {

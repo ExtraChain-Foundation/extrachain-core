@@ -129,7 +129,7 @@ private:
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
-                  "Your type is not supported. Only Keys are supported");
+                  "Type is not supported. Only Keys are supported");
 
 private:
     ActorId m_id;

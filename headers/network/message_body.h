@@ -1,6 +1,8 @@
 #ifndef MESSAGEBODY_H
 #define MESSAGEBODY_H
 
+#include <msgpack.hpp>
+
 #include "datastorage/actor.h"
 #include "utils/exc_utils.h"
 
