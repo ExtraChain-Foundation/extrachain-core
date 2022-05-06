@@ -122,7 +122,7 @@ void Transaction::setDate(long long value) {
 }
 
 void Transaction::calcHash() {
-    QByteArray resultHash = Utils::calcKeccak(getDataForHash());
+    QByteArray resultHash = Utils::calcHash(getDataForHash());
     if (!resultHash.isEmpty()) {
         this->hash = resultHash;
     }

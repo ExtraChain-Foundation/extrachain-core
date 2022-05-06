@@ -525,9 +525,9 @@ QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
-EXTRACHAIN_EXPORT std::string calcKeccak(const std::string &data, HashEncode encode = HashEncode::Base64);
-EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data, HashEncode encode = HashEncode::Base64);
-EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::filesystem::path &fileName,
+EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT QByteArray calcHash(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
                                                 HashEncode encode = HashEncode::Base64);
 
 std::string byteToHexString(std::vector<unsigned char> &data);

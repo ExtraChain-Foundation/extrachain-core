@@ -314,7 +314,7 @@ bool NetworkManager::isActiveConnectionExists() {
 bool NetworkManager::checkMsgCount(const QByteArray &msg) {
     bool flag_result = true;
     bool value = 0;
-    QByteArray hashMsg = Utils::calcKeccak(msg);
+    QByteArray hashMsg = Utils::calcHash(msg);
     QMap<QByteArray, int>::iterator it = msgHashList.find(hashMsg);
 
     if (it == msgHashList.end())

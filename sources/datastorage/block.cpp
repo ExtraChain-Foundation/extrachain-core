@@ -49,7 +49,7 @@ Block::Block(const QByteArray &data, const Block &prev)
     if (prev.isEmpty()) {
         // qDebug() << "BLOCK: Construction first block";
         this->index = BigNumber("0");
-        this->prevHash = Utils::calcKeccak(QByteArray("0 index"));
+        this->prevHash = Utils::calcHash(QByteArray("0 index"));
     } else {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
         //          << prev->getIndex();
@@ -77,7 +77,7 @@ Block Block::operator=(const Block &block) {
 }
 
 void Block::calcHash() {
-    QByteArray resultHash = Utils::calcKeccak(getDataForHash());
+    QByteArray resultHash = Utils::calcHash(getDataForHash());
     if (!resultHash.isEmpty()) {
         this->hash = resultHash;
     }
@@ -88,14 +88,14 @@ void Block::setType(const std::string &value) {
 }
 
 QByteArray Block::getDataForHash() const {
-    QByteArray idHash = Utils::calcKeccak(getIndex().toByteArray());
+    QByteArray idHash = Utils::calcHash(getIndex().toByteArray());
     auto list = extractTransactions();
     if (list.empty())
         return idHash;
-    QByteArray txHash = Utils::calcKeccak(list[0].serialize());
+    QByteArray txHash = Utils::calcHash(list[0].serialize());
     for (int i = 1; i < list.size(); i++) {
-        QByteArray tmpTxHash = Utils::calcKeccak(list[i].serialize());
-        txHash = Utils::calcKeccak(txHash + tmpTxHash);
+        QByteArray tmpTxHash = Utils::calcHash(list[i].serialize());
+        txHash = Utils::calcHash(txHash + tmpTxHash);
     }
     return idHash + txHash;
 }

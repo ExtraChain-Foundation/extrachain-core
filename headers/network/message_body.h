@@ -60,7 +60,7 @@ MessageBody<T> make_message(const T data, MessageType type, MessageStatus status
         qFatal("make message error: incorrect message id size");
     }
 
-    QByteArray randomId = Utils::calcKeccak(QByteArray::number(QDateTime::currentSecsSinceEpoch())
+    QByteArray randomId = Utils::calcHash(QByteArray::number(QDateTime::currentSecsSinceEpoch())
                                             + QByteArray::number(QRandomGenerator::global()->bounded(100000)))
                               .left(15); // temp
 

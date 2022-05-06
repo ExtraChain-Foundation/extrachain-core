@@ -165,7 +165,7 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto publicKey = this->m_key.publicKey();
-        auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey), Utils::HashEncode::Hex);
+        auto hash = Utils::calcHash(QByteArray::fromStdString(publicKey), Utils::HashEncode::Hex);
 
         if (hash.size() >= 20)
             m_id = hash.left(20).toStdString();

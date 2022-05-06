@@ -42,13 +42,13 @@
     #include "preconfig.h"
 #endif
 
-std::string Utils::calcKeccak(const std::string &data, HashEncode encode) {
-    QByteArray hash = calcKeccak(QByteArray::fromStdString(data), encode);
+std::string Utils::calcHash(const std::string &data, HashEncode encode) {
+    QByteArray hash = calcHash(QByteArray::fromStdString(data), encode);
     return hash.toStdString();
 }
 
-QByteArray Utils::calcKeccak(const QByteArray &data, HashEncode encode) {
-    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Keccak_256);
+QByteArray Utils::calcHash(const QByteArray &data, HashEncode encode) {
+    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Sha3_256);
     return bytesEncode(hash, encode);
 }
 
@@ -120,18 +120,18 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-std::string Utils::calcKeccakForFile(const std::filesystem::path &fileName, HashEncode encode) {
+std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        QCryptographicHash cryptographicHash(QCryptographicHash::Algorithm::Keccak_256);
+        QCryptographicHash cryptographicHash(QCryptographicHash::Algorithm::Sha3_256);
         if (cryptographicHash.addData(&file)) {
             auto hash = cryptographicHash.result();
             return bytesEncode(hash, encode).toStdString();
         }
     }
 
-    qFatal("Utils::calcKeccakForFile");
-    qDebug() << "[KeccakForFile] Can't open file" << fileName.c_str();
+    qFatal("Utils::calcHashForFile");
+    qDebug() << "[Utils] Calc hash for file: can't open file" << fileName.c_str();
     return "";
 }
 
