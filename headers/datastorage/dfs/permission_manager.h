@@ -63,7 +63,7 @@ private:
     static const QString RootDir;
 
 private:
-    DBConnector m_db;
+    // DBConnector m_db;
 };
 
 struct PermissionManager::GetPermissionMsg {
