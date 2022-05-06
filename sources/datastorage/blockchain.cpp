@@ -132,6 +132,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
     QString typeR = "0"; // receiver type
 
     DBConnector cacheDB("blockchain/cacheEC.db");
+    cacheDB.open();
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
                         "ActorId  TEXT   NOT NULL, "
@@ -215,6 +216,7 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken) {
     BigNumber id = gen.getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
+    cacheDB.open();
     std::vector<DBRow> extractData =
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "';");
     BigNumber res = 0;
@@ -229,6 +231,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     BigNumber id = blockIndex.getLastGenesisBlock().getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
+    cacheDB.open();
     std::vector<DBRow> extractData =
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "' ;");
     BigNumber res = 0;
@@ -237,6 +240,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
         res += BigNumber(sum).abs();
     }
     DBConnector cacheDB2("blockchain/cacheEC.db");
+    cacheDB2.open();
     std::vector<DBRow> extractData2 = cacheDB2.select(
         "SELECT * FROM cacheData WHERE Token = '"
         + idToken.toStdString()
@@ -452,9 +456,9 @@ bool Blockchain::signCheckAdd(Block &block) {
             if (list != savedList) {
                 for (int i = 0; i < list.size(); i += 3) {
                     if (!savedList.contains(list[i])) {
-                        DBConnector DB;
                         QString path = blockIndex.buildFilePath(block.getIndex());
-                        DB.open(path.toStdString());
+                        DBConnector DB(path.toStdString());
+                        DB.open();
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
@@ -490,9 +494,9 @@ bool Blockchain::signCheckAdd(Block &block) {
             if (list != savedList) {
                 for (int i = 0; i < list.size(); i += 3) {
                     if (!savedList.contains(list[i])) {
-                        DBConnector DB;
                         QString path = blockIndex.buildFilePath(block.getIndex());
-                        DB.open(path.toStdString());
+                        DBConnector DB(path.toStdString());
+                        DB.open();
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
@@ -650,6 +654,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 i--;
             }
             DBConnector cacheDB("blockchain/cacheEC.db");
+            cacheDB.open();
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
                 nb.addRow(

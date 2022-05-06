@@ -27,8 +27,8 @@ ActorId ActorIndex::firstId() {
 
 ActorIndex::ActorIndex(ExtraChainNode &node)
     : node(node) {
-    DBConnector db;
-    bool isDbOpen = db.open(folderPath + "actors");
+    DBConnector db(folderPath + "actors");
+    bool isDbOpen = db.open();
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
@@ -238,8 +238,8 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
         this->records++;
-        DBConnector db;
-        db.open(folderPath + "actors");
+        DBConnector db(folderPath + "actors");
+        db.open();
         bool dbInsert = db.insert(Config::DataStorage::actorsTable,
                                   { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
@@ -257,8 +257,8 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
 QByteArrayList ActorIndex::allActors() {
     QByteArrayList result;
 
-    DBConnector db;
-    db.open(folderPath + "actors");
+    DBConnector db(folderPath + "actors");
+    db.open();
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors) {
         result << actor["id"].data();
@@ -270,8 +270,8 @@ QByteArrayList ActorIndex::allActors() {
 std::vector<std::string> ActorIndex::allActorsStd() {
     std::vector<std::string> result;
 
-    DBConnector db;
-    db.open(folderPath + "actors");
+    DBConnector db(folderPath + "actors");
+    db.open();
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors) {
         result.push_back(actor["id"]);

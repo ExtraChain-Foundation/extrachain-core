@@ -107,6 +107,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         //        DBConnector dbc(
         //            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" +
         //            DfsStruct::ACTOR_CARD_FILE).toStdString());
+        //        dbc.open();
         //        dbc.createTable(Config::DataStorage::cardTableCreation);
         //        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
         //        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME +
