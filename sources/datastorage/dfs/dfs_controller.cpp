@@ -65,13 +65,13 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         newTargetVirtualFilePath = nvp.string();
     }
 
-    std::string fileHash = Utils::calcKeccakForFile(newFilePath);
+    std::string fileHash = Utils::calcHashForFile(newFilePath);
     auto fileSize = std::filesystem::file_size(newFilePath);
     std::filesystem::path placeInDFS = DFS::Basic::fsActrRootW + DFS::Basic::separator
         + actor.id().toString().toStdWString() + DFS::Basic::separator;
     std::filesystem::path dfsPath = DFS::Path::filePath(actor.id().toStdString(), fileHash);
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
-        std::string dfsFileHash = Utils::calcKeccakForFile(dfsPath);
+        std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
             qDebug() << "[DFS] File already in DFS";
             return "";
@@ -119,7 +119,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 }
 
 void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
-    std::string fileHash = Utils::calcKeccakForFile(filePath); // TODO: get hash
+    std::string fileHash = Utils::calcHashForFile(filePath); // TODO: get hash
     DFS::Packets::RemoveFileMessage msg = { .Actor = actor.id().toStdString(), .FileHash = fileHash };
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
 }
@@ -292,7 +292,7 @@ std::string DfsController::insertFragment(const DFS::Packets::EditSegmentMessage
 
     insertDataChunk(msg.Data, msg.Offset, realFilePath);
 
-    std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
+    std::string newFileHash = Utils::calcHashForFile(realFilePath.string());
     // auto newFileSize = std::filesystem::file_size(realFilePath);
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileHash") == msg.FileHash) {
@@ -577,7 +577,7 @@ std::string DfsController::addFragment(const DFS::Packets::EditSegmentMessage &m
 
     uint64_t offset = msg.Offset + DFS::Basic::sectionSize;
     if (fileSize <= offset) {
-        if (msg.FileHash == Utils::calcKeccakForFile(fileName)) {
+        if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             // TODO: send package done
             files.erase(msg.Actor + msg.FileHash);
@@ -627,7 +627,7 @@ std::string DfsController::deleteFragment(const DFS::Packets::DeleteSegmentMessa
         return "";
     }
     removeDataChunk(msg.Offset, msg.Size, realFilePath);
-    std::string newFileHash = Utils::calcKeccakForFile(realFilePath.string());
+    std::string newFileHash = Utils::calcHashForFile(realFilePath.string());
     // uint64_t newFileSize = std::filesystem::file_size(realFilePath);
 
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {

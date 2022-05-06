@@ -26,7 +26,7 @@ AccountController::AccountController(ExtraChainNode &node)
 }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
-    if (hash.empty() || hash.size() != 64)
+    if (hash.empty() || hash.size() != 43)
         qFatal("[Accounts] Create actor: hash is empty");
 
     Actor<KeyPrivate> actor;

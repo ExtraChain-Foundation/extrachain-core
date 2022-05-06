@@ -83,7 +83,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
     if (QDir("keystore/profile").isEmpty()) {
         qDebug() << "[Node] Create network with e-mail" << email;
-        auto consoleHash = Utils::calcKeccak(email.toStdString() + password.toStdString());
+        auto consoleHash = Utils::calcHash(email.toStdString() + password.toStdString());
         auto first = m_accountController->createProfile(consoleHash, ActorType::ServiceProvider);
         m_actorIndex->setFirstId(first.id());
     } else {
@@ -297,7 +297,7 @@ std::string ExtraChainNode::exportUser() {
 
 bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
                                 const std::string &password) {
-    auto hash = Utils::calcKeccak(login + password);
+    auto hash = Utils::calcHash(login + password);
 
     auto json = SecretKey::decryptWithPassword(data, hash);
     if (hash.empty() || json.empty()) {
@@ -369,7 +369,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(BigNumber::random(64).toByteArray());
+    file.write(Utils::calcHash(BigNumber::random(64).toByteArray()));
     file.flush();
     file.close();
 }
@@ -454,7 +454,7 @@ DfsController *ExtraChainNode::dfs() const {
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {
-    return m_accountController->load(Utils::calcKeccak(login + password));
+    return m_accountController->load(Utils::calcHash(login + password));
 }
 
 bool ExtraChainNode::login(const std::string &hash) {
@@ -473,14 +473,14 @@ void ExtraChainNode::testPermissions() const {
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
     const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
     m_accountController->createActor(ActorType::Account, userHash);
 
     // Mock actor create
     const std::string userEmail1 = "test@test.com";
     const std::string userPass1 = "12345678";
     const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
+    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
     m_accountController->createActor(ActorType::Account, userHash1);
 
     DFSController dfsController;
@@ -580,7 +580,7 @@ void ExtraChainNode::test() const {
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
     const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
     m_accountController->createActor(ActorType::ServiceProvider, userHash);
 
     DFSController dfsController;

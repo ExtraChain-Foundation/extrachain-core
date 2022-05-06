@@ -12,9 +12,9 @@ bool AutologinHash::load() {
         qDebug() << "[Autologin Hash] Can't read auth hash file";
         return false;
     }
-    m_hash = file.read(64);
+    m_hash = file.read(43);
     file.close();
-    return m_hash.size() == 64;
+    return m_hash.size() == 43;
 }
 
 void AutologinHash::save(const std::string& hash) {

@@ -265,7 +265,7 @@ BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, con
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id.toZeroByteArray(64))
+                if (tx.getHash() == id.toZeroByteArray(43))
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
