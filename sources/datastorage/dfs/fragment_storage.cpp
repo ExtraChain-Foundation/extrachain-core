@@ -53,6 +53,18 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
 
 bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
     uint64_t endPos = pos + data.length() - 1;
+    std::vector<DBRow> frags =
+        storageFile.select("SELECT * FROM " + DFSF::TableNameFragments + "WHERE pos >= " + std::to_string(pos)
+                           + " AND pos <= " + std::to_string(endPos));
+    if (frags.size() != 0) {
+        for (int i = 0; i < frags.size(); i++) {
+            int64_t fragpos = std::stoull(frags[i].at("pos"));
+            int64_t fragsize = std::stoull(frags[i].at("size"));
+            int64_t fragposend = fragpos + fragsize - 1;
+            int64_t offset = fragpos - pos;
+            //
+        }
+    }
     return true;
 }
 
