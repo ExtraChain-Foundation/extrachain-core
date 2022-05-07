@@ -47,7 +47,11 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
     return fragment;
 }
 
-bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
+bool FragmentStorage::applyChanges(const std::string &data, uint64_t pos) {
+    if (data.empty()) {
+        qFatal("Where I took a wrong turn");
+    }
+
     uint64_t endPos = pos + data.length();
     auto filePath = DFS::Path::filePath(actor, fileHash);
     std::vector<DBRow> frags =
@@ -55,10 +59,10 @@ bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
                            + std::to_string(pos) + " AND pos < " + std::to_string(endPos));
 
     for (int i = 0; i < frags.size(); i++) {
-        int64_t fragpos = std::stoull(frags[i].at("pos"));
-        int64_t fragsize = std::stoull(frags[i].at("size"));
-        int64_t fragposend = fragpos + fragsize;
-        int64_t fragstored = std::stoull(frags[i].at("storedPos"));
+        uint64_t fragpos = std::stoull(frags[i].at("pos"));
+        uint64_t fragsize = std::stoull(frags[i].at("size"));
+        uint64_t fragposend = fragpos + fragsize;
+        uint64_t fragstored = std::stoull(frags[i].at("storedPos"));
 
         if (fragpos > pos && fragposend < endPos) { // middle
             remove(filePath, fragstored, fragsize);
@@ -68,8 +72,9 @@ bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
             write(filePath, fragstored, data.substr(fragpos - pos, endPos - fragpos));
         } else { // begin
             auto storedpos = pos - (fragpos - fragstored);
-            remove(filePath, storedpos, fragposend - pos);
-            write(filePath, storedpos, data.substr(0, fragposend - pos));
+            auto count = std::min(data.length(), fragposend - pos);
+            remove(filePath, storedpos, count);
+            write(filePath, storedpos, data.substr(0, count));
         }
     }
 

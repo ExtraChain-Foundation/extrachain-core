@@ -36,7 +36,7 @@ class EXTRACHAIN_EXPORT ActorIndex {
 private:
     ExtraChainNode &node;
 
-    int64_t records = 0;
+    uint64_t records = 0;
     const std::string folderPath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
         + DataStorage::ACTOR_INDEX_FOLDER_NAME.toStdString() + '/';
     int16_t SECTION_NAME_SIZE = 2;

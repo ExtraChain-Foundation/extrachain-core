@@ -485,13 +485,13 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
 namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
 
-static int64_t currentDateSecs() {
+static uint64_t currentDateSecs() {
     using namespace std::chrono;
     uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return secs;
 }
 
-static int64_t currentDateMs() {
+static uint64_t currentDateMs() {
     using namespace std::chrono;
     uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return ms;
@@ -531,7 +531,7 @@ int qByteArrayToInt(const QByteArray &number);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Base64);
 EXTRACHAIN_EXPORT QByteArray calcHash(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
-                                                HashEncode encode = HashEncode::Base64);
+                                              HashEncode encode = HashEncode::Base64);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
