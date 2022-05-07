@@ -8,6 +8,9 @@
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <msgpack.hpp>
+
+class ActorId;
+
 namespace Tools {
 template <typename T>
 std::vector<unsigned char> typeToByteArray(T integerValue) {
@@ -85,12 +88,10 @@ namespace Packets {
         uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
     };
-    enum SegmentMessageType
-    {
+    enum SegmentMessageType {
         add = 0,
         insert = 1,
         replace = 2,
-
     };
 
     struct EditSegmentMessage {
@@ -200,11 +201,10 @@ namespace Tables {
 
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
-    std::filesystem::path filePath(const std::string &actorId, const std::string &fileHash);
+    std::filesystem::path filePath(const ActorId &actorId, const std::string &fileHash);
 }
 
-enum class Encryption
-{
+enum class Encryption {
     Public = 0,
     Encrypted = 1
 };

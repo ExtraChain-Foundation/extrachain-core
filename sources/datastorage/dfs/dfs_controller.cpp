@@ -65,7 +65,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     auto fileSize = std::filesystem::file_size(newFilePath);
     std::filesystem::path placeInDFS = DFS::Basic::fsActrRootW + DFS::Basic::separator
         + actor.id().toString().toStdWString() + DFS::Basic::separator;
-    std::filesystem::path dfsPath = DFS::Path::filePath(actor.id().toStdString(), fileHash);
+    std::filesystem::path dfsPath = DFS::Path::filePath(actor.id(), fileHash);
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
@@ -82,7 +82,9 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 #else
         std::filesystem::copy(newFilePath, placeInDFS);
 #endif
-    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
+    } catch (std::filesystem::filesystem_error const &err) {
+        qDebug() << "[Dfs] Copy error:" << err.what();
+    }
 
     DFS::Packets::AddFileMessage msg = { .Actor = actor.id().toStdString(),
                                          .FileHash = fileHash,
@@ -487,7 +489,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFS::Pa
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileHash) {
-    std::filesystem::remove(DFS::Path::filePath(actorId.toStdString(), fileHash));
+    std::filesystem::remove(DFS::Path::filePath(actorId, fileHash));
     node.network()->send_message(std::pair { actorId, fileHash }, MessageType::DfsRequestFile,
                                  MessageStatus::Request);
 }

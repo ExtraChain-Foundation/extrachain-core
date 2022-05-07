@@ -1,5 +1,7 @@
 #include "utils/dfs_utils.h"
 
+#include "datastorage/actor.h"
+
 std::vector<DBRow> DFS::Tables::ActorDirFile::getFileDataByHash(DBConnector *db, std::string hash) {
     std::string query = "SELECT * FROM " + TableName + " WHERE fileHash = '" + hash + "' "
         /*+ "OR fileHashPrev = '" + hash + "' "*/;
@@ -109,7 +111,7 @@ std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::pa
     return p;
 }
 
-std::filesystem::path DFS::Path::filePath(const std::string &actorId, const std::string &fileHash) {
-    return DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter()
-        + fileHash;
+std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::string &fileHash) {
+    return DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString()
+        + Utils::platformDelimeter() + fileHash;
 }
