@@ -52,8 +52,7 @@ class TransactionManager;
  *
  */
 
-enum class FreezeBalanceSearch
-{
+enum class FreezeBalanceSearch {
     AllStaking,
     AllNotMyStaking,
     OnlyMyStaking,
@@ -81,7 +80,7 @@ private:
     bool launched;
 
 public:
-    Blockchain(ExtraChainNode *node, bool fileMode = true);
+    explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
     Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
@@ -102,7 +101,7 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const QByteArray data) const;
+    void saveTxInfoInEC(const QByteArray &data) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
@@ -317,7 +316,7 @@ signals:
 
     // responses
     void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
-                       const SocketPair &receiver);
+                       const std::string &messageId);
 
     /**
      * @brief There no such block in a local blockchain
@@ -356,11 +355,11 @@ public slots:
     void blockCountResponse(const BigNumber &count);
     // from node manager
     void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                             const SocketPair &receiver, const QByteArray &request);
+                             const std::string &messageId, const QByteArray &request);
 
     void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                const QByteArray &requestHash, const SocketPair &receiver);
-    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
+                                const QByteArray &requestHash, const std::string &messageId);
+    void getBlockCount(const QByteArray &requestHash, const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block

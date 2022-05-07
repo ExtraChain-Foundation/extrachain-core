@@ -31,8 +31,8 @@
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "extrachain_global.h"
-#include "profile/public_profile.h"
 #include "utils/bignumber.h"
+#include "utils/exc_utils.h"
 
 /**
  * Acting entity.
@@ -129,7 +129,7 @@ private:
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
-                  "Your type is not supported. Only Keys are supported");
+                  "Type is not supported. Only Keys are supported");
 
 private:
     ActorId m_id;
@@ -165,7 +165,7 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto publicKey = this->m_key.publicKey();
-        auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
+        auto hash = Utils::calcHash(QByteArray::fromStdString(publicKey), Utils::HashEncode::Hex);
 
         if (hash.size() >= 20)
             m_id = hash.left(20).toStdString();
@@ -178,14 +178,6 @@ public:
             return true;
 
         return m_id.isEmpty();
-    }
-
-    PublicProfile profile() {
-        // TODO: public profile read to new dfs
-        QString pathToFolder =
-            QString::fromStdString(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + m_id.toStdString()
-                                   + Utils::platformDelimeter() + "profile" + Utils::platformDelimeter());
-        return PublicProfile(m_id.toByteArray(), pathToFolder);
     }
 
 public:
@@ -251,13 +243,11 @@ public:
         }
 
         QJsonArray array;
-        auto pub =
-            QString(QByteArray::fromStdString(m_key.publicKey()).toBase64(QByteArray::Base64UrlEncoding));
+        auto pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
         array << m_id.toString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto secret =
-                QString(QByteArray::fromStdString(m_key.secretKey()).toBase64(QByteArray::Base64UrlEncoding));
+            auto secret = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.secretKey())));
             array << secret;
         }
 
@@ -273,13 +263,13 @@ public:
         auto array = QJsonDocument::fromJson(serialized).array();
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
-        auto pub = QByteArray::fromBase64(array[2].toString().toLatin1(), QByteArray::Base64UrlEncoding);
+        auto pub = Utils::bytesDecode(array[2].toString().toLatin1());
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
             actor.setPublicKey(pub.toStdString());
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto sec = QByteArray::fromBase64(array[3].toString().toLatin1(), QByteArray::Base64UrlEncoding);
+            auto sec = Utils::bytesDecode(array[3].toString().toLatin1());
             actor.setSecretKey(sec.toStdString(), pub.toStdString());
         }
 

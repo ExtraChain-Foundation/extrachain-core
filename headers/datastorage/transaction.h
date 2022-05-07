@@ -21,7 +21,6 @@
 #define TRANSACTION_H
 
 #include "datastorage/actor.h"
-#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
 #include <QByteArray>
@@ -67,7 +66,7 @@ public: // make private
 private:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses keccak.
+     * Uses sha3.
      */
     void calcHash();
 

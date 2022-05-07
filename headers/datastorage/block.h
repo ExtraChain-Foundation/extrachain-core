@@ -22,7 +22,6 @@
 
 #include "actor.h"
 #include "datastorage/transaction.h"
-#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/db_connector.h"
 #include "utils/exc_utils.h"
@@ -93,7 +92,7 @@ public:
 private:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses keccak.
+     * Uses sha3.
      */
     void calcHash();
 

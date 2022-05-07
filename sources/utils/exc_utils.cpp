@@ -42,16 +42,14 @@
     #include "preconfig.h"
 #endif
 
-std::string Utils::calcKeccak(const std::string &data) {
-    QByteArray hash =
-        QCryptographicHash::hash(QByteArray::fromStdString(data), QCryptographicHash::Algorithm::Keccak_256)
-            .toHex();
+std::string Utils::calcHash(const std::string &data, HashEncode encode) {
+    QByteArray hash = calcHash(QByteArray::fromStdString(data), encode);
     return hash.toStdString();
 }
 
-QByteArray Utils::calcKeccak(const QByteArray &data) {
-    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Keccak_256).toHex();
-    return hash;
+QByteArray Utils::calcHash(const QByteArray &data, HashEncode encode) {
+    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Sha3_256);
+    return bytesEncode(hash, encode);
 }
 
 // SERIALIZATION //
@@ -122,16 +120,18 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-std::string Utils::calcKeccakForFile(const std::filesystem::path &fileName) {
+std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
-        if (hash.addData(&file))
-            return hash.result().toHex().toStdString();
+        QCryptographicHash cryptographicHash(QCryptographicHash::Algorithm::Sha3_256);
+        if (cryptographicHash.addData(&file)) {
+            auto hash = cryptographicHash.result();
+            return bytesEncode(hash, encode).toStdString();
+        }
     }
 
-    qFatal("Utils::calcKeccakForFile");
-    qDebug() << "[KeccakForFile] Can't open file" << fileName.c_str();
+    qFatal("Utils::calcHashForFile");
+    qDebug() << "[Utils] Calc hash for file: can't open file" << fileName.c_str();
     return "";
 }
 
@@ -356,6 +356,30 @@ std::string Utils::hexStringToByte(const std::string &data) {
         res.resize(res.size() - 1);
     }
     return res;
+}
+
+QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
+    switch (encode) {
+    case HashEncode::Base64:
+        return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    case HashEncode::Hex:
+        return data.toHex();
+    default:
+        break;
+    }
+    return data;
+}
+
+QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
+    switch (encode) {
+    case HashEncode::Base64:
+        return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    case HashEncode::Hex:
+        return QByteArray::fromHex(data);
+    default:
+        break;
+    }
+    return data;
 }
 
 QString Utils::detectCompiler() {

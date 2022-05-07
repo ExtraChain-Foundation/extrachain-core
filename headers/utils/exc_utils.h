@@ -29,7 +29,6 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
-#include "network/socket_pair.h"
 
 #include "utils/dfs_utils.h"
 #include <msgpack.hpp>
@@ -41,13 +40,7 @@ static bool isStartedServer = true;
 static quint16 maxConnections = 100;
 static bool networkDebug = false;
 
-struct DataStruct {
-    QByteArray msg;
-    SocketPair receiver;
-};
-
-enum class Protocol
-{
+enum class Protocol {
     Undefined = 0,
     Udp = 1,
     WebSocket = 2
@@ -515,6 +508,12 @@ enum PrintDebug
     On = 1
 };
 
+enum class HashEncode {
+    None,
+    Base64,
+    Hex,
+};
+
 #ifdef Q_OS_WIN
 static QString filePrefix = "file:///";
 #else
@@ -529,13 +528,16 @@ QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
-EXTRACHAIN_EXPORT std::string calcKeccak(const std::string &data);
-EXTRACHAIN_EXPORT QByteArray calcKeccak(const QByteArray &data);
-EXTRACHAIN_EXPORT std::string calcKeccakForFile(const std::filesystem::path &fileName);
+EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT QByteArray calcHash(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
+                                                HashEncode encode = HashEncode::Base64);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
 std::string hexStringToByte(const std::string &data);
+QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
 EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
                                    const QByteArray &key, int blockSize = 60007);
@@ -595,11 +597,6 @@ static const std::string profiles = "profiles";
 static const QString KEY_TYPE = ".key";
 QString makeKeyFileName(QString name);
 }
-
-namespace SmartContractStorage {
-static const QString CONTRACTSTORE = "keystore/contracts/";
-static const QString CONTRACTPROFILE = "keystore/contracts/profile/";
-} // namespace SmartContractStorage
 
 namespace SearchEnum {
 enum class BlockParam

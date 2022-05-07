@@ -32,13 +32,13 @@ private:
     std::string m_publicKey;
 
 public:
-    KeyPublic() = default;
-    KeyPublic(const std::string &publicKey);
-    KeyPublic(const KeyPublic &keyPublic);
+    explicit KeyPublic() = default;
+    explicit KeyPublic(const std::string &publicKey);
+    explicit KeyPublic(const KeyPublic &keyPublic);
     ~KeyPublic() = default;
 
-    QByteArray encrypt(const QByteArray &data, const std::string &senderPrivateKey) const;
-    bool verify(const std::string &data, const std::string &dsignHex) const;
+    std::string encrypt(const std::string &data, const std::string &senderPrivateKey) const;
+    bool verify(const std::string &data, const std::string &signature) const;
 
     const std::string &publicKey() const;
     bool empty() const;

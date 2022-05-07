@@ -24,15 +24,14 @@
 
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
-    static PrivateProfile createUser(const Actor<KeyPrivate> &actor, const std::string hash);
-    static PrivateProfile loadUser(const ActorId &actorId, const std::string hash);
+    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static PrivateProfile load(const ActorId &actorId, const std::string &hash);
     const Actor<KeyPrivate> &main() const;
     const Actor<KeyPrivate> &current() const;
     const std::vector<Actor<KeyPrivate>> &actors() const;
     bool changeCurrent(const ActorId &actorId);
     void addWalet(const Actor<KeyPrivate> &actor);
-    const Actor<KeyPrivate> &getActorConst(const ActorId &actorId) const;
-    Actor<KeyPrivate> &getActor(const ActorId &actorId);
+    const Actor<KeyPrivate> &getActor(const ActorId &actorId) const;
     bool loaded();
     const std::string &hash() const;
     QJsonObject toJson() const;

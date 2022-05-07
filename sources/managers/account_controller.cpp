@@ -20,26 +20,25 @@
 #include "managers/account_controller.h"
 
 #include "datastorage/blockchain.h"
-#include "profile/private_profile.h"
 
 AccountController::AccountController(ExtraChainNode &node)
     : node(node) {
 }
 
-Actor<KeyPrivate> AccountController::createUser(const std::string &hash, ActorType type) {
-    if (hash.empty() || hash.size() != 64)
+Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
+    if (hash.empty() || hash.size() != 43)
         qFatal("[Accounts] Create actor: hash is empty");
 
     Actor<KeyPrivate> actor;
     actor.create(type);
-    auto profile = PrivateProfile::createUser(actor, hash);
+    auto profile = PrivateProfile::create(actor, hash);
     m_profiles.push_back(profile);
-    m_currentUser = actor.id();
+    m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
     addToProfileList(actor.id());
     autologinHash.save(hash); // TODO: add arg
 
-    qDebug() << "[Accounts] Created new user" << actor.id();
+    qDebug() << "[Accounts] Created new profile" << actor.id();
 
     node.start(); // TODO: remove
 
@@ -49,11 +48,10 @@ Actor<KeyPrivate> AccountController::createUser(const std::string &hash, ActorTy
     return actor;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &userActor) {
-    auto hash = ""; // node->privateProfile()->hash();
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
-    auto &profile = getProfile(userActor.isEmpty() ? m_currentUser : userActor);
+    auto &profile = getProfile(profileActor.isEmpty() ? m_currentProfile : profileActor);
     profile.addWalet(actor);
     node.actorIndex()->addActor(actor.convertToPublic());
 
@@ -64,7 +62,7 @@ bool AccountController::load(const std::string &hash) {
     auto profiles = profilesList();
 
     for (auto &actorId : profiles) {
-        auto profile = PrivateProfile::loadUser(actorId, hash);
+        auto profile = PrivateProfile::load(actorId, hash);
         if (profile.loaded()) {
             const auto &actors = profile.actors();
             for (auto &actor : actors) {
@@ -74,7 +72,7 @@ bool AccountController::load(const std::string &hash) {
             }
 
             m_profiles.push_back(profile);
-            m_currentUser = profile.main().id();
+            m_currentProfile = profile.main().id();
             node.start();             // TODO: remove
             autologinHash.save(hash); // TODO: add arg
             return true;
@@ -89,7 +87,7 @@ const Actor<KeyPrivate> &AccountController::mainActor() {
         qFatal("[AccountController] No main actor");
         std::exit(-1);
     }
-    return currentUser().main();
+    return currentProfile().main();
 }
 
 PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
@@ -104,12 +102,12 @@ PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
     return m_profiles.front();
 }
 
-const PrivateProfile &AccountController::currentUser() const {
-    if (m_currentUser.isEmpty())
-        qFatal("Incorrect current user");
+const PrivateProfile &AccountController::currentProfile() const {
+    if (m_currentProfile.isEmpty())
+        qFatal("Incorrect current profile");
 
     for (auto &profile : m_profiles) {
-        if (m_currentUser == profile.main().id()) {
+        if (m_currentProfile == profile.main().id()) {
             return profile;
         }
     }
@@ -123,23 +121,23 @@ int AccountController::count() const {
     return m_profiles.size();
 }
 
-void AccountController::changeCurrentUser(const ActorId &actorId) {
+void AccountController::changeCurrentProfile(const ActorId &actorId) {
     if (!getProfile(actorId).actors().empty()) {
-        m_currentUser = actorId.toStdString();
+        m_currentProfile = actorId.toStdString();
     }
 }
 
 const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
-    return currentUser().actors();
+    return currentProfile().actors();
 }
 
 const Actor<KeyPrivate> &AccountController::currentWallet() const {
-    return currentUser().current();
+    return currentProfile().current();
 }
 
 void AccountController::clear() {
     m_profiles.clear();
-    m_currentUser = ActorId();
+    m_currentProfile = ActorId();
     qDebug() << "[AccountController] Cleared";
 }
 

@@ -20,8 +20,6 @@
 #include "enc/key_public.h"
 #include "enc/enc_tools.h"
 
-#include <QJsonObject>
-
 KeyPublic::KeyPublic(const std::string &publicKey) {
     m_publicKey = publicKey;
 }
@@ -30,13 +28,12 @@ KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
     m_publicKey = keyPublic.publicKey();
 }
 
-QByteArray KeyPublic::encrypt(const QByteArray &data, const std::string &senderPrivateKey) const {
-    auto res = SecretKey::encryptAsymmetric(data.toStdString(), senderPrivateKey, m_publicKey);
-    return QByteArray::fromStdString(res);
+std::string KeyPublic::encrypt(const std::string &data, const std::string &senderPrivateKey) const {
+    return SecretKey::encryptAsymmetric(data, senderPrivateKey, m_publicKey);
 }
 
-bool KeyPublic::verify(const std::string &data, const std::string &dsignHex) const {
-    return SecretKey::verify(data, m_publicKey, dsignHex);
+bool KeyPublic::verify(const std::string &data, const std::string &signature) const {
+    return SecretKey::verify(data, m_publicKey, signature);
 }
 
 const std::string &KeyPublic::publicKey() const {

@@ -74,7 +74,6 @@ public:
     // Remove this function before merge
     void test() const;
     void testPermissions() const;
-    void testSerializer() const;
 
     bool login(const std::string &login, const std::string &password);
     bool login(const std::string &hash);
@@ -108,6 +107,8 @@ public:
     bool importUser(const std::string &data, const std::string &login, const std::string &password);
     // TODO: prepareImportUser: get visual info about file
 
+    void createNetworkIdentifier();
+
 private:
     void showMessage(QString from, QString message);
     /**
@@ -128,32 +129,14 @@ private:
 
 signals:
     void ready();
-    void sendMsg(const QByteArray &data, const unsigned int &type);
-    void InitNet(ActorIndex *actorChain, AccountController *accountList);
     void NewTx(Transaction tx);
-    // created keys for chat
-    void sendKey(QByteArray key);
-    void sendPrivateKey(QByteArray prKey);
-    // public:
-    void saveProfile(Actor<KeyPrivate> key, QByteArrayList profile);
-    void sendTransactionContract(Transaction tx);
-    // void addActorInActorIndex(Actor<KeyPublic> actor);
-    void loadInfoFromPrProfile(const QByteArray &hash, const QByteArray &idProfile, const QString &type);
-    void getAllActorsNode(ActorId id, bool acc);
-    void generateSmartContract(QByteArray tokenCount, QByteArray tokenName, QByteArray rulAddress,
-                               QByteArray color);
-    void removeConnection(QString identifier);
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
 
 private slots:
     void getAllActorsTimerCall();
 
-    // void makeContractFirstTransaction(Contract &contract);
-    // void makeContractFinalTransaction(Contract &contract);
-
 public slots:
-    void createNetworkIdentifier();
     void notificationToken(QString os, QString actorId, QString token);
 };
 #endif // EXTRACHAIN_NODE_H

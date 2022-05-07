@@ -27,7 +27,6 @@
 #include "extrachain_global.h"
 
 #include <filesystem>
-#include <iostream>
 
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:
@@ -61,7 +60,7 @@ public:
     void decryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
 
     std::string sign(const std::string &data) const;
-    bool verify(const std::string &data, const std::string &dsignHex) const;
+    bool verify(const std::string &data, const std::string &signature) const;
 
     const std::string &secretKey() const;
     const std::string &publicKey() const;

@@ -9,8 +9,7 @@
 class EXTRACHAIN_EXPORT PermissionManager : public QObject {
     Q_OBJECT
 public:
-    enum CriticalErrors
-    {
+    enum CriticalErrors {
         RootDirCreateError = -2,
         ActorDirCreateError = -3,
 
@@ -20,8 +19,7 @@ public:
         NotSupportedPermission
     };
 
-    enum Permission
-    {
+    enum Permission {
         Read = 0,
         Write = 1,  // Add new entry
         Delete = 2, // Delete any entry
@@ -65,7 +63,7 @@ private:
     static const QString RootDir;
 
 private:
-    DBConnector m_db;
+    // DBConnector m_db;
 };
 
 struct PermissionManager::GetPermissionMsg {

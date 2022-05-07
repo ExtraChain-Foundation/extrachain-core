@@ -265,7 +265,7 @@ BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, con
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id.toZeroByteArray(64))
+                if (tx.getHash() == id.toZeroByteArray(43))
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
@@ -388,8 +388,8 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
         }
     }
 
-    DBConnector DB;
-    if (DB.open(path.toStdString())) {
+    DBConnector DB(path.toStdString());
+    if (DB.open()) {
         if (GenesisBlock::isGenesisBlock(_data)) {
             GenesisBlock block(_data);
             DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
@@ -572,6 +572,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
     }
 
     DBConnector DB(path.toStdString());
+    DB.open();
     if (DB.tableNames().size() == 0)
         return "";
     if (DB.tableNames()[0] == "GenesisBlock") {

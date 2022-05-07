@@ -301,7 +301,9 @@ bool BigNumber::isValid(const QByteArray &bigNumber, int base) {
     try {
         mpz_class(bigNumber.toStdString(), base);
         return true;
-    } catch (std::exception &) { return false; }
+    } catch (std::exception &) {
+        return false;
+    }
 }
 
 BigNumber BigNumber::factorial(unsigned long number) {
@@ -320,7 +322,7 @@ BigNumber BigNumber::random(int n, bool zeroAllowed) {
 
     for (int i = 1; i != n; ++i)
         str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-    // std::cout << str.toStdString() << std::endl;
+
     BigNumber res(str);
     if (!zeroAllowed && res == 0)
         return random(n, zeroAllowed);

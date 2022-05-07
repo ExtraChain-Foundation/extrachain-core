@@ -41,8 +41,8 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
-NetworkManager::NetworkManager(ExtraChainNode *node) {
-    this->node = node;
+NetworkManager::NetworkManager(ExtraChainNode &node)
+    : node(node) {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
@@ -266,7 +266,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 void NetworkManager::saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     std::ofstream file;
-    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app);
+    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
         qFatal("[NetworkManager/saveToCache] Error open cache file");
     }
@@ -314,7 +314,7 @@ bool NetworkManager::isActiveConnectionExists() {
 bool NetworkManager::checkMsgCount(const QByteArray &msg) {
     bool flag_result = true;
     bool value = 0;
-    QByteArray hashMsg = Utils::calcKeccak(msg);
+    QByteArray hashMsg = Utils::calcHash(msg);
     QMap<QByteArray, int>::iterator it = msgHashList.find(hashMsg);
 
     if (it == msgHashList.end())
@@ -341,12 +341,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
-    // std::cout << "[NetworkManager/messageReceived] " << sign << " " << msg << std::endl;
 
     // TODO: no check new actor
     //    {
     //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
-    //        auto actor = node->actorIndex()->getActor(sender);
+    //        auto actor = node.actorIndex()->getActor(sender);
 
     //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
     //                                         QByteArray::fromStdString(std::string(sign)));
@@ -381,27 +380,27 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     switch (type) {
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        node->actorIndex()->handleNewActor(actor);
+        node.actorIndex()->handleNewActor(actor);
         break;
     }
     case MessageType::Actor: {
         // actor get, test use ActorId
         if (status == MessageStatus::Request) {
             auto actorId = MessagePack::deserialize<ActorId>(serialized);
-            node->actorIndex()->handleGetActor(actorId, messageId);
+            node.actorIndex()->handleGetActor(actorId, messageId);
         } else if (status == MessageStatus::Response) {
             auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-            node->actorIndex()->handleNewActor(actor);
+            node.actorIndex()->handleNewActor(actor);
         }
         break;
     }
     case MessageType::ActorAll: {
         if (status == MessageStatus::Request) {
             auto ignoredActorId = MessagePack::deserialize<ActorId>(serialized);
-            node->actorIndex()->handleGetAllActor(ignoredActorId, messageId);
+            node.actorIndex()->handleGetAllActor(ignoredActorId, messageId);
         } else if (status == MessageStatus::Response) {
             auto actors = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            node->actorIndex()->handleNewAllActors(actors);
+            node.actorIndex()->handleNewAllActors(actors);
         }
         break;
     }
@@ -411,52 +410,55 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::DfsDirData: {
         if (status == MessageStatus::Request) {
             auto actorId = MessagePack::deserialize<ActorId>(serialized); // TODO: add last modified
-            node->dfs()->sendDirData(actorId, 0, messageId);
+            node.dfs()->sendDirData(actorId, 0, messageId);
         } else if (status == MessageStatus::Response) {
             auto [actorId, dirRows] =
                 MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::Packets::DirRow>>>(serialized);
-            node->dfs()->addDirData(actorId, dirRows);
+            node.dfs()->addDirData(actorId, dirRows);
         }
         break;
     }
     case MessageType::DfsLastModified: {
         auto msg = MessagePack::deserialize<uint64_t>(serialized);
-        node->dfs()->sendSync(msg, messageId);
+        node.dfs()->sendSync(msg, messageId);
         break;
     }
     case MessageType::DfsAddFile: {
         auto msg = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
-        node->dfs()->addFile(msg, true);
+        node.dfs()->addFile(msg, true);
         break;
     }
     case MessageType::DfsRequestFile: {
         auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        node->dfs()->sendFile(actorId, fileHash, messageId);
+        node.dfs()->sendFile(actorId, fileHash, messageId);
         break;
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
-        node->dfs()->sendFragment(msg, messageId);
+        node.dfs()->sendFragment(msg, messageId);
         break;
     }
     case MessageType::DfsAddSegment: {
+    case MessageType::DfsAddSegment: {
         auto msg = MessagePack::deserialize<DFS::Packets::SegmentMessage>(serialized);
-        node->dfs()->addFragment(msg);
+        node.dfs()->addFragment(msg);
         break;
     }
     case MessageType::DfsEditSegment: {
         auto msg = MessagePack::deserialize<DFS::Packets::SegmentMessage>(serialized);
-        node->dfs()->insertFragment(msg);
+        node.dfs()->insertFragment(msg);
+        break;
+    }
         break;
     }
     case MessageType::DfsDeleteSegment: {
         auto msg = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
-        node->dfs()->deleteFragment(msg);
+        node.dfs()->deleteFragment(msg);
         break;
     }
     case MessageType::DfsRemoveFile: {
         auto msg = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
-        node->dfs()->removeFile(msg);
+        node.dfs()->removeFile(msg);
         break;
     }
     case MessageType::DfsSendingFileDone: { // TODO

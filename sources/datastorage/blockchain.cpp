@@ -123,7 +123,7 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-void Blockchain::saveTxInfoInEC(const QByteArray data) const {
+void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
     QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
     std::vector<DBRow> extractData;
     DBRow resultData;
@@ -132,6 +132,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray data) const {
     QString typeR = "0"; // receiver type
 
     DBConnector cacheDB("blockchain/cacheEC.db");
+    cacheDB.open();
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
                         "ActorId  TEXT   NOT NULL, "
@@ -215,6 +216,7 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken) {
     BigNumber id = gen.getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
+    cacheDB.open();
     std::vector<DBRow> extractData =
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "';");
     BigNumber res = 0;
@@ -229,6 +231,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     BigNumber id = blockIndex.getLastGenesisBlock().getIndex();
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
+    cacheDB.open();
     std::vector<DBRow> extractData =
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "' ;");
     BigNumber res = 0;
@@ -237,6 +240,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
         res += BigNumber(sum).abs();
     }
     DBConnector cacheDB2("blockchain/cacheEC.db");
+    cacheDB2.open();
     std::vector<DBRow> extractData2 = cacheDB2.select(
         "SELECT * FROM cacheData WHERE Token = '"
         + idToken.toStdString()
@@ -335,7 +339,7 @@ void Blockchain::stakingReward(const Block &block) {
                     Serialization::serialize({ hash.toByteArray(), blockId.toByteArray(), tx.getHash(),
                                                block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
                 rtx.setProducer(wallet.id());
-                rtx.sign(node->accountController()->currentUser().getActorConst(wallet.id()));
+                rtx.sign(node->accountController()->currentProfile().getActor(wallet.id()));
                 // TODONEW emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
             }
         }
@@ -452,9 +456,9 @@ bool Blockchain::signCheckAdd(Block &block) {
             if (list != savedList) {
                 for (int i = 0; i < list.size(); i += 3) {
                     if (!savedList.contains(list[i])) {
-                        DBConnector DB;
                         QString path = blockIndex.buildFilePath(block.getIndex());
-                        DB.open(path.toStdString());
+                        DBConnector DB(path.toStdString());
+                        DB.open();
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
@@ -490,9 +494,9 @@ bool Blockchain::signCheckAdd(Block &block) {
             if (list != savedList) {
                 for (int i = 0; i < list.size(); i += 3) {
                     if (!savedList.contains(list[i])) {
-                        DBConnector DB;
                         QString path = blockIndex.buildFilePath(block.getIndex());
-                        DB.open(path.toStdString());
+                        DBConnector DB(path.toStdString());
+                        DB.open();
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
                         rowRow.insert({ "digSig", list[i + 1].toStdString() });
@@ -635,8 +639,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
-                nb.sign(
-                    node->accountController()->currentUser().getActorConst(node->actorIndex()->firstId()));
+                nb.sign(node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
             } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return nb;
@@ -651,6 +654,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
                 i--;
             }
             DBConnector cacheDB("blockchain/cacheEC.db");
+            cacheDB.open();
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
                 nb.addRow(
@@ -1280,7 +1284,7 @@ void Blockchain::blockCountResponse(const BigNumber &count) {
 }
 
 void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                        const QByteArray &requestHash, const SocketPair &receiver) {
+                                        const QByteArray &requestHash, const std::string &messageId) {
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
@@ -1288,7 +1292,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     // receiver);
 }
 
-void Blockchain::getBlockCount(const QByteArray &requestHash, const SocketPair &receiver) {
+void Blockchain::getBlockCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
     //
@@ -1348,7 +1352,7 @@ void Blockchain::setApprover(const Actor<KeyPrivate> &value) {
 }
 
 void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                                     const SocketPair &receiver, const QByteArray &request) {
+                                     const std::string &messageId, const QByteArray &request) {
     Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty()) {
         // TODONEW emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse,
@@ -1610,6 +1614,7 @@ void Blockchain::proveTx(Transaction *tx) {
     // if current transaction not fee
     else {
         if (tx->getData() == "InitContract") {
+            /*
             QByteArrayList profile = senderActor.profile().getListProfile();
             if (profile.length() < 6) {
                 qDebug() << "Transaction not approved: no profile for" << senderActor.id();
@@ -1633,6 +1638,7 @@ void Blockchain::proveTx(Transaction *tx) {
 
             qDebug() << "Transaction not approved: sender != token in genesis block";
             emit tx->NotApproved(tx);
+            */
 
             return;
         }
@@ -1684,7 +1690,7 @@ BlockIndex &Blockchain::getBlockIndex() {
 }
 
 void Blockchain::removeAll() {
-    node->actorIndex()->removeAll();
+    // node->actorIndex()->removeAll();
     this->memIndex.removeAll();
     this->blockIndex.removeAll();
     QFile(DataStorage::TMP_GENESIS_BLOCK).remove();

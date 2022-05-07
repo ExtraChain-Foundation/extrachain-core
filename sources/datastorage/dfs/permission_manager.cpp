@@ -5,13 +5,10 @@ const QString PermissionManager::ServiceDir = "Service";
 const QString PermissionManager::RootDir = "dfs";
 
 PermissionManager::PermissionManager(QObject *parent)
-    : QObject { parent }
-    , m_db() {
+    : QObject(parent) {
 }
 
 PermissionManager::~PermissionManager() {
-    if (m_db.isOpen())
-        m_db.close();
 }
 
 bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
