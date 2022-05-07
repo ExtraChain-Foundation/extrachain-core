@@ -1,16 +1,12 @@
 #include "datastorage/dfs/fragment_storage.h"
 
-FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash /*, DfsController *DFS*/) {
+FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
+    : storageFile(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + Actor.toStdString()
+                  + Utils::platformDelimeter() + FileHash + DFSF::Extension) {
     actor = Actor;
     fileHash = FileHash;
-    //    dfs = DFS;
-    storageFile.open(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actor.toStdString()
-                     + Utils::platformDelimeter() + fileHash + DFSF::Extension);
+    storageFile.open();
     storageFile.query(DFSF::CreateTableQueryFragments);
-}
-
-FragmentStorage::~FragmentStorage() {
-    storageFile.close();
 }
 
 bool FragmentStorage::insertFragment(DFS::Packets::SegmentMessage msg) {
@@ -136,7 +132,7 @@ DBRow FragmentStorage::makeFragmentRow(DFS::Packets::SegmentMessage msg, uint64_
     row.insert({ "pos", std::to_string(msg.Offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(msg.Data.size()) });
-    row.insert({ "fragHash", Utils::calcKeccak(msg.Data) });
+    row.insert({ "fragHash", Utils::calcHash(msg.Data) });
     return row;
 }
 

@@ -658,9 +658,9 @@ DFS::Packets::AddFileMessage DfsController::getFileHeader(const ActorId actor, c
     std::string pathDelim = Utils::platformDelimeter();
     std::string actrDirFilePath =
         DFS::Basic::fsActrRoot + pathDelim + actor.toStdString() + pathDelim + DFS::Basic::fsMapName;
-    DBConnector actrDirFile;
+    DBConnector actrDirFile(actrDirFilePath);
 
-    if (!actrDirFile.open(actrDirFilePath)) {
+    if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
     }
     std::vector<DBRow> actrDirData = DFS::Tables::ActorDirFile::getFileDataByHash(&actrDirFile, fileHash);

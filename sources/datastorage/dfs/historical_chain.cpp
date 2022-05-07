@@ -1,8 +1,8 @@
 #include "datastorage/dfs/historical_chain.h"
 
-HistoricalChain::HistoricalChain(std::string chainFilePath, std::string objectFilePath) {
-    chainPath = chainFilePath;
-    if (!chainFile.open(chainFilePath)) {
+HistoricalChain::HistoricalChain(std::string chainFilePath, std::string objectFilePath)
+    : chainFile(chainFilePath) {
+    if (!chainFile.open()) {
         exit(-1);
     }
     objectPath = objectFilePath;
@@ -15,7 +15,7 @@ HistoricalChain::~HistoricalChain() {
 }
 
 bool HistoricalChain::apply(DFS::Packets::EditSegmentMessage msg) {
-    chainFile.open(chainPath.string());
+    chainFile.open();
     DBRow lastRow = getLastRow();
     uint64_t num;
     uint64_t prevNum;
@@ -53,7 +53,7 @@ bool HistoricalChain::apply(DFS::Packets::EditSegmentMessage msg) {
 
 bool HistoricalChain::remove(DFS::Packets::EditSegmentMessage msg) {
     bool removed = false;
-    chainFile.open(chainPath.string());
+    chainFile.open();
     const auto lastSegment = getLastEditSegmentMessage();
 
     if (msg.Data == lastSegment.Data) {
@@ -80,7 +80,7 @@ bool HistoricalChain::remove(DFS::Packets::EditSegmentMessage msg) {
 
 bool HistoricalChain::revert(DFS::Packets::EditSegmentMessage msg) {
     bool reverted = true;
-    chainFile.open(chainPath.string());
+    chainFile.open();
 
     DBRow row = getRow(msg.Data);
     std::string queryGetListEditSegment =
@@ -99,7 +99,7 @@ bool HistoricalChain::revert(DFS::Packets::EditSegmentMessage msg) {
 
 bool HistoricalChain::update(DFS::Packets::EditSegmentMessage msg, const int &num) {
     bool updated = false;
-    chainFile.open(chainPath.string());
+    chainFile.open();
     DFS::Packets::EditSegmentMessage editableSegmentMessage = getEditSegmentMessage(num);
     updated = chainFile.update("UPDATE " + dfshc::TableNameHC + " SET "
                                + " type = " + std::to_string(msg.ActionType) + " data = " + msg.Data
@@ -109,7 +109,7 @@ bool HistoricalChain::update(DFS::Packets::EditSegmentMessage msg, const int &nu
 }
 
 DFS::Packets::EditSegmentMessage HistoricalChain::getEditSegmentMessage(const int &num) {
-    chainFile.open(chainPath.string());
+    chainFile.open();
     DBRow dbRow = getRow(num);
     chainFile.close();
 
@@ -120,7 +120,7 @@ DFS::Packets::EditSegmentMessage HistoricalChain::getEditSegmentMessage(const in
 }
 
 DFS::Packets::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
-    chainFile.open(chainPath.string());
+    chainFile.open();
     DBRow lastRow = getLastRow();
     chainFile.close();
 
@@ -137,7 +137,7 @@ DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::
     row.insert({ "prevNum", std::to_string(prevNum) });
     row.insert({ "type", std::to_string(type) });
     row.insert({ "data", data });
-    row.insert({ "hash", Utils::calcKeccak(data) });
+    row.insert({ "hash", Utils::calcHash(data) });
     return row;
 }
 

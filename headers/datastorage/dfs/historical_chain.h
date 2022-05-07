@@ -12,7 +12,6 @@ namespace dfshc = DFS::Historical;
 
 class EXTRACHAIN_EXPORT HistoricalChain {
 private:
-    stdfs::path chainPath;
     stdfs::path objectPath;
     DBConnector chainFile;
 
@@ -24,9 +23,10 @@ public:
     bool apply(dfsp::EditSegmentMessage msg);
     bool remove(dfsp::EditSegmentMessage msg);
     bool revert(dfsp::EditSegmentMessage msg);
-    bool update(dfsp::EditSegmentMessage msg, const int &num);
+    bool update(dfsp::EditSegmentMessage msg, const int& num);
     dfsp::EditSegmentMessage getEditSegmentMessage(const int& num);
     dfsp::EditSegmentMessage getLastEditSegmentMessage();
+
 private:
     DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
     dfsp::SegmentMessageType convertFromType(const int& type);

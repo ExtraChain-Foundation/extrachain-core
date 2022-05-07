@@ -6,18 +6,19 @@
 #include "utils/db_connector.h"
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+
 namespace DFSP = DFS::Packets;
 namespace DFSF = DFS::Fragments;
+
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
-    //    DfsController *dfs;
     DBConnector storageFile;
     ActorId actor;
     std::string fileHash;
 
 public:
-    FragmentStorage(ActorId Actor, std::string FileHash /*, DfsController *DFS*/);
-    ~FragmentStorage();
+    FragmentStorage(ActorId Actor, std::string FileHash);
+    ~FragmentStorage() = default;
 
 public:
     bool insertFragment(DFSP::SegmentMessage msg);

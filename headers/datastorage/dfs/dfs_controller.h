@@ -75,7 +75,8 @@ public:
     std::string sendFragment(const DFS::Packets::RequestFileSegmentMessage &msg,
                              const std::string &messageId);
     std::string addFragment(const DFS::Packets::SegmentMessage &msg);
-    std::string insertFragment(const DFS::Packets::DeleteSegmentMessage &msg);    std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
+    std::string insertFragment(const DFS::Packets::SegmentMessage &msg);
+    std::string deleteFragment(const DFS::Packets::DeleteSegmentMessage &msg);
     uint64_t bytesLimit() const;
     void setBytesLimit(uint64_t bytesLimit);
 
