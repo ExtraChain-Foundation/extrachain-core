@@ -63,7 +63,7 @@ bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
         if (fragpos > pos && fragposend < endPos) { // middle
             remove(filePath, fragstored, fragsize);
             write(filePath, fragstored, data.substr(fragpos - pos, fragsize));
-        } else if (fragposend > endPos) { // end
+        } else if (fragposend > endPos && fragpos > pos) { // end
             remove(filePath, fragstored, endPos - fragpos);
             write(filePath, fragstored, data.substr(fragpos - pos, endPos - fragpos));
         } else { // begin
