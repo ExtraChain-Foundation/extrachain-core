@@ -48,19 +48,31 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
 }
 
 bool FragmentStorage::applyChanges(std::string data, int64_t pos) {
-    uint64_t endPos = pos + data.length() - 1;
+    uint64_t endPos = pos + data.length();
+    auto filePath = DFS::Path::filePath(actor, fileHash);
     std::vector<DBRow> frags =
-        storageFile.select("SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos >= "
-                           + std::to_string(pos) + " AND pos <= " + std::to_string(endPos));
-    if (frags.size() != 0) {
-        for (int i = 0; i < frags.size(); i++) {
-            int64_t fragpos = std::stoull(frags[i].at("pos"));
-            int64_t fragsize = std::stoull(frags[i].at("size"));
-            int64_t fragposend = fragpos + fragsize - 1;
-            int64_t offset = fragpos - pos;
-            //
+        storageFile.select("SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos + size > "
+                           + std::to_string(pos) + " AND pos < " + std::to_string(endPos));
+
+    for (int i = 0; i < frags.size(); i++) {
+        int64_t fragpos = std::stoull(frags[i].at("pos"));
+        int64_t fragsize = std::stoull(frags[i].at("size"));
+        int64_t fragposend = fragpos + fragsize;
+        int64_t fragstored = std::stoull(frags[i].at("storedPos"));
+
+        if (fragpos > pos && fragposend < endPos) { // middle
+            remove(filePath, fragstored, fragsize);
+            write(filePath, fragstored, data.substr(fragpos - pos, fragsize));
+        } else if (fragposend > endPos) { // end
+            remove(filePath, fragstored, endPos - fragpos);
+            write(filePath, fragstored, data.substr(fragpos - pos, endPos - fragpos));
+        } else { // begin
+            auto storedpos = pos - (fragpos - fragstored);
+            remove(filePath, storedpos, fragposend - pos);
+            write(filePath, storedpos, data.substr(0, fragposend - pos));
         }
     }
+
     return true;
 }
 
