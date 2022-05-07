@@ -4,7 +4,8 @@ FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash /*, DfsCont
     actor = Actor;
     fileHash = FileHash;
     //    dfs = DFS;
-    storageFile.open(actor.toStdString() + Utils::platformDelimeter() + fileHash + DFSF::Extension);
+    storageFile.open(DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actor.toStdString()
+                     + Utils::platformDelimeter() + fileHash + DFSF::Extension);
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
