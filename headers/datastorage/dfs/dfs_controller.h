@@ -66,9 +66,6 @@ private:
                                 uint64_t fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
 
-    void editfile(const DFS::Packets::EditSegmentMessage&msg);
-    void editfile(const DFSP::DeleteSegmentMessage& msg);
-
 public:
     void requestSync();
     void sendSync(uint64_t lastModified, const std::string &messageId);

@@ -9,25 +9,48 @@ FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
-bool FragmentStorage::insertFragment(DFS::Packets::SegmentMessage msg) {
+bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
     uint64_t pos = writeFragment(msg);
     DBRow row = makeFragmentRow(msg, pos);
     storageFile.insert(DFSF::TableNameFragments, row);
     moveRows(row, msg.Data.size());
-    std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
 
-    HistoricalChain historicalChain(filePath, filePath);
-    DFS::Packets::EditSegmentMessage editSegmentMessage =
-        historicalChain.makeEditSegmentMessage(msg, DFS::Packets::SegmentMessageType::insert);
+    std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
+    HistoricalChain historicalChain(storageFile.file(), filePath);
+    DFSP::EditSegmentMessage editSegmentMessage =
+        historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::insert);
     historicalChain.apply(editSegmentMessage);
     return true;
 }
 
-bool FragmentStorage::editFragment(DFS::Packets::EditSegmentMessage msg) {
-    return applyChanges(msg.Data, msg.Offset);
+bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
+    switch (msg.ActionType) {
+    case DFSP::SegmentMessageType::insert: {
+        return insertFragment(DFS::Packets::SegmentMessage {
+            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
+    }
+    case DFSP::SegmentMessageType::add: {
+        return insertFragment(DFS::Packets::SegmentMessage {
+            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
+    }
+    case DFSP::SegmentMessageType::replace: {
+        std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
+        HistoricalChain historicalChain(storageFile.file(), filePath);
+        historicalChain.apply(msg);
+        return applyChanges(msg.Data, msg.Offset);
+    }
+    case DFSP::SegmentMessageType::remove: {
+        std::filesystem::path realFilePath = DFS::Path::filePath(msg.Actor, msg.FileHash);
+        boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
+        auto fileSize = std::filesystem::file_size(realFilePath);
+
+        return removeFragment(DFS::Packets::DeleteSegmentMessage {
+            .Actor = msg.Actor, .FileHash = msg.FileHash, .Offset = msg.Offset, .Size = fileSize });
+    }
+    }
 }
 
-bool FragmentStorage::removeFragment(DFS::Packets::DeleteSegmentMessage msg) {
+bool FragmentStorage::removeFragment(DFSP::DeleteSegmentMessage msg) {
     std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
         + " WHERE pos = " + std::to_string(msg.Offset) + " ORDER BY pos DESC LIMIT 1";
     std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
@@ -35,6 +58,12 @@ bool FragmentStorage::removeFragment(DFS::Packets::DeleteSegmentMessage msg) {
         DBRow frag = array[0];
         storageFile.deleteRow(DFSF::TableNameFragments, frag);
         std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
+
+        HistoricalChain historicalChain(storageFile.file(), filePath);
+        DFSP::EditSegmentMessage editSegmentMessage =
+            historicalChain.makeEditSegmentMessage(msg, DFS::Packets::SegmentMessageType::remove);
+        historicalChain.apply(editSegmentMessage);
+
         return remove(filePath, std::stoull(frag.at("storedPos")), std::stoull(frag.at("size")));
     }
     return false;
@@ -83,7 +112,7 @@ bool FragmentStorage::applyChanges(const std::string &data, uint64_t pos) {
             write(filePath, fragstored, data.substr(fragpos - pos, endPos - fragpos));
         } else { // begin
             auto storedpos = pos - (fragpos - fragstored);
-            auto count = std::min(data.length(), fragposend - pos);
+            auto count = std::min<unsigned long>(data.length(), fragposend - pos);
             remove(filePath, storedpos, count);
             write(filePath, storedpos, data.substr(0, count));
         }
@@ -154,7 +183,7 @@ std::pair<DBRow, DBRow> FragmentStorage::getPrevNextPairFragment(uint64_t number
     return ret;
 }
 
-DBRow FragmentStorage::makeFragmentRow(DFS::Packets::SegmentMessage msg, uint64_t storedPos) {
+DBRow FragmentStorage::makeFragmentRow(DFSP::SegmentMessage msg, uint64_t storedPos) {
     DBRow row;
     row.insert({ "pos", std::to_string(msg.Offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
@@ -163,7 +192,7 @@ DBRow FragmentStorage::makeFragmentRow(DFS::Packets::SegmentMessage msg, uint64_
     return row;
 }
 
-uint64_t FragmentStorage::writeFragment(DFS::Packets::SegmentMessage msg) {
+uint64_t FragmentStorage::writeFragment(DFSP::SegmentMessage msg) {
     std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
     std::pair<DBRow, DBRow> prevnext = getPrevNextPairFragment(msg.Offset);
     uint64_t posToWrite = 0;

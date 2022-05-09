@@ -210,7 +210,7 @@ DBRow HistoricalChain::getRow(const std::string &data) {
 
 dfsp::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
     DFS::Packets::EditSegmentMessage result;
-    result.ActionType = std::stoi(dbRow.at("type"));
+    result.ActionType = static_cast<DFS::Packets::SegmentMessageType>(std::stoi(dbRow.at("type")));
 
     DFS::Historical::FileChange fc;
     fc.fromStdString(dbRow.at("data"));

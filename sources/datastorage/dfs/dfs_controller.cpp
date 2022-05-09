@@ -177,6 +177,7 @@ std::string DfsController::addFile(const DFS::Packets::AddFileMessage &msg, bool
 
     files[msg.Actor + msg.FileHash] = msg;
     emit added(msg.Actor, msg.FileHash, msg.Path, msg.Size);
+
     return msg.FileHash;
 }
 
@@ -451,50 +452,6 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
     boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset);
     char *rr_ptr = static_cast<char *>(rightRegion.get_address());
     return std::string(rr_ptr, rightRegion.get_size());
-}
-
-void DfsController::editfile(const DFSP::EditSegmentMessage &msg) {
-    FragmentStorage fragmentStorage(msg.Actor, msg.FileHash);
-    switch (msg.ActionType) {
-    case DFSP::SegmentMessageType::insert: {
-        fragmentStorage.insertFragment(DFS::Packets::SegmentMessage {
-            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
-        break;
-    }
-    case DFSP::SegmentMessageType::add: {
-        fragmentStorage.insertFragment(DFS::Packets::SegmentMessage {
-            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
-        break;
-    }
-    case DFSP::SegmentMessageType::replace: {
-//        std::filesystem::path realFilePath = DFS::Path::filePath(msg.Actor, msg.FileHash);
-//        boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
-//        auto fileSize = std::filesystem::file_size(realFilePath);
-
-//        fragmentStorage.removeFragment(DFS::Packets::DeleteSegmentMessage {
-//            .Actor = msg.Actor, .FileHash = msg.FileHash, .Offset = msg.Offset, .Size = fileSize });
-
-//        fragmentStorage.insertFragment(DFS::Packets::SegmentMessage {
-//            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
-        break;
-    }
-    case DFSP::SegmentMessageType::remove: {
-        std::filesystem::path realFilePath = DFS::Path::filePath(msg.Actor, msg.FileHash);
-        boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
-        auto fileSize = std::filesystem::file_size(realFilePath);
-
-        fragmentStorage.removeFragment(DFS::Packets::DeleteSegmentMessage {
-            .Actor = msg.Actor, .FileHash = msg.FileHash, .Offset = msg.Offset, .Size = fileSize });
-        break;
-    }
-    }
-    node.network()->send_message(msg, MessageType::DfsEditSegment);
-}
-
-void DfsController::editfile(const DFSP::DeleteSegmentMessage &msg) {
-    FragmentStorage fragmentStorage(msg.Actor, msg.FileHash);
-    fragmentStorage.removeFragment(msg);
-    node.network()->send_message(msg, MessageType::DfsDeleteSegment);
 }
 
 void DfsController::requestSync() {
