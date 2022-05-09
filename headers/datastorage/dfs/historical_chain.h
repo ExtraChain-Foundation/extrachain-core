@@ -27,8 +27,10 @@ public:
     dfsp::EditSegmentMessage getEditSegmentMessage(const int& num);
     dfsp::EditSegmentMessage getLastEditSegmentMessage();
 
-    dfsp::EditSegmentMessage makeEditSegmentMessage(const dfsp::SegmentMessage& msg, const dfsp::SegmentMessageType& smType);
-    dfsp::EditSegmentMessage makeEditSegmentMessage(const dfsp::DeleteSegmentMessage& msg, const dfsp::SegmentMessageType& smType);
+    dfsp::EditSegmentMessage makeEditSegmentMessage(const dfsp::SegmentMessage& msg,
+                                                    const dfsp::SegmentMessageType& smType);
+    dfsp::EditSegmentMessage makeEditSegmentMessage(const dfsp::DeleteSegmentMessage& msg,
+                                                    const dfsp::SegmentMessageType& smType);
 
 private:
     DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
