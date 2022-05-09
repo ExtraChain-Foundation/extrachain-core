@@ -145,12 +145,12 @@ dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::Seg
 dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::DeleteSegmentMessage &msg,
                                                                  const dfsp::SegmentMessageType &smType) {
     return dfsp::EditSegmentMessage {
-                                      .Actor = msg.Actor,
-                                      .FileHash = msg.FileHash,
-                                      .Data = "",
-                                      .Offset = msg.Offset,
-                                      .ActionType = smType,
-                                      };
+        .Actor = msg.Actor,
+        .FileHash = msg.FileHash,
+        .Data = "",
+        .Offset = msg.Offset,
+        .ActionType = smType,
+    };
 }
 
 DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data) {
