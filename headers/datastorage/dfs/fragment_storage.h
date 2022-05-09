@@ -20,7 +20,6 @@ public:
     FragmentStorage(ActorId Actor, std::string FileHash);
     ~FragmentStorage() = default;
 
-public:
     bool insertFragment(DFSP::SegmentMessage msg);
     bool editFragment(DFSP::EditSegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
@@ -33,8 +32,6 @@ private:
     DBRow getRealPreviousFragment(uint64_t number);
     DBRow getRealNextFragment(uint64_t number);
     std::pair<DBRow, DBRow> getPrevNextPairFragment(uint64_t number);
-
-private:
     DBRow makeFragmentRow(DFSP::SegmentMessage msg, uint64_t storedPos);
     uint64_t writeFragment(DFSP::SegmentMessage msg);
     void moveRows(DBRow curRow, uint64_t moveSize);

@@ -51,7 +51,7 @@ bool HistoricalChain::apply(DFS::Packets::EditSegmentMessage msg) {
     }
 }
 
-bool HistoricalChain::remove(DFS::Packets::EditSegmentMessage msg) {
+bool HistoricalChain::remove(dfsp::EditSegmentMessage msg) {
     bool removed = false;
     chainFile.open();
     const auto lastSegment = getLastEditSegmentMessage();
@@ -65,7 +65,7 @@ bool HistoricalChain::remove(DFS::Packets::EditSegmentMessage msg) {
         DBRow dbRow = getRow(msg.Data);
         DBRow nextRow = getNextRow(std::stoi(dbRow.at("num")));
         const bool updated = chainFile.update("UPDATE " + dfshc::TableNameHC + "SET prevNum="
-                                              + dbRow.at("prevNum") + "WHERE data=" + nextRow.at("data"));
+                                              + dbRow.at("prevNum") + "WHERE hash=" + nextRow.at("hash"));
 
         if (!updated) {
             chainFile.close();
@@ -78,7 +78,7 @@ bool HistoricalChain::remove(DFS::Packets::EditSegmentMessage msg) {
     return removed;
 }
 
-bool HistoricalChain::revert(DFS::Packets::EditSegmentMessage msg) {
+bool HistoricalChain::revert(dfsp::EditSegmentMessage msg) {
     bool reverted = true;
     chainFile.open();
 
@@ -97,7 +97,7 @@ bool HistoricalChain::revert(DFS::Packets::EditSegmentMessage msg) {
     return reverted;
 }
 
-bool HistoricalChain::update(DFS::Packets::EditSegmentMessage msg, const int &num) {
+bool HistoricalChain::update(dfsp::EditSegmentMessage msg, const int &num) {
     bool updated = false;
     chainFile.open();
     DFS::Packets::EditSegmentMessage editableSegmentMessage = getEditSegmentMessage(num);
@@ -131,6 +131,28 @@ DFS::Packets::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
     return segmentMessageFromDBRow(lastRow);
 }
 
+dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::SegmentMessage &msg,
+                                                                 const dfsp::SegmentMessageType &smType) {
+    return dfsp::EditSegmentMessage {
+        .Actor = msg.Actor,
+        .FileHash = msg.FileHash,
+        .Data = msg.Data,
+        .Offset = msg.Offset,
+        .ActionType = smType,
+    };
+}
+
+dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::DeleteSegmentMessage &msg,
+                                                                 const dfsp::SegmentMessageType &smType) {
+    return dfsp::EditSegmentMessage {
+                                      .Actor = msg.Actor,
+                                      .FileHash = msg.FileHash,
+                                      .Data = "",
+                                      .Offset = msg.Offset,
+                                      .ActionType = smType,
+                                      };
+}
+
 DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data) {
     DBRow row;
     row.insert({ "num", std::to_string(num) });
@@ -139,19 +161,6 @@ DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::
     row.insert({ "data", data });
     row.insert({ "hash", Utils::calcHash(data) });
     return row;
-}
-
-DFS::Packets::SegmentMessageType HistoricalChain::convertFromType(const int &type) {
-    switch (type) {
-    case 0:
-        return DFS::Packets::SegmentMessageType::add;
-    case 1:
-        return DFS::Packets::SegmentMessageType::insert;
-    case 2:
-        return DFS::Packets::SegmentMessageType::replace;
-    default:
-        return DFS::Packets::SegmentMessageType::add;
-    }
 }
 
 DBRow HistoricalChain::getLastRow() {
@@ -199,10 +208,9 @@ DBRow HistoricalChain::getRow(const std::string &data) {
         return res[0];
 }
 
-DFS::Packets::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
+dfsp::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
     DFS::Packets::EditSegmentMessage result;
-    const int type = std::stoi(dbRow.at("type"));
-    result.ActionType = convertFromType(type);
+    result.ActionType = std::stoi(dbRow.at("type"));
 
     DFS::Historical::FileChange fc;
     fc.fromStdString(dbRow.at("data"));

@@ -27,6 +27,8 @@
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 
+namespace DFSP = DFS::Packets;
+
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -63,6 +65,9 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                 uint64_t fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
+
+    void editfile(const DFS::Packets::EditSegmentMessage&msg);
+    void editfile(const DFSP::DeleteSegmentMessage& msg);
 
 public:
     void requestSync();

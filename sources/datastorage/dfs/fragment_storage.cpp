@@ -1,4 +1,5 @@
 #include "datastorage/dfs/fragment_storage.h"
+#include "datastorage/dfs/historical_chain.h"
 
 FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
     : storageFile(DFS::Path::filePath(Actor, FileHash).string() + DFSF::Extension) {
@@ -13,6 +14,12 @@ bool FragmentStorage::insertFragment(DFS::Packets::SegmentMessage msg) {
     DBRow row = makeFragmentRow(msg, pos);
     storageFile.insert(DFSF::TableNameFragments, row);
     moveRows(row, msg.Data.size());
+    std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
+
+    HistoricalChain historicalChain(filePath, filePath);
+    DFS::Packets::EditSegmentMessage editSegmentMessage =
+        historicalChain.makeEditSegmentMessage(msg, DFS::Packets::SegmentMessageType::insert);
+    historicalChain.apply(editSegmentMessage);
     return true;
 }
 

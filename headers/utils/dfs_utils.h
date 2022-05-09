@@ -81,6 +81,7 @@ namespace Packets {
         std::string FileHash;
         MSGPACK_DEFINE(Actor, FileHash)
     };
+
     struct SegmentMessage {
         std::string Actor;
         std::string FileHash;
@@ -92,6 +93,7 @@ namespace Packets {
         add = 0,
         insert = 1,
         replace = 2,
+        remove = 3
     };
 
     struct EditSegmentMessage {
