@@ -16,6 +16,10 @@ bool FragmentStorage::insertFragment(DFS::Packets::SegmentMessage msg) {
     return true;
 }
 
+bool FragmentStorage::editFragment(DFS::Packets::EditSegmentMessage msg) {
+    return applyChanges(msg.Data, msg.Offset);
+}
+
 bool FragmentStorage::removeFragment(DFS::Packets::DeleteSegmentMessage msg) {
     std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
         + " WHERE pos = " + std::to_string(msg.Offset) + " ORDER BY pos DESC LIMIT 1";

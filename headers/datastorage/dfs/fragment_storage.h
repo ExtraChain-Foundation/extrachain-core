@@ -22,6 +22,7 @@ public:
 
 public:
     bool insertFragment(DFSP::SegmentMessage msg);
+    bool editFragment(DFSP::EditSegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
     DFSP::SegmentMessage getFragment(uint64_t pos);
     bool applyChanges(const std::string &data, uint64_t pos);
