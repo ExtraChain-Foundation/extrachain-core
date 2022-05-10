@@ -16,7 +16,7 @@ bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
     moveRows(row, msg.Data.size());
 
     std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
-    HistoricalChain historicalChain(storageFile.file(), filePath);
+    HistoricalChain historicalChain(storageFile.file(), filePath.string());
     DFSP::EditSegmentMessage editSegmentMessage =
         historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::insert);
     historicalChain.apply(editSegmentMessage);
@@ -35,7 +35,7 @@ bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
     }
     case DFSP::SegmentMessageType::replace: {
         std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
-        HistoricalChain historicalChain(storageFile.file(), filePath);
+        HistoricalChain historicalChain(storageFile.file(), filePath.string());
         historicalChain.apply(msg);
         return applyChanges(msg.Data, msg.Offset);
     }
@@ -48,6 +48,7 @@ bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
             .Actor = msg.Actor, .FileHash = msg.FileHash, .Offset = msg.Offset, .Size = fileSize });
     }
     }
+    return false;
 }
 
 bool FragmentStorage::removeFragment(DFSP::DeleteSegmentMessage msg) {
@@ -59,7 +60,7 @@ bool FragmentStorage::removeFragment(DFSP::DeleteSegmentMessage msg) {
         storageFile.deleteRow(DFSF::TableNameFragments, frag);
         std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
 
-        HistoricalChain historicalChain(storageFile.file(), filePath);
+        HistoricalChain historicalChain(storageFile.file(), filePath.string());
         DFSP::EditSegmentMessage editSegmentMessage =
             historicalChain.makeEditSegmentMessage(msg, DFS::Packets::SegmentMessageType::remove);
         historicalChain.apply(editSegmentMessage);
