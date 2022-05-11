@@ -1,4 +1,5 @@
 #include "datastorage/dfs/historical_chain.h"
+#include <fstream>
 
 HistoricalChain::HistoricalChain(std::string chainFilePath, std::string objectFilePath)
     : chainFile(chainFilePath) {
@@ -151,6 +152,33 @@ dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::Del
         .Offset = msg.Offset,
         .ActionType = smType,
     };
+}
+
+bool HistoricalChain::initLocal(const std::string &actor, const std::string &fileHash) {
+    std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
+    if (!std::filesystem::exists(filePath)) {
+        return false;
+        qFatal("[Dfs] No file");
+    }
+
+    std::ifstream ifs(filePath.c_str(), std::ios::binary);
+    char buf[DFS::Basic::historicalChainSectionSize];
+
+    if (!ifs.read(buf, sizeof(buf)) || !ifs.gcount()) {
+        ifs.close();
+        return false;
+    }
+
+    while (ifs.read(buf, sizeof(buf)) || ifs.gcount()) {
+        std::string data(buf, ifs.gcount());
+        apply(dfsp::EditSegmentMessage { .Actor = actor,
+                                         .FileHash = fileHash,
+                                         .Data = data,
+                                         .Offset = 0,
+                                         .ActionType = dfsp::SegmentMessageType::insert });
+    }
+    ifs.close();
+    return true;
 }
 
 DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data) {

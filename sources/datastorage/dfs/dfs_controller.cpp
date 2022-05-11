@@ -1,5 +1,6 @@
 #include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/dfs/fragment_storage.h"
+#include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
@@ -67,6 +68,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::filesystem::path placeInDFS = DFS::Basic::fsActrRootW + DFS::Basic::separator
         + actor.id().toString().toStdWString() + DFS::Basic::separator;
     std::filesystem::path dfsPath = DFS::Path::filePath(actor.id(), fileHash);
+
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
@@ -112,6 +114,11 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
 
     sendFile(actor.id(), fileHash, "");
+
+    HistoricalChain hc((DFS::Path::filePath(actor.id().toStdString(), fileHash).string() + DFSF::Extension),
+                       fpath.c_str());
+    hc.initLocal(actor.id().toStdString(), fileHash);
+
     return addFile(msg, false);
 }
 
