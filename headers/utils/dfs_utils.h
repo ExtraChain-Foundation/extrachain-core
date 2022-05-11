@@ -55,6 +55,8 @@ namespace Basic {
     static const std::string fsMapName = ".dir";
     static const std::string dirsPath = "dfs/.dirs";
     static const uint64_t sectionSize = /*2097152*/ 4194304;
+    static const uint64_t historicalChainSectionSize = 2097152;
+
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
 }
