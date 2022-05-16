@@ -309,14 +309,14 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
         return false;
     }
 
-    auto extrachain = array[0].toString();
+    auto extrachainVersion = array[0].toString();
     auto date = array[1].toInteger();
     auto profile = array[2].toObject();
     auto profileBytes = QJsonDocument(profile).toJson(QJsonDocument::Compact);
     auto profileBytesEncrypted =
         QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
 
-    Q_UNUSED(extrachain)
+    Q_UNUSED(extrachainVersion)
     Q_UNUSED(date)
 
     QString privateProfile = "keystore/" + profile["main"].toString() + ".profile";

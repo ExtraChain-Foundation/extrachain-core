@@ -364,8 +364,6 @@ QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
         return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return data.toHex();
-    default:
-        break;
     }
     return data;
 }
@@ -376,8 +374,6 @@ QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
         return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return QByteArray::fromHex(data);
-    default:
-        break;
     }
     return data;
 }

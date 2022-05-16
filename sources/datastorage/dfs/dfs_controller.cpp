@@ -115,8 +115,8 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     sendFile(actor.id(), fileHash, "");
 
-    HistoricalChain hc((DFS::Path::filePath(actor.id().toStdString(), fileHash).string() + DFSF::Extension),
-                       fpath.c_str());
+    HistoricalChain hc(DFS::Path::filePath(actor.id().toStdString(), fileHash).string() + DFSF::Extension,
+                       fpath.string());
     hc.initLocal(actor.id().toStdString(), fileHash);
 
     return addFile(msg, false);

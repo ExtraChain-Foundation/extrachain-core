@@ -509,7 +509,6 @@ enum PrintDebug
 };
 
 enum class HashEncode {
-    None,
     Base64,
     Hex,
 };
