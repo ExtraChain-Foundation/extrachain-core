@@ -28,6 +28,13 @@
 #include <QObject>
 #include <QtNetwork/QNetworkAddressEntry>
 
+#include <fmt/chrono.h>
+#include <fmt/color.h>
+#include <fmt/core.h>
+#include <fmt/os.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
+
 #include "extrachain_global.h"
 
 #include "utils/dfs_utils.h"

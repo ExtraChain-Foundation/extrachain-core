@@ -25,7 +25,6 @@
 
 #include <QJsonObject>
 #include <QMutex>
-#include <iostream>
 
 #ifdef Q_OS_ANDROID
     #include <android/log.h>
@@ -241,7 +240,6 @@ void LogsManager::offQml() {
 }
 
 void LogsManager::etHandler() {
-    std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
     qInstallMessageHandler(LogsManager::messageHandler);
 
@@ -272,7 +270,8 @@ void LogsManager::print(const std::string& log) {
         OutputDebugStringA("\n");
     }
     #endif
-    std::cout << log << std::endl;
+    fmt::print("{}\n", log);
+    fflush(stdout);
 #endif
 }
 
