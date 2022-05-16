@@ -28,17 +28,17 @@
 #include <QObject>
 #include <QtNetwork/QNetworkAddressEntry>
 
+#include <msgpack.hpp>
+
 #include <fmt/chrono.h>
 #include <fmt/color.h>
 #include <fmt/core.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
+#include <fmt/printf.h>
 #include <fmt/ranges.h>
 
 #include "extrachain_global.h"
-
-#include "utils/dfs_utils.h"
-#include <msgpack.hpp>
 
 namespace Network {
 Q_NAMESPACE
@@ -535,7 +535,7 @@ int qByteArrayToInt(const QByteArray &number);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Base64);
 EXTRACHAIN_EXPORT QByteArray calcHash(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
-                                                HashEncode encode = HashEncode::Base64);
+                                              HashEncode encode = HashEncode::Base64);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);

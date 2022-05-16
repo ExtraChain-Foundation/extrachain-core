@@ -88,6 +88,7 @@
     #include <fmt/core.h>
     #include <fmt/os.h>
     #include <fmt/ostream.h>
+    #include <fmt/printf.h>
     #include <fmt/ranges.h>
 
     #ifdef Q_OS_WINDOWS

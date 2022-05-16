@@ -19,6 +19,7 @@
 
 #include "enc/key_public.h"
 #include "enc/enc_tools.h"
+#include "utils/exc_utils.h"
 
 KeyPublic::KeyPublic(const std::string &publicKey) {
     m_publicKey = publicKey;
@@ -42,4 +43,15 @@ const std::string &KeyPublic::publicKey() const {
 
 bool KeyPublic::empty() const {
     return m_publicKey.empty();
+}
+
+QDebug operator<<(QDebug debug, const KeyPublic &key) {
+    QDebugStateSaver saver(debug);
+    debug << "KeyPublic( public: " << Utils::bytesEncode(key.publicKey().c_str()) << " )";
+    return debug;
+}
+
+std::ostream &operator<<(std::ostream &os, const KeyPublic &key) {
+    os << "KeyPublic( public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " )";
+    return os;
 }

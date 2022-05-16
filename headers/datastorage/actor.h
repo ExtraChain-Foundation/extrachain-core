@@ -103,6 +103,11 @@ public:
         return d;
     }
 
+    friend std::ostream &operator<<(std::ostream &os, const ActorId &actorId) {
+        os << actorId.toStdString();
+        return os;
+    }
+
     static bool empty(const std::string &actorId) {
         ActorId actor(actorId);
         return actor.isEmpty();
@@ -282,6 +287,13 @@ public:
         d << actor.key();
         d << ")";
         return d;
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
+        os << "Actor( id: " << actor.id() << ", type: " << int(actor.type()) << ", key: ";
+        os << actor.key();
+        os << ")";
+        return os;
     }
 
     MSGPACK_DEFINE(m_id, m_type, m_key)

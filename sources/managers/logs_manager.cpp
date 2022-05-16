@@ -23,6 +23,8 @@
 
 #include "managers/logs_manager.h"
 
+#include <fmt/core.h>
+
 #include <QJsonObject>
 #include <QMutex>
 
