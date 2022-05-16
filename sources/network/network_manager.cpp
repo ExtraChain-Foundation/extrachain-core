@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -413,7 +413,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             node.dfs()->sendDirData(actorId, 0, messageId);
         } else if (status == MessageStatus::Response) {
             auto [actorId, dirRows] =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::Packets::DirRow>>>(serialized);
+                MessagePack::deserialize<std::pair<ActorId, std::vector<DFSP::DirRow>>>(serialized);
             node.dfs()->addDirData(actorId, dirRows);
         }
         break;
@@ -424,7 +424,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
     case MessageType::DfsAddFile: {
-        auto msg = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFSP::AddFileMessage>(serialized);
         node.dfs()->addFile(msg, true);
         break;
     }
@@ -434,27 +434,27 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
     case MessageType::DfsRequestFileSegment: {
-        auto msg = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
         node.dfs()->sendFragment(msg, messageId);
         break;
     }
     case MessageType::DfsAddSegment: {
-        auto msg = MessagePack::deserialize<DFS::Packets::SegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
         node.dfs()->addFragment(msg);
         break;
     }
     case MessageType::DfsEditSegment: {
-        auto msg = MessagePack::deserialize<DFS::Packets::SegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
         node.dfs()->insertFragment(msg);
         break;
     }
     case MessageType::DfsDeleteSegment: {
-        auto msg = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFSP::DeleteSegmentMessage>(serialized);
         node.dfs()->deleteFragment(msg);
         break;
     }
     case MessageType::DfsRemoveFile: {
-        auto msg = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
+        auto msg = MessagePack::deserialize<DFSP::RemoveFileMessage>(serialized);
         node.dfs()->removeFile(msg);
         break;
     }

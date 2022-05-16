@@ -7,9 +7,6 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
-namespace DFSP = DFS::Packets;
-namespace DFSF = DFS::Fragments;
-
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
     DBConnector storageFile;

@@ -213,5 +213,14 @@ enum class Encryption {
     Encrypted = 1
 };
 }
+namespace DFSP = DFS::Packets;
+namespace DFSF = DFS::Fragments;
+namespace DFST = DFS::Tables;
+namespace STDFS = std::filesystem;
+namespace DFSHC = DFS::Historical;
+namespace DFSB = DFS::Basic;
+namespace DFS_PATH = DFS::Path;
+
+
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 #endif // DFS_UTILS_H

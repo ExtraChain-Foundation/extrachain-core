@@ -25,22 +25,22 @@ DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const std::string &actor
 }
 
 std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &actorId) {
-    std::string path = DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actorId
-        + Utils::platformDelimeter() + DFS::Basic::fsMapName;
+    std::string path = DFSB::fsActrRoot + Utils::platformDelimeter() + actorId
+        + Utils::platformDelimeter() + DFSB::fsMapName;
     return path;
 }
 
-std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId,
+std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId,
                                                                         uint64_t lastModified) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         return {};
     }
-    std::vector<DFS::Packets::DirRow> dirRows;
+    std::vector<DFSP::DirRow> dirRows;
     auto actrDirData = db.select("SELECT * FROM " + DFS::Tables::ActorDirFile::TableName
                                  + " WHERE lastModified > " + std::to_string(lastModified));
     for (auto &row : actrDirData) {
-        DFS::Packets::DirRow dirRow = { .fileHash = row["fileHash"],
+        DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
                                         .fileHashPrev = row["fileHashPrev"],
                                         .filePath = row["filePath"],
                                         .fileSize = std::stoull(row["fileSize"]),
@@ -51,7 +51,7 @@ std::vector<DFS::Packets::DirRow> DFS::Tables::ActorDirFile::getDirRows(const st
     return dirRows;
 }
 
-DFS::Packets::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId,
+DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId,
                                                           const std::string &fileHash) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
@@ -66,7 +66,7 @@ DFS::Packets::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &act
     }
 
     auto &row = rows[0];
-    DFS::Packets::DirRow dirRow = { .fileHash = row["fileHash"],
+    DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
                                     .fileHashPrev = row["fileHashPrev"],
                                     .filePath = row["filePath"],
                                     .fileSize = std::stoull(row["fileSize"]),
@@ -79,7 +79,7 @@ bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
                                            const std::vector<Packets::DirRow> &dirRows) {
     std::string pathDelim = Utils::platformDelimeter();
     std::string actrDirFilePath =
-        DFS::Basic::fsActrRoot + pathDelim + actorId + pathDelim + DFS::Basic::fsMapName;
+        DFSB::fsActrRoot + pathDelim + actorId + pathDelim + DFSB::fsMapName;
     DBConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         return false;
@@ -103,15 +103,15 @@ bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
 std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::path &path) {
     std::wstring p = path.wstring();
 
-    if (p.find(DFS::Basic::separator) == std::wstring::npos) {
-        boost::replace_all(p, L"/", DFS::Basic::separator);
-        boost::replace_all(p, L"\\", DFS::Basic::separator);
+    if (p.find(DFSB::separator) == std::wstring::npos) {
+        boost::replace_all(p, L"/", DFSB::separator);
+        boost::replace_all(p, L"\\", DFSB::separator);
     }
 
     return p;
 }
 
 std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::string &fileHash) {
-    return DFS::Basic::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString()
+    return DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString()
         + Utils::platformDelimeter() + fileHash;
 }

@@ -15,7 +15,7 @@ HistoricalChain::~HistoricalChain() {
     chainFile.close();
 }
 
-bool HistoricalChain::apply(DFS::Packets::EditSegmentMessage msg) {
+bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
     chainFile.open();
     DBRow lastRow = getLastRow();
     uint64_t num;
@@ -27,19 +27,19 @@ bool HistoricalChain::apply(DFS::Packets::EditSegmentMessage msg) {
         prevNum = std::stoull(lastRow.at("num"));
         num = prevNum + 1;
     }
-    if (stdfs::is_directory(objectPath) && msg.Offset == 0) {
-        if (chainFile.insert(dfshc::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data))) {
+    if (STDFS::is_directory(objectPath) && msg.Offset == 0) {
+        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data))) {
             chainFile.close();
             return true;
         } else {
             chainFile.close();
             return false;
         }
-    } else if (stdfs::is_regular_file(objectPath)) {
-        dfshc::FileChange fc;
+    } else if (STDFS::is_regular_file(objectPath)) {
+        DFSHC::FileChange fc;
         fc.pos = msg.Offset;
         fc.data = msg.Data;
-        if (chainFile.insert(dfshc::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toStdString()))) {
+        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toStdString()))) {
             chainFile.close();
             return true;
         } else {
@@ -52,7 +52,7 @@ bool HistoricalChain::apply(DFS::Packets::EditSegmentMessage msg) {
     }
 }
 
-bool HistoricalChain::remove(dfsp::EditSegmentMessage msg) {
+bool HistoricalChain::remove(DFSP::EditSegmentMessage msg) {
     bool removed = false;
     chainFile.open();
     const auto lastSegment = getLastEditSegmentMessage();
@@ -61,11 +61,11 @@ bool HistoricalChain::remove(dfsp::EditSegmentMessage msg) {
         DBRow lastRow = getLastRow();
         uint64_t prevNum = std::stoull(lastRow.at("prevNum"));
         uint64_t num = std::stoull(lastRow.at("num"));
-        removed = chainFile.deleteRow(dfshc::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));
+        removed = chainFile.deleteRow(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));
     } else {
         DBRow dbRow = getRow(msg.Data);
         DBRow nextRow = getNextRow(std::stoi(dbRow.at("num")));
-        const bool updated = chainFile.update("UPDATE " + dfshc::TableNameHC + "SET prevNum="
+        const bool updated = chainFile.update("UPDATE " + DFSHC::TableNameHC + "SET prevNum="
                                               + dbRow.at("prevNum") + "WHERE hash=" + nextRow.at("hash"));
 
         if (!updated) {
@@ -73,23 +73,23 @@ bool HistoricalChain::remove(dfsp::EditSegmentMessage msg) {
             return false;
         }
 
-        removed = chainFile.deleteRow(dfshc::TableNameHC, dbRow);
+        removed = chainFile.deleteRow(DFSHC::TableNameHC, dbRow);
     }
     chainFile.close();
     return removed;
 }
 
-bool HistoricalChain::revert(dfsp::EditSegmentMessage msg) {
+bool HistoricalChain::revert(DFSP::EditSegmentMessage msg) {
     bool reverted = true;
     chainFile.open();
 
     DBRow row = getRow(msg.Data);
     std::string queryGetListEditSegment =
-        "SELECT * FROM " + dfshc::TableNameHC + " WHERE num >=" + row.at("num");
-    std::vector<DBRow> editSegmentMessageList = chainFile.select(queryGetListEditSegment, dfshc::TableNameHC);
+        "SELECT * FROM " + DFSHC::TableNameHC + " WHERE num >=" + row.at("num");
+    std::vector<DBRow> editSegmentMessageList = chainFile.select(queryGetListEditSegment, DFSHC::TableNameHC);
 
     for (const DBRow &row : editSegmentMessageList) {
-        if (!chainFile.deleteRow(dfshc::TableNameHC, row)) {
+        if (!chainFile.deleteRow(DFSHC::TableNameHC, row)) {
             reverted = false;
             break;
         }
@@ -98,43 +98,43 @@ bool HistoricalChain::revert(dfsp::EditSegmentMessage msg) {
     return reverted;
 }
 
-bool HistoricalChain::update(dfsp::EditSegmentMessage msg, const int &num) {
+bool HistoricalChain::update(DFSP::EditSegmentMessage msg, const int &num) {
     bool updated = false;
     chainFile.open();
-    DFS::Packets::EditSegmentMessage editableSegmentMessage = getEditSegmentMessage(num);
-    updated = chainFile.update("UPDATE " + dfshc::TableNameHC + " SET "
+    DFSP::EditSegmentMessage editableSegmentMessage = getEditSegmentMessage(num);
+    updated = chainFile.update("UPDATE " + DFSHC::TableNameHC + " SET "
                                + " type = " + std::to_string(msg.ActionType) + " data = " + msg.Data
                                + " hash = " + msg.FileHash + " WHERE data=" + editableSegmentMessage.Data);
     chainFile.close();
     return updated;
 }
 
-DFS::Packets::EditSegmentMessage HistoricalChain::getEditSegmentMessage(const int &num) {
+DFSP::EditSegmentMessage HistoricalChain::getEditSegmentMessage(const int &num) {
     chainFile.open();
     DBRow dbRow = getRow(num);
     chainFile.close();
 
     if (dbRow.empty()) {
-        return DFS::Packets::EditSegmentMessage();
+        return DFSP::EditSegmentMessage();
     }
     return segmentMessageFromDBRow(dbRow);
 }
 
-DFS::Packets::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
+DFSP::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
     chainFile.open();
     DBRow lastRow = getLastRow();
     chainFile.close();
 
     if (lastRow.empty()) {
-        return DFS::Packets::EditSegmentMessage();
+        return DFSP::EditSegmentMessage();
     }
 
     return segmentMessageFromDBRow(lastRow);
 }
 
-dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::SegmentMessage &msg,
-                                                                 const dfsp::SegmentMessageType &smType) {
-    return dfsp::EditSegmentMessage {
+DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::SegmentMessage &msg,
+                                                                 const DFSP::SegmentMessageType &smType) {
+    return DFSP::EditSegmentMessage {
         .Actor = msg.Actor,
         .FileHash = msg.FileHash,
         .Data = msg.Data,
@@ -143,9 +143,9 @@ dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::Seg
     };
 }
 
-dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::DeleteSegmentMessage &msg,
-                                                                 const dfsp::SegmentMessageType &smType) {
-    return dfsp::EditSegmentMessage {
+DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::DeleteSegmentMessage &msg,
+                                                                 const DFSP::SegmentMessageType &smType) {
+    return DFSP::EditSegmentMessage {
         .Actor = msg.Actor,
         .FileHash = msg.FileHash,
         .Data = "",
@@ -155,14 +155,14 @@ dfsp::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const dfsp::Del
 }
 
 bool HistoricalChain::initLocal(const std::string &actor, const std::string &fileHash) {
-    std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
+    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
     if (!std::filesystem::exists(filePath)) {
         return false;
         qFatal("[Dfs] No file");
     }
 
     std::ifstream ifs(filePath.c_str(), std::ios::binary);
-    char buf[DFS::Basic::historicalChainSectionSize];
+    char buf[DFSB::historicalChainSectionSize];
 
     if (!ifs.read(buf, sizeof(buf)) || !ifs.gcount()) {
         ifs.close();
@@ -171,11 +171,11 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
 
     while (ifs.read(buf, sizeof(buf)) || ifs.gcount()) {
         std::string data(buf, ifs.gcount());
-        apply(dfsp::EditSegmentMessage { .Actor = actor,
+        apply(DFSP::EditSegmentMessage { .Actor = actor,
                                          .FileHash = fileHash,
                                          .Data = data,
                                          .Offset = 0,
-                                         .ActionType = dfsp::SegmentMessageType::insert });
+                                         .ActionType = DFSP::SegmentMessageType::insert });
     }
     ifs.close();
     return true;
@@ -194,7 +194,7 @@ DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::
 DBRow HistoricalChain::getLastRow() {
     std::vector<DBRow> res;
     std::pair<DBRow, DBRow> ret;
-    std::string GetLastQuery = "SELECT * FROM " + dfshc::TableNameHC + " ORDER BY num DESC LIMIT 1";
+    std::string GetLastQuery = "SELECT * FROM " + DFSHC::TableNameHC + " ORDER BY num DESC LIMIT 1";
     res = chainFile.select(GetLastQuery);
     if (res.empty())
         return DBRow();
@@ -205,7 +205,7 @@ DBRow HistoricalChain::getLastRow() {
 DBRow HistoricalChain::getNextRow(const int &currentNum) {
     std::vector<DBRow> res;
     std::pair<DBRow, DBRow> ret;
-    std::string GetNextQuery = "SELECT * FROM " + dfshc::TableNameHC + " WHERE num>"
+    std::string GetNextQuery = "SELECT * FROM " + DFSHC::TableNameHC + " WHERE num>"
         + std::to_string(currentNum) + " ORDER BY num DESC LIMIT 1";
     res = chainFile.select(GetNextQuery);
     if (res.empty())
@@ -217,7 +217,7 @@ DBRow HistoricalChain::getNextRow(const int &currentNum) {
 DBRow HistoricalChain::getRow(const int &num) {
     std::vector<DBRow> res;
     std::pair<DBRow, DBRow> ret;
-    std::string GetLastQuery = "SELECT * FROM " + dfshc::TableNameHC + " WHERE num=" + std::to_string(num);
+    std::string GetLastQuery = "SELECT * FROM " + DFSHC::TableNameHC + " WHERE num=" + std::to_string(num);
     res = chainFile.select(GetLastQuery);
     if (res.empty())
         return DBRow();
@@ -228,7 +228,7 @@ DBRow HistoricalChain::getRow(const int &num) {
 DBRow HistoricalChain::getRow(const std::string &data) {
     std::vector<DBRow> res;
     std::pair<DBRow, DBRow> ret;
-    std::string GetLastQuery = "SELECT * FROM " + dfshc::TableNameHC + " WHERE data=" + data;
+    std::string GetLastQuery = "SELECT * FROM " + DFSHC::TableNameHC + " WHERE data=" + data;
     res = chainFile.select(GetLastQuery);
     if (res.empty())
         return DBRow();
@@ -236,9 +236,9 @@ DBRow HistoricalChain::getRow(const std::string &data) {
         return res[0];
 }
 
-dfsp::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
-    DFS::Packets::EditSegmentMessage result;
-    result.ActionType = static_cast<DFS::Packets::SegmentMessageType>(std::stoi(dbRow.at("type")));
+DFSP::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
+    DFSP::EditSegmentMessage result;
+    result.ActionType = static_cast<DFSP::SegmentMessageType>(std::stoi(dbRow.at("type")));
 
     DFS::Historical::FileChange fc;
     fc.fromStdString(dbRow.at("data"));

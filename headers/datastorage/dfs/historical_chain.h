@@ -6,13 +6,9 @@
 #include "managers/extrachain_node.h"
 #include "utils/dfs_utils.h"
 
-namespace stdfs = std::filesystem;
-namespace dfsp = DFS::Packets;
-namespace dfshc = DFS::Historical;
-
 class EXTRACHAIN_EXPORT HistoricalChain {
 private:
-    stdfs::path objectPath;
+    STDFS::path objectPath;
     DBConnector chainFile;
 
 public:
@@ -20,19 +16,19 @@ public:
     ~HistoricalChain();
 
 public:
-    bool apply(dfsp::EditSegmentMessage msg);
-    bool remove(dfsp::EditSegmentMessage msg);
-    bool revert(dfsp::EditSegmentMessage msg);
-    bool update(dfsp::EditSegmentMessage msg, const int& num);
-    dfsp::EditSegmentMessage getEditSegmentMessage(const int& num);
-    dfsp::EditSegmentMessage getLastEditSegmentMessage();
+    bool apply(DFSP::EditSegmentMessage msg);
+    bool remove(DFSP::EditSegmentMessage msg);
+    bool revert(DFSP::EditSegmentMessage msg);
+    bool update(DFSP::EditSegmentMessage msg, const int& num);
+    DFSP::EditSegmentMessage getEditSegmentMessage(const int& num);
+    DFSP::EditSegmentMessage getLastEditSegmentMessage();
 
-    dfsp::EditSegmentMessage makeEditSegmentMessage(const dfsp::SegmentMessage& msg,
-                                                    const dfsp::SegmentMessageType& smType);
-    dfsp::EditSegmentMessage makeEditSegmentMessage(const dfsp::DeleteSegmentMessage& msg,
-                                                    const dfsp::SegmentMessageType& smType);
+    DFSP::EditSegmentMessage makeEditSegmentMessage(const DFSP::SegmentMessage& msg,
+                                                    const DFSP::SegmentMessageType& smType);
+    DFSP::EditSegmentMessage makeEditSegmentMessage(const DFSP::DeleteSegmentMessage& msg,
+                                                    const DFSP::SegmentMessageType& smType);
 
-    bool initLocal(const std::string& actor, const std::string& fileHash);
+    bool initLocal(const std::string &actor, const std::string& fileHash);
 
 private:
     DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
@@ -40,7 +36,7 @@ private:
     DBRow getNextRow(const int& currentNum);
     DBRow getRow(const int& num);
     DBRow getRow(const std::string& data);
-    dfsp::EditSegmentMessage segmentMessageFromDBRow(const DBRow& dbRow);
+    DFSP::EditSegmentMessage segmentMessageFromDBRow(const DBRow& dbRow);
 };
 
 #endif // HISTORICAL_CHAIN_H

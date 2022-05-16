@@ -1,8 +1,9 @@
 #include "datastorage/dfs/fragment_storage.h"
 #include "datastorage/dfs/historical_chain.h"
+#include "utils/dfs_utils.h"
 
 FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
-    : storageFile(DFS::Path::filePath(Actor, FileHash).string() + DFSF::Extension) {
+    : storageFile(DFS_PATH::filePath(Actor, FileHash).string() + DFSF::Extension) {
     actor = Actor;
     fileHash = FileHash;
     storageFile.open();
@@ -26,11 +27,11 @@ bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
 bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
     switch (msg.ActionType) {
     case DFSP::SegmentMessageType::insert: {
-        return insertFragment(DFS::Packets::SegmentMessage {
+        return insertFragment(DFSP::SegmentMessage {
             .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::add: {
-        return insertFragment(DFS::Packets::SegmentMessage {
+        return insertFragment(DFSP::SegmentMessage {
             .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::replace: {
@@ -40,11 +41,11 @@ bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
         return applyChanges(msg.Data, msg.Offset);
     }
     case DFSP::SegmentMessageType::remove: {
-        std::filesystem::path realFilePath = DFS::Path::filePath(msg.Actor, msg.FileHash);
+        std::filesystem::path realFilePath = DFS_PATH::filePath(msg.Actor, msg.FileHash);
         boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
         auto fileSize = std::filesystem::file_size(realFilePath);
 
-        return removeFragment(DFS::Packets::DeleteSegmentMessage {
+        return removeFragment(DFSP::DeleteSegmentMessage {
             .Actor = msg.Actor, .FileHash = msg.FileHash, .Offset = msg.Offset, .Size = fileSize });
     }
     }
@@ -58,11 +59,11 @@ bool FragmentStorage::removeFragment(DFSP::DeleteSegmentMessage msg) {
     if (!array.empty()) {
         DBRow frag = array[0];
         storageFile.deleteRow(DFSF::TableNameFragments, frag);
-        std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
+        std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
 
         HistoricalChain historicalChain(storageFile.file(), filePath.string());
         DFSP::EditSegmentMessage editSegmentMessage =
-            historicalChain.makeEditSegmentMessage(msg, DFS::Packets::SegmentMessageType::remove);
+            historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::remove);
         historicalChain.apply(editSegmentMessage);
 
         return remove(filePath, std::stoull(frag.at("storedPos")), std::stoull(frag.at("size")));
@@ -78,7 +79,7 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
     std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow fragMap = array[0];
-        std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
+        std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
         fragment.Offset = pos;
         fragment.Data = extract(filePath, pos, std::stoull(fragMap.at("size")));
         fragment.Actor = this->actor.toStdString();
@@ -94,7 +95,7 @@ bool FragmentStorage::applyChanges(const std::string &data, uint64_t pos) {
     }
 
     uint64_t endPos = pos + data.length();
-    auto filePath = DFS::Path::filePath(actor, fileHash);
+    auto filePath = DFS_PATH::filePath(actor, fileHash);
     std::vector<DBRow> frags =
         storageFile.select("SELECT * FROM " + DFSF::TableNameFragments + " WHERE pos + size > "
                            + std::to_string(pos) + " AND pos < " + std::to_string(endPos));
@@ -194,7 +195,7 @@ DBRow FragmentStorage::makeFragmentRow(DFSP::SegmentMessage msg, uint64_t stored
 }
 
 uint64_t FragmentStorage::writeFragment(DFSP::SegmentMessage msg) {
-    std::filesystem::path filePath = DFS::Path::filePath(actor, fileHash);
+    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
     std::pair<DBRow, DBRow> prevnext = getPrevNextPairFragment(msg.Offset);
     uint64_t posToWrite = 0;
     if (prevnext.first.empty()) {
@@ -239,10 +240,10 @@ uint64_t FragmentStorage::write(std::filesystem::path filePath, uint64_t pos, st
     ofs.flush();
     std::size_t i = 0;
 
-    for (i = pos; i < fz; i = i + DFS::Basic::sectionSize) { // copy old data to new temp file
-        if (i + DFS::Basic::sectionSize < fz) {
+    for (i = pos; i < fz; i = i + DFSB::sectionSize) { // copy old data to new temp file
+        if (i + DFSB::sectionSize < fz) {
             boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_write, i,
-                                                           DFS::Basic::sectionSize);
+                                                           DFSB::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofs.write(rr_ptr, rightRegion.get_size());
             ofs.flush();
@@ -263,10 +264,10 @@ uint64_t FragmentStorage::write(std::filesystem::path filePath, uint64_t pos, st
         boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
         uint64_t fzres = std::filesystem::file_size(tempFilePath);
 
-        for (i = 0; i < fzres; i = i + DFS::Basic::sectionSize) { // copy new data to old file
-            if (i + DFS::Basic::sectionSize < fzres) {
+        for (i = 0; i < fzres; i = i + DFSB::sectionSize) { // copy new data to old file
+            if (i + DFSB::sectionSize < fzres) {
                 boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i,
-                                                               DFS::Basic::sectionSize);
+                                                               DFSB::sectionSize);
                 char *rr_ptr = static_cast<char *>(rightRegion.get_address());
                 ofsres.write(rr_ptr, rightRegion.get_size());
             } else {
@@ -303,10 +304,10 @@ uint64_t FragmentStorage::remove(std::filesystem::path filePath, uint64_t pos, u
     boost::interprocess::file_mapping fmapSource(filePath.c_str(), boost::interprocess::read_write);
     uint64_t fz = std::filesystem::file_size(filePath);
     std::size_t i = 0;
-    for (i = pos + size; i < fz; i = i + DFS::Basic::sectionSize) { // copy old data to new temp file
-        if (i + DFS::Basic::sectionSize < fz) {
+    for (i = pos + size; i < fz; i = i + DFSB::sectionSize) { // copy old data to new temp file
+        if (i + DFSB::sectionSize < fz) {
             boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_write, i,
-                                                           DFS::Basic::sectionSize);
+                                                           DFSB::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofs.write(rr_ptr, rightRegion.get_size());
             ofs.flush();
@@ -324,10 +325,10 @@ uint64_t FragmentStorage::remove(std::filesystem::path filePath, uint64_t pos, u
     boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
     uint64_t fzres = std::filesystem::file_size(tempFilePath);
 
-    for (i = 0; i < fzres; i = i + DFS::Basic::sectionSize) { // copy new data to old file
-        if (i + DFS::Basic::sectionSize < fzres) {
+    for (i = 0; i < fzres; i = i + DFSB::sectionSize) { // copy new data to old file
+        if (i + DFSB::sectionSize < fzres) {
             boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i,
-                                                           DFS::Basic::sectionSize);
+                                                           DFSB::sectionSize);
             char *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofsres.write(rr_ptr, rightRegion.get_size());
         } else {
