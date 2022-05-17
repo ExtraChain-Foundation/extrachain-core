@@ -45,6 +45,7 @@ enum class ActorType {
     Service = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
+FORMAT_ENUM(ActorType)
 
 class EXTRACHAIN_EXPORT ActorId {
 public:
@@ -283,16 +284,13 @@ public:
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
-        d << "Actor( id:" << actor.id() << ", type: " << int(actor.type()) << ", key: ";
-        d << actor.key();
-        d << ")";
+        d << "Actor { id:" << actor.id() << ", type: " << magic_enum::enum_name(actor.type()).data()
+          << ", key: " << actor.key() << "}";
         return d;
     }
 
     friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
-        os << "Actor( id: " << actor.id() << ", type: " << int(actor.type()) << ", key: ";
-        os << actor.key();
-        os << ")";
+        os << "Actor { id: " << actor.id() << ", type: " << actor.type() << ", key: " << actor.key() << " }";
         return os;
     }
 

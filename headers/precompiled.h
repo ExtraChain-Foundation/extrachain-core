@@ -88,13 +88,14 @@
     #include <fmt/core.h>
     #include <fmt/os.h>
     #include <fmt/ostream.h>
-    #include <fmt/printf.h>
     #include <fmt/ranges.h>
+    #include <magic_enum.hpp>
 
     #ifdef Q_OS_WINDOWS
         #define UINT32_C(c) (c##ULL)
         #define UINT64_C(c) (c##ULL)
     #endif
+
     #include <QtConcurrent>
     #include <QtCore>
     #include <QtNetwork>

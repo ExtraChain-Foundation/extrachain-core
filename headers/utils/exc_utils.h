@@ -35,8 +35,11 @@
 #include <fmt/core.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
-#include <fmt/printf.h>
 #include <fmt/ranges.h>
+
+#include <magic_enum.hpp>
+using namespace magic_enum::ostream_operators;
+using namespace magic_enum::bitwise_operators;
 
 #include "extrachain_global.h"
 
@@ -748,5 +751,17 @@ T stdStringBytesToType(std::string value) {
     return *res;
 }
 }
+
+#define FORMAT_ENUM(E)                                        \
+    template <>                                               \
+    struct fmt::formatter<E> : formatter<string_view> {       \
+        template <typename FormatContext>                     \
+        auto format(E Enum, FormatContext &ctx) {             \
+            static_assert(std::is_enum_v<E>);                 \
+            string_view name = "unknown";                     \
+            name = magic_enum::enum_name(Enum);               \
+            return formatter<string_view>::format(name, ctx); \
+        }                                                     \
+    };
 
 #endif // UTILS_H

@@ -47,11 +47,11 @@ bool KeyPublic::empty() const {
 
 QDebug operator<<(QDebug debug, const KeyPublic &key) {
     QDebugStateSaver saver(debug);
-    debug << "KeyPublic( public: " << Utils::bytesEncode(key.publicKey().c_str()) << " )";
+    debug << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
     return debug;
 }
 
 std::ostream &operator<<(std::ostream &os, const KeyPublic &key) {
-    os << "KeyPublic( public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " )";
+    os << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
     return os;
 }

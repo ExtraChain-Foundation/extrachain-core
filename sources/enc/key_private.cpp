@@ -119,13 +119,13 @@ bool KeyPrivate::empty() const {
 
 QDebug operator<<(QDebug debug, const KeyPrivate &key) {
     QDebugStateSaver saver(debug);
-    debug << "KeyPrivate( secret: " << Utils::bytesEncode(key.secretKey().c_str())
-          << ", public: " << Utils::bytesEncode(key.publicKey().c_str()) << " )";
+    debug << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str())
+          << ", public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
     return debug;
 }
 
 std::ostream &operator<<(std::ostream &os, const KeyPrivate &key) {
-    os << "KeyPrivate( secret: " << Utils::bytesEncode(key.secretKey().c_str()).toStdString()
-       << ", public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " )";
+    os << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str()).toStdString()
+       << ", public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
     return os;
 }
