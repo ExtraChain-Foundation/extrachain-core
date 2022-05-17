@@ -17,6 +17,7 @@ public:
     FragmentStorage(ActorId Actor, std::string FileHash);
     ~FragmentStorage() = default;
 
+    bool initLocalFile(uint64_t filesize);
     bool insertFragment(DFSP::SegmentMessage msg);
     bool editFragment(DFSP::EditSegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
@@ -30,6 +31,7 @@ private:
     DBRow getRealNextFragment(uint64_t number);
     std::pair<DBRow, DBRow> getPrevNextPairFragment(uint64_t number);
     DBRow makeFragmentRow(DFSP::SegmentMessage msg, uint64_t storedPos);
+    DBRow makeFragmentRow(uint64_t pos, uint64_t storedPos, uint64_t size);
     uint64_t writeFragment(DFSP::SegmentMessage msg);
     void moveRows(DBRow curRow, uint64_t moveSize);
     uint64_t write(std::filesystem::path filePath, uint64_t pos, std::string data);

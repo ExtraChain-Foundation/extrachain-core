@@ -10,13 +10,21 @@ FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
+bool FragmentStorage::initLocalFile(uint64_t filesize) {
+    storageFile.open();
+    DBRow row = makeFragmentRow(0, 0, filesize);
+    storageFile.insert(DFSF::TableNameFragments, row);
+    HistoricalChain hc(storageFile.file(), DFS_PATH::filePath(actor, fileHash).string());
+    return hc.initLocal(actor.toStdString(), fileHash);
+}
+
 bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
     uint64_t pos = writeFragment(msg);
     DBRow row = makeFragmentRow(msg, pos);
     storageFile.insert(DFSF::TableNameFragments, row);
     moveRows(row, msg.Data.size());
 
-    std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
+    std::filesystem::path filePath = DFS::Path::filePath(actor.toStdString(), fileHash);
     HistoricalChain historicalChain(storageFile.file(), filePath.string());
     DFSP::EditSegmentMessage editSegmentMessage =
         historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::insert);
@@ -35,7 +43,7 @@ bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
             .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::replace: {
-        std::filesystem::path filePath(actor.toStdString() + Utils::platformDelimeter() + fileHash);
+        std::filesystem::path filePath = DFS::Path::filePath(actor.toStdString(), fileHash);
         HistoricalChain historicalChain(storageFile.file(), filePath.string());
         historicalChain.apply(msg);
         return applyChanges(msg.Data, msg.Offset);
@@ -191,6 +199,14 @@ DBRow FragmentStorage::makeFragmentRow(DFSP::SegmentMessage msg, uint64_t stored
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(msg.Data.size()) });
     // row.insert({ "fragHash", Utils::calcHash(msg.Data) });
+    return row;
+}
+
+DBRow FragmentStorage::makeFragmentRow(uint64_t pos, uint64_t storedPos, uint64_t size) {
+    DBRow row;
+    row.insert({ "pos", std::to_string(pos) });
+    row.insert({ "storedPos", std::to_string(storedPos) });
+    row.insert({ "size", std::to_string(size) });
     return row;
 }
 
