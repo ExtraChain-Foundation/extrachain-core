@@ -11,7 +11,6 @@ FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
 }
 
 bool FragmentStorage::initLocalFile(uint64_t filesize) {
-    storageFile.open();
     DBRow row = makeFragmentRow(0, 0, filesize);
     storageFile.insert(DFSF::TableNameFragments, row);
     HistoricalChain hc(storageFile.file(), DFS_PATH::filePath(actor, fileHash).string());

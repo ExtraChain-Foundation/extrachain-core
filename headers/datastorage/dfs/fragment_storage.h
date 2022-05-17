@@ -6,6 +6,7 @@
 #include "utils/db_connector.h"
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include "utils/dfs_utils.h"
 
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
