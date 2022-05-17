@@ -28,10 +28,20 @@
 #include <QObject>
 #include <QtNetwork/QNetworkAddressEntry>
 
-#include "extrachain_global.h"
-
-#include "utils/dfs_utils.h"
 #include <msgpack.hpp>
+
+#include <fmt/chrono.h>
+#include <fmt/color.h>
+#include <fmt/core.h>
+#include <fmt/os.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
+
+#include <magic_enum.hpp>
+using namespace magic_enum::ostream_operators;
+using namespace magic_enum::bitwise_operators;
+
+#include "extrachain_global.h"
 
 namespace Network {
 Q_NAMESPACE
@@ -528,7 +538,7 @@ int qByteArrayToInt(const QByteArray &number);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Base64);
 EXTRACHAIN_EXPORT QByteArray calcHash(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
-                                                HashEncode encode = HashEncode::Base64);
+                                              HashEncode encode = HashEncode::Base64);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
@@ -741,5 +751,17 @@ T stdStringBytesToType(std::string value) {
     return *res;
 }
 }
+
+#define FORMAT_ENUM(E)                                        \
+    template <>                                               \
+    struct fmt::formatter<E> : formatter<string_view> {       \
+        template <typename FormatContext>                     \
+        auto format(E Enum, FormatContext &ctx) {             \
+            static_assert(std::is_enum_v<E>);                 \
+            string_view name = "unknown";                     \
+            name = magic_enum::enum_name(Enum);               \
+            return formatter<string_view>::format(name, ctx); \
+        }                                                     \
+    };
 
 #endif // UTILS_H
