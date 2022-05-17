@@ -27,7 +27,6 @@
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
-#include <iostream>
 #include <string>
 #include <string_view>
 
@@ -191,9 +190,11 @@ public:
         if (Network::networkDebug) {
             msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object deserialized = oh.get();
-            std::cout << "[Network Message] Send: type " << int(message.message_type) << ", status "
-                      << int(message.status) << ", id " << message.message_id << ", type send "
-                      << int(typeSend) << ", body: " << deserialized << std::endl;
+            qDebug() << fmt::format(
+                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body {}",
+                            int(message.message_type), int(message.status), message.message_id, int(typeSend),
+                            (std::stringstream() << deserialized).str())
+                            .c_str();
         }
 #endif
 

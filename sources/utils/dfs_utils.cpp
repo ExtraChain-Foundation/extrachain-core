@@ -3,8 +3,7 @@
 #include "datastorage/actor.h"
 
 std::vector<DBRow> DFS::Tables::ActorDirFile::getFileDataByHash(DBConnector *db, std::string hash) {
-    std::string query = "SELECT * FROM " + TableName + " WHERE fileHash = '" + hash + "' "
-        /*+ "OR fileHashPrev = '" + hash + "' "*/;
+    std::string query = fmt::format("SELECT * FROM {} WHERE fileHash = '{}'", TableName, hash);
     return db->select(query);
 }
 
@@ -37,8 +36,8 @@ std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::strin
         return {};
     }
     std::vector<DFSP::DirRow> dirRows;
-    auto actrDirData = db.select("SELECT * FROM " + DFS::Tables::ActorDirFile::TableName
-                                 + " WHERE lastModified > " + std::to_string(lastModified));
+    auto actrDirData =
+        db.select(fmt::format("SELECT * FROM {} WHERE lastModified > {}", TableName, lastModified));
     for (auto &row : actrDirData) {
         DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
                                         .fileHashPrev = row["fileHashPrev"],
@@ -59,8 +58,7 @@ DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId,
         return {};
     }
 
-    auto rows = db.select("SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " WHERE fileHash = '"
-                          + fileHash + "';");
+    auto rows = db.select(fmt::format("SELECT * FROM {} WHERE fileHash = '{}';", TableName, fileHash));
     if (rows.empty()) {
         return {};
     }

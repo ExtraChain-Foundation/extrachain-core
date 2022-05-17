@@ -83,10 +83,19 @@
     #include <msgpack.hpp>
     #include <sodium.h>
 
-//    #ifdef Q_OS_WINDOWS
-    #define UINT32_C(c) (c##ULL)
-    #define UINT64_C(c) (c##ULL)
-//    #endif
+    #include <fmt/chrono.h>
+    #include <fmt/color.h>
+    #include <fmt/core.h>
+    #include <fmt/os.h>
+    #include <fmt/ostream.h>
+    #include <fmt/ranges.h>
+    #include <magic_enum.hpp>
+
+    #ifdef Q_OS_WINDOWS
+        #define UINT32_C(c) (c##ULL)
+        #define UINT64_C(c) (c##ULL)
+    #endif
+
     #include <QtConcurrent>
     #include <QtCore>
     #include <QtNetwork>

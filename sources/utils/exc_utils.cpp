@@ -37,6 +37,7 @@
 #include "boost/version.hpp"
 
 #include "enc/enc_tools.h"
+#include "utils/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
