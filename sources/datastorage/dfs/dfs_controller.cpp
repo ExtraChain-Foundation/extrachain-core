@@ -45,9 +45,26 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     newFilePath = fpath;
 #endif
 
+    if (!std::filesystem::exists(newFilePath)) {
+        qInfo() << "[Dfs] Can't load file";
+        return "ErrorNotExists";
+    }
+
+    if (!std::filesystem::is_regular_file(newFilePath)) {
+        qInfo() << "[Dfs] This is not a file";
+        return "ErrorNotFile";
+    }
+
+    std::ifstream my_file(newFilePath);
+    if (!my_file) {
+        qDebug() << "Can't read";
+        return "ErrorNotReadable";
+    }
+    my_file.close();
+
     // TODO: error description
     if (std::filesystem::file_size(newFilePath) >= m_bytesLimit - m_sizeTaken) {
-        return "";
+        return "ErrorStorageFull";
     }
 
     if (securityLevel == DFS::Encryption::Encrypted) {
