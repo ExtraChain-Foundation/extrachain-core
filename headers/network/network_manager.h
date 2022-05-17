@@ -27,19 +27,19 @@
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
+#include <string>
+#include <string_view>
 
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
+#include "network/message_body.h"
 #include "network/network_status.h"
 #include "utils/exc_utils.h"
 
-class ResolveManager;
 class SocketService;
-class TcpSocketService;
 class WebSocketService;
-class TcpServerService;
 class UPNPConnection;
 
 struct NetworkReconnect {
@@ -52,13 +52,25 @@ struct NetworkReconnect {
     }
 };
 
-inline uint qHash(const NetworkReconnect &reconnect) {
+inline size_t qHash(const NetworkReconnect &reconnect) {
     return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
 }
 
+struct MessageIdDataWaiting {
+    std::string identifier;
+    qint64 time;
+    std::string cached_message;
+    // msg type
+};
+
+struct MessageIdDataReceived {
+    std::string identifier;
+    qint64 time;
+};
+
 /**
  * @brief The NetworkManager class
- * Creates Discovery, Resolver, Server and Sockets services
+ * Creates Discovery, Server and Sockets services
  */
 class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
@@ -66,30 +78,30 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
 private:
     bool reservedActorListUse = false;
     bool active = false;
-    BigNumber maxBlockCount; // latest known block num in the blockchain
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};
 
-    ActorIndex *m_actorIndex;
-    ResolveManager *resolveManager;
+    ExtraChainNode &node;
     QNetworkAddressEntry *local = nullptr;
-    TcpServerService *tcpServer = nullptr;
     QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
     QSet<NetworkReconnect> m_reconnections;
     NetworkStatus m_networkStatus;
 
+    std::map<std::string, std::string> m_messages;
+    std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
+    std::map<std::string, MessageIdDataReceived> m_messages_received;
+
 public:
-    NetworkManager(ActorIndex *actorIndex);
+    explicit NetworkManager(ExtraChainNode &node);
     ~NetworkManager();
 
     // protected:
-    quint16 tcpPort = 2222;
+    // quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
 
 private:
-    void connectTcpSocket(TcpSocketService *service);
     void connectWsService(WebSocketService *ws);
 
 public:
@@ -103,13 +115,6 @@ signals:
     void finished(); // ThreadPool
 
 protected:
-    void startNetwork();
-    /**
-     * @brief Creates new tcp socket connection and adds it to connections
-     * @param ip
-     * @param port
-     */
-    void connectToTcpSocket(const QString &ip, quint16 port);
     void connectToWebSocket(const QString &ip, quint16 port);
 
     /**
@@ -118,19 +123,16 @@ protected:
      * @return
      */
     bool checkMsgCount(const QByteArray &msg);
-    void saveToCache(const QByteArray &message, const unsigned int &msgType, const SocketPair &receiver,
-                     Config::Net::TypeSend typeSend);
-    void sendFromCache();
 
 private slots:
     void onNewWsConnection();
 
 protected slots:
-    void onNewTcpConnection(qint64 socketDescriptor);
     virtual void checkConnectionsStatus();
     void startDiscovery();
 
 public slots:
+    void startNetwork();
     void connectToNode(const QString &ip, Network::Protocol protocol);
     void process();
     void reconnection();
@@ -138,27 +140,68 @@ public slots:
                     const QString &password);
 
 private slots:
-    /**
-     * @brief Remove connections from connection list
-     */
-    void removeTcpConnection();
     void removeWsConnection();
     void socketError(Network::SocketServiceError error, QString errorData);
 
 public:
     QString localIp(); // TODO: remove
-    void send(const QByteArray &message, const unsigned int &msgType,
-              const SocketPair &receiver = SocketPair(),
-              Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
 
-    virtual void sendMessage(const QByteArray &message, const unsigned int &msgType,
-                             const SocketPair &receiver = {},
-                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::Default);
-    virtual void messageReceived(const QByteArray &msg, const SocketPair &receiver);
+    void sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                     const std::string &receiver_identifier);
+    void saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                     const std::string &receiver_identifier);
+    void sendFromCache();
+    bool isActiveConnectionExists();
 
-    void setResolveManager(ResolveManager *value);
+    void messageReceived(const std::string &message, const std::string &identifier);
 
-    ActorIndex *actorIndex() const;
+    template <class T>
+    std::string send_message(T data, MessageType type, MessageStatus status = MessageStatus::NoStatus,
+                             std::string to_message_id = "",
+                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
+        if (status == MessageStatus::Response && to_message_id.empty()) {
+            qFatal("[Network] Send message error: empty message id for response message");
+        }
+        if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
+            qDebug()
+                << "[Network] Send message warning: incorrect type send for response message, set to focused";
+            typeSend = Config::Net::TypeSend::Focused;
+        }
+
+        if (node.accountController()->count() == 0) {
+            // qFatal("Can't send");
+            return "";
+        }
+
+        auto &mainActor = node.accountController()->mainActor();
+        MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
+        auto serialized = message.serialize();
+        auto sign = mainActor.key().sign(serialized);
+
+        std::string receiver_identifier;
+        if (!to_message_id.empty()) {
+            receiver_identifier = m_messages[to_message_id];
+            if (receiver_identifier.empty())
+                qFatal("Network send message error: receiver_identifier is empty");
+            m_messages.erase(to_message_id);
+        }
+
+#ifdef QT_DEBUG
+        if (Network::networkDebug) {
+            msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
+            msgpack::object deserialized = oh.get();
+            qDebug() << fmt::format(
+                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body {}",
+                            int(message.message_type), int(message.status), message.message_id, int(typeSend),
+                            (std::stringstream() << deserialized).str())
+                            .c_str();
+        }
+#endif
+
+        this->sendMessage(serialized + sign, typeSend, receiver_identifier);
+
+        return message.message_id;
+    }
 
 signals:
     void newSocket();

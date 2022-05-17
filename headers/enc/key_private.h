@@ -22,7 +22,11 @@
 
 #include <QDebug>
 
+#include <msgpack.hpp>
+
 #include "extrachain_global.h"
+
+#include <filesystem>
 
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:
@@ -33,32 +37,40 @@ public:
     /**
      * @brief New keys
      */
-    KeyPrivate();
+    KeyPrivate() = default;
     /**
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
     KeyPrivate(const std::string &secret_key, const std::string &public_key);
-    KeyPrivate(const QJsonObject &json);
     KeyPrivate(const KeyPrivate &keyPrivate);
     ~KeyPrivate() = default;
 
-private:
+public:
     void generate();
 
-public:
-    QByteArray encrypt(const QByteArray &data, const std::string &receiverPublicKey,
-                       const std::string &nonce = "");
-    QByteArray decrypt(const QByteArray &data, const std::string &senderPublicKey,
-                       const std::string &nonce = "");
-    QByteArray encryptSelf(const QByteArray &data);
-    QByteArray decryptSelf(const QByteArray &data);
+    std::string encrypt(const std::string &data, const std::string &receiverPublicKey,
+                        const std::string &nonce = "") const;
+    std::string decrypt(const std::string &data, const std::string &senderPublicKey,
+                        const std::string &nonce = "") const;
+    std::string encryptSelf(const std::string &data) const;
+    std::string decryptSelf(const std::string &data) const;
 
-    QByteArray sign(const QByteArray &data);
-    bool verify(const QByteArray &data, const QByteArray &dsignHex);
+    void encryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
+    void decryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
+
+    std::string sign(const std::string &data) const;
+    bool verify(const std::string &data, const std::string &signature) const;
 
     const std::string &secretKey() const;
     const std::string &publicKey() const;
+
+    bool empty() const;
+
+    MSGPACK_DEFINE(m_secretKey, m_publicKey)
 };
+
+QDebug operator<<(QDebug debug, const KeyPrivate &key);
+std::ostream &operator<<(std::ostream &os, const KeyPrivate &key);
 
 #endif // KEY_PRIVATE_H

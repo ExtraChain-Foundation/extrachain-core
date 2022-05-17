@@ -23,9 +23,10 @@
 
 #include "managers/logs_manager.h"
 
+#include <fmt/core.h>
+
 #include <QJsonObject>
 #include <QMutex>
-#include <iostream>
 
 #ifdef Q_OS_ANDROID
     #include <android/log.h>
@@ -36,7 +37,7 @@
 #endif
 
 bool LogsManager::toConsole = true;
-bool LogsManager::toFile = true;
+bool LogsManager::toFile = false;
 bool LogsManager::toModel =
 #ifdef LOG_FILENAME
     true;
@@ -241,10 +242,7 @@ void LogsManager::offQml() {
 }
 
 void LogsManager::etHandler() {
-    std::cout << std::boolalpha << std::endl;
     std::ios_base::sync_with_stdio(false);
-
-    QDir().mkpath("logs");
     qInstallMessageHandler(LogsManager::messageHandler);
 
 #ifdef Q_OS_WIN
@@ -274,8 +272,13 @@ void LogsManager::print(const std::string& log) {
         OutputDebugStringA("\n");
     }
     #endif
-    std::cout << log << std::endl;
+    fmt::print("{}\n", log);
+    fflush(stdout);
 #endif
+}
+
+void LogsManager::setDebugLogs(bool debugLogs) {
+    LogsManager::debugLogs = debugLogs;
 }
 
 void LogsManager::setAntiFilter(bool value) {

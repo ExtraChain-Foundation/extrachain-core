@@ -11,7 +11,7 @@ BreakBeforeBraces: Custom
 BraceWrapping:
  AfterClass: false
  AfterControlStatement: Never
- AfterEnum: true
+ AfterEnum: false
  AfterFunction: false
  AfterNamespace: false
  AfterObjCDeclaration: false
@@ -30,6 +30,7 @@ BraceWrapping:
 AlignAfterOpenBracket: true
 AlwaysBreakTemplateDeclarations: true
 AllowShortFunctionsOnASingleLine: Inline
+AllowShortEnumsOnASingleLine: false
 SortIncludes: true
 SortUsingDeclarations: true
 AlignTrailingComments: true

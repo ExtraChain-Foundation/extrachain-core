@@ -31,7 +31,7 @@ public:
 
 public:
     static QList<Transaction> blockDataToFeeTxs(QList<Transaction> pendingTxs, QByteArray blockHash,
-                                                ActorId myActorId, QByteArray* firstId);
+                                                ActorId myActorId, ActorId firstId);
 signals:
 };
 
@@ -46,8 +46,7 @@ static const QByteArray FEE = "Fee";
 static const QByteArray STAKING_REWARD = "StakingReward";
 
 static constexpr int TRANSACTION_FEE = 1; // 1% from transaction amount
-enum TypeRevert
-{
+enum TypeRevert {
     Fee,
     ApproverRevert,
     CheckerRevert,

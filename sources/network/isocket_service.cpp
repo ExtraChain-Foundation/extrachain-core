@@ -1,4 +1,5 @@
 #include "network/isocket_service.h"
+
 #include "enc/enc_tools.h"
 #include "network/network_manager.h"
 
@@ -6,12 +7,15 @@
     #include "preconfig.h"
 #endif
 
-SocketService::SocketService(NetworkManager *networkManager, QObject *parent)
-    : QObject(parent) {
-    m_networkManager = networkManager;
+SocketService::SocketService(ExtraChainNode &node, QObject *parent)
+    : node(node)
+    , QObject(parent) {
+    priv.generate();
 }
 
+/*
 SocketService::SocketService(const SocketService &socket) {
+    qFatal("SocketService copy TODO");
     m_identifier = socket.m_identifier;
     m_ip = socket.m_ip;
     m_activated = socket.m_activated;
@@ -19,6 +23,7 @@ SocketService::SocketService(const SocketService &socket) {
     m_bytesOutgoing = socket.m_bytesOutgoing;
     m_bytesCompressed = socket.m_bytesCompressed;
 }
+*/
 
 const QString &SocketService::identifier() const {
     return m_identifier;
@@ -34,6 +39,10 @@ Network::Protocol SocketService::protocol() const {
 
 const QString &SocketService::ip() const {
     return m_ip;
+}
+
+const SocketService::SendType SocketService::sendType() const {
+    return m_sendType;
 }
 
 int SocketService::bytesCompressed() const {
@@ -58,13 +67,17 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     auto version = json["version"].toString();
     m_identifier = json["identifier"].toString();
-    pub = KeyPublic(json["key"].toString().toStdString());
-    ActorId jsonFirstId = ActorId(json["firstId"].toString().toLatin1());
-    ActorId currentFirstId = m_networkManager->actorIndex()->firstId();
-    bool isFirstIdsContains = currentFirstId == jsonFirstId.toByteArray();
+    m_sendType = SendType(json["sendType"].toInt());
+    ActorId jsonFirstId = ActorId(json["firstId"].toString().toStdString());
+    ActorId currentFirstId = node.actorIndex()->firstId();
+    bool isFirstIdsContains = currentFirstId == jsonFirstId;
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
     qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
+
+    if (currentFirstId.isEmpty() && !jsonFirstId.isEmpty()) { // TODO: remove hack
+        node.actorIndex()->setFirstId(jsonFirstId);
+    }
 
     if (version != EXTRACHAIN_VERSION) {
         qDebug() << "[Socket] Close, because version incompatible";
@@ -86,7 +99,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     bool flag = false;
-    auto &connections = m_networkManager->connections();
+    auto &connections = node.network()->connections();
     std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
@@ -99,7 +112,8 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     qDebug() << "[Socket] Activated" << this << protocol();
-    // m_activated = true;
+    m_activated = true;
+    emit activated();
     return true;
 }
 
@@ -109,30 +123,30 @@ void SocketService::closeSocket() {
 
 QByteArray SocketService::generateFirstMessage() {
     QJsonObject json;
-    json["firstId"] = m_networkManager->actorIndex()->firstId().toString();
+    json["firstId"] = node.actorIndex()->firstId().toString();
     json["version"] = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["key"] = QString::fromStdString(priv.publicKey());
+    json["sendType"] = QString::number(int(m_sendType));
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
-    if (pub.publicKey().empty())
+    if (pub.empty())
         qFatal("Socket encrypt error");
 
-    auto result = priv.encrypt(message, pub.publicKey());
+    auto result = QByteArray::fromStdString(priv.encrypt(message.toStdString(), pub.publicKey()));
     m_bytesOutgoing += result.length();
     // m_bytesCompressed += message.length() - result.length();
     return result;
 }
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
-    if (pub.publicKey().empty())
+    if (pub.empty())
         qFatal("Socket decrypt error");
 
-    auto result = priv.decrypt(message, pub.publicKey());
+    auto result = QByteArray::fromStdString(priv.decrypt(message.toStdString(), pub.publicKey()));
     if (result.isEmpty())
         return "";
     m_bytesIncoming += message.length();

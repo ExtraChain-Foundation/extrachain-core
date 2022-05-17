@@ -6,148 +6,73 @@ INCLUDEPATH += $$PWD/headers
 INCLUDEPATH += $$PWD
 
 SOURCES += \
-    $$PWD/dfs/controls/sources/subscribe_controller.cpp \
-    $$PWD/dfs/managers/sources/dfs_networkmanager.cpp \
-    $$PWD/dfs/managers/sources/sender.cpp \
-    $$PWD/dfs/managers/sources/card_manager.cpp \
-    $$PWD/dfs/packages/sources/hash_operations.cpp \
-    $$PWD/dfs/packages/sources/status.cpp \
-    $$PWD/dfs/packages/sources/dfs_request.cpp \
-    $$PWD/dfs/packages/sources/dfs_changes.cpp \
-    $$PWD/dfs/packages/sources/message_struct.cpp \
-    $$PWD/dfs/packages/sources/req_frags_message.cpp \
-    $$PWD/dfs/packages/sources/title_message.cpp \
-    $$PWD/dfs/types/sources/cardfile.cpp \
-    $$PWD/sources/enc/enc_tools.cpp \
-    $$PWD/sources/managers/chat.cpp \
-    $$PWD/sources/managers/chatmanager.cpp \
-    $$PWD/sources/enc/key_private.cpp \
-    $$PWD/sources/enc/key_public.cpp \
+    $$PWD/sources/datastorage/dfs/dfs_controller.cpp \
+    $$PWD/sources/datastorage/block.cpp \
+    $$PWD/sources/datastorage/blockchain.cpp \
+    $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/index/actorindex.cpp \
     $$PWD/sources/datastorage/index/blockindex.cpp \
     $$PWD/sources/datastorage/index/memindex.cpp \
-    $$PWD/sources/datastorage/block.cpp \
-    $$PWD/sources/datastorage/blockchain.cpp \
-    $$PWD/sources/datastorage/contract.cpp \
-    $$PWD/sources/datastorage/genesis_block.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
-    $$PWD/sources/managers/extrachain_node.cpp \
-    $$PWD/sources/managers/file_updater_manager.cpp \
-    $$PWD/sources/network/packages/service/connections_message.cpp \
+    $$PWD/sources/datastorage/dfs/permission_manager.cpp \
+    $$PWD/sources/datastorage/private_profile.cpp \
+    $$PWD/sources/enc/enc_tools.cpp \
+    $$PWD/sources/enc/key_private.cpp \
+    $$PWD/sources/enc/key_public.cpp \
     $$PWD/sources/managers/account_controller.cpp \
-    $$PWD/sources/managers/sm_manager.cpp \
-    $$PWD/sources/managers/coin_service.cpp \
-    $$PWD/sources/managers/contract_manager.cpp \
-    $$PWD/sources/managers/tx_manager.cpp \
-    $$PWD/sources/managers/thread_pool.cpp \
     $$PWD/sources/managers/logs_manager.cpp \
-    $$PWD/sources/network/packages/base_message_response.cpp \
-    $$PWD/sources/network/packages/service/get_all_actor_message.cpp \
-    $$PWD/sources/network/socket_pair.cpp \
-    $$PWD/sources/profile/private_profile.cpp \
-    $$PWD/sources/profile/public_profile.cpp \
-    $$PWD/sources/resolve/dfs_resolver_service.cpp \
-    $$PWD/sources/resolve/resolve_manager.cpp \
-    $$PWD/sources/resolve/resolver_service.cpp \
-    $$PWD/sources/utils/bignumber.cpp \
-    $$PWD/sources/utils/coinprocess.cpp \
-    $$PWD/sources/utils/db_connector.cpp \
-    $$PWD/sources/utils/Keccak256.cpp \
-    $$PWD/dfs/controls/sources/dfs.cpp \
-    $$PWD/dfs/types/sources/dfstruct.cpp \
+    $$PWD/sources/managers/extrachain_node.cpp \
+    $$PWD/sources/managers/thread_pool.cpp \
+    $$PWD/sources/managers/tx_manager.cpp \
     $$PWD/sources/network/discovery_service.cpp \
     $$PWD/sources/network/network_manager.cpp \
     $$PWD/sources/network/network_status.cpp \
-    $$PWD/sources/network/packages/base_message.cpp \
-    $$PWD/sources/network/packages/service/get_actor_message.cpp \
-    $$PWD/sources/network/packages/service/get_block_message.cpp \
-    $$PWD/sources/network/packages/service/get_tx_message.cpp \
-    $$PWD/sources/network/packages/service/get_tx_pair_message.cpp \
-    $$PWD/sources/network/tcpserver_service.cpp \
     $$PWD/sources/network/isocket_service.cpp \
-    $$PWD/sources/network/tcpsocket_service.cpp \
     $$PWD/sources/network/websocket_service.cpp \
     $$PWD/sources/network/upnpconnection.cpp \
+    $$PWD/sources/utils/autologinhash.cpp \
+    $$PWD/sources/utils/bignumber.cpp \
+    $$PWD/sources/utils/coinprocess.cpp \
+    $$PWD/sources/utils/db_connector.cpp \
     $$PWD/sources/utils/exc_utils.cpp \
+    $$PWD/sources/utils/dfs_utils.cpp \
     $$PWD/sources/utils/variant_model.cpp
 
 HEADERS += \
-    $$PWD/headers/precompiled.h \
-    $$PWD/headers/extrachain_global.h \
-    $$PWD/dfs/controls/headers/subscribe_controller.h \
-    $$PWD/dfs/managers/headers/dfs_networkmanager.h \
-    $$PWD/dfs/managers/headers/sender.h \
-    $$PWD/dfs/packages/headers/all.h \
-    $$PWD/dfs/packages/headers/dfs_message_interface.h \
-    $$PWD/dfs/packages/headers/hash_operations.h \
-    $$PWD/dfs/packages/headers/message_struct.h \
-    $$PWD/dfs/packages/headers/req_frags_message.h \
-    $$PWD/dfs/packages/headers/status.h \
-    $$PWD/dfs/packages/headers/title_message.h \
-    $$PWD/headers/enc/enc_tools.h \
-    $$PWD/headers/enc/key_private.h \
-    $$PWD/headers/enc/key_public.h \
-    $$PWD/headers/enc/sign_interface.h \
-    $$PWD/dfs/packages/headers/dfs_changes.h \
-    $$PWD/dfs/types/headers/cardfile.h \
-    $$PWD/headers/managers/chat.h \
-    $$PWD/headers/managers/chatmanager.h \
-    $$PWD/headers/managers/extrachain_node.h \
-    $$PWD/headers/managers/file_updater_manager.h \
-    $$PWD/headers/metatypes.h \
-    $$PWD/dfs/packages/headers/dfs_request.h \
-    $$PWD/headers/datastorage/index/actorindex.h \
-    $$PWD/headers/datastorage/index/blockindex.h \
-    $$PWD/headers/datastorage/index/memindex.h \
+    $$PWD/headers/datastorage/dfs/dfs_controller.h \
     $$PWD/headers/datastorage/actor.h \
     $$PWD/headers/datastorage/block.h \
     $$PWD/headers/datastorage/blockchain.h \
-    $$PWD/headers/datastorage/contract.h \
     $$PWD/headers/datastorage/genesis_block.h \
+    $$PWD/headers/datastorage/index/actorindex.h \
+    $$PWD/headers/datastorage/index/blockindex.h \
+    $$PWD/headers/datastorage/index/memindex.h \
     $$PWD/headers/datastorage/transaction.h \
-    $$PWD/headers/network/packages/service/connections_message.h \
-    $$PWD/headers/network/packages/service/message_types.h \
+    $$PWD/headers/datastorage/dfs/permission_manager.h \
+    $$PWD/headers/datastorage/private_profile.h \
+    $$PWD/headers/enc/enc_tools.h \
+    $$PWD/headers/enc/key_private.h \
+    $$PWD/headers/enc/key_public.h \
     $$PWD/headers/managers/account_controller.h \
-    $$PWD/headers/managers/sm_manager.h \
-    $$PWD/headers/managers/coin_service.h \
-    $$PWD/headers/managers/contract_manager.h \
-    $$PWD/headers/managers/tx_manager.h \
-    $$PWD/headers/managers/thread_pool.h \
     $$PWD/headers/managers/logs_manager.h \
-    $$PWD/headers/network/packages/base_message_response.h \
-    $$PWD/headers/network/packages/service/get_all_actor_message.h \
-    $$PWD/headers/network/socket_pair.h \
-    $$PWD/headers/profile/private_profile.h \
-    $$PWD/headers/profile/public_profile.h \
-    $$PWD/headers/resolve/dfs_resolver_service.h \
-    $$PWD/headers/resolve/resolve_manager.h \
-    $$PWD/headers/resolve/resolver_service.h \
-    $$PWD/headers/utils/Keccak256.h \
-    $$PWD/headers/utils/bignumber.h \
-    $$PWD/headers/utils/coinprocess.h \
-    $$PWD/headers/utils/db_connector.h \
-    $$PWD/dfs/controls/headers/dfs.h \
-    $$PWD/dfs/managers/headers/card_manager.h \
-    $$PWD/dfs/types/headers/dfstruct.h \
+    $$PWD/headers/managers/extrachain_node.h \
+    $$PWD/headers/managers/thread_pool.h \
+    $$PWD/headers/managers/tx_manager.h \
+    $$PWD/headers/metatypes.h \
+    $$PWD/headers/extrachain_global.h \
     $$PWD/headers/network/discovery_service.h \
     $$PWD/headers/network/network_manager.h \
     $$PWD/headers/network/network_status.h \
-    $$PWD/headers/network/packages/base_message.h \
-    $$PWD/headers/network/packages/message_interface.h \
-    $$PWD/headers/network/packages/service/all_messages.h \
-    $$PWD/headers/network/packages/service/get_actor_message.h \
-    $$PWD/headers/network/packages/service/get_block_message.h \
-    $$PWD/headers/network/packages/service/get_count_messages.h \
-    $$PWD/headers/network/packages/service/get_tx_message.h \
-    $$PWD/headers/network/packages/service/get_tx_pair_message.h \
-    $$PWD/headers/network/packages/service/ping_pong_message.h \
-    $$PWD/headers/network/packages/service/verify_messages.h \
-    $$PWD/headers/network/tcpserver_service.h \
+    $$PWD/headers/network/message_body.h \
     $$PWD/headers/network/isocket_service.h \
-    $$PWD/headers/network/tcpsocket_service.h \
     $$PWD/headers/network/websocket_service.h \
     $$PWD/headers/network/upnpconnection.h \
+    $$PWD/headers/utils/autologinhash.h \
+    $$PWD/headers/utils/bignumber.h \
+    $$PWD/headers/utils/coinprocess.h \
+    $$PWD/headers/utils/db_connector.h \
     $$PWD/headers/utils/exc_utils.h \
+    $$PWD/headers/utils/dfs_utils.h \
     $$PWD/headers/utils/variant_model.h
 
 gcc || clang: QMAKE_CXXFLAGS += -Werror=return-type -Werror=implicit-fallthrough -Wno-unused-function  -Wno-deprecated # -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable
@@ -174,6 +99,6 @@ QMAKE_SUBSTITUTES += preconfig.h.in
 
 include(../extrachain-3rdparty/extrachain-3rdparty.pri)
 
-lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.15+")
-equals(QT_MAJOR_VERSION, 5): lessThan(QT_MINOR_VERSION, 15): error("requires Qt 5.15+")
-# lessThan(QT_PATCH_VERSION, 0): error("requires Qt 5.15+")
+lessThan(QT_MAJOR_VERSION, 6): error("requires Qt 6.2+")
+equals(QT_MAJOR_VERSION, 6): lessThan(QT_MINOR_VERSION, 2): error("requires Qt 6.2+")
+equals(QT_MAJOR_VERSION, 6): equals(QT_MINOR_VERSION, 2): lessThan(QT_PATCH_VERSION, 2): error("requires Qt 6.2.2+")

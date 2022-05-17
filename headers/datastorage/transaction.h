@@ -21,7 +21,6 @@
 #define TRANSACTION_H
 
 #include "datastorage/actor.h"
-#include "enc/sign_interface.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
 #include <QByteArray>
@@ -48,26 +47,26 @@ public:
 
     Transaction(const Transaction &other);
 
-private:
+public: // make private
     ActorId sender;
     ActorId receiver;
     BigNumber amount; // coin amount
     long long date;
-    QByteArray data;     // additional payload field
+    std::string data;    // additional payload field
     ActorId token;       // token contract address
     BigNumber prevBlock; // last block id at the moment of tx creation
     int gas;             // security and reward param
     int hop;             // number of the nodes, through which the transaction will pass before
                          // aprovement
-    QByteArray hash;     // hash from all fields
+    std::string hash;    // hash from all fields
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
-    QByteArray digSig;
+    std::string digSig;
 
 private:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses keccak.
+     * Uses sha3.
      */
     void calcHash();
 
@@ -145,14 +144,17 @@ public:
      * @brief 1 * 10e18 from BigNumber to number -> 1
      * @param number
      */
-    static QString amountToVisible(BigNumber number);
-    static BigNumber amountNormalizeMul(BigNumber number);
-    static BigNumber amountMul(BigNumber number1, BigNumber number2);
-    static BigNumber amountDiv(BigNumber number1, BigNumber number2);
+    static QString amountToVisible(const BigNumber &number);
+    static BigNumber amountNormalizeMul(const BigNumber &number);
+    static BigNumber amountMul(const BigNumber &number1, const BigNumber &number2);
+    static BigNumber amountDiv(const BigNumber &number1, const BigNumber &number2);
     static BigNumber amountPercent(BigNumber number, uint percent);
     void setAmount(const BigNumber &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
+
+    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
+                   digSig)
 };
 
 #endif // TRANSACTION_H

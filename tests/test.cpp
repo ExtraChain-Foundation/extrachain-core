@@ -68,6 +68,41 @@ private slots:
     //            key.sign(data);
     //        qDebug() << timer.elapsed() << "ms";
     //    }
+    
+    void bigNumberTest() {
+    //    BigNumber b(1);
+//    b++;
+//    b--;
+//    --b;
+//    ++b;
+//    b = b + 7;
+//    b = b - 4;
+//    b += 4;
+//    b -= 6;
+//    b *= 4;
+//    b = b * 4;
+//    b /= 2;
+//    b = b / 2;
+
+//    int i(1);
+//    i++;
+//    i--;
+//    --i;
+//    ++i;
+//    i = i + 7;
+//    i = i - 4;
+//    i += 4;
+//    i -= 6;
+//    i *= 4;
+//    i = i * 4;
+//    i /= 2;
+//    i = i / 2;
+
+//    qDebug() << b.toByteArray(10).toInt() << i;
+//    qDebug() << (b - 5 == i - 5);
+
+//    return 0;
+    }
 
     void createNetwork() {
         LogsManager::qtHandler();

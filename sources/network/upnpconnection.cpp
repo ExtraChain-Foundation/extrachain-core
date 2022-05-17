@@ -168,7 +168,7 @@ void UPNPConnection::postSOAP(QString action, QString message) {
     emit stageSucceded(QString("POST: \nAction: ") + action + QString("\nMessage: ") + message
                        + QString("\n\n"));
     QNetworkRequest req(gatewayCtrlUrl);
-    req.setRawHeader(QByteArray("Host"), (gateway.toString() + QString(":") + ctrlPort).toLocal8Bit());
+    req.setRawHeader(QByteArray("Host"), (gateway.toString() + QString(":") + ctrlPort).toLatin1());
     req.setRawHeader(QByteArray("Content-Type"), QByteArray("text/xml; charset=\"utf-8\""));
     req.setRawHeader(QByteArray("Content-Length"), QString::number(message.size()).toLatin1());
     req.setRawHeader(

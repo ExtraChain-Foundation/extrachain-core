@@ -1,9 +1,7 @@
 #include "network/websocket_service.h"
 
-#include "dfs/managers/headers/dfs_networkmanager.h"
-
-WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManager, QObject *parent)
-    : SocketService(networkManager, parent) {
+WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject *parent)
+    : SocketService(node, parent) {
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
         qDebug() << "[WS] Create new ws";
@@ -16,11 +14,11 @@ WebSocketService::WebSocketService(QWebSocket *ws, NetworkManager *networkManage
     }
 }
 
-WebSocketService::WebSocketService(const WebSocketService &service)
-    : SocketService(service) {
-    qFatal("[WS] Copy");
-    this->m_ws = service.m_ws;
-}
+// WebSocketService::WebSocketService(const WebSocketService &service)
+//     : SocketService(service) {
+//     qFatal("[WS] Copy");
+//     this->m_ws = service.m_ws;
+// }
 
 WebSocketService::~WebSocketService() {
     qDebug() << "[WS] I'm socket, i'm death";
@@ -60,15 +58,22 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 
 void WebSocketService::onTextMessage(const QString &message) // for first message
 {
-    if (pub.publicKey().empty()) {
+    if (message.isEmpty())
+        return;
+
+    if (pub.empty()) {
         if (message == "StatusOnly") {
             m_ws->sendTextMessage(generateFirstMessage());
             return;
         }
 
-        pub = KeyPublic(message.toStdString());
+        auto key = Utils::bytesDecode(message.toLatin1());
+        pub = KeyPublic(key.toStdString());
+        if (pub.empty()) { // or incorrect
+            qFatal("Incorrect public key in socket");
+        }
 
-        auto firstMessage = prepareSendMessage(generateFirstMessage());
+        auto firstMessage = Utils::bytesEncode(prepareSendMessage(generateFirstMessage()));
         m_ws->sendTextMessage(firstMessage);
         return;
     }
@@ -77,9 +82,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         return;
 
     qDebug() << "[WS] First message:" << message;
-    m_activated = checkFirstMessage(prepareReceiveMessage(message.toLatin1()));
-    if (m_activated)
-        emit activated();
+    checkFirstMessage(prepareReceiveMessage(Utils::bytesDecode(message.toLatin1())));
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
@@ -88,9 +91,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
-        SocketPair pair(m_ip.toStdString(), port());
-        pair.setIdentifier(m_identifier.toLatin1());
-        m_networkManager->messageReceived(mess, pair);
+        node.network()->messageReceived(mess.toStdString(), m_identifier.toStdString());
     } else {
         qFatal("[WS] Messsage is empty after prepare");
     }
@@ -112,7 +113,7 @@ void WebSocketService::onConnected() {
     this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
     handshake();
     qDebug() << "[WS] New service:" << m_ip << port();
-    emit m_networkManager->newSocket();
+    emit node.network()->newSocket();
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
@@ -134,16 +135,17 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::handshake() {
-    m_ws->sendTextMessage(QString::fromStdString(priv.publicKey()));
+    auto key = Utils::bytesEncode(QByteArray::fromStdString(priv.publicKey()));
+    m_ws->sendTextMessage(key);
 }
 
 quint16 WebSocketService::port() const {
-    if (m_ws->peerPort() != m_networkManager->wsPort)
+    if (m_ws->peerPort() != node.network()->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
 }
 
 quint16 WebSocketService::serverPort() const {
-    return m_networkManager->wsPort;
+    return node.network()->wsPort;
 }

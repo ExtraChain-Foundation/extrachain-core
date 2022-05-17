@@ -17,15 +17,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "network/network_manager.h"
+#include "datastorage/dfs/dfs_controller.h"
+#include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
-#include "network/tcpserver_service.h"
-#include "network/tcpsocket_service.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
-#include "resolve/resolve_manager.h"
 
-using namespace Messages;
+#include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
@@ -33,8 +31,8 @@ const QList<SocketService *> &NetworkManager::connections() const {
 
 bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     switch (protocol) {
-    case Network::Protocol::Tcp:
-        return tcpServer == nullptr ? false : tcpServer->isListening();
+    case Network::Protocol::Udp:
+        break;
     case Network::Protocol::WebSocket:
         return wsServer == nullptr ? false : wsServer->isListening();
     case Network::Protocol::Undefined:
@@ -43,30 +41,19 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
-void NetworkManager::setResolveManager(ResolveManager *value) {
-    resolveManager = value;
-}
-
-ActorIndex *NetworkManager::actorIndex() const {
-    return m_actorIndex;
-}
-
-NetworkManager::NetworkManager(ActorIndex *actorIndex) {
-    this->m_actorIndex = actorIndex;
-
+NetworkManager::NetworkManager(ExtraChainNode &node)
+    : node(node) {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    auto status = m_networkStatus.status();
-    qDebug() << "[NetworkManager] Current:" << m_networkStatus.status();
-
-    if (status == NetworkStatus::Status::Online) {
-        local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
-        qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    }
+    // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
+    // TODO: move to slot or process
+    local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
+    qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
+    // }
 
     if (local == nullptr) {
-        qDebug() << "Local not found";
+        qDebug() << "[NetworkManager] Local not found";
         return;
     }
 
@@ -80,7 +67,7 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
 
     upnpDis = new UPNPConnection(*local);
     upnpNet = new UPNPConnection(*local);
-    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::startNetwork);
+    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
     // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
     connect(upnpNet, &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
@@ -92,8 +79,6 @@ NetworkManager::NetworkManager(ActorIndex *actorIndex) {
 }
 
 void NetworkManager::process() {
-    startNetwork();
-
     auto tempTimer = new QTimer(this);
     connect(tempTimer, &QTimer::timeout, [this] { this->reconnection(); });
     tempTimer->start(5000);
@@ -113,8 +98,7 @@ void NetworkManager::reconnection() {
         if (finded)
             continue;
 
-        qDebug().noquote() << "[NetworkManager]" << (tcpPort == 2222 ? "Node:" : "DFS:") << "Reconnection to"
-                           << el.ip << el.protocol;
+        qDebug().noquote() << "[NetworkManager] Reconnection to" << el.ip << el.protocol;
         connectToNode(el.ip, el.protocol);
     }
 }
@@ -130,19 +114,10 @@ void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &ho
     QNetworkProxy::setApplicationProxy(proxy);
 }
 
-void NetworkManager::connectTcpSocket(TcpSocketService *service) {
-    connect(service, &TcpSocketService::error, this, &NetworkManager::socketError);
-    connect(service, &TcpSocketService::disconnected, this, &NetworkManager::removeTcpConnection);
-    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
-
-    if (!m_connections.contains(service))
-        m_connections.append(service);
-}
-
 void NetworkManager::connectWsService(WebSocketService *service) {
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
-    connect(service, &TcpSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
+    connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
     if (!m_connections.contains(service))
         m_connections.append(service);
@@ -159,11 +134,9 @@ void NetworkManager::removeConnection(const QString &identifier) {
 }
 
 NetworkManager::~NetworkManager() {
-    // delete resolverService;
     delete upnpNet;
     delete upnpDis;
     delete local;
-    delete tcpServer;
     // delete discoveryService;
 
     for (const auto &connection : qAsConst(m_connections)) {
@@ -184,12 +157,13 @@ void NetworkManager::checkConnectionsStatus() {
     emit connectionStatusChanged(flag);
     emit connectionsCountChanged(count); // TODO: check prev count value
 
-    if (flag) // TODO: replace to networkStatusChanged slot
+    if (flag) { // TODO: replace to networkStatusChanged slot
         sendFromCache();
+    }
 }
 
 void NetworkManager::startNetwork() {
-    qDebug() << "[NetworkManager] Start servers...";
+    qDebug() << "[NetworkManager] Start servers..." << (wsPort == 2233 ? "Network" : "DFS");
 
     if (local == nullptr) {
         qDebug() << "[NetworkManager] Can't detect local ip";
@@ -198,13 +172,6 @@ void NetworkManager::startNetwork() {
 
     if (!Network::isStartedServer)
         return;
-
-    tcpServer = new TcpServerService(tcpPort, local);
-    connect(tcpServer, &TcpServerService::newServerConnection, this, &NetworkManager::onNewTcpConnection,
-            Qt::UniqueConnection);
-    // connect(serverService, &TcpServerService::serverStatus, this, &NetworkManager::networkErrorChanged);
-    if (tcpServer->startListen()) { }
-
     wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
     if (wsServer->listen(QHostAddress::Any, wsPort)) {
@@ -239,15 +206,14 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     if (ip.isEmpty())
         return;
 
-    const quint16 port = (protocol == Network::Protocol::Tcp ? tcpPort : wsPort);
+    const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
     qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
                                  << ", port: " << port;
     m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
     switch (protocol) {
-    case Protocol::Tcp:
-        connectToTcpSocket(ip.simplified(), port);
+    case Protocol::Udp:
         break;
     case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), port);
@@ -258,50 +224,26 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 }
 
 void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
-    auto service = new WebSocketService(nullptr, this);
+    auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
     connectWsService(service);
 }
 
-void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &msgType,
-                                 const SocketPair &receiver, Config::Net::TypeSend typeSend) {
-    Config::Net::TypeSend send;
-
-    if (typeSend == Config::Net::TypeSend::Default) {
-        if (Messages::isChainMessage(msgType) || Messages::isGeneralRequest(msgType) || msgType == 400
-            || msgType == 402)
-            send = Config::Net::TypeSend::All;
-        else if (Messages::isGeneralResponse(msgType) || msgType == 401 || msgType == 403)
-            send = Config::Net::TypeSend::Focused;
-        else
-            send = Config::Net::TypeSend::Except;
-    } else {
-        send = typeSend;
+void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                                 const std::string &receiver_identifier) {
+    if (!isActiveConnectionExists()) {
+        qDebug() << "[NetworkManager] Save message to cache";
+        saveToCache(serialized_message, typeSend, receiver_identifier);
+        return;
     }
 
-    auto allActive = [this] {
-        if (m_connections.isEmpty())
-            return false;
-
-        for (const auto &el : qAsConst(m_connections)) {
-            if (el->isActive())
-                return true;
-        }
-
-        return false;
-    };
-
-    if (!allActive())
-        saveToCache(message, msgType, receiver, send); // TODO: check ws
-
-    auto isSendCheck = [](Config::Net::TypeSend send, std::string_view socketIp, quint16 socketPort,
-                          const SocketPair &pair) {
-        switch (send) {
+    auto isSendCheck = [typeSend, receiver_identifier](std::string_view socket_identifier) {
+        switch (typeSend) {
         case Config::Net::TypeSend::Except:
-            return socketIp != pair.ip && socketPort != pair.port;
+            return socket_identifier != receiver_identifier;
             break;
         case Config::Net::TypeSend::Focused:
-            return socketIp == pair.ip && socketPort == pair.port;
+            return socket_identifier == receiver_identifier;
             break;
         case Config::Net::TypeSend::All:
             return true;
@@ -313,18 +255,66 @@ void NetworkManager::sendMessage(const QByteArray &message, const unsigned int &
     };
 
     for (const auto &service : qAsConst(m_connections)) {
-        bool isSend = isSendCheck(send, service->ip().toStdString(), service->port(), receiver);
+        bool isSend = isSendCheck(service->identifier().toStdString());
         if (!isSend)
             continue;
-        if (service->isActive())
-            emit service->send(message);
+        if (service->isActive() && service->sendType() == SocketService::SendType::All)
+            emit service->send(QByteArray::fromStdString(serialized_message));
     }
+}
+
+void NetworkManager::saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+                                 const std::string &receiver_identifier) {
+    std::ofstream file;
+    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app | std::ios_base::binary);
+    if (!file.is_open()) {
+        qFatal("[NetworkManager/saveToCache] Error open cache file");
+    }
+
+    std::tuple tuple = { serialized_message, typeSend, receiver_identifier };
+    std::string package = MessagePack::serialize(tuple);
+    file << Utils::intToStdString(int(package.length()), 8);
+    file << package;
+
+    file.close();
+}
+
+void NetworkManager::sendFromCache() {
+    qDebug() << "[NetworkManager] Load from cache";
+
+    QFile file("tmp/network.cache");
+    if (!file.exists() || !file.open(QFile::ReadOnly)) {
+        return;
+    }
+
+    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
+    file.close();
+    file.remove();
+
+    for (const QByteArray &packageData : qAsConst(allPackages)) {
+        auto [serialized_message, typeSend, receiver_identifier] =
+            MessagePack::deserialize<std::tuple<std::string, Config::Net::TypeSend, std::string>>(
+                packageData);
+        sendMessage(serialized_message, typeSend, receiver_identifier);
+    }
+}
+
+bool NetworkManager::isActiveConnectionExists() {
+    if (this->m_connections.isEmpty())
+        return false;
+
+    for (const auto &el : qAsConst(this->m_connections)) {
+        if (el->isActive())
+            return true;
+    }
+
+    return false;
 }
 
 bool NetworkManager::checkMsgCount(const QByteArray &msg) {
     bool flag_result = true;
     bool value = 0;
-    QByteArray hashMsg = Utils::calcKeccak(msg);
+    QByteArray hashMsg = Utils::calcHash(msg);
     QMap<QByteArray, int>::iterator it = msgHashList.find(hashMsg);
 
     if (it == msgHashList.end())
@@ -342,89 +332,143 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
     return flag_result;
 }
 
-void NetworkManager::saveToCache(const QByteArray &message, const unsigned int &msgType,
-                                 const SocketPair &receiver, Config::Net::TypeSend typeSend) {
-    QFile file("tmp/network.cache");
-    file.open(QFile::Append);
-    QByteArrayList list = { message,
-                            QByteArray::fromStdString(receiver.ip),
-                            QByteArray::number(receiver.port),
-                            receiver.m_identifier,
-                            QByteArray::number(msgType),
-                            QByteArray::number(typeSend) };
-    QByteArray package = Serialization::serialize(list, 8);
-    file.write(Utils::intToByteArray(package.length(), 8) + package);
-    file.close();
-}
-
-void NetworkManager::sendFromCache() {
-    QFile file("tmp/network.cache");
-    if (!file.exists() || !file.open(QFile::ReadOnly)) {
-        return;
-    }
-
-    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
-    file.close();
-    file.remove();
-
-    for (const QByteArray &packageData : qAsConst(allPackages)) {
-        QByteArrayList package = Serialization::deserialize(packageData, 8);
-        if (package.length() != 6)
-            return;
-
-        QByteArray data = package[0];
-        SocketPair socketData;
-        socketData.ip = package[1].toStdString();
-        socketData.port = package[2].toShort();
-        socketData.m_identifier = package[3];
-        // TODO: protocol
-        auto msgType = package[4].toUInt();
-        Config::Net::TypeSend typeSend = Config::Net::TypeSend(package[5].toInt());
-        sendMessage(data, msgType, socketData, typeSend);
-    }
-}
-
-void NetworkManager::messageReceived(const QByteArray &msg, const SocketPair &receiver) {
-    if (checkMsgCount(msg))
-        resolveManager->setTask(msg, receiver);
-    else
+void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
+    if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
-}
-
-void NetworkManager::connectToTcpSocket(const QString &ip, quint16 port) {
-    TcpSocketService *socket = new TcpSocketService(ip, this);
-    connectTcpSocket(socket);
-    qDebug().noquote().nospace() << "[NetworkManager] New TCP connection: " << ip << ":" << port;
-    ThreadPool::addThread(socket);
-}
-
-void NetworkManager::onNewTcpConnection(qint64 socketDescriptor) {
-    if (m_connections.length() >= Network::maxConnections) {
-        qDebug() << "[NetworkManager] Can't connect from tcp server because the maximum number of connections"
-                 << tcpPort << wsPort;
         return;
     }
 
-    TcpSocketService *socket = new TcpSocketService(socketDescriptor, this);
-    connectTcpSocket(socket);
-    ThreadPool::addThread(socket);
-}
+    std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
+    std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
 
-void NetworkManager::removeTcpConnection() //
-{
-    QObject *sender = QObject::sender();
+    // TODO: no check new actor
+    //    {
+    //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
+    //        auto actor = node.actorIndex()->getActor(sender);
 
-    if (sender == nullptr)
-        return;
+    //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
+    //                                         QByteArray::fromStdString(std::string(sign)));
+    //        if (!verify) {
+    //            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
+    //        } else {
+    //            qDebug() << "[NetworkManager/messageReceived] Verify good";
+    //        }
+    //    }
 
-    TcpSocketService *connection = qobject_cast<TcpSocketService *>(sender);
-    auto removed = m_connections.removeAll(connection);
-    if (removed == 0)
-        return;
-    qDebug() << "[TCP] Removed" << connection;
-    emit connection->finished();
-    checkConnectionsStatus();
+    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
+    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
+    auto serialized = msg.substr(40);
+    auto messId = msg.substr(4, 15);
+    std::string messageId(messId.begin(), messId.end());
+
+    if (status == MessageStatus::Request) {
+        m_messages[messageId] = identifier;
+        // SocketIdentifier socketIdentifier { .socketIdentifier = identifier, .messageId = messageId };
+    }
+
+#ifdef QT_DEBUG
+    if (Network::networkDebug) {
+        msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
+        msgpack::object deserialized = oh.get();
+        std::cout << "[Network Message] Received: type " << int(type) << ", status " << int(status) << ", id "
+                  << messId << ", body: " << deserialized << std::endl;
+    }
+#endif
+
+    // try {
+    switch (type) {
+    case MessageType::NewActor: {
+        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+        node.actorIndex()->handleNewActor(actor);
+        break;
+    }
+    case MessageType::Actor: {
+        // actor get, test use ActorId
+        if (status == MessageStatus::Request) {
+            auto actorId = MessagePack::deserialize<ActorId>(serialized);
+            node.actorIndex()->handleGetActor(actorId, messageId);
+        } else if (status == MessageStatus::Response) {
+            auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+            node.actorIndex()->handleNewActor(actor);
+        }
+        break;
+    }
+    case MessageType::ActorAll: {
+        if (status == MessageStatus::Request) {
+            auto ignoredActorId = MessagePack::deserialize<ActorId>(serialized);
+            node.actorIndex()->handleGetAllActor(ignoredActorId, messageId);
+        } else if (status == MessageStatus::Response) {
+            auto actors = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            node.actorIndex()->handleNewAllActors(actors);
+        }
+        break;
+    }
+    case MessageType::ActorCount:
+        break;
+
+    case MessageType::DfsDirData: {
+        if (status == MessageStatus::Request) {
+            auto actorId = MessagePack::deserialize<ActorId>(serialized); // TODO: add last modified
+            node.dfs()->sendDirData(actorId, 0, messageId);
+        } else if (status == MessageStatus::Response) {
+            auto [actorId, dirRows] =
+                MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::Packets::DirRow>>>(serialized);
+            node.dfs()->addDirData(actorId, dirRows);
+        }
+        break;
+    }
+    case MessageType::DfsLastModified: {
+        auto msg = MessagePack::deserialize<uint64_t>(serialized);
+        node.dfs()->sendSync(msg, messageId);
+        break;
+    }
+    case MessageType::DfsAddFile: {
+        auto msg = MessagePack::deserialize<DFS::Packets::AddFileMessage>(serialized);
+        node.dfs()->addFile(msg, true);
+        break;
+    }
+    case MessageType::DfsRequestFile: {
+        auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        node.dfs()->sendFile(actorId, fileHash, messageId);
+        break;
+    }
+    case MessageType::DfsRequestFileSegment: {
+        auto msg = MessagePack::deserialize<DFS::Packets::RequestFileSegmentMessage>(serialized);
+        node.dfs()->sendFragment(msg, messageId);
+        break;
+    }
+    case MessageType::DfsAddSegment: {
+        auto msg = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        node.dfs()->addFragment(msg);
+        break;
+    }
+    case MessageType::DfsEditSegment: {
+        auto msg = MessagePack::deserialize<DFS::Packets::EditSegmentMessage>(serialized);
+        node.dfs()->insertFragment(msg);
+        break;
+    }
+    case MessageType::DfsDeleteSegment: {
+        auto msg = MessagePack::deserialize<DFS::Packets::DeleteSegmentMessage>(serialized);
+        node.dfs()->deleteFragment(msg);
+        break;
+    }
+    case MessageType::DfsRemoveFile: {
+        auto msg = MessagePack::deserialize<DFS::Packets::RemoveFileMessage>(serialized);
+        node.dfs()->removeFile(msg);
+        break;
+    }
+    case MessageType::DfsSendingFileDone: { // TODO
+        auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        qDebug() << "[Dfs] File done:" << actorId << fileHash.c_str();
+        break;
+    }
+
+    default:
+        qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
+        break;
+    }
+    // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
 void NetworkManager::removeWsConnection() //
@@ -459,22 +503,14 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
         }
     }
 
-    if (error == Network::IncompatibleNetwork || error == Network::IncompatibleVersion) {
+    if (error == Network::SocketServiceError::IncompatibleNetwork
+        || error == Network::SocketServiceError::IncompatibleVersion) {
         emit connectionError(error, service->identifier(), errorData);
     }
 }
 
 QString NetworkManager::localIp() {
     return local->ip().toString();
-}
-
-void NetworkManager::send(const QByteArray &data, const unsigned int &msgType, const SocketPair &receiver,
-                          Config::Net::TypeSend typeSend) {
-    Messages::BaseMessage msg;
-    msg.type = msgType;
-    msg.data = data;
-    QByteArray message = msg.serialize();
-    sendMessage(message, msgType, receiver, typeSend);
 }
 
 void NetworkManager::onNewWsConnection() {
@@ -487,7 +523,7 @@ void NetworkManager::onNewWsConnection() {
         return;
     }
 
-    auto service = new WebSocketService(ws, this);
+    auto service = new WebSocketService(ws, node);
     connectWsService(service);
     emit newSocket();
 }

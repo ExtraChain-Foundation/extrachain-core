@@ -19,38 +19,39 @@
 
 #include "enc/key_public.h"
 #include "enc/enc_tools.h"
+#include "utils/exc_utils.h"
 
-#include <QJsonObject>
-
-using std::string, std::vector;
-
-KeyPublic::KeyPublic(const string &publicKey) {
+KeyPublic::KeyPublic(const std::string &publicKey) {
     m_publicKey = publicKey;
-}
-
-KeyPublic::KeyPublic(const QJsonObject &json) {
-    m_publicKey = json["publicKey"].toString().toStdString();
 }
 
 KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
     m_publicKey = keyPublic.publicKey();
 }
 
-QByteArray KeyPublic::encrypt(const QByteArray &data, const string &senderPrivateKey) {
-    auto res = SecretKey::encryptAsymmetric(data.toStdString(), senderPrivateKey, m_publicKey);
-    return QByteArray::fromStdString(res);
+std::string KeyPublic::encrypt(const std::string &data, const std::string &senderPrivateKey) const {
+    return SecretKey::encryptAsymmetric(data, senderPrivateKey, m_publicKey);
 }
 
-bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignHex) {
-    string pks = Utils::hexStringToByte(this->m_publicKey);
-    string signature = Utils::hexStringToByte(dsignHex.toStdString());
-    vector<unsigned char> pk(pks.begin(), pks.end());
-    vector<unsigned char> vmsg(data.begin(), data.end());
-    vector<unsigned char> vsig(signature.begin(), signature.end());
-    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
-    return res == 0;
+bool KeyPublic::verify(const std::string &data, const std::string &signature) const {
+    return SecretKey::verify(data, m_publicKey, signature);
 }
 
 const std::string &KeyPublic::publicKey() const {
     return m_publicKey;
+}
+
+bool KeyPublic::empty() const {
+    return m_publicKey.empty();
+}
+
+QDebug operator<<(QDebug debug, const KeyPublic &key) {
+    QDebugStateSaver saver(debug);
+    debug << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
+    return debug;
+}
+
+std::ostream &operator<<(std::ostream &os, const KeyPublic &key) {
+    os << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
+    return os;
 }

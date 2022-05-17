@@ -29,7 +29,9 @@
 #include <sstream>
 #include <string>
 
+#include "extrachain_global.h"
 #include "gmpxx.h"
+#include "msgpack.hpp"
 
 #ifdef QT_DEBUG
     #define UPDATE_DEBUG()                  \
@@ -40,15 +42,15 @@
 #endif
 
 namespace BigNumberUtils {
-const static QVector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-                                     '2', '3', '4', '5', '6', '7', '8', '9' };
+const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+                                   '2', '3', '4', '5', '6', '7', '8', '9' };
 }
 
 /**
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
  */
-class BigNumber {
+class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
     BigNumber(const QByteArray &bigNumber, int base = 16);
@@ -119,6 +121,18 @@ public:
     static BigNumber random(int n, bool zeroAllowed = true);
     static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
     static BigNumber random(BigNumber max, bool zeroAllowed = true);
+
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        std::string num = toStdString();
+        msgpack_pk.pack_str(num.size());
+        msgpack_pk.pack_str_body(num.data(), num.size());
+    }
+
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        std::string num = msgpack_o.as<std::string>();
+        *this = BigNumber(QByteArray::fromStdString(num));
+    }
 };
 
 inline bool operator<(const BigNumber &l, const BigNumber &r) {
@@ -169,15 +183,9 @@ inline bool operator!=(const BigNumber &l, const int &r) {
     return l.data() != r;
 }
 
-#if QT_VERSION_MAJOR == 6
 inline size_t qHash(const BigNumber &key, size_t seed) {
     return qHash(key.toStdString(), seed);
 }
-#else
-inline uint qHash(const BigNumber &key, uint seed) {
-    return qHash(key.toByteArray(), seed);
-}
-#endif
 
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
 QDebug operator<<(QDebug debug, const mpz_class &bigNumber);

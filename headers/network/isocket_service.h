@@ -5,14 +5,20 @@
 #include "enc/key_public.h"
 #include "utils/exc_utils.h"
 
-class NetworkManager;
+class ExtraChainNode;
 
 class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:
-    explicit SocketService(NetworkManager *networkManager, QObject *parent = nullptr);
-    SocketService(const SocketService &socket);
+    enum class SendType {
+        All,
+        None,
+        // OnlySubNetwork
+    };
+    Q_ENUM(SendType)
+
+    explicit SocketService(ExtraChainNode &node, QObject *parent = nullptr);
     const QString &identifier() const;
     virtual QString protocolString() const = 0;
     virtual Network::Protocol protocol() const = 0;
@@ -20,6 +26,7 @@ public:
     virtual quint16 port() const = 0;
     virtual quint16 serverPort() const = 0;
     const QString &ip() const;
+    const SendType sendType() const;
     int bytesCompressed() const;
     int bytesOutgoing() const;
     int bytesIncoming() const;
@@ -41,13 +48,15 @@ protected:
     QByteArray prepareSendMessage(const QByteArray &message);
     QByteArray prepareReceiveMessage(const QByteArray &message);
 
-    NetworkManager *m_networkManager = nullptr;
+    ExtraChainNode &node;
     QString m_identifier;
     QString m_ip;
     bool m_activated = false;
     int m_bytesIncoming = 0;
     int m_bytesOutgoing = 0;
     int m_bytesCompressed = 0;
+    SendType m_sendType = SendType::All;
+    // ActorId subNetwork;
 
     KeyPrivate priv;
     KeyPublic pub;

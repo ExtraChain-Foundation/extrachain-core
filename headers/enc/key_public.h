@@ -23,6 +23,8 @@
 #include <QDebug>
 #include <string>
 
+#include <msgpack.hpp>
+
 #include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT KeyPublic {
@@ -30,17 +32,21 @@ private:
     std::string m_publicKey;
 
 public:
-    KeyPublic() = default;
-    KeyPublic(const std::string &publicKey);
-    KeyPublic(const QJsonObject &json);
-    KeyPublic(const KeyPublic &keyPublic);
+    explicit KeyPublic() = default;
+    explicit KeyPublic(const std::string &publicKey);
+    explicit KeyPublic(const KeyPublic &keyPublic);
     ~KeyPublic() = default;
 
-    QByteArray encrypt(const QByteArray &data, const std::string &senderPrivateKey);
-
-    bool verify(const QByteArray &data, const QByteArray &dsignHex);
+    std::string encrypt(const std::string &data, const std::string &senderPrivateKey) const;
+    bool verify(const std::string &data, const std::string &signature) const;
 
     const std::string &publicKey() const;
+    bool empty() const;
+
+    MSGPACK_DEFINE(m_publicKey)
 };
+
+QDebug operator<<(QDebug debug, const KeyPublic &key);
+std::ostream &operator<<(std::ostream &os, const KeyPublic &key);
 
 #endif // KEY_PUBLIC_H

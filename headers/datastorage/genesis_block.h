@@ -34,18 +34,17 @@ public:
     DataStorage::typeDataRow type;
 
 public:
-    GenesisDataRow() {
-    }
+    GenesisDataRow() = default;
 
-    GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
-                   const DataStorage::typeDataRow &type)
+    explicit GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
+                            const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)
         , token(token)
         , type(type) {
     }
 
-    GenesisDataRow(const QByteArray &serialized) {
+    explicit GenesisDataRow(const QByteArray &serialized) {
         deserialize(serialized);
     }
 
@@ -58,9 +57,9 @@ public:
     void deserialize(const QByteArray &serialized) {
         QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4) {
-            actorId = l.at(0);
+            actorId = l.at(0).toStdString();
             state = BigNumber(l.at(1));
-            token = l.at(2);
+            token = l.at(2).toStdString();
             type = DataStorage::typeDataRow(l.at(3).toInt());
         }
     }
@@ -72,8 +71,8 @@ public:
 };
 
 namespace Config {
-static const QByteArray GENESIS_BLOCK_TYPE = "genesis";
-static const QByteArray GENESIS_BLOCK_MERGE = "genesisMerge";
+static const std::string GENESIS_BLOCK_TYPE = "genesis";
+static const std::string GENESIS_BLOCK_MERGE = "genesisMerge";
 }
 
 /**
@@ -82,23 +81,23 @@ static const QByteArray GENESIS_BLOCK_MERGE = "genesisMerge";
  */
 class EXTRACHAIN_EXPORT GenesisBlock : public Block {
 public:
-    QByteArray prevGenHash; // previous genesis block hashes
+    std::string prevGenHash; // previous genesis block hashes
 
 public:
     GenesisBlock();
     GenesisBlock(const GenesisBlock &block);
 
     // Deserialize already constructed block
-    GenesisBlock(const QByteArray &serialized);
+    explicit GenesisBlock(const QByteArray &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
+    explicit GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
 
     // Block interface
 public:
     void addRow(const GenesisDataRow &row);
-    QByteArray getDataForHash() const override;   // deprecate?
-    QByteArray getDataForDigSig() const override; // deprecate?
+    QByteArray getDataForHash() const override;           // deprecate?
+    const std::string &getDataForDigSig() const override; // deprecate?
     bool deserialize(const QByteArray &serialized) override;
     QByteArray serialize() const override;
     void initFields(QList<QByteArray> &list) override;
@@ -111,8 +110,23 @@ public:
     static bool isGenesisBlock(const QByteArray &serialized);
 
 public:
-    QByteArray getPrevGenHash() const;
-    void setPrevGenHash(const QByteArray &value);
+    std::string getPrevGenHash() const;
+    void setPrevGenHash(const std::string &value);
+
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        std::string index_str = index.toStdString();
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
+                                         prevGenHash)
+            .msgpack_pack(msgpack_pk);
+    }
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        std::string index_str;
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
+                                         prevGenHash)
+            .msgpack_unpack(msgpack_o);
+        index = QByteArray::fromStdString(index_str);
+    }
 };
 
 #endif // GENESIS_BLOCK_H

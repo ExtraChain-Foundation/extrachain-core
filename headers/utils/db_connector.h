@@ -27,6 +27,7 @@
 
 #include <QByteArray>
 #include <QDebug>
+#include <QJsonDocument>
 #include <QMutex>
 
 #include "extrachain_global.h"
@@ -56,15 +57,17 @@ class EXTRACHAIN_EXPORT DBConnector {
 private:
     std::string m_file;
     bool m_open = false;
-    sqlite3 *db;
+    sqlite3 *db = nullptr;
 
 public:
-    DBConnector();
-    DBConnector(const std::string &name);
+    explicit DBConnector(const std::string &filePath);
+    DBConnector(DBConnector &&db);
     ~DBConnector();
 
 public:
-    bool open(const std::string &name);
+    static QString sqlite_version();
+
+    bool open();
     bool close();
     std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
@@ -84,6 +87,8 @@ public:
 
 public:
     bool query(std::string query);
+    QJsonObject toJsonObject();
+    QJsonDocument toJsonDocument();
 
 public:
     sqlite3 *getDb() const;

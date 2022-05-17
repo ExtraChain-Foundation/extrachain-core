@@ -88,7 +88,7 @@ QVariantMap VariantModel::get(int index) {
 void VariantModel::set(int indx, const QByteArray &role, const QVariant &value) {
     auto &val = m_datas[indx];
     val[role] = value;
-    emit dataChanged(index(indx, 0), index(indx, 0), QVector<int>() << m_roles.key(role));
+    emit dataChanged(index(indx, 0), index(indx, 0), QList<int>() << m_roles.key(role));
 }
 
 void VariantModel::move(int from, int to, int n) {

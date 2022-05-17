@@ -2,17 +2,14 @@
 #define NETWORKSTATUS_H
 
 #include <QObject>
-
-#if QT_VERSION >= 0x060100
-    #include <QtNetwork/QNetworkInformation>
-#endif
+#include <QtNetwork/QNetworkInformation>
 
 class NetworkStatus : public QObject {
     Q_OBJECT
 
 public:
-    enum class Status
-    {
+    enum class Status {
+        Unknown,
         Online,
         Offline,
         Local
@@ -23,9 +20,7 @@ public:
     Status status();
 
 private slots:
-#if QT_VERSION >= 0x060100
     void onReachabilityChanged(QNetworkInformation::Reachability reachability);
-#endif
 
 signals:
     void statusChanged(NetworkStatus::Status status);
