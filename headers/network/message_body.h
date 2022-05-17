@@ -25,6 +25,7 @@ enum class MessageType {
     DfsSendingFileDone = 59,
 };
 MSGPACK_ADD_ENUM(MessageType)
+FORMAT_ENUM(MessageType)
 
 enum class MessageStatus {
     NoStatus,
@@ -32,6 +33,7 @@ enum class MessageStatus {
     Response
 };
 MSGPACK_ADD_ENUM(MessageStatus)
+FORMAT_ENUM(MessageStatus)
 
 template <class T>
 struct MessageBody {
@@ -61,7 +63,7 @@ MessageBody<T> make_message(const T data, MessageType type, MessageStatus status
     }
 
     QByteArray randomId = Utils::calcHash(QByteArray::number(QDateTime::currentSecsSinceEpoch())
-                                            + QByteArray::number(QRandomGenerator::global()->bounded(100000)))
+                                          + QByteArray::number(QRandomGenerator::global()->bounded(100000)))
                               .left(15); // temp
 
     MessageBody<T> message = { .message_type = type,

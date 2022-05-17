@@ -1,5 +1,7 @@
 #include "network/isocket_service.h"
 
+#include <QJsonObject>
+
 #include "enc/enc_tools.h"
 #include "network/network_manager.h"
 

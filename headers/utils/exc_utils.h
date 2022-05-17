@@ -28,6 +28,7 @@
 #include <QObject>
 #include <QtNetwork/QNetworkAddressEntry>
 
+#include "extrachain_global.h"
 #include <msgpack.hpp>
 
 #include <fmt/chrono.h>
@@ -41,7 +42,17 @@
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
-#include "extrachain_global.h"
+#define FORMAT_ENUM(E)                                        \
+    template <>                                               \
+    struct fmt::formatter<E> : formatter<string_view> {       \
+        template <typename FormatContext>                     \
+        auto format(E Enum, FormatContext &ctx) {             \
+            static_assert(std::is_enum_v<E>);                 \
+            string_view name = "unknown";                     \
+            name = magic_enum::enum_name(Enum);               \
+            return formatter<string_view>::format(name, ctx); \
+        }                                                     \
+    };
 
 namespace Network {
 Q_NAMESPACE
@@ -57,8 +68,7 @@ enum class Protocol {
 };
 Q_ENUM_NS(Protocol)
 
-enum class SocketServiceError
-{
+enum class SocketServiceError {
     Unknown = 0,
     IncompatibleVersion = 1,
     IncompatibleNetwork = 2,
@@ -421,8 +431,7 @@ namespace Net {
     // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
-    enum class TypeSend
-    {
+    enum class TypeSend {
         All,
         Except,
         Focused
@@ -430,6 +439,7 @@ namespace Net {
 } // namespace Net
 } // namespace Config
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
+FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
@@ -512,8 +522,7 @@ EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();
 EXTRACHAIN_EXPORT QString boostAsioVersion();
 
-enum PrintDebug
-{
+enum PrintDebug {
     Off = 0,
     On = 1
 };
@@ -589,8 +598,7 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 // Dfs
 static const int DATA_OFFSET = 512;
 
-enum typeDataRow
-{
+enum typeDataRow {
     UNIVERSAL,
     STAKING
 };
@@ -608,8 +616,7 @@ QString makeKeyFileName(QString name);
 }
 
 namespace SearchEnum {
-enum class BlockParam
-{
+enum class BlockParam {
     Id = 0,
     Approver,
     Data,
@@ -617,8 +624,7 @@ enum class BlockParam
     Null
 };
 
-enum class TxParam
-{
+enum class TxParam {
     UserSender = 0,
     UserReceiver,
     UserApprover,
@@ -702,8 +708,7 @@ enum class TxParam
 //} // namespace FileSystem
 
 struct EXTRACHAIN_EXPORT Notification {
-    enum NotifyType
-    {
+    enum NotifyType {
         TxToUser,
         TxToMe,
         ChatMsg,
@@ -757,17 +762,5 @@ QDebug operator<<(QDebug d, const Notification &n);
 //    return *res;
 //}
 //}
-
-#define FORMAT_ENUM(E)                                        \
-    template <>                                               \
-    struct fmt::formatter<E> : formatter<string_view> {       \
-        template <typename FormatContext>                     \
-        auto format(E Enum, FormatContext &ctx) {             \
-            static_assert(std::is_enum_v<E>);                 \
-            string_view name = "unknown";                     \
-            name = magic_enum::enum_name(Enum);               \
-            return formatter<string_view>::format(name, ctx); \
-        }                                                     \
-    };
 
 #endif // UTILS_H

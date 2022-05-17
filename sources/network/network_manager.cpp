@@ -371,8 +371,9 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     if (Network::networkDebug) {
         msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
         msgpack::object deserialized = oh.get();
-        std::cout << "[Network Message] Received: type " << int(type) << ", status " << int(status) << ", id "
-                  << messId << ", body: " << deserialized << std::endl;
+        qDebug() << fmt::format("[Network Message] Received: type {}, status {}, id {}, body: {}", type,
+                                status, messId, (std::stringstream() << deserialized).str())
+                        .c_str();
     }
 #endif
 

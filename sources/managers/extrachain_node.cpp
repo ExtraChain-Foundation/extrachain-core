@@ -19,6 +19,9 @@
 
 #include "managers/extrachain_node.h"
 
+#include <QJsonObject>
+#include <sodium/core.h>
+
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -31,8 +34,6 @@
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
-
-#include <sodium/core.h>
 
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;

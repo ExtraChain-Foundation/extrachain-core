@@ -15,6 +15,8 @@ SOURCES += \
     $$PWD/sources/datastorage/index/memindex.cpp \
     $$PWD/sources/datastorage/transaction.cpp \
     $$PWD/sources/datastorage/dfs/permission_manager.cpp \
+    $$PWD/sources/datastorage/dfs/fragment_storage.cpp \
+    $$PWD/sources/datastorage/dfs/historical_chain.cpp \
     $$PWD/sources/datastorage/private_profile.cpp \
     $$PWD/sources/enc/enc_tools.cpp \
     $$PWD/sources/enc/key_private.cpp \
@@ -49,6 +51,8 @@ HEADERS += \
     $$PWD/headers/datastorage/index/memindex.h \
     $$PWD/headers/datastorage/transaction.h \
     $$PWD/headers/datastorage/dfs/permission_manager.h \
+    $$PWD/headers/datastorage/dfs/fragment_storage.h \
+    $$PWD/headers/datastorage/dfs/historical_chain.h \
     $$PWD/headers/datastorage/private_profile.h \
     $$PWD/headers/enc/enc_tools.h \
     $$PWD/headers/enc/key_private.h \
