@@ -1,19 +1,36 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "datastorage/block.h"
 
-Block::Block()
-{
-    this->type = Config::DATA_BLOCK_TYPE;
+Block::Block() {
+    this->m_type = Config::DATA_BLOCK_TYPE;
 
     this->index = BigNumber(-1);
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
     this->data = "";
     this->prevHash = "";
     this->hash = "";
 }
 
-Block::Block(const Block &block)
-{
-    this->type = block.getType();
+Block::Block(const Block &block) {
+    this->m_type = block.getType();
     this->index = block.getIndex();
     this->date = block.getDate();
     this->data = block.getData();
@@ -23,40 +40,33 @@ Block::Block(const Block &block)
 }
 
 Block::Block(const QByteArray &serialized)
-    : Block()
-{
+    : Block() {
     this->deserialize(serialized);
 }
 
 Block::Block(const QByteArray &data, const Block &prev)
-    : Block()
-{
-    if (prev.isEmpty())
-    {
+    : Block() {
+    if (prev.isEmpty()) {
         // qDebug() << "BLOCK: Construction first block";
         this->index = BigNumber("0");
-        this->prevHash = Utils::calcKeccak(QByteArray("0 index"));
-    }
-    else
-    {
+        this->prevHash = Utils::calcHash(QByteArray("0 index"));
+    } else {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
         //          << prev->getIndex();
         this->index = prev.getIndex() + 1;
         this->prevHash = prev.getHash();
     }
 
-    this->date = QDateTime::currentDateTime().toTime_t();
+    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     this->data = data;
 }
 
-Block::~Block()
-{
+Block::~Block() {
 }
 
-Block Block::operator=(const Block &block)
-{
-    type = block.type;
+Block Block::operator=(const Block &block) {
+    m_type = block.m_type;
     data = block.data;
     index = block.index;
     date = block.date;
@@ -66,278 +76,217 @@ Block Block::operator=(const Block &block)
     return *this;
 }
 
-void Block::calcHash()
-{
-    QByteArray resultHash = Utils::calcKeccak(getDataForHash());
-    if (!resultHash.isEmpty())
-    {
+void Block::calcHash() {
+    QByteArray resultHash = Utils::calcHash(getDataForHash());
+    if (!resultHash.isEmpty()) {
         this->hash = resultHash;
     }
 }
 
-void Block::setType(const QByteArray &value)
-{
-    type = value;
+void Block::setType(const std::string &value) {
+    m_type = value;
 }
 
-QByteArray Block::getDataForHash() const
-{
-    QByteArray idHash = Utils::calcKeccak(getIndex().toByteArray());
-    QList<Transaction> list = extractTransactions();
-    if (list.isEmpty())
+QByteArray Block::getDataForHash() const {
+    QByteArray idHash = Utils::calcHash(getIndex().toByteArray());
+    auto list = extractTransactions();
+    if (list.empty())
         return idHash;
-    QByteArray txHash = Utils::calcKeccak(list[0].serialize());
-    for (int i = 1; i < list.size(); i++)
-    {
-        QByteArray tmpTxHash = Utils::calcKeccak(list[i].serialize());
-        txHash = Utils::calcKeccak(txHash + tmpTxHash);
+    QByteArray txHash = Utils::calcHash(list[0].serialize());
+    for (int i = 1; i < list.size(); i++) {
+        QByteArray tmpTxHash = Utils::calcHash(list[i].serialize());
+        txHash = Utils::calcHash(txHash + tmpTxHash);
     }
     return idHash + txHash;
 }
 
-QByteArray Block::getDataForDigSig() const
-{
+const std::string &Block::getDataForDigSig() const {
     return hash;
 }
 
-void Block::sign(const Actor<KeyPrivate> &actor)
-{
+void Block::sign(const Actor<KeyPrivate> &actor) {
     calcHash();
-    QByteArray sign = actor.getKey()->sign(getDataForDigSig());
-    this->signatures.insert(actor.getId().toByteArray(), sign);
+    QByteArray sign = QByteArray::fromStdString(actor.key().sign(getDataForDigSig()));
+    this->signatures.push_back({ actor.id().toStdString(), sign.toStdString(), true });
 }
 
-bool Block::verify(const Actor<KeyPublic> &actor) const
-{
-    bool res = actor.getKey()->verify(getDataForDigSig(), getDigSig());
-    return signatures.isEmpty() ? false : res;
+bool Block::verify(const Actor<KeyPublic> &actor) const {
+    bool res = actor.key().verify(getDataForDigSig(), getDigSig());
+    return signatures.empty() ? false : res;
 }
 
-bool Block::deserialize(const QByteArray &serialized)
-{
-    QList<QByteArray> list = Serialization::universalDeserialize(serialized, FIELDS_SIZE);
-
-    if (list.length() == 7)
-    {
-
-        type = list.at(0);
-        index = BigNumber(list.at(1));
-        date = list.at(2).toLongLong();
-        data = list.at(3);
-        prevHash = list.at(4);
-        hash = list.at(5);
-        QByteArray signs = list.at(6);
-        QByteArrayList lists = Serialization::universalDeserialize(signs, FIELDS_SIZE);
-        for (const auto &tmp : lists)
-        {
-            QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
-            signatures.insert(tmps.at(0), tmps.at(1));
-        }
-        if (isEmpty())
-        {
-            qDebug() << "Can't deserialize, block" << getIndex() << "is empty";
-            return false;
-        }
-        return true;
-    }
-    return false;
+bool Block::deserialize(const QByteArray &serialized) {
+    *this = MessagePack::deserialize<Block>(serialized);
+    return true;
 }
 
-bool Block::equals(const Block &block) const
-{
+bool Block::equals(const Block &block) const {
     return hash == block.getHash();
 }
 
-BlockCompare Block::compareBlock(const Block &b) const
-{
+BlockCompare Block::compareBlock(const Block &b) const {
     BlockCompare temp;
-    temp.approverDiff = getApprover() - b.getApprover();
+    temp.approverDiff = BigNumber(getApprover().toByteArray()) - BigNumber(b.getApprover().toByteArray());
     temp.indexDiff = getIndex() - b.getIndex();
-    temp.dataDiff = Utils::compare(getData(), b.getData());
+    temp.dataDiff =
+        Utils::compare(QByteArray::fromStdString(getData()), QByteArray::fromStdString(b.getData()));
     temp.digitalSigDiff = getDigSig() == b.getDigSig();
     temp.hashDiff = getHash() == b.getHash();
     temp.prevHashDiff = getPrevHash() == b.getPrevHash();
     return temp;
 }
 
-void Block::addData(const QByteArray &data)
-{
-    this->data = this->data + Serialization::universalSerialize({ data }, FIELDS_SIZE);
+void Block::addData(const QByteArray &data) {
+    this->data += Serialization::serialize({ data }, FIELDS_SIZE).toStdString();
 }
 
-QList<Transaction> Block::extractTransactions() const
-{
-    if (type != Config::DATA_BLOCK_TYPE)
-    {
-        return QList<Transaction>();
-    }
+std::vector<Transaction> Block::extractTransactions() const {
+    if (m_type != Config::DATA_BLOCK_TYPE)
+        return {};
 
-    QList<QByteArray> txsData = Serialization::universalDeserialize(data, FIELDS_SIZE);
-    QList<Transaction> transactions;
-    for (const QByteArray &trData : txsData)
-    {
+    QList<QByteArray> txsData = Serialization::deserialize(QByteArray::fromStdString(data), FIELDS_SIZE);
+    std::vector<Transaction> transactions;
+    for (const QByteArray &trData : txsData) {
         Transaction tx(trData);
         if (!tx.isEmpty())
-        {
-            transactions.append(tx);
-        }
+            transactions.push_back(tx);
     }
     return transactions;
 }
 
-bool Block::contain(Block &from) const
-{
-    QList<Transaction> ourTx = this->extractTransactions();
-    QList<Transaction> fromTx = from.extractTransactions();
-    for (auto i : fromTx)
-    {
-        if (!ourTx.contains(i))
+Transaction Block::getTransactionByHash(QByteArray hash) const {
+    auto txList = extractTransactions();
+    for (const auto &i : txList)
+        if (i.getHash() == hash)
+            return i;
+    return Transaction();
+}
+
+bool Block::contain(Block &from) const {
+    auto ourTx = this->extractTransactions();
+    auto fromTx = from.extractTransactions();
+    for (const auto &i : fromTx) {
+        if (std::find(ourTx.begin(), ourTx.end(), i) == ourTx.end()) {
             return false;
+        }
     }
     return true;
 }
 
-QByteArray Block::serialize() const
-{
-    QList<QByteArray> list;
-
-    list << getType() << getIndex().toByteArray() << QByteArray::number(date) << getData() << getPrevHash()
-         << getHash() << getSignatures();
-    //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
-    return Serialization::universalSerialize(list, FIELDS_SIZE);
+QByteArray Block::serialize() const {
+    return QByteArray::fromStdString(MessagePack::serialize(*this));
 }
 
-QString Block::toString() const
-{
-    QList<QByteArray> list;
-
-    list << getType() << getIndex().toByteArray() << getApprover().toActorId() << QByteArray::number(date)
-         << getData() << getPrevHash() << getHash() << getDigSig();
-    //    return Serialization::serialize(list, Serialization::BLOCK_FIELD_SPLITTER);
-    return Serialization::universalSerialize(list, FIELDS_SIZE);
+QString Block::toString() const {
+    return this->serialize();
 }
 
-bool Block::isEmpty() const
-{
-    return (this->getHash().isEmpty()) && (this->getDigSig().isEmpty()) && (this->getPrevHash().isEmpty());
+bool Block::isEmpty() const {
+    return this->getHash().empty() && this->getDigSig().empty() && this->getPrevHash().empty();
 }
 
-QByteArray Block::getType() const
-{
-    return type;
+std::string Block::getType() const {
+    return m_type;
 }
 
-QByteArray Block::getDigSig() const
-{
-
-    return signatures.isEmpty() ? "" : this->signatures.begin().value();
+std::string Block::getDigSig() const {
+    return signatures.empty() ? "" : this->signatures.begin()->sign;
 }
 
-QByteArray Block::getSignatures() const
-{
-    QByteArray res = "";
-
-    for (auto it = signatures.begin(); it != signatures.end(); it++)
-    {
-        QByteArray data = Serialization::universalSerialize({ it.key(), it.value() }, FIELDS_SIZE);
-        res += Serialization::universalSerialize({ data }, FIELDS_SIZE);
-    }
-    return res;
-}
-
-QByteArrayList Block::getListSignatures() const
-{
+QByteArrayList Block::getListSignatures() const {
     QByteArrayList res;
 
-    for (auto it = signatures.begin(); it != signatures.end(); it++)
-        res << it.key() << it.value();
+    for (auto const &signature : signatures) {
+        res << QByteArray::fromStdString(signature.actorId) << QByteArray::fromStdString(signature.sign)
+            << (signature.isApprove ? "1" : "0");
+    }
 
     return res;
 }
 
-void Block::addSignature(const QByteArray &id, const QByteArray &sign)
-{
-    this->signatures.insert(id, sign);
+void Block::addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover) {
+    this->signatures.push_back({ id.toStdString(), sign.toStdString(), isApprover });
 }
 // void Block::setType(QByteArray type)
 //{
 //    this->type = type;
 //}
 
-void Block::setPrevHash(const QByteArray &value)
-{
+void Block::setPrevHash(const std::string &value) {
     prevHash = value;
 }
 
-BigNumber Block::getApprover() const
-{
-    return signatures.isEmpty() ? "" : this->signatures.begin().key();
+ActorId Block::getApprover() const {
+    if (signatures.empty()) {
+        return ActorId();
+    } else {
+        for (int i = signatures.size() - 1; i >= 0; i--) {
+            if (signatures[i].isApprove)
+                return signatures[i].actorId;
+        }
+    }
+
+    return ActorId();
 }
 
-BigNumber Block::getIndex() const
-{
+BigNumber Block::getIndex() const {
     return index;
 }
 
-QByteArray Block::getData() const
-{
+std::string Block::getData() const {
     return data;
 }
 
-QByteArray Block::getHash() const
-{
+std::string Block::getHash() const {
     return hash;
 }
 
-QByteArray Block::getPrevHash() const
-{
+std::string Block::getPrevHash() const {
     return prevHash;
 }
 
-bool Block::operator<(const Block &other)
-{
-    if (this->index < other.getIndex())
-    {
+bool Block::operator<(const Block &other) {
+    if (this->index < other.getIndex()) {
         return true;
-    }
-    else if (this->data < other.getData())
-    {
+    } else if (this->data < other.getData()) {
         return true;
     }
     return false;
 }
 
-bool Block::isBlock(const QByteArray &data)
-{
+bool Block::isBlock(const QByteArray &data) {
     return data.contains(Config::DATA_BLOCK_TYPE);
 }
 
-void Block::initFields(QList<QByteArray> &list)
-{
-    type = list.takeFirst();
+bool Block::isApprover(const ActorId &actorId) const {
+    return actorId == getApprover();
+}
+
+void Block::initFields(QList<QByteArray> &list) {
+    m_type = list.takeFirst();
     index = BigNumber(list.takeFirst());
     date = list.takeFirst().toLongLong();
     data = list.takeFirst();
     prevHash = list.takeFirst();
     hash = list.takeFirst();
     QByteArray signs = list.takeFirst();
-    QByteArrayList lists = Serialization::universalDeserialize(signs, FIELDS_SIZE);
-    for (const auto &tmp : lists)
-    {
-        QByteArrayList tmps = Serialization::universalDeserialize(tmp, FIELDS_SIZE);
-        signatures.insert(tmps.at(0), tmps.at(1));
+    QByteArrayList lists = Serialization::deserialize(signs, FIELDS_SIZE);
+    for (const auto &tmp : lists) {
+        QByteArrayList tmps = Serialization::deserialize(tmp, FIELDS_SIZE);
+        if (tmps.length() == 3) {
+            signatures.push_back(
+                { tmps.at(0).toStdString(), tmps.at(1).toStdString(), bool(tmps.at(2).toInt()) });
+        }
     }
 }
 
-QList<Block> Block::getDataFromAllBlocks(QList<QByteArray> paths)
-{
+QList<Block> Block::getDataFromAllBlocks(QList<QByteArray> paths) {
     // need to realize -- read only to genesis block
     QList<Block> res;
 
     //  QString temp;
-    for (int count = 0; count++; count < paths.size())
-    {
-
+    int size = paths.size();
+    for (int count = 0; count < size; ++count) {
         QFile file(paths.at(count));
         //        deserialize(file.readAll());
 
@@ -362,12 +311,10 @@ QList<Block> Block::getDataFromAllBlocks(QList<QByteArray> paths)
 
     return res;
 }
-long long Block::getDate() const
-{
+long long Block::getDate() const {
     return date;
 }
 
-void Block::setDate(long long value)
-{
+void Block::setDate(long long value) {
     date = value;
 }

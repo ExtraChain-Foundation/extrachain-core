@@ -1,268 +1,175 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "managers/account_controller.h"
+
 #include "datastorage/blockchain.h"
 
-QMap<QByteArray, QByteArray> AccountController::getCurrentState() const
-{
-    return currentState;
+AccountController::AccountController(ExtraChainNode &node)
+    : node(node) {
 }
 
-void AccountController::setCurrentState(const QMap<QByteArray, QByteArray> &value)
-{
-    currentState = value;
+Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
+    if (hash.empty() || hash.size() != 43)
+        qFatal("[Accounts] Create actor: hash is empty");
+
+    Actor<KeyPrivate> actor;
+    actor.create(type);
+    auto profile = PrivateProfile::create(actor, hash);
+    m_profiles.push_back(profile);
+    m_currentProfile = actor.id();
+    node.actorIndex()->addActor(actor.convertToPublic());
+    addToProfileList(actor.id());
+    autologinHash.save(hash); // TODO: add arg
+
+    qDebug() << "[Accounts] Created new profile" << actor.id();
+
+    node.start(); // TODO: remove
+
+    if (!m_profiles.empty()) // TODO: remove
+        node.blockchain()->getBlockZero();
+
+    return actor;
 }
 
-QList<Actor<KeyPrivate> *> AccountController::getAccounts() const
-{
-    return accounts;
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor) {
+    Actor<KeyPrivate> actor;
+    actor.create(ActorType::User);
+    auto &profile = getProfile(profileActor.isEmpty() ? m_currentProfile : profileActor);
+    profile.addWalet(actor);
+    node.actorIndex()->addActor(actor.convertToPublic());
+
+    return actor;
 }
 
-void AccountController::setAccounts(const QList<Actor<KeyPrivate> *> &value)
-{
-    accounts = value;
-}
+bool AccountController::load(const std::string &hash) {
+    auto profiles = profilesList();
 
-ActorIndex *AccountController::getActorIndex() const
-{
-    return actorIndex;
-}
-
-void AccountController::setActorIndex(ActorIndex *value)
-{
-    actorIndex = value;
-}
-
-void AccountController::setBlockchain(Blockchain *value)
-{
-    blockchain = value;
-}
-
-AccountController::AccountController(ActorIndex *actorIndex)
-{
-    this->actorIndex = actorIndex;
-    // when private actor is verified by actor index -> save it locally
-    connect(actorIndex, &ActorIndex::PrivateActorIsVerified, this, &AccountController::savePrivateActor);
-    //    if (!QFile(KeyStore::user_actor_state).exists())
-    //    {
-    //        QFile file(KeyStore::user_actor_state);
-    //        file.open(QIODevice::WriteOnly);
-    //        file.flush();
-    //        file.close();
-    //    }
-    loadActors();
-}
-
-QList<QByteArray> AccountController::getAccountID()
-{
-    QList<QByteArray> list;
-    for (int i = 0; i < accounts.size(); i++)
-        list.append(accounts[i]->getId().toActorId());
-    return list;
-}
-
-Actor<KeyPrivate> AccountController::createActor(int account)
-{
-    Actor<KeyPrivate> *actor = new Actor<KeyPrivate>();
-    actor->init(account);
-
-    qDebug() << actor->serialize();
-
-    emit verifyActor(actor->convertToPublic());
-
-    actorIndex->addActor(actor->convertToPublic());
-    savePrivateActor(*actor);
-    accounts.append(actor);
-    if (accounts.size() - 1 == 0)
-        emit savePrivateProfile(actor->getId().toActorId());
-
-    userNum = accounts.size() - 1;
-
-    qDebug() << "create actor finished" << account;
-    if (account == 1)
-    {
-        qDebug() << "Dfs hash init for me";
-        emit initDfs(); //
-    }
-    emit newActorIsCreated(this->getMainActor()->getId(), account);
-
-    if (!accounts.isEmpty())
-        blockchain->getBlockZero();
-    return *actor;
-}
-
-Actor<KeyPrivate> AccountController::getActor(BigNumber id)
-{
-    for (Actor<KeyPrivate> *actor : accounts)
-    {
-        if (id == actor->getId())
-        {
-            return *actor;
-        }
-    }
-    qDebug() << "Can't find actor with id:" << id;
-    return Actor<KeyPrivate>();
-}
-
-Actor<KeyPrivate> AccountController::getActor(QByteArray pubkey)
-{
-    for (Actor<KeyPrivate> *actor : accounts)
-    {
-        if (actor->getKey()->extractPublicKey() == pubkey)
-        {
-            qDebug() << "ACCOUNT CONTROLLER: currentActor: " << actor->getId();
-            return *actor;
-        }
-    }
-    qDebug() << "Can't find actor with pubkey:" << QString(pubkey);
-    return Actor<KeyPrivate>();
-}
-
-Actor<KeyPrivate> AccountController::getActor(int number)
-{
-    //    return actorIndex->getActor(BigNumber(number));
-    if (number >= 0 && !accounts.isEmpty() && number < accounts.size())
-    {
-        return *(accounts.at(number));
-    }
-    qDebug() << "Can't find actor with index:" << number;
-    return Actor<KeyPrivate>();
-}
-
-Actor<KeyPrivate> *AccountController::getMainActor()
-{
-    // assert(!accounts.isEmpty());
-    return accounts.isEmpty() ? nullptr : accounts.first();
-}
-
-Actor<KeyPrivate> AccountController::getCurrentActor()
-{
-    return getActor(this->userNum);
-}
-
-void AccountController::loadActors(QByteArray id, QByteArrayList idList)
-{
-    if (id.isEmpty())
-        return;
-
-    accounts.clear();
-    qDebug() << "ACCOUNT CONTROLLER : Attempting to load actors from local storage";
-    QString path = KeyStore::USER_KEYSTORE;
-    int loaded = 0;
-    for (const QByteArray &fileName : idList)
-    {
-        QFile file(path + "/" + fileName + ".key");
-        if (file.exists() && file.open(QIODevice::ReadOnly))
-        {
-            QByteArray serialized;
-            serialized = file.readAll();
-            qDebug() << serialized;
-            file.close();
-            if (!serialized.isEmpty())
-            {
-                Actor<KeyPrivate> *actor = new Actor<KeyPrivate>;
-
-                actor->init(serialized);
-
-                qDebug() << "Actor" << actor->getId() << "found locally -"
-                         << actor->getKey()->getPrivateKey();
-                this->accounts.append(actor);
-                loaded++;
+    for (auto &actorId : profiles) {
+        auto profile = PrivateProfile::load(actorId, hash);
+        if (profile.loaded()) {
+            const auto &actors = profile.actors();
+            for (auto &actor : actors) {
+                if (node.actorIndex()->getById(actor.id()).isEmpty()) {
+                    node.actorIndex()->addActor(actor.convertToPublic());
+                }
             }
+
+            m_profiles.push_back(profile);
+            m_currentProfile = profile.main().id();
+            node.start();             // TODO: remove
+            autologinHash.save(hash); // TODO: add arg
+            return true;
         }
     }
 
-    if (loaded > 0)
-    {
-        qDebug() << loaded << "accounts have been loaded" << id;
-        blockchain->getBlockZero();
-        emit loadWallets(id, idList);
+    return false;
+}
+
+const Actor<KeyPrivate> &AccountController::mainActor() {
+    if (m_profiles.empty()) {
+        qFatal("[AccountController] No main actor");
+        std::exit(-1);
     }
-    else
-    {
-        qDebug() << "There no accounts found locally";
-    }
+    return currentProfile().main();
 }
 
-int AccountController::getAccountCount()
-{
-    return accounts.size();
-}
-
-int AccountController::getUserNum() const
-{
-    return userNum;
-}
-
-void AccountController::setUserNum(int value)
-{
-    userNum = value;
-}
-
-void AccountController::savePrivateActor(Actor<KeyPrivate> actor)
-{
-    qDebug() << "Attempting to save Private Actor" << actor.getId();
-    if (!accounts.isEmpty())
-        emit editPrivateProfile(actor.getId().toActorId());
-    QString fileName = KeyStore::makeKeyFileName(actor.getId().toActorId());
-    QString path = KeyStore::USER_KEYSTORE + fileName;
-    qDebug() << "Path=" << path;
-    QFile *file = new QFile(path);
-
-    // move to another place
-    FileSystem::createFolderIfNotExist(KeyStore::USER_KEYSTORE);
-
-    if (file->open(QIODevice::ReadWrite))
-    {
-        QByteArray old = file->readAll();
-        if (old == actor.serialize())
-        {
-            qDebug() << "Private actor with id =" << actor.getId() << "already exists";
+PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
+    for (auto &profile : m_profiles) {
+        if (actorId == profile.main().id()) {
+            return profile;
         }
-        else
-        {
-            qDebug() << "actor serialized: ---- " << actor.serialize();
-            file->write(actor.serialize());
-            file->flush();
-            qDebug() << "Private Actor" << actor.getId() << "is successfully saved";
-        }
-        file->close();
-        delete file;
-        return;
     }
 
-    qDebug() << "Can't save actor" << actor.getId();
+    qFatal("Can't find actor");
+    std::exit(-123);
+    return m_profiles.front();
 }
 
-void AccountController::clearAcc()
-{
-    accounts.clear();
-    userNum = 0;
-    qDebug() << accounts.size() << " acc after LogOut";
-}
+const PrivateProfile &AccountController::currentProfile() const {
+    if (m_currentProfile.isEmpty())
+        qFatal("Incorrect current profile");
 
-//
-
-// void AccountController::regNewUser(bool account) // ~not ready yet
-//{
-//    Actor<KeyPrivate> keys = createActor(account);
-//    qDebug() << "AccountController::regNewUser";
-//    emit sentActorId(keys.getId());
-//}
-
-void AccountController::changeUserNum(QByteArray wallId)
-{
-    userNum = 0;
-    for (const auto &currAcc : accounts)
-    {
-        // qDebug() << "ACCOUNT CONTROLLER: change userNum" << wallId;
-        if (currAcc->getId().toActorId() == wallId)
-        {
-            emit updateTransactionListInModel();
-            break;
+    for (auto &profile : m_profiles) {
+        if (m_currentProfile == profile.main().id()) {
+            return profile;
         }
-        ++userNum;
+    }
+
+    qFatal("Can't find actor");
+    std::exit(-123);
+    return m_profiles.front();
+}
+
+int AccountController::count() const {
+    return m_profiles.size();
+}
+
+void AccountController::changeCurrentProfile(const ActorId &actorId) {
+    if (!getProfile(actorId).actors().empty()) {
+        m_currentProfile = actorId.toStdString();
     }
 }
 
-void AccountController::process()
-{
+const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
+    return currentProfile().actors();
+}
+
+const Actor<KeyPrivate> &AccountController::currentWallet() const {
+    return currentProfile().current();
+}
+
+void AccountController::clear() {
+    m_profiles.clear();
+    m_currentProfile = ActorId();
+    qDebug() << "[AccountController] Cleared";
+}
+
+std::vector<ActorId> AccountController::profilesList() {
+    QFile file(QString::fromStdString(KeyStore::folder + Utils::platformDelimeter() + KeyStore::profiles));
+    if (!file.exists())
+        return {};
+
+    file.open(QFile::ReadOnly);
+    auto jsonBytes = file.readAll();
+    auto profilesJson = QJsonDocument::fromJson(jsonBytes).array();
+
+    std::vector<ActorId> profiles;
+
+    for (auto actorId : profilesJson) {
+        profiles.push_back(actorId.toString().toStdString());
+    }
+
+    return profiles;
+}
+
+void AccountController::addToProfileList(const ActorId &actorId) {
+    auto profiles = profilesList();
+    profiles.push_back(actorId.toStdString());
+    QJsonArray array;
+    for (auto &actorId : profiles) {
+        array.push_back(actorId.toString());
+    }
+    auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
+
+    QFile file(QString::fromStdString(KeyStore::folder + Utils::platformDelimeter() + KeyStore::profiles));
+    file.open(QFile::WriteOnly);
+    file.write(json);
+    file.close();
 }

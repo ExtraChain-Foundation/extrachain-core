@@ -1,3 +1,23 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/*
 #include "datastorage/contract.h"
 //#include "utils/utils.h"
 Token::Token(QObject *parent)
@@ -105,9 +125,9 @@ BigNumber Token::getAmount(QList<Block> list, BigNumber userId)
     return amount;
 }
 
-/**
+/ **
  * @brief Contract
- */
+ * /
 
 Contract::performer_status Contract::fromInt(const int &s) const
 {
@@ -225,10 +245,11 @@ const QByteArray Contract::serialize() const
     QList<QByteArray> list;
     list << customer.toActorId() << performersSerialize() << _location << event << _contract_dateSerialize()
          << _scope_of_workSerialize() << _agreement << _amount.toByteArray() << data;
-    return Serialization::universalSerialize(list, CONTRACT_FIELDS_SIZE);
+    return Serialization::serialize(list, CONTRACT_FIELDS_SIZE);
 }
 
 const QList<QByteArray> Contract::deserialize(const QByteArray &serialized) const
 {
-    return Serialization::universalDeserialize(serialized, CONTRACT_FIELDS_SIZE);
+    return Serialization::deserialize(serialized, CONTRACT_FIELDS_SIZE);
 }
+*/

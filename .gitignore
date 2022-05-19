@@ -29,6 +29,8 @@ moc_*.cpp
 ui_*.h
 !ui_message.h
 !ui_package.h
+!ui_controller.h
+!ui_resolver.h
 qrc_*.cpp
 Thumbs.db
 *.res
@@ -38,6 +40,8 @@ Thumbs.db
 
 # qtcreator generated files
 *.pro.user*
+*.pro.qtds*
+CMakeLists.txt.user*
 
 # xemacs temporary files
 *.flc
@@ -78,7 +82,13 @@ Builds/
 lib/
 .vscode/
 .vs/
+.idea/
+cmake-build-debug*/
 debug/
 release/
 *.sln
 preconfig.h
+build*/
+target/
+Cargo.lock
+CMakeSettings.json

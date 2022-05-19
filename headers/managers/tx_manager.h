@@ -1,25 +1,45 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef TX_MANAGER_H
 #define TX_MANAGER_H
 
+#include <QByteArray>
+#include <QDebug>
 #include <QList>
 #include <QObject>
 #include <QThread>
-#include <QByteArray>
-#include <QDebug>
 #include <QTimer>
 
-#include "datastorage/blockchain.h"
-#include "enc/crypt_interface.h"
 #include "datastorage/block.h"
-#include "datastorage/transaction.h"
+#include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
-#include "headers/network/packages/service/message_types.h"
+#include "datastorage/transaction.h"
+#include "utils/coinprocess.h"
+
+class ExtraChainNode;
+
 /**
  * @brief Process all incoming transactions
  * Approves and packs them into a new block
  */
-class TransactionManager : public QObject
-{
+class EXTRACHAIN_EXPORT TransactionManager : public QObject {
     Q_OBJECT
 
 private:
@@ -28,6 +48,11 @@ private:
 
     // received transactions that will be packed into block
     QList<Transaction> pendingTxs;
+
+    QList<Transaction *> pendingForFeeTxs;
+    QList<Transaction *> pendingFeeSenderTxs;
+
+    QList<Transaction *> pendingFeeTxs;
 
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
@@ -39,19 +64,26 @@ private:
     //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
 
+    ExtraChainNode *extraChainNode;
+
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
 public:
     // todo: add ref to blockchain
-    TransactionManager(AccountController *accountController, Blockchain *blockchain);
+    TransactionManager(AccountController *accountController, Blockchain *blockchain,
+                       ExtraChainNode *extraChainNode);
 
 private:
     void removeTransaction(int i);
 
 public:
     static QByteArray convertTxs(const QList<Transaction> &txs);
-    BigNumber checkPendingTxsList(const BigNumber &sender);
+    BigNumber checkPendingTxsList(const ActorId &sender);
+    QList<Transaction *> getReceivedTxList() const;
+
+    QList<Transaction> getPendingTxs() const;
+
 public slots:
     /**
      * Serialize all transactions to a serialized data.
@@ -65,10 +97,14 @@ public slots:
      * @param tx - transaction
      * @return 0 is transaction is successfully added
      */
-    void addTransaction(Transaction tx);
-    void addProvedTransaction();
-    void removeUnApprovedTransaction();
 
+    void addTransaction(Transaction tx);
+    void addProvedTransaction(Transaction *transaction);
+    void removeUnApprovedTransaction(Transaction *tx);
+
+    void addPendingForFeeTxs(Transaction *transaction);
+    void verifyApproverFeeTx(Transaction *transaction);
+    void addPendingFeeSenderTxs(Transaction *transaction);
     // Unapproved tx's //
 
     /**

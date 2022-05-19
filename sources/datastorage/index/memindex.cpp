@@ -1,25 +1,41 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "datastorage/index/memindex.h"
 
-MemIndex::MemIndex()
-{
+using std::begin, std::end, std::find_if, std::remove_if;
+
+MemIndex::MemIndex() {
     //
 }
 
-MemIndex::~MemIndex()
-{
+MemIndex::~MemIndex() {
     //
 }
 
-int MemIndex::addBlock(const Block &block)
-{
-    if (blocks.contains(block))
-    {
+int MemIndex::addBlock(const Block &block) {
+    if (blocks.contains(block)) {
         qDebug() << "Block [" << block.toString() << "] already exists";
         return 1;
     }
 
-    if (Config::DataStorage::MEM_INDEX_SIZE_LIMIT <= blocks.size())
-    {
+    if (Config::DataStorage::MEM_INDEX_SIZE_LIMIT <= blocks.size()) {
         qWarning() << "MemBlock is filled";
         // todo: enable FILE mode
         return 2;
@@ -28,38 +44,31 @@ int MemIndex::addBlock(const Block &block)
     return 0;
 }
 
-int MemIndex::removeById(const BigNumber &blockId)
-{
+int MemIndex::removeById(const BigNumber &blockId) {
     const int sizeWas = blocks.size();
     blocks.erase(remove_if(begin(blocks), end(blocks),
                            [&](const Block &block) { return block.getIndex() == blockId; }));
-    if (sizeWas == blocks.size())
-    {
+    if (sizeWas == blocks.size()) {
         qDebug() << "There no record with id:" << blockId;
         return 1;
     }
     return 0;
 }
 
-int MemIndex::getRecords() const
-{
+int MemIndex::getRecords() const {
     return blocks.size();
 }
 
-bool MemIndex::contains(const BigNumber &blockId) const
-{
+bool MemIndex::contains(const BigNumber &blockId) const {
     Block block = this->operator[](blockId);
     return !block.isEmpty();
 }
 
-Block MemIndex::operator[](const BigNumber &blockId) const
-{
-    if (contains(blockId))
-    {
+Block MemIndex::operator[](const BigNumber &blockId) const {
+    if (contains(blockId)) {
         QList<Block>::const_iterator it = find_if(
             begin(blocks), end(blocks), [&](const Block &block) { return block.getIndex() == blockId; });
-        if (it != end(blocks))
-        {
+        if (it != end(blocks)) {
             return *it;
         }
     }
@@ -67,50 +76,40 @@ Block MemIndex::operator[](const BigNumber &blockId) const
     return Block();
 }
 
-Block MemIndex::getByPosition(int pos) const
-{
+Block MemIndex::getByPosition(int pos) const {
     return blocks.at(pos);
 }
 
-Block MemIndex::getLastBlock() const
-{
-    if (blocks.size() > 0)
-    {
+Block MemIndex::getLastBlock() const {
+    if (blocks.size() > 0) {
         return blocks.at(blocks.size() - 1);
     }
     return Block();
 }
 
-Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const
-{
+Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const {
     int index = getRecords() - 1;
 
     // iteration from the last to the first Block
-    while (index >= 0)
-    {
+    while (index >= 0) {
         Block byPosition = getByPosition(index);
-        switch (param)
-        {
-        case SearchEnum::BlockParam::Approver:
-        {
-            if (byPosition.getApprover() == id)
+        switch (param) {
+        case SearchEnum::BlockParam::Approver: {
+            if (BigNumber(byPosition.getApprover().toByteArray()) == id)
                 return byPosition;
             break;
         }
-        case SearchEnum::BlockParam::Data:
-        {
-            if (byPosition.getData() == id)
+        case SearchEnum::BlockParam::Data: {
+            if (byPosition.getData() == id.toStdString())
                 return byPosition;
             break;
         }
-        case SearchEnum::BlockParam::Hash:
-        {
-            if (byPosition.getHash() == id)
+        case SearchEnum::BlockParam::Hash: {
+            if (byPosition.getHash() == id.toStdString())
                 return byPosition;
             break;
         }
-        case SearchEnum::BlockParam::Id:
-        {
+        case SearchEnum::BlockParam::Id: {
             if (byPosition.getIndex() == id)
                 return byPosition;
             break;
@@ -123,59 +122,58 @@ Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam para
     return Block();
 }
 
-Block MemIndex::getByApprover(const BigNumber &approver) const
-{
+Block MemIndex::getByApprover(const BigNumber &approver) const {
     return getBlockByParam(approver, SearchEnum::BlockParam::Approver);
 }
 
-Block MemIndex::getByData(const QByteArray &data) const
-{
+Block MemIndex::getByData(const QByteArray &data) const {
     return getBlockByParam(data, SearchEnum::BlockParam::Data);
 }
 
-Block MemIndex::getByHash(const QByteArray &hash) const
-{
+Block MemIndex::getByHash(const QByteArray &hash) const {
     return getBlockByParam(hash, SearchEnum::BlockParam::Hash);
 }
 
-Transaction MemIndex::getLastTxByHash(const QByteArray &hash, const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray> MemIndex::getLastTxByHash(const QByteArray &hash,
+                                                             const QByteArray &token) const {
     return getLastTxByParam(BigNumber(hash), SearchEnum::TxParam::Hash, token);
 }
 
-Transaction MemIndex::getLastTxBySender(const BigNumber &id, const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray> MemIndex::getLastTxBySender(const BigNumber &id,
+                                                               const QByteArray &token) const {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSender, token);
 }
 
-Transaction MemIndex::getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray> MemIndex::getLastTxByReceiver(const BigNumber &id,
+                                                                 const QByteArray &token) const {
     return getLastTxByParam(id, SearchEnum::TxParam::UserReceiver, token);
 }
 
-Transaction MemIndex::getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray> MemIndex::getLastTxBySenderOrReceiver(const BigNumber &id,
+                                                                         const QByteArray &token) const {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
-Transaction MemIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray>
+MemIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const {
     return getLastTxByParam(id, SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-Transaction MemIndex::getLastTxByApprover(const BigNumber &id, const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray> MemIndex::getLastTxByApprover(const BigNumber &id,
+                                                                 const QByteArray &token) const {
     return getLastTxByParam(id, SearchEnum::TxParam::UserApprover, token);
 }
 
-void MemIndex::removeAll()
-{
+void MemIndex::removeAll() {
     this->blocks.clear();
 }
 
-Transaction MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
-                                       const QByteArray &token) const
-{
+std::pair<Transaction, QByteArray> MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
+                                                              const QByteArray &token) const {
+    Q_UNUSED(id)
+    Q_UNUSED(param)
+    Q_UNUSED(token)
+    /*
     int records = getRecords();
 
     if (records == 0)
@@ -197,8 +195,7 @@ Transaction MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam 
                 continue;
             switch (param)
             {
-            case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
-            {
+            case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
                 QList<QByteArray> data =
                     Serialization::deserialize(id.toActorId(), Serialization::TX_FIELD_SPLITTER);
                 if (data.size() != 2)
@@ -217,79 +214,38 @@ Transaction MemIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam 
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserSender:
-            {
+            case SearchEnum::TxParam::UserSender: {
                 if (tx.getSender() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserReceiver:
-            {
+            case SearchEnum::TxParam::UserReceiver: {
                 if (tx.getReceiver() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserSenderOrReceiver:
-            {
+            case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if (tx.getSender() == id || tx.getReceiver() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::UserApprover:
-            {
+            case SearchEnum::TxParam::UserApprover: {
                 if (tx.getApprover() == id)
                     return tx;
                 break;
             }
-            case SearchEnum::TxParam::Hash:
-            {
+            case SearchEnum::TxParam::Hash: {
                 if (tx.getHash() == id.toActorId())
                     return tx;
                 break;
             }
-            default:
-            {
+            default: {
             }
             }
         }
         --lastIndex;
     }
-    return Transaction();
-}
+    */
 
-TxPair MemIndex::searchPair(const BigNumber &first, const BigNumber &second) const
-{
-    TxPair pair;
-
-    bool firstFound = false;
-    bool secondFound = false;
-
-    int records = getRecords();
-    int index = records - 1;
-    while (index >= 0)
-    {
-        Block byPosition = getByPosition(index);
-        QList<Transaction> trx = byPosition.extractTransactions();
-
-        for (const Transaction &t : trx)
-        {
-            if (firstFound && secondFound)
-            {
-                records = 0;
-                break;
-            }
-            if (!firstFound && (t.getSender() == first || t.getReceiver() == first))
-            {
-                firstFound = true;
-                pair.setFirst(t);
-            }
-            if (!secondFound && (t.getSender() == second || t.getReceiver() == second))
-            {
-                secondFound = true;
-                pair.setSecond(t);
-            }
-        }
-        --index;
-    }
-    return pair;
+    return { Transaction(), "-1" };
 }

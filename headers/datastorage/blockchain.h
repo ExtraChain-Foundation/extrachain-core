@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef BLOCKCHAIN_H
 #define BLOCKCHAIN_H
 
@@ -8,20 +27,21 @@
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
-#include "datastorage/tx_pair.h"
 #include "managers/account_controller.h"
+#include "managers/extrachain_node.h"
 #include "utils/bignumber.h"
-#include "utils/list_container.h"
 #include <QByteArray>
-#include <QHostAddress>
+#include <QMutex>
 #include <QObject>
 #include <QString>
-#include <QMutex>
 #include <QTemporaryFile>
-
+#include <QtNetwork/QHostAddress>
+#include <cassert>
 // database
-#include "headers/utils/db_connector.h"
+#include "utils/db_connector.h"
+
 class TransactionManager;
+
 /*
  * Main database class
  *
@@ -31,21 +51,27 @@ class TransactionManager;
  * - merging blocks
  *
  */
-static QMutex mutex;
-class Blockchain : public QObject
-{
+
+enum class FreezeBalanceSearch {
+    AllStaking,
+    AllNotMyStaking,
+    OnlyMyStaking,
+    OnlySender
+};
+
+class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     Q_OBJECT
 private:
+    ExtraChainNode *node;
+
     // storage //
-    bool fileMode;          // true = block storage mode
-    ActorIndex *actorIndex; // actors
-    BlockIndex blockIndex;  // blocks (if fileMode is true)
-    MemIndex memIndex;      // blocks (if fileMode is false)
-                            //    Actor<KeyPrivate>   approver;       // current user.
-    AccountController *accountController;
+    bool fileMode;         // true = block storage mode
+    BlockIndex blockIndex; // blocks (if fileMode is true)
+    MemIndex memIndex;     // blocks (if fileMode is false)
+                           //    Actor<KeyPrivate>   approver;       // current user.
     TransactionManager *txManager;
     // service //
     QList<GenesisDataRow> genBlockData; // actorid -> token
@@ -54,33 +80,28 @@ private:
     bool launched;
 
 public:
-    Blockchain(AccountController *accountController, bool fileMode = true);
+    explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
+    Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
 private:
-    //    template <typename T>
-    Block getBlockByIndex(const BigNumber &index)
-    {
-        Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-        Block block2 = validateAndReturnBlock(block);
-        return block2;
-    }
+    Block getBlockByIndex(const BigNumber &index);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
-    Block getBlockByHash(const QByteArray &hash);
 
     QByteArray getBlockDataByIndex(const BigNumber &index);
 
-    Transaction getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
-    Transaction getTxBySender(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
-    Transaction getTxByUser(const BigNumber &id, const QByteArray &token = "0");
-    TxPair getTxPair(const BigNumber &first, const BigNumber second);
+    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySenderOrReceiver(const BigNumber &id,
+                                                               const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySenderOrReceiverAndToken(const BigNumber &id,
+                                                                       const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const QByteArray data) const;
+    void saveTxInfoInEC(const QByteArray &data) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
@@ -88,10 +109,18 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
+    void sendFeeUnfreeze(Block &block);
+    void sendUnFee(Block &block);
+    QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
+
+    const int COUNT_APPROVER_BLOCK = 1;
+    const int COUNT_CHECKER_BLOCK = 2;
+    const int COUNT_UNFROZE_FEE = 3;
+    const BigNumber StakingCoef = 5;
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
-                                    QMap<BigNumber, BigNumber> states = QMap<BigNumber, BigNumber>());
+                                    QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -99,6 +128,7 @@ public:
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
 
+    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
     Block checkBlock(const Block &block);
@@ -118,6 +148,11 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block);
+    void stakingReward(const Block &block);
+
+    std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
+
+    bool checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver);
 
 public:
     /**
@@ -153,7 +188,8 @@ public:
      * @param type of param
      * @return transaction
      */
-    Transaction getTransaction(SearchEnum::TxParam type, const QByteArray &value);
+    std::pair<Transaction, QByteArray> getTransaction(SearchEnum::TxParam type, const QByteArray &value,
+                                                      const QByteArray &token = "0");
 
     /**
      * Add block to blockchain
@@ -192,19 +228,6 @@ public:
     void signBlock(Block &block) const;
 
     // - ACTORS - //
-
-    /**
-     * Add actor to actor index
-     * @param actor - serialized actor
-     * @return 0 is success, or error code
-     */
-    int addActor(const Actor<KeyPublic> &actor);
-    /**
-     * Gets actor from actor index
-     * @param actorId
-     * @return actor
-     */
-    Actor<KeyPublic> getActor(const BigNumber &actorId);
     /**
      * @brief remove all blocks
      */
@@ -224,11 +247,6 @@ public:
      * @param memory
      */
     void setMode(bool fileMode);
-    /**
-     * @brief Return's reference to actorIndex
-     * @return ref to actorIndex field
-     */
-    ActorIndex *getActorIndex();
 
     /**
      * @brief Return's reference to memIndex
@@ -258,7 +276,11 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumber getUserBalance(BigNumber userId, BigNumber tokenId = BigNumber("0")) const;
+    BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
+    BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
+                                   FreezeBalanceSearch balanceSearch) const;
+
+    QMap<QByteArray, BigNumber> getAllStakingForMe(ActorId userId, ActorId tokenId) const;
     /**
      * @brief Show blockchain
      */
@@ -267,9 +289,9 @@ public:
     bool isSmContractTx(const Block &block) const;
 
     void getSmContractMembers(const Block &block) const;
-signals:
 
-    void newNotify(const notification ntf);
+signals:
+    void newNotify(Notification ntf);
     void addActorInActorIndex(Actor<KeyPublic> actor);
     void updateTransactionListInModel(QByteArray, QByteArray);
     /**
@@ -294,7 +316,7 @@ signals:
 
     // responses
     void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
-                       const SocketPair &receiver);
+                       const std::string &messageId);
 
     /**
      * @brief There no such block in a local blockchain
@@ -313,15 +335,13 @@ signals:
     void finished();
 
 public:
-    void addBlockToBlockchain(Block block);
+    void addBlockToBlockchain(Block &block);
     void addGenBlockToBlockchain(GenesisBlock block);
     void setTxManager(TransactionManager *value);
 
 public slots:
-
     void process();
-    void updateBlockchain(BigNumber id, bool isUser);
-    void updateBlockchainForSignIn(QByteArray id, QByteArrayList idList);
+    void updateBlockchain();
     /**
      * @brief Checks if there is a such block in a local blockchain.
      * Emits BlockExistence or SendMergedBlock signals.
@@ -335,11 +355,11 @@ public slots:
     void blockCountResponse(const BigNumber &count);
     // from node manager
     void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                             const SocketPair &receiver, const QByteArray &request);
+                             const std::string &messageId, const QByteArray &request);
 
     void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                const QByteArray &requestHash, const SocketPair &receiver);
-    void getBlockCount(const QByteArray &requestHash, const SocketPair &receiver);
+                                const QByteArray &requestHash, const std::string &messageId);
+    void getBlockCount(const QByteArray &requestHash, const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block
@@ -351,6 +371,6 @@ public slots:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    void proveTx();
+    void proveTx(Transaction *tx);
 };
 #endif // BLOCKCHAIN_H

@@ -1,26 +1,43 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef UPNPCONNECTION_H
 #define UPNPCONNECTION_H
 
-#include <QObject>
-#include <QUdpSocket>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QUrl>
-#include <QNetworkAddressEntry>
-#include <QHostAddress>
-#include <QTimer>
-#include <QTextStream>
 #include <QDateTime>
-#include <QXmlStreamReader>
+#include <QHostAddress>
+#include <QNetworkAccessManager>
+#include <QNetworkAddressEntry>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QObject>
 #include <QRandomGenerator>
+#include <QTextStream>
+#include <QTimer>
+#include <QUdpSocket>
+#include <QUrl>
+#include <QXmlStreamReader>
 
-class UPNPConnection : public QObject
-{
+class UPNPConnection : public QObject {
     Q_OBJECT
 public:
-    enum State
-    {
+    enum State {
         Opened = 0,
         NotOpened,
         Closed
@@ -78,7 +95,7 @@ signals:
     void stageSucceded(QString stage);
     void udpResponse();
     void extAddressExtracted();
-    void upnp_error(QString message);
+    void upnpError(QString message);
 };
 
 #endif // UPNPCONNECTION_H

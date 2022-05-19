@@ -1,18 +1,34 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "network/upnpconnection.h"
 
-QHostAddress UPNPConnection::getExternalAddress() const
-{
+QHostAddress UPNPConnection::getExternalAddress() const {
     return externalAddress;
 }
 
-int UPNPConnection::getPort()
-{
+int UPNPConnection::getPort() {
     return externalPort;
 }
 
 UPNPConnection::UPNPConnection(QNetworkAddressEntry &local, QObject *parent)
-    : QObject(parent)
-{
+    : QObject(parent) {
     conn_state = State::NotOpened;
     localAddress = local;
     waitTime = 1000;
@@ -25,16 +41,14 @@ UPNPConnection::UPNPConnection(QNetworkAddressEntry &local, QObject *parent)
     QObject::connect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
 }
 
-UPNPConnection::~UPNPConnection()
-{
+UPNPConnection::~UPNPConnection() {
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
+    timer->deleteLater();
 }
 
-void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text)
-{
-    if ((protocol == "TCP") || (protocol == "UDP"))
-    {
+void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text) {
+    if ((protocol == "TCP") || (protocol == "UDP")) {
         externalPort = external;
         internalPort = internal;
         info = text;
@@ -48,52 +62,43 @@ void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QS
         udp_socket->writeDatagram(discover_string.toLatin1(), discover_string.size(),
                                   localAddress.broadcast(), 1900);
         timer->start(waitTime);
-    }
-    else
-    {
-        emit upnp_error("Invalid protocol");
+    } else {
+        emit upnpError("Invalid protocol");
     }
 }
 
-void UPNPConnection::getUdp()
-{
+void UPNPConnection::getUdp() {
     QString vs;
-    while (udp_socket->hasPendingDatagrams())
-    {
+    while (udp_socket->hasPendingDatagrams()) {
         QByteArray datagram;
         datagram.resize(udp_socket->pendingDatagramSize());
         QHostAddress sender;
         quint16 senderPort;
         udp_socket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort);
         QHostAddress st_addr(sender.toIPv4Address());
-        if (st_addr != localAddress.ip())
-        {
+        if (st_addr != localAddress.ip()) {
             timer->stop();
             gateway = st_addr;
             emit stageSucceded(st_addr.toString() + ": " + QString(senderPort) + ";\n" + datagram.data()
                                + "\n");
             vs = datagram.data();
             int index = vs.indexOf("LOCATION: ");
-            if (index != -1)
-            {
+            if (index != -1) {
                 vs.remove(0, index + 10);
                 index = 0;
-                while (vs[index].isPrint())
-                {
+                while (vs[index].isPrint()) {
                     index++;
                 }
                 vs.remove(index, vs.size() - index);
                 QString sport = vs;
                 sport.remove(0, 5);
                 index = 0;
-                while (sport[index] != QChar(':'))
-                {
+                while (sport[index] != QChar(':')) {
                     index++;
                 }
                 sport.remove(0, index + 1);
                 index = 0;
-                while (sport[index] != QChar('/'))
-                {
+                while (sport[index] != QChar('/')) {
                     index++;
                 }
                 sport.remove(index, sport.size() - index);
@@ -107,22 +112,19 @@ void UPNPConnection::getUdp()
     }
 }
 
-void UPNPConnection::timeExpired()
-{
+void UPNPConnection::timeExpired() {
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
     timer->stop();
-    emit upnp_error("Time expired!");
+    emit upnpError("Time expired!");
 }
 
-void UPNPConnection::processReq(QNetworkReply *reply)
-{
+void UPNPConnection::processReq(QNetworkReply *reply) {
     QObject::disconnect(http_socket, SIGNAL(finished(QNetworkReply *)), this,
                         SLOT(processReq(QNetworkReply *)));
     QString response = reply->readAll();
     int i = 0;
-    while (i < response.size())
-    {
+    while (i < response.size()) {
         if (!response[i].isPrint())
             response.remove(i, 1);
         else
@@ -130,39 +132,29 @@ void UPNPConnection::processReq(QNetworkReply *reply)
     }
     QXmlStreamReader reader(response);
     reader.readNext();
-    while (!reader.atEnd())
-    {
-        if (reader.name().toString() == QString("serviceType"))
-        {
-            if (reader.readElementText() == QString("urn:schemas-upnp-org:service:WANIPConnection:1"))
-            {
-                while ((!reader.atEnd()) && (reader.name().toString() != "controlURL"))
-                {
+    while (!reader.atEnd()) {
+        if (reader.name().toString() == QString("serviceType")) {
+            if (reader.readElementText() == QString("urn:schemas-upnp-org:service:WANIPConnection:1")) {
+                while ((!reader.atEnd()) && (reader.name().toString() != "controlURL")) {
                     reader.readNext();
                 }
-                if (reader.name().toString() == "controlURL")
-                {
+                if (reader.name().toString() == "controlURL") {
                     gatewayCtrlUrl = QString("http://") + gateway.toString() + QString(":") + ctrlPort
                         + reader.readElementText();
 
                     break;
                 }
-            }
-            else
-            {
+            } else {
                 reader.readNext();
             }
-        }
-        else
-        {
+        } else {
             reader.readNext();
         }
     }
     getExternalIP();
 }
 
-void UPNPConnection::getExternalIP()
-{
+void UPNPConnection::getExternalIP() {
     QString message("<?xml version=\"1.0\"?>\r\n"
                     "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
                     "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
@@ -172,12 +164,11 @@ void UPNPConnection::getExternalIP()
     this->postSOAP("GetExternalIPAddress", message);
 }
 
-void UPNPConnection::postSOAP(QString action, QString message)
-{
+void UPNPConnection::postSOAP(QString action, QString message) {
     emit stageSucceded(QString("POST: \nAction: ") + action + QString("\nMessage: ") + message
                        + QString("\n\n"));
     QNetworkRequest req(gatewayCtrlUrl);
-    req.setRawHeader(QByteArray("Host"), (gateway.toString() + QString(":") + ctrlPort).toLocal8Bit());
+    req.setRawHeader(QByteArray("Host"), (gateway.toString() + QString(":") + ctrlPort).toLatin1());
     req.setRawHeader(QByteArray("Content-Type"), QByteArray("text/xml; charset=\"utf-8\""));
     req.setRawHeader(QByteArray("Content-Length"), QString::number(message.size()).toLatin1());
     req.setRawHeader(
@@ -189,77 +180,61 @@ void UPNPConnection::postSOAP(QString action, QString message)
                      SLOT(getHttpError(QNetworkReply::NetworkError)));
 }
 
-void UPNPConnection::getHttp()
-{
+void UPNPConnection::getHttp() {
     QString reply = http_reply->readAll();
     QObject::disconnect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
     QObject::disconnect(http_reply, SIGNAL(error(QNetworkReply::NetworkError)), this,
                         SLOT(getHttpError(QNetworkReply::NetworkError)));
-    qDebug() << "UPnP Reply: " << reply;
-    if (!reply.contains("UPnPError"))
-    {
-        if (reply.contains("<NewExternalIPAddress>"))
-        {
+    qDebug() << "UPnP Reply:" << reply;
+    if (!reply.contains("UPnPError")) {
+        if (reply.contains("<NewExternalIPAddress>")) {
             extractExternalIP(reply);
         }
-        if (reply.contains("AddPortMappingResponse"))
-        {
+        if (reply.contains("AddPortMappingResponse")) {
             conn_state = State::Opened;
-            //udp_socket->close();
+            // udp_socket->close();
             qDebug() << "UPNP emit success() ";
             emit success();
         }
-        if (reply.contains("DeletePortMappingResponse"))
-        {
+        if (reply.contains("DeletePortMappingResponse")) {
             conn_state = State::Closed;
         }
-    }
-    else
-    {
+    } else {
         extractUPNPError(reply);
     }
     emit stageSucceded(reply + "\n");
 }
 
-void UPNPConnection::getHttpError(QNetworkReply::NetworkError err)
-{
-    emit upnp_error(http_reply->errorString());
+void UPNPConnection::getHttpError(QNetworkReply::NetworkError err) {
+    Q_UNUSED(err)
+    emit upnpError(http_reply->errorString());
 }
 
-void UPNPConnection::extractExternalIP(QString message)
-{
+void UPNPConnection::extractExternalIP(QString message) {
     QXmlStreamReader reader(message);
     reader.readNext();
-    while (reader.name().toString() != QString("NewExternalIPAddress"))
-    {
+    while (reader.name().toString() != QString("NewExternalIPAddress")) {
         reader.readNext();
     }
-    if (reader.name().toString() == QString("NewExternalIPAddress"))
-    {
+    if (reader.name().toString() == QString("NewExternalIPAddress")) {
         externalAddress = QHostAddress(reader.readElementText());
     }
     emit extAddressExtracted();
     checkTunnels();
 }
 
-void UPNPConnection::extractUPNPError(QString message)
-{
+void UPNPConnection::extractUPNPError(QString message) {
     QXmlStreamReader reader(message);
     reader.readNext();
-    while (reader.name().toString() != QString("errorDescription"))
-    {
+    while (reader.name().toString() != QString("errorDescription")) {
         reader.readNext();
     }
-    if (reader.name().toString() == QString("errorDescription"))
-    {
+    if (reader.name().toString() == QString("errorDescription")) {
         QString ertext = reader.readElementText();
-        if ((ertext == QString("NoSuchEntryInArray")) || (ertext == QString("Invalid ExternalPort")))
-        {
+        if ((ertext == QString("NoSuchEntryInArray")) || (ertext == QString("Invalid ExternalPort"))) {
             setTunnel();
-        }
-        else
-        {
-            emit upnp_error(ertext);
+        } else {
+            emit upnpError(ertext);
             int rp = QRandomGenerator::global()->bounded(1000, 2000);
             internalPort = rp;
             externalPort = rp;
@@ -268,8 +243,7 @@ void UPNPConnection::extractUPNPError(QString message)
     }
 }
 
-void UPNPConnection::checkTunnels()
-{
+void UPNPConnection::checkTunnels() {
     QString message("<?xml version=\"1.0\"?>\r\n"
                     "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
                     "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
@@ -289,8 +263,7 @@ void UPNPConnection::checkTunnels()
     this->postSOAP("GetSpecificPortMappingEntry", message);
 }
 
-void UPNPConnection::setTunnel()
-{
+void UPNPConnection::setTunnel() {
     QString message("<?xml version=\"1.0\"?>\r\n"
                     "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
                     "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
@@ -321,8 +294,7 @@ void UPNPConnection::setTunnel()
     this->postSOAP("AddPortMapping", message);
 }
 
-void UPNPConnection::removeTunnel()
-{
+void UPNPConnection::removeTunnel() {
     QString message("<?xml version=\"1.0\"?>\r\n"
                     "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
                     "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
@@ -342,7 +314,6 @@ void UPNPConnection::removeTunnel()
     this->postSOAP("DeletePortMapping", message);
 }
 
-UPNPConnection::State UPNPConnection::getState() const
-{
+UPNPConnection::State UPNPConnection::getState() const {
     return conn_state;
 }

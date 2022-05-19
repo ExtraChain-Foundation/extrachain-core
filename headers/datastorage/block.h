@@ -1,20 +1,44 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef MEMBLOCK_H
 #define MEMBLOCK_H
 
-#include <QString>
-#include <QDebug>
-#include "enc/sign_interface.h"
-#include "utils/bignumber.h"
-#include "utils/utils.h"
-#include "datastorage/transaction.h"
 #include "actor.h"
-#include "utils/utils.h"
+#include "datastorage/transaction.h"
+#include "utils/bignumber.h"
+#include "utils/db_connector.h"
+#include "utils/exc_utils.h"
 #include <QDateTime>
-#include "headers/utils/db_connector.h"
+#include <QDebug>
+#include <QString>
 
 // Block comparison result
-struct BlockCompare
-{
+struct Approvers {
+    std::string actorId = "";
+    std::string sign = "";
+    bool isApprove = false;
+
+    MSGPACK_DEFINE(actorId, sign, isApprove)
+};
+
+struct BlockCompare {
     BigNumber indexDiff;
     BigNumber approverDiff;
     int dataDiff;
@@ -24,25 +48,23 @@ struct BlockCompare
 };
 
 namespace Config {
-static const QByteArray DATA_BLOCK_TYPE = "data";
-static const QByteArray MERGE_BLOCK = "dataMerge";
+static const std::string DATA_BLOCK_TYPE = "data";
+static const std::string MERGE_BLOCK = "dataMerge";
 }
 
-class Block
-{
-
+class EXTRACHAIN_EXPORT Block {
 protected:
     const int FIELDS_SIZE = 4;
-    QByteArray type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
-    QByteArray data;                           // payload (serialized tx's, or other)
-    BigNumber index = BigNumber(-1);           // block id
+    std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
+    std::string data;                             // payload (serialized tx's, or other)
+    BigNumber index = BigNumber(-1);              // block id
     //    BigNumber approver = BigNumber(-1);        // block approver id
 
     long long date;
-    QByteArray prevHash; // previous block hash
-    QByteArray hash;     // this block hash (from all previous fields)
+    std::string prevHash; // previous block hash
+    std::string hash;     // this block hash (from all previous fields)
     //    QByteArray digSig;   // digital signature (from all fields)
-    QHash<QByteArray, QByteArray> signatures;
+    std::vector<Approvers> signatures;
 
 public:
     Block();
@@ -70,7 +92,7 @@ public:
 private:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses keccak.
+     * Uses sha3.
      */
     void calcHash();
 
@@ -81,7 +103,7 @@ protected:
      * @return digSig data
      */
     virtual QByteArray getDataForHash() const;
-    virtual QByteArray getDataForDigSig() const;
+    virtual const std::string &getDataForDigSig() const;
 
 public:
     // data operations
@@ -95,7 +117,8 @@ public:
      * @brief extract non-empty transactions from data
      * @return transaction list
      */
-    QList<Transaction> extractTransactions() const;
+    std::vector<Transaction> extractTransactions() const;
+    Transaction getTransactionByHash(QByteArray hash) const;
 
     bool contain(Block &from) const;
 
@@ -114,39 +137,49 @@ public:
     QString toString() const;
     bool operator<(const Block &other);
     static bool isBlock(const QByteArray &data);
+    bool isApprover(const ActorId &) const;
 
 public:
     virtual void initFields(QList<QByteArray> &list);
     QList<Block> getDataFromAllBlocks(QList<QByteArray>);
-    void setPrevHash(const QByteArray &value);
-    QByteArray getType() const;
-    BigNumber getApprover() const;
+    void setPrevHash(const std::string &value);
+    std::string getType() const;
+    ActorId getApprover() const;
     BigNumber getIndex() const;
-    QByteArray getData() const;
-    QByteArray getHash() const;
-    QByteArray getPrevHash() const;
-    QByteArray getDigSig() const;
-    QByteArray getSignatures() const;
+    std::string getData() const;
+    std::string getHash() const;
+    std::string getPrevHash() const;
+    std::string getDigSig() const;
     QByteArrayList getListSignatures() const;
-    void addSignature(const QByteArray &id, const QByteArray &sign);
+    void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
     // void setType(QByteArray type);
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
+    void setType(const std::string &value);
 
-    void setType(const QByteArray &value);
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        std::string index_str = index.toStdString();
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+            .msgpack_pack(msgpack_pk);
+    }
+
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        std::string index_str;
+        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+            .msgpack_unpack(msgpack_o);
+        index = QByteArray::fromStdString(index_str);
+    }
 };
 
-inline bool operator<(const Block &l, const Block &r)
-{
+inline bool operator<(const Block &l, const Block &r) {
     return l.getIndex() < r.getIndex() || l.getData() < r.getData();
 }
 
-inline bool operator==(const Block &l, const Block &r)
-{
-    return l.getIndex() == r.getIndex() && l.getApprover() == r.getApprover() && l.getData() == r.getData()
-        && l.getDate() == r.getDate() && l.getPrevHash() == r.getPrevHash() && l.getHash() == r.getHash()
-        && l.getDigSig() == r.getDigSig();
+inline bool operator==(const Block &l, const Block &r) {
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
+        && l.extractTransactions() == r.extractTransactions();
 }
 
 #endif // MEMBLOCK_H

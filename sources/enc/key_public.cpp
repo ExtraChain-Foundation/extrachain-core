@@ -1,76 +1,57 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "enc/key_public.h"
-KeyPublic::KeyPublic(EllipticPoint pbKey)
-{
-    this->pbkey = pbKey;
-}
-KeyPublic::KeyPublic(QByteArray pbKey)
-{
+#include "enc/enc_tools.h"
+#include "utils/exc_utils.h"
 
-    this->pbkey = EllipticPoint(pbKey);
-}
-KeyPublic::KeyPublic(const KeyPublic &keyPublic)
-{
-    pbkey = keyPublic.pbkey;
+KeyPublic::KeyPublic(const std::string &publicKey) {
+    m_publicKey = publicKey;
 }
 
-KeyPublic::KeyPublic()
-{
-    pbkey = EllipticPoint();
-}
-QByteArray KeyPublic::encrypt(const QByteArray &data)
-{
-    QList<QByteArray> res;
-    QByteArray result;
-    BigNumber r;
-    EllipticPoint R;
-    EllipticPoint S;
-    ECC::curve secpCurve;
-    do
-    {
-        res.clear();
-
-        r = BigNumber::random(64, curve.p, false);
-        R = ECC::multiply(secpCurve, r, secpCurve.g);
-        S = ECC::multiply(secpCurve, r, this->pbkey);
-        res.append(blowFish_crypt().EncryptBlowFish(data, S.X().toByteArray() + S.Y().toByteArray()));
-        res.append(R.X().toByteArray());
-        res.append(R.Y().toByteArray());
-        result = Serialization::universalSerialize(res, Serialization::DEFAULT_FIELD_SIZE);
-        res.clear();
-        res = Serialization::universalDeserialize(result, Serialization::DEFAULT_FIELD_SIZE);
-    } while (res.size() != 3);
-    return result;
+KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
+    m_publicKey = keyPublic.publicKey();
 }
 
-bool KeyPublic::verify(const QByteArray &data, const QByteArray &dsignBase64)
-{
-    BigNumber z = BigNumber(Utils::calcKeccak(data));
-    QList<QByteArray> signature = Serialization::universalDeserialize(dsignBase64, 3);
-    BigNumber r(signature[0]), s(signature[1]);
-    BigNumber w = ECC::inverseMod(s, curve.n);
-    BigNumber u1 = (z * w) % curve.n;
-    BigNumber u2 = (r * w) % curve.n;
-    EllipticPoint p1 = ECC::multiply(curve, u1, curve.g);
-    EllipticPoint p2 = ECC::multiply(curve, u2, pbkey);
-    EllipticPoint point = ECC::add(curve, p1, p2);
-    return r % curve.n == point.X() % curve.n;
-}
-QByteArray KeyPublic::extractPublicKey()
-{
-    return this->pbkey.serialize();
+std::string KeyPublic::encrypt(const std::string &data, const std::string &senderPrivateKey) const {
+    return SecretKey::encryptAsymmetric(data, senderPrivateKey, m_publicKey);
 }
 
-QByteArray KeyPublic::getPublicKey()
-{
-    return extractPublicKey();
+bool KeyPublic::verify(const std::string &data, const std::string &signature) const {
+    return SecretKey::verify(data, m_publicKey, signature);
 }
 
-QByteArray KeyPublic::serialize()
-{
-    return pbkey.serialize();
+const std::string &KeyPublic::publicKey() const {
+    return m_publicKey;
 }
 
-bool KeyPublic::isEmpty()
-{
-    return pbkey.isZero();
+bool KeyPublic::empty() const {
+    return m_publicKey.empty();
+}
+
+QDebug operator<<(QDebug debug, const KeyPublic &key) {
+    QDebugStateSaver saver(debug);
+    debug << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
+    return debug;
+}
+
+std::ostream &operator<<(std::ostream &os, const KeyPublic &key) {
+    os << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
+    return os;
 }
