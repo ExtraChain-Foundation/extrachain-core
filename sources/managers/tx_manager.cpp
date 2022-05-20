@@ -78,7 +78,8 @@ void TransactionManager::addTransaction(Transaction tx) {
 void TransactionManager::addProvedTransaction(Transaction *tx) {
     qDebug() << "addProvedTransaction";
     if (tx->getData().contains(Fee::UNFEE))
-        if (!blockchain->checkHaveUNFreezeTx(tx, Serialization::deserialize(tx->getData()).at(0))) {
+        if (!blockchain->checkHaveUNFreezeTx(tx,
+                                             Serialization::deserialize(tx->getData()).at(0).toStdString())) {
             receivedTxList.removeOne(tx);
             return;
         }

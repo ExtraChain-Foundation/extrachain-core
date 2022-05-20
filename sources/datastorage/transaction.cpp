@@ -325,7 +325,7 @@ BigNumber Transaction::visibleToAmount(QByteArray amount) {
     amount += QString("0").repeated(18 - secondLength).toLatin1();
     amount.replace(".", "");
 
-    return BigNumber(amount, 10);
+    return BigNumber(amount.toStdString(), 10);
 }
 
 QString Transaction::amountToVisible(const BigNumber &number) {
@@ -356,7 +356,7 @@ BigNumber Transaction::amountNormalizeMul(const BigNumber &number) {
     QByteArray n = number.toByteArray(10);
     if (n.length() < 36)
         return number;
-    return BigNumber(n.chopped(18), 10);
+    return BigNumber(n.chopped(18).toStdString(), 10);
 }
 
 BigNumber Transaction::amountMul(const BigNumber &number1, const BigNumber &number2) {
@@ -381,7 +381,7 @@ BigNumber Transaction::amountDiv(const BigNumber &number1, const BigNumber &numb
     QByteArray newTwoByte = two.remove(index, 1);
 
     BigNumber returned = index == -1 ? 1 : BigNumber(10).pow(div);
-    auto second = BigNumber(newTwoByte, 10);
+    auto second = BigNumber(newTwoByte.toStdString(), 10);
     if (second == 0)
         return 0;
 

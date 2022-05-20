@@ -54,7 +54,6 @@ class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
     BigNumber(const std::string &bigNumber, int base = 16);
-    BigNumber(const QByteArray &bigNumber, int base = 16);
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);

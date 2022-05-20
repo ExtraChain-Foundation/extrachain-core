@@ -38,10 +38,6 @@ BigNumber::BigNumber(const std::string &bigNumber, int base) {
     UPDATE_DEBUG()
 }
 
-BigNumber::BigNumber(const QByteArray &bigNumber, int base) {
-    BigNumber(bigNumber.toStdString(), base);
-}
-
 BigNumber::BigNumber(const BigNumber &other) {
     this->m_data = other.data();
     UPDATE_DEBUG()
@@ -181,26 +177,26 @@ BigNumber &BigNumber::operator-=(long long number) {
 
 BigNumber &BigNumber::operator*=(const BigNumber &bigNumber) {
     this->m_data *= bigNumber.m_data;
-        UPDATE_DEBUG()
+    UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator*=(long long number) {
     this->m_data *= number;
-       UPDATE_DEBUG()
+    UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator/=(const BigNumber &bigNumber) {
     this->m_data /= bigNumber.m_data;
-        UPDATE_DEBUG()
+    UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator/=(long long number) {
     this->m_data /= number;
 
-       UPDATE_DEBUG()
+    UPDATE_DEBUG()
     return *this;
 }
 
