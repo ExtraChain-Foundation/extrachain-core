@@ -53,11 +53,12 @@ const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
 class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
+    BigNumber(const std::string &bigNumber, int base = 16);
     BigNumber(const QByteArray &bigNumber, int base = 16);
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);
-    BigNumber(mpz_class number);
+    BigNumber(const mpz_class &number);
     ~BigNumber() = default;
 
 private:
@@ -102,8 +103,7 @@ public:
     BigNumber operator-() const;
 
 public:
-    mpz_class data() const;
-    int isProbPrime() const;
+    const mpz_class &data() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const;
     std::string toStdString(int base = 16) const;
@@ -131,7 +131,7 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this = BigNumber(QByteArray::fromStdString(num));
+        *this = BigNumber(num);
     }
 };
 
@@ -184,10 +184,11 @@ inline bool operator!=(const BigNumber &l, const int &r) {
 }
 
 inline size_t qHash(const BigNumber &key, size_t seed) {
-    return qHash(key.toStdString(), seed);
+    return qHash(key, seed);
 }
 
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
 QDebug operator<<(QDebug debug, const mpz_class &bigNumber);
+std::ostream &operator<<(std::ostream &os, const BigNumber &bigNumber);
 
 #endif // BIGNUMBER_H

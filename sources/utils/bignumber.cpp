@@ -24,18 +24,22 @@ BigNumber::BigNumber()
     : m_data(0) {
 }
 
-BigNumber::BigNumber(const QByteArray &bigNumber, int base) {
+BigNumber::BigNumber(const std::string &bigNumber, int base) {
     try {
-        if (bigNumber.isEmpty())
+        if (bigNumber.empty())
             this->m_data = mpz_class(0);
         else
-            this->m_data = mpz_class(bigNumber.toStdString(), base);
+            this->m_data = mpz_class(bigNumber, base);
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumber value:" << bigNumber << "with base" << base;
+        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str() << "with base" << base;
         assert(false);
     }
 
     UPDATE_DEBUG()
+}
+
+BigNumber::BigNumber(const QByteArray &bigNumber, int base) {
+    BigNumber(bigNumber.toStdString(), base);
 }
 
 BigNumber::BigNumber(const BigNumber &other) {
@@ -43,8 +47,8 @@ BigNumber::BigNumber(const BigNumber &other) {
     UPDATE_DEBUG()
 }
 
-BigNumber::BigNumber(mpz_class number) {
-    this->m_data = mpz_class(number);
+BigNumber::BigNumber(const mpz_class &number) {
+    this->m_data = number;
     UPDATE_DEBUG()
 }
 
@@ -54,7 +58,7 @@ BigNumber::BigNumber(int number) {
 }
 
 BigNumber::BigNumber(long long number) {
-    this->m_data = mpz_class(std::to_string(number));
+    this->m_data = mpz_class(number);
     UPDATE_DEBUG()
 }
 
@@ -75,54 +79,44 @@ BigNumber BigNumber::operator>>=(const uint &value) {
     return *this;
 }
 
-BigNumber BigNumber::operator+(const BigNumber &other) {
-    BigNumber ret(m_data + other.data());
-    return ret;
+BigNumber BigNumber::operator+(const BigNumber &bigNumber) {
+    return BigNumber(m_data + bigNumber.data());
 }
 
 BigNumber BigNumber::operator+(long long number) {
-    BigNumber ret(m_data + BigNumber(number).data());
-    return ret;
+    return BigNumber(m_data + number);
 }
 
 BigNumber BigNumber::operator-(const BigNumber &bigNumber) {
-    BigNumber ret(m_data - bigNumber.data());
-    return ret;
+    return BigNumber(m_data - bigNumber.data());
 }
 
 BigNumber BigNumber::operator-(long long number) {
-    BigNumber ret(m_data - BigNumber(number).data());
-    return ret;
+    return BigNumber(m_data - number);
 }
 
 BigNumber BigNumber::operator*(const BigNumber &bigNumber) const {
-    BigNumber ret(m_data * bigNumber.data());
-    return ret;
+    return BigNumber(m_data * bigNumber.data());
 }
 
 BigNumber BigNumber::operator*(long long number) {
-    BigNumber ret(m_data * BigNumber(number).data());
-    return ret;
+    return BigNumber(m_data * number);
 }
 
 BigNumber BigNumber::operator/(const BigNumber &bigNumber) {
-    BigNumber ret(m_data / bigNumber.data());
-    return ret;
+    return BigNumber(m_data / bigNumber.data());
 }
 
 BigNumber BigNumber::operator/(long long number) {
-    BigNumber ret(m_data / BigNumber(number).data());
-    return ret;
+    return BigNumber(m_data / number);
 }
 
 BigNumber BigNumber::operator%(const BigNumber &bigNumber) {
-    BigNumber ret(m_data % bigNumber.data());
-    return ret;
+    return BigNumber(m_data % bigNumber.data());
 }
 
 BigNumber BigNumber::operator%(long long number) {
-    BigNumber ret(m_data % BigNumber(number).data());
-    return ret;
+    return BigNumber(m_data % number);
 }
 
 BigNumber &BigNumber::operator=(const BigNumber &bigNumber) {
@@ -132,7 +126,7 @@ BigNumber &BigNumber::operator=(const BigNumber &bigNumber) {
 }
 
 BigNumber &BigNumber::operator=(long long number) {
-    m_data = mpz_class(std::to_string(number));
+    m_data = mpz_class(number);
     UPDATE_DEBUG()
     return *this;
 }
@@ -162,61 +156,62 @@ BigNumber BigNumber::operator--(int) {
 }
 
 BigNumber &BigNumber::operator+=(const BigNumber &bigNumber) {
-    *this = *this + bigNumber;
+    this->m_data += bigNumber.m_data;
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator+=(long long number) {
-    *this = *this + number;
+    this->m_data += number;
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator-=(const BigNumber &bigNumber) {
-    *this = *this - bigNumber;
+    this->m_data -= bigNumber.data();
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator-=(long long number) {
-    *this = *this - number;
+    this->m_data -= number;
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator*=(const BigNumber &bigNumber) {
-    *this = *this * bigNumber;
-    UPDATE_DEBUG()
+    this->m_data *= bigNumber.m_data;
+        UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator*=(long long number) {
-    *this = *this * number;
-    UPDATE_DEBUG()
+    this->m_data *= number;
+       UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator/=(const BigNumber &bigNumber) {
-    *this = *this / bigNumber;
-    UPDATE_DEBUG()
+    this->m_data /= bigNumber.m_data;
+        UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator/=(long long number) {
-    *this = *this / number;
-    UPDATE_DEBUG()
+    this->m_data /= number;
+
+       UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator%=(const BigNumber &bigNumber) {
-    *this = *this % bigNumber;
+    this->m_data %= bigNumber.m_data;
     UPDATE_DEBUG()
     return *this;
 }
 
 BigNumber &BigNumber::operator%=(long long number) {
-    *this = *this % number;
+    this->m_data %= number;
     UPDATE_DEBUG()
     return *this;
 }
@@ -225,12 +220,8 @@ BigNumber BigNumber::operator-() const {
     return BigNumber(-m_data);
 }
 
-mpz_class BigNumber::data() const {
+const mpz_class &BigNumber::data() const {
     return m_data;
-}
-
-int BigNumber::isProbPrime() const {
-    return mpz_probab_prime_p(m_data.get_mpz_t(), 10);
 }
 
 bool BigNumber::isEmpty() const // TODO
@@ -323,7 +314,7 @@ BigNumber BigNumber::random(int n, bool zeroAllowed) {
     for (int i = 1; i != n; ++i)
         str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
 
-    BigNumber res(str);
+    BigNumber res(str.toStdString());
     if (!zeroAllowed && res == 0)
         return random(n, zeroAllowed);
     return res;
@@ -346,7 +337,7 @@ BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
     QByteArray b;
     b.clear();
     b.fill('f', maxdata.size());
-    BigNumber t(b);
+    BigNumber t(b.toStdString());
 
     while (t >= max) {
         int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
@@ -355,7 +346,7 @@ BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
         for (int i = 0; i < size; i++) {
             res.append(BigNumberUtils::Chars[QRandomGenerator::global()->bounded(0, 15)]);
         }
-        t = BigNumber(res);
+        t = BigNumber(res.toStdString());
     }
     if (!zeroAllowed && t == 0)
         return random(max, zeroAllowed);
@@ -384,4 +375,9 @@ QDebug operator<<(QDebug debug, const mpz_class &bigNumber) {
     }
 
     return debug;
+}
+
+std::ostream &operator<<(std::ostream &os, const BigNumber &bigNumber) {
+    os << bigNumber.toStdString();
+    return os;
 }
