@@ -62,7 +62,7 @@ QByteArray GenesisBlock::serialize() const {
 
 void GenesisBlock::initFields(QList<QByteArray> &list) {
     m_type = list.takeFirst();
-    index = BigNumber(list.takeFirst());
+    index = BigNumber(list.takeFirst().toStdString());
     date = list.takeFirst().toLongLong();
     data = list.takeFirst();
     prevHash = list.takeFirst();

@@ -126,7 +126,7 @@ bool Block::equals(const Block &block) const {
 
 BlockCompare Block::compareBlock(const Block &b) const {
     BlockCompare temp;
-    temp.approverDiff = BigNumber(getApprover().toByteArray()) - BigNumber(b.getApprover().toByteArray());
+    temp.approverDiff = BigNumber(getApprover().toStdString()) - BigNumber(b.getApprover().toStdString());
     temp.indexDiff = getIndex() - b.getIndex();
     temp.dataDiff =
         Utils::compare(QByteArray::fromStdString(getData()), QByteArray::fromStdString(b.getData()));
@@ -264,7 +264,7 @@ bool Block::isApprover(const ActorId &actorId) const {
 
 void Block::initFields(QList<QByteArray> &list) {
     m_type = list.takeFirst();
-    index = BigNumber(list.takeFirst());
+    index = BigNumber(list.takeFirst().toStdString());
     date = list.takeFirst().toLongLong();
     data = list.takeFirst();
     prevHash = list.takeFirst();
