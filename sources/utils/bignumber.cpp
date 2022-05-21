@@ -20,18 +20,27 @@
 #include "utils/bignumber.h"
 #include <exception>
 
+using boost::multiprecision::cpp_int;
+
 BigNumber::BigNumber()
     : m_data(0) {
 }
 
 BigNumber::BigNumber(const std::string &bigNumber, int base) {
     try {
-        if (bigNumber.empty())
-            this->m_data = mpz_class(0);
-        else
-            this->m_data = mpz_class(bigNumber, base);
+        if (bigNumber.empty()) {
+            this->m_data = cpp_int(0);
+        } else {
+            if (base == 10) {
+                this->m_data = cpp_int(bigNumber);
+            } else {
+                std::stringstream ss;
+                ss << std::hex << bigNumber;
+                ss >> m_data;
+            }
+        }
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str() << "with base" << base;
+        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str();
         assert(false);
     }
 
@@ -43,18 +52,18 @@ BigNumber::BigNumber(const BigNumber &other) {
     UPDATE_DEBUG()
 }
 
-BigNumber::BigNumber(const mpz_class &number) {
+BigNumber::BigNumber(const cpp_int &number) {
     this->m_data = number;
     UPDATE_DEBUG()
 }
 
 BigNumber::BigNumber(int number) {
-    this->m_data = mpz_class(number);
+    this->m_data = cpp_int(number);
     UPDATE_DEBUG()
 }
 
 BigNumber::BigNumber(long long number) {
-    this->m_data = mpz_class(number);
+    this->m_data = cpp_int(number);
     UPDATE_DEBUG()
 }
 
@@ -122,7 +131,7 @@ BigNumber &BigNumber::operator=(const BigNumber &bigNumber) {
 }
 
 BigNumber &BigNumber::operator=(long long number) {
-    m_data = mpz_class(number);
+    m_data = number;
     UPDATE_DEBUG()
     return *this;
 }
@@ -216,7 +225,7 @@ BigNumber BigNumber::operator-() const {
     return BigNumber(-m_data);
 }
 
-const mpz_class &BigNumber::data() const {
+const cpp_int &BigNumber::data() const {
     return m_data;
 }
 
@@ -226,16 +235,23 @@ bool BigNumber::isEmpty() const // TODO
 }
 
 QByteArray BigNumber::toByteArray(int base) const {
-    char *ch = mpz_get_str(nullptr, base, m_data.get_mpz_t());
-    QByteArray number(ch);
-    void (*freefunc)(void *, size_t);
-    mp_get_memory_functions(NULL, NULL, &freefunc);
-    freefunc(ch, strlen(ch) + 1);
-    return number;
+    auto res = toStdString(base);
+    return res.c_str();
 }
 
 std::string BigNumber::toStdString(int base) const {
-    return m_data.get_str(base);
+    if (base == 10) {
+        return m_data.str();
+    } else {
+        std::stringstream ss;
+        if (m_data >= 0) {
+            ss << std::hex << m_data;
+            return ss.str();
+        } else {
+            ss << std::hex << boost::multiprecision::abs(m_data);
+            return "-" + ss.str();
+        }
+    }
 }
 
 QByteArray BigNumber::toZeroByteArray(int size) const {
@@ -248,55 +264,13 @@ QByteArray BigNumber::toZeroByteArray(int size) const {
 }
 
 BigNumber BigNumber::pow(unsigned long number) {
-    mpz_class res;
-    mpz_pow_ui(res.get_mpz_t(), data().get_mpz_t(), number);
-    return res;
-}
-
-BigNumber BigNumber::sqrt(unsigned long number) const {
-    mpz_class res;
-    mpz_root(res.get_mpz_t(), m_data.get_mpz_t(), number);
-    return res;
+    auto res = boost::multiprecision::pow(m_data, number);
+    return BigNumber(res);
 }
 
 BigNumber BigNumber::abs() const {
-    mpz_class res;
-    mpz_abs(res.get_mpz_t(), m_data.get_mpz_t());
-    return res;
-}
-
-bool BigNumber::getInfinity() const {
-    return infinity;
-}
-
-void BigNumber::setInfinity(bool value) {
-    infinity = value;
-
-    if (value)
-        m_data = 0;
-}
-
-BigNumber BigNumber::nextPrime() {
-    mpz_class prime;
-    mpz_nextprime(prime.get_mpz_t(), m_data.get_mpz_t());
-    return prime;
-}
-
-bool BigNumber::isValid(const QByteArray &bigNumber, int base) {
-    if (bigNumber.isEmpty())
-        return false;
-    try {
-        mpz_class(bigNumber.toStdString(), base);
-        return true;
-    } catch (std::exception &) {
-        return false;
-    }
-}
-
-BigNumber BigNumber::factorial(unsigned long number) {
-    mpz_class res;
-    mpz_fac_ui(res.get_mpz_t(), number);
-    return res;
+    auto res = boost::multiprecision::abs(m_data);
+    return BigNumber(res);
 }
 
 BigNumber BigNumber::random(int n, bool zeroAllowed) {
@@ -351,25 +325,13 @@ BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
 
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber) {
     QDebugStateSaver saver(debug);
-
-    if (bigNumber >= 0)
-        debug.nospace().noquote() << "0x" << bigNumber.toByteArray(16);
-    else
-        debug.nospace().noquote() << "-0x" << bigNumber.abs().toByteArray(16);
-
+    debug.nospace().noquote() << bigNumber.toByteArray();
     return debug;
 }
 
-QDebug operator<<(QDebug debug, const mpz_class &bigNumber) {
+QDebug operator<<(QDebug debug, const cpp_int &bigNumber) {
     QDebugStateSaver saver(debug);
-
-    if (bigNumber >= 0) {
-        debug.nospace().noquote() << "0x" << bigNumber.get_str(16).c_str();
-    } else {
-        mpz_class num = -bigNumber;
-        debug.nospace().noquote() << "-0x" << num.get_str(16).c_str();
-    }
-
+    debug.nospace().noquote() << BigNumber(bigNumber).toByteArray();
     return debug;
 }
 

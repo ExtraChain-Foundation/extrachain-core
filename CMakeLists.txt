@@ -161,13 +161,6 @@ target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Web
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
 
-if (UNIX AND NOT IOS) # temp
-    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)
-endif(UNIX AND NOT IOS)
-if (WIN32) # temp
-    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
-endif(WIN32)
-
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
