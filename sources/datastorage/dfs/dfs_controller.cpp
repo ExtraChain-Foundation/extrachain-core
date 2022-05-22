@@ -13,7 +13,8 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     dirsFile.query(DFST::DirsFile::CreateTableQuery);
 
     m_sizeTaken = calculateSizeTaken();
-    qDebug() << "[Dfs] Started. Current size:" << m_sizeTaken;
+    qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
+                    .c_str();
 }
 
 DfsController::~DfsController() {
@@ -60,8 +61,8 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     }
     my_file.close();
 
-    // TODO: error description
-    if (std::filesystem::file_size(newFilePath) >= m_bytesLimit - m_sizeTaken) {
+    auto fileSize = std::filesystem::file_size(newFilePath);
+    if (!writeAvailable(fileSize)) {
         return "ErrorStorageFull";
     }
 
@@ -81,7 +82,6 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     }
 
     std::string fileHash = Utils::calcHashForFile(newFilePath);
-    auto fileSize = std::filesystem::file_size(newFilePath);
     std::filesystem::path placeInDFS =
         DFSB::fsActrRootW + DFSB::separator + actor.id().toString().toStdWString() + DFSB::separator;
     std::filesystem::path dfsPath = DFS_PATH::filePath(actor.id(), fileHash);
@@ -90,19 +90,20 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
             qDebug() << "[DFS] File already in DFS";
-            return "";
+            return "ErrorAlreadyExists";
         }
     }
 
     try {
         std::filesystem::create_directories(placeInDFS.c_str());
-        placeInDFS /= fileHash;
 #ifdef ANDROID
-        std::filesystem::rename(newFilePath, placeInDFS);
+        std::filesystem::rename(newFilePath, dfsPath);
 #else
-        std::filesystem::copy(newFilePath, placeInDFS);
+        std::filesystem::copy(newFilePath, dfsPath);
 #endif
-    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
+    } catch (std::filesystem::filesystem_error const &err) {
+        qDebug() << "[Dfs] Copy error:" << err.what();
+    }
 
     FragmentStorage fs(actor.id(), fileHash);
     fs.initLocalFile(fileSize);
@@ -121,9 +122,11 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
                  << DFST::ActorDirFile::TableName.c_str();
         qFatal("Insert failed");
-        return "";
+        return "ErrorDirError";
     }
+
     actrDirFile.close();
+    m_sizeTaken += fileSize;
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
     dirsFile.replace(
@@ -150,9 +153,16 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
     std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
 
-    if (loadBytes && std::filesystem::exists(realFilePath)) {
-        qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
-        return msg.FileHash;
+    if (loadBytes) {
+        if (std::filesystem::exists(realFilePath)) {
+            qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
+            return msg.FileHash;
+        }
+        if (!writeAvailable(msg.Size)) {
+            qDebug() << "[Dfs] Storage full";
+            qFatal("[Dfs] Storage full");
+            return msg.FileHash;
+        }
     }
 
     if (loadBytes && !std::filesystem::exists(realFilePath)) {
@@ -661,6 +671,7 @@ uint64_t DfsController::bytesLimit() const {
 
 void DfsController::setBytesLimit(uint64_t bytesLimit) {
     m_bytesLimit = bytesLimit;
+    qDebug() << "[Dfs] Changed limit:" << m_bytesLimit;
 }
 
 DFSP::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std::string fileHash) {
@@ -680,4 +691,15 @@ DFSP::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std
     ret.Path = actrDirData.at(0).at("filePath");
     ret.Size = std::stoull(actrDirData.at(0).at("fileSize"));
     return ret;
+}
+
+uint64_t DfsController::bytesAvailable() {
+    auto freeDfs = m_bytesLimit <= m_sizeTaken ? 0 : m_bytesLimit - m_sizeTaken;
+    uint64_t freeDisk = Utils::diskFreeMemory();
+    auto min = m_bytesLimit == 0 ? freeDisk : std::min(freeDfs, freeDisk);
+    return min;
+}
+
+bool DfsController::writeAvailable(uint64_t size) {
+    return bytesAvailable() > size + 10000;
 }

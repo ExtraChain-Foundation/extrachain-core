@@ -539,8 +539,8 @@ static QString filePrefix = "file://";
 #endif
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
-EXTRACHAIN_EXPORT qint64 checkMemoryFree();  // MB
-EXTRACHAIN_EXPORT qint64 checkMemoryTotal(); // MB
+EXTRACHAIN_EXPORT qint64 diskFreeMemory();
+EXTRACHAIN_EXPORT qint64 diskTotalMemory();
 
 QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);

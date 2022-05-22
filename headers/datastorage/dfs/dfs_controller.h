@@ -72,8 +72,7 @@ public:
     void addDirData(const ActorId &actorId, const std::vector<DFSP::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileHash);
     void sendFile(const ActorId &actorId, const std::string &fileHash, const std::string &messageId);
-    std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg,
-                             const std::string &messageId);
+    std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     std::string addFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
     std::string deleteFragment(const DFSP::DeleteSegmentMessage &msg);
@@ -82,6 +81,8 @@ public:
 
 public:
     DFSP::AddFileMessage getFileHeader(const ActorId actor, const std::string fileHash);
+    uint64_t bytesAvailable();
+    bool writeAvailable(uint64_t size = 10000);
 
 signals:
     void added(ActorId actorId, std::string fileHash, std::string visual, uint64_t size);

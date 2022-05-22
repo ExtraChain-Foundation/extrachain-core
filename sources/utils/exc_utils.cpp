@@ -292,15 +292,13 @@ void Utils::wipeDataFiles() {
     QDir::setCurrent(current);
 }
 
-qint64 Utils::checkMemoryFree() {
+qint64 Utils::diskFreeMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
     return x.bytesFree();
 }
 
-qint64 Utils::checkMemoryTotal() {
+qint64 Utils::diskTotalMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
     return x.bytesTotal();
 }
 
