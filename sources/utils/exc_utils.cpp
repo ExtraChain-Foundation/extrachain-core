@@ -28,6 +28,8 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTcpSocket>
+#include <QElapsedTimer>
+
 #include <string>
 #include <string_view>
 

@@ -2,6 +2,8 @@
 #include "datastorage/dfs/historical_chain.h"
 #include "utils/dfs_utils.h"
 
+#include <fstream>
+
 FragmentStorage::FragmentStorage(ActorId Actor, std::string FileHash)
     : storageFile(DFS_PATH::filePath(Actor, FileHash).string() + DFSF::Extension) {
     actor = Actor;
