@@ -181,6 +181,20 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
     return true;
 }
 
+bool HistoricalChain::remove(const std::string &actor, const std::string &fileHash) {
+    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
+    if (std::filesystem::exists(chainFile.file()))
+        return std::filesystem::remove(chainFile.file());
+    return false;
+}
+
+bool HistoricalChain::rename(const std::string &fileHash, const std::string &newFileHash) {
+    const auto path = std::filesystem::path(chainFile.file()).parent_path();
+    std::filesystem::rename(path / std::string(fileHash + DFSF::Extension),
+                            path / std::string(newFileHash + DFSF::Extension));
+    return std::filesystem::exists(path / std::string(newFileHash + DFSF::Extension));
+}
+
 DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data) {
     DBRow row;
     row.insert({ "num", std::to_string(num) });

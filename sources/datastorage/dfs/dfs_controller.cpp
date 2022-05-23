@@ -102,18 +102,20 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 #else
         std::filesystem::copy(newFilePath, placeInDFS);
 #endif
-    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
+    } catch (std::filesystem::filesystem_error const &err) {
+        qDebug() << "[Dfs] Copy error:" << err.what();
+    }
 
+    const auto actorId = actor.id().toStdString();
     FragmentStorage fs(actor.id(), fileHash);
     fs.initLocalFile(fileSize);
-    DFSP::AddFileMessage msg = { .Actor = actor.id().toStdString(),
-                                 .FileHash = fileHash,
-                                 .Path = newTargetVirtualFilePath,
-                                 .Size = fileSize };
+    DFSP::AddFileMessage msg = {
+        .Actor = actorId, .FileHash = fileHash, .Path = newTargetVirtualFilePath, .Size = fileSize
+    };
     qDebug() << "AddFileMessage" << actor.id().toString() << fileHash.c_str()
              << newTargetVirtualFilePath.c_str() << fileSize;
 
-    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actor.id().toStdString());
+    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
     auto lastFileHash = DFST::ActorDirFile::getLastHash(actrDirFile);
     const DBRow rowData = makeActrDirDBRow(msg.FileHash, lastFileHash, msg.Path, msg.Size);
 
@@ -126,23 +128,29 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     actrDirFile.close();
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
-    dirsFile.replace(
-        DFST::DirsFile::TableName,
-        { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
+    dirsFile.replace(DFST::DirsFile::TableName,
+                     { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
 
     sendFile(actor.id(), fileHash, "");
 
-    HistoricalChain hc((DFS_PATH::filePath(actor.id().toStdString(), fileHash).string() + DFSF::Extension),
-                       fpath.string());
-    hc.initLocal(actor.id().toStdString(), fileHash);
+    HistoricalChain hc((DFS_PATH::filePath(actorId, fileHash).string() + DFSF::Extension), fpath.string());
+
+    qDebug() << "fpath: " << QString::fromStdString(fpath.string());
+    hc.initLocal(actorId, fileHash);
 
     return addFile(msg, false);
 }
 
-void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
+bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
     std::string fileHash = Utils::calcHashForFile(filePath); // TODO: get hash
-    DFSP::RemoveFileMessage msg = { .Actor = actor.id().toStdString(), .FileHash = fileHash };
+    const std::string actorId = actor.id().toStdString();
+    DFSP::RemoveFileMessage msg = { .Actor = actorId, .FileHash = fileHash };
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
+
+    HistoricalChain hc((DFS_PATH::filePath(actorId, fileHash).string() + DFSF::Extension), filePath);
+    const bool databaseFileRemoved = hc.remove(actorId, fileHash);
+    const bool fileRemoved = std::filesystem::remove(DFS_PATH::filePath(actorId, fileHash).string());
+    return databaseFileRemoved && fileRemoved;
 }
 
 std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadBytes) {
@@ -263,6 +271,15 @@ bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
     actrDirFile.close();
 
     return true;
+}
+
+bool DfsController::renameFile(const ActorId &actor, const std::string &fileHash,
+                               const std::string &newFileHash) {
+    const std::string actorId = actor.toStdString();
+    std::string pathDelim = Utils::platformDelimeter();
+    std::filesystem::path path = DFSB::fsActrRoot + pathDelim + actorId + pathDelim;
+    std::filesystem::rename(path / std::string(fileHash), path / std::string(newFileHash));
+    return std::filesystem::exists(path / std::string(newFileHash));
 }
 
 std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
