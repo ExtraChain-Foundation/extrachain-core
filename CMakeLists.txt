@@ -13,6 +13,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(EXTRACHAIN_PRECOMPILED_ENABLED ON)
 
 if (EXTRACHAIN_STATIC_BUILD)
     message("Build static ExtraChain")
@@ -27,6 +28,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     if (UNIX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     endif (UNIX)
+endif()
+
+find_program(SCCACHE_PATH sccache)
+if (SCCACHE_PATH AND NOT MSVC)
+    message(STATUS "Using sccache")
+    set(CMAKE_C_COMPILER_LAUNCHER sccache)
+    set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
+    set(EXTRACHAIN_PRECOMPILED_ENABLED OFF)
 endif()
 
 find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
@@ -151,7 +160,9 @@ string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
-target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
+if (EXTRACHAIN_PRECOMPILED_ENABLED)
+    target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
+endif()
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 # target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
