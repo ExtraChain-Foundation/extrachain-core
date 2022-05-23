@@ -45,13 +45,14 @@ public:
     // Internal use only
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
-    void removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
+    bool removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
     // visualMoveFile
 
     // External interfaces
     std::string addFile(const DFSP::AddFileMessage &msg, bool loadBytes);
     std::string getFileFromStorage(ActorId owner, std::string fileHash);
     bool removeFile(const DFSP::RemoveFileMessage &msg);
+    bool renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
