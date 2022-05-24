@@ -38,6 +38,7 @@ private:
     uint64_t write(std::filesystem::path filePath, uint64_t pos, std::string data);
     std::string extract(std::filesystem::path filePath, uint64_t pos, uint64_t size);
     uint64_t remove(std::filesystem::path filePath, uint64_t pos, uint64_t size);
+    bool checkRenameFile(const DFS::Packets::EditSegmentMessage &msg);
 };
 
 #endif // FRAGMENT_STORAGE_H

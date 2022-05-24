@@ -101,6 +101,7 @@ namespace Packets {
     struct EditSegmentMessage {
         std::string Actor;
         std::string FileHash;
+        std::string NewFileHash;
         std::string Data;
         uint64_t Offset;
         SegmentMessageType ActionType;

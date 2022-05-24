@@ -34,28 +34,34 @@ bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
 }
 
 bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
+    const auto fileHash = msg.NewFileHash.empty() ? msg.FileHash : msg.NewFileHash;
+
     switch (msg.ActionType) {
     case DFSP::SegmentMessageType::insert: {
+//        checkRenameFile(msg);
         return insertFragment(DFSP::SegmentMessage {
-            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
+            .Actor = msg.Actor, .FileHash = fileHash, .Data = msg.Data, .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::add: {
+//        checkRenameFile(msg);
         return insertFragment(DFSP::SegmentMessage {
-            .Actor = msg.Actor, .FileHash = msg.FileHash, .Data = msg.Data, .Offset = msg.Offset });
+            .Actor = msg.Actor, .FileHash = fileHash, .Data = msg.Data, .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::replace: {
+//        checkRenameFile(msg);
         std::filesystem::path filePath = DFS::Path::filePath(actor.toStdString(), fileHash);
         HistoricalChain historicalChain(storageFile.file(), filePath.string());
         historicalChain.apply(msg);
         return applyChanges(msg.Data, msg.Offset);
     }
     case DFSP::SegmentMessageType::remove: {
-        std::filesystem::path realFilePath = DFS_PATH::filePath(msg.Actor, msg.FileHash);
+//        checkRenameFile(msg);
+        std::filesystem::path realFilePath = DFS_PATH::filePath(msg.Actor, fileHash);
         boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
         auto fileSize = std::filesystem::file_size(realFilePath);
 
         return removeFragment(DFSP::DeleteSegmentMessage {
-            .Actor = msg.Actor, .FileHash = msg.FileHash, .Offset = msg.Offset, .Size = fileSize });
+            .Actor = msg.Actor, .FileHash = fileHash, .Offset = msg.Offset, .Size = fileSize });
     }
     }
     return false;
@@ -359,4 +365,15 @@ uint64_t FragmentStorage::remove(std::filesystem::path filePath, uint64_t pos, u
     std::filesystem::remove(tempFilePath);
 
     return true;
+}
+
+bool FragmentStorage::checkRenameFile(const DFS::Packets::EditSegmentMessage &msg) {
+    if (msg.NewFileHash.empty())
+        return false;
+
+    fileHash = msg.NewFileHash;
+    std::string pathDelim = Utils::platformDelimeter();
+    std::filesystem::path path = DFS_PATH::filePath(actor, msg.FileHash);
+    std::filesystem::rename(path / std::string(msg.FileHash), path / std::string(msg.NewFileHash));
+    return std::filesystem::exists(path / std::string(msg.NewFileHash));
 }

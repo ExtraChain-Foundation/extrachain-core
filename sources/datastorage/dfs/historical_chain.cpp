@@ -164,11 +164,6 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
     std::ifstream ifs(filePath.c_str(), std::ios::binary);
     char buf[DFSB::historicalChainSectionSize];
 
-    if (!ifs.read(buf, sizeof(buf)) || !ifs.gcount()) {
-        ifs.close();
-        return false;
-    }
-
     while (ifs.read(buf, sizeof(buf)) || ifs.gcount()) {
         std::string data(buf, ifs.gcount());
         apply(DFSP::EditSegmentMessage { .Actor = actor,
