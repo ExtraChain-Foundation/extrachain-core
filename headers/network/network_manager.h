@@ -27,7 +27,6 @@
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
 #include <algorithm>
-#include <iostream>
 #include <string>
 #include <string_view>
 
@@ -83,7 +82,7 @@ private:
     UPNPConnection *upnpNet;
     QMap<QByteArray, int> msgHashList = {};
 
-    ExtraChainNode *node;
+    ExtraChainNode &node;
     QNetworkAddressEntry *local = nullptr;
     QWebSocketServer *wsServer = nullptr;
     QList<SocketService *> m_connections;
@@ -95,7 +94,7 @@ private:
     std::map<std::string, MessageIdDataReceived> m_messages_received;
 
 public:
-    NetworkManager(ExtraChainNode *node);
+    explicit NetworkManager(ExtraChainNode &node);
     ~NetworkManager();
 
     // protected:
@@ -169,12 +168,12 @@ public:
             typeSend = Config::Net::TypeSend::Focused;
         }
 
-        if (node->accountController()->count() == 0) {
+        if (node.accountController()->count() == 0) {
+            // qFatal("Can't send");
             return "";
-            qFatal("Can't send");
         }
 
-        auto &mainActor = node->accountController()->mainActor();
+        auto &mainActor = node.accountController()->mainActor();
         MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
         auto serialized = message.serialize();
         auto sign = mainActor.key().sign(serialized);
@@ -191,9 +190,11 @@ public:
         if (Network::networkDebug) {
             msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object deserialized = oh.get();
-            std::cout << "[Network Message] Send: type " << int(message.message_type) << ", status "
-                      << int(message.status) << ", id " << message.message_id << ", type send "
-                      << int(typeSend) << ", body: " << deserialized << std::endl;
+            qDebug() << fmt::format(
+                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+                            message.message_type, message.status, message.message_id, typeSend,
+                            (std::stringstream() << deserialized).str())
+                            .c_str();
         }
 #endif
 

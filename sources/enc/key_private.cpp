@@ -19,6 +19,8 @@
 
 #include "enc/key_private.h"
 #include "enc/enc_tools.h"
+#include "utils/dfs_utils.h"
+#include "utils/exc_utils.h"
 
 #include <sodium.h>
 
@@ -66,7 +68,7 @@ void KeyPrivate::encryptFile(const std::filesystem::path &file,
     std::ofstream efile(resultFile.string(), std::ios::binary | std::ios::app);
     if (sfile && efile) {
         std::string buf;
-        while (sfile.readsome(buf.data(), DFS::Basic::encSectionSize)) {
+        while (sfile.readsome(buf.data(), DFSB::encSectionSize)) {
             std::string wstring = encryptSelf(buf);
             wstring = Tools::typeToStdStringBytes<int>(wstring.size()) + wstring;
             efile << wstring;
@@ -113,4 +115,17 @@ const std::string &KeyPrivate::publicKey() const {
 
 bool KeyPrivate::empty() const {
     return m_secretKey.empty() && m_publicKey.empty();
+}
+
+QDebug operator<<(QDebug debug, const KeyPrivate &key) {
+    QDebugStateSaver saver(debug);
+    debug << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str())
+          << ", public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
+    return debug;
+}
+
+std::ostream &operator<<(std::ostream &os, const KeyPrivate &key) {
+    os << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str()).toStdString()
+       << ", public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
+    return os;
 }

@@ -27,12 +27,11 @@
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
-DBConnector::DBConnector() {
-    db = nullptr;
-}
-
-DBConnector::DBConnector(const std::string &name) {
-    this->open(name);
+DBConnector::DBConnector(const std::string &filePath) {
+    if (filePath.empty()) {
+        qFatal("[DBConnector] Empty file name");
+    }
+    this->m_file = filePath;
 }
 
 DBConnector::DBConnector(DBConnector &&rhs) {
@@ -58,18 +57,22 @@ QString DBConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
-bool DBConnector::open(const std::string &name) {
-    int rc = sqlite3_open(name.c_str(), &db);
+bool DBConnector::open() {
+    if (isOpen()) {
+        qFatal("[DBConnector] Double open");
+        return false;
+    }
+    int rc = sqlite3_open(m_file.c_str(), &db);
     if (rc) {
         qDebug() << "[DBConnector]" << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
         qFatal("Can't open DB");
         return false;
     } else {
-        m_file = name;
+        // m_file = name;
         m_open = true;
 
-        if (!QFile::exists(name.c_str()))
-            qFatal("db open error: %s", name.c_str());
+        if (!QFile::exists(m_file.c_str()))
+            qFatal("db open error: %s", m_file.c_str());
 
         return true;
     }
@@ -91,6 +94,10 @@ bool DBConnector::close() {
 
 std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
                                        DBRow binds) { // std::pair with status?
+    if (!isOpen()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
     dbmutex.lock();
     sqlite3_stmt *stmt;
     std::vector<DBRow> res;
@@ -186,6 +193,10 @@ bool DBConnector::createTable(const std::string &query) {
 }
 
 bool DBConnector::deleteRow(const std::string &tableName, const DBRow &data) {
+    if (!isOpen()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
     if (data.size() == 0) {
         qDebug() << "[DBConnector]" << file().c_str() << "(false): [ImplementationInsert] DBRow is empty";
         return false;
@@ -298,6 +309,10 @@ std::vector<DBColumn> DBConnector::tableColumns(const std::string &table) {
 }
 
 bool DBConnector::query(std::string query) {
+    if (!isOpen()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
     dbmutex.lock();
     sqlite3_stmt *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -317,6 +332,10 @@ bool DBConnector::query(std::string query) {
 }
 
 QJsonObject DBConnector::toJsonObject() {
+    if (!isOpen()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
     QJsonObject json;
 
     const auto tables = tableNames();
@@ -394,6 +413,10 @@ bool DBConnector::implementationPrepare(const std::string &tableName, const DBRo
 }
 
 bool DBConnector::implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace) {
+    if (!isOpen()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
     if (data.size() == 0) {
         qDebug() << "[DBConnector]" << file().c_str() << "(false): [ImplementationInsert] DBRow is empty";
         return false;

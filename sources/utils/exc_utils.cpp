@@ -21,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
@@ -28,6 +29,7 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTcpSocket>
+
 #include <string>
 #include <string_view>
 
@@ -37,21 +39,20 @@
 #include "boost/version.hpp"
 
 #include "enc/enc_tools.h"
+#include "utils/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
 #endif
 
-std::string Utils::calcKeccak(const std::string &data) {
-    QByteArray hash =
-        QCryptographicHash::hash(QByteArray::fromStdString(data), QCryptographicHash::Algorithm::Keccak_256)
-            .toHex();
+std::string Utils::calcHash(const std::string &data, HashEncode encode) {
+    QByteArray hash = calcHash(QByteArray::fromStdString(data), encode);
     return hash.toStdString();
 }
 
-QByteArray Utils::calcKeccak(const QByteArray &data) {
-    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Keccak_256).toHex();
-    return hash;
+QByteArray Utils::calcHash(const QByteArray &data, HashEncode encode) {
+    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Sha3_256);
+    return bytesEncode(hash, encode);
 }
 
 // SERIALIZATION //
@@ -122,16 +123,18 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-std::string Utils::calcKeccakForFile(const std::filesystem::path &fileName) {
+std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_256);
-        if (hash.addData(&file))
-            return hash.result().toHex().toStdString();
+        QCryptographicHash cryptographicHash(QCryptographicHash::Algorithm::Sha3_256);
+        if (cryptographicHash.addData(&file)) {
+            auto hash = cryptographicHash.result();
+            return bytesEncode(hash, encode).toStdString();
+        }
     }
 
-    qFatal("Utils::calcKeccakForFile");
-    qDebug() << "[KeccakForFile] Can't open file" << fileName.c_str();
+    qFatal("Utils::calcHashForFile");
+    qDebug() << "[Utils] Calc hash for file: can't open file" << fileName.c_str();
     return "";
 }
 
@@ -270,7 +273,7 @@ void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
-    QDir(QString::fromStdString(DFS::Basic::fsActrRoot)).removeRecursively();
+    QDir(QString::fromStdString(DFSB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile(".settings").remove();
@@ -291,15 +294,13 @@ void Utils::wipeDataFiles() {
     QDir::setCurrent(current);
 }
 
-qint64 Utils::checkMemoryFree() {
+qint64 Utils::diskFreeMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
     return x.bytesFree();
 }
 
-qint64 Utils::checkMemoryTotal() {
+qint64 Utils::diskTotalMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
     return x.bytesTotal();
 }
 
@@ -358,6 +359,26 @@ std::string Utils::hexStringToByte(const std::string &data) {
     return res;
 }
 
+QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
+    switch (encode) {
+    case HashEncode::Base64:
+        return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    case HashEncode::Hex:
+        return data.toHex();
+    }
+    return data;
+}
+
+QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
+    switch (encode) {
+    case HashEncode::Base64:
+        return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    case HashEncode::Hex:
+        return QByteArray::fromHex(data);
+    }
+    return data;
+}
+
 QString Utils::detectCompiler() {
 #ifdef __clang__
     #if __clang_major__ < 11
@@ -374,6 +395,9 @@ QString Utils::detectCompiler() {
 
 #if __GNUC__ > 4
     QString gcc = "GCC";
+    #ifdef __MINGW32__
+    gcc = "MinGW";
+    #endif
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
 #endif
 

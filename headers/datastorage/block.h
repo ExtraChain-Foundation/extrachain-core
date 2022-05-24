@@ -92,7 +92,7 @@ public:
 private:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses keccak.
+     * Uses sha3.
      */
     void calcHash();
 
@@ -169,7 +169,7 @@ public:
         std::string index_str;
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
             .msgpack_unpack(msgpack_o);
-        index = QByteArray::fromStdString(index_str);
+        index = index_str;
     }
 };
 

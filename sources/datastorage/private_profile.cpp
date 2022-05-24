@@ -19,10 +19,12 @@
 
 #include "datastorage/private_profile.h"
 
+#include <QJsonObject>
+
 #include "enc/enc_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string hash) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
     PrivateProfile user;
     user.m_actors.push_back(actor);
     user.m_main = actor.id();
@@ -31,7 +33,7 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std:
     return user;
 }
 
-PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string hash) {
+PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string &hash) {
     PrivateProfile user;
     user.m_main = actorId;
     user.m_hash = hash;
@@ -42,13 +44,13 @@ PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string ha
 const Actor<KeyPrivate> &PrivateProfile::main() const {
     if (m_main.isEmpty())
         qFatal("ExtraUser main error");
-    return getActorConst(m_main);
+    return getActor(m_main);
 }
 
 const Actor<KeyPrivate> &PrivateProfile::current() const {
     if (m_current.isEmpty())
         return main();
-    return getActorConst(m_current);
+    return getActor(m_current);
 }
 
 const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
@@ -69,20 +71,8 @@ void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
     save();
 }
 
-const Actor<KeyPrivate> &PrivateProfile::getActorConst(const ActorId &actorId) const {
+const Actor<KeyPrivate> &PrivateProfile::getActor(const ActorId &actorId) const {
     for (const auto &actor : qAsConst(m_actors)) {
-        if (actorId == actor.id()) {
-            return actor;
-        }
-    }
-
-    qFatal("Can't find actor");
-    std::exit(-123);
-    return m_actors.front();
-}
-
-Actor<KeyPrivate> &PrivateProfile::getActor(const ActorId &actorId) {
-    for (auto &actor : m_actors) {
         if (actorId == actor.id()) {
             return actor;
         }

@@ -19,6 +19,9 @@
 
 #include "managers/extrachain_node.h"
 
+#include <QJsonObject>
+#include <sodium/core.h>
+
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -31,8 +34,6 @@
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
-
-#include <sodium/core.h>
 
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
@@ -47,14 +48,14 @@ ExtraChainNode::ExtraChainNode() {
     }
 
     prepareFolders();
-    m_actorIndex = new ActorIndex(this);
+    m_actorIndex = new ActorIndex(*this);
     m_accountController = new AccountController(*this);
-    m_networkManager = new NetworkManager(this);
 
+    m_networkManager = new NetworkManager(*this);
     ThreadPool::addThread(m_networkManager);
+
     m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
-
     m_dfs = new DfsController(*this);
 
     m_blockchain->setTxManager(m_txManager);
@@ -68,13 +69,22 @@ ExtraChainNode::ExtraChainNode() {
     // ThreadPool::addThread(m_txManager);
 }
 
+ExtraChainNode::~ExtraChainNode() {
+    emit m_networkManager->finished();
+    delete m_dfs;
+    delete m_actorIndex;
+    delete m_txManager;
+    delete m_blockchain;
+    delete m_accountController;
+}
+
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
                                       const QString &tokenCount, const QString &tokenColor) {
     // TODO: check correct color in tokenColor
 
     if (QDir("keystore/profile").isEmpty()) {
-        qDebug() << "[Node] Create network with e-mail" << email << "and password" << password;
-        auto consoleHash = Utils::calcKeccak(email.toStdString() + password.toStdString());
+        qDebug() << "[Node] Create network with e-mail" << email;
+        auto consoleHash = Utils::calcHash(email.toStdString() + password.toStdString());
         auto first = m_accountController->createProfile(consoleHash, ActorType::ServiceProvider);
         m_actorIndex->setFirstId(first.id());
     } else {
@@ -84,7 +94,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
     if (m_blockchain->getRecords() <= 0) {
         auto &first = m_accountController->mainActor();
-        QString firstId = first.id().toString();
+        // QString firstId = first.id().toString();
 
         QMap<ActorId, BigNumber> tm;
         tm.insert(ActorId(), 0);
@@ -98,6 +108,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         //        DBConnector dbc(
         //            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" +
         //            DfsStruct::ACTOR_CARD_FILE).toStdString());
+        //        dbc.open();
         //        dbc.createTable(Config::DataStorage::cardTableCreation);
         //        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
         //        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME +
@@ -140,13 +151,6 @@ void ExtraChainNode::showMessage(QString from, QString message) {
 void ExtraChainNode::connectTxManager() {
     // TODOD delete later (s)
     connect(this, &ExtraChainNode::NewTx, m_txManager, &TransactionManager::addTransaction);
-}
-
-ExtraChainNode::~ExtraChainNode() {
-    emit m_networkManager->finished();
-    emit m_txManager->finished();
-    emit m_txManager->finished();
-    emit m_blockchain->finished();
 }
 
 // DFSIndex *ExtraChainNode::getDFSIndex(){
@@ -294,7 +298,7 @@ std::string ExtraChainNode::exportUser() {
 
 bool ExtraChainNode::importUser(const std::string &data, const std::string &login,
                                 const std::string &password) {
-    auto hash = Utils::calcKeccak(login + password);
+    auto hash = Utils::calcHash(login + password);
 
     auto json = SecretKey::decryptWithPassword(data, hash);
     if (hash.empty() || json.empty()) {
@@ -306,14 +310,14 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
         return false;
     }
 
-    auto extrachain = array[0].toString();
+    auto extrachainVersion = array[0].toString();
     auto date = array[1].toInteger();
     auto profile = array[2].toObject();
     auto profileBytes = QJsonDocument(profile).toJson(QJsonDocument::Compact);
     auto profileBytesEncrypted =
         QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
 
-    Q_UNUSED(extrachain)
+    Q_UNUSED(extrachainVersion)
     Q_UNUSED(date)
 
     QString privateProfile = "keystore/" + profile["main"].toString() + ".profile";
@@ -335,7 +339,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActorConst(sender);
+    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
@@ -366,7 +370,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(BigNumber::random(64).toByteArray());
+    file.write(Utils::calcHash(BigNumber::random(64).toByteArray()));
     file.flush();
     file.close();
 }
@@ -383,9 +387,9 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto &mainKey = m_accountController->mainActor().key();
     auto &publicKey = first.key().publicKey();
 
-    std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
-                                               { "token", mainKey.encrypt(token.toStdString(), publicKey) },
-                                               { "os", mainKey.encrypt(os.toStdString(), publicKey) } };
+    // std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
+    //                                            { "token", mainKey.encrypt(token.toStdString(), publicKey)
+    //                                            }, { "os", mainKey.encrypt(os.toStdString(), publicKey) } };
 
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
@@ -450,35 +454,8 @@ DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
-void ExtraChainNode::testSerializer() const {
-    /*
-   // Mock actor create
-    const std::string userEmail = "test@test.com";
-    const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-   Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
-   m_accountController->createActor(ActorType::Account, userHash);
-
-    auto actor2 = m_accountController->createActor(ActorType::Account, "random");
-    auto actor3 = m_accountController->createActor(ActorType::Account, "random");
-
-    assert(actor1.idStd() != actor2.idStd());
-    assert(actor1.idStd() != actor3.idStd());
-
-    auto msg = actor1.serialize();
-    if(actor2.deserialize(msg))
-        assert(actor1.idStd() == actor2.idStd());
-    else
-        qDebug() << "TEST message serializer: can't deserialize Actor instance";
-
-    auto msgQt = actor1.serializeQt();
-    actor3.deserializeQt(msgQt);
-    assert(actor1.idStd() == actor3.idStd());
-    */
-}
-
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {
-    return m_accountController->load(Utils::calcKeccak(login + password));
+    return m_accountController->load(Utils::calcHash(login + password));
 }
 
 bool ExtraChainNode::login(const std::string &hash) {
@@ -497,14 +474,14 @@ void ExtraChainNode::testPermissions() const {
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
     const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
     m_accountController->createActor(ActorType::Account, userHash);
 
     // Mock actor create
     const std::string userEmail1 = "test@test.com";
     const std::string userPass1 = "12345678";
     const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
+    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
     m_accountController->createActor(ActorType::Account, userHash1);
 
     DFSController dfsController;
@@ -604,7 +581,7 @@ void ExtraChainNode::test() const {
     const std::string userEmail = "test@test.com";
     const std::string userPass = "12345678";
     const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcKeccak(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
+    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
     m_accountController->createActor(ActorType::ServiceProvider, userHash);
 
     DFSController dfsController;

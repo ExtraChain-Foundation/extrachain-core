@@ -34,18 +34,17 @@ public:
     DataStorage::typeDataRow type;
 
 public:
-    GenesisDataRow() {
-    }
+    GenesisDataRow() = default;
 
-    GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
-                   const DataStorage::typeDataRow &type)
+    explicit GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
+                            const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)
         , token(token)
         , type(type) {
     }
 
-    GenesisDataRow(const QByteArray &serialized) {
+    explicit GenesisDataRow(const QByteArray &serialized) {
         deserialize(serialized);
     }
 
@@ -59,7 +58,7 @@ public:
         QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4) {
             actorId = l.at(0).toStdString();
-            state = BigNumber(l.at(1));
+            state = BigNumber(l.at(1).toStdString());
             token = l.at(2).toStdString();
             type = DataStorage::typeDataRow(l.at(3).toInt());
         }
@@ -89,10 +88,10 @@ public:
     GenesisBlock(const GenesisBlock &block);
 
     // Deserialize already constructed block
-    GenesisBlock(const QByteArray &serialized);
+    explicit GenesisBlock(const QByteArray &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
+    explicit GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
 
     // Block interface
 public:
@@ -126,7 +125,7 @@ public:
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
                                          prevGenHash)
             .msgpack_unpack(msgpack_o);
-        index = QByteArray::fromStdString(index_str);
+        index = index_str;
     }
 };
 

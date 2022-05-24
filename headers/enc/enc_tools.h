@@ -22,11 +22,6 @@ EXTRACHAIN_EXPORT std::string encryptAsymmetric(const std::string &data, const s
                                                 const std::string &public_key, const std::string &nonce = "");
 EXTRACHAIN_EXPORT std::string decryptAsymmetric(const std::string &data, const std::string &secret_key,
                                                 const std::string &public_key, const std::string &nonce = "");
-
-EXTRACHAIN_EXPORT QByteArray encryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
-                                               const QByteArray &public_key, const QByteArray &nonce = "");
-EXTRACHAIN_EXPORT QByteArray decryptAsymmetric(const QByteArray &data, const QByteArray &secret_key,
-                                               const QByteArray &public_key, const QByteArray &nonce = "");
 }
 
 #endif // ENC_TOOLS_H

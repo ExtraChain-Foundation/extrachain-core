@@ -45,6 +45,7 @@ enum class ActorType {
     Service = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
+FORMAT_ENUM(ActorType)
 
 class EXTRACHAIN_EXPORT ActorId {
 public:
@@ -53,11 +54,6 @@ public:
     };
 
     ActorId(const std::string &actorId) {
-#ifdef QT_DEBUG
-        if (!actorId.empty() && !BigNumber::isValid(QByteArray::fromStdString(actorId)))
-            qFatal("ActorId not valid");
-#endif
-
         m_id = !actorId.empty() ? actorId : "00000000000000000000";
         normalize();
     }
@@ -103,6 +99,11 @@ public:
         return d;
     }
 
+    friend std::ostream &operator<<(std::ostream &os, const ActorId &actorId) {
+        os << actorId.toStdString();
+        return os;
+    }
+
     static bool empty(const std::string &actorId) {
         ActorId actor(actorId);
         return actor.isEmpty();
@@ -129,7 +130,7 @@ private:
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
-                  "Your type is not supported. Only Keys are supported");
+                  "Type is not supported. Only Keys are supported");
 
 private:
     ActorId m_id;
@@ -165,7 +166,7 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto publicKey = this->m_key.publicKey();
-        auto hash = Utils::calcKeccak(QByteArray::fromStdString(publicKey));
+        auto hash = Utils::calcHash(QByteArray::fromStdString(publicKey), Utils::HashEncode::Hex);
 
         if (hash.size() >= 20)
             m_id = hash.left(20).toStdString();
@@ -243,13 +244,11 @@ public:
         }
 
         QJsonArray array;
-        auto pub =
-            QString(QByteArray::fromStdString(m_key.publicKey()).toBase64(QByteArray::Base64UrlEncoding));
+        auto pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
         array << m_id.toString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto secret =
-                QString(QByteArray::fromStdString(m_key.secretKey()).toBase64(QByteArray::Base64UrlEncoding));
+            auto secret = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.secretKey())));
             array << secret;
         }
 
@@ -265,13 +264,13 @@ public:
         auto array = QJsonDocument::fromJson(serialized).array();
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
-        auto pub = QByteArray::fromBase64(array[2].toString().toLatin1(), QByteArray::Base64UrlEncoding);
+        auto pub = Utils::bytesDecode(array[2].toString().toLatin1());
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
             actor.setPublicKey(pub.toStdString());
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto sec = QByteArray::fromBase64(array[3].toString().toLatin1(), QByteArray::Base64UrlEncoding);
+            auto sec = Utils::bytesDecode(array[3].toString().toLatin1());
             actor.setSecretKey(sec.toStdString(), pub.toStdString());
         }
 
@@ -280,10 +279,14 @@ public:
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
-        d << "Actor( id:" << actor.id() << ", type: " << int(actor.type()) << ", key: ";
-        d << actor.key();
-        d << ")";
+        d << "Actor { id:" << actor.id() << ", type: " << magic_enum::enum_name(actor.type()).data()
+          << ", key: " << actor.key() << "}";
         return d;
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
+        os << "Actor { id: " << actor.id() << ", type: " << actor.type() << ", key: " << actor.key() << " }";
+        return os;
     }
 
     MSGPACK_DEFINE(m_id, m_type, m_key)

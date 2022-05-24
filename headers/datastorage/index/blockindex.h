@@ -27,11 +27,11 @@
 class EXTRACHAIN_EXPORT BlockIndex {
 public:
     BlockIndex();
-    BlockIndex(const BigNumber &recordsLimit);
+    explicit BlockIndex(const BigNumber &recordsLimit);
 
     /// custom folder name
-    BlockIndex(const QString &folderName);
-    BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
+    explicit BlockIndex(const QString &folderName);
+    explicit BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
 
     QString folderName;          // set in subclasses
     int sectionSize;             // todo: 0 = use only one folder
