@@ -373,7 +373,7 @@ bool FragmentStorage::checkRenameFile(const DFS::Packets::EditSegmentMessage &ms
 
     fileHash = msg.NewFileHash;
     std::string pathDelim = Utils::platformDelimeter();
-    std::filesystem::path path = DFS_PATH::filePath(actor, msg.FileHash);
+    std::filesystem::path path = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
     std::filesystem::rename(path / std::string(msg.FileHash), path / std::string(msg.NewFileHash));
     return std::filesystem::exists(path / std::string(msg.NewFileHash));
 }
