@@ -28,7 +28,7 @@ bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
         num = prevNum + 1;
     }
     if (STDFS::is_directory(objectPath) && msg.Offset == 0) {
-        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data))) {
+        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data, msg.FileName))) {
             chainFile.close();
             return true;
         } else {
@@ -39,7 +39,7 @@ bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
         DFSHC::FileChange fc;
         fc.pos = msg.Offset;
         fc.data = msg.Data;
-        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toStdString()))) {
+        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toStdString(), msg.FileName))) {
             chainFile.close();
             return true;
         } else {
@@ -61,7 +61,7 @@ bool HistoricalChain::remove(DFSP::EditSegmentMessage msg) {
         DBRow lastRow = getLastRow();
         uint64_t prevNum = std::stoull(lastRow.at("prevNum"));
         uint64_t num = std::stoull(lastRow.at("num"));
-        removed = chainFile.deleteRow(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));
+        removed = chainFile.deleteRow(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data, msg.FileName));
     } else {
         DBRow dbRow = getRow(msg.Data);
         DBRow nextRow = getNextRow(std::stoi(dbRow.at("num")));
@@ -134,19 +134,19 @@ DFSP::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
 
 DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::SegmentMessage &msg,
                                                                  const DFSP::SegmentMessageType &smType) {
-    return DFSP::EditSegmentMessage {
-        .Actor = msg.Actor,
-        .FileHash = msg.FileHash,
-        .Data = msg.Data,
-        .Offset = msg.Offset,
-        .ActionType = smType,
-    };
+    return DFSP::EditSegmentMessage { .Actor = msg.Actor,
+                                      .FileName = msg.FileName,
+                                      .FileHash = msg.FileHash,
+                                      .Data = msg.Data,
+                                      .Offset = msg.Offset,
+                                      .ActionType = smType };
 }
 
 DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::DeleteSegmentMessage &msg,
                                                                  const DFSP::SegmentMessageType &smType) {
     return DFSP::EditSegmentMessage {
         .Actor = msg.Actor,
+        .FileName = msg.FileName,
         .FileHash = msg.FileHash,
         .Data = "",
         .Offset = msg.Offset,
@@ -154,8 +154,9 @@ DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::Del
     };
 }
 
-bool HistoricalChain::initLocal(const std::string &actor, const std::string &fileHash) {
-    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
+bool HistoricalChain::initLocal(const std::string &actor, const std::string &fileName,
+                                const std::string &fileHash) {
+    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
     if (!std::filesystem::exists(filePath)) {
         return false;
         qFatal("[Dfs] No file");

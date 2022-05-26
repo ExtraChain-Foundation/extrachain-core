@@ -12,10 +12,11 @@ class EXTRACHAIN_EXPORT FragmentStorage {
 private:
     DBConnector storageFile;
     ActorId actor;
+    std::string fileName;
     std::string fileHash;
 
 public:
-    FragmentStorage(ActorId Actor, std::string FileHash);
+    FragmentStorage(ActorId Actor, std::string FileName, std::string FileHash);
     ~FragmentStorage() = default;
 
     bool initLocalFile(uint64_t filesize);

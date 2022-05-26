@@ -104,7 +104,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 #endif
     } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
 
-    FragmentStorage fs(actor.id(), fileName);
+    FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
     DFSP::AddFileMessage msg = { .Actor = actor.id().toStdString(),
                                  .FileName = fileName,
@@ -137,7 +137,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     HistoricalChain hc((DFS_PATH::filePath(actor.id().toStdString(), fileName).string() + DFSF::Extension),
                        fpath.string());
-    hc.initLocal(actor.id().toStdString(), fileName);
+    hc.initLocal(actor.id().toStdString(), fileName, fileHash);
 
     return addFile(msg, false);
 }
@@ -333,7 +333,7 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 
     actrDirFile.close();
 
-    FragmentStorage fragmentStorage(msg.Actor, msg.FileHash);
+    FragmentStorage fragmentStorage(msg.Actor, msg.FileName, msg.FileHash);
     fragmentStorage.insertFragment(msg);
 
     return newFileHash;
@@ -671,7 +671,7 @@ std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg)
         }
     }
 
-    FragmentStorage fragmentStorage(msg.Actor, msg.FileHash);
+    FragmentStorage fragmentStorage(msg.Actor, msg.FileName, msg.FileHash);
     fragmentStorage.removeFragment(msg);
 
     return newFileHash;
