@@ -21,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
@@ -28,7 +29,6 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTcpSocket>
-#include <QElapsedTimer>
 
 #include <string>
 #include <string_view>
@@ -395,6 +395,9 @@ QString Utils::detectCompiler() {
 
 #if __GNUC__ > 4
     QString gcc = "GCC";
+    #ifdef __MINGW32__
+    gcc = "MinGW";
+    #endif
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
 #endif
 

@@ -28,7 +28,7 @@ public:
     DFSP::EditSegmentMessage makeEditSegmentMessage(const DFSP::DeleteSegmentMessage& msg,
                                                     const DFSP::SegmentMessageType& smType);
 
-    bool initLocal(const std::string& actor, const std::string& fileHash);
+    bool initLocal(const std::string& actor, const std::string& fileName, const std::string& fileHash);
     bool remove(const std::string& actor, const std::string& fileHash);
     bool rename(const std::string& fileHash, const std::string& newFileHash);
 

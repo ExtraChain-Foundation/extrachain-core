@@ -134,19 +134,19 @@ DFSP::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
 
 DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::SegmentMessage &msg,
                                                                  const DFSP::SegmentMessageType &smType) {
-    return DFSP::EditSegmentMessage {
-        .Actor = msg.Actor,
-        .FileHash = msg.FileHash,
-        .Data = msg.Data,
-        .Offset = msg.Offset,
-        .ActionType = smType,
-    };
+    return DFSP::EditSegmentMessage { .Actor = msg.Actor,
+                                      .FileName = msg.FileName,
+                                      .FileHash = msg.FileHash,
+                                      .Data = msg.Data,
+                                      .Offset = msg.Offset,
+                                      .ActionType = smType };
 }
 
 DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::DeleteSegmentMessage &msg,
                                                                  const DFSP::SegmentMessageType &smType) {
     return DFSP::EditSegmentMessage {
         .Actor = msg.Actor,
+        .FileName = msg.FileName,
         .FileHash = msg.FileHash,
         .Data = "",
         .Offset = msg.Offset,
@@ -154,8 +154,9 @@ DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DFSP::Del
     };
 }
 
-bool HistoricalChain::initLocal(const std::string &actor, const std::string &fileHash) {
-    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
+bool HistoricalChain::initLocal(const std::string &actor, const std::string &fileName,
+                                const std::string &fileHash) {
+    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
     if (!std::filesystem::exists(filePath)) {
         return false;
         qFatal("[Dfs] No file");

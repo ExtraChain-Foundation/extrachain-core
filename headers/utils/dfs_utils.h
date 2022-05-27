@@ -64,34 +64,38 @@ namespace Basic {
 namespace Packets {
     struct AddFileMessage {
         std::string Actor;
+        std::string FileName;
         std::string FileHash;
         std::string Path;
         uint64_t Size;
-        MSGPACK_DEFINE(Actor, FileHash, Path, Size)
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Path, Size)
     };
 
     struct RequestFileSegmentMessage {
         std::string Actor;
+        std::string FileName;
         std::string FileHash;
         std::string Path;
         uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileHash, Path, Offset)
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Path, Offset)
     };
 
     struct RemoveFileMessage {
         std::string Actor;
-        std::string FileHash;
-        MSGPACK_DEFINE(Actor, FileHash)
+        std::string FileName;
+        MSGPACK_DEFINE(Actor, FileName)
     };
 
     struct SegmentMessage {
         std::string Actor;
+        std::string FileName;
         std::string FileHash;
         std::string Data;
         uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileHash, Data, Offset)
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset)
     };
-    enum SegmentMessageType {
+    enum SegmentMessageType
+    {
         add = 0,
         insert = 1,
         replace = 2,
@@ -100,20 +104,22 @@ namespace Packets {
 
     struct EditSegmentMessage {
         std::string Actor;
+        std::string FileName;
         std::string FileHash;
         std::string NewFileHash;
         std::string Data;
         uint64_t Offset;
         SegmentMessageType ActionType;
-        MSGPACK_DEFINE(Actor, FileHash, Data, Offset, ActionType)
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset, ActionType)
     };
 
     struct DeleteSegmentMessage {
         std::string Actor;
+        std::string FileName;
         std::string FileHash;
         uint64_t Offset;
         uint64_t Size;
-        MSGPACK_DEFINE(Actor, FileHash, Offset, Size)
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Offset, Size)
     };
 
     struct DirRow {
@@ -164,14 +170,16 @@ namespace Tables {
         static const std::string TableName = "FilesTable";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
             + "("
-              "fileHash     TEXT PRIMARY KEY NOT NULL,"
-              "fileHashPrev TEXT             NOT NULL,"
+              "fileName     TEXT PRIMARY KEY NOT NULL,"
+              "fileNamePrev TEXT PRIMARY KEY NOT NULL,"
+              "fileHash     TEXT             NOT NULL,"
               "filePath     TEXT             NOT NULL,"
               "fileSize     INTEGER          NOT NULL,"
               "lastModified INTEGER          NOT NULL "
               ");";
         std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
-        std::string getLastHash(DBConnector &db);
+        std::vector<DBRow> getFileDataByName(DBConnector *db, std::string name);
+        std::string getLastName(DBConnector &db);
 
         // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);
@@ -200,16 +208,17 @@ namespace Tables {
           ");";
 
     static const std::string filesTableLast =
-        "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileHash DESC LIMIT 1";
+        "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileName DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
 }
 
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
-    std::filesystem::path filePath(const ActorId &actorId, const std::string &fileHash);
+    std::filesystem::path filePath(const ActorId &actorId, const std::string &fileName);
 }
 
-enum class Encryption {
+enum class Encryption
+{
     Public = 0,
     Encrypted = 1
 };
@@ -221,7 +230,6 @@ namespace STDFS = std::filesystem;
 namespace DFSHC = DFS::Historical;
 namespace DFSB = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
-
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 #endif // DFS_UTILS_H

@@ -12,8 +12,10 @@
 #include <QFileInfo>
 #include <QObject>
 
+#include <boost/generator_iterator.hpp>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <boost/random.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -50,15 +52,18 @@ public:
 
     // External interfaces
     std::string addFile(const DFSP::AddFileMessage &msg, bool loadBytes);
-    std::string getFileFromStorage(ActorId owner, std::string fileHash);
+    std::string getFileFromStorage(ActorId owner, std::string fileName);
     bool removeFile(const DFSP::RemoveFileMessage &msg);
     bool renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
 private:
+    // Unique file ID: hash+msec+salt
+    std::string createFileName(std::filesystem::path file);
+
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
     bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
-    DBRow makeActrDirDBRow(std::string fileHash, std::string fileHashPrev, std::string filePath,
-                           uint64_t fileSize);
+    DBRow makeActrDirDBRow(std::string fileName, std::string fileNamePrev, std::string fileHash,
+                           std::string filePath, uint64_t fileSize);
     uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot);
     std::string extractNextFragment();
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
@@ -81,7 +86,7 @@ public:
     void setBytesLimit(uint64_t bytesLimit);
 
 public:
-    DFSP::AddFileMessage getFileHeader(const ActorId actor, const std::string fileHash);
+    DFSP::AddFileMessage getFileHeader(const ActorId actor, const std::string fileName);
     uint64_t bytesAvailable();
     bool writeAvailable(uint64_t size = 10000);
 
