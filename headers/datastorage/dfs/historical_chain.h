@@ -31,7 +31,7 @@ public:
     bool initLocal(const std::string& actor, const std::string& fileName, const std::string& fileHash);
 
 private:
-    DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data, std::string path);
+    DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
     DBRow getLastRow();
     DBRow getNextRow(const int& currentNum);
     DBRow getRow(const int& num);
