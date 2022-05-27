@@ -106,7 +106,9 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
-    DFSP::AddFileMessage msg = { .Actor = actor.id().toStdString(),
+
+    const auto actorId = actor.id().toStdString();
+    DFSP::AddFileMessage msg = { .Actor = actorId,
                                  .FileName = fileName,
                                  .FileHash = fileHash,
                                  .Path = newTargetVirtualFilePath,
@@ -114,7 +116,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     qDebug() << "AddFileMessage" << actor.id().toString() << fileName.c_str()
              << newTargetVirtualFilePath.c_str() << fileSize;
 
-    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actor.id().toStdString());
+    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
     auto lastFileName = DFST::ActorDirFile::getLastName(actrDirFile);
     const DBRow rowData = makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
 
@@ -134,19 +136,20 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     sendFile(actor.id(), fileHash, "");
 
-    HistoricalChain hc((DFS_PATH::filePath(actor.id().toStdString(), fileName).string() + DFSF::Extension),
+    HistoricalChain hc((DFS_PATH::filePath(actorId, fileName).string() + DFSF::Extension),
                        fpath.string());
-    hc.initLocal(actor.id().toStdString(), fileName, fileHash);
+    hc.initLocal(actorId, fileName, fileHash);
 
     qDebug() << "fpath: " << QString::fromStdString(fpath.string());
-    hc.initLocal(actorId, fileHash);
+    hc.initLocal(actorId, fileName, fileHash);
 
     return addFile(msg, false);
 }
 
 bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
     std::string fileHash = Utils::calcHashForFile(filePath); // TODO: get hash
-    DFSP::RemoveFileMessage msg = { .Actor = actor.id().toStdString(),
+    const auto actorId = actor.id().toStdString();
+    DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = std::filesystem::path(filePath).filename().string() };
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
 
@@ -287,7 +290,7 @@ std::string DfsController::createFileName(std::filesystem::path file) {
     int64_t time = std::chrono::system_clock::now().time_since_epoch().count();
     std::string filename = file.filename().string();
     boost::mt11213b rng(time);
-    boost::random::uniform_int_distribution<> dist(0, MAXINT);
+    boost::random::uniform_int_distribution<> dist(0, INT_MAX);
     std::string salt = Tools::typeToStdStringBytes<int>(dist(rng));
     std::string ret = Utils::calcHash(filename + std::to_string(time) + salt);
     return ret;
