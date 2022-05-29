@@ -171,7 +171,7 @@ namespace Tables {
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
             + "("
               "fileName     TEXT PRIMARY KEY NOT NULL,"
-              "fileNamePrev TEXT PRIMARY KEY NOT NULL,"
+              "fileNamePrev TEXT             NOT NULL,"
               "fileHash     TEXT             NOT NULL,"
               "filePath     TEXT             NOT NULL,"
               "fileSize     INTEGER          NOT NULL,"

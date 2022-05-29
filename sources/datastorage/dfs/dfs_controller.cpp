@@ -140,9 +140,6 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
                        fpath.string());
     hc.initLocal(actorId, fileName, fileHash);
 
-    qDebug() << "fpath: " << QString::fromStdString(fpath.string());
-    hc.initLocal(actorId, fileName, fileHash);
-
     return addFile(msg, false);
 }
 
