@@ -125,9 +125,10 @@ namespace Packets {
         std::string fileHash;
         std::string fileHashPrev;
         std::string filePath;
+        std::string fileName;
         uint64_t fileSize;
         uint64_t lastModified;
-        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileSize, lastModified)
+        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, fileSize, lastModified)
     };
 }
 namespace Fragments {
@@ -170,7 +171,7 @@ namespace Tables {
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
             + "("
               "fileName     TEXT PRIMARY KEY NOT NULL,"
-              "fileNamePrev TEXT PRIMARY KEY NOT NULL,"
+              "fileNamePrev TEXT             NOT NULL,"
               "fileHash     TEXT             NOT NULL,"
               "filePath     TEXT             NOT NULL,"
               "fileSize     INTEGER          NOT NULL,"

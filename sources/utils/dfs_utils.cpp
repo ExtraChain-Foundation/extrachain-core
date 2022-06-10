@@ -47,6 +47,7 @@ std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::strin
         DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
                                 .fileHashPrev = row["fileHashPrev"],
                                 .filePath = row["filePath"],
+                                .fileName = row["fileName"],
                                 .fileSize = std::stoull(row["fileSize"]),
                                 .lastModified = std::stoull(row["lastModified"]) };
         dirRows.push_back(dirRow);
@@ -71,6 +72,7 @@ DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId, co
     DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
                             .fileHashPrev = row["fileHashPrev"],
                             .filePath = row["filePath"],
+                            .fileName = row["fileName"],
                             .fileSize = std::stoull(row["fileSize"]),
                             .lastModified = std::stoull(row["lastModified"]) };
 

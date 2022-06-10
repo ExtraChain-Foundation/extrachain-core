@@ -102,7 +102,9 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 #else
         std::filesystem::copy(newFilePath, dfsPath);
 #endif
-    } catch (std::filesystem::filesystem_error const &err) { qDebug() << "[Dfs] Copy error:" << err.what(); }
+    } catch (std::filesystem::filesystem_error const &err) {
+        qDebug() << "[Dfs] Copy error:" << err.what();
+    }
 
     FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
@@ -201,15 +203,17 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
         if (msg.Size >= m_bytesLimit - m_sizeTaken) {
             return msg.FileHash;
         } else {
-            DFSP::RequestFileSegmentMessage reqMessage = {
-                .Actor = msg.Actor, .FileHash = msg.FileHash, .Path = msg.Path, .Offset = 0
-            };
+            DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
+                                                           .FileName = msg.FileName,
+                                                           .FileHash = msg.FileHash,
+                                                           .Path = msg.Path,
+                                                           .Offset = 0 };
             node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
                                          MessageStatus::Request);
         }
     }
 
-    files[msg.Actor + msg.FileHash] = msg;
+    files[msg.Actor + msg.FileName] = msg;
     emit added(msg.Actor, msg.FileHash, msg.Path, msg.Size);
 
     return msg.FileHash;
@@ -280,7 +284,7 @@ std::string DfsController::createFileName(std::filesystem::path file) {
     int64_t time = std::chrono::system_clock::now().time_since_epoch().count();
     std::string filename = file.filename().string();
     boost::mt11213b rng(time);
-    boost::random::uniform_int_distribution<> dist(0, MAXINT);
+    boost::random::uniform_int_distribution<> dist(0, INT_MAX);
     std::string salt = Tools::typeToStdStringBytes<int>(dist(rng));
     std::string ret = Utils::calcHash(filename + std::to_string(time) + salt);
     return ret;
@@ -605,7 +609,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             // TODO: send package done
-            files.erase(msg.Actor + msg.FileHash);
+            files.erase(msg.Actor + msg.FileName);
             emit downloaded(msg.Actor, msg.FileHash);
             // node.network()->send_message(std::pair(msg.Actor, msg.FileHash),
             // MessageType::DfsSendingFileDone);
