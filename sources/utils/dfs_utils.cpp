@@ -56,14 +56,14 @@ std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::strin
     return dirRows;
 }
 
-DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId, const std::string &fileHash) {
+DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId, const std::string &fileName) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
         return {};
     }
 
-    auto rows = db.select(fmt::format("SELECT * FROM {} WHERE fileHash = '{}';", TableName, fileHash));
+    auto rows = db.select(fmt::format("SELECT * FROM {} WHERE fileName = '{}';", TableName, fileName));
     if (rows.empty()) {
         return {};
     }

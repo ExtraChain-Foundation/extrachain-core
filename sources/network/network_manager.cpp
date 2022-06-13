@@ -430,8 +430,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
     case MessageType::DfsRequestFile: {
-        auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        node.dfs()->sendFile(actorId, fileHash, messageId);
+        auto [actorId, fileName] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        node.dfs()->sendFile(actorId, fileName, messageId);
         break;
     }
     case MessageType::DfsRequestFileSegment: {
