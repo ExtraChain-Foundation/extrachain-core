@@ -13,6 +13,15 @@ FragmentStorage::FragmentStorage(ActorId Actor, std::string FileName, std::strin
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
+FragmentStorage::FragmentStorage(DFS::Packets::SegmentMessage segmentMessage)
+    : storageFile(DFS_PATH::filePath(segmentMessage.Actor, segmentMessage.FileHash).string() + DFSF::Extension),
+    actor(segmentMessage.Actor),
+    fileName(segmentMessage.FileName)
+{
+    storageFile.open();
+    storageFile.query(DFSF::CreateTableQueryFragments);
+}
+
 bool FragmentStorage::initLocalFile(uint64_t filesize) {
     DBRow row = makeFragmentRow(0, 0, filesize);
     storageFile.insert(DFSF::TableNameFragments, row);
@@ -30,8 +39,7 @@ bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
     HistoricalChain historicalChain(storageFile.file(), filePath.string());
     DFSP::EditSegmentMessage editSegmentMessage =
         historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::insert);
-    historicalChain.apply(editSegmentMessage);
-    return true;
+    return historicalChain.apply(editSegmentMessage);
 }
 
 bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
@@ -235,8 +243,7 @@ uint64_t FragmentStorage::writeFragment(DFSP::SegmentMessage msg) {
     } else {
         posToWrite = std::stoull(prevnext.second["storedPos"]);
     }
-    write(filePath, posToWrite, msg.Data);
-    return posToWrite;
+    return write(filePath, posToWrite, msg.Data);
 }
 
 void FragmentStorage::moveRows(DBRow curRow, uint64_t moveSize) {

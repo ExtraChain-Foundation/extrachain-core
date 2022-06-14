@@ -17,6 +17,7 @@ private:
 
 public:
     FragmentStorage(ActorId Actor, std::string FileName, std::string FileHash);
+    FragmentStorage(DFSP::SegmentMessage segmentMessage);
     ~FragmentStorage() = default;
 
     bool initLocalFile(uint64_t filesize);

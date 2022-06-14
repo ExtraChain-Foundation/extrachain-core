@@ -241,16 +241,12 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
         switch (typeSend) {
         case Config::Net::TypeSend::Except:
             return socket_identifier != receiver_identifier;
-            break;
         case Config::Net::TypeSend::Focused:
             return socket_identifier == receiver_identifier;
-            break;
         case Config::Net::TypeSend::All:
             return true;
-            break;
         default:
             return false;
-            break;
         }
     };
 

@@ -135,7 +135,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         DFST::DirsFile::TableName,
         { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
 
-    sendFile(actor.id(), fileName, "");
+    sendFile(actor.id(), fileName);
 
     HistoricalChain hc((DFS_PATH::filePath(actor.id().toStdString(), fileName).string() + DFSF::Extension),
                        fpath.string());
@@ -201,7 +201,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
 
     if (loadBytes) {
         if (msg.Size >= m_bytesLimit - m_sizeTaken) {
-            return msg.FileHash;
+            return msg.FileName;
         } else {
             DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
                                                            .FileName = msg.FileName,
@@ -216,7 +216,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     files[msg.Actor + msg.FileName] = msg;
     emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
 
-    return msg.FileHash;
+    return msg.FileName;
 }
 
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileName) {
@@ -337,8 +337,8 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 
     actrDirFile.close();
 
-    //    FragmentStorage fragmentStorage(msg.Actor, msg.FileName, msg.FileHash);
-    //    fragmentStorage.insertFragment(msg);
+    FragmentStorage fragmentStorage(msg);
+    fragmentStorage.insertFragment(msg);
 
     return newFileHash;
 }
@@ -574,10 +574,10 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
     node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
                                  Config::Net::TypeSend::Focused);
     if (msg.Offset + DFSB::sectionSize >= fileSize) {
-        emit uploaded(msg.Actor, msg.FileHash);
+        emit uploaded(msg.Actor, msg.FileName);
         return "";
     }
-    emit uploadProgress(msg.Actor, msg.FileHash, double(msg.Offset) / double(fileSize) * 100);
+    emit uploadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     return "";
 }
 
@@ -593,8 +593,8 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         exit(EXIT_FAILURE);
     }
     std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, msg.FileName);
-    actrDirData = actrDirFile.select("SELECT * FROM " + DFST::ActorDirFile::TableName + " WHERE fileHash = '"
-                                     + msg.FileHash + "';");
+    actrDirData = actrDirFile.select("SELECT * FROM " + DFST::ActorDirFile::TableName + " WHERE fileName = '"
+                                     + msg.FileName + "';");
     std::string virtualPath = actrDirData[0].at("filePath");
     uint64_t fileSize = std::stoull(actrDirData[0].at("fileSize"));
 
@@ -606,6 +606,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     std::string hash = insertFragment(msg);
     uint64_t offset = msg.Offset + DFSB::sectionSize;
     if (fileSize <= offset) {
+        //To do: fix compare by hash
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             // TODO: send package done
@@ -613,7 +614,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             emit downloaded(msg.Actor, msg.FileName);
             // node.network()->send_message(std::pair(msg.Actor, msg.FileHash),
             // MessageType::DfsSendingFileDone);
-            sendFile(msg.Actor, msg.FileName, ""); // temp
+            sendFile(msg.Actor, msg.FileName); // temp
             return hash;
         } else {
             requestFile(msg.Actor, msg.FileName);
