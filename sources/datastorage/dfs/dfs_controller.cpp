@@ -314,33 +314,8 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
         return "";
     }
     insertDataChunk(msg.Data, msg.Offset, realFilePath);
-    std::string newFileHash = Utils::calcHashForFile(realFilePath.string());
-    //    auto newFileSize = std::filesystem::file_size(realFilePath);
-    //    for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
-    //        if (it->at("fileHash") == msg.FileHash) {
-    //            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileHash = " + "'"
-    //            //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" +
-    //            //it->at("fileHash");
-    //            //                    + "'");
-    //            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileSize = " + "'"
-    //            //                    + std::to_string(newFileSize) + "' " + "WHERE " + "fileHash = " + "'"
-    //            //                    + it->at("fileHash") + "'");
-    //        }
-    //        if (it->at("fileHashPrev") == msg.FileHash) {
-    //            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileHashPrev = " +
-    //            // "'"
-    //            //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" +
-    //            //it->at("fileHash");
-    //            //                    + "'");
-    //        }
-    //    }
-
     actrDirFile.close();
-
-    FragmentStorage fragmentStorage(msg);
-    fragmentStorage.insertFragment(msg);
-
-    return newFileHash;
+    return Utils::calcHashForFile(realFilePath.string());
 }
 
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
@@ -603,6 +578,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         return "";
     }
 
+    FragmentStorage fs(msg);
     std::string hash = insertFragment(msg);
     uint64_t offset = msg.Offset + DFSB::sectionSize;
     if (fileSize <= offset) {
@@ -623,7 +599,9 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         }
     }
 
+    fs.insertFragment(msg);
     emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
+
     DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
                                                    .FileName = msg.FileName,
                                                    .FileHash = msg.FileHash,
