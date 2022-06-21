@@ -17,6 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <QJsonObject>
+
 #include "datastorage/blockchain.h"
 #include "managers/tx_manager.h"
 
@@ -157,9 +159,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         }
 
         else {
-            resultData["State"] =
-                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) - BigNumber(q.amount))
-                    .toStdString();
+            resultData["State"] = (BigNumber(extractData[0]["State"]) - BigNumber(q.amount)).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
@@ -182,9 +182,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         }
 
         else {
-            resultData["State"] =
-                (BigNumber(QByteArray::fromStdString(extractData[0]["State"])) + BigNumber(q.amount))
-                    .toStdString();
+            resultData["State"] = (BigNumber(extractData[0]["State"]) + BigNumber(q.amount)).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
@@ -221,8 +219,7 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken) {
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "';");
     BigNumber res = 0;
     for (const auto &tmp : extractData) {
-        QByteArray sum(tmp.at("state").c_str());
-        res += BigNumber(sum).abs();
+        res += BigNumber(tmp.at("state")).abs();
     }
     return res;
 }
@@ -236,8 +233,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
         cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "' ;");
     BigNumber res = 0;
     for (const auto &tmp : extractData) {
-        QByteArray sum(tmp.at("state").c_str());
-        res += BigNumber(sum).abs();
+        res += BigNumber(tmp.at("state")).abs();
     }
     DBConnector cacheDB2("blockchain/cacheEC.db");
     cacheDB2.open();
@@ -248,7 +244,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
          + BigNumber(0).toActorId().toStdString()*/
         + "';");
     for (const auto &tmp : extractData2) {
-        QByteArray sum(tmp.at("State").c_str());
+        std::string sum = tmp.at("State");
         if (sum[0] == '-')
             continue;
         res += BigNumber(sum).abs();
@@ -352,7 +348,7 @@ std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &r
         auto listTx = blockIndex.getBlockById(i).extractTransactions();
         for (const auto &tx : listTx) {
             if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token) {
-                return { tx.getHash(), i };
+                return { tx.getHash().toStdString(), i };
             }
         }
     }
@@ -658,7 +654,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
             std::vector<DBRow> extractData = cacheDB.select("SELECT * FROM cacheData;");
             for (auto i : extractData)
                 nb.addRow(
-                    GenesisDataRow(i["ActorId"], BigNumber(QByteArray::fromStdString(i["State"])), i["Token"],
+                    GenesisDataRow(i["ActorId"], BigNumber(i["State"]), i["Token"],
                                    DataStorage::typeDataRow(QByteArray::fromStdString(i["Type"]).toInt())));
             cacheDB.query("DELETE FROM cacheData");
             cacheDB.query("VACUUM");
@@ -799,7 +795,7 @@ Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
     Block res;
     switch (type) {
     case SearchEnum::BlockParam::Id:
-        res = getBlockByIndex(BigNumber(value));
+        res = getBlockByIndex(BigNumber(value.toStdString()));
         break;
     case SearchEnum::BlockParam::Data:
         res = getBlockByData(value);
@@ -808,7 +804,7 @@ Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
         res = getBlockByHash(value);
         break;
     case SearchEnum::BlockParam::Approver:
-        res = getBlockByApprover(BigNumber(value));
+        res = getBlockByApprover(BigNumber(value.toStdString()));
         break;
     default:
         res = Block();
@@ -821,7 +817,7 @@ QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArra
     QByteArray res = "";
     switch (type) {
     case SearchEnum::BlockParam::Id:
-        res = getBlockDataByIndex(BigNumber(value));
+        res = getBlockDataByIndex(BigNumber(value.toStdString()));
         break;
     default:
         break;
@@ -833,19 +829,19 @@ std::pair<Transaction, QByteArray>
 Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token) {
     switch (type) {
     case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
-        return getTxBySenderOrReceiverAndToken(value, token);
+        return getTxBySenderOrReceiverAndToken(value.toStdString(), token);
     case SearchEnum::TxParam::Hash:
         return getTxByHash(value, token);
     case SearchEnum::TxParam::User:
-        return getTxByUser(value, token);
+        return getTxByUser(value.toStdString(), token);
     case SearchEnum::TxParam::UserApprover:
-        return getTxByApprover(value, token);
+        return getTxByApprover(value.toStdString(), token);
     case SearchEnum::TxParam::UserReceiver:
-        return getTxByReceiver(value, token);
+        return getTxByReceiver(value.toStdString(), token);
     case SearchEnum::TxParam::UserSender:
-        return getTxBySender(value, token);
+        return getTxBySender(value.toStdString(), token);
     case SearchEnum::TxParam::UserSenderOrReceiver:
-        return getTxBySenderOrReceiver(value, token);
+        return getTxBySenderOrReceiver(value.toStdString(), token);
     default:
         qWarning() << "Can't get tx: incorrent SearchEnum::TxParam. Value:" << value;
         return { Transaction(), "-1" };
@@ -1421,7 +1417,7 @@ void Blockchain::proveTx(Transaction *tx) {
             qDebug() << "TX prove: incorrect data for unfreeze fee";
             return;
         }
-        BigNumber indexFreezeTxBlock = dataList.at(0);
+        BigNumber indexFreezeTxBlock = dataList.at(0).toStdString();
         QByteArray hashTx = dataList.at(1);
         if (!checkHaveUNFreezeTx(tx, indexFreezeTxBlock)) {
             emit tx->NotApproved(tx);
@@ -1471,7 +1467,7 @@ void Blockchain::proveTx(Transaction *tx) {
             qDebug() << "TX prove: incorrect data for unfreeze fee";
             return;
         }
-        BigNumber indexApBlock = dataList.at(0);
+        BigNumber indexApBlock = dataList.at(0).toStdString();
         QByteArray hashTx = dataList.at(1);
         for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
             Block tmpBlock = blockIndex.getBlockById(i);

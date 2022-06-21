@@ -191,8 +191,8 @@ public:
             msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object deserialized = oh.get();
             qDebug() << fmt::format(
-                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body {}",
-                            int(message.message_type), int(message.status), message.message_id, int(typeSend),
+                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+                            message.message_type, message.status, message.message_id, typeSend,
                             (std::stringstream() << deserialized).str())
                             .c_str();
         }

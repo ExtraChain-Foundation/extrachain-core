@@ -54,11 +54,6 @@ public:
     };
 
     ActorId(const std::string &actorId) {
-#ifdef QT_DEBUG
-        if (!actorId.empty() && !BigNumber::isValid(QByteArray::fromStdString(actorId)))
-            qFatal("ActorId not valid");
-#endif
-
         m_id = !actorId.empty() ? actorId : "00000000000000000000";
         normalize();
     }

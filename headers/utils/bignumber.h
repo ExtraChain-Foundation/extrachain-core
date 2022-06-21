@@ -29,14 +29,15 @@
 #include <sstream>
 #include <string>
 
-#include "extrachain_global.h"
-#include "gmpxx.h"
+#include "boost/multiprecision/cpp_int.hpp"
 #include "msgpack.hpp"
 
+#include "extrachain_global.h"
+
 #ifdef QT_DEBUG
-    #define UPDATE_DEBUG()                  \
-        qdata = m_data.get_str(16).c_str(); \
-        qdataDec = m_data.get_str(10).c_str();
+    #define UPDATE_DEBUG()       \
+        qdata = toStdString(16); \
+        qdataDec = toStdString(10);
 #else
     #define UPDATE_DEBUG()
 #endif
@@ -53,20 +54,19 @@ const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
 class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
-    BigNumber(const QByteArray &bigNumber, int base = 16);
+    BigNumber(const std::string &bigNumber, int base = 16);
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);
-    BigNumber(mpz_class number);
+    BigNumber(const boost::multiprecision::cpp_int &number);
     ~BigNumber() = default;
 
 private:
-    mpz_class m_data;
-    bool infinity = false;
+    boost::multiprecision::cpp_int m_data;
 
 #ifdef QT_DEBUG
-    QByteArray qdata;
-    QByteArray qdataDec;
+    std::string qdata;
+    std::string qdataDec;
 #endif
 
 public:
@@ -102,22 +102,14 @@ public:
     BigNumber operator-() const;
 
 public:
-    mpz_class data() const;
-    int isProbPrime() const;
+    const boost::multiprecision::cpp_int &data() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const;
     std::string toStdString(int base = 16) const;
     QByteArray toZeroByteArray(int size) const;
     BigNumber pow(unsigned long number);
-    BigNumber sqrt(unsigned long number = 2) const;
+    // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
-    bool getInfinity() const;
-    void setInfinity(bool value);
-    BigNumber nextPrime();
-
-    static bool isValid(const QByteArray &bigNumber, int base = 16);
-    static BigNumber factorial(unsigned long number);
-    static char binaryCompareAnd(char, char);
     static BigNumber random(int n, bool zeroAllowed = true);
     static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
     static BigNumber random(BigNumber max, bool zeroAllowed = true);
@@ -131,7 +123,7 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this = BigNumber(QByteArray::fromStdString(num));
+        *this = BigNumber(num);
     }
 };
 
@@ -184,10 +176,11 @@ inline bool operator!=(const BigNumber &l, const int &r) {
 }
 
 inline size_t qHash(const BigNumber &key, size_t seed) {
-    return qHash(key.toStdString(), seed);
+    return qHash(key, seed);
 }
 
 QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
-QDebug operator<<(QDebug debug, const mpz_class &bigNumber);
+QDebug operator<<(QDebug debug, const boost::multiprecision::cpp_int &bigNumber);
+std::ostream &operator<<(std::ostream &os, const BigNumber &bigNumber);
 
 #endif // BIGNUMBER_H

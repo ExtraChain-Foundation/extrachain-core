@@ -21,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
@@ -28,6 +29,7 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTcpSocket>
+
 #include <string>
 #include <string_view>
 
@@ -271,7 +273,7 @@ void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
-    QDir(QString::fromStdString(DFS::Basic::fsActrRoot)).removeRecursively();
+    QDir(QString::fromStdString(DFSB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile(".settings").remove();
@@ -292,15 +294,13 @@ void Utils::wipeDataFiles() {
     QDir::setCurrent(current);
 }
 
-qint64 Utils::checkMemoryFree() {
+qint64 Utils::diskFreeMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
     return x.bytesFree();
 }
 
-qint64 Utils::checkMemoryTotal() {
+qint64 Utils::diskTotalMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
     return x.bytesTotal();
 }
 
@@ -365,8 +365,6 @@ QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
         return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return data.toHex();
-    default:
-        break;
     }
     return data;
 }
@@ -377,8 +375,6 @@ QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
         return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return QByteArray::fromHex(data);
-    default:
-        break;
     }
     return data;
 }
@@ -399,6 +395,9 @@ QString Utils::detectCompiler() {
 
 #if __GNUC__ > 4
     QString gcc = "GCC";
+    #ifdef __MINGW32__
+    gcc = "MinGW";
+    #endif
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
 #endif
 

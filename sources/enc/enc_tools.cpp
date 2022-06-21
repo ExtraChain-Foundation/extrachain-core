@@ -15,7 +15,7 @@ string SecretKey::keygen() {
 string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
     vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
     if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES) {
-        std::fill(vsalt.begin(), vsalt.end(), '\0');
+        std::fill(vsalt.begin(), vsalt.end(), '0');
     } else {
         vsalt = vector<unsigned char>(salt.begin(), salt.end());
     }

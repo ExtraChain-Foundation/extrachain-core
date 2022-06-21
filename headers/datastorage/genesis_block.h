@@ -58,7 +58,7 @@ public:
         QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
         if (l.size() == 4) {
             actorId = l.at(0).toStdString();
-            state = BigNumber(l.at(1));
+            state = BigNumber(l.at(1).toStdString());
             token = l.at(2).toStdString();
             type = DataStorage::typeDataRow(l.at(3).toInt());
         }
@@ -125,7 +125,7 @@ public:
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
                                          prevGenHash)
             .msgpack_unpack(msgpack_o);
-        index = QByteArray::fromStdString(index_str);
+        index = index_str;
     }
 };
 

@@ -169,7 +169,7 @@ public:
         std::string index_str;
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
             .msgpack_unpack(msgpack_o);
-        index = QByteArray::fromStdString(index_str);
+        index = index_str;
     }
 };
 

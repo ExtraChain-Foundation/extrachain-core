@@ -95,7 +95,7 @@ Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam para
         Block byPosition = getByPosition(index);
         switch (param) {
         case SearchEnum::BlockParam::Approver: {
-            if (BigNumber(byPosition.getApprover().toByteArray()) == id)
+            if (BigNumber(byPosition.getApprover().toStdString()) == id)
                 return byPosition;
             break;
         }
@@ -127,16 +127,16 @@ Block MemIndex::getByApprover(const BigNumber &approver) const {
 }
 
 Block MemIndex::getByData(const QByteArray &data) const {
-    return getBlockByParam(data, SearchEnum::BlockParam::Data);
+    return getBlockByParam(data.toStdString(), SearchEnum::BlockParam::Data);
 }
 
 Block MemIndex::getByHash(const QByteArray &hash) const {
-    return getBlockByParam(hash, SearchEnum::BlockParam::Hash);
+    return getBlockByParam(hash.toStdString(), SearchEnum::BlockParam::Hash);
 }
 
 std::pair<Transaction, QByteArray> MemIndex::getLastTxByHash(const QByteArray &hash,
                                                              const QByteArray &token) const {
-    return getLastTxByParam(BigNumber(hash), SearchEnum::TxParam::Hash, token);
+    return getLastTxByParam(BigNumber(hash.toStdString()), SearchEnum::TxParam::Hash, token);
 }
 
 std::pair<Transaction, QByteArray> MemIndex::getLastTxBySender(const BigNumber &id,

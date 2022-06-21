@@ -68,7 +68,7 @@ void KeyPrivate::encryptFile(const std::filesystem::path &file,
     std::ofstream efile(resultFile.string(), std::ios::binary | std::ios::app);
     if (sfile && efile) {
         std::string buf;
-        while (sfile.readsome(buf.data(), DFS::Basic::encSectionSize)) {
+        while (sfile.readsome(buf.data(), DFSB::encSectionSize)) {
             std::string wstring = encryptSelf(buf);
             wstring = Tools::typeToStdStringBytes<int>(wstring.size()) + wstring;
             efile << wstring;

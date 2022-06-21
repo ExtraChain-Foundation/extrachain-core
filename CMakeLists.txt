@@ -46,6 +46,8 @@ set(EXTRACHAIN_CORE_INCLUDES
 set(EXTRACHAIN_CORE_SOURCES
 
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/fragment_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/historical_chain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
@@ -81,6 +83,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/genesis_block.cpp
@@ -156,13 +160,6 @@ target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Web
     magic_enum::magic_enum Boost::boost Boost::system Boost::thread) # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
-
-if (UNIX AND NOT IOS) # temp
-    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)
-endif(UNIX AND NOT IOS)
-if (WIN32) # temp
-    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
-endif(WIN32)
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 

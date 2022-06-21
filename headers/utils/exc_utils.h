@@ -28,6 +28,7 @@
 #include <QObject>
 #include <QtNetwork/QNetworkAddressEntry>
 
+#include "extrachain_global.h"
 #include <msgpack.hpp>
 
 #include <fmt/chrono.h>
@@ -41,7 +42,25 @@
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
-#include "extrachain_global.h"
+#define FORMAT_ENUM(E)                                        \
+    template <>                                               \
+    struct fmt::formatter<E> : formatter<string_view> {       \
+        template <typename FormatContext>                     \
+        auto format(E Enum, FormatContext &ctx) {             \
+            static_assert(std::is_enum_v<E>);                 \
+            string_view name = "unknown";                     \
+            name = magic_enum::enum_name(Enum);               \
+            return formatter<string_view>::format(name, ctx); \
+        }                                                     \
+    };
+
+namespace fmt {
+template <typename... Args>
+void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
+    fmt::print("{}\n",
+               fmt::format(std::forward<fmt::format_string<Args...>>(fmt_str), std::forward<Args>(args)...));
+}
+}
 
 namespace Network {
 Q_NAMESPACE
@@ -428,6 +447,7 @@ namespace Net {
 } // namespace Net
 } // namespace Config
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
+FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
@@ -493,13 +513,13 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
 namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
 
-static int64_t currentDateSecs() {
+static uint64_t currentDateSecs() {
     using namespace std::chrono;
     uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return secs;
 }
 
-static int64_t currentDateMs() {
+static uint64_t currentDateMs() {
     using namespace std::chrono;
     uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return ms;
@@ -516,7 +536,6 @@ enum PrintDebug {
 };
 
 enum class HashEncode {
-    None,
     Base64,
     Hex,
 };
@@ -528,8 +547,8 @@ static QString filePrefix = "file://";
 #endif
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
-EXTRACHAIN_EXPORT qint64 checkMemoryFree();  // MB
-EXTRACHAIN_EXPORT qint64 checkMemoryTotal(); // MB
+EXTRACHAIN_EXPORT qint64 diskFreeMemory();
+EXTRACHAIN_EXPORT qint64 diskTotalMemory();
 
 QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
@@ -718,50 +737,38 @@ QDebug operator<<(QDebug d, const Notification &n);
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 
-namespace Tools {
-template <typename T>
-std::vector<unsigned char> typeToByteArray(T integerValue) {
-    std::vector<unsigned char> res;
-    unsigned char *b = (unsigned char *)(&integerValue);
-    unsigned char *e = b + sizeof(T);
-    std::copy(b, e, back_inserter(res));
-    return res;
-}
+// namespace Tools {
+// template <typename T>
+// std::vector<unsigned char> typeToByteArray(T integerValue) {
+//    std::vector<unsigned char> res;
+//    unsigned char *b = (unsigned char *)(&integerValue);
+//    unsigned char *e = b + sizeof(T);
+//    std::copy(b, e, back_inserter(res));
+//    return res;
+//}
 
-template <typename T>
-T byteArrayToType(std::vector<unsigned char> value) {
-    T *res;
-    res = reinterpret_cast<T *>(value.data());
-    return *res;
-}
+// template <typename T>
+// T byteArrayToType(std::vector<unsigned char> value) {
+//    T *res;
+//    res = reinterpret_cast<T *>(value.data());
+//    return *res;
+//}
 
-template <typename T>
-std::string typeToStdStringBytes(T integerValue) {
-    std::string res;
-    unsigned char *b = (unsigned char *)(&integerValue);
-    unsigned char *e = b + sizeof(T);
-    std::copy(b, e, back_inserter(res));
-    return res;
-}
+// template <typename T>
+// std::string typeToStdStringBytes(T integerValue) {
+//    std::string res;
+//    unsigned char *b = (unsigned char *)(&integerValue);
+//    unsigned char *e = b + sizeof(T);
+//    std::copy(b, e, back_inserter(res));
+//    return res;
+//}
 
-template <typename T>
-T stdStringBytesToType(std::string value) {
-    T *res;
-    res = reinterpret_cast<T *>(value.data());
-    return *res;
-}
-}
-
-#define FORMAT_ENUM(E)                                        \
-    template <>                                               \
-    struct fmt::formatter<E> : formatter<string_view> {       \
-        template <typename FormatContext>                     \
-        auto format(E Enum, FormatContext &ctx) {             \
-            static_assert(std::is_enum_v<E>);                 \
-            string_view name = "unknown";                     \
-            name = magic_enum::enum_name(Enum);               \
-            return formatter<string_view>::format(name, ctx); \
-        }                                                     \
-    };
+// template <typename T>
+// T stdStringBytesToType(std::string value) {
+//    T *res;
+//    res = reinterpret_cast<T *>(value.data());
+//    return *res;
+//}
+//}
 
 #endif // UTILS_H
