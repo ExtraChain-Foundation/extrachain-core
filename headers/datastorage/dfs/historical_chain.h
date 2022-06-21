@@ -29,6 +29,8 @@ public:
                                                     const DFSP::SegmentMessageType& smType);
 
     bool initLocal(const std::string& actor, const std::string& fileName, const std::string& fileHash);
+    bool remove(const std::string& actor, const std::string& fileHash);
+    bool rename(const std::string& fileHash, const std::string& newFileHash);
 
 private:
     DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);

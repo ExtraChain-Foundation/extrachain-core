@@ -114,7 +114,9 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
-    DFSP::AddFileMessage msg = { .Actor = actor.id().toStdString(),
+
+    const auto actorId = actor.id().toStdString();
+    DFSP::AddFileMessage msg = { .Actor = actorId,
                                  .FileName = fileName,
                                  .FileHash = fileHash,
                                  .Path = newTargetVirtualFilePath,
@@ -122,7 +124,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     qDebug() << "AddFileMessage" << actor.id().toString() << fileName.c_str()
              << newTargetVirtualFilePath.c_str() << fileSize;
 
-    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actor.id().toStdString());
+    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
     auto lastFileName = DFST::ActorDirFile::getLastName(actrDirFile);
     const DBRow rowData = makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
 
@@ -137,24 +139,29 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     m_sizeTaken += fileSize;
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
-    dirsFile.replace(
-        DFST::DirsFile::TableName,
-        { { "actorId", actor.id().toStdString() }, { "lastModified", rowData.at("lastModified") } });
+    dirsFile.replace(DFST::DirsFile::TableName,
+                     { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
 
     sendFile(actor.id(), fileName);
 
-    HistoricalChain hc((DFS_PATH::filePath(actor.id().toStdString(), fileName).string() + DFSF::Extension),
+    HistoricalChain hc((DFS_PATH::filePath(actorId, fileName).string() + DFSF::Extension),
                        fpath.string());
-    hc.initLocal(actor.id().toStdString(), fileName, fileHash);
+    hc.initLocal(actorId, fileName, fileHash);
 
     return addFile(msg, false);
 }
 
-void DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
+bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
     std::string fileHash = Utils::calcHashForFile(filePath); // TODO: get hash
-    DFSP::RemoveFileMessage msg = { .Actor = actor.id().toStdString(),
+    const auto actorId = actor.id().toStdString();
+    DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = std::filesystem::path(filePath).filename().string() };
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
+
+    HistoricalChain hc((DFS_PATH::filePath(actorId, fileHash).string() + DFSF::Extension), filePath);
+    const bool databaseFileRemoved = hc.remove(actorId, fileHash);
+    const bool fileRemoved = std::filesystem::remove(DFS_PATH::filePath(actorId, fileHash).string());
+    return databaseFileRemoved && fileRemoved;
 }
 
 std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadBytes) {
@@ -294,6 +301,15 @@ std::string DfsController::createFileName(std::filesystem::path file) {
     std::string salt = Tools::typeToStdStringBytes<int>(dist(rng));
     std::string ret = Utils::calcHash(filename + std::to_string(time) + salt);
     return ret;
+}
+
+bool DfsController::renameFile(const ActorId &actor, const std::string &fileHash,
+                               const std::string &newFileHash) {
+    const std::string actorId = actor.toStdString();
+    std::string pathDelim = Utils::platformDelimeter();
+    std::filesystem::path path = DFSB::fsActrRoot + pathDelim + actorId + pathDelim;
+    std::filesystem::rename(path / std::string(fileHash), path / std::string(newFileHash));
+    return std::filesystem::exists(path / std::string(newFileHash));
 }
 
 std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {

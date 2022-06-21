@@ -165,11 +165,6 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
     std::ifstream ifs(filePath.c_str(), std::ios::binary);
     char buf[DFSB::historicalChainSectionSize];
 
-    if (!ifs.read(buf, sizeof(buf)) || !ifs.gcount()) {
-        ifs.close();
-        return false;
-    }
-
     while (ifs.read(buf, sizeof(buf)) || ifs.gcount()) {
         std::string data(buf, ifs.gcount());
         apply(DFSP::EditSegmentMessage { .Actor = actor,
@@ -180,6 +175,20 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
     }
     ifs.close();
     return true;
+}
+
+bool HistoricalChain::remove(const std::string &actor, const std::string &fileHash) {
+    std::filesystem::path filePath = DFS_PATH::filePath(actor, fileHash);
+    if (std::filesystem::exists(chainFile.file()))
+        return std::filesystem::remove(chainFile.file());
+    return false;
+}
+
+bool HistoricalChain::rename(const std::string &fileHash, const std::string &newFileHash) {
+    const auto path = std::filesystem::path(chainFile.file()).parent_path();
+    std::filesystem::rename(path / std::string(fileHash + DFSF::Extension),
+                            path / std::string(newFileHash + DFSF::Extension));
+    return std::filesystem::exists(path / std::string(newFileHash + DFSF::Extension));
 }
 
 DBRow HistoricalChain::makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data) {

@@ -106,6 +106,7 @@ namespace Packets {
         std::string Actor;
         std::string FileName;
         std::string FileHash;
+        std::string NewFileHash;
         std::string Data;
         uint64_t Offset;
         SegmentMessageType ActionType;
