@@ -71,6 +71,9 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         newFilePath = L"temp";
         std::filesystem::create_directories(newFilePath);
         newFilePath = newFilePath.wstring() + DFSB::separator + fname;
+        if (!std::filesystem::exists(newFilePath)) {
+            std::filesystem::copy(filePath, newFilePath);
+        }
         actor.key().encryptFile(fpath, newFilePath);
 
         std::filesystem::path nvp = targetVirtualFilePath;
@@ -105,6 +108,9 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     } catch (std::filesystem::filesystem_error const &err) {
         qDebug() << "[Dfs] Copy error:" << err.what();
     }
+
+    if (std::filesystem::exists(newFilePath))
+        std::filesystem::remove(newFilePath);
 
     FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
@@ -582,7 +588,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     std::string hash = insertFragment(msg);
     uint64_t offset = msg.Offset + DFSB::sectionSize;
     if (fileSize <= offset) {
-        //To do: fix compare by hash
+        // To do: fix compare by hash
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             // TODO: send package done
