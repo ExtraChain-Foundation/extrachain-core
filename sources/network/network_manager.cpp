@@ -251,7 +251,11 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : qAsConst(m_connections)) {
-        bool isSend = isSendCheck(service->identifier().toStdString());
+        const auto identifier = service->identifier().toStdString();
+        if (identifier == receiver_identifier) {
+            continue;
+        }
+        bool isSend = isSendCheck(identifier);
         if (!isSend)
             continue;
         if (service->isActive() && service->sendType() == SocketService::SendType::All)
@@ -329,11 +333,18 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
+    if (m_messages.contains(identifier)) {
+        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
+        return;
+    }
+
     if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
         return;
     }
+
+    m_messages[identifier] = message;
 
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
