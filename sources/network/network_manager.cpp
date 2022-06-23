@@ -252,9 +252,9 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 
     for (const auto &service : qAsConst(m_connections)) {
         const auto identifier = service->identifier().toStdString();
-        if (identifier == receiver_identifier) {
-            continue;
-        }
+//        if (identifier == receiver_identifier) {
+//            continue;
+//        }
         bool isSend = isSendCheck(identifier);
         if (!isSend)
             continue;
@@ -333,10 +333,10 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
-    if (m_messages.contains(identifier)) {
-        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
-        return;
-    }
+//    if (m_messages.contains(identifier)) {
+//        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
+//        return;
+//    }
 
     if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
         qDebug()
