@@ -54,7 +54,7 @@ namespace Basic {
     static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
     static const std::string dirsPath = "dfs/.dirs";
-    static const uint64_t sectionSize = /*2097152*/ 4194304;
+    static const uint64_t sectionSize = /*2097152*/ 524288000;
     static const uint64_t historicalChainSectionSize = 2097152;
 
     static const uint64_t encSectionSize = 256;
@@ -94,8 +94,7 @@ namespace Packets {
         uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset)
     };
-    enum SegmentMessageType
-    {
+    enum SegmentMessageType {
         add = 0,
         insert = 1,
         replace = 2,
@@ -218,8 +217,7 @@ namespace Path {
     std::filesystem::path filePath(const ActorId &actorId, const std::string &fileName);
 }
 
-enum class Encryption
-{
+enum class Encryption {
     Public = 0,
     Encrypted = 1
 };

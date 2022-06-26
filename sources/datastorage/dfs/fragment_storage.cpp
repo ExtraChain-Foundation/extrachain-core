@@ -14,10 +14,11 @@ FragmentStorage::FragmentStorage(ActorId Actor, std::string FileName, std::strin
 }
 
 FragmentStorage::FragmentStorage(DFS::Packets::SegmentMessage segmentMessage)
-    : storageFile(DFS_PATH::filePath(segmentMessage.Actor, segmentMessage.FileHash).string() + DFSF::Extension),
-    actor(segmentMessage.Actor),
-    fileName(segmentMessage.FileName)
-{
+    : storageFile(DFS_PATH::filePath(segmentMessage.Actor, segmentMessage.FileName).string()
+                  + DFSF::Extension)
+    , actor(segmentMessage.Actor)
+    , fileName(segmentMessage.FileName)
+    , fileHash(segmentMessage.FileHash) {
     storageFile.open();
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
@@ -47,22 +48,20 @@ bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
 
     switch (msg.ActionType) {
     case DFSP::SegmentMessageType::insert: {
-//        checkRenameFile(msg);
-        return insertFragment(DFSP::SegmentMessage {
-            .Actor = msg.Actor,
-            .FileName = msg.FileName,
-            .FileHash = msg.FileHash,
-            .Data = msg.Data,
-            .Offset = msg.Offset });
+        //        checkRenameFile(msg);
+        return insertFragment(DFSP::SegmentMessage { .Actor = msg.Actor,
+                                                     .FileName = msg.FileName,
+                                                     .FileHash = msg.FileHash,
+                                                     .Data = msg.Data,
+                                                     .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::add: {
-//        checkRenameFile(msg);
-        return insertFragment(DFSP::SegmentMessage {
-            .Actor = msg.Actor,
-            .FileName = msg.FileName,
-            .FileHash = msg.FileHash,
-            .Data = msg.Data,
-            .Offset = msg.Offset });
+        //        checkRenameFile(msg);
+        return insertFragment(DFSP::SegmentMessage { .Actor = msg.Actor,
+                                                     .FileName = msg.FileName,
+                                                     .FileHash = msg.FileHash,
+                                                     .Data = msg.Data,
+                                                     .Offset = msg.Offset });
     }
     case DFSP::SegmentMessageType::replace: {
         std::filesystem::path filePath = DFS::Path::filePath(actor.toStdString(), fileName);
@@ -71,17 +70,16 @@ bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
         return applyChanges(msg.Data, msg.Offset);
     }
     case DFSP::SegmentMessageType::remove: {
-//        checkRenameFile(msg);
+        //        checkRenameFile(msg);
         std::filesystem::path realFilePath = DFS_PATH::filePath(msg.Actor, fileHash);
         boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
         auto fileSize = std::filesystem::file_size(realFilePath);
 
-        return removeFragment(DFSP::DeleteSegmentMessage {
-            .Actor = msg.Actor,
-            .FileName = msg.FileName,
-            .FileHash = msg.FileHash,
-            .Offset = msg.Offset,
-            .Size = fileSize });
+        return removeFragment(DFSP::DeleteSegmentMessage { .Actor = msg.Actor,
+                                                           .FileName = msg.FileName,
+                                                           .FileHash = msg.FileHash,
+                                                           .Offset = msg.Offset,
+                                                           .Size = fileSize });
     }
     }
     return false;

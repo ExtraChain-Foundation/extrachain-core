@@ -109,7 +109,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         qDebug() << "[Dfs] Copy error:" << err.what();
     }
 
-    if (std::filesystem::exists(newFilePath))
+    if (std::filesystem::exists(newFilePath) && securityLevel == DFS::Encryption::Encrypted)
         std::filesystem::remove(newFilePath);
 
     FragmentStorage fs(actor.id(), fileName, fileHash);
@@ -144,9 +144,8 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     sendFile(actor.id(), fileName);
 
-    HistoricalChain hc((DFS_PATH::filePath(actorId, fileName).string() + DFSF::Extension),
-                       fpath.string());
-    hc.initLocal(actorId, fileName, fileHash);
+//    HistoricalChain hc((DFS_PATH::filePath(actorId, fileName).string() + DFSF::Extension), fpath.string());
+//    hc.initLocal(actorId, fileName, fileHash);
 
     return addFile(msg, false);
 }
@@ -601,7 +600,8 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     }
 
     FragmentStorage fs(msg);
-    std::string hash = insertFragment(msg);
+    fs.insertFragment(msg);
+
     uint64_t offset = msg.Offset + DFSB::sectionSize;
     if (fileSize <= offset) {
         // To do: fix compare by hash
@@ -610,10 +610,8 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             // TODO: send package done
             files.erase(msg.Actor + msg.FileName);
             emit downloaded(msg.Actor, msg.FileName);
-            // node.network()->send_message(std::pair(msg.Actor, msg.FileHash),
-            // MessageType::DfsSendingFileDone);
             sendFile(msg.Actor, msg.FileName); // temp
-            return hash;
+            return "hash";
         } else {
             requestFile(msg.Actor, msg.FileName);
             qFatal("[Dfs] Incorrect file check");
@@ -621,7 +619,6 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         }
     }
 
-    fs.insertFragment(msg);
     emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
 
     DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
@@ -631,7 +628,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
                                                    .Offset = offset };
     node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
 
-    return hash;
+    return "";
 }
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {

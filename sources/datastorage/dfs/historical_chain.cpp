@@ -162,17 +162,17 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
         qFatal("[Dfs] No file");
     }
 
-    std::ifstream ifs(filePath.c_str(), std::ios::binary);
-    char buf[DFSB::historicalChainSectionSize];
-
-    while (ifs.read(buf, sizeof(buf)) || ifs.gcount()) {
-        std::string data(buf, ifs.gcount());
+    std::ifstream ifs(filePath, std::ios::binary);
+    ifs.seekg(0, std::ios::beg);
+    std::vector<char> buffer(DFS::Basic::historicalChainSectionSize);
+    do {
+        std::string data(buffer.data(), buffer.size());
         apply(DFSP::EditSegmentMessage { .Actor = actor,
                                          .FileHash = fileHash,
                                          .Data = data,
                                          .Offset = 0,
                                          .ActionType = DFSP::SegmentMessageType::insert });
-    }
+    } while (ifs.read(buffer.data(), DFS::Basic::historicalChainSectionSize));
     ifs.close();
     return true;
 }
