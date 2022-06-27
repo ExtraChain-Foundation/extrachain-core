@@ -443,7 +443,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
-        qDebug() << fmt::format("got request file segment. File {}", msg.FileName).c_str();
         node.dfs()->sendFragment(msg, messageId);
         break;
     }
