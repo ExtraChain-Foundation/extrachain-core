@@ -143,10 +143,6 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
                      { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
 
     sendFile(actor.id(), fileName);
-
-//    HistoricalChain hc((DFS_PATH::filePath(actorId, fileName).string() + DFSF::Extension), fpath.string());
-//    hc.initLocal(actorId, fileName, fileHash);
-
     return addFile(msg, false);
 }
 
