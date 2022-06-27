@@ -34,7 +34,7 @@ class EXTRACHAIN_EXPORT DfsController : public QObject {
 
 private:
     ExtraChainNode &node;
-    uint64_t m_bytesLimit = 8589934592;
+    uint64_t m_bytesLimit = 10995116277760;
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
 
