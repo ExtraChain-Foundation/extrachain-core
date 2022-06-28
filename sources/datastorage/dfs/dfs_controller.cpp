@@ -211,13 +211,13 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
         if (msg.Size >= m_bytesLimit - m_sizeTaken) {
             return msg.FileName;
         } else {
-            DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
-                                                           .FileName = msg.FileName,
-                                                           .FileHash = msg.FileHash,
-                                                           .Path = msg.Path,
-                                                           .Offset = 0 };
-            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
-                                         MessageStatus::Request);
+            //            DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
+            //                                                           .FileName = msg.FileName,
+            //                                                           .FileHash = msg.FileHash,
+            //                                                           .Path = msg.Path,
+            //                                                           .Offset = 0 };
+            //            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
+            //                                         MessageStatus::Request);
         }
     }
 
