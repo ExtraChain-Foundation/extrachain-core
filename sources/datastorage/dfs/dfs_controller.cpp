@@ -211,13 +211,13 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
         if (msg.Size >= m_bytesLimit - m_sizeTaken) {
             return msg.FileName;
         } else {
-            //            DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
-            //                                                           .FileName = msg.FileName,
-            //                                                           .FileHash = msg.FileHash,
-            //                                                           .Path = msg.Path,
-            //                                                           .Offset = 0 };
-            //            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
-            //                                         MessageStatus::Request);
+            DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
+                                                           .FileName = msg.FileName,
+                                                           .FileHash = msg.FileHash,
+                                                           .Path = msg.Path,
+                                                           .Offset = 0 };
+            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
+                                         MessageStatus::Request);
         }
     }
 
@@ -573,6 +573,42 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
     return "";
 }
 
+void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
+                                   const std::string &messageId) {
+    std::filesystem::path realFilePath = DFS_PATH::filePath(msg.Actor, msg.FileName);
+    qDebug() << msg.FileName.c_str() << msg.Actor.c_str() << realFilePath.c_str()
+             << std::filesystem::exists(realFilePath);
+    if (!std::filesystem::exists(realFilePath)) {
+        //        qDebug() << "[Dfs] No file" << realFilePath.c_str();
+        //        qFatal("[Dfs] No file");
+        return;
+    }
+
+    auto fileSize = std::filesystem::file_size(realFilePath);
+    boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
+    std::string data;
+    uint64_t totalOffset = 0;
+    while (totalOffset < fileSize) {
+        qDebug() << "totalOffset: " << totalOffset;
+        if (fileSize - msg.Offset > DFSB::sectionSize) {
+            data = extractFragment(fmapTarget, msg.Offset, DFSB::sectionSize);
+        } else {
+            data = extractFragment(fmapTarget, msg.Offset);
+        }
+
+        DFSP::SegmentMessage fragment = { .Actor = msg.Actor,
+                                          .FileName = msg.FileName,
+                                          .FileHash = msg.FileHash,
+                                          .Data = std::move(data),
+                                          .Offset = msg.Offset };
+
+        node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
+                                     Config::Net::TypeSend::Focused);
+
+        totalOffset += DFSB::sectionSize;
+    }
+}
+
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)) {
@@ -617,12 +653,12 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
 
     emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
 
-    DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
-                                                   .FileName = msg.FileName,
-                                                   .FileHash = msg.FileHash,
-                                                   .Path = virtualPath,
-                                                   .Offset = offset };
-    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
+//    DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
+//                                                   .FileName = msg.FileName,
+//                                                   .FileHash = msg.FileHash,
+//                                                   .Path = virtualPath,
+//                                                   .Offset = offset };
+//    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
 
     return "";
 }
