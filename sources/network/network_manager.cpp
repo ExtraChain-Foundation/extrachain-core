@@ -46,8 +46,8 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
-    // TODO: move to slot or process
+         // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
+         // TODO: move to slot or process
     local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
     // }
@@ -251,15 +251,16 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : qAsConst(m_connections)) {
-        const auto identifier = service->identifier().toStdString();
+//        const auto identifier = service->identifier().toStdString();
         //        if (identifier == receiver_identifier) {
         //            continue;
         //        }
-        bool isSend = isSendCheck(identifier);
-        if (!isSend)
-            continue;
-        if (service->isActive() && service->sendType() == SocketService::SendType::All)
+//        bool isSend = isSendCheck(identifier);
+        //        if (!isSend)
+        //        {
+//        if (service->isActive() && service->sendType() == SocketService::SendType::All)
             emit service->send(QByteArray::fromStdString(serialized_message));
+        //        }
     }
 }
 
@@ -349,19 +350,19 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
 
-    // TODO: no check new actor
-    //    {
-    //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
-    //        auto actor = node.actorIndex()->getActor(sender);
+         // TODO: no check new actor
+         //    {
+         //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
+         //        auto actor = node.actorIndex()->getActor(sender);
 
-    //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
-    //                                         QByteArray::fromStdString(std::string(sign)));
-    //        if (!verify) {
-    //            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
-    //        } else {
-    //            qDebug() << "[NetworkManager/messageReceived] Verify good";
-    //        }
-    //    }
+         //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
+         //                                         QByteArray::fromStdString(std::string(sign)));
+         //        if (!verify) {
+         //            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
+         //        } else {
+         //            qDebug() << "[NetworkManager/messageReceived] Verify good";
+         //        }
+         //    }
 
     MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
     auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
@@ -384,7 +385,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 #endif
 
-    // try {
+         // try {
     switch (type) {
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
@@ -444,7 +445,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
         qDebug() << "here send all fragments with message_id: " << messageId.c_str() << "]";
-//        node.dfs()->sendFragment(msg, messageId);
+        //        node.dfs()->sendFragment(msg, messageId);
         node.dfs()->fetchFragments(msg, messageId);
         break;
     }
