@@ -251,16 +251,15 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : qAsConst(m_connections)) {
-//        const auto identifier = service->identifier().toStdString();
+        const auto identifier = service->identifier().toStdString();
         //        if (identifier == receiver_identifier) {
         //            continue;
         //        }
 //        bool isSend = isSendCheck(identifier);
-        //        if (!isSend)
-        //        {
-//        if (service->isActive() && service->sendType() == SocketService::SendType::All)
+//        if (!isSend)
+//            continue;
+        if (service->isActive() && service->sendType() == SocketService::SendType::All)
             emit service->send(QByteArray::fromStdString(serialized_message));
-        //        }
     }
 }
 

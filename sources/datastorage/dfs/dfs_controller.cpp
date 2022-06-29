@@ -606,7 +606,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
                                           .FileName = msg.FileName,
                                           .FileHash = msg.FileHash,
                                           .Data = std::move(data),
-                                          .Offset = lastFragment ? (fileSize - totalOffset) : totalOffset };
+                                          .Offset = totalOffset };
 
         messageId =
             node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
@@ -642,7 +642,9 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
 
-    if (fileSize <= msg.Offset + msg.Data.size()) {
+    auto currentFileSize = std::filesystem::file_size(fileName);
+    qDebug() << "current file size: " << currentFileSize << fileSize;
+    if (fileSize == currentFileSize) {
         // To do: fix compare by hash
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
