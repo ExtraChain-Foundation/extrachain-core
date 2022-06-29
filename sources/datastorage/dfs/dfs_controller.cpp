@@ -598,9 +598,8 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
             data = extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
         } else {
             lastFragment = true;
-            uint64_t lastOffset = fileSize - totalOffset;
-            data = extractFragment(fmapTarget, lastOffset);
-            qDebug() << "extract fragment 2" << lastOffset;
+            data = extractFragment(fmapTarget, totalOffset);
+            qDebug() << "extract fragment 2" << totalOffset;
         }
 
         DFSP::SegmentMessage fragment = { .Actor = msg.Actor,
