@@ -181,8 +181,8 @@ public:
         std::string receiver_identifier;
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];
-            if (receiver_identifier.empty())
-                qFatal("Network send message error: receiver_identifier is empty");
+//            if (receiver_identifier.empty())
+//                qFatal("Network send message error: receiver_identifier is empty");
             m_messages.erase(to_message_id);
         }
 
