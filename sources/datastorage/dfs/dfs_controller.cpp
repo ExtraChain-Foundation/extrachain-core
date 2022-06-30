@@ -590,11 +590,17 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
     uint64_t totalOffset = 0;
     bool lastFragment = false;
     do {
-        if (fileSize - totalOffset > DFSB::sectionSize) {
-            data = extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
-        } else {
-            lastFragment = true;
-            data = extractFragment(fmapTarget, totalOffset);
+        uint64_t limitSectionSize = 0;
+        while (limitSectionSize == DFSB::maxSectionSize || !lastFragment) {
+            if (fileSize - totalOffset > DFSB::sectionSize) {
+                data += extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
+                totalOffset += DFSB::sectionSize;
+                limitSectionSize += DFSB::sectionSize;
+                emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
+            } else {
+                lastFragment = true;
+                data += extractFragment(fmapTarget, totalOffset);
+            }
         }
 
         DFSP::SegmentMessage fragment = { .Actor = msg.Actor,
@@ -607,11 +613,9 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
             node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
                                          messageId, Config::Net::TypeSend::Focused);
 
-        if (totalOffset + DFSB::sectionSize >= fileSize) {
+        if (lastFragment) {
             emit uploaded(msg.Actor, msg.FileName);
         }
-        emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
-        totalOffset += DFSB::sectionSize;
     } while (!lastFragment);
 }
 
@@ -632,8 +636,8 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
                                      + msg.FileName + "';");
     std::string virtualPath = actrDirData[0].at("filePath");
     uint64_t fileSize = std::stoull(actrDirData[0].at("fileSize"));
-
-    if (fileSize == std::filesystem::file_size(fileName)) {
+    auto currentFileSize = std::filesystem::file_size(fileName);
+    if (fileSize == currentFileSize) {
         m_compliteFiles.push_back(msg.FileName);
         qDebug() << "[Dfs] File is complite";
         return "";
@@ -642,7 +646,6 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
 
-    auto currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
