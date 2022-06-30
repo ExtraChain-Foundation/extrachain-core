@@ -577,29 +577,24 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
 
 void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId) {
     std::filesystem::path realFilePath = DFS_PATH::filePath(msg.Actor, msg.FileName);
-    qDebug() << msg.FileName.c_str() << msg.Actor.c_str() << realFilePath.c_str()
-             << std::filesystem::exists(realFilePath);
     if (!std::filesystem::exists(realFilePath)) {
         return;
     }
 
     auto fileSize = std::filesystem::file_size(realFilePath);
-    if (fileSize == 0)
+    if (fileSize == 0) {
         return;
-
+    }
     boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
     std::string data;
     uint64_t totalOffset = 0;
     bool lastFragment = false;
     do {
-        qDebug() << "totalOffset: " << totalOffset << msg.Offset << fileSize << DFSB::sectionSize;
         if (fileSize - totalOffset > DFSB::sectionSize) {
-            qDebug() << "extract fragment 1";
             data = extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
         } else {
             lastFragment = true;
             data = extractFragment(fmapTarget, totalOffset);
-            qDebug() << "extract fragment 2" << totalOffset;
         }
 
         DFSP::SegmentMessage fragment = { .Actor = msg.Actor,
@@ -611,15 +606,14 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
         messageId =
             node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
                                          messageId, Config::Net::TypeSend::Focused);
-        qDebug() << "Sended with message id: [" << messageId.c_str() << "]";
         totalOffset += DFSB::sectionSize;
     } while (!lastFragment);
 }
 
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
-    qDebug() << msg.FileHash.c_str() << msg.FileName.c_str() << msg.Offset;
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
-    if (!std::filesystem::exists(fileName)) {
+    if (!std::filesystem::exists(fileName)
+        || std::find(m_compliteFiles.begin(), m_compliteFiles.end(), msg.FileName) != m_compliteFiles.end()) {
         return "";
     }
 
@@ -635,7 +629,8 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     uint64_t fileSize = std::stoull(actrDirData[0].at("fileSize"));
 
     if (fileSize == std::filesystem::file_size(fileName)) {
-        qDebug() << "[Dfs] Skip fragment";
+        m_compliteFiles.push_back(msg.FileName);
+        qDebug() << "[Dfs] File is complite";
         return "";
     }
 
@@ -643,12 +638,9 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     fs.insertFragment(msg);
 
     auto currentFileSize = std::filesystem::file_size(fileName);
-    qDebug() << "current file size: " << currentFileSize << fileSize;
     if (fileSize == currentFileSize) {
-        // To do: fix compare by hash
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
-            // TODO: send package done
             files.erase(msg.Actor + msg.FileName);
             emit downloaded(msg.Actor, msg.FileName);
             sendFile(msg.Actor, msg.FileName); // temp
@@ -662,15 +654,6 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     }
 
     emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
-
-    //    DFSP::RequestFileSegmentMessage reqMessage = { .Actor = msg.Actor,
-    //                                                   .FileName = msg.FileName,
-    //                                                   .FileHash = msg.FileHash,
-    //                                                   .Path = virtualPath,
-    //                                                   .Offset = offset };
-    //    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
-    //    MessageStatus::Request);
-
     return "";
 }
 

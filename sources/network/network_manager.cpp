@@ -251,15 +251,9 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : qAsConst(m_connections)) {
-        const auto identifier = service->identifier().toStdString();
-        //        if (identifier == receiver_identifier) {
-        //            continue;
-        //        }
-//        bool isSend = isSendCheck(identifier);
-//        if (!isSend)
-//            continue;
-        if (service->isActive() && service->sendType() == SocketService::SendType::All)
+        if (service->isActive() && service->sendType() == SocketService::SendType::All) {
             emit service->send(QByteArray::fromStdString(serialized_message));
+        }
     }
 }
 
@@ -371,7 +365,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     if (status == MessageStatus::Request) {
         m_messages[messageId] = identifier;
-        // SocketIdentifier socketIdentifier { .socketIdentifier = identifier, .messageId = messageId };
     }
 
 #ifdef QT_DEBUG
@@ -443,8 +436,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
-        qDebug() << "here send all fragments with message_id: " << messageId.c_str() << "]";
-        //        node.dfs()->sendFragment(msg, messageId);
         node.dfs()->fetchFragments(msg, messageId);
         break;
     }

@@ -37,6 +37,7 @@ private:
     uint64_t m_bytesLimit = 10995116277760;
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
+    std::vector<std::string> m_compliteFiles;
 
 public:
     explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
