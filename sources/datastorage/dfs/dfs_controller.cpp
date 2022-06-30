@@ -606,6 +606,11 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
         messageId =
             node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
                                          messageId, Config::Net::TypeSend::Focused);
+
+        if (totalOffset + DFSB::sectionSize >= fileSize) {
+            emit uploaded(msg.Actor, msg.FileName);
+        }
+        emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         totalOffset += DFSB::sectionSize;
     } while (!lastFragment);
 }
