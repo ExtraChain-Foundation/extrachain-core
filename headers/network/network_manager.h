@@ -36,6 +36,7 @@
 #include "managers/account_controller.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
+#include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 
 class SocketService;
@@ -113,6 +114,7 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
+    void addFragSignal(const DFSP::SegmentMessage &msg);
 
 protected:
     void connectToWebSocket(const QString &ip, quint16 port);
@@ -180,8 +182,8 @@ public:
         std::string receiver_identifier;
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];
-//            if (receiver_identifier.empty())
-//                qFatal("Network send message error: receiver_identifier is empty");
+            //            if (receiver_identifier.empty())
+            //                qFatal("Network send message error: receiver_identifier is empty");
             m_messages.erase(to_message_id);
         }
 

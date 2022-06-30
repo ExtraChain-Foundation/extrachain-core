@@ -83,9 +83,13 @@ public:
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
 
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
-    void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string& messageId);
+    void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
+
+public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
+
+public:
     std::string deleteFragment(const DFSP::DeleteSegmentMessage &msg);
     uint64_t bytesLimit() const;
     void setBytesLimit(uint64_t bytesLimit);
