@@ -165,10 +165,10 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
 
     if (loadBytes) {
-        //        if (std::filesystem::exists(realFilePath)) {
-        //            qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
-        //            return msg.FileHash;
-        //        }
+        if (std::filesystem::exists(realFilePath)) {
+            qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
+            return msg.FileHash;
+        }
         if (!writeAvailable(msg.Size)) {
             qDebug() << "[Dfs] Storage full";
             qFatal("[Dfs] Storage full");
@@ -614,6 +614,8 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 
         if (lastFragment) {
             emit uploaded(msg.Actor, msg.FileName);
+        } else {
+            emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         }
     } while (!lastFragment);
 }
