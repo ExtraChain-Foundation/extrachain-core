@@ -563,8 +563,6 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
                                       .Data = std::move(data),
                                       .Offset = msg.Offset };
 
-    qDebug() << "Send with message_id: [" << messageId.c_str() << "]";
-
     node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
                                  Config::Net::TypeSend::Focused);
     if (msg.Offset + DFSB::sectionSize >= fileSize) {
@@ -596,6 +594,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
                 data += extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
                 totalOffset += DFSB::sectionSize;
                 limitSectionSize += DFSB::sectionSize;
+                qDebug() << "progress: [" << (double(totalOffset) / double(fileSize) * 100) << "%]";
                 emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
             } else {
                 lastFragment = true;
@@ -645,7 +644,8 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
 
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
-
+    currentFileSize = std::filesystem::file_size(fileName);
+    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
@@ -654,14 +654,11 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             sendFile(msg.Actor, msg.FileName); // temp
             return "hash";
         } else {
-            // requestFile(msg.Actor, msg.FileName);
-            qDebug() << Utils::calcHashForFile(fileName).c_str() << msg.FileName.c_str();
+             requestFile(msg.Actor, msg.FileName);
             qFatal("[Dfs] Incorrect file check");
             return "";
         }
     }
-
-    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     return "";
 }
 
