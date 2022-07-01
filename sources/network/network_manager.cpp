@@ -22,7 +22,7 @@
 #include "managers/thread_pool.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
-
+#include <QtConcurrent/QtConcurrent>
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -442,6 +442,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::DfsAddSegment: {
         auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
         emit addFragSignal(msg);
+//        QFuture<void> future = QtConcurrent::run(node.dfs(), &DfsController::addFragment);
         break;
     }
     case MessageType::DfsEditSegment: {

@@ -28,7 +28,9 @@
 #include "utils/db_connector.h"
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include <QThread>
 
+class Frag;
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -38,6 +40,8 @@ private:
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
     std::vector<std::string> m_compliteFiles;
+    Frag *frag;
+    QThread *thread;
 
 public:
     explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
@@ -84,9 +88,11 @@ public:
 
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
-
+    void test() {
+    }
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
+    std::string awaitAddFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
 
 public:
@@ -105,6 +111,31 @@ signals:
     void downloaded(ActorId actorId, std::string fileHash);
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
+    void addF();
+};
+
+class Frag : public QThread {
+    Q_OBJECT
+    DFSP::SegmentMessage m_segmentMessage;
+    DfsController *m_controller;
+
+public:
+    Frag(DfsController *controller, DFSP::SegmentMessage sm)
+        : m_controller(controller)
+        , m_segmentMessage(sm) {
+    }
+    Frag(DfsController *controller)
+        : m_controller(controller){
+    }
+    void setSegment(DFSP::SegmentMessage message) {
+        m_segmentMessage = message;
+    }
+
+    // QThread interface
+    virtual void run() override {
+        qDebug() << "run add frag";
+        m_controller->addFragment(m_segmentMessage);
+    };
 };
 
 #endif // DFS_CONTROLLER_H

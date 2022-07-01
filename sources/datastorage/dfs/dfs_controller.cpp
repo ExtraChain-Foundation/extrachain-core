@@ -2,6 +2,7 @@
 #include "datastorage/dfs/fragment_storage.h"
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
+#include <QtConcurrent>
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -15,6 +16,10 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     m_sizeTaken = calculateSizeTaken();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
+    frag = new Frag(this);
+    thread = new QThread();
+    frag->moveToThread(thread);
+    thread->start();
 }
 
 DfsController::~DfsController() {
@@ -661,6 +666,13 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             return "";
         }
     }
+    return "";
+}
+
+std::string DfsController::awaitAddFragment(const DFS::Packets::SegmentMessage &msg)
+{
+    frag->setSegment(msg);
+    frag->run();
     return "";
 }
 
