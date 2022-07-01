@@ -436,13 +436,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
-        node.dfs()->fetchFragments(msg, messageId);
+        emit fetchFragments(msg, messageId);
         break;
     }
     case MessageType::DfsAddSegment: {
         auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
         emit addFragSignal(msg);
-        //        node.dfs()->addFragment(msg);
         break;
     }
     case MessageType::DfsEditSegment: {

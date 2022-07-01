@@ -165,10 +165,10 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
 
     if (loadBytes) {
-        //        if (std::filesystem::exists(realFilePath)) {
-        //            qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
-        //            return msg.FileHash;
-        //        }
+        if (std::filesystem::exists(realFilePath)) {
+            qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
+            return msg.FileHash;
+        }
         if (!writeAvailable(msg.Size)) {
             qDebug() << "[Dfs] Storage full";
             qFatal("[Dfs] Storage full");
@@ -563,8 +563,6 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
                                       .Data = std::move(data),
                                       .Offset = msg.Offset };
 
-    qDebug() << "Send with message_id: [" << messageId.c_str() << "]";
-
     node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
                                  Config::Net::TypeSend::Focused);
     if (msg.Offset + DFSB::sectionSize >= fileSize) {
@@ -609,8 +607,9 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 
         if (totalOffset + DFSB::sectionSize >= fileSize) {
             emit uploaded(msg.Actor, msg.FileName);
+        } else {
+            emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         }
-        emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         totalOffset += DFSB::sectionSize;
     } while (!lastFragment);
 }
