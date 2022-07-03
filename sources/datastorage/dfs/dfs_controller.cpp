@@ -16,10 +16,6 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     m_sizeTaken = calculateSizeTaken();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
-    frag = new Frag(this);
-    thread = new QThread();
-    frag->moveToThread(thread);
-    thread->start();
 }
 
 DfsController::~DfsController() {
@@ -31,7 +27,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
     DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.query(DFST::ActorDirFile::CreateTableQuery);
 
-    //
+         //
     requestDirData(actorId);
 }
 
@@ -512,7 +508,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
     bool res = DFST::ActorDirFile::addDirRows(actorId.toStdString(), dirRows);
     qDebug() << "[Dfs] addDirData result:" << res;
 
-    // temp
+         // temp
     for (auto &row : dirRows) {
         requestFile(actorId, row.fileHash);
     }
@@ -626,6 +622,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 }
 
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
+    qDebug() << "run addFragment" << QThread::currentThreadId() << objectName();
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)
         || std::find(m_compliteFiles.begin(), m_compliteFiles.end(), msg.FileName) != m_compliteFiles.end()) {
@@ -650,7 +647,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     }
 
     FragmentStorage fs(msg);
-    fs.insertFragment(msg);
+    const bool isAddedFragment = fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
@@ -661,19 +658,20 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             sendFile(msg.Actor, msg.FileName); // temp
             return "hash";
         } else {
-             requestFile(msg.Actor, msg.FileName);
+            requestFile(msg.Actor, msg.FileName);
             qFatal("[Dfs] Incorrect file check");
             return "";
         }
     }
-    return "";
+    return isAddedFragment ? "added" : "error";
 }
 
-std::string DfsController::awaitAddFragment(const DFS::Packets::SegmentMessage &msg)
+void DfsController::futureAddFragment(const DFS::Packets::SegmentMessage &msg)
 {
-    frag->setSegment(msg);
-    frag->run();
-    return "";
+    qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
+    Frag frag(node, msg);
+    frag.start();
+    frag.wait();
 }
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {

@@ -40,8 +40,6 @@ private:
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
     std::vector<std::string> m_compliteFiles;
-    Frag *frag;
-    QThread *thread;
 
 public:
     explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
@@ -88,11 +86,10 @@ public:
 
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
-    void test() {
-    }
+
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
-    std::string awaitAddFragment(const DFSP::SegmentMessage &msg);
+    void futureAddFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
 
 public:
@@ -116,26 +113,20 @@ signals:
 
 class Frag : public QThread {
     Q_OBJECT
-    DFSP::SegmentMessage m_segmentMessage;
-    DfsController *m_controller;
-
+    ExtraChainNode &node;
+    std::vector<DFSP::SegmentMessage> msgs;
+    DFSP::SegmentMessage m_msg;
 public:
-    Frag(DfsController *controller, DFSP::SegmentMessage sm)
-        : m_controller(controller)
-        , m_segmentMessage(sm) {
-    }
-    Frag(DfsController *controller)
-        : m_controller(controller){
-    }
-    void setSegment(DFSP::SegmentMessage message) {
-        m_segmentMessage = message;
+    Frag(ExtraChainNode &exNode, const DFSP::SegmentMessage &msg, QObject *parent = NULL)
+        : QThread(parent)
+        , node(exNode),
+        m_msg(msg){
     }
 
-    // QThread interface
-    virtual void run() override {
-        qDebug() << "run add frag";
-        m_controller->addFragment(m_segmentMessage);
-    };
+protected:
+    void run() override {
+        node.dfs()->addFragment(m_msg);
+    }
 };
 
 #endif // DFS_CONTROLLER_H
