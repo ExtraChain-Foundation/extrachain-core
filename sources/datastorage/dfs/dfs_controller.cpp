@@ -335,6 +335,15 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
     return Utils::calcHashForFile(realFilePath.string());
 }
 
+void DfsController::addListFiles(const QStringList &files) {
+    qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]";
+
+    InserterFiles inserterFiles(node, files);
+    connect(&inserterFiles, &InserterFiles::resultAddFile, this, &DfsController::resultAddFile);
+    inserterFiles.start();
+    inserterFiles.wait();
+}
+
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
     std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
@@ -656,7 +665,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             sendFile(msg.Actor, msg.FileName); // temp
             return "hash";
         } else {
-             requestFile(msg.Actor, msg.FileName);
+            requestFile(msg.Actor, msg.FileName);
             qFatal("[Dfs] Incorrect file check");
             return "";
         }
@@ -752,4 +761,20 @@ uint64_t DfsController::bytesAvailable() {
 
 bool DfsController::writeAvailable(uint64_t size) {
     return bytesAvailable() > size + 10000;
+}
+
+InserterFiles::InserterFiles(ExtraChainNode &xNode, const QStringList &files, QObject *parent)
+    : QThread(parent)
+    , node(xNode)
+    , fList(files) {
+}
+
+void InserterFiles::run() {
+    for (const auto &filePath : fList) {
+        qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]";
+        const std::string result =
+            node.dfs()->addLocalFile(node.accountController()->mainActor(), filePath.toStdWString(),
+                                     QFileInfo(filePath).fileName().toStdString(), DFS::Encryption::Public);
+        emit resultAddFile(QString::fromStdString(result), filePath);
+    }
 }
