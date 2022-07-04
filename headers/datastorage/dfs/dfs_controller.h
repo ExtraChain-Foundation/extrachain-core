@@ -87,6 +87,7 @@ public:
 
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
+    void threadAddFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
 
 public:

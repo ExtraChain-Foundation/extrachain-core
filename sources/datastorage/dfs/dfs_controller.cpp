@@ -2,6 +2,7 @@
 #include "datastorage/dfs/fragment_storage.h"
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
+#include <QtConcurrent>
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -654,14 +655,22 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             files.erase(msg.Actor + msg.FileName);
             emit downloaded(msg.Actor, msg.FileName);
             sendFile(msg.Actor, msg.FileName); // temp
+            fs.initHistoricalChain();
             return "hash";
         } else {
-             requestFile(msg.Actor, msg.FileName);
+            requestFile(msg.Actor, msg.FileName);
             qFatal("[Dfs] Incorrect file check");
             return "";
         }
     }
     return "";
+}
+
+void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
+    qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
+    FragmentWriter fragmentWriter(node, msg);
+    fragmentWriter.start();
+    fragmentWriter.wait();
 }
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {

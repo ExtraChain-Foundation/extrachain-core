@@ -30,17 +30,18 @@ bool FragmentStorage::initLocalFile(uint64_t filesize) {
     return hc.initLocal(actor.toStdString(), fileName, fileHash);
 }
 
+bool FragmentStorage::initHistoricalChain()
+{
+    HistoricalChain hc(storageFile.file(), DFS_PATH::filePath(actor, fileName).string());
+    return hc.initLocal(actor.toStdString(), fileName, fileHash);
+}
+
 bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
     uint64_t pos = writeFragment(msg);
     DBRow row = makeFragmentRow(msg, pos);
-    storageFile.insert(DFSF::TableNameFragments, row);
+    const auto inserted = storageFile.insert(DFSF::TableNameFragments, row);
     moveRows(row, msg.Data.size());
-
-    std::filesystem::path filePath = DFS::Path::filePath(actor.toStdString(), fileName);
-    HistoricalChain historicalChain(storageFile.file(), filePath.string());
-    DFSP::EditSegmentMessage editSegmentMessage =
-        historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::insert);
-    return historicalChain.apply(editSegmentMessage);
+    return inserted;
 }
 
 bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
@@ -393,4 +394,15 @@ bool FragmentStorage::checkRenameFile(const DFS::Packets::EditSegmentMessage &ms
     std::filesystem::path path = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
     std::filesystem::rename(path / std::string(msg.FileHash), path / std::string(msg.NewFileHash));
     return std::filesystem::exists(path / std::string(msg.NewFileHash));
+}
+
+FragmentWriter::FragmentWriter(ExtraChainNode &exNode, const DFS::Packets::SegmentMessage &msg,
+                               QObject *parent)
+    : QThread(parent)
+    , node(exNode)
+    , m_msg(msg) {
+}
+
+void FragmentWriter::run() {
+    node.dfs()->addFragment(m_msg);
 }
