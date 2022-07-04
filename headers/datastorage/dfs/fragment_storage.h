@@ -4,10 +4,13 @@
 #include "extrachain_global.h"
 #include "managers/extrachain_node.h"
 #include "utils/db_connector.h"
+#include "utils/dfs_utils.h"
+#include "dfs_controller.h"
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
-#include "utils/dfs_utils.h"
+#include <QThread>
 
+class FragmentWriter;
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
     DBConnector storageFile;
@@ -21,6 +24,7 @@ public:
     ~FragmentStorage() = default;
 
     bool initLocalFile(uint64_t filesize);
+    bool initHistoricalChain();
     bool insertFragment(DFSP::SegmentMessage msg);
     bool editFragment(DFSP::EditSegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
@@ -41,6 +45,18 @@ private:
     std::string extract(std::filesystem::path filePath, uint64_t pos, uint64_t size);
     uint64_t remove(std::filesystem::path filePath, uint64_t pos, uint64_t size);
     bool checkRenameFile(const DFS::Packets::EditSegmentMessage &msg);
+};
+
+class FragmentWriter : public QThread {
+    Q_OBJECT
+        ExtraChainNode &node;
+    DFSP::SegmentMessage m_msg;
+
+public:
+    FragmentWriter(ExtraChainNode &exNode, const DFSP::SegmentMessage &msg, QObject *parent = NULL);
+
+protected:
+    void run() override;
 };
 
 #endif // FRAGMENT_STORAGE_H

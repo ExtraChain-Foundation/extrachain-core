@@ -27,7 +27,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
     DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.query(DFST::ActorDirFile::CreateTableQuery);
 
-         //
+    //
     requestDirData(actorId);
 }
 
@@ -508,7 +508,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
     bool res = DFST::ActorDirFile::addDirRows(actorId.toStdString(), dirRows);
     qDebug() << "[Dfs] addDirData result:" << res;
 
-         // temp
+    // temp
     for (auto &row : dirRows) {
         requestFile(actorId, row.fileHash);
     }
@@ -622,7 +622,6 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 }
 
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
-    qDebug() << "run addFragment" << QThread::currentThreadId() << objectName();
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)
         || std::find(m_compliteFiles.begin(), m_compliteFiles.end(), msg.FileName) != m_compliteFiles.end()) {
@@ -647,7 +646,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     }
 
     FragmentStorage fs(msg);
-    const bool isAddedFragment = fs.insertFragment(msg);
+    fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
@@ -656,6 +655,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             files.erase(msg.Actor + msg.FileName);
             emit downloaded(msg.Actor, msg.FileName);
             sendFile(msg.Actor, msg.FileName); // temp
+            fs.initHistoricalChain();
             return "hash";
         } else {
             requestFile(msg.Actor, msg.FileName);
@@ -663,15 +663,14 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
             return "";
         }
     }
-    return isAddedFragment ? "added" : "error";
+    return "";
 }
 
-void DfsController::futureAddFragment(const DFS::Packets::SegmentMessage &msg)
-{
+void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
-    Frag frag(node, msg);
-    frag.start();
-    frag.wait();
+    FragmentWriter fragmentWriter(node, msg);
+    fragmentWriter.start();
+    fragmentWriter.wait();
 }
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {

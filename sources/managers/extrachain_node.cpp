@@ -403,7 +403,7 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
-    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::futureAddFragment);
+    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
     connect(m_networkManager, &NetworkManager::fetchFragments, m_dfs, &DfsController::fetchFragments);
     connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);

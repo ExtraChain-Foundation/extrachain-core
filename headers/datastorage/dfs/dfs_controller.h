@@ -28,9 +28,7 @@
 #include "utils/db_connector.h"
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
-#include <QThread>
 
-class Frag;
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -89,7 +87,7 @@ public:
 
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
-    void futureAddFragment(const DFSP::SegmentMessage &msg);
+    void threadAddFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
 
 public:
@@ -108,25 +106,6 @@ signals:
     void downloaded(ActorId actorId, std::string fileHash);
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
-    void addF();
-};
-
-class Frag : public QThread {
-    Q_OBJECT
-    ExtraChainNode &node;
-    std::vector<DFSP::SegmentMessage> msgs;
-    DFSP::SegmentMessage m_msg;
-public:
-    Frag(ExtraChainNode &exNode, const DFSP::SegmentMessage &msg, QObject *parent = NULL)
-        : QThread(parent)
-        , node(exNode),
-        m_msg(msg){
-    }
-
-protected:
-    void run() override {
-        node.dfs()->addFragment(m_msg);
-    }
 };
 
 #endif // DFS_CONTROLLER_H
