@@ -81,7 +81,6 @@ public:
     void sendFile(const ActorId &actorId, const std::string &fileName, const std::string &messageId = "");
 
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
-
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
 
@@ -89,6 +88,7 @@ public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
     void threadAddFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
+    void addListFiles(const QStringList &files);
 
 public:
     std::string deleteFragment(const DFSP::DeleteSegmentMessage &msg);
@@ -106,6 +106,8 @@ signals:
     void downloaded(ActorId actorId, std::string fileHash);
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
+    void resultAddFile(const QString& result, const QString& fileName);
 };
+
 
 #endif // DFS_CONTROLLER_H

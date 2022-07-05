@@ -3,6 +3,7 @@
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
 #include <QtConcurrent>
+#include "datastorage/threds/inserter_files.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -334,6 +335,15 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
     insertDataChunk(msg.Data, msg.Offset, realFilePath);
     actrDirFile.close();
     return Utils::calcHashForFile(realFilePath.string());
+}
+
+void DfsController::addListFiles(const QStringList &files) {
+    qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]";
+
+    InserterFiles inserterFiles(node, files);
+    connect(&inserterFiles, &InserterFiles::resultAddFile, this, &DfsController::resultAddFile);
+    inserterFiles.start();
+    inserterFiles.wait();
 }
 
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
