@@ -52,7 +52,7 @@ ExtraChainNode::ExtraChainNode() {
     m_accountController = new AccountController(*this);
 
     m_networkManager = new NetworkManager(*this);
-    ThreadPool::addThread(m_networkManager);
+    //    ThreadPool::addThread(m_networkManager);
 
     m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
