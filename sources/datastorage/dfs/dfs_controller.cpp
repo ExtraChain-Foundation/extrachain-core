@@ -2,6 +2,7 @@
 #include "datastorage/dfs/fragment_storage.h"
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
+#include "datastorage/threds/inserter_files.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -761,20 +762,4 @@ uint64_t DfsController::bytesAvailable() {
 
 bool DfsController::writeAvailable(uint64_t size) {
     return bytesAvailable() > size + 10000;
-}
-
-InserterFiles::InserterFiles(ExtraChainNode &xNode, const QStringList &files, QObject *parent)
-    : QThread(parent)
-    , node(xNode)
-    , fList(files) {
-}
-
-void InserterFiles::run() {
-    for (const auto &filePath : fList) {
-        qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]";
-        const std::string result =
-            node.dfs()->addLocalFile(node.accountController()->mainActor(), filePath.toStdWString(),
-                                     QFileInfo(filePath).fileName().toStdString(), DFS::Encryption::Public);
-        emit resultAddFile(QString::fromStdString(result), filePath);
-    }
 }
