@@ -3,7 +3,6 @@
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
 #include <QtConcurrent>
-#include "datastorage/threds/inserter_files.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -338,12 +337,12 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 }
 
 void DfsController::addListFiles(const QStringList &files) {
-    qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]";
-
-    InserterFiles inserterFiles(node, files);
-    connect(&inserterFiles, &InserterFiles::resultAddFile, this, &DfsController::resultAddFile);
-    inserterFiles.start();
-    inserterFiles.wait();
+    qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
+    const auto actor = node.accountController()->mainActor();
+    for (const auto &file : files) {
+        addLocalFile(actor, file.toStdWString(), QFileInfo(files.first()).fileName().toStdString(),
+                     DFS::Encryption::Public);
+    }
 }
 
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
@@ -658,7 +657,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
-//    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
+    //    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
@@ -681,17 +680,14 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     FragmentWriter fw(msg, m_compliteFiles);
 
     connect(&fw, &FragmentWriter::downloadProgress, this, &DfsController::downloadProgress);
-    connect(&fw, &FragmentWriter::eraseFromFiles, this, [=](DFSP::SegmentMessage msg) {
-        files.erase(msg.Actor + msg.FileName);
-    });
+    connect(&fw, &FragmentWriter::eraseFromFiles, this,
+            [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
-    connect(&fw, &FragmentWriter::sendFile, this, [&](const std::string& actorId, const std::string& fileName) {
-        sendFile(actorId, fileName);
-    });
+    connect(&fw, &FragmentWriter::sendFile, this,
+            [&](const std::string &actorId, const std::string &fileName) { sendFile(actorId, fileName); });
     connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
-    connect(&fw, &FragmentWriter::compliteFile, this, [&](const std::string& fileName){
-        m_compliteFiles.push_back(fileName);
-    });
+    connect(&fw, &FragmentWriter::compliteFile, this,
+            [&](const std::string &fileName) { m_compliteFiles.push_back(fileName); });
 
     fw.start();
     fw.wait();
