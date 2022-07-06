@@ -658,7 +658,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
-    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
+//    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
@@ -678,9 +678,23 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
 
 void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
-    FragmentWriter fragmentWriter(node, msg);
-    fragmentWriter.start();
-    fragmentWriter.wait();
+    FragmentWriter fw(msg, m_compliteFiles);
+
+    connect(&fw, &FragmentWriter::downloadProgress, this, &DfsController::downloadProgress);
+    connect(&fw, &FragmentWriter::eraseFromFiles, this, [=](DFSP::SegmentMessage msg) {
+        files.erase(msg.Actor + msg.FileName);
+    });
+    connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
+    connect(&fw, &FragmentWriter::sendFile, this, [&](const std::string& actorId, const std::string& fileName) {
+        sendFile(actorId, fileName);
+    });
+    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
+    connect(&fw, &FragmentWriter::compliteFile, this, [&](const std::string& fileName){
+        m_compliteFiles.push_back(fileName);
+    });
+
+    fw.start();
+    fw.wait();
 }
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {
