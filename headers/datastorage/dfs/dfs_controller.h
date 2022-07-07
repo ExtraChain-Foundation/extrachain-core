@@ -29,6 +29,8 @@
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 
+#include <QThread>
+class ThreadAddFiles;
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -57,14 +59,17 @@ public:
     bool removeFile(const DFSP::RemoveFileMessage &msg);
     bool renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
-private:
     // Unique file ID: hash+msec+salt
     std::string createFileName(std::filesystem::path file);
-
-    bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
-    bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
     DBRow makeActrDirDBRow(std::string fileName, std::string fileNamePrev, std::string fileHash,
                            std::string filePath, uint64_t fileSize);
+    uint64_t sizeTaken() const;
+    void increaseSizeTaken(uintmax_t value);
+    void insertToFiles(DFSP::AddFileMessage msg);
+
+private:
+    bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
+    bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
     uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot);
     std::string extractNextFragment();
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
@@ -106,8 +111,26 @@ signals:
     void downloaded(ActorId actorId, std::string fileHash);
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
-    void resultAddFile(const QString& result, const QString& fileName);
+    void resultAddFile(const QString &result, const QString &fileName);
 };
 
+class ThreadAddFiles : public QThread {
+    Q_OBJECT
+    DfsController *m_dfsController;
+    QStringList m_files;
+    Actor<KeyPrivate> m_actor;
+public:
+    ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor,
+                   const QStringList &files, QObject *parent = nullptr);
+
+    virtual void run() override;
+    void addFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+                 std::string targetVirtualFilePath);
+
+signals:
+    void error(std::string error);
+    void sendMessage(DFSP::AddFileMessage msg, MessageType messageType);
+    void added(DFSP::AddFileMessage msg);
+};
 
 #endif // DFS_CONTROLLER_H
