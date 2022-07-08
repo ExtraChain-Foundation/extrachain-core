@@ -119,9 +119,11 @@ class ThreadAddFiles : public QThread {
     DfsController *m_dfsController;
     QStringList m_files;
     Actor<KeyPrivate> m_actor;
+
 public:
-    ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor,
-                   const QStringList &files, QObject *parent = nullptr);
+    ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor, const QStringList &files,
+                   QObject *parent = nullptr);
+    ~ThreadAddFiles();
 
     virtual void run() override;
     void addFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,

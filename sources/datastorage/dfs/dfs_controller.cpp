@@ -339,26 +339,22 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 void DfsController::addListFiles(const QStringList &files) {
     qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
     const auto actor = node.accountController()->mainActor();
-    ThreadAddFiles *addFilesThread = new ThreadAddFiles(this, actor, files);
-    connect(addFilesThread, &ThreadAddFiles::added, this, [&](DFSP::AddFileMessage msg) {
+    ThreadAddFiles addFilesThread(this, actor, files);
+    connect(&addFilesThread, &ThreadAddFiles::added, this, [&](DFSP::AddFileMessage msg) {
         qDebug() << "added file: " << msg.FileName.c_str();
         insertToFiles(msg);
         emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
-        addFilesThread->deleteLater();
     });
 
-    connect(addFilesThread, &ThreadAddFiles::sendMessage, this,
+    connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
             [&](DFSP::AddFileMessage msg, MessageType messageType) {
                 qDebug() << "send file: " << msg.FileName.c_str();
                 node.network()->send_message(msg, MessageType::DfsAddFile);
             });
-    connect(addFilesThread, &ThreadAddFiles::error, this, [&](std::string error){
-        qDebug() << error.c_str();
-        addFilesThread->quit();
-        addFilesThread->deleteLater();
-    });
-    addFilesThread->start();
-    addFilesThread->wait();
+    connect(&addFilesThread, &ThreadAddFiles::error, this,
+            [&](std::string error) { qDebug() << error.c_str(); });
+    addFilesThread.start();
+    addFilesThread.wait();
 }
 
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
@@ -811,11 +807,17 @@ bool DfsController::writeAvailable(uint64_t size) {
     return bytesAvailable() > size + 10000;
 }
 
-ThreadAddFiles::ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor, const QStringList &files, QObject *parent)
+ThreadAddFiles::ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor,
+                               const QStringList &files, QObject *parent)
     : QThread(parent)
     , m_dfsController(dfsController)
     , m_actor(actor)
     , m_files(files) {
+    connect(this, &ThreadAddFiles::finished, this, &ThreadAddFiles::deleteLater);
+}
+
+ThreadAddFiles::~ThreadAddFiles() {
+    qDebug() << "run destructor for thread add files";
 }
 
 void ThreadAddFiles::run() {
