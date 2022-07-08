@@ -130,9 +130,9 @@ public:
                  std::string targetVirtualFilePath);
 
 signals:
-    void error(std::string error);
+    void error(std::string error, std::string fileName);
     void sendMessage(DFSP::AddFileMessage msg, MessageType messageType);
-    void added(DFSP::AddFileMessage msg);
+    void added(DFSP::AddFileMessage msg, std::string filePath);
 };
 
 #endif // DFS_CONTROLLER_H

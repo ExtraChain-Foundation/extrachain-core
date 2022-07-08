@@ -25,9 +25,7 @@ FragmentStorage::FragmentStorage(DFS::Packets::SegmentMessage segmentMessage)
 
 bool FragmentStorage::initLocalFile(uint64_t filesize) {
     DBRow row = makeFragmentRow(0, 0, filesize);
-    storageFile.insert(DFSF::TableNameFragments, row);
-    HistoricalChain hc(storageFile.file(), DFS_PATH::filePath(actor, fileName).string());
-    return hc.initLocal(actor.toStdString(), fileName, fileHash);
+    return storageFile.insert(DFSF::TableNameFragments, row);
 }
 
 bool FragmentStorage::initHistoricalChain() {
