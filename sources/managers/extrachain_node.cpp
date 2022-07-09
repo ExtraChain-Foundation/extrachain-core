@@ -52,7 +52,7 @@ ExtraChainNode::ExtraChainNode() {
     m_accountController = new AccountController(*this);
 
     m_networkManager = new NetworkManager(*this);
-    ThreadPool::addThread(m_networkManager);
+    //    ThreadPool::addThread(m_networkManager);
 
     m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
@@ -403,6 +403,8 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
+    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
+    connect(m_networkManager, &NetworkManager::fetchFragments, m_dfs, &DfsController::fetchFragments);
     connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);

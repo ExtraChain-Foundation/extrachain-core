@@ -32,10 +32,12 @@ public:
     quint16 port() const override;
     quint16 serverPort() const override;
 
+public:
+    virtual void sendMessage(const QByteArray &data) override;
 private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
-    void sendMessage(const QByteArray &data);
+
     void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;

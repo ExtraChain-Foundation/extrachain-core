@@ -22,7 +22,6 @@
 #include "managers/thread_pool.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
-
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -251,15 +250,9 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : qAsConst(m_connections)) {
-        const auto identifier = service->identifier().toStdString();
-//        if (identifier == receiver_identifier) {
-//            continue;
-//        }
-        bool isSend = isSendCheck(identifier);
-        if (!isSend)
-            continue;
-        if (service->isActive() && service->sendType() == SocketService::SendType::All)
-            emit service->send(QByteArray::fromStdString(serialized_message));
+        if (service->isActive() && service->sendType() == SocketService::SendType::All) {
+            service->sendMessage(QByteArray::fromStdString(serialized_message));
+        }
     }
 }
 
@@ -333,10 +326,10 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
-//    if (m_messages.contains(identifier)) {
-//        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
-//        return;
-//    }
+    //    if (m_messages.contains(identifier)) {
+    //        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
+    //        return;
+    //    }
 
     if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
         qDebug()
@@ -371,7 +364,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     if (status == MessageStatus::Request) {
         m_messages[messageId] = identifier;
-        // SocketIdentifier socketIdentifier { .socketIdentifier = identifier, .messageId = messageId };
     }
 
 #ifdef QT_DEBUG
@@ -443,12 +435,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::DfsRequestFileSegment: {
         auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
-        node.dfs()->sendFragment(msg, messageId);
+        emit fetchFragments(msg, messageId);
         break;
     }
     case MessageType::DfsAddSegment: {
         auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
-        node.dfs()->addFragment(msg);
+        emit addFragSignal(msg);
         break;
     }
     case MessageType::DfsEditSegment: {

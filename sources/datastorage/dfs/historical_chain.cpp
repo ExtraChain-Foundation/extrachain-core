@@ -165,11 +165,11 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
     std::ifstream ifs(filePath, std::ios::binary);
     ifs.seekg(0, std::ios::beg);
     std::vector<char> buffer(DFS::Basic::historicalChainSectionSize);
+
     do {
-        std::string data(buffer.data(), buffer.size());
         apply(DFSP::EditSegmentMessage { .Actor = actor,
                                          .FileHash = fileHash,
-                                         .Data = data,
+                                         .Data = std::string(buffer.data(), buffer.size()),
                                          .Offset = 0,
                                          .ActionType = DFSP::SegmentMessageType::insert });
     } while (ifs.read(buffer.data(), DFS::Basic::historicalChainSectionSize));
