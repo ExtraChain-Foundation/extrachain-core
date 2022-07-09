@@ -340,12 +340,13 @@ void DfsController::addListFiles(const QStringList &files) {
     qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
     const auto actor = node.accountController()->mainActor();
     ThreadAddFiles addFilesThread(this, actor, files);
-    connect(&addFilesThread, &ThreadAddFiles::added, this, [&](DFSP::AddFileMessage msg, std::string filePath) {
-        qDebug() << "added file: " << msg.FileName.c_str();
-        insertToFiles(msg);
-        emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
-        emit resultAddFile("", QString::fromStdString(filePath));
-    });
+    connect(&addFilesThread, &ThreadAddFiles::added, this,
+            [&](DFSP::AddFileMessage msg, std::string filePath) {
+                qDebug() << "added file: " << msg.FileName.c_str();
+                insertToFiles(msg);
+                emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
+                emit resultAddFile("", QString::fromStdString(filePath));
+            });
 
     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
             [&](DFSP::AddFileMessage msg, MessageType messageType) {
@@ -846,27 +847,27 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
 
     if (!std::filesystem::exists(newFilePath)) {
         qInfo() << "[Dfs] Can't load file";
-        emit error("ErrorNotExists", filePath);
+        emit error("ErrorNotExists", filePath.string());
         return;
     }
 
     if (!std::filesystem::is_regular_file(newFilePath)) {
         qInfo() << "[Dfs] This is not a file";
-        emit error("ErrorNotFile", filePath);
+        emit error("ErrorNotFile", filePath.string());
         return;
     }
 
     std::ifstream my_file(newFilePath);
     if (!my_file) {
         qDebug() << "Can't read";
-        emit error("ErrorNotReadable", filePath);
+        emit error("ErrorNotReadable", filePath.string());
         return;
     }
     my_file.close();
 
     auto fileSize = std::filesystem::file_size(newFilePath);
     if (!m_dfsController->writeAvailable(fileSize)) {
-        emit error("ErrorStorageFull", filePath);
+        emit error("ErrorStorageFull", filePath.string());
         return;
     }
 
@@ -880,7 +881,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
             qDebug() << "[DFS] File already in DFS";
-            emit error("ErrorAlreadyExists", filePath);
+            emit error("ErrorAlreadyExists", filePath.string());
             return;
         }
     }
@@ -912,7 +913,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
         qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
                  << DFST::ActorDirFile::TableName.c_str();
         qFatal("Insert failed");
-        emit error("ErrorDirError", filePath);
+        emit error("ErrorDirError", filePath.string());
         return;
     }
 
@@ -953,5 +954,5 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
-    emit added(msg, filePath);
+    emit added(msg, filePath.string());
 }
