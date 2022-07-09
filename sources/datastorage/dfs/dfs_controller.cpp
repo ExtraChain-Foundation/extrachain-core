@@ -336,6 +336,31 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
     return Utils::calcHashForFile(realFilePath.string());
 }
 
+void DfsController::addListFiles(const QStringList &files) {
+    qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
+    const auto actor = node.accountController()->mainActor();
+    ThreadAddFiles addFilesThread(this, actor, files);
+    connect(&addFilesThread, &ThreadAddFiles::added, this,
+            [&](DFSP::AddFileMessage msg, std::string filePath) {
+                qDebug() << "added file: " << msg.FileName.c_str();
+                insertToFiles(msg);
+                emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
+                emit resultAddFile("", QString::fromStdString(filePath));
+            });
+
+    connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
+            [&](DFSP::AddFileMessage msg, MessageType messageType) {
+                qDebug() << "send file: " << msg.FileName.c_str();
+                node.network()->send_message(msg, MessageType::DfsAddFile);
+            });
+    connect(&addFilesThread, &ThreadAddFiles::error, this, [&](std::string error, std::string fileName) {
+        qDebug() << error.c_str();
+        emit resultAddFile(QString::fromStdString(error), QString::fromStdString(fileName));
+    });
+    addFilesThread.start();
+    addFilesThread.wait();
+}
+
 bool DfsController::insertDataChunk(std::string data, uint64_t position, std::filesystem::path file) {
     std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
@@ -444,6 +469,18 @@ DBRow DfsController::makeActrDirDBRow(std::string fileName, std::string fileName
              { "filePath", filePath },
              { "fileSize", std::to_string(fileSize) },
              { "lastModified", std::to_string(Utils::currentDateSecs()) } };
+}
+
+uint64_t DfsController::sizeTaken() const {
+    return m_sizeTaken;
+}
+
+void DfsController::increaseSizeTaken(uintmax_t value) {
+    m_sizeTaken += value;
+}
+
+void DfsController::insertToFiles(DFS::Packets::AddFileMessage msg) {
+    files[msg.Actor + msg.FileName] = msg;
 }
 
 uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
@@ -590,7 +627,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
     bool lastFragment = false;
     do {
         uint64_t limitSectionSize = 0;
-        while (limitSectionSize == DFSB::maxSectionSize || !lastFragment) {
+        while (limitSectionSize <= DFSB::maxSectionSize && !lastFragment) {
             if (fileSize - totalOffset > DFSB::sectionSize) {
                 data += extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
                 totalOffset += DFSB::sectionSize;
@@ -648,7 +685,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
-    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
+    //    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
@@ -668,9 +705,20 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
 
 void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
-    FragmentWriter fragmentWriter(node, msg);
-    fragmentWriter.start();
-    fragmentWriter.wait();
+    FragmentWriter fw(msg, m_compliteFiles);
+
+    connect(&fw, &FragmentWriter::downloadProgress, this, &DfsController::downloadProgress);
+    connect(&fw, &FragmentWriter::eraseFromFiles, this,
+            [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
+    connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
+    connect(&fw, &FragmentWriter::sendFile, this,
+            [&](const std::string &actorId, const std::string &fileName) { sendFile(actorId, fileName); });
+    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
+    connect(&fw, &FragmentWriter::compliteFile, this,
+            [&](const std::string &fileName) { m_compliteFiles.push_back(fileName); });
+
+    fw.start();
+    fw.wait();
 }
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {
@@ -761,4 +809,150 @@ uint64_t DfsController::bytesAvailable() {
 
 bool DfsController::writeAvailable(uint64_t size) {
     return bytesAvailable() > size + 10000;
+}
+
+ThreadAddFiles::ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor,
+                               const QStringList &files, QObject *parent)
+    : QThread(parent)
+    , m_dfsController(dfsController)
+    , m_actor(actor)
+    , m_files(files) {
+    connect(this, &ThreadAddFiles::finished, this, &ThreadAddFiles::deleteLater);
+}
+
+ThreadAddFiles::~ThreadAddFiles() {
+    qDebug() << "run destructor for thread add files";
+}
+
+void ThreadAddFiles::run() {
+    qDebug() << "Run function in thread: " << QThread::currentThreadId();
+    for (const auto &fileName : m_files) {
+        addFile(m_actor, fileName.toStdWString(), QFileInfo(fileName).fileName().toStdString());
+    }
+}
+
+void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+                             std::string targetVirtualFilePath) {
+    std::filesystem::path fpath = DFS_PATH::convertPathToPlatform(filePath);
+    std::filesystem::path newFilePath = fpath;
+    std::string newTargetVirtualFilePath = targetVirtualFilePath;
+
+#ifdef ANDROID
+    auto tempPath = "dfs/temp"
+        + QString::number(QRandomGenerator::global()->bounded(1000) + QDateTime::currentMSecsSinceEpoch());
+    QFile::copy(newFilePath.string().c_str(), tempPath);
+    fpath = tempPath.toStdString();
+    newFilePath = fpath;
+#endif
+
+    if (!std::filesystem::exists(newFilePath)) {
+        qInfo() << "[Dfs] Can't load file";
+        emit error("ErrorNotExists", filePath.string());
+        return;
+    }
+
+    if (!std::filesystem::is_regular_file(newFilePath)) {
+        qInfo() << "[Dfs] This is not a file";
+        emit error("ErrorNotFile", filePath.string());
+        return;
+    }
+
+    std::ifstream my_file(newFilePath);
+    if (!my_file) {
+        qDebug() << "Can't read";
+        emit error("ErrorNotReadable", filePath.string());
+        return;
+    }
+    my_file.close();
+
+    auto fileSize = std::filesystem::file_size(newFilePath);
+    if (!m_dfsController->writeAvailable(fileSize)) {
+        emit error("ErrorStorageFull", filePath.string());
+        return;
+    }
+
+    std::string fileName = m_dfsController->createFileName(filePath);
+    std::string fileHash = Utils::calcHashForFile(newFilePath);
+    std::filesystem::path placeInDFS =
+        DFSB::fsActrRootW + DFSB::separator + actor.id().toString().toStdWString() + DFSB::separator;
+    std::filesystem::path dfsPath = DFS_PATH::filePath(actor.id(), fileName);
+
+    if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
+        std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
+        if (fileHash == dfsFileHash) {
+            qDebug() << "[DFS] File already in DFS";
+            emit error("ErrorAlreadyExists", filePath.string());
+            return;
+        }
+    }
+
+    try {
+        std::filesystem::create_directories(placeInDFS.c_str());
+#ifdef ANDROID
+        std::filesystem::rename(newFilePath, dfsPath);
+#else
+        std::filesystem::copy(newFilePath, dfsPath);
+#endif
+    } catch (std::filesystem::filesystem_error const &err) {
+        qDebug() << "[Dfs] Copy error:" << err.what();
+    }
+
+    const auto actorId = actor.id().toStdString();
+    DFSP::AddFileMessage msg = { .Actor = actorId,
+                                 .FileName = fileName,
+                                 .FileHash = fileHash,
+                                 .Path = newTargetVirtualFilePath,
+                                 .Size = fileSize };
+
+    auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
+    auto lastFileName = DFST::ActorDirFile::getLastName(actrDirFile);
+    const DBRow rowData =
+        m_dfsController->makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
+
+    if (!actrDirFile.insert(DFST::ActorDirFile::TableName, rowData)) {
+        qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
+                 << DFST::ActorDirFile::TableName.c_str();
+        qFatal("Insert failed");
+        emit error("ErrorDirError", filePath.string());
+        return;
+    }
+
+    actrDirFile.close();
+    m_dfsController->increaseSizeTaken(fileSize);
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+    dirsFile.replace(DFST::DirsFile::TableName,
+                     { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
+    dirsFile.close();
+    auto dirRow = DFST::ActorDirFile::getDirRow(actorId, fileName);
+
+    emit sendMessage(msg, MessageType::DfsAddFile);
+
+    std::string pathDelim = Utils::platformDelimeter();
+    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
+    std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
+
+    DBConnector actrDirPathFile(actrDirFilePath);
+
+    if (!actrDirPathFile.open()) {
+        exit(EXIT_FAILURE);
+    }
+
+    auto result = actrDirPathFile.select(DFST::filesTableLast);
+
+    if (!actrDirPathFile.insert(DFST::ActorDirFile::TableName, rowData)) {
+        qDebug() << "[Dfs] addFile: insert failed:" << actrDirPathFile.file().c_str() << " :"
+                 << DFST::ActorDirFile::TableName.c_str();
+        qFatal("Error 2");
+        return;
+    }
+    actrDirPathFile.close();
+    dirsFile.open();
+    dirsFile.replace(DFST::DirsFile::TableName,
+                     { { "actorId", msg.Actor }, { "lastModified", rowData.at("lastModified") } });
+
+    FragmentStorage fs(actor.id(), fileName, fileHash);
+    fs.initLocalFile(fileSize);
+    fs.initHistoricalChain();
+    emit added(msg, filePath.string());
 }

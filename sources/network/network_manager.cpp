@@ -251,7 +251,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 
     for (const auto &service : qAsConst(m_connections)) {
         if (service->isActive() && service->sendType() == SocketService::SendType::All) {
-            emit service->send(QByteArray::fromStdString(serialized_message));
+            service->sendMessage(QByteArray::fromStdString(serialized_message));
         }
     }
 }
