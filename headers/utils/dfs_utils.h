@@ -54,7 +54,7 @@ namespace Basic {
     static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
     static const std::string dirsPath = "dfs/.dirs";
-    static const uint64_t sectionSize = /*2097152*/ 512000;
+    static const uint64_t sectionSize = /*2097152*/ 524228;
     static const uint64_t maxSectionSize = 2097152;
     static const uint64_t historicalChainSectionSize = 2097152;
 

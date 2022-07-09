@@ -627,7 +627,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
     bool lastFragment = false;
     do {
         uint64_t limitSectionSize = 0;
-        while (limitSectionSize == DFSB::maxSectionSize || !lastFragment) {
+        while (limitSectionSize <= DFSB::maxSectionSize && !lastFragment) {
             if (fileSize - totalOffset > DFSB::sectionSize) {
                 data += extractFragment(fmapTarget, totalOffset, DFSB::sectionSize);
                 totalOffset += DFSB::sectionSize;
