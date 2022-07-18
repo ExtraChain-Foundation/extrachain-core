@@ -59,6 +59,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/threds/inserter_files.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/private_profile.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/ip_parser/countryblockipv4.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/ip_parser/parseripcountrylocationcsv.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_public.h
@@ -96,6 +98,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/threds/inserter_files.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/ip_parser/countryblockipv4.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/ip_parser/parseripcountrylocationcsv.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/enc_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_public.cpp
