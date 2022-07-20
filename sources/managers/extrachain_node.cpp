@@ -35,6 +35,7 @@
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
 
+
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
     if (!singleton)
@@ -65,6 +66,9 @@ ExtraChainNode::ExtraChainNode() {
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
 
+    m_ipController = new IPController(*this);
+
+
     // ThreadPool::addThread(m_blockchain);
     // ThreadPool::addThread(m_txManager);
 }
@@ -76,6 +80,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_txManager;
     delete m_blockchain;
     delete m_accountController;
+    delete m_ipController;
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -454,6 +459,11 @@ ActorIndex *ExtraChainNode::actorIndex() const {
 
 DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
+}
+
+IPController *ExtraChainNode::ipController() const
+{
+    return m_ipController;
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {

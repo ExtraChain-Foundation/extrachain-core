@@ -23,6 +23,9 @@ enum class MessageType {
     DfsAddSegment = 57,
     DfsDeleteSegment = 58,
     DfsSendingFileDone = 59,
+
+    IpRequestAllConnection = 70,
+    IpNewConnection = 71
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)

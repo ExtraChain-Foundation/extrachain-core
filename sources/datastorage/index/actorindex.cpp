@@ -111,6 +111,11 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
         node.network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
 
         qDebug() << "[ActorIndex] Get all actors request";
+
+        auto &mainActor = node.accountController()->mainActor();
+        DFSP::IPRequest msgIp = {.Actor = mainActor.id().toStdString() };
+        node.network()->send_message(msgIp, MessageType::IpRequestAllConnection);
+        qDebug() << "sended request get all ip connection";
     }
 }
 

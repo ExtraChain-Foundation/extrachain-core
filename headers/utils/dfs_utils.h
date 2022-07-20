@@ -131,7 +131,20 @@ namespace Packets {
         uint64_t lastModified;
         MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, fileSize, lastModified)
     };
+
+    struct IPConnection {
+        std::string Actor;
+        std::string IP_Address;
+        uint64_t IP_Port;
+        MSGPACK_DEFINE(Actor, IP_Address, IP_Port)
+    };
+
+    struct IPRequest {
+        std::string Actor;
+        MSGPACK_DEFINE(Actor)
+    };
 }
+
 namespace Fragments {
     static const std::string Extension = ".storj";
     static const std::string TableNameFragments = "Fragments";

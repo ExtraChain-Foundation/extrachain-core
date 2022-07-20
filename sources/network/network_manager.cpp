@@ -464,6 +464,20 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::IpRequestAllConnection: {
+        auto msg = MessagePack::deserialize<DFSP::IPRequest>(serialized);
+        qDebug() << "IpRequestAllConnection actor: "<< msg.Actor.c_str();
+        node.ipController()->getIpConnections(msg.Actor);
+        break;
+    }
+
+    case MessageType::IpNewConnection: {
+        auto msg = MessagePack::deserialize<DFSP::IPConnection>(serialized);
+        node.ipController()->connectToIP(msg);
+        qDebug() << "new ip connection: " << msg.IP_Address.c_str() << "port:" << msg.IP_Port;
+        break;
+    }
+
     default:
         qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
         break;

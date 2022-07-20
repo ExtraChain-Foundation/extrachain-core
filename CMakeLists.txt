@@ -78,6 +78,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/ip_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/coinprocess.h
@@ -114,6 +115,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/ip_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/coinprocess.cpp

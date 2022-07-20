@@ -26,6 +26,7 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
+#include "network/ip_controller.h"
 
 class DfsController;
 class ActorIndex;
@@ -53,7 +54,7 @@ private:
     TransactionManager *m_txManager = nullptr;
     AccountController *m_accountController = nullptr;
     // ContractManager *m_contractManager = nullptr;
-
+    IPController *m_ipController = nullptr;
     bool fileMode = true;
     bool started = false;
 
@@ -70,6 +71,7 @@ public:
     AccountController *accountController() const;
     ActorIndex *actorIndex() const;
     DfsController *dfs() const;
+    IPController *ipController() const;
 
     // Remove this function before merge
     void test() const;
