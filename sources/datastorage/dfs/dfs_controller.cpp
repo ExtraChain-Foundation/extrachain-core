@@ -3,6 +3,7 @@
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
 #include <QtConcurrent>
+#include <boost/algorithm/string.hpp>
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -481,6 +482,54 @@ void DfsController::increaseSizeTaken(uintmax_t value) {
 
 void DfsController::insertToFiles(DFS::Packets::AddFileMessage msg) {
     files[msg.Actor + msg.FileName] = msg;
+}
+
+void DfsController::exportFile(const std::string &pathTo, const std::string &pathFrom,
+                               const std::string &nameFile) {
+    size_t pos = pathFrom.rfind("/");
+    std::string actorId = pathFrom.substr(pos + 1, pathFrom.size());
+
+    if (!nameFile.empty()) {
+        std::string pathFile = pathFrom + "/" + nameFile;
+        const bool fileFromExist = std::filesystem::exists(pathFile);
+        const bool folderToExist = std::filesystem::exists(pathTo);
+        if (fileFromExist && folderToExist) {
+            std::filesystem::copy(pathFile, pathTo);
+            auto dirRows = DFS::Tables::ActorDirFile::getDirRows(actorId);
+            auto it = std::find_if(dirRows.begin(), dirRows.end(), [&](DFSP::DirRow &dbRow) {
+                transform(dbRow.fileName.begin(), dbRow.fileName.end(), dbRow.fileName.begin(), ::tolower);
+                auto lowerNameFile = nameFile;
+                transform(lowerNameFile.begin(), lowerNameFile.end(), lowerNameFile.begin(), ::tolower);
+
+                if (dbRow.fileName == lowerNameFile) {
+                    if (!std::filesystem::exists(pathTo + "/" + dbRow.filePath)) {
+                        std::filesystem::rename(pathTo + "/" + nameFile, pathTo + "/" + dbRow.filePath);
+                    } else {
+                        const auto pathFile = std::filesystem::path(pathTo + "/" + dbRow.filePath);
+                        for (int index = 2; index < 100; index++) {
+                            std::string possibleNewFile = pathTo + "/" + pathFile.stem().string() + "_"
+                                + std::to_string(index) + pathFile.extension().string();
+                            if (!std::filesystem::exists(possibleNewFile)) {
+                                std::filesystem::rename(pathTo + "/" + nameFile, possibleNewFile);
+                                break;
+                            }
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            });
+        }
+    } else {
+        std::filesystem::create_directories(pathTo + "/" + actorId);
+
+        for (const auto &entry : std::filesystem::directory_iterator(pathFrom)) {
+            if (entry.path().extension() != ".storj" && entry.path().filename() != ".dir") {
+                auto copyTo = (pathTo + "/" + actorId);
+                exportFile(copyTo, pathFrom, entry.path().filename());
+            }
+        }
+    }
 }
 
 uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
