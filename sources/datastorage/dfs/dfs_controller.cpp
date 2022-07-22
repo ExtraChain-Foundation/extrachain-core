@@ -526,7 +526,7 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
         for (const auto &entry : std::filesystem::directory_iterator(pathFrom)) {
             if (entry.path().extension() != ".storj" && entry.path().filename() != ".dir") {
                 auto copyTo = (pathTo + "/" + actorId);
-                exportFile(copyTo, pathFrom, entry.path().filename());
+                exportFile(copyTo, pathFrom, entry.path().filename().string());
             }
         }
     }
