@@ -486,8 +486,21 @@ void DfsController::insertToFiles(DFS::Packets::AddFileMessage msg) {
 
 void DfsController::exportFile(const std::string &pathTo, const std::string &pathFrom,
                                const std::string &nameFile) {
-    size_t pos = pathFrom.rfind("/");
-    std::string actorId = pathFrom.substr(pos + 1, pathFrom.size());
+    std::string actorId = "";
+
+    if (pathFrom.find('/') != std::string::npos) {
+        size_t pos = pathFrom.rfind('/');
+        actorId = pathFrom.substr(pos + 1, pathFrom.size());
+    } else {
+        actorId = pathFrom;
+        std::filesystem::path actorFolderPath = DFSB::fsActrRoot + "/" + actorId;
+        exportFile(pathTo, actorFolderPath.string(), nameFile);
+    }
+
+    if(actorId.empty()) {
+        qDebug() << "Path or actor_id hadn't been found. Please check in parameters.";
+        return;
+    }
 
     if (!nameFile.empty()) {
         std::string pathFile = pathFrom + "/" + nameFile;
@@ -500,7 +513,6 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
                 transform(dbRow.fileName.begin(), dbRow.fileName.end(), dbRow.fileName.begin(), ::tolower);
                 auto lowerNameFile = nameFile;
                 transform(lowerNameFile.begin(), lowerNameFile.end(), lowerNameFile.begin(), ::tolower);
-
                 if (dbRow.fileName == lowerNameFile) {
                     if (!std::filesystem::exists(pathTo + "/" + dbRow.filePath)) {
                         std::filesystem::rename(pathTo + "/" + nameFile, pathTo + "/" + dbRow.filePath);
@@ -521,12 +533,14 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
             });
         }
     } else {
-        std::filesystem::create_directories(pathTo + "/" + actorId);
-
-        for (const auto &entry : std::filesystem::directory_iterator(pathFrom)) {
-            if (entry.path().extension() != ".storj" && entry.path().filename() != ".dir") {
-                auto copyTo = (pathTo + "/" + actorId);
-                exportFile(copyTo, pathFrom, entry.path().filename().string());
+        const std::string nameDirectory = pathTo + "/" + actorId;
+        std::filesystem::create_directories(nameDirectory);
+        if (pathFrom.find('/') != std::string::npos) {
+            for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(pathFrom)) {
+                if (entry.path().extension() != ".storj" && entry.path().extension() != ".storj-journal" && entry.path().filename() != ".dir") {
+                    auto copyTo = (pathTo + "/" + actorId);
+                    exportFile(copyTo, pathFrom, entry.path().filename().string());
+                }
             }
         }
     }
