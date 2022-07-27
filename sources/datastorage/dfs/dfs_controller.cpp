@@ -3,6 +3,7 @@
 #include "datastorage/dfs/historical_chain.h"
 #include "network/network_manager.h"
 #include <QtConcurrent>
+#include <boost/algorithm/string.hpp>
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -481,6 +482,77 @@ void DfsController::increaseSizeTaken(uintmax_t value) {
 
 void DfsController::insertToFiles(DFS::Packets::AddFileMessage msg) {
     files[msg.Actor + msg.FileName] = msg;
+}
+
+void DfsController::exportFile(const std::string &pathTo, const std::string &pathFrom,
+                               const std::string &nameFile) {
+    std::string actorId = "";
+
+    if (!std::filesystem::exists(pathTo)) {
+        std::filesystem::create_directories(pathTo);
+    }
+
+    if (pathFrom.find('/') != std::string::npos) {
+        size_t pos = pathFrom.rfind('/');
+        actorId = pathFrom.substr(pos + 1, pathFrom.size());
+    } else {
+        actorId = pathFrom;
+        std::filesystem::path actorFolderPath = DFSB::fsActrRoot + "/" + actorId;
+        exportFile(pathTo, actorFolderPath.string(), nameFile);
+    }
+
+    if (actorId.empty()) {
+        qDebug() << "Path or actor_id hadn't been found. Please check in parameters.";
+        return;
+    }
+
+    if (!nameFile.empty()) {
+        std::string pathFile = pathFrom + "/" + nameFile;
+        const bool fileFromExist = std::filesystem::exists(pathFile);
+        const bool folderToExist = std::filesystem::exists(pathTo);
+        if (fileFromExist && folderToExist) {
+            std::filesystem::copy(pathFile, pathTo);
+            auto dirRows = DFS::Tables::ActorDirFile::getDirRows(actorId);
+            auto it = std::find_if(dirRows.begin(), dirRows.end(), [&](DFSP::DirRow &dbRow) {
+                transform(dbRow.fileName.begin(), dbRow.fileName.end(), dbRow.fileName.begin(), ::tolower);
+                auto lowerNameFile = nameFile;
+                transform(lowerNameFile.begin(), lowerNameFile.end(), lowerNameFile.begin(), ::tolower);
+                if (dbRow.fileName == lowerNameFile) {
+                    if (!std::filesystem::exists(pathTo + "/" + dbRow.filePath)) {
+                        std::filesystem::rename(pathTo + "/" + nameFile, pathTo + "/" + dbRow.filePath);
+                    } else {
+                        const auto pathFile = std::filesystem::path(pathTo + "/" + dbRow.filePath);
+                        for (int index = 2; index < 100; index++) {
+                            std::string possibleNewFile = pathTo + "/" + pathFile.stem().string() + "_"
+                                + std::to_string(index) + pathFile.extension().string();
+                            if (!std::filesystem::exists(possibleNewFile)) {
+                                std::filesystem::rename(pathTo + "/" + nameFile, possibleNewFile);
+                                break;
+                            }
+                        }
+                    }
+                    qDebug() << fmt::format("File \"{}\" of actor \"{}\" extracted\n", dbRow.filePath,
+                                            actorId)
+                                    .c_str();
+                    return true;
+                }
+                return false;
+            });
+        }
+    } else {
+        const std::string nameDirectory = pathTo + "/" + actorId;
+        std::filesystem::create_directories(nameDirectory);
+        if (pathFrom.find('/') != std::string::npos) {
+            for (std::filesystem::directory_entry const &entry :
+                 std::filesystem::directory_iterator(pathFrom)) {
+                if (entry.path().extension() != ".storj" && entry.path().extension() != ".storj-journal"
+                    && entry.path().filename() != ".dir") {
+                    auto copyTo = (pathTo + "/" + actorId);
+                    exportFile(copyTo, pathFrom, entry.path().filename().string());
+                }
+            }
+        }
+    }
 }
 
 uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
