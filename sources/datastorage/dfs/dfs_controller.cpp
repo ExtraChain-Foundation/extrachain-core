@@ -488,6 +488,10 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
                                const std::string &nameFile) {
     std::string actorId = "";
 
+    if(!std::filesystem::exists(pathTo)) {
+        std::filesystem::create_directories(pathTo);
+    }
+
     if (pathFrom.find('/') != std::string::npos) {
         size_t pos = pathFrom.rfind('/');
         actorId = pathFrom.substr(pos + 1, pathFrom.size());
