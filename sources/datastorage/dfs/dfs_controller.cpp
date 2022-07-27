@@ -488,7 +488,7 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
                                const std::string &nameFile) {
     std::string actorId = "";
 
-    if(!std::filesystem::exists(pathTo)) {
+    if (!std::filesystem::exists(pathTo)) {
         std::filesystem::create_directories(pathTo);
     }
 
@@ -501,7 +501,7 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
         exportFile(pathTo, actorFolderPath.string(), nameFile);
     }
 
-    if(actorId.empty()) {
+    if (actorId.empty()) {
         qDebug() << "Path or actor_id hadn't been found. Please check in parameters.";
         return;
     }
@@ -531,6 +531,9 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
                             }
                         }
                     }
+                    qDebug() << fmt::format("File \"{}\" of actor \"{}\" extracted\n", dbRow.filePath,
+                                            actorId)
+                                    .c_str();
                     return true;
                 }
                 return false;
@@ -540,8 +543,10 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
         const std::string nameDirectory = pathTo + "/" + actorId;
         std::filesystem::create_directories(nameDirectory);
         if (pathFrom.find('/') != std::string::npos) {
-            for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(pathFrom)) {
-                if (entry.path().extension() != ".storj" && entry.path().extension() != ".storj-journal" && entry.path().filename() != ".dir") {
+            for (std::filesystem::directory_entry const &entry :
+                 std::filesystem::directory_iterator(pathFrom)) {
+                if (entry.path().extension() != ".storj" && entry.path().extension() != ".storj-journal"
+                    && entry.path().filename() != ".dir") {
                     auto copyTo = (pathTo + "/" + actorId);
                     exportFile(copyTo, pathFrom, entry.path().filename().string());
                 }
