@@ -66,6 +66,7 @@ public:
     uint64_t sizeTaken() const;
     void increaseSizeTaken(uintmax_t value);
     void insertToFiles(DFSP::AddFileMessage msg);
+    void exportFile(const std::string& pathTo, const std::string& pathFrom, const std::string& nameFile = "");
 
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
