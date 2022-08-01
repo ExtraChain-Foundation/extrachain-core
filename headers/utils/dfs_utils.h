@@ -54,6 +54,7 @@ namespace Basic {
     static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
     static const std::string dirsPath = "dfs/.dirs";
+    static const std::string ipdirsPath = "dfs/ip";
     static const uint64_t sectionSize = /*2097152*/ 524228;
     static const uint64_t maxSectionSize = 209715200;
     static const uint64_t historicalChainSectionSize = 209715200;
@@ -231,6 +232,26 @@ namespace Path {
     std::filesystem::path filePath(const ActorId &actorId, const std::string &fileName);
 }
 
+namespace IP {
+    static const std::string ipTableName = "IpConnections";
+    static const std::string ipConnectionsTableCreate = "CREATE TABLE IF NOT EXISTS " + ipTableName
+        + " ("
+          "ip   TEXT NOT NULL, "
+          "port TEXT NOT NULL, "
+          "actor TEXT NOT NULL, "
+          "connected_count TEXT NOT NULL, "
+          "disconnected_count     TEXT NOT NULL"
+          ");";
+    DBConnector ipDbConnector();
+    std::vector<DFS::Packets::IPConnection> getAllIpConnections();
+    void increaseConnectionCount(const Packets::IPConnection &ipconnection);
+    void increaseDisconnectedCount(const Packets::IPConnection &ipconnection);
+    int getCountConnected(const Packets::IPConnection &ipconnection);
+    int getCountDisconnected(const Packets::IPConnection &ipconnection);
+    bool createTable();
+
+}
+
 enum class Encryption {
     Public = 0,
     Encrypted = 1
@@ -243,6 +264,7 @@ namespace STDFS = std::filesystem;
 namespace DFSHC = DFS::Historical;
 namespace DFSB = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
+namespace DFSIP = DFS::IP;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 #endif // DFS_UTILS_H

@@ -118,3 +118,63 @@ std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::str
     return DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString() + Utils::platformDelimeter()
         + fileName;
 }
+
+std::vector<DFS::Packets::IPConnection> DFS::IP::getAllIpConnections() {
+    std::vector<DFSP::DirRow> dirRows;
+    auto result = ipDbConnector().select(fmt::format("SELECT * FROM {};", ipTableName));
+
+    std::vector<DFS::Packets::IPConnection> ipConnections;
+    for (auto &row : result) {
+        DFS::Packets::IPConnection connection = {
+            .Actor = row["actor"],
+            .IP_Address = row["ip"],
+            .IP_Port = std::stoull(row["port"]),
+        };
+        ipConnections.push_back(connection);
+    }
+    return ipConnections;
+}
+
+void DFS::IP::increaseConnectionCount(const Packets::IPConnection &ipconnection) {
+    int count = getCountConnected(ipconnection);
+    count++;
+    ipDbConnector().query(
+        fmt::format("UPDATE {} SET connected_count = {} WHERE ip = '{}' AND port = {} AND actor = '{}';",
+                    ipTableName, count, ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
+}
+
+void DFS::IP::increaseDisconnectedCount(const Packets::IPConnection &ipconnection) {
+    int count = getCountDisconnected(ipconnection);
+    count++;
+    ipDbConnector().query(
+        fmt::format("UPDATE {} SET disconnected_count = {} WHERE ip = '{}' AND port = {} AND actor = '{}';",
+                    ipTableName, count, ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
+}
+
+int DFS::IP::getCountConnected(const Packets::IPConnection &ipconnection) {
+    auto result = ipDbConnector().select(
+        fmt::format("SELECT * FROM {} WHERE ip = '{}' AND port = {} AND actor = '{}';", ipTableName,
+                    ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
+
+    return std::stoll(result[0]["connected_count"]);
+}
+
+int DFS::IP::getCountDisconnected(const Packets::IPConnection &ipconnection) {
+    auto result = ipDbConnector().select(
+        fmt::format("SELECT * FROM {} WHERE ip = '{}' AND port = {} AND actor = '{}';", ipTableName,
+                    ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
+    return std::stoll(result[0]["disconnected_count"]);
+}
+
+DBConnector DFS::IP::ipDbConnector() {
+    DBConnector dbConnector(DFSB::ipdirsPath);
+    dbConnector.open();
+    if (!dbConnector.isOpen()) {
+        exit(-1);
+    }
+    return dbConnector;
+}
+
+bool DFS::IP::createTable() {
+    return ipDbConnector().query(DFS::IP::ipConnectionsTableCreate);
+}
