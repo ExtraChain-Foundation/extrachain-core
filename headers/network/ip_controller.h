@@ -16,6 +16,7 @@ struct IPConnection {
     std::string ip;
     std::string actor;
     int port;
+    float rank = 0.0;
 };
 
 class EXTRACHAIN_EXPORT IPController {
@@ -47,6 +48,7 @@ public:
     std::vector<IPConnection> load();
     void update(const IPConnection& ipconnection, const IPConnectionEvent& connectionEvent);
     int getCount(const IPConnection& ipconnection, const IPConnectionEvent& connectionEvent);
+    float ranking(IPConnection &ipconnection);
     DBRow makeDBRow(const std::string ip, const uint64_t port, const std::string anchor,
                     const uint64_t connectedCount = 0, const uint64_t disconnectedCount = 0);
     DFSP::IPConnection convertIntoIPConnection(const IPConnection& ipconnection);

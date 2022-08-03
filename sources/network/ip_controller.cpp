@@ -124,6 +124,14 @@ int IPLoader::getCount(const IPConnection &ipconnection, const IPConnectionEvent
     }
 }
 
+float IPLoader::ranking(IPConnection &ipconnection) {
+    const auto countConnected = getCount(ipconnection, IPConnectionEvent::Connected);
+    const auto countDisonnected = getCount(ipconnection, IPConnectionEvent::Disconnected);
+
+    ipconnection.rank = round((((float)countConnected / (float)countDisonnected) * 5) * 100) / 100;
+    return ipconnection.rank;
+}
+
 DBRow IPLoader::makeDBRow(const std::string ip, const uint64_t port, const std::string anchor,
                           const uint64_t connectedCount, const uint64_t disconnectedCount) {
     DBRow row;
