@@ -176,7 +176,7 @@ void NetworkManager::startNetwork() {
     if (wsServer->listen(QHostAddress::Any, wsPort)) {
         connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
         connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
-            qDebug() << "[WS] Server error code:" << closeCode;
+//            qDebug() << "[WS] Server error code:" << closeCode;
         });
         connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Server: closed"; });
         connect(wsServer, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
@@ -540,4 +540,39 @@ void NetworkManager::onNewWsConnection() {
     auto service = new WebSocketService(ws, node);
     connectWsService(service);
     emit newSocket();
+}
+
+SocketServicePinger::SocketServicePinger(QList<SocketService *> &connections, QObject *parent)
+    : QObject(parent)
+    , m_connections(connections)
+{
+
+}
+
+void SocketServicePinger::ping(SocketService *socket, const std::optional<std::string> &opMessage)
+{
+    if (const bool checkAll = !socket) {
+        for (const auto &connection : m_connections) {
+            ping_impl(connection, opMessage);
+        }
+    } else {
+        ping_impl(socket, opMessage);
+    }
+}
+
+void SocketServicePinger::ping_impl(SocketService *socket, const std::optional<std::string> &opMessage)
+{
+    const std::string data = opMessage.value_or(std::string{});
+    const auto pingPayload = QByteArray::fromStdString(data);
+
+    const auto webSocket = dynamic_cast<WebSocketService*>(socket);
+    Q_ASSERT(webSocket);
+
+    const auto socketImpl = webSocket->socket();
+    connect(socketImpl, &QWebSocket::pong, this, [this, socket, &pingPayload](quint64 elapsedTime, const QByteArray &payload){
+        Q_ASSERT(payload == pingPayload);
+        m_socketStatus[socket] = elapsedTime;
+    });
+
+    socketImpl->ping(pingPayload);
 }

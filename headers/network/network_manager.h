@@ -214,4 +214,19 @@ signals:
     friend class DfsNetworkManager;
 };
 
+class SocketServicePinger : public QObject
+{
+public:
+    explicit SocketServicePinger(QList<SocketService *> &connections, QObject *parent = nullptr);
+
+    void ping(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt);
+
+private:
+    void ping_impl(SocketService *socket, const std::optional<std::string> &opMessage = std::nullopt);
+
+    QList<SocketService *> &m_connections;
+    std::vector<SocketService*> m_unaviabled;
+    std::unordered_map<SocketService*, quint64> m_socketStatus;
+};
+
 #endif // NETWORK_MANAGER_H
