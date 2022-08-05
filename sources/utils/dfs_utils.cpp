@@ -176,5 +176,29 @@ DBConnector DFS::IP::ipDbConnector() {
 }
 
 bool DFS::IP::createTable() {
-    return ipDbConnector().query(DFS::IP::ipConnectionsTableCreate);
+    return ipDbConnector().query(DFS::IP::ipConnectionsTableCreate) && Rate::createConnectionRateTable();
+}
+
+bool DFS::IP::Rate::createConnectionRateTable() {
+    return DFS::IP::ipDbConnector().query(DFS::IP::Rate::connectionRateTableCreate);
+}
+
+std::vector<DFS::Packets::IPRate> DFS::IP::Rate::getConnectionRates(const Packets::IPConnection &ipconnection) {
+    std::vector<DFS::Packets::IPRate> rates;
+
+    auto result = ipDbConnector().select(
+        fmt::format("SELECT * FROM {} WHERE ip='{}' AND port={} AND actor='{}';", connectionRateTableName,
+                    ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
+
+    for (auto &row : result) {
+        DFS::Packets::IPRate connection = {
+            .connection_rate = static_cast<uint64_t>(std::stoll(row["connection_rate"])),
+            .ping_time = static_cast<uint64_t>(std::stoll(row["ping_time"])),
+            .sent_data = static_cast<uint64_t>(std::stoll(row["sent_data"])),
+            .bandwidth = static_cast<uint64_t>(std::stoll(row["bandwidth"]))
+        };
+        rates.push_back(connection);
+    }
+
+    return rates;
 }

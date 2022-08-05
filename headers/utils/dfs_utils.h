@@ -140,6 +140,14 @@ namespace Packets {
         MSGPACK_DEFINE(Actor, IP_Address, IP_Port)
     };
 
+    struct IPRate {
+        uint64_t connection_rate = 1;
+        uint64_t ping_time;
+        uint64_t sent_data;
+        uint64_t bandwidth;
+        MSGPACK_DEFINE(connection_rate, ping_time, sent_data, bandwidth)
+    };
+
     struct IPRequest {
         std::string Actor;
         MSGPACK_DEFINE(Actor)
@@ -250,6 +258,22 @@ namespace IP {
     int getCountDisconnected(const Packets::IPConnection &ipconnection);
     bool createTable();
 
+    namespace Rate {
+        static const std::string connectionRateTableName = "ConnectionRate";
+        static const std::string connectionRateTableCreate = "CREATE TABLE IF NOT EXISTS "
+            + connectionRateTableName
+            + " ("
+              "ip   TEXT NOT NULL, "
+              "port TEXT NOT NULL, "
+              "actor TEXT NOT NULL, "
+              "connection_rate TEXT NOT NULL DEFAULT '1', "
+              "ping_time     TEXT NOT NULL, "
+              "sent_data     TEXT NOT NULL, "
+              "bandwidth     TEXT NOT NULL"
+              ");";
+        bool createConnectionRateTable();
+        std::vector<DFS::Packets::IPRate> getConnectionRates(const Packets::IPConnection &ipconnection);
+    }
 }
 
 enum class Encryption {
