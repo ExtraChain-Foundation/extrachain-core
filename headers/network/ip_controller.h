@@ -9,6 +9,17 @@
 class ExtraChainNode;
 class IPLoader;
 struct IPConnection {
+    struct Rate {
+        Rate() = default;
+        Rate(const int& rConnectionRate, const int& rPingTime, const int& rSentData, const int& rBandWidth);
+        int connectionRate = 1;
+        int pingTime;
+        int sentData;
+        int bandWidth;
+        int lastRate;
+        int calcRate();
+    };
+
     IPConnection(const std::string ip, const int port, const std::string actor);
     IPConnection(DFS::Packets::IPConnection ipConnection);
     bool operator==(const IPConnection& ipConnection) const;
@@ -16,7 +27,7 @@ struct IPConnection {
     std::string ip;
     std::string actor;
     int port;
-    float rank = 0.0;
+    std::vector<Rate> rates;
 };
 
 class EXTRACHAIN_EXPORT IPController {
@@ -48,9 +59,10 @@ public:
     std::vector<IPConnection> load();
     void update(const IPConnection& ipconnection, const IPConnectionEvent& connectionEvent);
     int getCount(const IPConnection& ipconnection, const IPConnectionEvent& connectionEvent);
-    float ranking(IPConnection &ipconnection);
     DBRow makeDBRow(const std::string ip, const uint64_t port, const std::string anchor,
                     const uint64_t connectedCount = 0, const uint64_t disconnectedCount = 0);
+    DBRow makeRateDBRow(const IPConnection& ipconnection, const IPConnection::Rate& rate);
+
     DFSP::IPConnection convertIntoIPConnection(const IPConnection& ipconnection);
 };
 

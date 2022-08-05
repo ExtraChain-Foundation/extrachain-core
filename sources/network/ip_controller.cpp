@@ -83,6 +83,13 @@ void IPLoader::save(IPConnection ipConnection) {
         auto row = makeDBRow(ipConnection.ip, ipConnection.port, ipConnection.actor);
         dbConnector.insert(DFSIP::ipTableName, row);
     }
+
+    if (!ipConnection.rates.empty()) {
+        for (const auto rate : ipConnection.rates) {
+            auto rateRow = makeRateDBRow(ipConnection, rate);
+            dbConnector.insert(DFSIP::Rate::connectionRateTableName, rateRow);
+        }
+    }
 }
 
 void IPLoader::save(std::vector<IPConnection> ipConnections) {
@@ -124,14 +131,6 @@ int IPLoader::getCount(const IPConnection &ipconnection, const IPConnectionEvent
     }
 }
 
-float IPLoader::ranking(IPConnection &ipconnection) {
-    const auto countConnected = getCount(ipconnection, IPConnectionEvent::Connected);
-    const auto countDisonnected = getCount(ipconnection, IPConnectionEvent::Disconnected);
-
-    ipconnection.rank = round((((float)countConnected / (float)countDisonnected) * 5) * 100) / 100;
-    return ipconnection.rank;
-}
-
 DBRow IPLoader::makeDBRow(const std::string ip, const uint64_t port, const std::string anchor,
                           const uint64_t connectedCount, const uint64_t disconnectedCount) {
     DBRow row;
@@ -144,8 +143,34 @@ DBRow IPLoader::makeDBRow(const std::string ip, const uint64_t port, const std::
     return row;
 }
 
+DBRow IPLoader::makeRateDBRow(const IPConnection &ipconnection, const IPConnection::Rate &rate) {
+    DBRow row;
+    row.insert({ "ip", ipconnection.ip });
+    row.insert({ "port", std::to_string(ipconnection.port) });
+    row.insert({ "actor", ipconnection.actor });
+    row.insert({ "connection_rate", std::to_string(rate.connectionRate) });
+    row.insert({ "ping_time", std::to_string(rate.pingTime) });
+    row.insert({ "sent_data", std::to_string(rate.sentData) });
+    row.insert({ "bandwidth", std::to_string(rate.bandWidth) });
+
+    return row;
+}
+
 DFSP::IPConnection IPLoader::convertIntoIPConnection(const IPConnection &ipconnection) {
     return DFS::Packets::IPConnection { .Actor = ipconnection.actor,
                                         .IP_Address = ipconnection.ip,
                                         .IP_Port = static_cast<uint64_t>(ipconnection.port) };
+}
+
+IPConnection::Rate::Rate(const int &rConnectionRate, const int &rPingTime, const int &rSentData,
+                         const int &rBandWidth)
+    : connectionRate(rConnectionRate)
+    , pingTime(rPingTime)
+    , sentData(rSentData)
+    , bandWidth(rBandWidth) {
+    lastRate = calcRate();
+}
+
+int IPConnection::Rate::calcRate() {
+    return ((sentData / pingTime) / (pingTime * connectionRate));
 }
