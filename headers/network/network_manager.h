@@ -26,9 +26,11 @@
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
+#include <QTimer>
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <chrono>
 
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -69,6 +71,31 @@ struct MessageIdDataReceived {
     qint64 time;
 };
 
+class SocketServicePinger : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit SocketServicePinger(QList<SocketService *> &connections, QObject *parent = nullptr);
+
+    void ping(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt);
+
+signals:
+    void pingResult(SocketService *socket, quint64 elapsedTime) const;
+
+private slots:
+    void pingTimerTrigger();
+
+private:
+    void ping_impl(SocketService *socket, const std::optional<std::string> &opMessage = std::nullopt);
+
+    QList<SocketService *> &m_connections;
+    std::vector<SocketService*> m_unaviabled;
+    std::unordered_map<SocketService*, quint64> m_socketStatus;
+    std::unique_ptr<QTimer> m_pingTimer = nullptr;
+    const std::chrono::milliseconds m_pingTimerMs;
+};
+
 /**
  * @brief The NetworkManager class
  * Creates Discovery, Server and Sockets services
@@ -93,6 +120,7 @@ private:
     std::map<std::string, std::string> m_messages;
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
+    SocketServicePinger m_socketServicePinger;
 
 public:
     explicit NetworkManager(ExtraChainNode &node);
@@ -212,21 +240,6 @@ signals:
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
 
     friend class DfsNetworkManager;
-};
-
-class SocketServicePinger : public QObject
-{
-public:
-    explicit SocketServicePinger(QList<SocketService *> &connections, QObject *parent = nullptr);
-
-    void ping(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt);
-
-private:
-    void ping_impl(SocketService *socket, const std::optional<std::string> &opMessage = std::nullopt);
-
-    QList<SocketService *> &m_connections;
-    std::vector<SocketService*> m_unaviabled;
-    std::unordered_map<SocketService*, quint64> m_socketStatus;
 };
 
 #endif // NETWORK_MANAGER_H

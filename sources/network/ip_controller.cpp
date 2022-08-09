@@ -128,6 +128,8 @@ int IPLoader::getCount(const IPConnection &ipconnection, const IPConnectionEvent
         return DFSIP::getCountConnected(convertIntoIPConnection(ipconnection));
     case IPConnectionEvent::Disconnected:
         return DFSIP::getCountDisconnected(convertIntoIPConnection(ipconnection));
+    default:
+        return {};
     }
 }
 

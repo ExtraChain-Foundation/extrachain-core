@@ -41,7 +41,8 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 }
 
 NetworkManager::NetworkManager(ExtraChainNode &node)
-    : node(node) {
+    : node(node)
+    , m_socketServicePinger(m_connections){
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
@@ -49,6 +50,9 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     // TODO: move to slot or process
     local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
+    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this, [](SocketService *socket, quint64 elapsedTime){
+        qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip() << "time: " << elapsedTime << "ms";
+    });
     // }
 
     if (local == nullptr) {
@@ -118,8 +122,9 @@ void NetworkManager::connectWsService(WebSocketService *service) {
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
-    if (!m_connections.contains(service))
+    if (!m_connections.contains(service)) {
         m_connections.append(service);
+    }
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -148,7 +153,7 @@ NetworkManager::~NetworkManager() {
 void NetworkManager::checkConnectionsStatus() {
     bool flag = false;
     int count = 0;
-    std::for_each(m_connections.begin(), m_connections.end(), [&flag, &count](SocketService *el) {
+    std::for_each(m_connections.begin(), m_connections.end(), [&flag, &count, this](SocketService *el) {
         flag = flag || el->isActive();
         if (el->isActive())
             count++;
@@ -159,6 +164,7 @@ void NetworkManager::checkConnectionsStatus() {
     if (flag) { // TODO: replace to networkStatusChanged slot
         sendFromCache();
     }
+
 }
 
 void NetworkManager::startNetwork() {
@@ -542,11 +548,16 @@ void NetworkManager::onNewWsConnection() {
     emit newSocket();
 }
 
+using namespace std::chrono_literals;
+
 SocketServicePinger::SocketServicePinger(QList<SocketService *> &connections, QObject *parent)
     : QObject(parent)
     , m_connections(connections)
+    , m_pingTimer(std::make_unique<QTimer>())
+    , m_pingTimerMs(std::chrono::milliseconds(1min).count())
 {
-
+    connect(m_pingTimer.get(), &QTimer::timeout, this, &SocketServicePinger::pingTimerTrigger);
+    m_pingTimer->start(m_pingTimerMs);
 }
 
 void SocketServicePinger::ping(SocketService *socket, const std::optional<std::string> &opMessage)
@@ -560,6 +571,11 @@ void SocketServicePinger::ping(SocketService *socket, const std::optional<std::s
     }
 }
 
+void SocketServicePinger::pingTimerTrigger()
+{
+    ping();
+}
+
 void SocketServicePinger::ping_impl(SocketService *socket, const std::optional<std::string> &opMessage)
 {
     const std::string data = opMessage.value_or(std::string{});
@@ -570,8 +586,8 @@ void SocketServicePinger::ping_impl(SocketService *socket, const std::optional<s
 
     const auto socketImpl = webSocket->socket();
     connect(socketImpl, &QWebSocket::pong, this, [this, socket, &pingPayload](quint64 elapsedTime, const QByteArray &payload){
-        Q_ASSERT(payload == pingPayload);
         m_socketStatus[socket] = elapsedTime;
+        emit pingResult(socket, elapsedTime);
     });
 
     socketImpl->ping(pingPayload);
