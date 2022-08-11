@@ -6,6 +6,7 @@
 #include "utils/exc_utils.h"
 
 class ExtraChainNode;
+class ISocketServicePinger;
 
 class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
@@ -25,6 +26,7 @@ public:
     virtual bool isActive() const = 0;
     virtual quint16 port() const = 0;
     virtual quint16 serverPort() const = 0;
+    virtual std::unique_ptr<ISocketServicePinger> pingServiceImpl(QList<SocketService *> &connections) = 0;
     const QString &ip() const;
     const SendType sendType() const;
     int bytesCompressed() const;
@@ -65,4 +67,43 @@ protected:
     KeyPublic pub;
 };
 
+class ISocketServicePinger : public QObject
+{
+    Q_OBJECT
+
+public:
+    virtual void pingImpl(SocketService *socket, const std::optional<std::string> &opMessage = std::nullopt) = 0;
+
+signals:
+    void emitPing(SocketService *socket, quint64 elapsedTime);
+
+};
+
+struct PingerDataImplBase
+{
+    QList<SocketService *> &connections;
+    std::vector<SocketService*> unaviabled;
+    std::unordered_map<SocketService*, quint64> socketStatus;
+    std::unique_ptr<QTimer> pingTimer = nullptr;
+    const std::chrono::milliseconds pingTimerMs;
+    inline QByteArray defaultPayload() {
+        QByteArray payload;
+        payload.resize(125);
+        payload.fill('1', 125);
+
+        return payload;
+    };
+};
+
+class WebSocketServicePingerImpl : public ISocketServicePinger {
+    Q_OBJECT
+
+public:
+    explicit WebSocketServicePingerImpl(QList<SocketService *> &connections, QObject *parent = nullptr);
+
+    void pingImpl(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt) override;
+
+private:
+    std::unique_ptr<PingerDataImplBase> m_data;
+};
 #endif // WEBSOCKETSERVICE_H

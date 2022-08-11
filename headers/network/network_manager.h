@@ -44,6 +44,7 @@
 class SocketService;
 class WebSocketService;
 class UPNPConnection;
+class ISocketServicePinger;
 
 struct NetworkReconnect {
     QString ip;
@@ -78,6 +79,12 @@ class SocketServicePinger : public QObject
 public:
     explicit SocketServicePinger(QList<SocketService *> &connections, QObject *parent = nullptr);
 
+    template<typename Impl, typename EmitFunc, typename ...Args>
+    void ping(const Impl &impl,
+              EmitFunc &&func,
+              const Args &...args,
+              SocketService *socket = nullptr,
+              const std::optional<std::string> &opMessage = std::nullopt);
     void ping(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt);
 
 signals:
@@ -121,6 +128,7 @@ private:
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
     SocketServicePinger m_socketServicePinger;
+    std::unique_ptr<ISocketServicePinger> m_socketPingerImpl;
 
 public:
     explicit NetworkManager(ExtraChainNode &node);

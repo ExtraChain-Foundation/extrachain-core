@@ -4,6 +4,7 @@
 
 #include "enc/enc_tools.h"
 #include "network/network_manager.h"
+#include "network/websocket_service.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
@@ -154,4 +155,26 @@ QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     m_bytesIncoming += message.length();
     // m_bytesCompressed += result.length() - message.length();
     return result;
+}
+
+WebSocketServicePingerImpl::WebSocketServicePingerImpl(QList<SocketService *> &connections, QObject *parent)
+    : m_data(std::make_unique<PingerDataImplBase>(connections))
+{
+}
+
+void WebSocketServicePingerImpl::pingImpl(SocketService *socket, const std::optional<std::string> &opMessage)
+{
+    const std::string data = opMessage.value_or(std::string{});
+    const auto pingPayload = QByteArray::fromStdString(data);
+
+    const auto webSocket = dynamic_cast<WebSocketService*>(socket);
+    Q_ASSERT(webSocket);
+
+    const auto socketImpl = webSocket->socket();
+    connect(socketImpl, &QWebSocket::pong, this, [this, socket, &pingPayload](quint64 elapsedTime, const QByteArray &payload){
+        m_data->socketStatus[socket] = elapsedTime;
+        emit emitPing(socket, elapsedTime);
+    });
+
+    socketImpl->ping(pingPayload);
 }

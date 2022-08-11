@@ -23,6 +23,7 @@
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include <fstream>
+#include <memory>
 
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
@@ -50,8 +51,11 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     // TODO: move to slot or process
     local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this, [](SocketService *socket, quint64 elapsedTime){
+    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this, [this](SocketService *socket, quint64 elapsedTime){
         qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip() << "time: " << elapsedTime << "ms";
+//        if (m_socketPingerImpl) {
+//            m_socketServicePinger.ping(*m_socketPingerImpl.get(), &ISocketServicePinger::emitPing);
+//        }
     });
     // }
 
@@ -124,6 +128,10 @@ void NetworkManager::connectWsService(WebSocketService *service) {
 
     if (!m_connections.contains(service)) {
         m_connections.append(service);
+    }
+
+    if(!m_socketPingerImpl) {
+        m_socketPingerImpl = service->pingServiceImpl(m_connections);
     }
 }
 
@@ -554,7 +562,7 @@ SocketServicePinger::SocketServicePinger(QList<SocketService *> &connections, QO
     : QObject(parent)
     , m_connections(connections)
     , m_pingTimer(std::make_unique<QTimer>())
-    , m_pingTimerMs(std::chrono::milliseconds(1min).count())
+    , m_pingTimerMs(std::chrono::milliseconds(5s).count())
 {
     connect(m_pingTimer.get(), &QTimer::timeout, this, &SocketServicePinger::pingTimerTrigger);
     m_pingTimer->start(m_pingTimerMs);
@@ -591,4 +599,22 @@ void SocketServicePinger::ping_impl(SocketService *socket, const std::optional<s
     });
 
     socketImpl->ping(pingPayload);
+}
+
+template<typename Impl, typename EmitFunc, typename ...Args>
+void SocketServicePinger::ping(const Impl &impl,
+                               EmitFunc &&func,
+                               const Args &...args,
+                               SocketService *socket,
+                               const std::optional<std::string> &opMessage)
+{
+//    connect(&impl, &func, this, &SocketServicePinger::pingResult);
+
+//    if (const bool checkAll = !socket) {
+//        for (const auto &connection : m_connections) {
+//            impl.pingImpl(connection, opMessage);
+//        }
+//    } else {
+//        impl.pingImpl(socket, opMessage);
+//    }
 }

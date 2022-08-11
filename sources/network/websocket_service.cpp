@@ -33,6 +33,11 @@ bool WebSocketService::isActive() const {
     return m_activated && m_ws->isValid();
 }
 
+std::unique_ptr<ISocketServicePinger> WebSocketService::pingServiceImpl(QList<SocketService *> &connections)
+{
+    return std::make_unique<WebSocketServicePingerImpl>(connections);
+}
+
 void WebSocketService::open(const QString &ip, quint16 port) {
     if (m_ws->isValid()) {
         qFatal("[WS] Already opened");
