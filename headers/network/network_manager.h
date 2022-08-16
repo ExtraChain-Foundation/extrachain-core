@@ -20,22 +20,23 @@
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
+#include <QTimer>
 #include <QtCore/QMutex>
 #include <QtCore/QRandomGenerator>
 #include <QtNetwork/QNetworkAddressEntry>
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
-#include <QTimer>
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <string_view>
-#include <chrono>
 
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
+#include "network/ip_controller.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
 #include "utils/dfs_utils.h"
@@ -72,23 +73,19 @@ struct MessageIdDataReceived {
     qint64 time;
 };
 
-class SocketServicePinger : public QObject
-{
+class SocketServicePinger : public QObject {
     Q_OBJECT
 
 public:
     explicit SocketServicePinger(QList<SocketService *> &connections, QObject *parent = nullptr);
 
-    template<typename Impl, typename EmitFunc, typename ...Args>
-    void ping(const Impl &impl,
-              EmitFunc &&func,
-              const Args &...args,
-              SocketService *socket = nullptr,
+    template <typename Impl, typename EmitFunc, typename... Args>
+    void ping(const Impl &impl, EmitFunc &&func, const Args &...args, SocketService *socket = nullptr,
               const std::optional<std::string> &opMessage = std::nullopt);
     void ping(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt);
 
 signals:
-    void pingResult(SocketService *socket, quint64 elapsedTime) const;
+    void pingResult(SocketService *socket, quint64 elapsedTime, quint64 dataSent = 24) const;
 
 private slots:
     void pingTimerTrigger();
@@ -97,8 +94,8 @@ private:
     void ping_impl(SocketService *socket, const std::optional<std::string> &opMessage = std::nullopt);
 
     QList<SocketService *> &m_connections;
-    std::vector<SocketService*> m_unaviabled;
-    std::unordered_map<SocketService*, quint64> m_socketStatus;
+    std::vector<SocketService *> m_unaviabled;
+    std::unordered_map<SocketService *, quint64> m_socketStatus;
     std::unique_ptr<QTimer> m_pingTimer = nullptr;
     const std::chrono::milliseconds m_pingTimerMs;
 };
@@ -129,6 +126,7 @@ private:
     std::map<std::string, MessageIdDataReceived> m_messages_received;
     SocketServicePinger m_socketServicePinger;
     std::unique_ptr<ISocketServicePinger> m_socketPingerImpl;
+    std::unique_ptr<IPController> m_ipController;
 
 public:
     explicit NetworkManager(ExtraChainNode &node);
@@ -155,6 +153,7 @@ signals:
 
 protected:
     void connectToWebSocket(const QString &ip, quint16 port);
+    void recoveryConnectToWebSockets();
 
     /**
      * @brief NetworkManager::checkMsgCount

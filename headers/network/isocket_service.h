@@ -4,6 +4,7 @@
 #include "enc/key_private.h"
 #include "enc/key_public.h"
 #include "utils/exc_utils.h"
+#include <QTimer>
 
 class ExtraChainNode;
 class ISocketServicePinger;
@@ -67,25 +68,27 @@ protected:
     KeyPublic pub;
 };
 
-class ISocketServicePinger : public QObject
-{
+class ISocketServicePinger : public QObject {
     Q_OBJECT
 
 public:
-    virtual void pingImpl(SocketService *socket, const std::optional<std::string> &opMessage = std::nullopt) = 0;
+    virtual void pingImpl(SocketService *socket,
+                          const std::optional<std::string> &opMessage = std::nullopt) = 0;
 
 signals:
     void emitPing(SocketService *socket, quint64 elapsedTime);
-
 };
 
-struct PingerDataImplBase
-{
+struct PingerDataImplBase {
+    PingerDataImplBase(QList<SocketService *> &m_connections)
+        : connections(m_connections) {
+    }
+
     QList<SocketService *> &connections;
-    std::vector<SocketService*> unaviabled;
-    std::unordered_map<SocketService*, quint64> socketStatus;
+    std::vector<SocketService *> unaviabled;
+    std::unordered_map<SocketService *, quint64> socketStatus;
     std::unique_ptr<QTimer> pingTimer = nullptr;
-    const std::chrono::milliseconds pingTimerMs;
+    std::chrono::milliseconds pingTimerMs;
     inline QByteArray defaultPayload() {
         QByteArray payload;
         payload.resize(125);
@@ -101,7 +104,8 @@ class WebSocketServicePingerImpl : public ISocketServicePinger {
 public:
     explicit WebSocketServicePingerImpl(QList<SocketService *> &connections, QObject *parent = nullptr);
 
-    void pingImpl(SocketService *socket = nullptr, const std::optional<std::string> &opMessage = std::nullopt) override;
+    void pingImpl(SocketService *socket = nullptr,
+                  const std::optional<std::string> &opMessage = std::nullopt) override;
 
 private:
     std::unique_ptr<PingerDataImplBase> m_data;

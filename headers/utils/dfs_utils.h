@@ -54,7 +54,6 @@ namespace Basic {
     static const std::wstring fsActrRootW = L"dfs";
     static const std::string fsMapName = ".dir";
     static const std::string dirsPath = "dfs/.dirs";
-    static const std::string ipdirsPath = "dfs/ip";
     static const uint64_t sectionSize = /*2097152*/ 524228;
     static const uint64_t maxSectionSize = 209715200;
     static const uint64_t historicalChainSectionSize = 209715200;
@@ -137,7 +136,8 @@ namespace Packets {
         std::string Actor;
         std::string IP_Address;
         uint64_t IP_Port;
-        MSGPACK_DEFINE(Actor, IP_Address, IP_Port)
+        std::string Identifier;
+        MSGPACK_DEFINE(Actor, IP_Address, IP_Port, Identifier)
     };
 
     struct IPRate {
@@ -241,14 +241,16 @@ namespace Path {
 }
 
 namespace IP {
+    static const std::string ipdirsPath = "tmp/ip";
     static const std::string ipTableName = "IpConnections";
     static const std::string ipConnectionsTableCreate = "CREATE TABLE IF NOT EXISTS " + ipTableName
         + " ("
           "ip   TEXT NOT NULL, "
           "port TEXT NOT NULL, "
           "actor TEXT NOT NULL, "
+          "identifier TEXT NOT NULL, "
           "connected_count TEXT NOT NULL, "
-          "disconnected_count     TEXT NOT NULL"
+          "disconnected_count TEXT NOT NULL"
           ");";
     DBConnector ipDbConnector();
     std::vector<DFS::Packets::IPConnection> getAllIpConnections();
@@ -269,7 +271,8 @@ namespace IP {
               "connection_rate TEXT NOT NULL DEFAULT '1', "
               "ping_time     TEXT NOT NULL, "
               "sent_data     TEXT NOT NULL, "
-              "bandwidth     TEXT NOT NULL"
+              "bandwidth     TEXT NOT NULL,"
+              "identifier     TEXT NOT NULL"
               ");";
         bool createConnectionRateTable();
         std::vector<DFS::Packets::IPRate> getConnectionRates(const Packets::IPConnection &ipconnection);
