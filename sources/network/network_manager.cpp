@@ -43,20 +43,28 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node)
-    , m_socketServicePinger(m_connections){
+    , m_socketServicePinger(m_connections) {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
     // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
     // TODO: move to slot or process
     local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
+    m_ipController = std::make_unique<IPController>(node);
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this, [this](SocketService *socket, quint64 elapsedTime){
-        qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip() << "time: " << elapsedTime << "ms";
-//        if (m_socketPingerImpl) {
-//            m_socketServicePinger.ping(*m_socketPingerImpl.get(), &ISocketServicePinger::emitPing);
-//        }
-    });
+    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this,
+            [&, this](SocketService *socket, quint64 elapsedTime, quint64 sentDataSize) {
+                qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
+                         << "time: " << elapsedTime << "ms";
+                IPConnection ipConnection(socket, node.accountController()->mainActor().id().toStdString());
+                IPConnection::Rate rate(elapsedTime, sentDataSize);
+                m_ipController->saveRate(ipConnection, rate);
+
+                //        if (m_socketPingerImpl) {
+                //            m_socketServicePinger.ping(*m_socketPingerImpl.get(),
+                //            &ISocketServicePinger::emitPing);
+                //        }
+            });
     // }
 
     if (local == nullptr) {
@@ -126,11 +134,12 @@ void NetworkManager::connectWsService(WebSocketService *service) {
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
-    if (!m_connections.contains(service)) {
-        m_connections.append(service);
-    }
+    auto serviceIp = service->ip();
+    const auto it = std::find_if(m_connections.begin(), m_connections.end(),
+                                 [&service](SocketService *socket) { return socket->ip() == service->ip(); });
 
-    if(!m_socketPingerImpl) {
+    if (it == m_connections.end()) {
+        m_connections.append(service);
         m_socketPingerImpl = service->pingServiceImpl(m_connections);
     }
 }
@@ -172,7 +181,6 @@ void NetworkManager::checkConnectionsStatus() {
     if (flag) { // TODO: replace to networkStatusChanged slot
         sendFromCache();
     }
-
 }
 
 void NetworkManager::startNetwork() {
@@ -190,7 +198,7 @@ void NetworkManager::startNetwork() {
     if (wsServer->listen(QHostAddress::Any, wsPort)) {
         connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
         connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
-//            qDebug() << "[WS] Server error code:" << closeCode;
+            //            qDebug() << "[WS] Server error code:" << closeCode;
         });
         connect(wsServer, &QWebSocketServer::closed, [] { qDebug() << "[WS] Server: closed"; });
         connect(wsServer, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
@@ -230,6 +238,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
         break;
     case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), port);
+        recoveryConnectToWebSockets();
         break;
     case Protocol::Undefined:
         qFatal("Undefined connectToNode");
@@ -240,6 +249,12 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
     auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
     connectWsService(service);
+}
+
+void NetworkManager::recoveryConnectToWebSockets() {
+    for (const auto &ipConnection : m_ipController->allIpConnections()) {
+        connectToWebSocket(QString::fromStdString(ipConnection.ip), ipConnection.port);
+    }
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
@@ -480,7 +495,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::IpRequestAllConnection: {
         auto msg = MessagePack::deserialize<DFSP::IPRequest>(serialized);
-        qDebug() << "IpRequestAllConnection actor: "<< msg.Actor.c_str();
+        qDebug() << "IpRequestAllConnection actor: " << msg.Actor.c_str();
         node.ipController()->getIpConnections(msg.Actor);
         break;
     }
@@ -562,14 +577,12 @@ SocketServicePinger::SocketServicePinger(QList<SocketService *> &connections, QO
     : QObject(parent)
     , m_connections(connections)
     , m_pingTimer(std::make_unique<QTimer>())
-    , m_pingTimerMs(std::chrono::milliseconds(5s).count())
-{
+    , m_pingTimerMs(std::chrono::milliseconds(5s).count()) {
     connect(m_pingTimer.get(), &QTimer::timeout, this, &SocketServicePinger::pingTimerTrigger);
     m_pingTimer->start(m_pingTimerMs);
 }
 
-void SocketServicePinger::ping(SocketService *socket, const std::optional<std::string> &opMessage)
-{
+void SocketServicePinger::ping(SocketService *socket, const std::optional<std::string> &opMessage) {
     if (const bool checkAll = !socket) {
         for (const auto &connection : m_connections) {
             ping_impl(connection, opMessage);
@@ -579,42 +592,37 @@ void SocketServicePinger::ping(SocketService *socket, const std::optional<std::s
     }
 }
 
-void SocketServicePinger::pingTimerTrigger()
-{
+void SocketServicePinger::pingTimerTrigger() {
     ping();
 }
 
-void SocketServicePinger::ping_impl(SocketService *socket, const std::optional<std::string> &opMessage)
-{
-    const std::string data = opMessage.value_or(std::string{});
+void SocketServicePinger::ping_impl(SocketService *socket, const std::optional<std::string> &opMessage) {
+    const std::string data = opMessage.value_or(std::string {});
     const auto pingPayload = QByteArray::fromStdString(data);
 
-    const auto webSocket = dynamic_cast<WebSocketService*>(socket);
+    const auto webSocket = dynamic_cast<WebSocketService *>(socket);
     Q_ASSERT(webSocket);
 
     const auto socketImpl = webSocket->socket();
-    connect(socketImpl, &QWebSocket::pong, this, [this, socket, &pingPayload](quint64 elapsedTime, const QByteArray &payload){
-        m_socketStatus[socket] = elapsedTime;
-        emit pingResult(socket, elapsedTime);
-    });
+    connect(socketImpl, &QWebSocket::pong, this,
+            [this, socket, &pingPayload](quint64 elapsedTime, const QByteArray &payload) {
+                m_socketStatus[socket] = elapsedTime;
+                emit pingResult(socket, elapsedTime, sizeof(data));
+            });
 
     socketImpl->ping(pingPayload);
 }
 
-template<typename Impl, typename EmitFunc, typename ...Args>
-void SocketServicePinger::ping(const Impl &impl,
-                               EmitFunc &&func,
-                               const Args &...args,
-                               SocketService *socket,
-                               const std::optional<std::string> &opMessage)
-{
-//    connect(&impl, &func, this, &SocketServicePinger::pingResult);
+template <typename Impl, typename EmitFunc, typename... Args>
+void SocketServicePinger::ping(const Impl &impl, EmitFunc &&func, const Args &...args, SocketService *socket,
+                               const std::optional<std::string> &opMessage) {
+    //    connect(&impl, &func, this, &SocketServicePinger::pingResult);
 
-//    if (const bool checkAll = !socket) {
-//        for (const auto &connection : m_connections) {
-//            impl.pingImpl(connection, opMessage);
-//        }
-//    } else {
-//        impl.pingImpl(socket, opMessage);
-//    }
+    //    if (const bool checkAll = !socket) {
+    //        for (const auto &connection : m_connections) {
+    //            impl.pingImpl(connection, opMessage);
+    //        }
+    //    } else {
+    //        impl.pingImpl(socket, opMessage);
+    //    }
 }

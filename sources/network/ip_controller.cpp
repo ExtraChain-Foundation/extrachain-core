@@ -14,8 +14,16 @@ IPController::~IPController() {
     delete ipLoader;
 }
 
-void IPController::connectToIP(const std::string &ip, const int &port, const std::string &actor) {
-    IPConnection newIpConnection(ip, port, actor);
+void IPController::connectToIp(IPConnection connection) {
+    if (std::find(ipConnections.begin(), ipConnections.end(), connection) == ipConnections.end()) {
+        ipConnections.push_back(connection);
+        ipLoader->save(connection);
+    }
+}
+
+void IPController::connectToIP(const std::string &ip, const int &port, const std::string &actor,
+                               const std::string &identifier) {
+    IPConnection newIpConnection(ip, port, actor, identifier);
     if (std::find(ipConnections.begin(), ipConnections.end(), newIpConnection) == ipConnections.end()) {
         ipConnections.push_back(newIpConnection);
         ipLoader->save(newIpConnection);
@@ -28,7 +36,7 @@ void IPController::connectToIP(const DFS::Packets::IPConnection &ipConnection) {
     auto &publicKey = first.key().publicKey();
     const auto decryptedIpAddress = mainKey.decrypt(ipConnection.IP_Address, publicKey);
     qDebug() << "Decrypt ip connection: " << decryptedIpAddress.c_str();
-    connectToIP(decryptedIpAddress, ipConnection.IP_Port, ipConnection.Actor);
+    connectToIP(decryptedIpAddress, ipConnection.IP_Port, ipConnection.Actor, ipConnection.Identifier);
 }
 
 void IPController::getIpConnections(const ActorId &actor) {
@@ -50,16 +58,30 @@ std::vector<IPConnection> IPController::allIpConnections() {
     return ipConnections;
 }
 
-IPConnection::IPConnection(const std::string ip, const int port, const std::string actor)
+void IPController::saveRate(const IPConnection &ipconnection, IPConnection::Rate &rate) {
+    ipLoader->saveRate(ipconnection, rate);
+}
+
+IPConnection::IPConnection(const std::string ip, const int port, const std::string actor,
+                           const std::string identifier)
     : ip(ip)
     , port(port)
-    , actor(actor) {
+    , actor(actor)
+    , identifier(identifier) {
+}
+
+IPConnection::IPConnection(const SocketService *socket, const std::string actor)
+    : ip(socket->ip().toStdString())
+    , port(socket->port())
+    , actor(actor)
+    , identifier(socket->identifier().toStdString()) {
 }
 
 IPConnection::IPConnection(DFS::Packets::IPConnection ipConnection)
     : ip(ipConnection.IP_Address)
     , port(ipConnection.IP_Port)
-    , actor(ipConnection.Actor) {
+    , actor(ipConnection.Actor)
+    , identifier(ipConnection.Identifier) {
 }
 
 bool IPConnection::operator==(const IPConnection &ipConnection) const {
@@ -71,7 +93,7 @@ IPLoader::IPLoader() {
 }
 
 void IPLoader::save(IPConnection ipConnection) {
-    DBConnector dbConnector(DFSB::ipdirsPath);
+    DBConnector dbConnector(DFSIP::ipdirsPath);
     dbConnector.open();
     if (!dbConnector.isOpen()) {
         exit(-1);
@@ -80,7 +102,7 @@ void IPLoader::save(IPConnection ipConnection) {
                                          fmt::format("ip='{}' AND port = {} AND actor = '{}'",
                                                      ipConnection.ip, ipConnection.port, ipConnection.actor));
     if (!count) {
-        auto row = makeDBRow(ipConnection.ip, ipConnection.port, ipConnection.actor);
+        auto row = makeDBRow(ipConnection);
         dbConnector.insert(DFSIP::ipTableName, row);
     }
 
@@ -93,20 +115,42 @@ void IPLoader::save(IPConnection ipConnection) {
 }
 
 void IPLoader::save(std::vector<IPConnection> ipConnections) {
-    DBConnector dbConnector(DFSB::ipdirsPath);
+    DBConnector dbConnector(DFSIP::ipdirsPath);
     dbConnector.open();
     for (const auto &connection : ipConnections) {
         save(connection);
     }
 }
 
+void IPLoader::saveRate(const IPConnection &ipconnection, IPConnection::Rate &rate) {
+    save(ipconnection);
+    DBConnector dbConnector(DFSIP::ipdirsPath);
+    dbConnector.open();
+    if (!dbConnector.isOpen()) {
+        exit(-1);
+    }
+
+    const auto count = dbConnector.count(
+        DFSIP::Rate::connectionRateTableName,
+        fmt::format("ip='{}' AND port = {} AND actor = '{}' AND identifier= '{}'", ipconnection.ip,
+                    ipconnection.port, ipconnection.actor, ipconnection.identifier));
+    if (!count) {
+        auto rateRow = makeRateDBRow(ipconnection, rate);
+        dbConnector.insert(DFSIP::Rate::connectionRateTableName, rateRow);
+    } else {
+        dbConnector.update(fmt::format("UPDATE '{}' SET connection_rate='{}' WHERE identifier='{}'",
+                                       DFSIP::Rate::connectionRateTableName, std::to_string(rate.calcRate()),
+                                       ipconnection.identifier));
+    }
+}
+
 std::vector<IPConnection> IPLoader::load() {
-    DBConnector dbConnector(DFSB::ipdirsPath);
+    DBConnector dbConnector(DFSIP::ipdirsPath);
     dbConnector.open();
     const auto ipConnectionData = DFSIP::getAllIpConnections();
     std::vector<IPConnection> ipConnections;
     for (const auto connection : ipConnectionData) {
-        ipConnections.push_back(connection);
+        ipConnections.push_back(IPConnection(connection));
     }
     return ipConnections;
 }
@@ -133,19 +177,20 @@ int IPLoader::getCount(const IPConnection &ipconnection, const IPConnectionEvent
     }
 }
 
-DBRow IPLoader::makeDBRow(const std::string ip, const uint64_t port, const std::string anchor,
-                          const uint64_t connectedCount, const uint64_t disconnectedCount) {
+DBRow IPLoader::makeDBRow(const IPConnection &ipconnection, const uint64_t connectedCount,
+                          const uint64_t disconnectedCount) {
     DBRow row;
-    row.insert({ "ip", ip });
-    row.insert({ "port", std::to_string(port) });
-    row.insert({ "actor", anchor });
+    row.insert({ "ip", ipconnection.ip });
+    row.insert({ "port", std::to_string(ipconnection.port) });
+    row.insert({ "actor", ipconnection.actor });
+    row.insert({ "identifier", ipconnection.identifier });
     row.insert({ "connected_count", std::to_string(connectedCount) });
     row.insert({ "disconnected_count", std::to_string(disconnectedCount) });
 
     return row;
 }
 
-DBRow IPLoader::makeRateDBRow(const IPConnection &ipconnection, const IPConnection::Rate &rate) {
+DBRow IPLoader::makeRateDBRow(const IPConnection &ipconnection, const IPConnection::Rate &rate) const {
     DBRow row;
     row.insert({ "ip", ipconnection.ip });
     row.insert({ "port", std::to_string(ipconnection.port) });
@@ -154,6 +199,7 @@ DBRow IPLoader::makeRateDBRow(const IPConnection &ipconnection, const IPConnecti
     row.insert({ "ping_time", std::to_string(rate.pingTime) });
     row.insert({ "sent_data", std::to_string(rate.sentData) });
     row.insert({ "bandwidth", std::to_string(rate.bandWidth) });
+    row.insert({ "identifier", ipconnection.identifier });
 
     return row;
 }
@@ -161,18 +207,20 @@ DBRow IPLoader::makeRateDBRow(const IPConnection &ipconnection, const IPConnecti
 DFSP::IPConnection IPLoader::convertIntoIPConnection(const IPConnection &ipconnection) {
     return DFS::Packets::IPConnection { .Actor = ipconnection.actor,
                                         .IP_Address = ipconnection.ip,
-                                        .IP_Port = static_cast<uint64_t>(ipconnection.port) };
+                                        .IP_Port = static_cast<uint64_t>(ipconnection.port),
+                                        .Identifier = ipconnection.identifier };
 }
 
-IPConnection::Rate::Rate(const int &rConnectionRate, const int &rPingTime, const int &rSentData,
-                         const int &rBandWidth)
-    : connectionRate(rConnectionRate)
-    , pingTime(rPingTime)
-    , sentData(rSentData)
-    , bandWidth(rBandWidth) {
+IPConnection::Rate::Rate(const int &rPingTime, const int &rSentData)
+    : pingTime(rPingTime)
+    , sentData(rSentData) {
     lastRate = calcRate();
 }
 
 int IPConnection::Rate::calcRate() {
-    return ((sentData / pingTime) / (pingTime * connectionRate));
+    if (pingTime == 0)
+        pingTime = 1;
+    bandWidth = (sentData / pingTime);
+    connectionRate = (bandWidth / (pingTime * connectionRate));
+    return connectionRate;
 }

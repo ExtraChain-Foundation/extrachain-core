@@ -125,11 +125,10 @@ std::vector<DFS::Packets::IPConnection> DFS::IP::getAllIpConnections() {
 
     std::vector<DFS::Packets::IPConnection> ipConnections;
     for (auto &row : result) {
-        DFS::Packets::IPConnection connection = {
-            .Actor = row["actor"],
-            .IP_Address = row["ip"],
-            .IP_Port = std::stoull(row["port"]),
-        };
+        DFS::Packets::IPConnection connection = { .Actor = row["actor"],
+                                                  .IP_Address = row["ip"],
+                                                  .IP_Port = std::stoull(row["port"]),
+                                                  .Identifier = row["identifier"] };
         ipConnections.push_back(connection);
     }
     return ipConnections;
@@ -167,7 +166,7 @@ int DFS::IP::getCountDisconnected(const Packets::IPConnection &ipconnection) {
 }
 
 DBConnector DFS::IP::ipDbConnector() {
-    DBConnector dbConnector(DFSB::ipdirsPath);
+    DBConnector dbConnector(DFS::IP::ipdirsPath);
     dbConnector.open();
     if (!dbConnector.isOpen()) {
         exit(-1);
@@ -183,20 +182,21 @@ bool DFS::IP::Rate::createConnectionRateTable() {
     return DFS::IP::ipDbConnector().query(DFS::IP::Rate::connectionRateTableCreate);
 }
 
-std::vector<DFS::Packets::IPRate> DFS::IP::Rate::getConnectionRates(const Packets::IPConnection &ipconnection) {
+std::vector<DFS::Packets::IPRate>
+DFS::IP::Rate::getConnectionRates(const Packets::IPConnection &ipconnection) {
     std::vector<DFS::Packets::IPRate> rates;
 
-    auto result = ipDbConnector().select(
-        fmt::format("SELECT * FROM {} WHERE ip='{}' AND port={} AND actor='{}';", connectionRateTableName,
-                    ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
+    auto result = ipDbConnector().select(fmt::format(
+        "SELECT * FROM {} WHERE ip='{}' AND port={} AND actor='{}' ORDER BY connection_rate DESC;",
+        connectionRateTableName, ipconnection.IP_Address, ipconnection.IP_Port, ipconnection.Actor));
 
     for (auto &row : result) {
-        DFS::Packets::IPRate connection = {
-            .connection_rate = static_cast<uint64_t>(std::stoll(row["connection_rate"])),
-            .ping_time = static_cast<uint64_t>(std::stoll(row["ping_time"])),
-            .sent_data = static_cast<uint64_t>(std::stoll(row["sent_data"])),
-            .bandwidth = static_cast<uint64_t>(std::stoll(row["bandwidth"]))
-        };
+        DFS::Packets::IPRate connection = { .connection_rate =
+                                                static_cast<uint64_t>(std::stoll(row["connection_rate"])),
+                                            .ping_time = static_cast<uint64_t>(std::stoll(row["ping_time"])),
+                                            .sent_data = static_cast<uint64_t>(std::stoll(row["sent_data"])),
+                                            .bandwidth =
+                                                static_cast<uint64_t>(std::stoll(row["bandwidth"])) };
         rates.push_back(connection);
     }
 
