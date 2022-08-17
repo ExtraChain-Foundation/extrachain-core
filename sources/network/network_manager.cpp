@@ -53,13 +53,16 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     m_ipController = std::make_unique<IPController>(node);
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
     connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this,
-            [&, this](SocketService *socket, quint64 elapsedTime, quint64 sentDataSize) {
+            //            [&, this](SocketService *socket, quint64 elapsedTime, quint64 sentDataSize) {
+            //                qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
+            //                         << "time: " << elapsedTime << "ms";
+            //                IPConnection ipConnection(socket,
+            //                node.accountController()->mainActor().id().toStdString()); IPConnection::Rate
+            //                rate(elapsedTime, sentDataSize); m_ipController->saveRate(ipConnection, rate);
+
+            [this](SocketService *socket, quint64 elapsedTime) {
                 qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
                          << "time: " << elapsedTime << "ms";
-                IPConnection ipConnection(socket, node.accountController()->mainActor().id().toStdString());
-                IPConnection::Rate rate(elapsedTime, sentDataSize);
-                m_ipController->saveRate(ipConnection, rate);
-
                 //        if (m_socketPingerImpl) {
                 //            m_socketServicePinger.ping(*m_socketPingerImpl.get(),
                 //            &ISocketServicePinger::emitPing);
@@ -137,11 +140,10 @@ void NetworkManager::connectWsService(WebSocketService *service) {
     auto serviceIp = service->ip();
     const auto it = std::find_if(m_connections.begin(), m_connections.end(),
                                  [&service](SocketService *socket) { return socket->ip() == service->ip(); });
-
-    if (it == m_connections.end()) {
-        m_connections.append(service);
-        m_socketPingerImpl = service->pingServiceImpl(m_connections);
-    }
+    //    if (it == m_connections.end()) {
+    //        m_connections.append(service);
+    //        m_socketPingerImpl = service->pingServiceImpl(m_connections);
+    //    }
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -367,24 +369,28 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     m_messages[identifier] = message;
-
-    std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
-    std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
-
-    // TODO: no check new actor
-    //    {
-    //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
-    //        auto actor = node.actorIndex()->getActor(sender);
-
-    //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
-    //                                         QByteArray::fromStdString(std::string(sign)));
-    //        if (!verify) {
-    //            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
-    //        } else {
-    //            qDebug() << "[NetworkManager/messageReceived] Verify good";
-    //        }
-    //    }
-
+    std::string_view msg = "";
+    std::string_view sign = "";
+    std::string state = message.substr(message.size() - 1);
+    if (state == "0") {
+        msg = std::string_view(message).substr(0, message.size() - 1);
+    } else if (state == "1") {
+        msg = std::string_view(message).substr(0, message.size() - 64);
+        sign = std::string_view(message).substr(message.size() - 64, 64);
+        ActorId senderId;
+        senderId = std::string(msg.substr(19, senderId.toStdString().size()));
+        auto actor = node.actorIndex()->getActor(senderId);
+        bool verifyRes = actor.key().verify(std::string(msg), std::string(sign));
+#ifdef QT_DEBUG
+        qDebug() << fmt::format(
+                        "[Network Message] Received: sender {}, body: {}, signature {} | verifyRes: {}",
+                        senderId.toStdString(), std::string(msg), std::string(sign), verifyRes)
+                        .c_str();
+#endif
+        if (!verifyRes) {
+            return;
+        }
+    }
     MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
     auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
     auto serialized = msg.substr(40);

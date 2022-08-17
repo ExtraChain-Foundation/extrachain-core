@@ -50,7 +50,7 @@ void IPController::getIpConnections(const ActorId &actor) {
                                    .IP_Port = static_cast<uint64_t>(ipConnection.port) };
         qDebug() << "IP data port[" << msg.IP_Port << "][" << msg.IP_Address.c_str() << "]";
         qDebug() << "Decrypt: " << mainKey.decrypt(msg.IP_Address, publicKey).c_str();
-        m_node.network()->send_message(msg, MessageType::IpNewConnection);
+        m_node.network()->send_message_signed(msg, MessageType::IpNewConnection);
     }
 }
 

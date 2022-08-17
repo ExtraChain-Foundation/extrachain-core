@@ -153,7 +153,7 @@ bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::s
     const auto actorId = actor.id().toStdString();
     DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = std::filesystem::path(filePath).filename().string() };
-    node.network()->send_message(msg, MessageType::DfsRemoveFile);
+    node.network()->send_message_signed(msg, MessageType::DfsRemoveFile);
 
     HistoricalChain hc((DFS_PATH::filePath(actorId, fileHash).string() + DFSF::Extension), filePath);
     const bool databaseFileRemoved = hc.remove(actorId, fileHash);
@@ -218,7 +218,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
                                                            .FileHash = msg.FileHash,
                                                            .Path = msg.Path,
                                                            .Offset = 0 };
-            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
+            node.network()->send_message_signed(reqMessage, MessageType::DfsRequestFileSegment,
                                          MessageStatus::Request);
         }
     }
@@ -352,7 +352,7 @@ void DfsController::addListFiles(const QStringList &files) {
     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
             [&](DFSP::AddFileMessage msg, MessageType messageType) {
                 qDebug() << "send file: " << msg.FileName.c_str();
-                node.network()->send_message(msg, MessageType::DfsAddFile);
+                node.network()->send_message_signed(msg, MessageType::DfsAddFile);
             });
     connect(&addFilesThread, &ThreadAddFiles::error, this, [&](std::string error, std::string fileName) {
         qDebug() << error.c_str();
@@ -584,7 +584,7 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
 }
 
 void DfsController::requestSync() {
-    node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified,
+    node.network()->send_message_signed(Utils::currentDateSecs(), MessageType::DfsLastModified,
                                  MessageStatus::Request);
 }
 
@@ -599,7 +599,7 @@ void DfsController::sendSync(uint64_t lastModified, const std::string &messageId
 }
 
 void DfsController::requestDirData(const ActorId &actorId) {
-    node.network()->send_message(actorId, MessageType::DfsDirData, MessageStatus::Request);
+    node.network()->send_message_signed(actorId, MessageType::DfsDirData, MessageStatus::Request);
 }
 
 void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId) {
@@ -608,7 +608,7 @@ void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, c
     }
     auto rows = DFST::ActorDirFile::getDirRows(actorId.toStdString(), lastModified);
     if (!rows.empty()) {
-        node.network()->send_message(std::pair { actorId, rows }, MessageType::DfsDirData,
+        node.network()->send_message_signed(std::pair { actorId, rows }, MessageType::DfsDirData,
                                      MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
     }
 }
@@ -625,7 +625,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
     std::filesystem::remove(DFS_PATH::filePath(actorId, fileName));
-    node.network()->send_message(std::pair { actorId, fileName }, MessageType::DfsRequestFile,
+    node.network()->send_message_signed(std::pair { actorId, fileName }, MessageType::DfsRequestFile,
                                  MessageStatus::Request);
 }
 
@@ -643,9 +643,9 @@ void DfsController::sendFile(const ActorId &actorId, const std::string &fileName
                                  .Size = dirRow.fileSize };
 
     if (messageId.empty()) {
-        node.network()->send_message(msg, MessageType::DfsAddFile);
+        node.network()->send_message_signed(msg, MessageType::DfsAddFile);
     } else {
-        node.network()->send_message(msg, MessageType::DfsAddFile, MessageStatus::Response, messageId,
+        node.network()->send_message_signed(msg, MessageType::DfsAddFile, MessageStatus::Response, messageId,
                                      Config::Net::TypeSend::Focused);
     }
 }
@@ -673,7 +673,7 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
                                       .Data = std::move(data),
                                       .Offset = msg.Offset };
 
-    node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
+    node.network()->send_message_signed(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
                                  Config::Net::TypeSend::Focused);
     if (msg.Offset + DFSB::sectionSize >= fileSize) {
         emit uploaded(msg.Actor, msg.FileName);
@@ -719,7 +719,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
                                           .Offset = totalOffset };
 
         messageId =
-            node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
+            node.network()->send_message_signed(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
                                          messageId, Config::Net::TypeSend::Focused);
 
         if (lastFragment) {

@@ -194,9 +194,9 @@ public:
     void messageReceived(const std::string &message, const std::string &identifier);
 
     template <class T>
-    std::string send_message(T data, MessageType type, MessageStatus status = MessageStatus::NoStatus,
-                             std::string to_message_id = "",
-                             Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
+    std::string send_message_signed(T data, MessageType type, MessageStatus status = MessageStatus::NoStatus,
+                                    std::string to_message_id = "",
+                                    Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
         if (status == MessageStatus::Response && to_message_id.empty()) {
             qFatal("[Network] Send message error: empty message id for response message");
         }
@@ -235,11 +235,58 @@ public:
         }
 #endif
 
-        this->sendMessage(serialized + sign, typeSend, receiver_identifier);
+        this->sendMessage(serialized + sign + "1", typeSend,
+                          receiver_identifier); // NOTE: last byte is "signed" state
 
         return message.message_id;
     }
+    template <class T>
+    std::string send_message_unsigned(T data, MessageType type,
+                                      MessageStatus status = MessageStatus::NoStatus,
+                                      std::string to_message_id = "",
+                                      Config::Net::TypeSend typeSend = Config::Net::TypeSend::All) {
+        if (status == MessageStatus::Response && to_message_id.empty()) {
+            qFatal("[Network] Send message error: empty message id for response message");
+        }
+        if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
+            qDebug()
+                << "[Network] Send message warning: incorrect type send for response message, set to focused";
+            typeSend = Config::Net::TypeSend::Focused;
+        }
 
+        if (node.accountController()->count() == 0) {
+            // qFatal("Can't send");
+            return "";
+        }
+
+        auto &mainActor = node.accountController()->mainActor();
+        MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
+        auto serialized = message.serialize();
+        std::string receiver_identifier;
+        if (!to_message_id.empty()) {
+            receiver_identifier = m_messages[to_message_id];
+            //            if (receiver_identifier.empty())
+            //                qFatal("Network send message error: receiver_identifier is empty");
+            m_messages.erase(to_message_id);
+        }
+
+#ifdef QT_DEBUG
+        if (Network::networkDebug) {
+            msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
+            msgpack::object deserialized = oh.get();
+            qDebug() << fmt::format(
+                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+                            message.message_type, message.status, message.message_id, typeSend,
+                            (std::stringstream() << deserialized).str())
+                            .c_str();
+        }
+#endif
+
+        this->sendMessage(serialized + "0", typeSend,
+                          receiver_identifier); // NOTE: last byte is "unsigned" state
+
+        return message.message_id;
+    }
 signals:
     void newSocket();
     void connectionStatusChanged(bool status);

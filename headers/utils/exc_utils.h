@@ -69,6 +69,11 @@ static bool isStartedServer = true;
 static quint16 maxConnections = 100;
 static bool networkDebug = false;
 
+struct ConnectionStats {
+    int time = -1;
+    int datasize = -1;
+};
+
 enum class Protocol {
     Undefined = 0,
     Udp = 1,

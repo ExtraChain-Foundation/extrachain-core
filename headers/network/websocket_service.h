@@ -19,7 +19,7 @@ public:
 
     QWebSocket *socket() const;
     bool isActive() const override;
-    std::unique_ptr<ISocketServicePinger> pingServiceImpl(QList<SocketService *> &connections) override;
+    //    std::unique_ptr<ISocketServicePinger> pingServiceImpl(QList<SocketService *> &connections) override;
     void open(const QString &ip, quint16 port);
     virtual QString protocolString() const override {
         return "WebSocket";

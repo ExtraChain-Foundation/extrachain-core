@@ -25,7 +25,9 @@ enum class MessageType {
     DfsSendingFileDone = 59,
 
     IpRequestAllConnection = 70,
-    IpNewConnection = 71
+    IpNewConnection = 71,
+    IpPingRequest = 72,
+    IpPingResponse = 73
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)
