@@ -43,31 +43,31 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node)
-    , m_socketServicePinger(m_connections) {
+     {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
     // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
     // TODO: move to slot or process
     local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
-    m_ipController = std::make_unique<IPController>(node);
+//    m_ipController = std::make_unique<IPController>(node);
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this,
-            //            [&, this](SocketService *socket, quint64 elapsedTime, quint64 sentDataSize) {
-            //                qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
-            //                         << "time: " << elapsedTime << "ms";
-            //                IPConnection ipConnection(socket,
-            //                node.accountController()->mainActor().id().toStdString()); IPConnection::Rate
-            //                rate(elapsedTime, sentDataSize); m_ipController->saveRate(ipConnection, rate);
+//    connect(&m_socketServicePinger, &SocketServicePinger::pingResult, this,
+//            //            [&, this](SocketService *socket, quint64 elapsedTime, quint64 sentDataSize) {
+//            //                qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
+//            //                         << "time: " << elapsedTime << "ms";
+//            //                IPConnection ipConnection(socket,
+//            //                node.accountController()->mainActor().id().toStdString()); IPConnection::Rate
+//            //                rate(elapsedTime, sentDataSize); m_ipController->saveRate(ipConnection, rate);
 
-            [this](SocketService *socket, quint64 elapsedTime) {
-                qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
-                         << "time: " << elapsedTime << "ms";
-                //        if (m_socketPingerImpl) {
-                //            m_socketServicePinger.ping(*m_socketPingerImpl.get(),
-                //            &ISocketServicePinger::emitPing);
-                //        }
-            });
+//            [this](SocketService *socket, quint64 elapsedTime) {
+//                qDebug() << "[NetworkManager] Ping Result: socket: " << socket->ip()
+//                         << "time: " << elapsedTime << "ms";
+//                //        if (m_socketPingerImpl) {
+//                //            m_socketServicePinger.ping(*m_socketPingerImpl.get(),
+//                //            &ISocketServicePinger::emitPing);
+//                //        }
+//            });
     // }
 
     if (local == nullptr) {
@@ -137,13 +137,13 @@ void NetworkManager::connectWsService(WebSocketService *service) {
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
-    auto serviceIp = service->ip();
-    const auto it = std::find_if(m_connections.begin(), m_connections.end(),
-                                 [&service](SocketService *socket) { return socket->ip() == service->ip(); });
+//    auto serviceIp = service->ip();
+//    const auto it = std::find_if(m_connections.begin(), m_connections.end(),
+//                                 [&service](SocketService *socket) { return socket->ip() == service->ip(); });
     //    if (it == m_connections.end()) {
-    //        m_connections.append(service);
     //        m_socketPingerImpl = service->pingServiceImpl(m_connections);
     //    }
+    m_connections.append(service);
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -240,7 +240,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
         break;
     case Protocol::WebSocket:
         connectToWebSocket(ip.simplified(), port);
-        recoveryConnectToWebSockets();
+//        recoveryConnectToWebSockets();
         break;
     case Protocol::Undefined:
         qFatal("Undefined connectToNode");
@@ -375,10 +375,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     if (state == "0") {
         msg = std::string_view(message).substr(0, message.size() - 1);
     } else if (state == "1") {
-        msg = std::string_view(message).substr(0, message.size() - 64);
-        sign = std::string_view(message).substr(message.size() - 64, 64);
+        msg = std::string_view(message).substr(0, message.size() - 65);
+        sign = std::string_view(message).substr(message.size() - 65, 64);
         ActorId senderId;
-        senderId = std::string(msg.substr(19, senderId.toStdString().size()));
+        senderId = std::string(msg.substr(20, senderId.toStdString().size()));
         auto actor = node.actorIndex()->getActor(senderId);
         bool verifyRes = actor.key().verify(std::string(msg), std::string(sign));
 #ifdef QT_DEBUG

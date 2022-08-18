@@ -216,7 +216,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
         qFatal("Can't get actor by empty id");
     }
 
-    node.network()->send_message_signed(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);
+    node.network()->send_message_unsigned(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {

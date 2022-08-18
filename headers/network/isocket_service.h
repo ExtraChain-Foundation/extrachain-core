@@ -71,8 +71,8 @@ class ISocketServicePinger : public QObject {
     Q_OBJECT
 
 public:
-    virtual void pingImpl(SocketService *socket,
-                          const std::optional<std::string> &opMessage = std::nullopt) = 0;
+//    virtual void pingImpl(SocketService *socket,
+//                          const std::optional<std::string> &opMessage = std::nullopt) = 0;
 signals:
     void emitPing(SocketService *socket, quint64 elapsedTime);
 };
@@ -95,16 +95,16 @@ signals:
 //    };
 //};
 
-class WebSocketServicePingerImpl : public ISocketServicePinger {
-    Q_OBJECT
+//class WebSocketServicePingerImpl : public ISocketServicePinger {
+//    Q_OBJECT
 
-public:
-    explicit WebSocketServicePingerImpl(QList<SocketService *> &connections, QObject *parent = nullptr);
+//public:
+//    explicit WebSocketServicePingerImpl(QList<SocketService *> &connections, QObject *parent = nullptr);
 
-    void pingImpl(SocketService *socket = nullptr,
-                  const std::optional<std::string> &opMessage = std::nullopt) override;
+////    void pingImpl(SocketService *socket = nullptr,
+////                  const std::optional<std::string> &opMessage = std::nullopt) override;
 
-private:
-    //    std::unique_ptr<PingerDataImplBase> m_data;
-};
+//private:
+//    //    std::unique_ptr<PingerDataImplBase> m_data;
+//};
 #endif // WEBSOCKETSERVICE_H

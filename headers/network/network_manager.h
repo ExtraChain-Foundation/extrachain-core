@@ -124,8 +124,8 @@ private:
     std::map<std::string, std::string> m_messages;
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
-    SocketServicePinger m_socketServicePinger;
-    std::unique_ptr<ISocketServicePinger> m_socketPingerImpl;
+//    SocketServicePinger m_socketServicePinger;
+//    std::unique_ptr<ISocketServicePinger> m_socketPingerImpl;
     std::unique_ptr<IPController> m_ipController;
 
 public:
