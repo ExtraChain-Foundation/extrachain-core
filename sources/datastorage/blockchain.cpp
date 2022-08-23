@@ -484,7 +484,10 @@ bool Blockchain::signCheckAdd(Block &block) {
         //            block.sign(*accountController->getMainActor());
         //        }
     } else {
-        Block saved(getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray()));
+        const auto blockData = getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray());
+        if(blockData.isEmpty())
+            return false;
+        Block saved(blockData);
         QByteArrayList savedList = saved.getListSignatures();
         if (!savedList.isEmpty()) {
             if (list != savedList) {

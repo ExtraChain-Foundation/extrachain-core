@@ -225,7 +225,9 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
 
     files[msg.Actor + msg.FileName] = msg;
     emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
-
+    Block lastBlock = node.blockchain()->getLastBlock();
+    Block block("", lastBlock);
+    node.blockchain()->addBlock(block);
     return msg.FileName;
 }
 
