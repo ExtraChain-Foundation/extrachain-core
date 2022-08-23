@@ -101,8 +101,14 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
         m_blockchain->addBlock(tmp, true);
 
-        // emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
-        //                            tokenColor.toLatin1());
+        // TEST
+        Block lastBlock = m_blockchain->getLastBlock();
+        Block block("", lastBlock);
+        m_blockchain->addBlock(block);
+        // TEST
+
+        //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
+        //                             tokenColor.toLatin1());
 
         //        // TODO: usernames: move to console
         //        DBConnector dbc(
