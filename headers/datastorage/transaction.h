@@ -36,7 +36,6 @@ class EXTRACHAIN_EXPORT Transaction : public QObject {
 
          // Deserialize already created transaction
     Transaction(const QByteArray &serialized, QObject *parent = nullptr);
-    Transaction(std::string &serialized);
 
          // Construct transaction
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
@@ -168,9 +167,9 @@ public:
             .msgpack_unpack(msgpack_o);
     }
 
-    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash,
-                   approver, producer,
-                   digSig)
+//    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash,
+//                   approver, producer,
+//                   digSig)
 };
 
 #endif // TRANSACTION_H

@@ -298,7 +298,7 @@ std::string Transaction::serialize() const {
     // tests: start
     auto serializedAgain = MessagePack::serialize(deserialized);
 
-    auto deserialized2 = Transaction(serialized);
+    auto deserialized2 = Transaction(QByteArray::fromStdString(serialized));
     auto serializedAgain2 = MessagePack::serialize(deserialized2);
 
     if (serialized != serializedAgain)
