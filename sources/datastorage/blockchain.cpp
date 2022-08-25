@@ -1000,7 +1000,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
         }
         QList<QByteArray> list;
         for (const Transaction &tx : resultList)
-            list << tx.serialize();
+            list << tx.serialize().c_str();
         QByteArray dataBlock = Serialization::serialize(list);
         Block mergedBlock(dataBlock, prev);
         signBlock(mergedBlock);

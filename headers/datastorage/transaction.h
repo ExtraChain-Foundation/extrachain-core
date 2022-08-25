@@ -18,30 +18,31 @@
  */
 
 #ifndef TRANSACTION_H
-#define TRANSACTION_H
+    #define TRANSACTION_H
 
-#include "datastorage/actor.h"
-#include "utils/bignumber.h"
-#include "utils/exc_utils.h"
-#include <QByteArray>
-#include <QDateTime>
-#include <QString>
+    #include "datastorage/actor.h"
+    #include "utils/bignumber.h"
+    #include "utils/exc_utils.h"
+    #include <QByteArray>
+    #include <QDateTime>
+    #include <QString>
 
 class EXTRACHAIN_EXPORT Transaction : public QObject {
     Q_OBJECT
 
-public:
-    // Construct empty transaction
-    Transaction(QObject *parent = nullptr);
+        public:
+                 // Construct empty transaction
+                 Transaction(QObject *parent = nullptr);
 
-    // Deserialize already created transaction
+         // Deserialize already created transaction
     Transaction(const QByteArray &serialized, QObject *parent = nullptr);
+    Transaction(std::string &serialized);
 
-    // Construct transaction
+         // Construct transaction
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                 QObject *parent = nullptr);
 
-    // Construct transaction with data
+         // Construct transaction with data
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
                 const QByteArray &data, QObject *parent = nullptr);
 
@@ -57,7 +58,7 @@ public: // make private
     BigNumber prevBlock; // last block id at the moment of tx creation
     int gas;             // security and reward param
     int hop;             // number of the nodes, through which the transaction will pass before
-                         // aprovement
+             // aprovement
     std::string hash;    // hash from all fields
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
@@ -114,7 +115,8 @@ public:
     void operator=(const Transaction &transaction);
 
 public:
-    QByteArray serialize() const;
+    std::string serialize() const;
+    bool deserialize(const QByteArray &serialized);
     QString toString() const;
 
     long long getDate() const;
@@ -153,7 +155,21 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
 
-    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
+    template <typename Packer>
+    void msgpack_pack(Packer &msgpack_pk) const {
+        msgpack::type::make_define_array(sender, receiver, amount, date, data, token, prevBlock, gas, hop,
+                                         hash, approver, producer, digSig)
+            .msgpack_pack(msgpack_pk);
+    }
+
+    void msgpack_unpack(msgpack::object const &msgpack_o) {
+        msgpack::type::make_define_array(sender, receiver, amount, date, data, token, prevBlock, gas, hop,
+                                         hash, approver, producer, digSig)
+            .msgpack_unpack(msgpack_o);
+    }
+
+    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash,
+                   approver, producer,
                    digSig)
 };
 

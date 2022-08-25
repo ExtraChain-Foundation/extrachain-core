@@ -92,9 +92,9 @@ QByteArray Block::getDataForHash() const {
     auto list = extractTransactions();
     if (list.empty())
         return idHash;
-    QByteArray txHash = Utils::calcHash(list[0].serialize());
+    QByteArray txHash = Utils::calcHash(QByteArray::fromStdString(list[0].serialize()));
     for (int i = 1; i < list.size(); i++) {
-        QByteArray tmpTxHash = Utils::calcHash(list[i].serialize());
+        QByteArray tmpTxHash = Utils::calcHash(QByteArray::fromStdString(list[i].serialize()));
         txHash = Utils::calcHash(txHash + tmpTxHash);
     }
     return idHash + txHash;

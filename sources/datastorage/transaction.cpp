@@ -238,6 +238,11 @@ bool Transaction::isEmpty() const {
         && approver.isEmpty() && hash.empty();
 }
 
+bool Transaction::deserialize(const QByteArray &serialized) {
+    *this = MessagePack::deserialize<Transaction>(serialized);
+    return true;
+}
+
 bool Transaction::operator==(const Transaction &transaction) const {
     if (this->sender != transaction.getSender())
         return false;
@@ -286,23 +291,26 @@ void Transaction::operator=(const Transaction &other) {
     this->producer = other.producer;
 }
 
-QByteArray Transaction::serialize() const {
+std::string Transaction::serialize() const {
     auto serialized = MessagePack::serialize(*this);
     auto deserialized = MessagePack::deserialize<Transaction>(serialized);
 
     // tests: start
     auto serializedAgain = MessagePack::serialize(deserialized);
 
-    auto deserialized2 = Transaction(QByteArray::fromStdString(serialized));
+    auto deserialized2 = Transaction(serialized);
     auto serializedAgain2 = MessagePack::serialize(deserialized2);
 
     if (serialized != serializedAgain)
         qFatal("TX SER ERROR 1");
-    if (serialized != serializedAgain2)
+    if (serialized != serializedAgain2) {
+        qDebug() << serialized.c_str() << serialized.size();
+        qDebug() << serializedAgain2.c_str() << serializedAgain2.size();
         qFatal("TX SER ERROR 2");
+    }
     // test: end
 
-    return QByteArray::fromStdString(serialized);
+    return serialized;
 }
 
 QString Transaction::toString() const {

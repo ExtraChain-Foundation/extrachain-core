@@ -338,6 +338,24 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 
 void DfsController::addListFiles(const QStringList &files) {
     qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
+    Block lastBlock = node.blockchain()->getLastBlock();
+    Block block("", lastBlock);
+    Transaction transaction;
+    transaction.setAmount(BigNumber(1000111));
+    transaction.setDate(12321312);
+    transaction.setGas(200);
+//    block.addData(transaction.serialize());
+//    const int result = node.blockchain()->addBlock(block);
+//    qDebug().noquote().nospace() << "result" << result;
+//    if(result == 0) {
+//        node.network()->send_message(block.serialize().toStdString(), MessageType::BlockchainNewBlock);
+//    }
+    qDebug() << transaction.serialize().c_str();
+    node.network()->send_message(transaction.serialize(), MessageType::BlockchainTransaction);
+    return;
+//    node.network()->send_message("reqMessage", MessageType::BlockchainTransaction);
+
+
     const auto actor = node.accountController()->mainActor();
     ThreadAddFiles addFilesThread(this, actor, files);
     connect(&addFilesThread, &ThreadAddFiles::added, this,

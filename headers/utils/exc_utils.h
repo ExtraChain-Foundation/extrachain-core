@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -501,7 +501,9 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
         msgpack::object deserialized = oh.get();
         auto t = deserialized.as<T>();
         return t;
-    } catch (std::exception &e) { }
+    } catch (std::exception &e) {
+        qDebug() << e.what();
+    }
 
     auto qt_bytes = QByteArray::fromStdString(data.data());
     qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;

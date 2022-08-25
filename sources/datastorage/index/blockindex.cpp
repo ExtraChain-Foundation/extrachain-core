@@ -652,7 +652,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
             tx.approver = tmp.at("approver").c_str();
             tx.digSig = tmp.at("digSig").c_str();
             tx.producer = tmp.at("producer").c_str();
-            b.addData(tx.serialize());
+            b.addData(tx.serialize().c_str());
         }
 
         return b.serialize();

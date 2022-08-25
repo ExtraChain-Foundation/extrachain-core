@@ -223,7 +223,7 @@ Block TransactionManager::makeBlock() {
 QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs) {
     QList<QByteArray> l;
     for (const Transaction &tx : txs) {
-        l << tx.serialize();
+        l << QByteArray::fromStdString(tx.serialize());
     }
     return Serialization::serialize(l, Serialization::TRANSACTION_FIELD_SIZE);
 }
