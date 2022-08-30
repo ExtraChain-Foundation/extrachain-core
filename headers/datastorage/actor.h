@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *

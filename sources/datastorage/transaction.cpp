@@ -19,8 +19,7 @@
 
 #include "datastorage/transaction.h"
 
-Transaction::Transaction(QObject *parent)
-    : QObject(parent) {
+Transaction::Transaction() {
     this->amount = BigNumber(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = QByteArray();
@@ -32,21 +31,17 @@ Transaction::Transaction(QObject *parent)
     calcHash();
 }
 
-Transaction::Transaction(const QByteArray &serialized, QObject *parent)
-    : QObject(parent) {
+Transaction::Transaction(const QByteArray &serialized) {
     if (serialized.isEmpty()) {
         qDebug() << "Incorrect TX";
         return;
     }
 
-    auto ser = serialized.toStdString();
-    *this = MessagePack::deserialize<Transaction>(ser);
+    deserialize(serialized);
     calcHash();
 }
 
-Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
-                         QObject *parent)
-    : Transaction(parent) {
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount) {
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
@@ -61,8 +56,8 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
 }
 
 Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
-                         const QByteArray &data, QObject *parent)
-    : Transaction(sender, receiver, amount, parent) {
+                         const QByteArray &data)
+    : Transaction(sender, receiver, amount) {
     this->data = data;
 
     calcHash();
@@ -91,6 +86,21 @@ void Transaction::setReceiver(const ActorId &value) {
 
 void Transaction::setProducer(const ActorId &value) {
     producer = value;
+}
+
+void Transaction::setDigSig(const std::string &value)
+{
+    digSig = value;
+}
+
+void Transaction::setApprover(const ActorId &value)
+{
+    approver = value;
+}
+
+void Transaction::setHash(const std::string &value)
+{
+    hash = value;
 }
 
 void Transaction::setSender(const ActorId &value) {
@@ -292,25 +302,7 @@ void Transaction::operator=(const Transaction &other) {
 }
 
 std::string Transaction::serialize() const {
-    auto serialized = MessagePack::serialize(*this);
-    auto deserialized = MessagePack::deserialize<Transaction>(serialized);
-
-    // tests: start
-    auto serializedAgain = MessagePack::serialize(deserialized);
-
-    auto deserialized2 = Transaction(QByteArray::fromStdString(serialized));
-    auto serializedAgain2 = MessagePack::serialize(deserialized2);
-
-    if (serialized != serializedAgain)
-        qFatal("TX SER ERROR 1");
-    if (serialized != serializedAgain2) {
-        qDebug() << serialized.c_str() << serialized.size();
-        qDebug() << serializedAgain2.c_str() << serializedAgain2.size();
-        qFatal("TX SER ERROR 2");
-    }
-    // test: end
-
-    return serialized;
+    return MessagePack::serialize(*this);
 }
 
 QString Transaction::toString() const {

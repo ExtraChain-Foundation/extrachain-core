@@ -465,22 +465,20 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::BlockchainNewBlock: {
         qDebug() << "[blockchain] BlockchainNewBlock";
-        const auto serialezedData = QByteArray::fromStdString(std::string { serialized.begin(), serialized.end() });
+        const auto serialezedData =
+            QByteArray::fromStdString(std::string { serialized.begin(), serialized.end() });
         qDebug() << serialezedData;
         auto block = Block();
-//        qDebug() << "count tx:" << block.extractTransactions().size();
-        node.blockchain()->addBlock(block);
+        //        qDebug() << "count tx:" << block.extractTransactions().size();
         break;
     }
 
     case MessageType::BlockchainTransaction: {
         qDebug() << "[blockchain] BlockchainTransaction";
-        qDebug() << std::string { serialized.begin(), serialized.end() }.c_str() << std::string{serialized}.c_str();
-//        Transaction t = MessagePack::deserialize<Transaction>(serialized);
-        Transaction t(QByteArray::fromStdString(std::string { serialized.begin(), serialized.end() }));
-//        qDebug() << t.getAmount();
-//        Transaction t;
-//        node.createTransaction(t);
+        const auto data = std::string { serialized.begin() + 2, serialized.end() };
+        Transaction t = MessagePack::deserialize<Transaction>(data);
+        node.createTransaction(t);
+
         break;
     }
 

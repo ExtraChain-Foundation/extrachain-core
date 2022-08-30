@@ -54,16 +54,7 @@ void TransactionManager::addTransaction(Transaction tx) {
 
     Transaction *trx = new Transaction(tx);
     receivedTxList.append(trx);
-    connect(trx, &Transaction::ProveMe, blockchain, &Blockchain::proveTx);
-    connect(trx, &Transaction::Approved, this, &TransactionManager::addProvedTransaction);
-    connect(trx, &Transaction::NotApproved, this, &TransactionManager::removeUnApprovedTransaction);
-
-    connect(trx, &Transaction::addPendingForFeeTxs, this, &TransactionManager::addPendingForFeeTxs);
-    connect(trx, &Transaction::addPendingFeeSenderTxs, this, &TransactionManager::addPendingFeeSenderTxs);
-    connect(trx, &Transaction::addPendingFeeApproverTxs, this, &TransactionManager::verifyApproverFeeTx);
-    //    connect(&tx, &Transaction::Approved, this,
-    //    &TransactionManager::makeBlock);
-    emit trx->ProveMe(trx);
+    blockchain->proveTx(trx);
     //    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
     //                "function)\n after emit tx.ProveMe() signal to Blockshain";
     //    BigNumber receiverBalance = tx.getReceiverBalance();
@@ -99,10 +90,10 @@ void TransactionManager::addPendingForFeeTxs(Transaction *transaction) {
             if (transaction->getAmount() / 100 * Fee::TRANSACTION_FEE == i->getAmount()) {
                 pendingFeeTxs.removeOne(i);
                 transaction->sign(accountController->currentWallet());
-                emit transaction->Approved(transaction);
+                addProvedTransaction(transaction);
             } else {
                 qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
-                emit transaction->NotApproved(transaction);
+                removeUnApprovedTransaction(transaction);
             }
         }
     }
@@ -118,30 +109,30 @@ void TransactionManager::verifyApproverFeeTx(Transaction *tx) {
     Block block = blockchain->getBlockByHash(tempData[1]);
     if (block.isEmpty()) {
         qDebug() << "[Check fee] Block is not valid. Invalid fee transaction";
-        emit tx->NotApproved(tx);
+        removeUnApprovedTransaction(tx);
         return;
     }
     Transaction tempTx = block.getTransactionByHash(tempData[2]);
     if (tempTx.getAmount() / 100 / 100 * Fee::TRANSACTION_FEE != tx->getAmount()) {
         qDebug() << "[Check fee] amount1 != amount2 Fee";
-        emit tx->NotApproved(tx);
+        removeUnApprovedTransaction(tx);
 
         return;
     }
     if (tempTx.isEmpty()) {
         qDebug() << "[Check fee] Fee transaction is not found in block. Invalid transaction";
-        emit tx->NotApproved(tx);
+        removeUnApprovedTransaction(&tempTx);
         return;
     }
 
     if (tempTx.getApprover() == tx->getReceiver()) {
         qDebug() << "Fee approver transaciton successfull approved";
         tx->sign(accountController->currentWallet());
-        emit tx->Approved(tx);
+        addProvedTransaction(tx);
         return;
     } else {
         qDebug() << "Current actor is not tx approver and don't get fee";
-        emit tx->NotApproved(tx);
+        removeUnApprovedTransaction(tx);
     }
 }
 
@@ -154,12 +145,12 @@ void TransactionManager::addPendingFeeSenderTxs(Transaction *tx) {
                 qDebug() << i->getHash() << " transaction successfull approved";
                 tx->sign(accountController->currentWallet());
                 i->sign(accountController->currentWallet());
-                emit i->Approved(i);
-                emit tx->Approved(tx);
+                addProvedTransaction(i);
+                addProvedTransaction(tx);
             } else {
                 qDebug() << "Transaction fee not approved: amount fee and amount transaction not appropriate";
-                emit tx->NotApproved(tx);
-                emit i->NotApproved(i);
+                removeUnApprovedTransaction(tx);
+                removeUnApprovedTransaction(i);
             }
         }
     }

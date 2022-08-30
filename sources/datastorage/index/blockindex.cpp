@@ -639,19 +639,19 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
         for (const auto &tmp : rows) {
             QByteArrayList list;
             Transaction tx;
-            tx.sender = ActorId(tmp.at("sender"));
-            tx.receiver = ActorId(tmp.at("receiver"));
-            tx.amount = BigNumber(tmp.at("amount"));
-            tx.date = std::stoll(tmp.at("date"));
-            tx.data = QByteArray::fromStdString(tmp.at("data"));
-            tx.token = ActorId(tmp.at("token"));
-            tx.prevBlock = BigNumber(tmp.at("prevBlock"));
-            tx.gas = std::stoi(tmp.at("gas"));
-            tx.hop = std::stoi(tmp.at("hop"));
-            tx.hash = tmp.at("hash").c_str();
-            tx.approver = tmp.at("approver").c_str();
-            tx.digSig = tmp.at("digSig").c_str();
-            tx.producer = tmp.at("producer").c_str();
+            tx.setSender(ActorId(tmp.at("sender")));
+            tx.setReceiver(ActorId(tmp.at("receiver")));
+            tx.setAmount(BigNumber(tmp.at("amount")));
+            tx.setDate(std::stoll(tmp.at("date")));
+            tx.setData(QByteArray::fromStdString(tmp.at("data")));
+            tx.setToken(ActorId(tmp.at("token")));
+            tx.setPrevBlock(BigNumber(tmp.at("prevBlock")));
+            tx.setGas(std::stoi(tmp.at("gas")));
+            tx.setHop(std::stoi(tmp.at("hop")));
+            tx.setHash(tmp.at("hash").c_str());
+            tx.setApprover(ActorId(tmp.at("approver").c_str()));
+            tx.setDigSig(tmp.at("digSig").c_str());
+            tx.setProducer(ActorId(tmp.at("producer").c_str()));
             b.addData(tx.serialize().c_str());
         }
 
