@@ -24,8 +24,9 @@ enum class MessageType {
     DfsDeleteSegment = 58,
     DfsSendingFileDone = 59,
 
-    BlockchainNewBlock = 80,
-    BlockchainTransaction = 81
+    BlockchainGenesisBlock = 80,
+    BlockchainNewBlock = 81,
+    BlockchainTransaction = 82
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)

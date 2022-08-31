@@ -70,6 +70,7 @@ public:
     AccountController *accountController() const;
     ActorIndex *actorIndex() const;
     DfsController *dfs() const;
+    TransactionManager *txManager() const;
 
     // Remove this function before merge
     void test() const;
