@@ -426,6 +426,9 @@ namespace DataStorage {
 
     // Max number of saved blocks in mem index
     static const int MEM_INDEX_SIZE_LIMIT = 1000;
+
+    //How often to prove pransactions
+    static const int PROVE_TXS_INTERVAL = 2000;
 } // namespace DataStorage
 
 namespace Net {

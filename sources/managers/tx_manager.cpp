@@ -39,6 +39,11 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
     connect(&blockCreationTimer, &QTimer::timeout, this, &TransactionManager::makeBlock);
     blockCreationTimer.start();
+
+    // prove timer
+    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
+    connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
+    proveTimer.start();
     qDebug() << "start timer:";
 }
 
@@ -54,16 +59,6 @@ void TransactionManager::addTransaction(Transaction tx) {
 
     Transaction *trx = new Transaction(tx);
     receivedTxList.append(trx);
-    blockchain->proveTx(trx);
-    //    qDebug() << "tx_manger.cpp <void TransactionManger::addTransaction> (public "
-    //                "function)\n after emit tx.ProveMe() signal to Blockshain";
-    //    BigNumber receiverBalance = tx.getReceiverBalance();
-    //    BigNumber senderBalance = tx.getSenderBalance();
-    //    if (!pendingTxs.contains(tx))
-    //    {
-    //        pendingTxs.append(tx);
-    //    }
-    //    //    emit SendProveTransactionRequest(senderBalance, receiverBalance, tx.getHash());`
 }
 
 void TransactionManager::addProvedTransaction(Transaction *tx) {
@@ -209,6 +204,12 @@ Block TransactionManager::makeBlock() {
     // fee section end
     this->pendingTxs.clear();
     return block;
+}
+
+void TransactionManager::proveTransactions() {
+    for (auto tx : receivedTxList) {
+        blockchain->proveTx(tx);
+    }
 }
 
 QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs) {

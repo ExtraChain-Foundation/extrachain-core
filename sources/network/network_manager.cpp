@@ -22,6 +22,7 @@
 #include "managers/thread_pool.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
+#include "managers/tx_manager.h"
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -477,7 +478,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         qDebug() << "[blockchain] BlockchainTransaction";
         const auto data = std::string { serialized.begin() + 2, serialized.end() };
         Transaction t = MessagePack::deserialize<Transaction>(data);
-        node.createTransaction(t);
+        node.txManager()->addTransaction(t);
 
         break;
     }

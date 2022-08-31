@@ -200,7 +200,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         // send without fee
         if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId()
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
-            emit NewTx(tx);
+            m_txManager->addTransaction(tx);
         else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
             // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
         } else {
@@ -460,6 +460,11 @@ ActorIndex *ExtraChainNode::actorIndex() const {
 
 DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
+}
+
+TransactionManager *ExtraChainNode::txManager() const
+{
+    return m_txManager;
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {
