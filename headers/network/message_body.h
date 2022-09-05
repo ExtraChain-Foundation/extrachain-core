@@ -26,7 +26,8 @@ enum class MessageType {
 
     BlockchainGenesisBlock = 80,
     BlockchainNewBlock = 81,
-    BlockchainTransaction = 82
+    BlockchainTransaction = 82,
+    BlockchainCopyScript = 83
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)

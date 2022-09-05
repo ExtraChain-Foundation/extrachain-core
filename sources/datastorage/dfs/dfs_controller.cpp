@@ -225,6 +225,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
 
     files[msg.Actor + msg.FileName] = msg;
     emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
+
     return msg.FileName;
 }
 
@@ -349,7 +350,7 @@ void DfsController::addListFiles(const QStringList &files) {
                     Transaction transaction;
                     transaction.setData(MessagePack::serialize(TransactionData{
                         .hash = transaction.getHash().toStdString(),
-                        .path = msg.FileName
+                        .path = msg.FileHash
                     }));
                     node.network()->send_message(transaction.serialize(), MessageType::BlockchainTransaction);
                 }
@@ -730,6 +731,9 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 
         if (lastFragment) {
             emit uploaded(msg.Actor, msg.FileName);
+            if(std::filesystem::exists(Scripts::folder + "/" + msg.FileName)) {
+                node.network()->send_message(fragment, MessageType::BlockchainCopyScript);
+            }
         } else {
             emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         }
@@ -1036,10 +1040,8 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     const bool isScript = filePath.extension() == Scripts::wasmExtention;
     std::string scriptPath = "";
     if(isScript) {
-        scriptPath = Scripts::folder + "/" + fileHash;
-        if(!std::filesystem::exists(scriptPath)) {
-            std::filesystem::copy(filePath, scriptPath);
-        }
+        scriptPath = Scripts::folder + "/" + fileName;
+        std::filesystem::copy(filePath, scriptPath);
     };
     emit added(msg, filePath.string(), scriptPath);
 }

@@ -492,6 +492,14 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::BlockchainCopyScript: {
+        auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
+        std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
+        std::string toPath = Scripts::folder + "/" + msg.FileName;
+        std::filesystem::copy_file(fromPath, toPath);
+        break;
+    }
+
     default:
         qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
         break;
