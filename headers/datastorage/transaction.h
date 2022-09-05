@@ -27,6 +27,12 @@
 #include <QDateTime>
 #include <QString>
 
+struct TransactionData {
+    std::string hash;
+    std::string path;
+    MSGPACK_DEFINE(hash, path)
+};
+
 class EXTRACHAIN_EXPORT Transaction {
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -115,6 +121,7 @@ public:
     void setDate(long long value);
     void setToken(const ActorId &value);
     void setData(const QByteArray &value);
+    void setData(const std::string &value);
     /**
      * @brief 1.1 -> 1.1 * 10e18 in BigNumber
      * @param amount

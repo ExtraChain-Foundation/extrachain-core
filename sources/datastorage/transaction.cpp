@@ -115,7 +115,14 @@ void Transaction::setAmount(const BigNumber &value) {
     amount = value;
 }
 
+
+
 void Transaction::setData(const QByteArray &value) {
+    data = value;
+}
+
+void Transaction::setData(const std::string &value)
+{
     data = value;
 }
 

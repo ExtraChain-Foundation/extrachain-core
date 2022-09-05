@@ -28,7 +28,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
     DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.query(DFST::ActorDirFile::CreateTableQuery);
 
-    //
+         //
     requestDirData(actorId);
 }
 
@@ -338,32 +338,21 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 
 void DfsController::addListFiles(const QStringList &files) {
     qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
-    Block lastBlock = node.blockchain()->getLastBlock();
-    Block block("", lastBlock);
-    Transaction transaction;
-    transaction.setAmount(BigNumber(1000111));
-    transaction.setDate(12321312);
-    transaction.setGas(200);
-//    block.addData(transaction.serialize());
-//    const int result = node.blockchain()->addBlock(block);
-//    qDebug().noquote().nospace() << "result" << result;
-//    if(result == 0) {
-//        node.network()->send_message(block.serialize().toStdString(), MessageType::BlockchainNewBlock);
-//    }
-    qDebug() << transaction.serialize().c_str();
-    node.network()->send_message(transaction.serialize(), MessageType::BlockchainTransaction);
-    return;
-//    node.network()->send_message("reqMessage", MessageType::BlockchainTransaction);
-
-
     const auto actor = node.accountController()->mainActor();
     ThreadAddFiles addFilesThread(this, actor, files);
     connect(&addFilesThread, &ThreadAddFiles::added, this,
-            [&](DFSP::AddFileMessage msg, std::string filePath) {
-                qDebug() << "added file: " << msg.FileName.c_str();
+            [&](DFSP::AddFileMessage msg, std::string filePath, std::string scriptPath) {
                 insertToFiles(msg);
                 emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
                 emit resultAddFile("", QString::fromStdString(filePath));
+                if(!scriptPath.empty()) {
+                    Transaction transaction;
+                    transaction.setData(MessagePack::serialize(TransactionData{
+                        .hash = transaction.getHash().toStdString(),
+                        .path = msg.FileName
+                    }));
+                    node.network()->send_message(transaction.serialize(), MessageType::BlockchainTransaction);
+                }
             });
 
     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
@@ -634,7 +623,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
     bool res = DFST::ActorDirFile::addDirRows(actorId.toStdString(), dirRows);
     qDebug() << "[Dfs] addDirData result:" << res;
 
-    // temp
+         // temp
     for (auto &row : dirRows) {
         requestFile(actorId, row.fileHash);
     }
@@ -1043,5 +1032,14 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     FragmentStorage fs(actor.id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
-    emit added(msg, filePath.string());
+
+    const bool isScript = filePath.extension() == Scripts::wasmExtention;
+    std::string scriptPath = "";
+    if(isScript) {
+        scriptPath = Scripts::folder + "/" + fileHash;
+        if(!std::filesystem::exists(scriptPath)) {
+            std::filesystem::copy(filePath, scriptPath);
+        }
+    };
+    emit added(msg, filePath.string(), scriptPath);
 }

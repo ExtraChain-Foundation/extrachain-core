@@ -133,7 +133,7 @@ public:
 signals:
     void error(std::string error, std::string fileName);
     void sendMessage(DFSP::AddFileMessage msg, MessageType messageType);
-    void added(DFSP::AddFileMessage msg, std::string filePath);
+    void added(DFSP::AddFileMessage msg, std::string filePath, std::string &scriptPath);
 };
 
 #endif // DFS_CONTROLLER_H

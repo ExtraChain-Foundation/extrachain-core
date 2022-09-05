@@ -20,9 +20,9 @@
 #include "datastorage/dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
+#include "managers/tx_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
-#include "managers/tx_manager.h"
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -466,23 +466,29 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::BlockchainGenesisBlock: {
         const auto serialezedData =
-            QByteArray::fromStdString(std::string { serialized.begin() +1, serialized.end() });
+            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
         auto genesisBlock = GenesisBlock(serialezedData);
         node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         break;
     }
     case MessageType::BlockchainNewBlock: {
         const auto serialezedData =
-            QByteArray::fromStdString(std::string { serialized.begin()+1, serialized.end() });
+            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
         auto block = Block(serialezedData);
         node.blockchain()->addBlockToBlockchain(block);
         break;
     }
 
     case MessageType::BlockchainTransaction: {
-        const auto data = std::string { serialized.begin() + 2, serialized.end() };
-        Transaction t = MessagePack::deserialize<Transaction>(data);
-        node.txManager()->addTransaction(t);
+        const auto data = std::string { serialized.begin() + 3, serialized.end() };
+        Transaction transaction = MessagePack::deserialize<Transaction>(data);
+        if (!transaction.getData().isEmpty()) {
+            TransactionData transactionData =
+                MessagePack::deserialize<TransactionData>(transaction.getData());
+            qDebug() << "run code from " << transactionData.path.c_str()
+                     << "with hash: " << transactionData.hash.c_str();
+        }
+        node.txManager()->addTransaction(transaction);
         break;
     }
 
