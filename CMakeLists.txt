@@ -86,6 +86,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm
     ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm.h
+     ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm_rust_test.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
