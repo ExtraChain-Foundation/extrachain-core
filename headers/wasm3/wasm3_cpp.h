@@ -11,7 +11,7 @@
 #include <iterator>
 #include <cassert>
 
-#include "wasm3.h"
+#include "../wasm3/source/wasm3.h"
 
 
 namespace wasm3 {
