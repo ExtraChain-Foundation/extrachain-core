@@ -19,67 +19,54 @@
 
 #include "managers/data_mining_manager.h"
 #include "utils/exc_utils.h"
-#include <QDebug>
 
 DataMiningManager::DataMiningManager(QObject *parent)
     : QObject(parent) {
 }
 
-std::string DataMiningManager::merkleHash(std::vector<std::string> &listHashes,
-                                          std::vector<std::vector<std::string>> &branchesTree,
-                                          const bool isHahsing) {
-    std::string rootHash = "";
-    const auto splittedList = splitListOnPair(listHashes, isHahsing);
+void DataMiningManager::rootMerkleHash(std::vector<std::string> &listHashes,
+                                              std::vector<MerkleDataBlocks> &branchesTree,
+                                              const bool isHahsing,
+                                              std::string &result) {
+    if (listHashes.empty()) {
+        qFatal("Root merkle hash: list is empty");
+    };
+    const auto splittedList = splitListIntoPair(listHashes, isHahsing);
+    MerkleDataBlocks merkleBlocks;
 
-    std::vector<std::string> lastResult;
-    qDebug() << "print splitted list";
-    for(int i = 0; i < splittedList.size(); i++) {
-        const auto pair = splittedList[i];
-        for(int j = 0; j < pair.size(); j++) {
-            qDebug() << pair[j].c_str();
-        }
-        qDebug() << "========" << pair.size();
-    }    qDebug() << "finish print splitted list";
-
-    for (int i = 0; i < splittedList.size(); i++) {
-        const auto pair = splittedList[i];
+    for (int index = 0; index < splittedList.size(); index++) {
+        const auto pair = splittedList[index];
 
         if (pair.size() == 1) {
-            lastResult.push_back(pair[0]);
+            merkleBlocks.push_back(pair[0]);
         } else {
-            lastResult.push_back(merkleFormula(pair[0], pair[1]));
+            merkleBlocks.push_back(merkleFormula(pair[0], pair[1]));
         }
     }
-    branchesTree.push_back(lastResult);
+    branchesTree.push_back(merkleBlocks);
 
-    for (int k = 0; k < lastResult.size(); k++) {
-        qDebug() << lastResult[k].c_str();
-    }
-
-    if (lastResult.size() != 1) {
-        merkleHash(lastResult, branchesTree, false);
+    if (merkleBlocks.size() != 1) {
+        rootMerkleHash(merkleBlocks, branchesTree, false, result);
     } else {
-        qDebug() << "Root hash: " << branchesTree[branchesTree.size() -1][0].c_str();
+        result = branchesTree[branchesTree.size() - 1][0];
     }
-
-    return rootHash;
 }
 
-std::vector<std::vector<std::string>> DataMiningManager::splitListOnPair(std::vector<std::string> &vector,
+std::vector<MerkleDataBlocks> DataMiningManager::splitListIntoPair(std::vector<std::string> &vector,
                                                                          const bool isHahsing) {
-    std::vector<std::vector<std::string>> result;
+    std::vector<MerkleDataBlocks> result;
 
     if (vector.empty())
         return result;
 
-    if(isHahsing)
+    if (isHahsing)
         hashingElements(vector);
 
     int position = 0;
     int step = 2;
     const int sizeVector = vector.size();
     bool isLastPair = sizeVector <= 2;
-    const bool isPairVector = sizeVector % 2 == 0 ? true : false;
+    const bool isPairVector = (sizeVector % 2 == 0) ? true : false;
     const int next = 1;
 
     while (position < sizeVector) {
@@ -108,10 +95,7 @@ std::vector<std::vector<std::string>> DataMiningManager::splitListOnPair(std::ve
 
 void DataMiningManager::hashingElements(std::vector<std::string> &vector) {
     for (int i = 0; i < vector.size(); i++) {
-        std::string res = "[" + vector[i] + "|";
         vector[i] = Utils::calcHash(vector[i]);
-        res += vector[i] + "]";
-        qDebug() << res.c_str();
     }
 }
 

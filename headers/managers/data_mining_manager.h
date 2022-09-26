@@ -23,15 +23,19 @@
 #include <QObject>
 #include <string>
 
+typedef std::vector<std::string> MerkleDataBlocks;
+
 class DataMiningManager : public QObject {
     Q_OBJECT
 
 public:
     explicit DataMiningManager(QObject *parent = nullptr);
 
-    std::string merkleHash(std::vector<std::string> &a, std::vector<std::vector<std::string>> &branchesTree, const bool isHahsing);
+    void rootMerkleHash(std::vector<std::string> &a, std::vector<MerkleDataBlocks> &branchesTree,
+                           const bool isHahsing, std::string &result);
 
-    std::vector<std::vector<std::string>> splitListOnPair(std::vector<std::string> &vector,
+private:
+    std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
                                                           const bool isHahsing);
     void hashingElements(std::vector<std::string> &vector);
     std::string merkleFormula(const std::string &hash1, const std::string &hash2) const;
