@@ -33,7 +33,7 @@ endif()
 find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system thread)
+find_package(Boost REQUIRED COMPONENTS system thread iostreams)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 
@@ -84,10 +84,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm
-    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm_rust_test.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/streaming_compression.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/streaming_decompression.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/zstd_common_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
@@ -124,6 +123,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+#    ${Boost_INCLUDE_DIR}/../boost/iostreams/filter/zstd.cpp
     )
 
 # add_library(extrachainc
@@ -151,7 +151,26 @@ if (EXTRACHAIN_ENABLE_LTO)
         message(STATUS "LTO not supported: <${error}>")
     endif(lto_supported)
 endif(EXTRACHAIN_ENABLE_LTO)
+if (ZSTD_FOUND AND NOT BOOST_IOSTREAMS_HAS_ZSTD)
+    add_subdirectory("../extrachain-3rdparty/boost-zstd")
+endif()
+if (${Boost_IOSTREAMS_FOUND})
+    find_package(ZSTD ${REQUIRED_IN_APPIMAGE})
 
+    include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state()
+    set(CMAKE_REQUIRED_INCLUDES ${Boost_INCLUDE_DIRS})
+    set(CMAKE_REQUIRED_LIBRARIES ${Boost_LIBRARIES})
+    check_cxx_source_compiles("#include <boost/iostreams/filter/zstd.hpp>
+        int main() { boost::iostreams::zstd_decompressor(); return 0; }"
+        BOOST_IOSTREAMS_HAS_ZSTD
+    )
+    cmake_pop_check_state()
+endif()
+set_package_properties(ZSTD PROPERTIES TYPE RECOMMENDED PURPOSE "Zstandard offers better (de)compression performance compared with gzip/zlib, making heaptrack faster and datafiles smaller.")
+#add_subdirectory("../extrachain-3rdparty/boost-zstd")
+find_package(zstd CONFIG REQUIRED)
 # git
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
 execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
@@ -166,7 +185,7 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx fmt::fmt-header-only
-    magic_enum::magic_enum Boost::boost Boost::system Boost::thread) # extrachainc
+    magic_enum::magic_enum Boost::boost Boost::system Boost::thread Boost::iostreams zstd::libzstd_static ) # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
 

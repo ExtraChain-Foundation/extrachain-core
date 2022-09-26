@@ -39,6 +39,8 @@
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 
+#include <boost/iostreams/filter/zstd.hpp>
+
 class SocketService;
 class WebSocketService;
 class UPNPConnection;
@@ -93,6 +95,7 @@ private:
     std::map<std::string, std::string> m_messages;
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
+
 
 public:
     explicit NetworkManager(ExtraChainNode &node);

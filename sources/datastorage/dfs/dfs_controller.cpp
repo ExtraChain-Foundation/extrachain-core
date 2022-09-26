@@ -4,6 +4,8 @@
 #include "network/network_manager.h"
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
+#include "headers/utils/streaming_compression.h"
+#include "headers/utils/streaming_decompression.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -37,7 +39,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::filesystem::path fpath = DFS_PATH::convertPathToPlatform(filePath);
     std::filesystem::path newFilePath = fpath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
-
+    compress(filePath);
 #ifdef ANDROID
     auto tempPath = "dfs/temp"
         + QString::number(QRandomGenerator::global()->bounded(1000) + QDateTime::currentMSecsSinceEpoch());
@@ -182,6 +184,8 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
         std::fstream fs;
         fs.open(realFilePath, std::ios::out | std::ios::binary);
         fs.close();
+
+        compress(realFilePath);
     }
 
     DBConnector actrDirFile(actrDirFilePath);
@@ -559,8 +563,24 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
                 }
             }
         }
-    }
+        }
 }
+
+void DfsController::compress(const std::filesystem::path &path)
+{
+    const auto inFilename = path.c_str();
+    const auto outFilename =  createOutFilename_orDie(inFilename);
+
+    std::filesystem::copy(path, outFilename);
+    compressFile_orDie(outFilename.c_str(), inFilename, 1, 4);
+}
+
+void DfsController::decompress(const std::filesystem::path &path)
+{
+    const auto inFilename = path.c_str();
+    decompressFile_orDie(inFilename);
+}
+
 
 uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
     uint64_t size = 0;
@@ -918,6 +938,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     std::filesystem::path fpath = DFS_PATH::convertPathToPlatform(filePath);
     std::filesystem::path newFilePath = fpath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
+
 
 #ifdef ANDROID
     auto tempPath = "dfs/temp"
