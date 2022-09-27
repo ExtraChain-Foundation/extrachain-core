@@ -142,6 +142,12 @@ namespace Fragments {
           "size       INTEGER             NOT NULL"
           ");";
 
+    struct FragmentsInfo {
+        std::string fileHash;
+        std::string filePath;
+        std::list<std::pair<int, int>> fragmentPositionList;
+        MSGPACK_DEFINE(fileHash, filePath, fragmentPositionList)
+    };
 }
 namespace Historical {
     struct FileChange {

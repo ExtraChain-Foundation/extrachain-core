@@ -33,6 +33,7 @@ public:
 
     void rootMerkleHash(std::vector<std::string> &a, std::vector<MerkleDataBlocks> &branchesTree,
                            const bool isHahsing, std::string &result);
+    std::string rootMerkleHash(std::string &data);
 
 private:
     std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,

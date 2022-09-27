@@ -52,6 +52,16 @@ void DataMiningManager::rootMerkleHash(std::vector<std::string> &listHashes,
     }
 }
 
+std::string DataMiningManager::rootMerkleHash(std::string &data)
+{
+    std::string result;
+    std::vector<MerkleDataBlocks> branches;
+    std::vector<std::string> dataList;
+    dataList.push_back(data);
+    rootMerkleHash(dataList, branches, true, result);
+    return result;
+}
+
 std::vector<MerkleDataBlocks> DataMiningManager::splitListIntoPair(std::vector<std::string> &vector,
                                                                          const bool isHahsing) {
     std::vector<MerkleDataBlocks> result;
