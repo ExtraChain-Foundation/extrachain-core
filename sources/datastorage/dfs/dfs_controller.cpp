@@ -28,7 +28,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
     DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.query(DFST::ActorDirFile::CreateTableQuery);
 
-         //
+    //
     requestDirData(actorId);
 }
 
@@ -346,12 +346,10 @@ void DfsController::addListFiles(const QStringList &files) {
                 insertToFiles(msg);
                 emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
                 emit resultAddFile("", QString::fromStdString(filePath));
-                if(!scriptPath.empty()) {
+                if (!scriptPath.empty()) {
                     Transaction transaction;
-                    transaction.setData(MessagePack::serialize(TransactionData{
-                        .hash = transaction.getHash().toStdString(),
-                        .path = msg.FileHash
-                    }));
+                    transaction.setData(MessagePack::serialize(TransactionData {
+                        .hash = transaction.getHash().toStdString(), .path = msg.FileHash }));
                     node.network()->send_message(transaction.serialize(), MessageType::BlockchainTransaction);
                 }
             });
@@ -624,13 +622,14 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
     bool res = DFST::ActorDirFile::addDirRows(actorId.toStdString(), dirRows);
     qDebug() << "[Dfs] addDirData result:" << res;
 
-         // temp
+    // temp
     for (auto &row : dirRows) {
         requestFile(actorId, row.fileHash);
     }
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
+    qDebug() << fileName.c_str();
     std::filesystem::remove(DFS_PATH::filePath(actorId, fileName));
     node.network()->send_message(std::pair { actorId, fileName }, MessageType::DfsRequestFile,
                                  MessageStatus::Request);
@@ -731,7 +730,7 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 
         if (lastFragment) {
             emit uploaded(msg.Actor, msg.FileName);
-            if(std::filesystem::exists(Scripts::folder + "/" + msg.FileName)) {
+            if (std::filesystem::exists(Scripts::folder + "/" + msg.FileName)) {
                 node.network()->send_message(fragment, MessageType::BlockchainCopyScript);
             }
         } else {
@@ -1039,7 +1038,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
 
     const bool isScript = filePath.extension() == Scripts::wasmExtention;
     std::string scriptPath = "";
-    if(isScript) {
+    if (isScript) {
         scriptPath = Scripts::folder + "/" + fileName;
         std::filesystem::copy(filePath, scriptPath);
     };

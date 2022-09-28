@@ -143,10 +143,21 @@ namespace Fragments {
           ");";
 
     struct FragmentsInfo {
+        std::string actor;
         std::string fileHash;
         std::string filePath;
+        uint64_t fileSize;
         std::list<std::pair<int, int>> fragmentPositionList;
-        MSGPACK_DEFINE(fileHash, filePath, fragmentPositionList)
+
+        void print() const {
+            qDebug() << "actor: [" << actor.c_str() << "]"
+                     << "fileHash" << fileHash.c_str() << "]"
+                     << "filePath" << filePath.c_str() << "]";
+            for(const auto& pair: fragmentPositionList) {
+                qDebug() << pair.first << pair.second;
+            }
+        }
+        MSGPACK_DEFINE(actor, fileHash, filePath, fileSize, fragmentPositionList)
     };
 }
 namespace Historical {

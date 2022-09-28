@@ -29,7 +29,8 @@ enum class MessageType {
     BlockchainTransaction = 82,
     BlockchainCopyScript = 83,
 
-    FragmentDataInfo = 90
+    FragmentDataInfo = 90,
+    FragmentsDataListInfo = 91
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)

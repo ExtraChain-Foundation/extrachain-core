@@ -500,6 +500,21 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::FragmentDataInfo: {
+        auto msg = MessagePack::deserialize<DFSF::FragmentsInfo>(serialized);
+        msg.print();
+        break;
+    }
+
+    case MessageType::FragmentsDataListInfo: {
+        auto fragmentsInfoList = MessagePack::deserialize<std::vector<DFSF::FragmentsInfo>>(serialized);
+        qDebug() << "Recieved fragment data info from list";
+        for (const auto &msg : fragmentsInfoList) {
+            msg.print();
+        }
+        break;
+    }
+
     default:
         qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
         break;
