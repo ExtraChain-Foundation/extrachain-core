@@ -131,6 +131,14 @@ namespace Packets {
         uint64_t lastModified;
         MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, fileSize, lastModified)
     };
+
+    struct VerifyFileMessage {
+        std::string Actor;
+        std::string FileHash;
+        std::string FileName;
+        bool Verified = false;
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Verified)
+    };
 }
 namespace Fragments {
     static const std::string Extension = ".storj";

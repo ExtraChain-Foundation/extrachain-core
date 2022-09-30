@@ -739,6 +739,38 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
     } while (!lastFragment);
 }
 
+void DfsController::verifyFiles(std::vector<DFS::Packets::VerifyFileMessage> &fileList,
+                                std::string &messageId) {
+    for (auto &file : fileList) {
+        // check file exist
+        std::filesystem::path realFilePath = DFS_PATH::filePath(file.Actor, file.FileName);
+        if (!std::filesystem::exists(realFilePath)) {
+            qDebug() << "File by path" << realFilePath.c_str() << "doesn't exist.";
+            continue;
+        }
+        std::string fileHash = Utils::calcHashForFile(realFilePath);
+        if (fileHash == file.FileHash) {
+            file.Verified = true;
+        }
+    }
+    const std::string serializedData = MessagePack::serialize<std::vector<DFSP::VerifyFileMessage>>(fileList);
+    node.network()->send_message(serializedData,
+                                 MessageType::DfsVerifyList, MessageStatus::Response, messageId,
+                                 Config::Net::TypeSend::Focused);
+}
+
+float DfsController::percentVerified(std::vector<DFS::Packets::VerifyFileMessage> &fileList) {
+    float result = 0.0;
+    int countFilesVerified = 0;
+    for (const auto &msg : fileList) {
+        if (msg.Verified) {
+            countFilesVerified++;
+        }
+    }
+    result = ((float)countFilesVerified / (float)fileList.size()) * 100;
+    return result;
+}
+
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)

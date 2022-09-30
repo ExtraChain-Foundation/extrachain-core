@@ -464,6 +464,25 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         qDebug() << "[Dfs] File done:" << actorId << fileHash.c_str();
         break;
     }
+
+    case MessageType::DfsVerifyList: {
+        switch (status) {
+        case MessageStatus::NoStatus:
+            break;
+        case MessageStatus::Request: {
+            auto list = MessagePack::deserialize<std::vector<DFSP::VerifyFileMessage>>(serialized);
+            node.dfs()->verifyFiles(list, messageId);
+            break;
+        }
+        case MessageStatus::Response: {
+            auto list = MessagePack::deserialize<std::vector<DFSP::VerifyFileMessage>>(serialized);
+            auto percentVerified = node.dfs()->percentVerified(list);
+            break;
+        }
+        }
+        break;
+    }
+
     case MessageType::BlockchainGenesisBlock: {
         const auto serialezedData =
             QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });

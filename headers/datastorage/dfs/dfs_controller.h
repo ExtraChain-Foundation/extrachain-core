@@ -89,6 +89,8 @@ public:
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
+    void verifyFiles(std::vector<DFSP::VerifyFileMessage> &fileList, std::string &messageId);
+    float percentVerified(std::vector<DFSP::VerifyFileMessage> &fileList);
 
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);

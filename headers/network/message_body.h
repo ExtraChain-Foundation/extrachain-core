@@ -23,6 +23,7 @@ enum class MessageType {
     DfsAddSegment = 57,
     DfsDeleteSegment = 58,
     DfsSendingFileDone = 59,
+    DfsVerifyList = 60,
 
     BlockchainGenesisBlock = 80,
     BlockchainNewBlock = 81,
