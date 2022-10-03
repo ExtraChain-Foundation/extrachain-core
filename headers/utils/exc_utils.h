@@ -513,6 +513,26 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
     qFatal("[MessagePack] Incorrect deserialize");
     return T();
 }
+
+template <class T>
+std::vector<std::string> serializeContainer(std::vector<T> &list) {
+    std::vector<std::string> result;
+    for(const auto& item : list) {
+        result.push_back(serialize(item));
+    }
+    return result;
+}
+
+template <class T>
+std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer) {
+    std::vector<T> result;
+
+    for(const auto& data : dataContainer) {
+        const T element = deserialize<T>(data);
+        result.push_back(element);
+    }
+    return result;
+}
 } // namespace MessagePack
 
 namespace Utils {

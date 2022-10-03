@@ -470,13 +470,19 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            auto list = MessagePack::deserialize<std::vector<DFSP::VerifyFileMessage>>(serialized);
-            node.dfs()->verifyFiles(list, messageId);
+            std::vector<std::string> listMessage =
+                MessagePack::deserialize<std::vector<std::string>>(serialized);
+            std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
+                MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
+            node.dfs()->verifyFiles(listVerifiedMessage, messageId);
             break;
         }
         case MessageStatus::Response: {
-            auto list = MessagePack::deserialize<std::vector<DFSP::VerifyFileMessage>>(serialized);
-            auto percentVerified = node.dfs()->percentVerified(list);
+            std::vector<std::string> listMessage =
+                MessagePack::deserialize<std::vector<std::string>>(serialized);
+            std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
+                MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
+            float percentVerified = node.dfs()->percentVerified(listVerifiedMessage);
             break;
         }
         }
