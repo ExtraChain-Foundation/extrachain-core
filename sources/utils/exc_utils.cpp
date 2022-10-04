@@ -127,11 +127,7 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
 std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        char buffer[1024];
-        int length;
-        std::string data;
-        while ((length = file.read(buffer, sizeof(buffer))) > 0)
-            data += buffer;
+        std::string data = file.readAll().toStdString();
         DataMiningManager dmm;
         QByteArray hash = QByteArray::fromStdString(dmm.rootMerkleHash(data));
         return bytesEncode(hash, encode).toStdString();
