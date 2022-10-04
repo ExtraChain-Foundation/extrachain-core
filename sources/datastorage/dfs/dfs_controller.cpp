@@ -753,7 +753,7 @@ void DfsController::verifyFiles(std::vector<DFS::Packets::VerifyFileMessage> &fi
             file.Verified = true;
         }
     }
-    const std::string serializedData = MessagePack::serialize<std::vector<DFSP::VerifyFileMessage>>(fileList);
+    std::vector<std::string> serializedData = MessagePack::serializeContainer(fileList);
     node.network()->send_message(serializedData,
                                  MessageType::DfsVerifyList, MessageStatus::Response, messageId,
                                  Config::Net::TypeSend::Focused);
