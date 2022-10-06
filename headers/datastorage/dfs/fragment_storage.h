@@ -60,6 +60,21 @@ public:
     }
 
 protected:
+    inline std::string decompress(const std::string &actorIdStr,
+                    const std::filesystem::path &path)
+    {
+        const auto inFilename = path.c_str();
+        const auto tmpFilePath = std::string("tmp") + '/' + actorIdStr
+                + '/' +  path.filename().string();
+        const auto outPath = std::filesystem::path(tmpFilePath);
+        if (!std::filesystem::exists(outPath)) {
+            std::filesystem::create_directories(outPath.parent_path());
+            std::ofstream output(outPath);
+            output.close();
+        }
+        decompressFile_orDie(inFilename, tmpFilePath.c_str());
+        return tmpFilePath;
+    }
     void run() override;
 
 signals:

@@ -14,12 +14,12 @@
 #include <zstd.h>
 #include "zstd_common_utils.h"
 
-static void decompressFile_orDie(const char* fname)
+static void decompressFile_orDie(const char* fname, const char *outName)
 {
     FILE* const fin  = fopen_orDie(fname, "rb");
     size_t const buffInSize = ZSTD_DStreamInSize();
     void*  const buffIn  = malloc_orDie(buffInSize);
-    FILE* const fout = stdout;
+    FILE* const fout = fopen_orDie(outName, "wb");;
     size_t const buffOutSize = ZSTD_DStreamOutSize();
     void*  const buffOut = malloc_orDie(buffOutSize);
 

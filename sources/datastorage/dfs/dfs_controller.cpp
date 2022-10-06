@@ -5,7 +5,6 @@
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
 #include "headers/utils/streaming_compression.h"
-#include "headers/utils/streaming_decompression.h"
 
 DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     : QObject(parent)
@@ -588,7 +587,7 @@ void ThreadAddFiles::compress(const std::string &actorIdStr,
         std::filesystem::create_directories(tmpFilePathFs.parent_path());
         std::filesystem::copy_file(path, tmpFilePath);
         std::filesystem::remove(path);
-        compressFile_orDie(tmpFilePath.c_str(), inFilename, 1, 4);
+        compressFile_orDie(tmpFilePath.c_str(), inFilename, 19, 2);
     }  catch (...) {
         qDebug() << "DFS DEBUG LOG: path: [" << path.string().c_str()
                  << " ] inFilename: [ "<< inFilename << " ] tmpFilePath [" << tmpFilePath.c_str()
@@ -596,11 +595,7 @@ void ThreadAddFiles::compress(const std::string &actorIdStr,
     }
 }
 
-void DfsController::decompress(const std::filesystem::path &path)
-{
-    const auto inFilename = path.c_str();
-    decompressFile_orDie(inFilename);
-}
+
 
 
 uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
@@ -989,28 +984,13 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     }
     my_file.close();
 
-    auto fileSize = std::filesystem::file_size(newFilePath);
-    if (!m_dfsController->writeAvailable(fileSize)) {
-        emit error("ErrorStorageFull", filePath.string());
-        return;
-    }
-
     std::string fileName = m_dfsController->createFileName(filePath);
     std::string fileHash = Utils::calcHashForFile(newFilePath);
     std::filesystem::path placeInDFS =
         DFSB::fsActrRootW + DFSB::separator + actor.id().toString().toStdWString() + DFSB::separator;
     std::filesystem::path dfsPath = DFS_PATH::filePath(actor.id(), fileName);
-
-    if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
-        std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
-        if (fileHash == dfsFileHash) {
-            qDebug() << "[DFS] File already in DFS";
-            emit error("ErrorAlreadyExists", filePath.string());
-            return;
-        }
-    }
-
     try {
+
         std::filesystem::create_directories(placeInDFS.c_str());
 #ifdef ANDROID
         std::filesystem::rename(newFilePath, dfsPath);
@@ -1021,6 +1001,23 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     } catch (std::filesystem::filesystem_error const &err) {
         qDebug() << "[Dfs] Copy error:" << err.what();
     }
+    auto fileSize = std::filesystem::file_size(dfsPath);
+    if (!m_dfsController->writeAvailable(fileSize)) {
+        emit error("ErrorStorageFull", filePath.string());
+        return;
+    }
+
+
+    if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
+        std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
+        if (fileHash == dfsFileHash) {
+            qDebug() << "[DFS] File already in DFS";
+            emit error("ErrorAlreadyExists", filePath.string());
+            return;
+        }
+    }
+
+
 
     const auto actorId = actor.id().toStdString();
     DFSP::AddFileMessage msg = { .Actor = actorId,

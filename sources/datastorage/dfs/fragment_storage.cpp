@@ -421,6 +421,7 @@ void FragmentWriter::run() {
     auto currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
         qDebug() << "[Dfs] File is complite";
+        decompress(m_msg.Actor, fileName);
         emit compliteFile(m_msg.FileName);
         return;
     }
@@ -430,8 +431,10 @@ void FragmentWriter::run() {
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(m_msg.Actor, m_msg.FileName, double(m_msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
-        if (m_msg.FileHash == Utils::calcHashForFile(fileName)) {
+        const auto tmpFileName = decompress(m_msg.Actor, fileName);
+        if (m_msg.FileHash == Utils::calcHashForFile(tmpFileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+
             emit eraseFromFiles(m_msg);
             emit downloadedFile(m_msg.Actor, m_msg.FileName);
             emit sendFile(m_msg.Actor, m_msg.FileName);

@@ -8,6 +8,7 @@
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <msgpack.hpp>
+#include "headers/utils/streaming_decompression.h"
 
 class ActorId;
 
@@ -46,6 +47,7 @@ T stdStringBytesToType(std::string value) {
 }
 namespace Utils {
 std::string platformDelimeter();
+
 }
 
 namespace DFS {

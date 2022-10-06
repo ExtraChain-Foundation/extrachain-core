@@ -68,9 +68,6 @@ public:
     void insertToFiles(DFSP::AddFileMessage msg);
     void exportFile(const std::string& pathTo, const std::string& pathFrom, const std::string& nameFile = "");
 
-    void compress(const std::filesystem::path& path);
-    void decompress(const std::filesystem::path &path);
-
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
     bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
