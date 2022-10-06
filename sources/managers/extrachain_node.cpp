@@ -433,6 +433,9 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
     connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+        m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
+    });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
 }

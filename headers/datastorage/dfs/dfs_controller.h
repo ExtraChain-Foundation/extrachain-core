@@ -78,6 +78,9 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
 
 public:
+    void sendSizeRequestMsg(const ActorId &actorId) const;
+    void sendSizeReponseMsg(const DFSP::RequestDfsSize & msg,
+                            const std::string &messageId) const;
     void requestSync();
     void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);

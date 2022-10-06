@@ -588,9 +588,26 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
     return std::string(rr_ptr, rightRegion.get_size());
 }
 
+void DfsController::sendSizeRequestMsg(const ActorId& actorId) const
+{
+    DFSP::RequestDfsSize msg {actorId.toStdString()};
+    node.network()->send_message(msg, MessageType::RequestDfsSize, MessageStatus::Request);
+}
+
+void DfsController::sendSizeReponseMsg(const DFS::Packets::RequestDfsSize &msg, const std::string &messageId) const
+{
+    DFSP::ResponseDfsSize response { .Actor = msg.Actor, .Size = m_sizeTaken };
+    node.network()->send_message(response,
+                                 MessageType::ResponseDfsSize,
+                                 MessageStatus::Response,
+                                 messageId);
+}
+
 void DfsController::requestSync() {
     node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified,
                                  MessageStatus::Request);
+
+
 }
 
 void DfsController::sendSync(uint64_t lastModified, const std::string &messageId) {
