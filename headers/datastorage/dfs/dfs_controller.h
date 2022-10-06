@@ -128,7 +128,8 @@ public:
     ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor, const QStringList &files,
                    QObject *parent = nullptr);
     ~ThreadAddFiles();
-
+    void compress(const std::string &actorIdStr,
+                  const std::filesystem::path &path);
     virtual void run() override;
     void addFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                  std::string targetVirtualFilePath);

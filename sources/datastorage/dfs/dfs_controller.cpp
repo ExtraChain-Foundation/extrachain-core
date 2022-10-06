@@ -39,7 +39,6 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::filesystem::path fpath = DFS_PATH::convertPathToPlatform(filePath);
     std::filesystem::path newFilePath = fpath;
     std::string newTargetVirtualFilePath = targetVirtualFilePath;
-    compress(filePath);
 #ifdef ANDROID
     auto tempPath = "dfs/temp"
         + QString::number(QRandomGenerator::global()->bounded(1000) + QDateTime::currentMSecsSinceEpoch());
@@ -184,8 +183,6 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
         std::fstream fs;
         fs.open(realFilePath, std::ios::out | std::ios::binary);
         fs.close();
-
-        compress(realFilePath);
     }
 
     DBConnector actrDirFile(actrDirFilePath);
@@ -566,13 +563,37 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
         }
 }
 
-void DfsController::compress(const std::filesystem::path &path)
+void ThreadAddFiles::compress(const std::string &actorIdStr,
+                              const std::filesystem::path &path)
 {
-    const auto inFilename = path.c_str();
-    const auto outFilename =  createOutFilename_orDie(inFilename);
+    const std::unordered_set<std::string> serviceDirs = {
+        ".storj",
+        ".dir",
+        ".db",
+        ".storj-journal"
+    };
 
-    std::filesystem::copy(path, outFilename);
-    compressFile_orDie(outFilename.c_str(), inFilename, 1, 4);
+    if (serviceDirs.contains(path.extension()))
+    {
+        return;
+    }
+
+    const auto inFilename = path.c_str();
+    const auto tmpFilePath = DataStorage::TMP_FOLDER.toStdString()
+            + '/' + actorIdStr
+            + '/' +  path.filename().string();
+
+    try {
+        const auto tmpFilePathFs = std::filesystem::path(tmpFilePath);
+        std::filesystem::create_directories(tmpFilePathFs.parent_path());
+        std::filesystem::copy_file(path, tmpFilePath);
+        std::filesystem::remove(path);
+        compressFile_orDie(tmpFilePath.c_str(), inFilename, 1, 4);
+    }  catch (...) {
+        qDebug() << "DFS DEBUG LOG: path: [" << path.string().c_str()
+                 << " ] inFilename: [ "<< inFilename << " ] tmpFilePath [" << tmpFilePath.c_str()
+                 << " ];";
+    }
 }
 
 void DfsController::decompress(const std::filesystem::path &path)
@@ -996,6 +1017,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
 #else
         std::filesystem::copy(newFilePath, dfsPath);
 #endif
+        compress(actor.id().toStdString(), dfsPath);
     } catch (std::filesystem::filesystem_error const &err) {
         qDebug() << "[Dfs] Copy error:" << err.what();
     }
