@@ -525,6 +525,25 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::BlockchainDataMiningRewardTransaction: {
+        switch (status) {
+        case MessageStatus::NoStatus:
+            break;
+        case MessageStatus::Request: {
+            RewardTransaction rewardTx =
+                MessagePack::deserialize<RewardTransaction>(serialized);
+            node.verifyHashProcessing(rewardTx, messageId);
+            break;
+        }
+        case MessageStatus::Response: {
+            RewardTransaction rewardTx =
+                MessagePack::deserialize<RewardTransaction>(serialized);
+            break;
+        }
+        }
+        break;
+    }
+
     case MessageType::FragmentDataInfo: {
         auto msg = MessagePack::deserialize<DFSF::FragmentsInfo>(serialized);
         msg.print();

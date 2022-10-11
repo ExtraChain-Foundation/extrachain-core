@@ -25,6 +25,7 @@
 #include <QObject>
 
 #include "datastorage/transaction.h"
+#include "datastorage/reward_transaction.h"
 #include "extrachain_global.h"
 
 class DfsController;
@@ -103,6 +104,14 @@ public:
      * @return
      */
     Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
+
+    /**
+    @brief Create reward transaction
+    @param recieveDataList - list of data
+    */
+    RewardTransaction createRewardTx(const std::vector<RecieveData> &recieveDataList, bool sendRequest = false,
+                                   std::string messageId = "");
+    void verifyHashProcessing(RewardTransaction &rewardTransaction, std::string &messageId);
 
     std::string exportUser();
     bool importUser(const std::string &data, const std::string &login, const std::string &password);

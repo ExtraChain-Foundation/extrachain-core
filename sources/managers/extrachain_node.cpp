@@ -287,6 +287,37 @@ Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber 
     return Transaction();
 }
 
+RewardTransaction ExtraChainNode::createRewardTx(const std::vector<RecieveData> &recieveDataList,
+                                                 bool sendRequest, std::string messageId) {
+    ActorId actorId = accountController()->mainActor().id();
+    RewardTransaction rewardTransaction(actorId, TransactionRewardData(recieveDataList));
+
+    if (sendRequest) {
+        messageId =
+            network()->send_message(rewardTransaction, MessageType::BlockchainDataMiningRewardTransaction,
+                                    MessageStatus::Request, messageId, Config::Net::TypeSend::Focused);
+    }
+
+    return rewardTransaction;
+}
+
+void ExtraChainNode::verifyHashProcessing(RewardTransaction &rewardTransaction, std::string &messageId) {
+    const auto recieveDataList = rewardTransaction.getRewardData().getRecieveDataList();
+    for (const auto &recieveData : recieveDataList) {
+        FragmentStorage fs(recieveData);
+        DFSP::SegmentMessage segmentMessage = fs.getFragment(recieveData.fragmentHash);
+        if (!segmentMessage.FileHash.empty()) {
+            AdditionalData additionalData = { .actorVerifier =
+                                                  accountController()->mainActor().id().toStdString(),
+                                              .hashRecord = segmentMessage.FileHash };
+            rewardTransaction.insertAdditionalData(additionalData);
+        }
+    }
+
+    messageId = network()->send_message(rewardTransaction, MessageType::BlockchainDataMiningRewardTransaction,
+                                        MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+}
+
 std::string ExtraChainNode::exportUser() {
     auto hash = m_accountController->currentProfile().hash();
 
@@ -464,8 +495,7 @@ DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
-TransactionManager *ExtraChainNode::txManager() const
-{
+TransactionManager *ExtraChainNode::txManager() const {
     return m_txManager;
 }
 
@@ -497,7 +527,7 @@ void ExtraChainNode::testPermissions() const {
     const std::string userPass1 = "12345678";
     const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
     Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
-    m_accountController->createActor(ActorType::Account, userHash1);
+        m_accountController->createActor(ActorType::Account, userHash1);
 
     DFSController dfsController;
     dfsController.initDB(actor);
@@ -533,34 +563,37 @@ void ExtraChainNode::testPermissions() const {
 
     struct SetPermission : public TestSet{
         SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
-    PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId, fileHash),
-            permission(permission),
-            resultSet(result) {}
-        PermissionManager::Permission permission;
-        bool resultSet;
+                      PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId,
+                      fileHash), permission(permission), resultSet(result) {} PermissionManager::Permission
+    permission; bool resultSet;
     };
 
     struct GetPermission : public TestSet{
         GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
-    PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash), resultGet(permission)
-    {} PermissionManager::Permission resultGet;
+                      PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash),
+            resultGet(permission)
+        {} PermissionManager::Permission resultGet;
     };
 
     std::vector<TestSet*> testSet;
     testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm",
-    PermissionManager::Read)); testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(),
-    ".perm", PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor,
-    actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission)); testSet.emplace_back(new
-    GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
+                                           PermissionManager::Read)); testSet.emplace_back(new
+                         GetPermission("get", actor, actor.idStd().c_str(),
+                                       ".perm", PermissionManager::Edit)); testSet.emplace_back(new
+                         GetPermission("get", actor, actor1.idStd().c_str(), "fHashPublic",
+    PermissionManager::NoPermission)); testSet.emplace_back(new GetPermission("get", actor,
+    actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
 
     testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic",
-    PermissionManager::Edit, false)); testSet.emplace_back(new SetPermission("set", actor,
-    actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true)); testSet.emplace_back(new
-    SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
+                                           PermissionManager::Edit, false)); testSet.emplace_back(new
+                         SetPermission("set", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Edit,
+    true)); testSet.emplace_back(new SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate",
+                                           PermissionManager::Edit, true));
 
     testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate",
-    PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(),
-    ".perm", PermissionManager::Edit));
+                                           PermissionManager::Edit)); testSet.emplace_back(new
+                         GetPermission("get", actor1, actor1.idStd().c_str(),
+                                       ".perm", PermissionManager::Edit));
 
     for(auto & test: testSet)
     {
@@ -569,7 +602,7 @@ void ExtraChainNode::testPermissions() const {
             GetPermission* getPerm = static_cast<GetPermission*>(test);
             auto permission = permManager.getPermission(getPerm->actor,
                                                         {getPerm->userId.toStdString(),
-                                                         getPerm->fileHash.toStdString()});
+                                                          getPerm->fileHash.toStdString()});
             assert(permission == getPerm->resultGet);
         }
         else
@@ -577,8 +610,8 @@ void ExtraChainNode::testPermissions() const {
             SetPermission* setPerm = static_cast<SetPermission*>(test);
             auto permission = permManager.setPermission(setPerm->actor,
                                                         {setPerm->userId.toStdString(),
-                                                         setPerm->fileHash.toStdString(),
-                                                         permManager.permissions[setPerm->permission].toStdString()});
+                                                          setPerm->fileHash.toStdString(),
+                                                          permManager.permissions[setPerm->permission].toStdString()});
             assert(permission == setPerm->resultSet);
         }
     }
@@ -669,7 +702,7 @@ void ExtraChainNode::test() const {
 
     validate(newContent, newContent);
 
-    // Add segment tests
+         // Add segment tests
     newContent.insert(0, "qwe");
 
     DFSController::AddSegmentMsg addSegmentMsg;
@@ -685,7 +718,7 @@ void ExtraChainNode::test() const {
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    //
+         //
 
     newContent.insert(10, "qwe");
 
@@ -699,7 +732,7 @@ void ExtraChainNode::test() const {
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    //
+         //
 
     addSegmentMsg.offset = std::to_string(newContent.size());
     addSegmentMsg.fileHash = fHashPublic;
@@ -712,7 +745,7 @@ void ExtraChainNode::test() const {
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    // Delete segment tests
+         // Delete segment tests
 
     newContent = newContent.toStdString().erase(0, 10).c_str();
 

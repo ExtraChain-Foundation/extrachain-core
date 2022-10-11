@@ -56,6 +56,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/reward_transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/threds/inserter_files.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/private_profile.h
@@ -98,6 +99,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/memindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/reward_transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/threds/inserter_files.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp

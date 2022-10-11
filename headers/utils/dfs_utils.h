@@ -60,6 +60,7 @@ namespace Basic {
 
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
+    static const int miningReward = 1;
 }
 
 namespace Packets {
@@ -137,7 +138,8 @@ namespace Packets {
         std::string FileHash;
         std::string FileName;
         bool Verified = false;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Verified)
+        uint64_t Size;
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Verified, Size)
     };
 }
 namespace Fragments {
@@ -145,9 +147,10 @@ namespace Fragments {
     static const std::string TableNameFragments = "Fragments";
     static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
         + "("
-          "pos        INTEGER PRIMARY KEY NOT NULL,"
-          "storedPos  INTEGER             NOT NULL,"
-          "size       INTEGER             NOT NULL"
+          "pos        INTEGER PRIMARY KEY NOT NULL, "
+          "storedPos  INTEGER             NOT NULL, "
+          "size       INTEGER             NOT NULL, "
+          "fragHash   TEXT                NOT NULL"
           ");";
 
     struct FragmentsInfo {

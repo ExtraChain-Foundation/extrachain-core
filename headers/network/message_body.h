@@ -29,6 +29,7 @@ enum class MessageType {
     BlockchainNewBlock = 81,
     BlockchainTransaction = 82,
     BlockchainCopyScript = 83,
+    BlockchainDataMiningRewardTransaction = 84,
 
     FragmentDataInfo = 90,
     FragmentsDataListInfo = 91

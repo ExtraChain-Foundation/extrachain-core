@@ -754,9 +754,8 @@ void DfsController::verifyFiles(std::vector<DFS::Packets::VerifyFileMessage> &fi
         }
     }
     std::vector<std::string> serializedData = MessagePack::serializeContainer(fileList);
-    node.network()->send_message(serializedData,
-                                 MessageType::DfsVerifyList, MessageStatus::Response, messageId,
-                                 Config::Net::TypeSend::Focused);
+    node.network()->send_message(serializedData, MessageType::DfsVerifyList, MessageStatus::Response,
+                                 messageId, Config::Net::TypeSend::Focused);
 }
 
 float DfsController::percentVerified(std::vector<DFS::Packets::VerifyFileMessage> &fileList) {
