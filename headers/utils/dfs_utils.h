@@ -46,6 +46,8 @@ T stdStringBytesToType(std::string value) {
 }
 namespace Utils {
 std::string platformDelimeter();
+
+inline static uint64_t globalVariableOfDfsSize = 0;
 }
 
 namespace DFS {
@@ -64,6 +66,19 @@ namespace Basic {
 }
 
 namespace Packets {
+    struct ResponseDfsSize {
+        std::string Actor;
+        uint64_t Size;
+
+        MSGPACK_DEFINE(Actor, Size)
+    };
+
+    struct RequestDfsSize {
+        std::string Actor;
+
+        MSGPACK_DEFINE(Actor)
+    };
+
     struct AddFileMessage {
         std::string Actor;
         std::string FileName;

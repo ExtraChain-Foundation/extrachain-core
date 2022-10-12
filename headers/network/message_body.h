@@ -24,6 +24,8 @@ enum class MessageType {
     DfsDeleteSegment = 58,
     DfsSendingFileDone = 59,
     DfsVerifyList = 60,
+    RequestDfsSize = 61,
+    ResponseDfsSize = 62,
 
     BlockchainGenesisBlock = 80,
     BlockchainNewBlock = 81,

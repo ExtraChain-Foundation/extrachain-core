@@ -379,6 +379,18 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     // try {
     switch (type) {
+    case MessageType::ResponseDfsSize: {
+        const auto msgStruct = MessagePack::deserialize<DFSP::ResponseDfsSize>(serialized);
+        if (Utils::globalVariableOfDfsSize < msgStruct.Size) {
+            Utils::globalVariableOfDfsSize = msgStruct.Size;
+        }
+        break;
+    }
+    case MessageType::RequestDfsSize: {
+        const auto msgStruct = MessagePack::deserialize<DFSP::RequestDfsSize>(serialized);
+        node.dfs()->sendSizeReponseMsg(msgStruct, messageId);
+        break;
+    }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         node.actorIndex()->handleNewActor(actor);
