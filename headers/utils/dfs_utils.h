@@ -156,6 +156,37 @@ namespace Packets {
         uint64_t Size;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Verified, Size)
     };
+
+    enum StateMessageType {
+        base = 0
+    };
+
+    struct StateMessage {
+        StateMessageType StateTypeMessage;
+        uint64_t DataAmountStored;
+        uint64_t DataAmountTotalStoredInNetwork;
+        uint64_t BlockAmount;
+        double Coefficient;
+        uint64_t TotalSupply;
+        double CoinProducedForNode = 0.0;
+        uint64_t CoinProductionAlgorithmTickBlocks;
+        float BlockProductionRate;
+        uint64_t CoinProductionAlgorithmTickPerHour;
+
+        void calc() {
+            CoinProducedForNode = ((double)DataAmountStored/(double)DataAmountTotalStoredInNetwork) *
+                ((double)TotalSupply/(double)BlockAmount) * Coefficient;
+
+            if(CoinProducedForNode < 1) {
+                Coefficient *= 2;
+                calc();
+            }
+        }
+        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork,
+                       BlockAmount, Coefficient, TotalSupply, CoinProducedForNode,
+                       CoinProductionAlgorithmTickBlocks, BlockProductionRate,
+                       CoinProductionAlgorithmTickPerHour)
+    };
 }
 namespace Fragments {
     static const std::string Extension = ".storj";
@@ -275,4 +306,6 @@ namespace DFSB = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
+MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)
+
 #endif // DFS_UTILS_H

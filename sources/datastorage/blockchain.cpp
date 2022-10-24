@@ -146,8 +146,9 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         auto q = MessagePack::deserialize<Transaction>(i);
 
         // modify sender data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getSender().toStdString()
-                                     + "' AND Token='" + q.getToken().toStdString() + "';");
+        extractData =
+            cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getSender().toStdString()
+                           + "' AND Token='" + q.getToken().toStdString() + "';");
 
         resultData["ActorId"] = q.getSender().toStdString();
         resultData["Token"] = q.getToken().toStdString();
@@ -159,7 +160,8 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         }
 
         else {
-            resultData["State"] = (BigNumber(extractData[0]["State"]) - BigNumber(q.getAmount())).toStdString();
+            resultData["State"] =
+                (BigNumber(extractData[0]["State"]) - BigNumber(q.getAmount())).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
@@ -170,8 +172,9 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         resultData.clear();
 
         // modify receiver data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getReceiver().toStdString()
-                                     + "' AND Token='" + q.getToken().toStdString() + "';");
+        extractData =
+            cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getReceiver().toStdString()
+                           + "' AND Token='" + q.getToken().toStdString() + "';");
 
         resultData["ActorId"] = q.getReceiver().toStdString();
         resultData["Token"] = q.getToken().toStdString();
@@ -182,7 +185,8 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         }
 
         else {
-            resultData["State"] = (BigNumber(extractData[0]["State"]) + BigNumber(q.getAmount())).toStdString();
+            resultData["State"] =
+                (BigNumber(extractData[0]["State"]) + BigNumber(q.getAmount())).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
@@ -1231,6 +1235,14 @@ void Blockchain::getSmContractMembers(const Block &block) const {
             node->actorIndex()->getActor(tx.getReceiver());
         }
     }
+}
+
+int Blockchain::getTotalSuply() const {
+    return totalSupply;
+}
+
+void Blockchain::setTotalSupply(const int &newValue) {
+    totalSupply = newValue;
 }
 
 void Blockchain::process() {

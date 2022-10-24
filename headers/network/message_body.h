@@ -26,6 +26,7 @@ enum class MessageType {
     DfsVerifyList = 60,
     RequestDfsSize = 61,
     ResponseDfsSize = 62,
+    DfsState = 63,
 
     BlockchainGenesisBlock = 80,
     BlockchainNewBlock = 81,

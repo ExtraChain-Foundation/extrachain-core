@@ -78,6 +78,7 @@ private:
     int blocksFromLastGenesis = 0;
 
     bool launched;
+    int totalSupply;
 
 public:
     explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
@@ -129,6 +130,7 @@ public:
     BigNumber getFullSupply(const QByteArray &idToken);
 
     bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
+
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
     Block checkBlock(const Block &block);
@@ -289,6 +291,16 @@ public:
     bool isSmContractTx(const Block &block) const;
 
     void getSmContractMembers(const Block &block) const;
+
+    /**
+     *  @brief Get total supply
+     */
+    int getTotalSuply() const;
+
+    /**
+     * @brief Set new value total supply
+     */
+    void setTotalSupply(const int &newValue);
 
 signals:
     void newNotify(Notification ntf);

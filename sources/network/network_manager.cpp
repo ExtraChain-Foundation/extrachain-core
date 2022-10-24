@@ -501,6 +501,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::DfsState: {
+        DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
+        state.calc();
+        node.blockchain()->setTotalSupply(state.TotalSupply);
+    }
+
     case MessageType::BlockchainGenesisBlock: {
         const auto serialezedData =
             QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
