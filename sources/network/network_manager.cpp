@@ -505,6 +505,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
         state.calc();
         node.blockchain()->setTotalSupply(state.TotalSupply);
+        break; // was added as build fix, check logic here mb it's unnecessary
     }
 
     case MessageType::BlockchainGenesisBlock: {
