@@ -52,6 +52,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/genesis_block.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dummy_block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h

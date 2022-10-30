@@ -69,7 +69,7 @@ void Blockchain::setTxManager(TransactionManager *value) {
 
 // Blocks //
 
-Block Blockchain::getLastBlock() {
+Block Blockchain::getLastBlock() const {
     Block block = fileMode ? blockIndex.getLastBlock() : memIndex.getLastBlock();
     return validateAndReturnBlock(block);
 }
@@ -666,6 +666,13 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
     } else
         return GenesisBlock();
 }
+
+std::unique_ptr<DummyBlock> Blockchain::createDummyBlock() const
+{
+    const std::string last_block_hash = getLastBlock().getHash();
+    const QByteArray last_block_hash_b = QByteArray::fromStdString(last_block_hash);
+    return std::make_unique<DummyBlock>(last_block_hash_b);
+}
 // Merging //
 
 int Blockchain::mergeBlockWithLocal(Block &received) {
@@ -851,7 +858,7 @@ bool Blockchain::validateBlock(const Block &block) {
     return node->actorIndex()->validateBlock(block);
 }
 
-Block Blockchain::validateAndReturnBlock(const Block &block) {
+Block Blockchain::validateAndReturnBlock(const Block &block) const {
     // Get prev block hash and check if it exists in current one :)
     return block;
 }
