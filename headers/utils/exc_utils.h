@@ -367,6 +367,18 @@ namespace DataStorage {
           "type       TEXT  NOT NULL "
           ");";
 
+    static const std::string DummyBlockTable = "DummyBlock";
+    static const std::string DummyBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + DummyBlockTable
+        + " ("
+          "type         TEXT  NOT NULL, "
+          "id           TEXT  NOT NULL, "
+          "date         TEXT  NOT NULL, "
+          "data         TEXT          , "
+          "prevHash     TEXT  NOT NULL, "
+          "hash         TEXT  NOT NULL, "
+          "prevGenHash  TEXT            "
+          ");";
+
     static const std::string tokensCacheTable = "Tokens";
     static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
         + " ("
@@ -419,7 +431,7 @@ namespace DataStorage {
     static const int SECTION_SIZE = 1000;
 
     // How often to construct block from pending transactions (in miliseconds)
-    static const int BLOCK_CREATION_PERIOD = 1000;
+    static const int BLOCK_CREATION_PERIOD = 2000;
 
     // How often to construct genesis block (in blocks)
     static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;

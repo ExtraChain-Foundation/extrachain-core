@@ -23,6 +23,7 @@
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/genesis_block.h"
+#include "datastorage/dummy_block.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"

@@ -91,7 +91,7 @@ public slots:
      * Creates a memblock, and setup data field with serialized data.
      * Emits SendBlock signal.
      */
-    Block makeBlock();
+    void makeBlock();
 
     /**
      * If Transaction is valid, adds it to the txList.

@@ -864,7 +864,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     if (isGenesis) {
         qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
     } else {
-        qDebug() << "Adding a block" << block.getIndex() << "to storage";
+        std::string typeBlock = block.getType();
+        qDebug() << "Adding a" << block.getType().c_str() << "block" << block.getIndex() << "to storage";
     }
     if (!GenesisBlock::isGenesisBlock(block.serialize())) {
         if (block.getIndex() != 0) {
@@ -909,6 +910,14 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         } else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
                    || (block.getType() == Config::GENESIS_BLOCK_MERGE)) {
             resultCode = mergeGenesisBlockWithLocal(dynamic_cast<const GenesisBlock &>(block));
+        } else if (block.getType() == Config::DUMMY_BLOCK_TYPE) {
+            Block prevBlock = getBlockByHash(QByteArray::fromStdString(block.getPrevHash()));
+            if (prevBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
+                resultCode = mergeGenesisBlockWithLocal(dynamic_cast<GenesisBlock &>(block));
+            } else if (prevBlock.getType() == Config::DATA_BLOCK_TYPE) {
+                resultCode = mergeBlockWithLocal(dynamic_cast<Block &>(block));
+            }
+
         } else {
             qCritical() << "Unsupported block type in block: " << block.getIndex();
         }
@@ -946,7 +955,9 @@ bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB) {
     // 3) Blocks ids are identical
     if (!blockA.getDigSig().empty() && !blockB.getDigSig().empty() && blockA.getType() == blockB.getType()
         && blockA.getIndex() == blockB.getIndex()) {
-        if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE))
+        if ((blockA.getType() == Config::DATA_BLOCK_TYPE)
+            || (blockA.getType() == Config::GENESIS_BLOCK_TYPE
+                || blockA.getType() == Config::DUMMY_BLOCK_TYPE))
             return true;
         else if (blockA.getType() == Config::GENESIS_BLOCK_MERGE) {
             // 4) at least one common data row

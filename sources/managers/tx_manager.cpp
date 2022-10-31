@@ -177,33 +177,30 @@ void TransactionManager::addVerifiedTx(Transaction tx) {
 
 // Block making
 
-Block TransactionManager::makeBlock() {
-    int txs = pendingTxs.size();
-    //    qDebug() << QString("Attempting to make a block from [%1]
-    //    txs)").arg(txs);
+void TransactionManager::makeBlock() {
+    const bool txs = pendingTxs.empty();
 
-    if (txs == 0) {
-        return Block();
-    }
-
-    QByteArray data = convertTxs(pendingTxs);
     Block lastBlock = blockchain->getLastBlock();
+    if (txs) {
+        DummyBlock dummyBlock(lastBlock);
+        qDebug() << "Created dummy block:" << dummyBlock.getIndex();
+    } else {
+        QByteArray data = convertTxs(pendingTxs);
+        Block block(data, lastBlock);
+        // QList<Transaction> x = block.extractTransactions();
+        blockchain->signBlock(block);
+        qDebug() << "Created block:" << block.getIndex();
+        blockchain->addBlock(block);
 
-    Block block(data, lastBlock);
-    // QList<Transaction> x = block.extractTransactions();
-    blockchain->signBlock(block);
-    qDebug() << "Created block:" << block.getIndex();
-    blockchain->addBlock(block);
-
-    // fee section start
-    //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
-    //                                                               accountController->getMainActor()->getId(),
-    //                                                               accountController->getActorIndex()->m_firstId);
-    //    for (const auto &i : feeTxs)
-    //        extraChainNode->createTransaction(i);
-    // fee section end
-    this->pendingTxs.clear();
-    return block;
+        // fee section start
+        //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
+        //                                                               accountController->getMainActor()->getId(),
+        //                                                               accountController->getActorIndex()->m_firstId);
+        //    for (const auto &i : feeTxs)
+        //        extraChainNode->createTransaction(i);
+        // fee section end
+        this->pendingTxs.clear();
+    }
 }
 
 void TransactionManager::proveTransactions() {
