@@ -5,7 +5,8 @@
 
 class EXTRACHAIN_EXPORT DummyBlock : public Block {
 public:
-    explicit DummyBlock(const QByteArray &prev_block_hash);
+    explicit DummyBlock(const QByteArray &prev_block_hash)
+        : m_data(prev_block_hash) {};
 
 private:
     QByteArray m_data;
