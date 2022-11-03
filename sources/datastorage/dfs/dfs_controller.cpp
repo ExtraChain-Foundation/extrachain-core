@@ -560,7 +560,7 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
     }
 }
 
-uint64_t DfsController::calculateSizeTaken(const std::string &folder) {
+uint64_t DfsController::calculateSizeTaken(const std::string &folder) const {
     uint64_t size = 0;
 
     for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
@@ -596,7 +596,8 @@ void DfsController::sendSizeRequestMsg(const ActorId& actorId) const
 
 void DfsController::sendSizeReponseMsg(const DFS::Packets::RequestDfsSize &msg, const std::string &messageId) const
 {
-    DFSP::ResponseDfsSize response { .Actor = msg.Actor, .Size = m_sizeTaken };
+    const auto dfsSize = calculateSizeTaken();
+    DFSP::ResponseDfsSize response { .Actor = msg.Actor, .Size = dfsSize };
     node.network()->send_message(response,
                                  MessageType::ResponseDfsSize,
                                  MessageStatus::Response,

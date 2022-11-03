@@ -71,7 +71,7 @@ public:
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
     bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
-    uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot);
+    uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot) const;
     std::string extractNextFragment();
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                 uint64_t fragmentSize);

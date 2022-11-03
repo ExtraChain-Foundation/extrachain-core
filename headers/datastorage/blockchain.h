@@ -23,6 +23,7 @@
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/genesis_block.h"
+#include "datastorage/dummy_block.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"
@@ -122,6 +123,8 @@ private:
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
                                     QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
+    std::unique_ptr<DummyBlock> createDummyBlock() const;
+
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -149,7 +152,7 @@ private:
      * @param block
      * @return block - if it is valid, empty block - if block is corrupted.
      */
-    Block validateAndReturnBlock(const Block &block);
+    Block validateAndReturnBlock(const Block &block) const;
     void stakingReward(const Block &block);
 
     std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
@@ -169,7 +172,7 @@ public:
     /**
      * @return last blockchain block
      */
-    Block getLastBlock();
+    Block getLastBlock() const;
     /**
      * Gets the block from blockchain by *value* of a certain *type*
      * @param value

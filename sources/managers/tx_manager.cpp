@@ -44,6 +44,17 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
     proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
     connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
     proveTimer.start();
+
+    const auto dummyBlockCreator = [this, &blockchain]() -> std::unique_ptr<DummyBlock> {
+        if (pendingTxs.empty()) {
+            return blockchain->createDummyBlock();
+        } else {
+            return std::unique_ptr<DummyBlock>{nullptr};
+        }
+
+    };
+
+    connect(&proveTimer, &QTimer::timeout, this, dummyBlockCreator);
     qDebug() << "start timer:";
 }
 
