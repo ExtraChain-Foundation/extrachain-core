@@ -146,20 +146,22 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         auto q = MessagePack::deserialize<Transaction>(i);
 
         // modify sender data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.sender.toStdString()
-                                     + "' AND Token='" + q.token.toStdString() + "';");
+        extractData =
+            cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getSender().toStdString()
+                           + "' AND Token='" + q.getToken().toStdString() + "';");
 
-        resultData["ActorId"] = q.sender.toStdString();
-        resultData["Token"] = q.token.toStdString();
+        resultData["ActorId"] = q.getSender().toStdString();
+        resultData["Token"] = q.getToken().toStdString();
         resultData["Type"] = typeS.toStdString();
 
         if (extractData.empty()) {
-            resultData["State"] = '-' + q.amount.toStdString();
+            resultData["State"] = '-' + q.getAmount().toStdString();
             cacheDB.insert("cacheData", resultData);
         }
 
         else {
-            resultData["State"] = (BigNumber(extractData[0]["State"]) - BigNumber(q.amount)).toStdString();
+            resultData["State"] =
+                (BigNumber(extractData[0]["State"]) - BigNumber(q.getAmount())).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
@@ -170,19 +172,21 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         resultData.clear();
 
         // modify receiver data in db
-        extractData = cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.receiver.toStdString()
-                                     + "' AND Token='" + q.token.toStdString() + "';");
+        extractData =
+            cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getReceiver().toStdString()
+                           + "' AND Token='" + q.getToken().toStdString() + "';");
 
-        resultData["ActorId"] = q.receiver.toStdString();
-        resultData["Token"] = q.token.toStdString();
+        resultData["ActorId"] = q.getReceiver().toStdString();
+        resultData["Token"] = q.getToken().toStdString();
         resultData["Type"] = typeR.toStdString();
         if (extractData.empty()) {
-            resultData["State"] = q.amount.toStdString();
+            resultData["State"] = q.getAmount().toStdString();
             cacheDB.insert("cacheData", resultData);
         }
 
         else {
-            resultData["State"] = (BigNumber(extractData[0]["State"]) + BigNumber(q.amount)).toStdString();
+            resultData["State"] =
+                (BigNumber(extractData[0]["State"]) + BigNumber(q.getAmount())).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
@@ -484,7 +488,10 @@ bool Blockchain::signCheckAdd(Block &block) {
         //            block.sign(*accountController->getMainActor());
         //        }
     } else {
-        Block saved(getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray()));
+        const auto blockData = getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray());
+        if (blockData.isEmpty())
+            return false;
+        Block saved(blockData);
         QByteArrayList savedList = saved.getListSignatures();
         if (!savedList.isEmpty()) {
             if (list != savedList) {
@@ -526,10 +533,6 @@ bool Blockchain::signCheckAdd(Block &block) {
                 return true;
             }
         }
-        //        else
-        //        {
-        //            block.sign(*accountController->getMainActor());
-        //        }
     }
     return false;
 }
@@ -1001,7 +1004,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
         }
         QList<QByteArray> list;
         for (const Transaction &tx : resultList)
-            list << tx.serialize();
+            list << tx.serialize().c_str();
         QByteArray dataBlock = Serialization::serialize(list);
         Block mergedBlock(dataBlock, prev);
         signBlock(mergedBlock);
@@ -1234,6 +1237,14 @@ void Blockchain::getSmContractMembers(const Block &block) const {
     }
 }
 
+int Blockchain::getTotalSuply() const {
+    return totalSupply;
+}
+
+void Blockchain::setTotalSupply(const int &newValue) {
+    totalSupply = newValue;
+}
+
 void Blockchain::process() {
     //
 }
@@ -1407,7 +1418,7 @@ void Blockchain::proveTx(Transaction *tx) {
     if (!targetReceiver.isEmpty())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
     if (tx->getAmount() < 0) {
-        emit tx->NotApproved(tx);
+        txManager->removeUnApprovedTransaction(tx);
         return;
     }
     if (tx->getData().contains(Fee::UNFEE)) {
@@ -1420,7 +1431,7 @@ void Blockchain::proveTx(Transaction *tx) {
         BigNumber indexFreezeTxBlock = dataList.at(0).toStdString();
         QByteArray hashTx = dataList.at(1);
         if (!checkHaveUNFreezeTx(tx, indexFreezeTxBlock)) {
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             qDebug() << "ProveTx: have this UNFee Tx";
             return;
         }
@@ -1439,16 +1450,17 @@ void Blockchain::proveTx(Transaction *tx) {
         if (producerActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
             tx->setAmount(fee);
             tx->sign(node->accountController()->currentWallet());
-            emit tx->Approved(tx);
-        } else
-            emit tx->NotApproved(tx);
+            txManager->addProvedTransaction(tx);
+        } else {
+            txManager->removeUnApprovedTransaction(tx);
+        }
     } else if (tx->getData().contains(Fee::FEE_FREEZE_TX)) {
         BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
 
         senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
         if (tx->getAmount() <= 0) {
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             qDebug() << "Transaction Freeze not approved: amount <= 0";
             return;
         }
@@ -1456,10 +1468,10 @@ void Blockchain::proveTx(Transaction *tx) {
         if ((senderCurrentBalance - tx->getAmount()) < 0) {
             qDebug() << "Transaction Freeze "
                         "not approved: sender's balance will be < 0";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        emit tx->Approved(tx);
+        txManager->addProvedTransaction(tx);
         return;
     } else if (tx->getData().contains(Fee::FEE_UNFREEZE_TX)) {
         QByteArrayList dataList = Serialization::deserialize(tx->getData());
@@ -1484,26 +1496,26 @@ void Blockchain::proveTx(Transaction *tx) {
                             if (producerActor.key().verify(tx->getDataForDigSig().toStdString(),
                                                            tx->getDigSig().toStdString())) {
                                 if (checkHaveUNFreezeTx(tx, indexApBlock)) {
-                                    emit tx->Approved(tx);
+                                    txManager->addProvedTransaction(tx);
                                     return;
                                 } else {
                                     qDebug() << "ProveTx: We have this unFreeze tx";
-                                    emit tx->NotApproved(tx);
+                                    txManager->removeUnApprovedTransaction(tx);
                                     return;
                                 }
                             } else {
                                 qDebug() << "TX prove: incorrect sign for unfreeze fee";
-                                emit tx->NotApproved(tx);
+                                txManager->removeUnApprovedTransaction(tx);
                                 return;
                             }
                         } else {
                             qDebug() << "TX prove error: it`s checker -> not approver for unfreeze fee";
-                            emit tx->NotApproved(tx);
+                            txManager->removeUnApprovedTransaction(tx);
                             return;
                         }
                     } else {
                         qDebug() << "TX prove: haven`t approver in block for unfreeze fee";
-                        emit tx->NotApproved(tx);
+                        txManager->removeUnApprovedTransaction(tx);
                         return;
                     }
                 }
@@ -1515,7 +1527,7 @@ void Blockchain::proveTx(Transaction *tx) {
         senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
         if (tx->getAmount() <= 0) {
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             qDebug() << "Transaction Freeze not approved: amount <= 0";
             return;
         }
@@ -1523,12 +1535,12 @@ void Blockchain::proveTx(Transaction *tx) {
         if ((senderCurrentBalance - tx->getAmount()) < 0) {
             qDebug() << "Transaction Freeze "
                         "not approved: sender's balance will be < 0";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
 
         tx->sign(node->accountController()->currentWallet());
-        emit tx->Approved(tx);
+        txManager->addProvedTransaction(tx);
         return;
     } else if (tx->getData() == Fee::UNFREEZE_TX) {
         BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender(),
@@ -1537,17 +1549,17 @@ void Blockchain::proveTx(Transaction *tx) {
         if ((senderCurrentBalance - tx->getAmount()) < 0) {
             qDebug() << "Transaction UNFreeze "
                         "not approved: sender's balance will be < 0";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
         tx->setSender(targetReceiver);
         tx->setReceiver(sender);
         tx->sign(node->accountController()->currentWallet());
-        emit tx->Approved(tx);
+        txManager->addProvedTransaction(tx);
         return;
     }
     if (targetSender == targetReceiver) {
-        emit tx->NotApproved(tx);
+        txManager->removeUnApprovedTransaction(tx);
         qDebug() << "Transaction not approved: sender == receiver";
         return;
     }
@@ -1556,7 +1568,7 @@ void Blockchain::proveTx(Transaction *tx) {
 
     if ((receiverActor.empty() && !targetReceiver.isEmpty())
         || (senderActor.empty() && !targetSender.isEmpty())) {
-        emit tx->NotApproved(tx);
+        txManager->removeUnApprovedTransaction(tx);
         qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }
@@ -1567,43 +1579,43 @@ void Blockchain::proveTx(Transaction *tx) {
             producerActor = node->actorIndex()->getActor(tx->getProducer());
         else {
             qDebug() << "Tx" << tx->getHash() << "producer 0";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (!producerActor.key().verify(tx->getDataForDigSig().toStdString(),
                                         tx->getDigSig().toStdString())) {
             qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (tx->getAmount() <= 0) {
             qDebug() << "Tx" << tx->getHash() << "fee amount <= 0";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        emit tx->Approved(tx);
+        txManager->addProvedTransaction(tx);
         return;
     }
 
     // if !sig
     if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
         qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
-        emit tx->NotApproved(tx);
+        txManager->removeUnApprovedTransaction(tx);
         return;
     }
 
     if (targetReceiver.isEmpty()) {
         if (Serialization::deserialize(tx->getData()).size() != 2) {
             qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (tx->getAmount() <= 0) {
             qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
-            emit tx->NotApproved(tx);
+            txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        emit tx->addPendingFeeSenderTxs(tx);
+        txManager->addPendingFeeSenderTxs(tx);
         return;
     }
 
@@ -1644,7 +1656,7 @@ void Blockchain::proveTx(Transaction *tx) {
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
             if (tx->getAmount() <= 0) {
-                emit tx->NotApproved(tx);
+                txManager->removeUnApprovedTransaction(tx);
                 qDebug() << "Transaction not approved: amount <= 0";
                 return;
             }
@@ -1653,14 +1665,14 @@ void Blockchain::proveTx(Transaction *tx) {
                 qDebug() << senderCurrentBalance << tx->getAmount();
                 qDebug() << "Transaction "
                             "not approved: sender's or receiver's balance will be < 0";
-                emit tx->NotApproved(tx);
+                txManager->removeUnApprovedTransaction(tx);
                 return;
             }
 
-            emit tx->Approved(tx);
+            txManager->addProvedTransaction(tx);
         } else {
             tx->sign(node->accountController()->currentWallet());
-            emit tx->Approved(tx);
+            txManager->addProvedTransaction(tx);
             return;
         }
 
@@ -1668,7 +1680,7 @@ void Blockchain::proveTx(Transaction *tx) {
         return;
     }
     qDebug() << "Undefine behaviour blockhain.cpp proveTx";
-    emit tx->NotApproved(tx);
+    txManager->removeUnApprovedTransaction(tx);
 }
 
 // Other //

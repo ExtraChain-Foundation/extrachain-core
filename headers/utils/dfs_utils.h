@@ -46,6 +46,8 @@ T stdStringBytesToType(std::string value) {
 }
 namespace Utils {
 std::string platformDelimeter();
+
+inline static uint64_t globalVariableOfDfsSize = 0;
 }
 
 namespace DFS {
@@ -60,9 +62,23 @@ namespace Basic {
 
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
+    static const int miningReward = 1;
 }
 
 namespace Packets {
+    struct ResponseDfsSize {
+        std::string Actor;
+        uint64_t Size;
+
+        MSGPACK_DEFINE(Actor, Size)
+    };
+
+    struct RequestDfsSize {
+        std::string Actor;
+
+        MSGPACK_DEFINE(Actor)
+    };
+
     struct AddFileMessage {
         std::string Actor;
         std::string FileName;
@@ -131,17 +147,75 @@ namespace Packets {
         uint64_t lastModified;
         MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, fileSize, lastModified)
     };
+
+    struct VerifyFileMessage {
+        std::string Actor;
+        std::string FileHash;
+        std::string FileName;
+        bool Verified = false;
+        uint64_t Size;
+        MSGPACK_DEFINE(Actor, FileName, FileHash, Verified, Size)
+    };
+
+    enum StateMessageType {
+        base = 0
+    };
+
+    struct StateMessage {
+        StateMessageType StateTypeMessage;
+        uint64_t DataAmountStored;
+        uint64_t DataAmountTotalStoredInNetwork;
+        uint64_t BlockAmount;
+        double Coefficient;
+        uint64_t TotalSupply;
+        double CoinProducedForNode = 0.0;
+        uint64_t CoinProductionAlgorithmTickBlocks;
+        float BlockProductionRate;
+        uint64_t CoinProductionAlgorithmTickPerHour;
+
+        void calc() {
+            CoinProducedForNode = ((double)DataAmountStored/(double)DataAmountTotalStoredInNetwork) *
+                ((double)TotalSupply/(double)BlockAmount) * Coefficient;
+
+            if(CoinProducedForNode < 1) {
+                Coefficient *= 2;
+                calc();
+            }
+        }
+        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork,
+                       BlockAmount, Coefficient, TotalSupply, CoinProducedForNode,
+                       CoinProductionAlgorithmTickBlocks, BlockProductionRate,
+                       CoinProductionAlgorithmTickPerHour)
+    };
 }
 namespace Fragments {
     static const std::string Extension = ".storj";
     static const std::string TableNameFragments = "Fragments";
     static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
         + "("
-          "pos        INTEGER PRIMARY KEY NOT NULL,"
-          "storedPos  INTEGER             NOT NULL,"
-          "size       INTEGER             NOT NULL"
+          "pos        INTEGER PRIMARY KEY NOT NULL, "
+          "storedPos  INTEGER             NOT NULL, "
+          "size       INTEGER             NOT NULL, "
+          "fragHash   TEXT                NOT NULL"
           ");";
 
+    struct FragmentsInfo {
+        std::string actor;
+        std::string fileHash;
+        std::string filePath;
+        uint64_t fileSize;
+        std::list<std::pair<int, int>> fragmentPositionList;
+
+        void print() const {
+            qDebug() << "actor: [" << actor.c_str() << "]"
+                     << "fileHash" << fileHash.c_str() << "]"
+                     << "filePath" << filePath.c_str() << "]";
+            for(const auto& pair: fragmentPositionList) {
+                qDebug() << pair.first << pair.second;
+            }
+        }
+        MSGPACK_DEFINE(actor, fileHash, filePath, fileSize, fragmentPositionList)
+    };
 }
 namespace Historical {
     struct FileChange {
@@ -232,4 +306,6 @@ namespace DFSB = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
+MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)
+
 #endif // DFS_UTILS_H

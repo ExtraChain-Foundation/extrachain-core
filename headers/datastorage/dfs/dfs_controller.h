@@ -66,7 +66,7 @@ public:
     uint64_t sizeTaken() const;
     void increaseSizeTaken(uintmax_t value);
     void insertToFiles(DFSP::AddFileMessage msg);
-    void exportFile(const std::string& pathTo, const std::string& pathFrom, const std::string& nameFile = "");
+    void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
 
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
@@ -78,6 +78,9 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
 
 public:
+    void sendSizeRequestMsg(const ActorId &actorId) const;
+    void sendSizeReponseMsg(const DFSP::RequestDfsSize & msg,
+                            const std::string &messageId) const;
     void requestSync();
     void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
@@ -89,6 +92,8 @@ public:
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
+    void verifyFiles(std::vector<DFSP::VerifyFileMessage> &fileList, std::string &messageId);
+    float percentVerified(std::vector<DFSP::VerifyFileMessage> &fileList);
 
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
@@ -133,7 +138,7 @@ public:
 signals:
     void error(std::string error, std::string fileName);
     void sendMessage(DFSP::AddFileMessage msg, MessageType messageType);
-    void added(DFSP::AddFileMessage msg, std::string filePath);
+    void added(DFSP::AddFileMessage msg, std::string filePath, std::string &scriptPath);
 };
 
 #endif // DFS_CONTROLLER_H

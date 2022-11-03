@@ -45,6 +45,7 @@ class EXTRACHAIN_EXPORT TransactionManager : public QObject {
 private:
     // to create block's from pending txs
     QTimer blockCreationTimer;
+    QTimer proveTimer;
 
     // received transactions that will be packed into block
     QList<Transaction> pendingTxs;
@@ -98,6 +99,7 @@ public slots:
      * @return 0 is transaction is successfully added
      */
 
+    void proveTransactions();
     void addTransaction(Transaction tx);
     void addProvedTransaction(Transaction *transaction);
     void removeUnApprovedTransaction(Transaction *tx);

@@ -1,0 +1,45 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#ifndef DATA_MINING_MANAGER_H
+#define DATA_MINING_MANAGER_H
+
+#include <QObject>
+#include <string>
+
+typedef std::vector<std::string> MerkleDataBlocks;
+
+class DataMiningManager : public QObject {
+    Q_OBJECT
+
+public:
+    explicit DataMiningManager(QObject *parent = nullptr);
+
+    void rootMerkleHash(std::vector<std::string> &a, std::vector<MerkleDataBlocks> &branchesTree,
+                           const bool isHahsing, std::string &result);
+    std::string rootMerkleHash(std::string &data);
+
+private:
+    std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
+                                                          const bool isHahsing);
+    void hashingElements(std::vector<std::string> &vector);
+    std::string merkleFormula(const std::string &hash1, const std::string &hash2) const;
+};
+
+#endif // DATA_MINING_MANAGER_H

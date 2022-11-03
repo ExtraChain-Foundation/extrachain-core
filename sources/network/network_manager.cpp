@@ -20,6 +20,7 @@
 #include "datastorage/dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
+#include "managers/tx_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include <fstream>
@@ -378,6 +379,18 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     // try {
     switch (type) {
+    case MessageType::ResponseDfsSize: {
+        const auto msgStruct = MessagePack::deserialize<DFSP::ResponseDfsSize>(serialized);
+        if (Utils::globalVariableOfDfsSize < msgStruct.Size) {
+            Utils::globalVariableOfDfsSize = msgStruct.Size;
+        }
+        break;
+    }
+    case MessageType::RequestDfsSize: {
+        const auto msgStruct = MessagePack::deserialize<DFSP::RequestDfsSize>(serialized);
+        node.dfs()->sendSizeReponseMsg(msgStruct, messageId);
+        break;
+    }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         node.actorIndex()->handleNewActor(actor);
@@ -461,6 +474,107 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::DfsSendingFileDone: { // TODO
         auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
         qDebug() << "[Dfs] File done:" << actorId << fileHash.c_str();
+        break;
+    }
+
+    case MessageType::DfsVerifyList: {
+        switch (status) {
+        case MessageStatus::NoStatus:
+            break;
+        case MessageStatus::Request: {
+            std::vector<std::string> listMessage =
+                MessagePack::deserialize<std::vector<std::string>>(serialized);
+            std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
+                MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
+            node.dfs()->verifyFiles(listVerifiedMessage, messageId);
+            break;
+        }
+        case MessageStatus::Response: {
+            std::vector<std::string> listMessage =
+                MessagePack::deserialize<std::vector<std::string>>(serialized);
+            std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
+                MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
+            float percentVerified = node.dfs()->percentVerified(listVerifiedMessage);
+            break;
+        }
+        }
+        break;
+    }
+
+    case MessageType::DfsState: {
+        DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
+        state.calc();
+        node.blockchain()->setTotalSupply(state.TotalSupply);
+        break; // was added as build fix, check logic here mb it's unnecessary
+    }
+
+    case MessageType::BlockchainGenesisBlock: {
+        const auto serialezedData =
+            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
+        auto genesisBlock = GenesisBlock(serialezedData);
+        node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+        break;
+    }
+    case MessageType::BlockchainNewBlock: {
+        const auto serialezedData =
+            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
+        auto block = Block(serialezedData);
+        node.blockchain()->addBlockToBlockchain(block);
+        break;
+    }
+
+    case MessageType::BlockchainTransaction: {
+        const auto data = std::string { serialized.begin() + 3, serialized.end() };
+        Transaction transaction = MessagePack::deserialize<Transaction>(data);
+        if (!transaction.getData().isEmpty()) {
+            TransactionData transactionData =
+                MessagePack::deserialize<TransactionData>(transaction.getData());
+            qDebug() << "run code from " << transactionData.path.c_str()
+                     << "with hash: " << transactionData.hash.c_str();
+        }
+        node.txManager()->addTransaction(transaction);
+        break;
+    }
+
+    case MessageType::BlockchainCopyScript: {
+        auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
+        std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
+        std::string toPath = Scripts::folder + "/" + msg.FileName;
+        std::filesystem::copy_file(fromPath, toPath);
+        break;
+    }
+
+    case MessageType::BlockchainDataMiningRewardTransaction: {
+        switch (status) {
+        case MessageStatus::NoStatus:
+            break;
+        case MessageStatus::Request: {
+            RewardTransaction rewardTx =
+                MessagePack::deserialize<RewardTransaction>(serialized);
+            node.verifyHashProcessing(rewardTx, messageId);
+            break;
+        }
+        case MessageStatus::Response: {
+            RewardTransaction rewardTx =
+                MessagePack::deserialize<RewardTransaction>(serialized);
+            break;
+        }
+        }
+        break;
+    }
+
+    case MessageType::FragmentDataInfo: {
+        auto msg = MessagePack::deserialize<DFSF::FragmentsInfo>(serialized);
+        msg.print();
+        break;
+    }
+
+    case MessageType::FragmentsDataListInfo: {
+        auto fragmentsInfoList = MessagePack::deserialize<std::vector<DFSF::FragmentsInfo>>(serialized);
+        qDebug() << "Recieved fragment data info from list";
+        for (const auto &msg : fragmentsInfoList) {
+            msg.print();
+        }
         break;
     }
 

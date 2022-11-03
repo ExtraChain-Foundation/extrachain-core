@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -426,6 +426,9 @@ namespace DataStorage {
 
     // Max number of saved blocks in mem index
     static const int MEM_INDEX_SIZE_LIMIT = 1000;
+
+    //How often to prove pransactions
+    static const int PROVE_TXS_INTERVAL = 2000;
 } // namespace DataStorage
 
 namespace Net {
@@ -501,12 +504,34 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
         msgpack::object deserialized = oh.get();
         auto t = deserialized.as<T>();
         return t;
-    } catch (std::exception &e) { }
+    } catch (std::exception &e) {
+        qDebug() << e.what();
+    }
 
     auto qt_bytes = QByteArray::fromStdString(data.data());
     qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
     qFatal("[MessagePack] Incorrect deserialize");
     return T();
+}
+
+template <class T>
+std::vector<std::string> serializeContainer(std::vector<T> &list) {
+    std::vector<std::string> result;
+    for(const auto& item : list) {
+        result.push_back(serialize(item));
+    }
+    return result;
+}
+
+template <class T>
+std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer) {
+    std::vector<T> result;
+
+    for(const auto& data : dataContainer) {
+        const T element = deserialize<T>(data);
+        result.push_back(element);
+    }
+    return result;
 }
 } // namespace MessagePack
 
@@ -621,6 +646,11 @@ static const std::string profiles = "profiles";
 // TODO: remove
 static const QString KEY_TYPE = ".key";
 QString makeKeyFileName(QString name);
+}
+
+namespace Scripts {
+static const std::string folder = "scripts";
+static const std::string wasmExtention = ".wasm";
 }
 
 namespace SearchEnum {

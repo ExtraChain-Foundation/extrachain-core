@@ -23,6 +23,15 @@ FragmentStorage::FragmentStorage(DFS::Packets::SegmentMessage segmentMessage)
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
+FragmentStorage::FragmentStorage(RecieveData recieveData)
+    : storageFile(DFS_PATH::filePath(recieveData.actor, recieveData.fileName).string() + DFSF::Extension)
+    , actor(recieveData.actor)
+    , fileName(recieveData.fileName)
+    , fileHash(recieveData.fileHash) {
+    storageFile.open();
+    storageFile.query(DFSF::CreateTableQueryFragments);
+}
+
 bool FragmentStorage::initLocalFile(uint64_t filesize) {
     DBRow row = makeFragmentRow(0, 0, filesize);
     return storageFile.insert(DFSF::TableNameFragments, row);
@@ -116,6 +125,23 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
         fragment.Actor = this->actor.toStdString();
         fragment.FileHash = this->fileName;
         return fragment;
+    }
+    return fragment;
+}
+
+DFS::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) {
+    DFSP::SegmentMessage fragment;
+
+    std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
+        + " WHERE fragHash = '" + fragHash + "' ORDER BY pos DESC LIMIT 1";
+    std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
+    if (!array.empty()) {
+        DBRow fragMap = array[0];
+        std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
+        fragment.Offset = std::stoull(fragMap.at("pos"));
+        fragment.Data = extract(filePath, std::stoull(fragMap.at("pos")), std::stoull(fragMap.at("size")));
+        fragment.Actor = this->actor.toStdString();
+        fragment.FileHash = fragMap.at("fragHash");
     }
     return fragment;
 }
@@ -221,7 +247,7 @@ DBRow FragmentStorage::makeFragmentRow(DFSP::SegmentMessage msg, uint64_t stored
     row.insert({ "pos", std::to_string(msg.Offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(msg.Data.size()) });
-    // row.insert({ "fragHash", Utils::calcHash(msg.Data) });
+    row.insert({ "fragHash", Utils::calcHash(msg.Data) });
     return row;
 }
 

@@ -39,6 +39,7 @@
 #include "boost/version.hpp"
 
 #include "enc/enc_tools.h"
+#include "managers/data_mining_manager.h"
 #include "utils/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
@@ -126,11 +127,10 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
 std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        QCryptographicHash cryptographicHash(QCryptographicHash::Algorithm::Sha3_256);
-        if (cryptographicHash.addData(&file)) {
-            auto hash = cryptographicHash.result();
-            return bytesEncode(hash, encode).toStdString();
-        }
+        std::string data = file.readAll().toStdString();
+        DataMiningManager dmm;
+        QByteArray hash = QByteArray::fromStdString(dmm.rootMerkleHash(data));
+        return bytesEncode(hash, encode).toStdString();
     }
 
     qFatal("Utils::calcHashForFile");

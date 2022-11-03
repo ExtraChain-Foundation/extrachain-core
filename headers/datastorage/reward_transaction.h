@@ -17,59 +17,90 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TRANSACTION_H
-#define TRANSACTION_H
+#ifndef REWARD_TRANSACTION_H
+#define REWARD_TRANSACTION_H
 
 #include "datastorage/actor.h"
 #include "utils/bignumber.h"
+#include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 #include <QByteArray>
 #include <QDateTime>
 #include <QString>
 
-struct TransactionData {
-    std::string hash;
-    std::string path;
-    MSGPACK_DEFINE(hash, path)
+struct RecieveData {
+    std::string actor;
+    std::string fileName;
+    std::string fileHash;
+    std::string fragmentHash;
+
+    MSGPACK_DEFINE(actor, fileName, fileHash, fragmentHash)
 };
 
-class EXTRACHAIN_EXPORT Transaction {
+struct AdditionalData {
+    std::vector<DFSP::VerifyFileMessage> verifiedFragments;
+    ActorId actorVerifier;
+    std::string hashRecord;
+    int calcReward() const;
+
+    MSGPACK_DEFINE(verifiedFragments, actorVerifier, hashRecord)
+};
+
+struct TransactionRewardData {
+    TransactionRewardData() {
+    }
+    TransactionRewardData(const std::vector<RecieveData> &recieveDataList)
+        : recieveDataList(recieveDataList) {
+    }
+    std::vector<AdditionalData> additionalData;
+    bool isEmpty() const;
+    std::vector<RecieveData> getRecieveDataList() {
+        return recieveDataList;
+    }
+    MSGPACK_DEFINE(recieveDataList, additionalData);
+private:
+    std::vector<RecieveData> recieveDataList;
+};
+
+class EXTRACHAIN_EXPORT RewardTransaction {
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
     void calcHash();
 
-    ActorId sender;
-    ActorId receiver;
-    BigNumber amount;    // coin amount
+    ActorId senderReceiver;
+    BigNumber amount; // coin amount
     long long date;
-    std::string data;    // additional payload field
-    ActorId token;       // token contract address
-    BigNumber prevBlock; // last block id at the moment of tx creation
-    int gas;             // security and reward param
-    int hop;             // number of the nodes, through which the transaction will pass before
-                         // aprovement
-    std::string hash;    // hash from all fields
-    ActorId approver;    // address of the transaction approver.
+    TransactionRewardData rewardData; // reward additional payload field
+    ActorId token;                    // token contract address
+    BigNumber prevBlock;              // last block id at the moment of tx creation
+    int gas;                          // security and reward param
+    int hop;                          // number of the nodes, through which the transaction will pass before
+                                      // aprovement
+    std::string hash;                 // hash from all fields
+    ActorId approver;                 // address of the transaction approver.
     ActorId producer;
     std::string digSig;
 
 public:
     // Construct empty transaction
-    Transaction();
+    RewardTransaction();
 
     // Deserialize already created transaction
-    Transaction(const QByteArray &serialized);
+    RewardTransaction(const QByteArray &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount);
+    RewardTransaction(const ActorId &senderReceiver);
+
+    RewardTransaction(const ActorId &senderReceiver, const TransactionRewardData &rewardData);
+
 
     // Construct transaction with data
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
-                const QByteArray &data);
+    RewardTransaction(const ActorId &senderReceiver, const QByteArray &data,
+                      const TransactionRewardData &rewardData);
 
-    Transaction(const Transaction &other);
+    RewardTransaction(const RewardTransaction &other);
 
     /**
      * @brief Concatenates all fields that are used for digSig calculation
@@ -83,8 +114,7 @@ public:
     void sign(const Actor<KeyPrivate> &actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
-    void setSenderBalance(BigNumber balance);
-    void setReceiverBalance(BigNumber balance);
+    void setSenderReceiverBalance(BigNumber balance);
     void setPrevBlock(const BigNumber &value);
     void setGas(int gas);
     void setHop(int hop);
@@ -97,22 +127,20 @@ public:
 
     int getGas() const;
     int getHop() const;
-    ActorId getSender() const;
-    ActorId getReceiver() const;
+    ActorId getSenderReceiver() const;
     BigNumber getAmount() const;
     BigNumber getPrevBlock() const;
-    QByteArray getData() const;
+    TransactionRewardData getRewardData() const;
     QByteArray getHash() const;
     ActorId getToken() const;
     ActorId getApprover() const;
     QByteArray getDigSig() const;
     ActorId getProducer() const;
 
-
     bool isEmpty() const;
-    bool operator==(const Transaction &transaction) const;
-    bool operator!=(const Transaction &transaction) const;
-    void operator=(const Transaction &transaction);
+    bool operator==(const RewardTransaction &transaction) const;
+    bool operator!=(const RewardTransaction &transaction) const;
+    void operator=(const RewardTransaction &transaction);
 
     std::string serialize() const;
     bool deserialize(const QByteArray &serialized);
@@ -120,8 +148,7 @@ public:
     long long getDate() const;
     void setDate(long long value);
     void setToken(const ActorId &value);
-    void setData(const QByteArray &value);
-    void setData(const std::string &value);
+    void setRewardData(const TransactionRewardData &transactionRewardData);
     /**
      * @brief 1.1 -> 1.1 * 10e18 in BigNumber
      * @param amount
@@ -138,11 +165,13 @@ public:
     static BigNumber amountDiv(const BigNumber &number1, const BigNumber &number2);
     static BigNumber amountPercent(BigNumber number, uint percent);
     void setAmount(const BigNumber &value);
-    void setSender(const ActorId &value);
-    void setReceiver(const ActorId &value);
+    void setSenderReceiver(const ActorId &value);
+    void insertAdditionalData(AdditionalData& additionalData);
 
-    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
-                   digSig)
+    MSGPACK_DEFINE(senderReceiver, amount, date, rewardData, token, prevBlock, gas, hop, hash, approver,
+                   producer, digSig)
+protected:
+    void calcAmount();
 };
 
-#endif // TRANSACTION_H
+#endif // REWARD_TRANSACTION_H

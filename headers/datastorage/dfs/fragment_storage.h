@@ -6,6 +6,7 @@
 #include "managers/extrachain_node.h"
 #include "utils/db_connector.h"
 #include "utils/dfs_utils.h"
+#include "datastorage/reward_transaction.h"
 #include <QThread>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -21,6 +22,7 @@ private:
 public:
     FragmentStorage(ActorId Actor, std::string FileName, std::string FileHash);
     FragmentStorage(DFSP::SegmentMessage segmentMessage);
+    FragmentStorage(RecieveData recieveData);
     ~FragmentStorage() = default;
 
     bool initLocalFile(uint64_t filesize);
@@ -29,6 +31,7 @@ public:
     bool editFragment(DFSP::EditSegmentMessage msg);
     bool removeFragment(DFSP::DeleteSegmentMessage msg);
     DFSP::SegmentMessage getFragment(uint64_t pos);
+    DFSP::SegmentMessage getFragment(std::string fragHash);
     bool applyChanges(const std::string& data, uint64_t pos);
 
 private:
