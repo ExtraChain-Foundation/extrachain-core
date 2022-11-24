@@ -49,6 +49,7 @@ struct BlockCompare {
 
 namespace Config {
 static const std::string DATA_BLOCK_TYPE = "data";
+static const std::string DUMMY_BLOCK_TYPE = "dummy";
 static const std::string MERGE_BLOCK = "dataMerge";
 }
 

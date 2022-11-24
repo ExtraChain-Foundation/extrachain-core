@@ -671,8 +671,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
         return GenesisBlock();
 }
 
-std::unique_ptr<DummyBlock> Blockchain::createDummyBlock() const
-{
+std::unique_ptr<DummyBlock> Blockchain::createDummyBlock() const {
     const std::string last_block_hash = getLastBlock().getHash();
     const QByteArray last_block_hash_b = QByteArray::fromStdString(last_block_hash);
     return std::make_unique<DummyBlock>(last_block_hash_b);
@@ -900,8 +899,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     switch (resultCode) {
     case 0: {
         emit updateLastTransactionList(); // TODO: ?
-        qDebug() << "Block" << block.getIndex() << QByteArray::fromStdString(block.getType())
-                 << "is successfully added to blockchain";
+        qDebug() << "Block" << block.getIndex() << "is successfully added to blockchain";
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
@@ -910,8 +908,9 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
-        qDebug() << "Block" << block.getIndex() << "is already in blockchain";
-        if ((block.getType() == Config::DATA_BLOCK_TYPE) || block.getType() == Config::MERGE_BLOCK) {
+        qDebug() << "Block" << block.getIndex() << block.getType().c_str() << "is already in blockchain";
+        if (block.getType() == Config::DATA_BLOCK_TYPE || block.getType() == Config::MERGE_BLOCK
+            || block.getType() == Config::DUMMY_BLOCK_TYPE) {
             resultCode = mergeBlockWithLocal(block);
         } else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
                    || (block.getType() == Config::GENESIS_BLOCK_MERGE)) {
@@ -947,13 +946,18 @@ int Blockchain::removeBlock(const Block &block) {
     return fileMode ? blockIndex.removeById(block.getIndex()) : memIndex.removeById(block.getIndex());
 }
 
+void Blockchain::removeAllDummyBlocks(const Block &block) {
+    blockIndex.removeDummyBlocks(block.getIndex());
+}
+
 bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB) {
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
     if (!blockA.getDigSig().empty() && !blockB.getDigSig().empty() && blockA.getType() == blockB.getType()
         && blockA.getIndex() == blockB.getIndex()) {
-        if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE))
+        if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE)
+            || (blockA.getType() == Config::DUMMY_BLOCK_TYPE))
             return true;
         else if (blockA.getType() == Config::GENESIS_BLOCK_MERGE) {
             // 4) at least one common data row
@@ -1634,26 +1638,26 @@ void Blockchain::proveTx(Transaction *tx) {
             if (profile.length() < 6) {
                 qDebug() << "Transaction not approved: no profile for" << senderActor.id();
 
-                // TODO: temp
-                node->actorIndex()->getActor(senderActor.id());
-                QTimer::singleShot(3000, this, [this, tx] {
-                    qDebug() << "Transaction initcontract";
-                    this->proveTx(tx);
-                });
+     // TODO: temp
+            node->actorIndex()->getActor(senderActor.id());
+            QTimer::singleShot(3000, this, [this, tx] {
+                qDebug() << "Transaction initcontract";
+                this->proveTx(tx);
+            });
 
-                return;
-            }
-            if (profile[0] == "6" && ActorId(profile[5].toStdString()) == targetReceiver
-                && (targetSender == tx->getToken())) {
-                qDebug() << "Contract tx proved";
-                tx->sign(node->accountController()->currentWallet());
-                emit tx->Approved(tx);
-                return;
-            }
+            return;
+        }
+        if (profile[0] == "6" && ActorId(profile[5].toStdString()) == targetReceiver
+            && (targetSender == tx->getToken())) {
+            qDebug() << "Contract tx proved";
+            tx->sign(node->accountController()->currentWallet());
+            emit tx->Approved(tx);
+            return;
+        }
 
-            qDebug() << "Transaction not approved: sender != token in genesis block";
-            emit tx->NotApproved(tx);
-            */
+        qDebug() << "Transaction not approved: sender != token in genesis block";
+        emit tx->NotApproved(tx);
+        */
 
             return;
         }

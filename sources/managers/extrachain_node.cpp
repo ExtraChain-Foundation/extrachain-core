@@ -104,7 +104,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         // TEST
         Block lastBlock = m_blockchain->getLastBlock();
         Block block("", lastBlock);
-        m_blockchain->addBlock(block);
+//        m_blockchain->addBlock(block);
         // TEST
 
         //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
