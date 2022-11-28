@@ -179,7 +179,7 @@ void TransactionManager::addVerifiedTx(Transaction tx) {
 // Block making
 
 void TransactionManager::makeBlock() {
-//    int txs = pendingTxs.size();
+    //    int txs = pendingTxs.size();
     //    qDebug() << QString("Attempting to make a block from [%1]
     //    txs)").arg(txs);
 
@@ -187,21 +187,20 @@ void TransactionManager::makeBlock() {
     if (pendingTxs.empty()) {
         Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
         qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
-        if(!lastRealBlock.isEmpty()) {
-            DummyBlock dummyBlock(lastBlock, lastRealBlock);
-            blockchain->signBlock(dummyBlock);
-            blockchain->addBlock(dummyBlock);
+        DummyBlock dummyBlock;
+        if (!lastRealBlock.isEmpty()) {
+            dummyBlock = DummyBlock(lastBlock, lastRealBlock);
         } else {
             GenesisBlock lastGenesisBlock = blockchain->getBlockIndex().getLastGenesisBlock();
-            DummyBlock dummyBlock(lastBlock, lastGenesisBlock);
-            blockchain->signBlock(dummyBlock);
-            blockchain->addBlock(dummyBlock);
+            dummyBlock = DummyBlock(lastBlock, lastGenesisBlock);
         }
+        blockchain->signBlock(dummyBlock);
+        blockchain->addBlock(dummyBlock);
 
         return;
     }
 
-    //remove all dummy blocks
+    // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);
     QByteArray data = convertTxs(pendingTxs);
 
@@ -222,13 +221,13 @@ void TransactionManager::makeBlock() {
 }
 
 void TransactionManager::proveTransactions() {
-//    const auto dummyBlockCreator = [this]() -> std::unique_ptr<DummyBlock> {
-//        if (pendingTxs.empty()) {
-//            return blockchain->createDummyBlock();
-//        } else {
-//            return std::unique_ptr<DummyBlock> { nullptr };
-//        }
-//    };
+    //    const auto dummyBlockCreator = [this]() -> std::unique_ptr<DummyBlock> {
+    //        if (pendingTxs.empty()) {
+    //            return blockchain->createDummyBlock();
+    //        } else {
+    //            return std::unique_ptr<DummyBlock> { nullptr };
+    //        }
+    //    };
 
     for (auto tx : receivedTxList) {
         blockchain->proveTx(tx);

@@ -679,13 +679,14 @@ std::unique_ptr<DummyBlock> Blockchain::createDummyBlock() const {
 // Merging //
 
 int Blockchain::mergeBlockWithLocal(Block &received) {
-    Block existed = getBlockByIndex(received.getIndex());
+    const auto receivedBlockIndex = received.getIndex();
+    Block existed = getBlockByIndex(receivedBlockIndex);
     if (!canMergeBlocks(received, existed)) {
-        qWarning() << "Blocks with id" << received.getIndex() << "can't be merged";
+        qWarning() << "Blocks with id" << receivedBlockIndex << "can't be merged";
         return Errors::BLOCKS_CANT_MERGE;
     }
 
-    qDebug() << "Start merging block" << received.getIndex();
+    qDebug() << "Start merging block" << receivedBlockIndex;
     if (received == existed) {
         qDebug() << QString("Blocks are equal ([%1])").arg(Errors::BLOCKS_ARE_EQUAL);
         return Errors::BLOCKS_ARE_EQUAL;
@@ -706,17 +707,18 @@ int Blockchain::mergeBlockWithLocal(Block &received) {
     // step 2 - collect all blocks from old to latest
     QList<Block> tmpBlocks; // from existed to last block;
 
+    const auto lastBlockIndex = getLastBlock().getIndex();
     // only if indexes is different
-    if (received.getIndex() != getLastBlock().getIndex()) {
+    if (receivedBlockIndex != lastBlockIndex) {
         // we should collect temp blocks
         BigNumber lastBlockId = existed.getIndex();
-        BigNumber nextBlockId = getLastBlock().getIndex();
+        BigNumber nextBlockId = lastBlockIndex;
         for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
             tmpBlocks << getBlockByIndex(i);
         }
         if (tmpBlocks.isEmpty()) {
             qWarning() << "Error: There is no blocks found locally while merging block"
-                       << received.getIndex();
+                       << receivedBlockIndex;
             return Errors::NO_BLOCKS;
         }
     }
@@ -746,7 +748,8 @@ int Blockchain::mergeBlockWithLocal(Block &received) {
 }
 
 int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
-    GenesisBlock existed = blockIndex.getGenesisBlockById(received.getIndex());
+    const auto receivedIndex = received.getIndex();
+    GenesisBlock existed = blockIndex.getGenesisBlockById(receivedIndex);
     if (!existed.isEmpty()) {
         // saved block with the same id is genesis
         qDebug() << QString("Start merging genesis block [%1] with exising [%2]")
@@ -758,17 +761,18 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
         // step 2 - collect all blocks from old to latest
         QList<Block> tmpBlocks; // from existed to last block;
 
+        const auto lastBlockIndex = getLastBlock().getIndex();
         // only if indexes is different
-        if (received.getIndex() != getLastBlock().getIndex()) {
+        if (receivedIndex != lastBlockIndex) {
             // we should collect temp blocks
             BigNumber lastBlockId = existed.getIndex();
-            BigNumber nextBlockId = getLastBlock().getIndex();
+            BigNumber nextBlockId = lastBlockIndex;
             for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
                 tmpBlocks << getBlockByIndex(i);
             }
             if (tmpBlocks.isEmpty()) {
                 qWarning() << "Error: There is no blocks found locally while merging block"
-                           << received.getIndex();
+                           << receivedIndex;
                 return Errors::NO_BLOCKS;
             }
         }
@@ -794,7 +798,7 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
             addBlock(b);
         }
     } else {
-        qCritical() << "Can't find genesis block with id=" << received.getIndex() << "locally";
+        qCritical() << "Can't find genesis block with id=" << receivedIndex << "locally";
         return Errors::NO_BLOCKS;
     }
     return 0;
@@ -872,8 +876,10 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     } else {
         qDebug() << "Adding a block" << block.getIndex() << "to storage";
     }
+
+    const auto indexBlock = block.getIndex();
     if (!GenesisBlock::isGenesisBlock(block.serialize())) {
-        if (block.getIndex() != 0) {
+        if (indexBlock != 0) {
             BigNumber id = block.getIndex() - 1;
             if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
                 // TODONEW
@@ -884,10 +890,10 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
             }
         }
     }
-    if (block.getIndex() == 0) {
+    if (indexBlock == 0) {
         node->actorIndex()->setFirstId(block.getApprover());
     }
-    if (block.getIndex() < 0)
+    if (indexBlock < 0)
         return Errors::BLOCK_IS_NOT_VALID;
 
     bool check = signCheckAdd(block);
@@ -895,11 +901,12 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
     }
     int resultCode = fileMode ? blockIndex.addBlock(block) : memIndex.addBlock(block);
+    const auto blockType = block.getType();
 
     switch (resultCode) {
     case 0: {
         emit updateLastTransactionList(); // TODO: ?
-        qDebug() << "Block" << block.getIndex() << "is successfully added to blockchain";
+        qDebug() << "Block" << indexBlock << "is successfully added to blockchain";
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
@@ -908,11 +915,11 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
-        qDebug() << "Block" << block.getIndex() << block.getType().c_str() << "is already in blockchain";
-        if (block.getType() == Config::DATA_BLOCK_TYPE || block.getType() == Config::MERGE_BLOCK
-            || block.getType() == Config::DUMMY_BLOCK_TYPE) {
+        qDebug() << "Block" << indexBlock << blockType.c_str() << "is already in blockchain";
+        if (blockType == Config::DATA_BLOCK_TYPE || blockType == Config::MERGE_BLOCK
+            || blockType == Config::DUMMY_BLOCK_TYPE) {
             resultCode = mergeBlockWithLocal(block);
-        } else if ((block.getType() == Config::GENESIS_BLOCK_TYPE)
+        } else if ((blockType == Config::GENESIS_BLOCK_TYPE)
                    || (block.getType() == Config::GENESIS_BLOCK_MERGE)) {
             resultCode = mergeGenesisBlockWithLocal(dynamic_cast<const GenesisBlock &>(block));
         } else {
@@ -950,28 +957,30 @@ void Blockchain::removeAllDummyBlocks(const Block &block) {
     blockIndex.removeDummyBlocks(block.getIndex());
 }
 
-bool Blockchain::canMergeBlocks(const Block &blockA, const Block &blockB) {
+bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existedBlock) {
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
-    if (!blockA.getDigSig().empty() && !blockB.getDigSig().empty() && blockA.getType() == blockB.getType()
-        && blockA.getIndex() == blockB.getIndex()) {
-        if ((blockA.getType() == Config::DATA_BLOCK_TYPE) || (blockA.getType() == Config::GENESIS_BLOCK_TYPE)
-            || (blockA.getType() == Config::DUMMY_BLOCK_TYPE))
+    if (!receivedBlock.getDigSig().empty() && !existedBlock.getDigSig().empty()
+        && receivedBlock.getType() == existedBlock.getType()
+        && receivedBlock.getIndex() == existedBlock.getIndex()) {
+        if ((receivedBlock.getType() == Config::DATA_BLOCK_TYPE)
+            || (receivedBlock.getType() == Config::GENESIS_BLOCK_TYPE)
+            || (receivedBlock.getType() == Config::DUMMY_BLOCK_TYPE))
             return true;
-        else if (blockA.getType() == Config::GENESIS_BLOCK_MERGE) {
+        else if (receivedBlock.getType() == Config::GENESIS_BLOCK_MERGE) {
             // 4) at least one common data row
-            QList<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(blockA).extractDataRows();
-            QList<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(blockB).extractDataRows();
+            QList<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(receivedBlock).extractDataRows();
+            QList<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(existedBlock).extractDataRows();
             for (const GenesisDataRow &g : rowsA) {
                 if (rowsB.contains(g)) {
                     return true;
                 }
             }
-        } else if (blockA.getType() == Config::MERGE_BLOCK) {
+        } else if (receivedBlock.getType() == Config::MERGE_BLOCK) {
             // 4) at least one common transaction
-            auto transactionsA = blockA.extractTransactions();
-            auto transactionsB = blockB.extractTransactions();
+            auto transactionsA = receivedBlock.extractTransactions();
+            auto transactionsB = existedBlock.extractTransactions();
             for (const Transaction &tr : transactionsA) {
                 if (std::find(transactionsB.begin(), transactionsB.end(), tr) != transactionsB.end()) {
                     return true;

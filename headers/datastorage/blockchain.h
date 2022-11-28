@@ -220,7 +220,7 @@ public:
          * @param blockB
          * @return true, if blocks can be merged
          */
-        bool canMergeBlocks(const Block &blockA, const Block &blockB);
+        bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
     /**
      * @brief Merge two blocks to one and sign it using approver
      * @param blockA
