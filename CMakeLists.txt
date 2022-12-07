@@ -36,6 +36,8 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
+find_package(cpprestsdk REQUIRED)
+
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
 
@@ -169,7 +171,7 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx fmt::fmt-header-only
-    magic_enum::magic_enum Boost::boost Boost::system Boost::thread) # extrachainc
+    magic_enum::magic_enum Boost::boost Boost::system Boost::thread cpprestsdk::cpprest) # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
 
