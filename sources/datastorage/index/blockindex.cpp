@@ -18,7 +18,7 @@
  */
 
 #include "datastorage/index/blockindex.h"
-
+#include "datastorage/dummy_block.h"
 #include <QDir>
 #include <QFileInfoList>
 
@@ -104,6 +104,9 @@ Block BlockIndex::getBlockById(const BigNumber &id) const {
             return Block(serializedBlock);
         else if (GenesisBlock::isGenesisBlock(serializedBlock))
             return GenesisBlock(serializedBlock);
+        else if (DummyBlock::isDummyBlock(serializedBlock)) {
+            return DummyBlock(serializedBlock);
+        }
     } else {
         qDebug() << id << "is not block";
     }
@@ -172,6 +175,19 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
             break;
         }
         --lastBlockId;
+    }
+    return Block();
+}
+
+Block BlockIndex::getLastRealBlockById()
+{
+    BigNumber id = this->lastSavedId;
+    while (id >= getFirstSavedId()) {
+        Block block = this->getBlockById(id);
+        if (!block.isEmpty() && block.getType() != Config::DUMMY_BLOCK_TYPE) {
+            return block;
+        }
+        --id;
     }
     return Block();
 }
@@ -520,6 +536,21 @@ int BlockIndex::removeById(const BigNumber &id) {
 
     this->lastSavedId = BigNumber(id) - 1;
     return 0;
+}
+
+void BlockIndex::removeDummyBlocks(const BigNumber& id)
+{
+    bool isNotDummyBlock = false;
+    auto lastId = lastSavedId;
+    while(!isNotDummyBlock) {
+        const auto block = getBlockById(lastId);
+        if(block.getType() != Config::DUMMY_BLOCK_TYPE){
+            isNotDummyBlock = true;
+        } else {
+            removeById(lastId);
+            lastId--;
+        }
+    }
 }
 
 void BlockIndex::removeAll() {

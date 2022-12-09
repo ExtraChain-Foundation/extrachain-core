@@ -79,6 +79,7 @@ public:
     Block getBlockByData(const QByteArray &data) const;
 
     Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
+    Block getLastRealBlockById();
 
     std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
     std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
@@ -100,6 +101,7 @@ public:
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
     int removeById(const BigNumber &id);
+    void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;
 
 private:

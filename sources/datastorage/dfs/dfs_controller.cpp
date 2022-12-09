@@ -1085,11 +1085,11 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
 
-    const bool isScript = filePath.extension() == Scripts::wasmExtention;
-    std::string scriptPath = "";
-    if (isScript) {
-        scriptPath = Scripts::folder + "/" + fileName;
-        std::filesystem::copy(filePath, scriptPath);
-    };
-    emit added(msg, filePath.string(), scriptPath);
+//    const bool isScript = filePath.extension() == Scripts::wasmExtention;
+//    std::string scriptPath = "";
+//    if (isScript) {
+//        scriptPath = Scripts::folder + "/" + fileName;
+//        std::filesystem::copy(filePath, scriptPath);
+//    };
+    emit added(msg, filePath.string());
 }

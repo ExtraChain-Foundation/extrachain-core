@@ -22,8 +22,8 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include "datastorage/genesis_block.h"
 #include "datastorage/dummy_block.h"
+#include "datastorage/genesis_block.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"
@@ -125,7 +125,6 @@ public:
                                     QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
     std::unique_ptr<DummyBlock> createDummyBlock() const;
 
-
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
     void getBlockZero();
@@ -210,13 +209,18 @@ public:
     int removeBlock(const Block &block);
 
     /**
-     * @brief Check if two blocks can be merged
-     * (has identical id and at least one common transaction)
-     * @param blockA
-     * @param blockB
-     * @return true, if blocks can be merged
+     *
      */
-    bool canMergeBlocks(const Block &blockA, const Block &blockB);
+    void removeAllDummyBlocks(const Block &block);
+
+        /**
+         * @brief Check if two blocks can be merged
+         * (has identical id and at least one common transaction)
+         * @param blockA
+         * @param blockB
+         * @return true, if blocks can be merged
+         */
+        bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
     /**
      * @brief Merge two blocks to one and sign it using approver
      * @param blockA
