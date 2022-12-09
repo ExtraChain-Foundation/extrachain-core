@@ -240,6 +240,14 @@ namespace Historical {
           "hash       TEXT                NOT NULL "
           ");";
 }
+namespace Reward {
+    struct CoinReward {
+        std::string Actor;
+        int Coin;
+        MSGPACK_DEFINE(Actor, Coin)
+    };
+}
+
 namespace Tables {
     namespace ActorDirFile {
         static const std::string TableName = "FilesTable";
@@ -304,6 +312,7 @@ namespace STDFS = std::filesystem;
 namespace DFSHC = DFS::Historical;
 namespace DFSB = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
+namespace DFSR = DFS::Reward;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)

@@ -549,14 +549,12 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            RewardTransaction rewardTx =
-                MessagePack::deserialize<RewardTransaction>(serialized);
+            RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
             node.verifyHashProcessing(rewardTx, messageId);
             break;
         }
         case MessageStatus::Response: {
-            RewardTransaction rewardTx =
-                MessagePack::deserialize<RewardTransaction>(serialized);
+            RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
             break;
         }
         }
@@ -576,6 +574,22 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             msg.print();
         }
         break;
+    }
+
+    case MessageType::BlockchainCoinReward: {
+        auto msg = MessagePack::deserialize<DFSR::CoinReward>(serialized);
+        switch (status) {
+        case MessageStatus::NoStatus:
+            break;
+        case MessageStatus::Request: {
+            //to do
+            break;
+        }
+        case MessageStatus::Response: {
+            //to do
+            break;
+        }
+        }
     }
 
     default:

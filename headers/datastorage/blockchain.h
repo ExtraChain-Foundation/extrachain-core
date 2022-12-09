@@ -30,6 +30,7 @@
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/message_body.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QMutex>
@@ -308,6 +309,11 @@ public:
      * @brief Set new value total supply
      */
     void setTotalSupply(const int &newValue);
+
+    /**
+     * @brief Send reward amount
+     */
+    void sendCoinReward(const ActorId &receiver, const int &amount, const MessageStatus& messageStatus);
 
 signals:
     void newNotify(Notification ntf);

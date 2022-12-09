@@ -717,8 +717,7 @@ int Blockchain::mergeBlockWithLocal(Block &received) {
             tmpBlocks << getBlockByIndex(i);
         }
         if (tmpBlocks.isEmpty()) {
-            qWarning() << "Error: There is no blocks found locally while merging block"
-                       << receivedBlockIndex;
+            qWarning() << "Error: There is no blocks found locally while merging block" << receivedBlockIndex;
             return Errors::NO_BLOCKS;
         }
     }
@@ -771,8 +770,7 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
                 tmpBlocks << getBlockByIndex(i);
             }
             if (tmpBlocks.isEmpty()) {
-                qWarning() << "Error: There is no blocks found locally while merging block"
-                           << receivedIndex;
+                qWarning() << "Error: There is no blocks found locally while merging block" << receivedIndex;
                 return Errors::NO_BLOCKS;
             }
         }
@@ -1263,6 +1261,12 @@ int Blockchain::getTotalSuply() const {
 
 void Blockchain::setTotalSupply(const int &newValue) {
     totalSupply = newValue;
+}
+
+void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount,
+                                const MessageStatus &messageStatus) {
+    DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
+    node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, messageStatus);
 }
 
 void Blockchain::process() {
