@@ -169,9 +169,9 @@ namespace Packets {
         double Coefficient;
         uint64_t TotalSupply;
         double CoinProducedForNode = 0.0;
-        uint64_t CoinProductionAlgorithmTickBlocks;
-        float BlockProductionRate;
-        uint64_t CoinProductionAlgorithmTickPerHour;
+        uint64_t CoinProductionAlgorithmTickBlocks = 100;
+        float BlockProductionRate = 0.5;
+        uint64_t CoinProductionAlgorithmTickPerHour = 18;
 
         void calc() {
             CoinProducedForNode = ((double)DataAmountStored/(double)DataAmountTotalStoredInNetwork) *
@@ -241,6 +241,7 @@ namespace Historical {
           ");";
 }
 namespace Reward {
+    static const int coinProductionAlgorithmTick = 100;
     struct CoinReward {
         std::string Actor;
         int Coin;

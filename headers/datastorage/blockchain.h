@@ -154,6 +154,8 @@ private:
 
     std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
 
+    void makeCoinProduction(const BigNumber &indexBlock);;
+
 public:
     /**
      * Compares prevHash field of every block

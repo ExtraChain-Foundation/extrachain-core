@@ -34,6 +34,7 @@ RewardTransaction::RewardTransaction(const QByteArray &serialized)
 
     deserialize(serialized);
     calcHash();
+    calcAmount();
 }
 
 RewardTransaction::RewardTransaction(const ActorId &senderReceiver)

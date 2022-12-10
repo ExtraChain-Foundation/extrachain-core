@@ -648,6 +648,17 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
     return block;
 }
 
+void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
+    if (std::stoi(indexBlock.toStdString(10)) % DFSR::coinProductionAlgorithmTick == 0) {
+        qDebug() << "Make reward request" << std::stoi(indexBlock.toStdString(10));
+        DFSP::StateMessage stateMessage = {
+            //fill in data
+        };
+
+        node->network()->send_message(stateMessage, MessageType::DfsState);
+    }
+}
+
 int Blockchain::addBlock(Block &block, bool isGenesis) {
     if (isGenesis) {
         qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
@@ -689,6 +700,8 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
         saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
+
+        makeCoinProduction(indexBlock);
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
