@@ -577,7 +577,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::BlockchainCoinReward: {
-        auto msg = MessagePack::deserialize<DFSR::CoinReward>(serialized);
+        auto coinReward = MessagePack::deserialize<DFSR::CoinReward>(serialized);
         switch (status) {
         case MessageStatus::NoStatus:
             break;
@@ -586,7 +586,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             break;
         }
         case MessageStatus::Response: {
-            //to do
+            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin);
             break;
         }
         }

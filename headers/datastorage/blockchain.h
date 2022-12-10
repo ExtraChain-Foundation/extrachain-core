@@ -313,7 +313,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinReward(const ActorId &receiver, const int &amount, const MessageStatus& messageStatus);
+    void sendCoinReward(const ActorId &receiver, const int &amount);
 
 signals:
     void newNotify(Notification ntf);

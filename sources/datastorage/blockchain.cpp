@@ -1263,10 +1263,12 @@ void Blockchain::setTotalSupply(const int &newValue) {
     totalSupply = newValue;
 }
 
-void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount,
-                                const MessageStatus &messageStatus) {
-    DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
-    node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, messageStatus);
+void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount) {
+    auto mainActor = node->accountController()->mainActor();
+    if (mainActor.id() == node->actorIndex()->firstId()) {
+        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
+        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+    }
 }
 
 void Blockchain::process() {
