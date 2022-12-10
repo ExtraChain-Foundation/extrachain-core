@@ -112,8 +112,6 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
-    void sendFeeUnfreeze(Block &block);
-    void sendUnFee(Block &block);
     QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
@@ -153,11 +151,8 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block) const;
-    void stakingReward(const Block &block);
 
     std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
-
-    bool checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver);
 
 public:
     /**
@@ -173,6 +168,10 @@ public:
      * @return last blockchain block
      */
     Block getLastBlock() const;
+    /**
+     * @return last real blockchain block
+     */
+    Block getLastRealBlock() const;
     /**
      * Gets the block from blockchain by *value* of a certain *type*
      * @param value
@@ -214,14 +213,14 @@ public:
      */
     void removeAllDummyBlocks(const Block &block);
 
-        /**
-         * @brief Check if two blocks can be merged
-         * (has identical id and at least one common transaction)
-         * @param blockA
-         * @param blockB
-         * @return true, if blocks can be merged
-         */
-        bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
+    /**
+     * @brief Check if two blocks can be merged
+     * (has identical id and at least one common transaction)
+     * @param blockA
+     * @param blockB
+     * @return true, if blocks can be merged
+     */
+    bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
     /**
      * @brief Merge two blocks to one and sign it using approver
      * @param blockA

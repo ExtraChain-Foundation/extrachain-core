@@ -74,6 +74,21 @@ Block BlockIndex::getLastBlock() const {
     return Block();
 }
 
+Block BlockIndex::getLastRealBlock() const {
+    BigNumber id = this->lastSavedId;
+    qDebug() << "BLOCK INDEX: getLastBlock:"
+             << "\n      last saved id - " << this->lastSavedId;
+    while (id >= getFirstSavedId()) {
+        Block block = this->getBlockById(id);
+        if ((!block.isEmpty()) && (!DummyBlock::isDummyBlock(block.serialize()))) {
+            return block;
+        }
+        --id;
+    }
+
+    return Block();
+}
+
 GenesisBlock BlockIndex::getLastGenesisBlock() const {
     BigNumber id = this->lastSavedId;
     qDebug() << "BLOCK INDEX: getLastGenesisBlock:"
@@ -179,8 +194,7 @@ Block BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam pa
     return Block();
 }
 
-Block BlockIndex::getLastRealBlockById()
-{
+Block BlockIndex::getLastRealBlockById() {
     BigNumber id = this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
@@ -538,13 +552,12 @@ int BlockIndex::removeById(const BigNumber &id) {
     return 0;
 }
 
-void BlockIndex::removeDummyBlocks(const BigNumber& id)
-{
+void BlockIndex::removeDummyBlocks(const BigNumber &id) {
     bool isNotDummyBlock = false;
     auto lastId = lastSavedId;
-    while(!isNotDummyBlock) {
+    while (!isNotDummyBlock) {
         const auto block = getBlockById(lastId);
-        if(block.getType() != Config::DUMMY_BLOCK_TYPE){
+        if (block.getType() != Config::DUMMY_BLOCK_TYPE) {
             isNotDummyBlock = true;
         } else {
             removeById(lastId);

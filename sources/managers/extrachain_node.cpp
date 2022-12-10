@@ -104,7 +104,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         // TEST
         Block lastBlock = m_blockchain->getLastBlock();
         Block block("", lastBlock);
-//        m_blockchain->addBlock(block);
+        //        m_blockchain->addBlock(block);
         // TEST
 
         //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
@@ -183,58 +183,34 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
                         .arg(tx.toString(), QString(actor.id().toByteArray()));
 
         // 1) set prev block id
-        BigNumber lastBlockId = m_blockchain->getLastBlock().getIndex();
+        BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
         if (lastBlockId.isEmpty()) {
-            qDebug() << QString("Warning: can not create tx:[%1]. There no last block in "
+            qDebug() << QString("Warning: can not create tx:[%1]. There is no last block in "
                                 "blockchain")
                             .arg(tx.toString());
             return Transaction();
         }
         tx.setPrevBlock(lastBlockId);
-
-        // 2) sign transaction
+        // 2) check coin availability
+        if (blockchain()->getUserBalance(actor.id(), tx.getToken()) < tx.getAmount()) {
+            qDebug() << QString("Warning: can not create tx:[%1]. There is not enough coins/tokens in wallet")
+                            .arg(tx.toString());
+            return Transaction();
+        }
+        // 3) sign transaction
 
         tx.sign(actor);
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
-        // send without fee
         if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId()
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
             m_txManager->addTransaction(tx);
-        else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-            // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
-        } else {
-            BigNumber amountTemp(tx.getAmount());
-            if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
-                >= 0) {
-                // send with fee
-
-                Transaction txFee = tx;
-                // restructure tx for fee
-                {
-                    amountTemp /= 100;
-                    txFee.setAmount(amountTemp);
-                    txFee.setReceiver(actor.id()); // send fee to my freezeFee
-                    // ENUM | Tx hash that fee refer
-                    txFee.setData(Serialization::serialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
-                    txFee.sign(actor);
-                }
-
-                // send fee tx
-                // TODONEW emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
-                // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
-            } else {
-                qDebug() << "Not enough money ";
-                return Transaction();
-            }
-        }
-
-        return tx;
-    } else
-
+    } else {
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
+        return Transaction();
+    }
 
-    return Transaction();
+    return tx;
 }
 
 Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount, ActorId token) {
@@ -249,32 +225,6 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         Transaction tx(actor.id(), receiver, amount);
         // add sent tx balances
 
-        tx.setToken(token);
-        //        if (actorIndex->m_firstId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
-        //                tx.setSenderBalance(BigNumber(0));
-
-        return this->createTransaction(tx);
-    }
-    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toByteArray()));
-    return Transaction();
-}
-
-Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
-                                                    ActorId token) {
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-
-    if (!actor.empty()) {
-        if (receiver.isEmpty()) {
-            qDebug() << "Create freeze tx to me";
-            receiver = actor.id();
-        } else
-            qDebug() << "Create freeze tx to" << receiver;
-
-        Transaction tx(actor.id(), receiver, amount);
-        // add sent tx balances
-        tx.setData(toFreeze ? Fee::FREEZE_TX : Fee::UNFREEZE_TX);
         tx.setToken(token);
         //        if (actorIndex->m_firstId != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
@@ -464,9 +414,8 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
     connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
-    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
-        m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
-    });
+    connect(m_networkManager, &NetworkManager::newSocket,
+            [this]() { m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id()); });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
 }

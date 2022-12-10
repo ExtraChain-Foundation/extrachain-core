@@ -31,7 +31,6 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
-#include "utils/coinprocess.h"
 
 class ExtraChainNode;
 
@@ -49,11 +48,6 @@ private:
 
     // received transactions that will be packed into block
     QList<Transaction> pendingTxs;
-
-    QList<Transaction *> pendingForFeeTxs;
-    QList<Transaction *> pendingFeeSenderTxs;
-
-    QList<Transaction *> pendingFeeTxs;
 
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
@@ -103,10 +97,6 @@ public slots:
     void addTransaction(Transaction tx);
     void addProvedTransaction(Transaction *transaction);
     void removeUnApprovedTransaction(Transaction *tx);
-
-    void addPendingForFeeTxs(Transaction *transaction);
-    void verifyApproverFeeTx(Transaction *transaction);
-    void addPendingFeeSenderTxs(Transaction *transaction);
     // Unapproved tx's //
 
     /**
