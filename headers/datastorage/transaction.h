@@ -34,14 +34,15 @@ struct TransactionData {
 };
 
 class EXTRACHAIN_EXPORT Transaction {
+
+    ActorId sender;
+    ActorId receiver;
+protected:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
     void calcHash();
-
-    ActorId sender;
-    ActorId receiver;
     BigNumber amount;    // coin amount
     long long date;
     std::string data;    // additional payload field
@@ -109,7 +110,7 @@ public:
     ActorId getProducer() const;
 
 
-    bool isEmpty() const;
+    virtual bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;
     bool operator!=(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);
