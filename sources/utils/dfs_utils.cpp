@@ -118,3 +118,16 @@ std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::str
     return DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString() + Utils::platformDelimeter()
         + fileName;
 }
+
+int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId)
+{
+    auto db = actorDbConnector(actorId);
+    if (!db.isOpen()) {
+        qFatal("DB Error");
+        return 0;
+    }
+
+    auto row = db.select(fmt::format("SELECT SUM(fileSize) from {}", TableName)).at(0);
+
+    return std::stoi(row["SUM(fileSize)"]);
+}

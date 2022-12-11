@@ -166,7 +166,7 @@ namespace Packets {
         uint64_t DataAmountStored;
         uint64_t DataAmountTotalStoredInNetwork;
         uint64_t BlockAmount;
-        double Coefficient;
+        double Coefficient = 0.5;
         uint64_t TotalSupply;
         double CoinProducedForNode = 0.0;
         uint64_t CoinProductionAlgorithmTickBlocks = 100;
@@ -264,6 +264,7 @@ namespace Tables {
         std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector *db, std::string name);
         std::string getLastName(DBConnector &db);
+        int totalFileSize(const std::string &actorId);
 
         // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);

@@ -40,6 +40,7 @@ private:
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
     std::vector<std::string> m_compliteFiles;
+    uint64_t m_totalFileSize = 0;
 
 public:
     explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
@@ -64,6 +65,7 @@ public:
     DBRow makeActrDirDBRow(std::string fileName, std::string fileNamePrev, std::string fileHash,
                            std::string filePath, uint64_t fileSize);
     uint64_t sizeTaken() const;
+    uint64_t totalFilesSize() const;
     void increaseSizeTaken(uintmax_t value);
     void insertToFiles(DFSP::AddFileMessage msg);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
@@ -72,6 +74,7 @@ private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
     bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
     uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot) const;
+    uint64_t calculateFilesSize(const std::string &folder = DFSB::fsActrRoot) const;
     std::string extractNextFragment();
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                 uint64_t fragmentSize);

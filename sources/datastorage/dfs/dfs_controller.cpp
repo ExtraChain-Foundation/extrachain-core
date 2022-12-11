@@ -15,6 +15,7 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     dirsFile.query(DFST::DirsFile::CreateTableQuery);
 
     m_sizeTaken = calculateSizeTaken();
+    m_totalFileSize = calculateFilesSize();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
 }
@@ -139,6 +140,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
 
     actrDirFile.close();
     m_sizeTaken += fileSize;
+    m_totalFileSize += fileSize;
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
     dirsFile.replace(DFST::DirsFile::TableName,
@@ -481,6 +483,11 @@ uint64_t DfsController::sizeTaken() const {
     return m_sizeTaken;
 }
 
+uint64_t DfsController::totalFilesSize() const
+{
+    return m_totalFileSize;
+}
+
 void DfsController::increaseSizeTaken(uintmax_t value) {
     m_sizeTaken += value;
 }
@@ -568,6 +575,22 @@ uint64_t DfsController::calculateSizeTaken(const std::string &folder) const {
             size += entry.file_size();
         } else if (entry.is_directory()) {
             size += calculateSizeTaken(entry.path().string());
+        }
+    }
+
+    return size;
+}
+
+uint64_t DfsController::calculateFilesSize(const std::string &folder) const
+{
+    uint64_t size = 0;
+
+    for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
+        if (entry.path().filename() == DFS::Basic::fsMapName) {
+            const std::string actorId = entry.path().parent_path().filename();
+            size += DFST::ActorDirFile::totalFileSize(actorId);
+        } else if (entry.is_directory()) {
+            size += calculateFilesSize(entry.path().string());
         }
     }
 
