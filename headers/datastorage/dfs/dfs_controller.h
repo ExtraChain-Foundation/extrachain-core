@@ -22,12 +22,16 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/dfs/fragment_storage.h"
+#include "datastorage/dfs/historical_chain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/network_manager.h"
 #include "utils/db_connector.h"
 #include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include <QtConcurrent>
+#include <boost/algorithm/string.hpp>
 
 #include <QThread>
 class ThreadAddFiles;
@@ -40,7 +44,7 @@ private:
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
     std::vector<std::string> m_compliteFiles;
-    uint64_t m_totalFileSize = 0;
+    uint64_t m_totalDfsSize = 0;
 
 public:
     explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
@@ -65,7 +69,7 @@ public:
     DBRow makeActrDirDBRow(std::string fileName, std::string fileNamePrev, std::string fileHash,
                            std::string filePath, uint64_t fileSize);
     uint64_t sizeTaken() const;
-    uint64_t totalFilesSize() const;
+    uint64_t totalDfsSize() const;
     void increaseSizeTaken(uintmax_t value);
     void insertToFiles(DFSP::AddFileMessage msg);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
@@ -82,8 +86,7 @@ private:
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
-    void sendSizeReponseMsg(const DFSP::RequestDfsSize & msg,
-                            const std::string &messageId) const;
+    void sendSizeReponseMsg(const DFSP::RequestDfsSize &msg, const std::string &messageId) const;
     void requestSync();
     void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
@@ -141,7 +144,8 @@ public:
 signals:
     void error(std::string error, std::string fileName);
     void sendMessage(DFSP::AddFileMessage msg, MessageType messageType);
-    void added(const DFSP::AddFileMessage &msg, const std::string &filePath, const std::string &scriptPath = "");
+    void added(const DFSP::AddFileMessage &msg, const std::string &filePath,
+               const std::string &scriptPath = "");
 };
 
 #endif // DFS_CONTROLLER_H

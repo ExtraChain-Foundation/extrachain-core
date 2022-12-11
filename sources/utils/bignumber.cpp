@@ -120,6 +120,10 @@ BigNumber BigNumber::operator%(const BigNumber &bigNumber) {
     return BigNumber(m_data % bigNumber.data());
 }
 
+BigNumber BigNumber::operator%(const BigNumber &bigNumber) const {
+    return BigNumber(m_data % bigNumber.data());
+}
+
 BigNumber BigNumber::operator%(long long number) {
     return BigNumber(m_data % number);
 }

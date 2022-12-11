@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "utils/bignumber.h"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <msgpack.hpp>
@@ -174,18 +175,17 @@ namespace Packets {
         uint64_t CoinProductionAlgorithmTickPerHour = 18;
 
         void calc() {
-            CoinProducedForNode = ((double)DataAmountStored/(double)DataAmountTotalStoredInNetwork) *
-                ((double)TotalSupply/(double)BlockAmount) * Coefficient;
+            CoinProducedForNode = ((double)DataAmountStored / (double)DataAmountTotalStoredInNetwork)
+                * ((double)TotalSupply / (double)BlockAmount) * Coefficient;
 
-            if(CoinProducedForNode < 1) {
+            if (CoinProducedForNode < 1) {
                 Coefficient *= 2;
                 calc();
             }
         }
-        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork,
-                       BlockAmount, Coefficient, TotalSupply, CoinProducedForNode,
-                       CoinProductionAlgorithmTickBlocks, BlockProductionRate,
-                       CoinProductionAlgorithmTickPerHour)
+        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork, BlockAmount,
+                       Coefficient, TotalSupply, CoinProducedForNode, CoinProductionAlgorithmTickBlocks,
+                       BlockProductionRate, CoinProductionAlgorithmTickPerHour)
     };
 }
 namespace Fragments {
@@ -210,7 +210,7 @@ namespace Fragments {
             qDebug() << "actor: [" << actor.c_str() << "]"
                      << "fileHash" << fileHash.c_str() << "]"
                      << "filePath" << filePath.c_str() << "]";
-            for(const auto& pair: fragmentPositionList) {
+            for (const auto &pair : fragmentPositionList) {
                 qDebug() << pair.first << pair.second;
             }
         }
@@ -241,7 +241,7 @@ namespace Historical {
           ");";
 }
 namespace Reward {
-    static const int coinProductionAlgorithmTick = 100;
+    static const BigNumber coinProductionAlgorithmTick = BigNumber("100", 10);
     struct CoinReward {
         std::string Actor;
         int Coin;

@@ -649,12 +649,13 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
 }
 
 void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
-    if (std::stoi(indexBlock.toStdString(10)) % DFSR::coinProductionAlgorithmTick == 0) {
+    if (indexBlock % DFSR::coinProductionAlgorithmTick == 0) {
         qDebug() << "Make reward request" << std::stoi(indexBlock.toStdString(10));
-        DFSP::StateMessage stateMessage = {
-            //fill in data
-        };
-
+        DFSP::StateMessage stateMessage;
+        stateMessage.DataAmountStored = node->dfs()->sizeTaken();
+        stateMessage.DataAmountTotalStoredInNetwork = node->dfs()->totalDfsSize();
+        stateMessage.BlockAmount = std::stoull(getLastRealBlock().getIndex().toStdString(10));
+        stateMessage.TotalSupply = getTotalSuply();
         node->network()->send_message(stateMessage, MessageType::DfsState);
     }
 }
@@ -1102,29 +1103,6 @@ void Blockchain::VerifyTx(Transaction tx) {
 
     qDebug() << QString("New transaction [%1] is verified").arg(tx.toString());
     emit VerifiedTx(tx);
-}
-
-bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
-                                     const BigNumber &indexBlock) // return true if haven`t
-{
-    auto listProve = txManager->getPendingTxs();
-    for (const auto &tmpTx : listProve) {
-        if (tmpTx.getSender() == tx->getSender() && tmpTx.getReceiver() == tx->getReceiver()
-            && tmpTx.getData() == tx->getData()) {
-            return false;
-        }
-    }
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= indexBlock; i--) {
-        Block tmpBlock = blockIndex.getBlockById(i);
-        auto listTxs = tmpBlock.extractTransactions();
-        for (const auto &tmp : listTxs) {
-            if (tmp.getSender() == tx->getSender() && tmp.getReceiver() == tx->getReceiver()
-                && tmp.getData() == tx->getData()) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
 
 void Blockchain::proveTx(Transaction *tx) {

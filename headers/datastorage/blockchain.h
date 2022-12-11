@@ -42,6 +42,7 @@
 // database
 #include "utils/db_connector.h"
 
+#include "datastorage/dfs/dfs_controller.h"
 class TransactionManager;
 
 /*
@@ -154,7 +155,8 @@ private:
 
     std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
 
-    void makeCoinProduction(const BigNumber &indexBlock);;
+    void makeCoinProduction(const BigNumber &indexBlock);
+    ;
 
 public:
     /**
