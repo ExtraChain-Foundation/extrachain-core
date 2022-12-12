@@ -401,6 +401,37 @@ QString BlockIndex::buildFilePath(const BigNumber &id) const {
 
     return pathToFolder + "/" + id.toByteArray();
 }
+
+BigNumber BlockIndex::calculateCirculativeBalance() const
+{
+    BigNumber circulativeBalance = 0;
+    bool isGenesisBlockFounde = false;
+    auto lastId = lastSavedId;
+    while (!isGenesisBlockFounde) {
+        const auto block = getBlockById(lastId);
+        if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
+            isGenesisBlockFounde = true;
+        } else {
+            circulativeBalance += calculateCirculativeBalanceBlock(block);
+            lastId--;
+        }
+    }
+    return circulativeBalance;
+}
+
+BigNumber BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const
+{
+    BigNumber circulativeBalanceBlock(0);
+
+    const auto allTx = block.extractTransactions();
+    if(allTx.empty())
+        return BigNumber(0);
+
+    for(int numberTx = 0; numberTx < allTx.size(); numberTx++) {
+        circulativeBalanceBlock += allTx[numberTx].getAmount();
+    }
+    return circulativeBalanceBlock;
+}
 int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
     QString path = buildFilePath(id);
     QFile file(path);

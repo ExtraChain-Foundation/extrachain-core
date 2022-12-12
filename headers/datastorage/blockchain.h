@@ -81,7 +81,8 @@ private:
     int blocksFromLastGenesis = 0;
 
     bool launched;
-    int totalSupply;
+    BigNumber circulativeSupply;
+    bool possibleMining = true;
 
 public:
     explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
@@ -154,7 +155,6 @@ private:
     std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
 
     void makeCoinProduction(const BigNumber &indexBlock);
-    ;
 
 public:
     /**
@@ -302,19 +302,34 @@ public:
     void getSmContractMembers(const Block &block) const;
 
     /**
-     *  @brief Get total supply
+     *  @brief Get circulative supply
      */
-    int getTotalSuply() const;
+    BigNumber getCirculativeSuply() const;
 
     /**
-     * @brief Set new value total supply
+     * @brief Set new value circulative supply
      */
-    void setTotalSupply(const int &newValue);
+    void setCirculativeSupply(const BigNumber &newValue);
+
+    /**
+     * @brief Increase circulative supply value
+     */
+    void increaseCirculativeSupply(const BigNumber &value);
 
     /**
      * @brief Send reward amount
      */
     void sendCoinReward(const ActorId &receiver, const int &amount);
+
+    /**
+     * @brief Set possible mining
+     */
+    void setPossibleMining(const bool &value);
+
+    /**
+     * @brief Get possible mining
+    */
+    bool getPossibleMining() const;
 
 signals:
     void newNotify(Notification ntf);
@@ -359,6 +374,12 @@ signals:
     void updateLastTransactionList();
     void sendMessage(const QByteArray &data, const unsigned int &type);
     void finished();
+
+    /**
+     * @brief possibleMiningChange
+     * @param possibleMinig
+     */
+    void possibleMiningChange(const bool& possibleMinig);
 
 public:
     void addBlockToBlockchain(Block &block);

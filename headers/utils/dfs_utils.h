@@ -168,7 +168,7 @@ namespace Packets {
         uint64_t DataAmountTotalStoredInNetwork;
         uint64_t BlockAmount;
         double Coefficient = 0.5;
-        uint64_t TotalSupply;
+        uint64_t CirculativeSupply;
         double CoinProducedForNode = 0.0;
         uint64_t CoinProductionAlgorithmTickBlocks = 100;
         float BlockProductionRate = 0.5;
@@ -176,7 +176,7 @@ namespace Packets {
 
         void calc() {
             CoinProducedForNode = ((double)DataAmountStored / (double)DataAmountTotalStoredInNetwork)
-                * ((double)TotalSupply / (double)BlockAmount) * Coefficient;
+                * ((double)CirculativeSupply / (double)BlockAmount) * Coefficient;
 
             if (CoinProducedForNode < 1) {
                 Coefficient *= 2;
@@ -184,7 +184,7 @@ namespace Packets {
             }
         }
         MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork, BlockAmount,
-                       Coefficient, TotalSupply, CoinProducedForNode, CoinProductionAlgorithmTickBlocks,
+                       Coefficient, CirculativeSupply, CoinProducedForNode, CoinProductionAlgorithmTickBlocks,
                        BlockProductionRate, CoinProductionAlgorithmTickPerHour)
     };
 }

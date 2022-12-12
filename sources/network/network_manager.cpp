@@ -503,9 +503,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::DfsState: {
         DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
+        BigNumber circulativeSupplyValue((int)state.CirculativeSupply);
+        node.blockchain()->increaseCirculativeSupply(circulativeSupplyValue);
         state.calc();
-        node.blockchain()->setTotalSupply(state.TotalSupply);
-        break; // was added as build fix, check logic here mb it's unnecessary
+        break;
     }
 
     case MessageType::BlockchainGenesisBlock: {

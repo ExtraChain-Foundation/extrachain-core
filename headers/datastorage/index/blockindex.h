@@ -107,6 +107,8 @@ public:
     int removeById(const BigNumber &id);
     void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;
+    BigNumber calculateCirculativeBalance() const;
+    BigNumber calculateCirculativeBalanceBlock(const Block& block) const;
 
 private:
     std::pair<Transaction, QByteArray> getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,

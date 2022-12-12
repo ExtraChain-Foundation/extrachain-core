@@ -29,6 +29,7 @@ Blockchain::Blockchain(ExtraChainNode *node, bool fileMode)
     : fileMode(fileMode) {
     this->node = node;
     genBlockData.clear();
+    setCirculativeSupply(blockIndex.calculateCirculativeBalance());
 }
 
 Blockchain::~Blockchain() {
@@ -655,7 +656,7 @@ void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
         stateMessage.DataAmountStored = node->dfs()->sizeTaken();
         stateMessage.DataAmountTotalStoredInNetwork = node->dfs()->totalDfsSize();
         stateMessage.BlockAmount = std::stoull(getLastRealBlock().getIndex().toStdString(10));
-        stateMessage.TotalSupply = getTotalSuply();
+        stateMessage.CirculativeSupply = std::stoull(getCirculativeSuply().toStdString(10));
         node->network()->send_message(stateMessage, MessageType::DfsState);
     }
 }
@@ -703,6 +704,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
 
         makeCoinProduction(indexBlock);
+
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
@@ -953,12 +955,18 @@ void Blockchain::getSmContractMembers(const Block &block) const {
     }
 }
 
-int Blockchain::getTotalSuply() const {
-    return totalSupply;
+BigNumber Blockchain::getCirculativeSuply() const {
+    return circulativeSupply;
 }
 
-void Blockchain::setTotalSupply(const int &newValue) {
-    totalSupply = newValue;
+void Blockchain::setCirculativeSupply(const BigNumber &newValue) {
+    circulativeSupply = newValue;
+}
+
+void Blockchain::increaseCirculativeSupply(const BigNumber &value)
+{
+    circulativeSupply += value;
+    setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
 void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount) {
@@ -967,6 +975,17 @@ void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount) {
         DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
         node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
     }
+}
+
+void Blockchain::setPossibleMining(const bool &value) {
+    if(value != possibleMining) {
+        emit possibleMiningChange(value);
+    }
+    possibleMining = value;
+}
+
+bool Blockchain::getPossibleMining() const {
+    return possibleMining;
 }
 
 void Blockchain::process() {
