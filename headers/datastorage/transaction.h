@@ -141,6 +141,7 @@ public:
     void setAmount(const BigNumber &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
+    bool isRewardTransaction() const;
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
                    digSig)

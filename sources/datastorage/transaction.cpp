@@ -84,6 +84,10 @@ void Transaction::setReceiver(const ActorId &value) {
     receiver = value;
 }
 
+bool Transaction::isRewardTransaction() const {
+    return data.starts_with(TypeTransaction::rewardTx);
+}
+
 void Transaction::setProducer(const ActorId &value) {
     producer = value;
 }

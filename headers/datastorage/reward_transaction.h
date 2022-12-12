@@ -85,10 +85,13 @@ public:
 
     RewardTransaction(const RewardTransaction &other);
 
+    RewardTransaction(const Transaction &transaction);
+
+
     void setSenderReceiverBalance(BigNumber balance);
     void clear();
-    ActorId getSenderReceiver() const { return senderReceiver; };
-    TransactionRewardData getRewardData() const { return rewardData; };
+    ActorId getSenderReceiver() const { return senderReceiver; }
+    TransactionRewardData getRewardData() const { return rewardData; }
     virtual bool isEmpty() const override;
     bool operator==(const RewardTransaction &transaction) const;
     bool operator!=(const RewardTransaction &transaction) const;
@@ -99,6 +102,8 @@ public:
     void setRewardData(const TransactionRewardData &transactionRewardData);
     void setSenderReceiver(const ActorId &value);
     void insertAdditionalData(AdditionalData& additionalData);
+
+    Transaction convertToTransaction();
 
     MSGPACK_DEFINE(senderReceiver, amount, date, rewardData, token, prevBlock, gas, hop, hash, approver,
                    producer, digSig)

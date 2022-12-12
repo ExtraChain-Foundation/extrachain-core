@@ -67,12 +67,27 @@ RewardTransaction::RewardTransaction(const RewardTransaction &other)
     calcHash();
 }
 
+RewardTransaction::RewardTransaction(const Transaction &transaction)
+{
+    const auto serialized = transaction.getData().remove(0, TypeTransaction::rewardTx.length());
+    deserialize(serialized);
+    calcHash();
+    calcAmount();
+}
+
 void RewardTransaction::setSenderReceiver(const ActorId &value) {
     senderReceiver = value;
 }
 
 void RewardTransaction::insertAdditionalData(AdditionalData &additionalData) {
     rewardData.additionalData.push_back(additionalData);
+}
+
+Transaction RewardTransaction::convertToTransaction()
+{
+    Transaction tx = *this;
+    tx.setData(TypeTransaction::rewardTx + serialize());
+    return tx;
 }
 
 void RewardTransaction::calcAmount() {

@@ -556,6 +556,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         }
         case MessageStatus::Response: {
             RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
+            node.txManager()->addTransaction(rewardTx.convertToTransaction());
             break;
         }
         }

@@ -19,6 +19,7 @@
 
 #include "datastorage/index/blockindex.h"
 #include "datastorage/dummy_block.h"
+#include "datastorage/reward_transaction.h"
 #include <QDir>
 #include <QFileInfoList>
 
@@ -428,7 +429,11 @@ BigNumber BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const
         return BigNumber(0);
 
     for(int numberTx = 0; numberTx < allTx.size(); numberTx++) {
-        circulativeBalanceBlock += allTx[numberTx].getAmount();
+        const Transaction tx = allTx[numberTx];
+        if(tx.isRewardTransaction()) {
+            RewardTransaction rewardTx(tx);
+            circulativeBalanceBlock += rewardTx.getAmount();
+        }
     }
     return circulativeBalanceBlock;
 }

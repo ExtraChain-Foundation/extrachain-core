@@ -1126,6 +1126,7 @@ void Blockchain::VerifyTx(Transaction tx) {
 
 void Blockchain::proveTx(Transaction *tx) {
     qDebug() << "proveTx: started";
+    const bool isRewardTx = tx->isRewardTransaction();
 
     ActorId targetSender = tx->getSender();
     ActorId targetReceiver = tx->getReceiver();
@@ -1136,10 +1137,11 @@ void Blockchain::proveTx(Transaction *tx) {
     if (!targetReceiver.isEmpty())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
     if (tx->getAmount() < 0) {
+        qDebug() << "Transaction not approved: amount less 0";
         txManager->removeUnApprovedTransaction(tx);
         return;
     }
-    if (targetSender == targetReceiver) {
+    if (targetSender == targetReceiver && !isRewardTx) {
         txManager->removeUnApprovedTransaction(tx);
         qDebug() << "Transaction not approved: sender == receiver";
         return;
@@ -1178,6 +1180,7 @@ void Blockchain::proveTx(Transaction *tx) {
         txManager->addProvedTransaction(tx);
         return;
     }
+
 
     // if !sig
     if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
