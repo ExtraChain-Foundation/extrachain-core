@@ -109,6 +109,7 @@ public:
     QString buildFilePath(const BigNumber &id) const;
     BigNumber calculateCirculativeBalance() const;
     BigNumber calculateCirculativeBalanceBlock(const Block& block) const;
+    BigNumber calculateCirculativeBalanceLastGenesisBlock() const;
 
 private:
     std::pair<Transaction, QByteArray> getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,

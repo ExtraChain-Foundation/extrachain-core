@@ -29,7 +29,9 @@ Blockchain::Blockchain(ExtraChainNode *node, bool fileMode)
     : fileMode(fileMode) {
     this->node = node;
     genBlockData.clear();
+
     setCirculativeSupply(blockIndex.calculateCirculativeBalance());
+    increaseCirculativeSupply(blockIndex.calculateCirculativeBalanceLastGenesisBlock());
 }
 
 Blockchain::~Blockchain() {

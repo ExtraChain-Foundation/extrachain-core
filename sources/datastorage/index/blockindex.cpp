@@ -437,6 +437,22 @@ BigNumber BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const
     }
     return circulativeBalanceBlock;
 }
+
+BigNumber BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const
+{
+    BigNumber circulativeBalanceGenesisBlock(0);
+    const auto genesisBlock = getLastGenesisBlock();
+    circulativeBalanceGenesisBlock += calculateCirculativeBalanceBlock(genesisBlock);
+
+    const auto dataRows = genesisBlock.extractDataRows();
+    for(int numberRow = 0; numberRow < dataRows.size(); numberRow++) {
+        const GenesisDataRow dataRow = dataRows[numberRow];
+        if(dataRow.type == DataStorage::typeDataRow::UNIVERSAL) {
+            circulativeBalanceGenesisBlock += dataRow.state;
+        }
+    }
+    return circulativeBalanceGenesisBlock;
+}
 int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
     QString path = buildFilePath(id);
     QFile file(path);
