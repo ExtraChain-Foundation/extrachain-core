@@ -25,9 +25,8 @@ DataMiningManager::DataMiningManager(QObject *parent)
 }
 
 void DataMiningManager::rootMerkleHash(std::vector<std::string> &listHashes,
-                                              std::vector<MerkleDataBlocks> &branchesTree,
-                                              const bool isHahsing,
-                                              std::string &result) {
+                                       std::vector<MerkleDataBlocks> &branchesTree, const bool isHahsing,
+                                       std::string &result) {
     if (listHashes.empty()) {
         qFatal("Root merkle hash: list is empty");
     };
@@ -52,8 +51,7 @@ void DataMiningManager::rootMerkleHash(std::vector<std::string> &listHashes,
     }
 }
 
-std::string DataMiningManager::rootMerkleHash(std::string &data)
-{
+std::string DataMiningManager::rootMerkleHash(std::string &data) {
     std::string result;
     std::vector<MerkleDataBlocks> branches;
     std::vector<std::string> dataList;
@@ -63,7 +61,7 @@ std::string DataMiningManager::rootMerkleHash(std::string &data)
 }
 
 std::vector<MerkleDataBlocks> DataMiningManager::splitListIntoPair(std::vector<std::string> &vector,
-                                                                         const bool isHahsing) {
+                                                                   const bool isHahsing) {
     std::vector<MerkleDataBlocks> result;
 
     if (vector.empty())
@@ -113,7 +111,9 @@ std::string DataMiningManager::merkleFormula(const std::string &hash1, const std
     return Utils::calcHash(hash1 + hash2);
 }
 
-double DataMiningManager::calculateCoins(int dataAmountStored, int dataAmountTotalStoredInNetwork, int circulativeSupply, int blockAmount, double coefficient) {
+double DataMiningManager::calculateCoins(uint64_t dataAmountStored, uint64_t dataAmountTotalStoredInNetwork,
+                                         uint64_t circulativeSupply, uint64_t blockAmount,
+                                         double coefficient) {
     double coinProducedForNode = 0.0;
     coinProducedForNode = ((double)dataAmountStored / (double)dataAmountTotalStoredInNetwork)
         * ((double)circulativeSupply / (double)blockAmount) * coefficient;

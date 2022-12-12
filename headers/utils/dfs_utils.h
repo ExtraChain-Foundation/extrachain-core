@@ -253,7 +253,7 @@ namespace Tables {
         std::vector<DBRow> getFileDataByName(DBConnector *db, std::string name);
         std::string getLastName(DBConnector &db);
         int totalFileSize(const std::string &actorId);
-        int dataAmountStoredSize(const std::string &actorId, const std::string &storjName);
+        uint64_t dataAmountStoredSize(const std::string &actorId, const std::string &storjName);
 
         // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);

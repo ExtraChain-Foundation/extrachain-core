@@ -139,7 +139,7 @@ int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId)
     return std::stoi(row["SUM(fileSize)"]);
 }
 
-int DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId, const std::string &storjName)
+uint64_t DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId, const std::string &storjName)
 {
     DBConnector db(storjDbPath(actorId, storjName));
     db.open();
@@ -156,5 +156,5 @@ int DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId, 
     auto rows = db.select(fmt::format("SELECT SUM(size) from {}", DFSF::TableNameFragments));
     auto &row = rows[0];
 
-    return std::stoi(row["SUM(size)"]);
+    return std::stoull(row["SUM(size)"]);
 }

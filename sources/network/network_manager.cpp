@@ -504,10 +504,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::DfsState: {
         DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
-        int circulativeSupply = std::stoi(node.blockchain()->getCirculativeSuply().toStdString(10));
-        int blockAmount = std::stoi(node.blockchain()->getRecords().toStdString(10));
-        int dataAmountStoredInNetwork = node.dfs()->totalDfsSize();
-        int dataAmountStored = node.dfs()->calculateDataAmountStored();
+        uint64_t circulativeSupply = std::stoull(node.blockchain()->getCirculativeSuply().toStdString(10));
+        uint64_t blockAmount = std::stoull(node.blockchain()->getRecords().toStdString(10));
+        uint64_t dataAmountStoredInNetwork = node.dfs()->totalDfsSize();
+        uint64_t dataAmountStored = node.dfs()->calculateDataAmountStored();
 
         DataMiningManager dmm;
         double result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,

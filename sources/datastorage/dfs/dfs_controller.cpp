@@ -595,7 +595,7 @@ uint64_t DfsController::calculateDataAmountStored(const std::string &folder) con
     uint64_t size = 0;
 
     for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".storj") {
+        if (entry.is_regular_file() && entry.path().extension() == DFSF::Extension) {
             const std::string actorId = entry.path().parent_path().filename();
             size += DFST::ActorDirFile::dataAmountStoredSize(actorId, entry.path().filename());
         } else if (entry.is_directory()) {
