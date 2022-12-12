@@ -656,9 +656,6 @@ void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
         qDebug() << "Make reward request" << std::stoi(indexBlock.toStdString(10));
         DFSP::StateMessage stateMessage;
         stateMessage.DataAmountStored = node->dfs()->sizeTaken();
-        stateMessage.DataAmountTotalStoredInNetwork = node->dfs()->totalDfsSize();
-        stateMessage.BlockAmount = std::stoull(getLastRealBlock().getIndex().toStdString(10));
-        stateMessage.CirculativeSupply = std::stoull(getCirculativeSuply().toStdString(10));
         node->network()->send_message(stateMessage, MessageType::DfsState);
     }
 }

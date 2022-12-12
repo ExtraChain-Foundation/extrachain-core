@@ -112,3 +112,16 @@ void DataMiningManager::hashingElements(std::vector<std::string> &vector) {
 std::string DataMiningManager::merkleFormula(const std::string &hash1, const std::string &hash2) const {
     return Utils::calcHash(hash1 + hash2);
 }
+
+double DataMiningManager::calculateCoins(int dataAmountStored, int dataAmountTotalStoredInNetwork, int circulativeSupply, int blockAmount, double coefficient) {
+    double coinProducedForNode = 0.0;
+    coinProducedForNode = ((double)dataAmountStored / (double)dataAmountTotalStoredInNetwork)
+        * ((double)circulativeSupply / (double)blockAmount) * coefficient;
+
+    if (coinProducedForNode < 1) {
+        coefficient *= 2;
+        coinProducedForNode = calculateCoins(dataAmountStored, dataAmountTotalStoredInNetwork,
+                                             circulativeSupply, blockAmount, coefficient);
+    }
+    return coinProducedForNode;
+}

@@ -73,6 +73,7 @@ public:
     void increaseSizeTaken(uintmax_t value);
     void insertToFiles(DFSP::AddFileMessage msg);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
+    uint64_t calculateDataAmountStored(const std::string &folder = DFSB::fsActrRoot) const;
 
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);

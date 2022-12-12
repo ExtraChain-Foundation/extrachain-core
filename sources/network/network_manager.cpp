@@ -18,6 +18,7 @@
  */
 
 #include "datastorage/dfs/dfs_controller.h"
+#include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
@@ -503,9 +504,14 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::DfsState: {
         DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
-        BigNumber circulativeSupplyValue((int)state.CirculativeSupply);
-        node.blockchain()->increaseCirculativeSupply(circulativeSupplyValue);
-        state.calc();
+        int circulativeSupply = std::stoi(node.blockchain()->getCirculativeSuply().toStdString(10));
+        int blockAmount = std::stoi(node.blockchain()->getRecords().toStdString(10));
+        int dataAmountStoredInNetwork = node.dfs()->totalDfsSize();
+        int dataAmountStored = node.dfs()->calculateDataAmountStored();
+
+        DataMiningManager dmm;
+        double result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,
+                                           blockAmount, state.Coefficient);
         break;
     }
 
@@ -584,7 +590,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            //to do
+            // to do
             break;
         }
         case MessageStatus::Response: {

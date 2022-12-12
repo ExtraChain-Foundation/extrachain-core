@@ -590,6 +590,21 @@ uint64_t DfsController::calculateFilesSize(const std::string &folder) const {
     return size;
 }
 
+uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const
+{
+    uint64_t size = 0;
+
+    for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".storj") {
+            const std::string actorId = entry.path().parent_path().filename();
+            size += DFST::ActorDirFile::dataAmountStoredSize(actorId, entry.path().filename());
+        } else if (entry.is_directory()) {
+            size += calculateDataAmountStored(entry.path().string());
+        }
+    }
+    return size;
+}
+
 std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                            uint64_t fragmentSize) {
     boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset,

@@ -32,14 +32,16 @@ public:
     explicit DataMiningManager(QObject *parent = nullptr);
 
     void rootMerkleHash(std::vector<std::string> &a, std::vector<MerkleDataBlocks> &branchesTree,
-                           const bool isHahsing, std::string &result);
+                        const bool isHahsing, std::string &result);
     std::string rootMerkleHash(std::string &data);
 
+    double calculateCoins(int dataAmountStored, int dataAmountTotalStoredInNetwork, int circulativeSupply,
+                          int blockAmount, double coefficient);
 private:
-    std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
-                                                          const bool isHahsing);
+    std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
     void hashingElements(std::vector<std::string> &vector);
     std::string merkleFormula(const std::string &hash1, const std::string &hash2) const;
+
 };
 
 #endif // DATA_MINING_MANAGER_H

@@ -34,6 +34,13 @@ std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &
     return path;
 }
 
+std::filesystem::path DFS::Tables::ActorDirFile::storjDbPath(const std::string &actorId, const std::string &storjName)
+{
+    std::string path = DFSB::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter()
+        + storjName;
+    return path;
+}
+
 std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId,
                                                                 uint64_t lastModified) {
     auto db = actorDbConnector(actorId);
@@ -130,4 +137,24 @@ int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId)
     auto row = db.select(fmt::format("SELECT SUM(fileSize) from {}", TableName)).at(0);
 
     return std::stoi(row["SUM(fileSize)"]);
+}
+
+int DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId, const std::string &storjName)
+{
+    DBConnector db(storjDbPath(actorId, storjName));
+    db.open();
+    if (!db.isOpen()) {
+        qFatal("DB Error");
+        return 0;
+    }
+
+    auto count = db.select(fmt::format("SELECT COUNT(size) from {}", DFSF::TableNameFragments))[0];
+    if(std::stoi(count["COUNT(size)"]) == 0) {
+        return 0;
+    }
+
+    auto rows = db.select(fmt::format("SELECT SUM(size) from {}", DFSF::TableNameFragments));
+    auto &row = rows[0];
+
+    return std::stoi(row["SUM(size)"]);
 }

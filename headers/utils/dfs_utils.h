@@ -165,27 +165,15 @@ namespace Packets {
     struct StateMessage {
         StateMessageType StateTypeMessage;
         uint64_t DataAmountStored;
-        uint64_t DataAmountTotalStoredInNetwork;
-        uint64_t BlockAmount;
         double Coefficient = 0.5;
-        uint64_t CirculativeSupply;
         double CoinProducedForNode = 0.0;
         uint64_t CoinProductionAlgorithmTickBlocks = 100;
         float BlockProductionRate = 0.5;
         uint64_t CoinProductionAlgorithmTickPerHour = 18;
 
-        void calc() {
-            CoinProducedForNode = ((double)DataAmountStored / (double)DataAmountTotalStoredInNetwork)
-                * ((double)CirculativeSupply / (double)BlockAmount) * Coefficient;
-
-            if (CoinProducedForNode < 1) {
-                Coefficient *= 2;
-                calc();
-            }
-        }
-        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork, BlockAmount,
-                       Coefficient, CirculativeSupply, CoinProducedForNode, CoinProductionAlgorithmTickBlocks,
-                       BlockProductionRate, CoinProductionAlgorithmTickPerHour)
+        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, Coefficient, CoinProducedForNode,
+                       CoinProductionAlgorithmTickBlocks, BlockProductionRate,
+                       CoinProductionAlgorithmTickPerHour)
     };
 }
 namespace Fragments {
@@ -265,10 +253,12 @@ namespace Tables {
         std::vector<DBRow> getFileDataByName(DBConnector *db, std::string name);
         std::string getLastName(DBConnector &db);
         int totalFileSize(const std::string &actorId);
+        int dataAmountStoredSize(const std::string &actorId, const std::string &storjName);
 
         // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);
         std::filesystem::path actorDbPath(const std::string &actorId);
+        std::filesystem::path storjDbPath(const std::string &actorId, const std::string &storjName);
         DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string &fileHash);
         std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId, uint64_t lastModified = 0);
         bool addDirRows(const std::string &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
