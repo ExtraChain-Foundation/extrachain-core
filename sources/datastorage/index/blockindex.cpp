@@ -442,12 +442,12 @@ BigNumber BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const
 {
     BigNumber circulativeBalanceGenesisBlock(0);
     const auto genesisBlock = getLastGenesisBlock();
-    circulativeBalanceGenesisBlock += calculateCirculativeBalanceBlock(genesisBlock);
 
     const auto dataRows = genesisBlock.extractDataRows();
     for(int numberRow = 0; numberRow < dataRows.size(); numberRow++) {
         const GenesisDataRow dataRow = dataRows[numberRow];
-        if(dataRow.type == DataStorage::typeDataRow::UNIVERSAL) {
+        if(dataRow.type == DataStorage::typeDataRow::UNIVERSAL &&
+            dataRow.token == ActorId("00000000000000000000")) {
             circulativeBalanceGenesisBlock += dataRow.state;
         }
     }
