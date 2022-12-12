@@ -131,8 +131,6 @@ public:
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
 
-    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
-
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
     Block checkBlock(const Block &block);
