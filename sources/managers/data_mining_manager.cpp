@@ -19,6 +19,7 @@
 
 #include "managers/data_mining_manager.h"
 #include "utils/exc_utils.h"
+#include "utils/bignumber_float.h"
 
 DataMiningManager::DataMiningManager(QObject *parent)
     : QObject(parent) {
@@ -111,12 +112,16 @@ std::string DataMiningManager::merkleFormula(const std::string &hash1, const std
     return Utils::calcHash(hash1 + hash2);
 }
 
-double DataMiningManager::calculateCoins(uint64_t dataAmountStored, uint64_t dataAmountTotalStoredInNetwork,
-                                         uint64_t circulativeSupply, uint64_t blockAmount,
+BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored, BigNumberFloat dataAmountTotalStoredInNetwork,
+                                         BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
                                          double coefficient) {
-    double coinProducedForNode = 0.0;
-    coinProducedForNode = ((double)dataAmountStored / (double)dataAmountTotalStoredInNetwork)
-        * ((double)circulativeSupply / (double)blockAmount) * coefficient;
+    if(dataAmountStored == 0 || dataAmountTotalStoredInNetwork == 0 || circulativeSupply == 0
+        || blockAmount == 0) {
+        return BigNumberFloat();
+    }
+    BigNumberFloat coinProducedForNode(0);
+    coinProducedForNode = (dataAmountStored / dataAmountTotalStoredInNetwork)
+        * (circulativeSupply / blockAmount) * coefficient;
 
     if (coinProducedForNode < 1) {
         coefficient *= 2;

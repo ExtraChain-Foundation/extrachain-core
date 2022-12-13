@@ -20,6 +20,7 @@
 #ifndef DATA_MINING_MANAGER_H
 #define DATA_MINING_MANAGER_H
 
+#include "utils/bignumber_float.h"
 #include <QObject>
 #include <string>
 
@@ -35,8 +36,8 @@ public:
                         const bool isHahsing, std::string &result);
     std::string rootMerkleHash(std::string &data);
 
-    double calculateCoins(uint64_t dataAmountStored, uint64_t dataAmountTotalStoredInNetwork, uint64_t circulativeSupply,
-                          uint64_t blockAmount, double coefficient);
+    BigNumberFloat calculateCoins(BigNumberFloat dataAmountStored, BigNumberFloat dataAmountTotalStoredInNetwork, BigNumberFloat circulativeSupply,
+                          BigNumberFloat blockAmount, double coefficient);
 private:
     std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
     void hashingElements(std::vector<std::string> &vector);

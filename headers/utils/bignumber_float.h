@@ -42,10 +42,10 @@
     #define UPDATE_DEBUG()
 #endif
 
-namespace BigNumberUtils {
-const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-                                   '2', '3', '4', '5', '6', '7', '8', '9' };
-}
+//namespace BigNumberUtils {
+//const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+//                                   '2', '3', '4', '5', '6', '7', '8', '9' };
+//}
 
 /**
  * Data type for big hex numbers for addresses

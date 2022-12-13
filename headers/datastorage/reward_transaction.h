@@ -22,6 +22,7 @@
 
 #include "datastorage/actor.h"
 #include "utils/bignumber.h"
+#include "utils/bignumber_float.h"
 #include "utils/dfs_utils.h"
 #include "datastorage/transaction.h"
 #include <QByteArray>
@@ -65,6 +66,7 @@ private:
 class EXTRACHAIN_EXPORT RewardTransaction : public Transaction {
     ActorId senderReceiver;
     TransactionRewardData rewardData; // reward additional payload field
+    BigNumberFloat amountReward;
 
 public:
     // Construct empty transaction
@@ -104,9 +106,12 @@ public:
     void insertAdditionalData(AdditionalData& additionalData);
 
     Transaction convertToTransaction();
+    void setAmountReward(const BigNumberFloat& value);
+
+    BigNumberFloat getAmountReward() const;
 
     MSGPACK_DEFINE(senderReceiver, amount, date, rewardData, token, prevBlock, gas, hop, hash, approver,
-                   producer, digSig)
+                   producer, digSig, amountReward)
 protected:
     void calcAmount();
 };

@@ -90,6 +90,14 @@ Transaction RewardTransaction::convertToTransaction()
     return tx;
 }
 
+void RewardTransaction::setAmountReward(const BigNumberFloat &value) {
+    amountReward = value;
+}
+
+BigNumberFloat RewardTransaction::getAmountReward() const {
+    return amountReward;
+}
+
 void RewardTransaction::calcAmount() {
     int result = 0;
     for (const auto &data : rewardData.additionalData) {

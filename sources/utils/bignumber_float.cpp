@@ -18,6 +18,7 @@
  */
 
 #include "utils/bignumber_float.h"
+#include "utils/bignumber.h"
 #include <exception>
 
 using boost::multiprecision::cpp_bin_float_50;

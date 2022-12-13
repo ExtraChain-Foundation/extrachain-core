@@ -24,6 +24,7 @@
 #include "managers/tx_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
+#include "utils/bignumber_float.h"
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -505,10 +506,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::DfsState: {
         DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
-        uint64_t circulativeSupply = std::stoull(node.blockchain()->getCirculativeSuply().toStdString(10));
-        uint64_t blockAmount = std::stoull(node.blockchain()->getRecords().toStdString(10));
-        uint64_t dataAmountStoredInNetwork = node.dfs()->totalDfsSize();
-        uint64_t dataAmountStored = node.dfs()->calculateDataAmountStored();
+        BigNumberFloat circulativeSupply(node.blockchain()->getCirculativeSuply().toStdString(10));
+        BigNumberFloat blockAmount(node.blockchain()->getRecords().toStdString(10));
+        BigNumberFloat dataAmountStoredInNetwork(std::to_string(node.dfs()->totalDfsSize()));
+        BigNumberFloat dataAmountStored(std::to_string(node.dfs()->calculateDataAmountStored()));
 
         std::cout << "circulativeSupply" << circulativeSupply << std::endl
                  << "blockAmount" << blockAmount << std::endl
@@ -517,9 +518,14 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                  << "coef" << state.Coefficient << std::endl;
 
         DataMiningManager dmm;
-        double result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,
-                                           blockAmount, state.Coefficient);
+        auto result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,
+                                         blockAmount, state.Coefficient);
         qDebug() << "result: " << result;
+
+        RewardTransaction rewardTx;
+        rewardTx.setSenderReceiver(node.accountController()->mainActor().id());
+        rewardTx.setAmountReward(result);
+        node.network()->send_message(rewardTx, MessageType::BlockchainDataMiningRewardTransaction);
         break;
     }
 
@@ -560,16 +566,15 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::BlockchainDataMiningRewardTransaction: {
+        RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
         switch (status) {
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
             node.verifyHashProcessing(rewardTx, messageId);
             break;
         }
         case MessageStatus::Response: {
-            RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
             node.txManager()->addTransaction(rewardTx.convertToTransaction());
             break;
         }
