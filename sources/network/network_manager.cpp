@@ -233,6 +233,7 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     if (!isActiveConnectionExists()) {
+        messageReceived(serialized_message, receiver_identifier);
         qDebug() << "[NetworkManager] Save message to cache";
         saveToCache(serialized_message, typeSend, receiver_identifier);
         return;
@@ -509,9 +510,16 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         uint64_t dataAmountStoredInNetwork = node.dfs()->totalDfsSize();
         uint64_t dataAmountStored = node.dfs()->calculateDataAmountStored();
 
+        std::cout << "circulativeSupply" << circulativeSupply << std::endl
+                 << "blockAmount" << blockAmount << std::endl
+                 << "dataAmountStoredInNetwork" << dataAmountStoredInNetwork << std::endl
+                 << "dataAmountStored" << dataAmountStored << std::endl
+                 << "coef" << state.Coefficient << std::endl;
+
         DataMiningManager dmm;
         double result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,
                                            blockAmount, state.Coefficient);
+        qDebug() << "result: " << result;
         break;
     }
 

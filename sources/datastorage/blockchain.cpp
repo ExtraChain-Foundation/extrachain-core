@@ -655,8 +655,9 @@ void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
     if (indexBlock % DFSR::coinProductionAlgorithmTick == 0) {
         qDebug() << "Make reward request" << std::stoi(indexBlock.toStdString(10));
         DFSP::StateMessage stateMessage;
-        stateMessage.DataAmountStored = node->dfs()->sizeTaken();
-        node->network()->send_message(stateMessage, MessageType::DfsState);
+        node->network()->send_message(stateMessage, MessageType::DfsState,
+                                      MessageStatus::Response, "234234234312345",
+                                      Config::Net::TypeSend::Focused);
     }
 }
 
@@ -971,16 +972,15 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value)
 void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId) {
     auto mainActor = node->accountController()->mainActor();
     if (mainActor.id() == node->actorIndex()->firstId()) {
-        qDebug() << "sendCoinReward" << receiver.toStdString().c_str() << amount;
         Transaction tx;
         tx.setSender(mainActor.id());
         tx.setReceiver(receiver);
         tx.setAmount(amount);
         node->network()->send_message(tx.serialize(), MessageType::BlockchainTransaction);
     } else {
-        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
-        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
-                                      messageId, Config::Net::TypeSend::All);
+//        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
+//        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
+//                                      messageId, Config::Net::TypeSend::All);
     }
 }
 
