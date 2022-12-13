@@ -590,11 +590,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            // to do
+            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin);
             break;
         }
         case MessageStatus::Response: {
-            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin);
+            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin, messageId);
             break;
         }
         }
