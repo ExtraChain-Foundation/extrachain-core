@@ -580,7 +580,7 @@ uint64_t DfsController::calculateFilesSize(const std::string &folder) const {
 
     for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
         if (entry.path().filename() == DFS::Basic::fsMapName) {
-            const std::string actorId = entry.path().parent_path().filename();
+            const std::string actorId = entry.path().parent_path().filename().string();
             size += DFST::ActorDirFile::totalFileSize(actorId);
         } else if (entry.is_directory()) {
             size += calculateFilesSize(entry.path().string());
@@ -590,14 +590,13 @@ uint64_t DfsController::calculateFilesSize(const std::string &folder) const {
     return size;
 }
 
-uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const
-{
+uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const {
     uint64_t size = 0;
 
     for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
         if (entry.is_regular_file() && entry.path().extension() == DFSF::Extension) {
-            const std::string actorId = entry.path().parent_path().filename();
-            size += DFST::ActorDirFile::dataAmountStoredSize(actorId, entry.path().filename());
+            const std::string actorId = entry.path().parent_path().filename().string();
+            size += DFST::ActorDirFile::dataAmountStoredSize(actorId, entry.path().filename().string());
         } else if (entry.is_directory()) {
             size += calculateDataAmountStored(entry.path().string());
         }

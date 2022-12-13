@@ -34,10 +34,10 @@ std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &
     return path;
 }
 
-std::filesystem::path DFS::Tables::ActorDirFile::storjDbPath(const std::string &actorId, const std::string &storjName)
-{
-    std::string path = DFSB::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter()
-        + storjName;
+std::filesystem::path DFS::Tables::ActorDirFile::storjDbPath(const std::string &actorId,
+                                                             const std::string &storjName) {
+    std::string path =
+        DFSB::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter() + storjName;
     return path;
 }
 
@@ -126,8 +126,7 @@ std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::str
         + fileName;
 }
 
-int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId)
-{
+int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
@@ -139,9 +138,9 @@ int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId)
     return std::stoi(row["SUM(fileSize)"]);
 }
 
-uint64_t DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId, const std::string &storjName)
-{
-    DBConnector db(storjDbPath(actorId, storjName));
+uint64_t DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId,
+                                                         const std::string &storjName) {
+    DBConnector db(storjDbPath(actorId, storjName).string());
     db.open();
     if (!db.isOpen()) {
         qFatal("DB Error");
@@ -149,7 +148,7 @@ uint64_t DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &acto
     }
 
     auto count = db.select(fmt::format("SELECT COUNT(size) from {}", DFSF::TableNameFragments))[0];
-    if(std::stoi(count["COUNT(size)"]) == 0) {
+    if (std::stoi(count["COUNT(size)"]) == 0) {
         return 0;
     }
 
