@@ -1134,9 +1134,9 @@ void Blockchain::VerifyTx(Transaction tx) {
 void Blockchain::proveTx(Transaction *tx) {
     qDebug() << "proveTx: started";
     const bool isRewardTx = tx->isRewardTransaction();
-
-    ActorId targetSender = tx->getSender();
-    ActorId targetReceiver = tx->getReceiver();
+    RewardTransaction txReward(*tx);
+    ActorId targetSender =   isRewardTx ? txReward.getSenderReceiver() : tx->getSender();
+    ActorId targetReceiver = isRewardTx ? txReward.getSenderReceiver() : tx->getReceiver();
     Actor<KeyPublic> senderActor;
     if (!targetSender.isEmpty())
         senderActor = node->actorIndex()->getActor(targetSender);
@@ -1213,7 +1213,9 @@ void Blockchain::proveTx(Transaction *tx) {
                 return;
             }
 
-            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0) {
+            auto mainActorId = node->accountController()->mainActor().id();
+            ActorId firstId = node->actorIndex()->firstId();
+            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0 && mainActorId == firstId) {
                 qDebug() << senderCurrentBalance << tx->getAmount();
                 qDebug() << "Transaction "
                             "not approved: sender's or receiver's balance will be < 0";
