@@ -319,7 +319,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinReward(const ActorId &receiver, const int &amount);
+    void sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining
@@ -379,7 +379,7 @@ signals:
      * @brief possibleMiningChange
      * @param possibleMinig
      */
-    void possibleMiningChange(const bool& possibleMinig);
+    void possibleMiningChange(const bool &possibleMinig);
 
 public:
     void addBlockToBlockchain(Block &block);
