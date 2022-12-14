@@ -30,8 +30,8 @@ Blockchain::Blockchain(ExtraChainNode *node, bool fileMode)
     this->node = node;
     genBlockData.clear();
 
-    setCirculativeSupply(blockIndex.calculateCirculativeBalance());
-    increaseCirculativeSupply(blockIndex.calculateCirculativeBalanceLastGenesisBlock());
+    //    setCirculativeSupply(blockIndex.calculateCirculativeBalance());
+    //    increaseCirculativeSupply(blockIndex.calculateCirculativeBalanceLastGenesisBlock());
 }
 
 Blockchain::~Blockchain() {
@@ -652,12 +652,11 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
 }
 
 void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
-    if (indexBlock % DFSR::coinProductionAlgorithmTick == 0) {
+    if (indexBlock % 3 == 0) {
         qDebug() << "Make reward request" << std::stoi(indexBlock.toStdString(10));
         DFSP::StateMessage stateMessage;
-        node->network()->send_message(stateMessage, MessageType::DfsState,
-                                      MessageStatus::Response, "234234234312345",
-                                      Config::Net::TypeSend::Focused);
+        node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Response,
+                                      "234234234312345", Config::Net::TypeSend::Focused);
     }
 }
 
@@ -702,7 +701,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
         saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
-
+        qDebug() << (blockType == Config::DATA_BLOCK_TYPE) << blockType.c_str();
         makeCoinProduction(indexBlock);
 
         break;
@@ -963,8 +962,7 @@ void Blockchain::setCirculativeSupply(const BigNumber &newValue) {
     circulativeSupply = newValue;
 }
 
-void Blockchain::increaseCirculativeSupply(const BigNumber &value)
-{
+void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     circulativeSupply += value;
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
@@ -978,14 +976,15 @@ void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount, cons
         tx.setAmount(amount);
         node->network()->send_message(tx.serialize(), MessageType::BlockchainTransaction);
     } else {
-//        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin = amount };
-//        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
-//                                      messageId, Config::Net::TypeSend::All);
+        //        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin =
+        //        amount }; node->network()->send_message(coinReward, MessageType::BlockchainCoinReward,
+        //        MessageStatus::Response,
+        //                                      messageId, Config::Net::TypeSend::All);
     }
 }
 
 void Blockchain::setPossibleMining(const bool &value) {
-    if(value != possibleMining) {
+    if (value != possibleMining) {
         emit possibleMiningChange(value);
     }
     possibleMining = value;
@@ -1132,10 +1131,14 @@ void Blockchain::VerifyTx(Transaction tx) {
 }
 
 void Blockchain::proveTx(Transaction *tx) {
-    qDebug() << "proveTx: started";
+    qDebug() << "proveTx: started" << tx->getTypeTx();
     const bool isRewardTx = tx->isRewardTransaction();
-    RewardTransaction txReward(*tx);
-    ActorId targetSender =   isRewardTx ? txReward.getSenderReceiver() : tx->getSender();
+    RewardTransaction txReward;
+    if (isRewardTx) {
+        txReward = RewardTransaction(*tx);
+        qDebug() << txReward.getAmountReward() << tx->getAmount();
+    }
+    ActorId targetSender = isRewardTx ? txReward.getSenderReceiver() : tx->getSender();
     ActorId targetReceiver = isRewardTx ? txReward.getSenderReceiver() : tx->getReceiver();
     Actor<KeyPublic> senderActor;
     if (!targetSender.isEmpty())
@@ -1188,13 +1191,13 @@ void Blockchain::proveTx(Transaction *tx) {
         return;
     }
 
-
-    // if !sig
-    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
-        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
-        txManager->removeUnApprovedTransaction(tx);
-        return;
-    }
+    //    // if !sig
+    //    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString()))
+    //    {
+    //        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
+    //        txManager->removeUnApprovedTransaction(tx);
+    //        return;
+    //    }
 
     // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.isEmpty()) {
@@ -1215,7 +1218,8 @@ void Blockchain::proveTx(Transaction *tx) {
 
             auto mainActorId = node->accountController()->mainActor().id();
             ActorId firstId = node->actorIndex()->firstId();
-            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0 && mainActorId == firstId) {
+            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0
+                && mainActorId == firstId) {
                 qDebug() << senderCurrentBalance << tx->getAmount();
                 qDebug() << "Transaction "
                             "not approved: sender's or receiver's balance will be < 0";

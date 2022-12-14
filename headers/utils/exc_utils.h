@@ -504,7 +504,10 @@ enum class TxParam {
 } // namespace SearchEnum
 
 namespace TypeTransaction {
-    static const std::string rewardTx = "reward:";
+
+enum TypeTx {
+    Transaction = 0, RewardTransaction
+};
 }
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType {

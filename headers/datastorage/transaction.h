@@ -33,6 +33,7 @@ struct TransactionData {
     MSGPACK_DEFINE(hash, path)
 };
 
+
 class EXTRACHAIN_EXPORT Transaction {
 
     ActorId sender;
@@ -55,6 +56,7 @@ protected:
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string digSig;
+    int typeTx;
 
 public:
     // Construct empty transaction
@@ -142,9 +144,11 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
+    int getTypeTx() const;
+    virtual void setTypeTx(int newTypeTx);
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
-                   digSig)
+                   digSig, typeTx)
 };
 
 #endif // TRANSACTION_H

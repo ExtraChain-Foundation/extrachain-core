@@ -104,6 +104,7 @@ void TransactionManager::makeBlock() {
     //    qDebug() << QString("Attempting to make a block from [%1]
     //    txs)").arg(txs);
 
+    qDebug() << "straty makeBlock";
     Block lastBlock = blockchain->getLastBlock();
     if (pendingTxs.empty()) {
         Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
@@ -124,11 +125,12 @@ void TransactionManager::makeBlock() {
     // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);
     QByteArray data = convertTxs(pendingTxs);
-
+    qDebug() << "convertTxs" << data;
+    lastBlock = blockchain->getLastRealBlock();
     Block block(data, lastBlock);
     // QList<Transaction> x = block.extractTransactions();
     blockchain->signBlock(block);
-    qDebug() << "Created block:" << block.getIndex();
+    qDebug() << "Created block:" << block.getIndex() << block.getDigSig().c_str();
     blockchain->addBlock(block);
 
     // fee section start

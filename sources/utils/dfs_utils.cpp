@@ -133,6 +133,11 @@ int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId) {
         return 0;
     }
 
+    auto count = db.select(fmt::format("SELECT COUNT(fileSize) from {}", TableName))[0];
+    if (std::stoi(count["COUNT(fileSize)"]) == 0) {
+        return 0;
+    }
+
     auto row = db.select(fmt::format("SELECT SUM(fileSize) from {}", TableName)).at(0);
 
     return std::stoi(row["SUM(fileSize)"]);
