@@ -47,7 +47,7 @@ const std::string &GenesisBlock::getDataForDigSig() const {
     return Block::getDataForDigSig();
 }
 
-QByteArray GenesisBlock::getDataForHash() const {
+std::string GenesisBlock::getDataForHash() const {
     return Block::getDataForHash();
 }
 

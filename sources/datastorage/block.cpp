@@ -77,8 +77,8 @@ Block Block::operator=(const Block &block) {
 }
 
 void Block::calcHash() {
-    QByteArray resultHash = Utils::calcHash(getDataForHash());
-    if (!resultHash.isEmpty()) {
+    std::string resultHash = Utils::calcHash(getDataForHash());
+    if (!resultHash.empty()) {
         this->hash = resultHash;
     }
 }
@@ -87,14 +87,14 @@ void Block::setType(const std::string &value) {
     m_type = value;
 }
 
-QByteArray Block::getDataForHash() const {
-    QByteArray idHash = Utils::calcHash(getIndex().toByteArray());
+std::string Block::getDataForHash() const {
+    std::string idHash = Utils::calcHash(getIndex().toStdString());
     auto list = extractTransactions();
     if (list.empty())
         return idHash;
-    QByteArray txHash = Utils::calcHash(QByteArray::fromStdString(list[0].serialize()));
+    std::string txHash = Utils::calcHash(list[0].serialize());
     for (int i = 1; i < list.size(); i++) {
-        QByteArray tmpTxHash = Utils::calcHash(QByteArray::fromStdString(list[i].serialize()));
+        std::string tmpTxHash = Utils::calcHash(list[i].serialize());
         txHash = Utils::calcHash(txHash + tmpTxHash);
     }
     return idHash + txHash;

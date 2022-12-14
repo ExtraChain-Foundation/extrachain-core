@@ -5,7 +5,8 @@
 
 class EXTRACHAIN_EXPORT DummyBlock : public Block {
 public:
-    DummyBlock() : Block() {
+    DummyBlock()
+        : Block() {
         this->m_type = Config::DUMMY_BLOCK_TYPE;
     }
 
@@ -47,7 +48,7 @@ public:
      * Override in subclasses
      * @return digSig data
      */
-    virtual QByteArray getDataForHash() const override {
+    virtual std::string getDataForHash() const override {
         return Block::getDataForHash();
     };
     virtual const std::string &getDataForDigSig() const override {

@@ -96,7 +96,7 @@ public:
     // Block interface
 public:
     void addRow(const GenesisDataRow &row);
-    QByteArray getDataForHash() const override;           // deprecate?
+    std::string getDataForHash() const override;          // deprecate?
     const std::string &getDataForDigSig() const override; // deprecate?
     bool deserialize(const QByteArray &serialized) override;
     QByteArray serialize() const override;

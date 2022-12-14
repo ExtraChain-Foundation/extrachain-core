@@ -103,7 +103,7 @@ protected:
      * Override in subclasses
      * @return digSig data
      */
-    virtual QByteArray getDataForHash() const;
+    virtual std::string getDataForHash() const;
     virtual const std::string &getDataForDigSig() const;
 
 public:
