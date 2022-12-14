@@ -106,7 +106,7 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const QByteArray &data) const;
+    void saveTxInfoInEC(const std::string &data) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
@@ -328,7 +328,7 @@ public:
 
     /**
      * @brief Get possible mining
-    */
+     */
     bool getPossibleMining() const;
 
 signals:

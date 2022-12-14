@@ -103,7 +103,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
         // TEST
         Block lastBlock = m_blockchain->getLastBlock();
-        Block block("", lastBlock);
+        Block block(std::string(""), lastBlock);
         //        m_blockchain->addBlock(block);
         // TEST
 

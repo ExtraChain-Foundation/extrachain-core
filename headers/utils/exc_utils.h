@@ -239,10 +239,8 @@ namespace Serialization {
 static const int TRANSACTION_FIELD_SIZE = 4;
 static const int DEFAULT_FIELD_SIZE = 8;
 
-EXTRACHAIN_EXPORT QByteArray serialize(const QList<QByteArray> &list,
-                                       const int &fiels_size = DEFAULT_FIELD_SIZE);
-EXTRACHAIN_EXPORT QList<QByteArray> deserialize(const QByteArray &serialized,
-                                                const int &fiels_size = DEFAULT_FIELD_SIZE);
+EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
+EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
 
 bool isEmpty(const QByteArray &bytes);
 bool isEmpty(const std::string &str);
@@ -506,7 +504,8 @@ enum class TxParam {
 namespace TypeTransaction {
 
 enum TypeTx {
-    Transaction = 0, RewardTransaction
+    Transaction = 0,
+    RewardTransaction
 };
 }
 struct EXTRACHAIN_EXPORT Notification {

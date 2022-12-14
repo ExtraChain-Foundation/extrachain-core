@@ -33,18 +33,17 @@ struct TransactionData {
     MSGPACK_DEFINE(hash, path)
 };
 
-
 class EXTRACHAIN_EXPORT Transaction {
-
     ActorId sender;
     ActorId receiver;
+
 protected:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
     void calcHash();
-    BigNumber amount;    // coin amount
+    BigNumber amount; // coin amount
     long long date;
     std::string data;    // additional payload field
     ActorId token;       // token contract address
@@ -64,6 +63,8 @@ public:
 
     // Deserialize already created transaction
     Transaction(const QByteArray &serialized);
+    // Deserialize already created transaction
+    Transaction(const std::string &serialized);
 
     // Construct transaction
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount);
@@ -111,7 +112,6 @@ public:
     QByteArray getDigSig() const;
     ActorId getProducer() const;
 
-
     virtual bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;
     bool operator!=(const Transaction &transaction) const;
@@ -119,6 +119,7 @@ public:
 
     std::string serialize() const;
     bool deserialize(const QByteArray &serialized);
+    bool deserialize(const std::string &serialized);
     QString toString() const;
     long long getDate() const;
     void setDate(long long value);

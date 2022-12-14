@@ -158,11 +158,12 @@ void TransactionManager::proveTransactions() {
 }
 
 QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs) {
-    QList<QByteArray> l;
+    std::vector<std::string> l;
     for (const Transaction &tx : txs) {
-        l << QByteArray::fromStdString(tx.serialize());
+        l.push_back(tx.serialize());
     }
-    return Serialization::serialize(l, Serialization::TRANSACTION_FIELD_SIZE);
+    std::string s = Serialization::serialize(l);
+    return QByteArray::fromStdString(s);
 }
 
 BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender) {

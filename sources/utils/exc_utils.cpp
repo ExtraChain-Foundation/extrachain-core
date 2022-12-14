@@ -235,38 +235,12 @@ QString Utils::fileMimeSuffix(const QString &filePath) {
     return type.preferredSuffix();
 }
 
-QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fiels_size) {
-    QByteArray serialized = "";
-    for (const QByteArray &param : list) {
-        serialized += Utils::intToByteArray(param.size(), fiels_size);
-        serialized += param;
-    }
-    return serialized;
+std::string Serialization::serialize(const std::vector<std::string> &list) {
+    return MessagePack::serialize(list);
 }
 
-QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const int &fiels_size) {
-    if (serialized.isEmpty() || serialized.length() <= fiels_size) {
-        return {};
-    }
-
-    QList<QByteArray> list = {};
-    int pos = 0;
-    while (pos < serialized.size()) {
-        bool ok = true;
-        int count = serialized.mid(pos, fiels_size)
-                        .toInt(&ok); // Utils::qByteArrayToInt(serialized.mid(pos, fiels_size));
-        if (!ok)
-            return list;
-        pos += fiels_size;
-        QByteArray el = serialized.mid(pos, count);
-        pos += count;
-        if (el.isEmpty())
-            list.append(el);
-        else
-            list << el;
-    }
-    //    serialized.remove(0, pos);
-    return list;
+std::vector<std::string> Serialization::deserialize(const std::string &serialized) {
+    return MessagePack::deserialize<std::vector<std::string>>(serialized);
 }
 
 void Utils::wipeDataFiles() {

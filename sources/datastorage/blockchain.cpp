@@ -133,8 +133,8 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
-    QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
+void Blockchain::saveTxInfoInEC(const std::string &data) const {
+    std::vector<std::string> l = Serialization::deserialize(data);
     std::vector<DBRow> extractData;
     DBRow resultData;
 
@@ -700,7 +700,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-        saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
+        saveTxInfoInEC(block.getData());
         qDebug() << (blockType == Config::DATA_BLOCK_TYPE) << blockType.c_str();
         makeCoinProduction(indexBlock);
 
@@ -814,10 +814,10 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
             if (std::find(transactionsB.begin(), transactionsB.end(), tx) == transactionsB.end())
                 resultList.push_back(tx);
         }
-        QList<QByteArray> list;
+        std::vector<std::string> list;
         for (const Transaction &tx : resultList)
-            list << tx.serialize().c_str();
-        QByteArray dataBlock = Serialization::serialize(list);
+            list.push_back(tx.serialize());
+        std::string dataBlock = Serialization::serialize(list);
         Block mergedBlock(dataBlock, prev);
         signBlock(mergedBlock);
         return mergedBlock;
@@ -857,13 +857,14 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
             } else
                 count++;
         }
-        QList<QByteArray> list;
+        std::vector<std::string> list;
         if (count < Config::NECESSARY_SAME_TX)
             return GenesisBlock();
         for (const GenesisDataRow &gn : resultList)
-            list << gn.serialize();
-        QByteArray genData = Serialization::serialize(list);
-        GenesisBlock mergedBlock(genData, prev, QByteArray::fromStdString(blockA.getPrevGenHash()));
+            list.push_back(gn.serialize());
+        std::string genData = Serialization::serialize(list);
+        GenesisBlock mergedBlock(QByteArray::fromStdString(genData), prev,
+                                 QByteArray::fromStdString(blockA.getPrevGenHash()));
         signBlock(mergedBlock);
         return mergedBlock;
     }

@@ -44,23 +44,27 @@ public:
         , type(type) {
     }
 
-    explicit GenesisDataRow(const QByteArray &serialized) {
+    explicit GenesisDataRow(const std::string &serialized) {
         deserialize(serialized);
     }
 
-    QByteArray serialize() const {
-        QList<QByteArray> l;
-        l << actorId.toByteArray() << state.toByteArray() << token.toByteArray() << QByteArray::number(type);
-        return Serialization::serialize(l, Serialization::DEFAULT_FIELD_SIZE);
+    std::string serialize() const {
+        std::vector<std::string> l;
+
+        l.push_back(actorId.toStdString());
+        l.push_back(state.toStdString());
+        l.push_back(token.toStdString());
+        l.push_back(std::to_string(type));
+        return Serialization::serialize(l);
     }
 
-    void deserialize(const QByteArray &serialized) {
-        QList<QByteArray> l = Serialization::deserialize(serialized, Serialization::DEFAULT_FIELD_SIZE);
+    void deserialize(const std::string &serialized) {
+        std::vector<std::string> l = Serialization::deserialize(serialized);
         if (l.size() == 4) {
-            actorId = l.at(0).toStdString();
-            state = BigNumber(l.at(1).toStdString());
-            token = l.at(2).toStdString();
-            type = DataStorage::typeDataRow(l.at(3).toInt());
+            actorId = l.at(0);
+            state = BigNumber(l.at(1));
+            token = l.at(2);
+            type = DataStorage::typeDataRow(std::stoi(l.at(3)));
         }
     }
 

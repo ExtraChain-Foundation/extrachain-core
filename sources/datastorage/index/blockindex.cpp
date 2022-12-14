@@ -403,8 +403,7 @@ QString BlockIndex::buildFilePath(const BigNumber &id) const {
     return pathToFolder + "/" + id.toByteArray();
 }
 
-BigNumber BlockIndex::calculateCirculativeBalance() const
-{
+BigNumber BlockIndex::calculateCirculativeBalance() const {
     BigNumber circulativeBalance = 0;
     bool isGenesisBlockFounde = false;
     auto lastId = lastSavedId;
@@ -420,17 +419,16 @@ BigNumber BlockIndex::calculateCirculativeBalance() const
     return circulativeBalance;
 }
 
-BigNumber BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const
-{
+BigNumber BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const {
     BigNumber circulativeBalanceBlock(0);
 
     const auto allTx = block.extractTransactions();
-    if(allTx.empty())
+    if (allTx.empty())
         return BigNumber(0);
 
-    for(int numberTx = 0; numberTx < allTx.size(); numberTx++) {
+    for (int numberTx = 0; numberTx < allTx.size(); numberTx++) {
         const Transaction tx = allTx[numberTx];
-        if(tx.isRewardTransaction()) {
+        if (tx.isRewardTransaction()) {
             RewardTransaction rewardTx(tx);
             circulativeBalanceBlock += rewardTx.getAmount();
         }
@@ -438,16 +436,15 @@ BigNumber BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const
     return circulativeBalanceBlock;
 }
 
-BigNumber BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const
-{
+BigNumber BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const {
     BigNumber circulativeBalanceGenesisBlock(0);
     const auto genesisBlock = getLastGenesisBlock();
 
     const auto dataRows = genesisBlock.extractDataRows();
-    for(int numberRow = 0; numberRow < dataRows.size(); numberRow++) {
+    for (int numberRow = 0; numberRow < dataRows.size(); numberRow++) {
         const GenesisDataRow dataRow = dataRows[numberRow];
-        if(dataRow.type == DataStorage::typeDataRow::UNIVERSAL &&
-            dataRow.token == ActorId("00000000000000000000")) {
+        if (dataRow.type == DataStorage::typeDataRow::UNIVERSAL
+            && dataRow.token == ActorId("00000000000000000000")) {
             circulativeBalanceGenesisBlock += dataRow.state;
         }
     }
@@ -690,8 +687,14 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
             type = QByteArray(tmp.at("type").c_str());
-            QByteArray sign = Serialization::serialize({ key, value, type }, 4);
-            signes += Serialization::serialize({ sign }, 4);
+            std::vector<std::string> v;
+            v.push_back(key.toStdString());
+            v.push_back(value.toStdString());
+            v.push_back(type.toStdString());
+            std::string sign = Serialization::serialize(v);
+            std::vector<std::string> v1;
+            v1.push_back(sign);
+            signes += Serialization::serialize(v1);
         }
         list << signes;
         b.initFields(list);
@@ -725,8 +728,14 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
             key = QByteArray(tmp.at("actorId").c_str());
             value = QByteArray(tmp.at("digSig").c_str());
             type = QByteArray(tmp.at("type").c_str());
-            QByteArray sign = Serialization::serialize({ key, value, type }, 4);
-            signes += Serialization::serialize({ sign }, 4);
+            std::vector<std::string> v;
+            v.push_back(key.toStdString());
+            v.push_back(value.toStdString());
+            v.push_back(type.toStdString());
+            std::string sign = Serialization::serialize(v);
+            std::vector<std::string> v1;
+            v1.push_back(sign);
+            signes += Serialization::serialize(v1);
         }
         list << signes;
         b.initFields(list);

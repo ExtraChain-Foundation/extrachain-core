@@ -41,6 +41,16 @@ Transaction::Transaction(const QByteArray &serialized) {
     calcHash();
 }
 
+Transaction::Transaction(const std::string &serialized) {
+    if (serialized.empty()) {
+        qDebug() << "Incorrect TX";
+        return;
+    }
+
+    deserialize(serialized);
+    calcHash();
+}
+
 Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount) {
     this->sender = sender;
     this->receiver = receiver;
@@ -93,18 +103,15 @@ void Transaction::setProducer(const ActorId &value) {
     producer = value;
 }
 
-void Transaction::setDigSig(const std::string &value)
-{
+void Transaction::setDigSig(const std::string &value) {
     digSig = value;
 }
 
-void Transaction::setApprover(const ActorId &value)
-{
+void Transaction::setApprover(const ActorId &value) {
     approver = value;
 }
 
-void Transaction::setHash(const std::string &value)
-{
+void Transaction::setHash(const std::string &value) {
     hash = value;
 }
 
@@ -120,14 +127,11 @@ void Transaction::setAmount(const BigNumber &value) {
     amount = value;
 }
 
-
-
 void Transaction::setData(const QByteArray &value) {
     data = value;
 }
 
-void Transaction::setData(const std::string &value)
-{
+void Transaction::setData(const std::string &value) {
     data = value;
 }
 
@@ -150,13 +154,11 @@ void Transaction::calcHash() {
     }
 }
 
-int Transaction::getTypeTx() const
-{
+int Transaction::getTypeTx() const {
     return typeTx;
 }
 
-void Transaction::setTypeTx(int newTypeTx)
-{
+void Transaction::setTypeTx(int newTypeTx) {
     typeTx = newTypeTx;
 }
 
@@ -271,6 +273,10 @@ bool Transaction::isEmpty() const {
 }
 
 bool Transaction::deserialize(const QByteArray &serialized) {
+    *this = MessagePack::deserialize<Transaction>(serialized);
+    return true;
+}
+bool Transaction::deserialize(const std::string &serialized) {
     *this = MessagePack::deserialize<Transaction>(serialized);
     return true;
 }

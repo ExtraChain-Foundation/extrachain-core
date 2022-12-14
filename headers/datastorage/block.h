@@ -87,6 +87,13 @@ public:
      * @param prev
      */
     Block(const QByteArray &data, const Block &prev);
+    /**
+     * @brief Block
+     * Initial block construction, prev = nullptr for first block
+     * @param data
+     * @param prev
+     */
+    Block(const std::string &data, const Block &prev);
 
     virtual ~Block();
 
@@ -113,7 +120,7 @@ public:
      * @brief add data to this block
      * @param data
      */
-    void addData(const QByteArray &data);
+    void addData(const std::string &data);
     /**
      * @brief extract non-empty transactions from data
      * @return transaction list

@@ -284,11 +284,11 @@ void NetworkManager::sendFromCache() {
         return;
     }
 
-    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
+    std::vector<std::string> allPackages = Serialization::deserialize(file.readAll().toStdString());
     file.close();
     file.remove();
 
-    for (const QByteArray &packageData : qAsConst(allPackages)) {
+    for (const std::string &packageData : qAsConst(allPackages)) {
         auto [serialized_message, typeSend, receiver_identifier] =
             MessagePack::deserialize<std::tuple<std::string, Config::Net::TypeSend, std::string>>(
                 packageData);
@@ -512,10 +512,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         BigNumberFloat dataAmountStored(std::to_string(node.dfs()->calculateDataAmountStored()));
 
         std::cout << "circulativeSupply" << circulativeSupply << std::endl
-                 << "blockAmount" << blockAmount << std::endl
-                 << "dataAmountStoredInNetwork" << dataAmountStoredInNetwork << std::endl
-                 << "dataAmountStored" << dataAmountStored << std::endl
-                 << "coef" << state.Coefficient << std::endl;
+                  << "blockAmount" << blockAmount << std::endl
+                  << "dataAmountStoredInNetwork" << dataAmountStoredInNetwork << std::endl
+                  << "dataAmountStored" << dataAmountStored << std::endl
+                  << "coef" << state.Coefficient << std::endl;
 
         DataMiningManager dmm;
         auto result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,
@@ -571,16 +571,16 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::BlockchainDataMiningRewardTransaction: {
         RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
         Transaction tx = rewardTx.convertToTransaction();
-//        tx
-//        tx.setData(QByteArray());
+        //        tx
+        //        tx.setData(QByteArray());
         qDebug() << "BlockchainDataMiningRewardTransaction " << rewardTx.getTypeTx() << tx.getTypeTx();
-//        rewardTx.setAmountReward(BigNumberFloat(300));
+        //        rewardTx.setAmountReward(BigNumberFloat(300));
         tx.setAmount(BigNumber(100));
-//        tx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
-//        Transaction tx = rewardTx.convertToTransaction();
-//        tx.setAmount(100);
+        //        tx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
+        //        Transaction tx = rewardTx.convertToTransaction();
+        //        tx.setAmount(100);
         node.txManager()->addTransaction(tx);
-//        node.txManager()->proveTransactions();
+        //        node.txManager()->proveTransactions();
 
         const auto actors = node.actorIndex()->allActorsStd();
         for (int i = 0; i < actors.size(); i++) {
@@ -593,11 +593,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-//            node.verifyHashProcessing(rewardTx, messageId);
+            //            node.verifyHashProcessing(rewardTx, messageId);
             break;
         }
         case MessageStatus::Response: {
-//            node.txManager()->addTransaction(rewardTx.convertToTransaction());
+            //            node.txManager()->addTransaction(rewardTx.convertToTransaction());
             break;
         }
         }
@@ -642,8 +642,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
-void NetworkManager::removeWsConnection()
-{
+void NetworkManager::removeWsConnection() {
     if (QObject::sender() == nullptr)
         return;
 
