@@ -524,29 +524,32 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
         RewardTransaction rewardTx;
         rewardTx.setSenderReceiver(node.accountController()->mainActor().id());
-        rewardTx.setAmountReward(result);
+        rewardTx.setAmount(BigNumber(200));
+        qDebug() << "Serialized rwTx:" << rewardTx.serialize().length() << rewardTx.serialize().c_str()
+                 << rewardTx.getTypeTx();
+        const auto tx = rewardTx.convertToTransaction();
+        qDebug() << tx.getTypeTx();
         node.network()->send_message(rewardTx, MessageType::BlockchainDataMiningRewardTransaction);
         break;
     }
 
     case MessageType::BlockchainGenesisBlock: {
-        const auto serialezedData =
-            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
-        auto genesisBlock = GenesisBlock(serialezedData);
+        qDebug() << "BlockchainGenesisBlock";
+        auto genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
         node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         break;
     }
     case MessageType::BlockchainNewBlock: {
-        const auto serialezedData =
-            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
-        auto block = Block(serialezedData);
+        qDebug() << "BlockchainNewBlock";
+
+        auto block = MessagePack::deserialize<Block>(serialized);
         node.blockchain()->addBlockToBlockchain(block);
         break;
     }
 
     case MessageType::BlockchainTransaction: {
-        const auto data = std::string { serialized.begin() + 3, serialized.end() };
-        Transaction transaction = MessagePack::deserialize<Transaction>(data);
+        qDebug() << "BlockchainTransaction";
+        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction.getData().isEmpty()) {
             TransactionData transactionData =
                 MessagePack::deserialize<TransactionData>(transaction.getData());
@@ -567,15 +570,34 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainDataMiningRewardTransaction: {
         RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
+        Transaction tx = rewardTx.convertToTransaction();
+//        tx
+//        tx.setData(QByteArray());
+        qDebug() << "BlockchainDataMiningRewardTransaction " << rewardTx.getTypeTx() << tx.getTypeTx();
+//        rewardTx.setAmountReward(BigNumberFloat(300));
+        tx.setAmount(BigNumber(100));
+//        tx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
+//        Transaction tx = rewardTx.convertToTransaction();
+//        tx.setAmount(100);
+        node.txManager()->addTransaction(tx);
+//        node.txManager()->proveTransactions();
+
+        const auto actors = node.actorIndex()->allActorsStd();
+        for (int i = 0; i < actors.size(); i++) {
+            const auto balance = node.blockchain()->getUserBalance(ActorId(actors[i]), ActorId());
+            std::cout << "[Actor: " << actors[i].c_str() << "] | ["
+                      << "Balance: " << balance << "]" << std::endl;
+        }
+
         switch (status) {
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.verifyHashProcessing(rewardTx, messageId);
+//            node.verifyHashProcessing(rewardTx, messageId);
             break;
         }
         case MessageStatus::Response: {
-            node.txManager()->addTransaction(rewardTx.convertToTransaction());
+//            node.txManager()->addTransaction(rewardTx.convertToTransaction());
             break;
         }
         }
@@ -620,7 +642,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
-void NetworkManager::removeWsConnection() //
+void NetworkManager::removeWsConnection()
 {
     if (QObject::sender() == nullptr)
         return;

@@ -41,7 +41,7 @@ public:
         index = index_str;
     }
 
-protected:
+public:
     /**
      * @brief Concatenates all fields that are used for digSig calculation
      * Override in subclasses

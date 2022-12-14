@@ -66,7 +66,7 @@ private:
 class EXTRACHAIN_EXPORT RewardTransaction : public Transaction {
     ActorId senderReceiver;
     TransactionRewardData rewardData; // reward additional payload field
-    BigNumberFloat amountReward;
+    BigNumber amountReward;
 
 public:
     // Construct empty transaction
@@ -106,12 +106,12 @@ public:
     void insertAdditionalData(AdditionalData& additionalData);
 
     Transaction convertToTransaction();
-    void setAmountReward(const BigNumberFloat& value);
+    void setAmountReward(const BigNumber& value);
 
-    BigNumberFloat getAmountReward() const;
+    BigNumber getAmountReward() const;
 
     MSGPACK_DEFINE(senderReceiver, amount, date, rewardData, token, prevBlock, gas, hop, hash, approver,
-                   producer, digSig, amountReward)
+                   producer, digSig, amountReward, typeTx)
 protected:
     void calcAmount();
 };

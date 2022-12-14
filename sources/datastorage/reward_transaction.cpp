@@ -22,11 +22,11 @@
 RewardTransaction::RewardTransaction()
     : Transaction() {
     this->rewardData = TransactionRewardData();
+    typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcHash();
 }
 
-RewardTransaction::RewardTransaction(const QByteArray &serialized)
-    : Transaction(serialized) {
+RewardTransaction::RewardTransaction(const QByteArray &serialized) {
     if (serialized.isEmpty()) {
         qDebug() << "Incorrect TX";
         return;
@@ -40,6 +40,7 @@ RewardTransaction::RewardTransaction(const QByteArray &serialized)
 RewardTransaction::RewardTransaction(const ActorId &senderReceiver)
     : Transaction() {
     this->senderReceiver = senderReceiver;
+    typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcAmount();
     calcHash();
 }
@@ -47,6 +48,7 @@ RewardTransaction::RewardTransaction(const ActorId &senderReceiver)
 RewardTransaction::RewardTransaction(const ActorId &senderReceiver, const TransactionRewardData &rewardData)
     : RewardTransaction(senderReceiver) {
     this->rewardData = rewardData;
+    typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcAmount();
     calcHash();
 }
@@ -55,6 +57,7 @@ RewardTransaction::RewardTransaction(const ActorId &senderReceiver, const QByteA
                                      const TransactionRewardData &rewardData)
     : RewardTransaction(senderReceiver) {
     this->rewardData = rewardData;
+    typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcAmount();
     calcHash();
 }
@@ -63,14 +66,17 @@ RewardTransaction::RewardTransaction(const RewardTransaction &other)
     : Transaction(other) {
     this->senderReceiver = other.senderReceiver;
     this->rewardData = other.rewardData;
+    typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcAmount();
     calcHash();
 }
 
 RewardTransaction::RewardTransaction(const Transaction &transaction)
 {
-    const auto serialized = transaction.getData().remove(0, TypeTransaction::rewardTx.length());
-    deserialize(serialized);
+//    const auto serialized = transaction.getData().remove(0, TypeTransaction::rewardTx.length());
+    qDebug() << transaction.getData().length() << transaction.getData();
+    deserialize(transaction.getData());
+    typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcHash();
     calcAmount();
 }
@@ -86,15 +92,19 @@ void RewardTransaction::insertAdditionalData(AdditionalData &additionalData) {
 Transaction RewardTransaction::convertToTransaction()
 {
     Transaction tx = *this;
-    tx.setData(TypeTransaction::rewardTx + serialize());
+    tx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
+    tx.setData(serialize());
+    tx.setSender(getSenderReceiver());
+    tx.setReceiver(getSenderReceiver());
+    qDebug() << "txData:" << tx.getData().length() << tx.getData() << tx.getTypeTx();
     return tx;
 }
 
-void RewardTransaction::setAmountReward(const BigNumberFloat &value) {
+void RewardTransaction::setAmountReward(const BigNumber &value) {
     amountReward = value;
 }
 
-BigNumberFloat RewardTransaction::getAmountReward() const {
+BigNumber RewardTransaction::getAmountReward() const {
     return amountReward;
 }
 

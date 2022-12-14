@@ -77,6 +77,7 @@ Transaction::Transaction(const Transaction &other) {
     this->approver = other.approver;
     this->digSig = other.digSig;
     this->producer = other.producer;
+    this->typeTx = other.typeTx;
     calcHash();
 }
 
@@ -85,7 +86,7 @@ void Transaction::setReceiver(const ActorId &value) {
 }
 
 bool Transaction::isRewardTransaction() const {
-    return data.starts_with(TypeTransaction::rewardTx);
+    return typeTx == TypeTransaction::TypeTx::RewardTransaction;
 }
 
 void Transaction::setProducer(const ActorId &value) {
@@ -147,6 +148,16 @@ void Transaction::calcHash() {
     if (!resultHash.isEmpty()) {
         this->hash = resultHash;
     }
+}
+
+int Transaction::getTypeTx() const
+{
+    return typeTx;
+}
+
+void Transaction::setTypeTx(int newTypeTx)
+{
+    typeTx = newTypeTx;
 }
 
 QByteArray Transaction::getDataForHash() const {
