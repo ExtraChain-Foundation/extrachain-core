@@ -34,6 +34,7 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <boost/beast/core/detail/base64.hpp>
 
 #include <fmt/chrono.h>
 #include <fmt/color.h>
@@ -356,6 +357,9 @@ EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileN
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
 std::string hexStringToByte(const std::string &data);
+
+std::string bytesEncodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
+std::string bytesDecodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
 QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 

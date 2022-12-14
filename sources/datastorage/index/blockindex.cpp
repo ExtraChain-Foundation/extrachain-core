@@ -683,14 +683,14 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
         std::vector<DBRow> rowsSign = DB.select("SELECT * FROM " + Config::DataStorage::SignTable + " ;");
         QByteArray signes = "";
         for (const auto &tmp : rowsSign) {
-            QByteArray key, value, type;
-            key = QByteArray(tmp.at("actorId").c_str());
-            value = QByteArray(tmp.at("digSig").c_str());
-            type = QByteArray(tmp.at("type").c_str());
+            std::string key, value, type;
+            key = tmp.at("actorId");
+            value = tmp.at("digSig");
+            type = tmp.at("type");
             std::vector<std::string> v;
-            v.push_back(key.toStdString());
-            v.push_back(value.toStdString());
-            v.push_back(type.toStdString());
+            v.push_back(key);
+            v.push_back(value);
+            v.push_back(type);
             std::string sign = Serialization::serialize(v);
             std::vector<std::string> v1;
             v1.push_back(sign);
@@ -724,14 +724,14 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
         std::vector<DBRow> rowsSign = DB.select("SELECT * FROM " + Config::DataStorage::SignTable + " ;");
         QByteArray signes = "";
         for (const auto &tmp : rowsSign) {
-            QByteArray key, value, type;
-            key = QByteArray(tmp.at("actorId").c_str());
-            value = QByteArray(tmp.at("digSig").c_str());
-            type = QByteArray(tmp.at("type").c_str());
+            std::string key, value, type;
+            key = tmp.at("actorId");
+            value = tmp.at("digSig");
+            type = tmp.at("type");
             std::vector<std::string> v;
-            v.push_back(key.toStdString());
-            v.push_back(value.toStdString());
-            v.push_back(type.toStdString());
+            v.push_back(key);
+            v.push_back(value);
+            v.push_back(type);
             std::string sign = Serialization::serialize(v);
             std::vector<std::string> v1;
             v1.push_back(sign);

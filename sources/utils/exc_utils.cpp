@@ -239,7 +239,7 @@ std::string Serialization::serialize(const std::vector<std::string> &list) {
     std::string res;
     std::vector<std::string> reslist;
     for (int i = 0; i < list.size(); i++) {
-        reslist.push_back(MessagePack::serialize(list.at(i)));
+        reslist.push_back(MessagePack::serialize(Utils::bytesEncodeStdString(list.at(i))));
     }
     res = boost::algorithm::join(reslist, "|");
     return res;
@@ -250,7 +250,7 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
     std::vector<std::string> reslist;
     boost::algorithm::split(reslist, serialized, boost::algorithm::is_any_of("|"));
     for (int i = 0; i < reslist.size(); i++) {
-        res.push_back(MessagePack::deserialize<std::string>(reslist.at(i)));
+        res.push_back(MessagePack::deserialize<std::string>(Utils::bytesDecodeStdString(reslist.at(i))));
     }
     return res;
 }
@@ -341,6 +341,32 @@ std::string Utils::hexStringToByte(const std::string &data) {
     if (r == 0) {
         res = std::string(p.begin(), p.end());
         res.resize(res.size() - 1);
+    }
+    return res;
+}
+
+std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode encode) {
+    std::string res;
+    switch (encode) {
+    case HashEncode::Base64:
+        boost::beast::detail::base64::encode(res.data(), data.data(), data.size());
+        return res;
+    case HashEncode::Hex:
+        break;
+        //        return data.toHex();
+    }
+    return res;
+}
+
+std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode encode) {
+    std::string res;
+    switch (encode) {
+    case HashEncode::Base64:
+        boost::beast::detail::base64::decode(res.data(), data.data(), data.size());
+        return res;
+    case HashEncode::Hex:
+        break;
+        //        return data.toHex();
     }
     return res;
 }
