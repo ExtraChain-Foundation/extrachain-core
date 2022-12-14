@@ -1131,12 +1131,10 @@ void Blockchain::VerifyTx(Transaction tx) {
 }
 
 void Blockchain::proveTx(Transaction *tx) {
-    qDebug() << "proveTx: started" << tx->getTypeTx();
     const bool isRewardTx = tx->isRewardTransaction();
     RewardTransaction txReward;
     if (isRewardTx) {
         txReward = RewardTransaction(*tx);
-        qDebug() << txReward.getAmountReward() << tx->getAmount();
     }
     ActorId targetSender = isRewardTx ? txReward.getSenderReceiver() : tx->getSender();
     ActorId targetReceiver = isRewardTx ? txReward.getSenderReceiver() : tx->getReceiver();
@@ -1207,8 +1205,15 @@ void Blockchain::proveTx(Transaction *tx) {
             return;
         }
         if (targetSender != node->actorIndex()->firstId()) {
+            qDebug() << "we are here";
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
-            senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
+            qDebug() << senderCurrentBalance;
+            if(isRewardTx) {
+                senderCurrentBalance += txManager->checkRewardTxsList();
+            } else {
+                senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
+            }
+            qDebug() << senderCurrentBalance;
 
             if (tx->getAmount() <= 0) {
                 txManager->removeUnApprovedTransaction(tx);

@@ -35,12 +35,12 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
     this->blockchain = blockchain;
     this->extraChainNode = extraChainNode;
 
-    // setup timer
+         // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
     connect(&blockCreationTimer, &QTimer::timeout, this, &TransactionManager::makeBlock);
     blockCreationTimer.start();
 
-    // prove timer
+         // prove timer
     proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
     connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
 
@@ -104,7 +104,6 @@ void TransactionManager::makeBlock() {
     //    qDebug() << QString("Attempting to make a block from [%1]
     //    txs)").arg(txs);
 
-    qDebug() << "straty makeBlock";
     Block lastBlock = blockchain->getLastBlock();
     if (pendingTxs.empty()) {
         Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
@@ -122,24 +121,22 @@ void TransactionManager::makeBlock() {
         return;
     }
 
-    // remove all dummy blocks
+         // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);
     QByteArray data = convertTxs(pendingTxs);
-    qDebug() << "convertTxs" << data;
     lastBlock = blockchain->getLastRealBlock();
     Block block(data, lastBlock);
     // QList<Transaction> x = block.extractTransactions();
     blockchain->signBlock(block);
-    qDebug() << "Created block:" << block.getIndex() << block.getDigSig().c_str();
     blockchain->addBlock(block);
 
-    // fee section start
-    //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
-    //                                                               accountController->getMainActor()->getId(),
-    //                                                               accountController->getActorIndex()->m_firstId);
-    //    for (const auto &i : feeTxs)
-    //        extraChainNode->createTransaction(i);
-    // fee section end
+         // fee section start
+         //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
+         //                                                               accountController->getMainActor()->getId(),
+         //                                                               accountController->getActorIndex()->m_firstId);
+         //    for (const auto &i : feeTxs)
+         //        extraChainNode->createTransaction(i);
+         // fee section end
     this->pendingTxs.clear();
 }
 
@@ -158,11 +155,12 @@ void TransactionManager::proveTransactions() {
 }
 
 QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs) {
-    QList<QByteArray> l;
+    std::vector<std::string> l;
     for (const Transaction &tx : txs) {
-        l << QByteArray::fromStdString(tx.serialize());
+        l.push_back(tx.serialize());
     }
-    return Serialization::serialize(l, Serialization::TRANSACTION_FIELD_SIZE);
+    std::string s = MessagePack::serialize(l);
+    return QByteArray::fromStdString(s);
 }
 
 BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender) {
@@ -174,6 +172,17 @@ BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender) {
             } else if (tmp.getReceiver() == sender) {
                 res += tmp.getAmount();
             }
+        }
+    }
+    return res;
+}
+
+BigNumber TransactionManager::checkRewardTxsList()
+{
+    BigNumber res = 0;
+    if (!pendingTxs.isEmpty()) {
+        for (const Transaction &tmp : qAsConst(pendingTxs)) {
+            res += tmp.getAmount();
         }
     }
     return res;

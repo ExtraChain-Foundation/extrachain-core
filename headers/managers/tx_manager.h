@@ -75,6 +75,7 @@ private:
 public:
     static QByteArray convertTxs(const QList<Transaction> &txs);
     BigNumber checkPendingTxsList(const ActorId &sender);
+    BigNumber checkRewardTxsList();
     QList<Transaction *> getReceivedTxList() const;
 
     QList<Transaction> getPendingTxs() const;
