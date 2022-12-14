@@ -31,6 +31,10 @@
 #include "extrachain_global.h"
 #include <msgpack.hpp>
 
+#include <boost/algorithm/string/classification.hpp>
+#include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string/split.hpp>
+
 #include <fmt/chrono.h>
 #include <fmt/color.h>
 #include <fmt/core.h>

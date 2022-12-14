@@ -236,11 +236,23 @@ QString Utils::fileMimeSuffix(const QString &filePath) {
 }
 
 std::string Serialization::serialize(const std::vector<std::string> &list) {
-    return MessagePack::serialize(list);
+    std::string res;
+    std::vector<std::string> reslist;
+    for (int i = 0; i < list.size(); i++) {
+        reslist.push_back(MessagePack::serialize(list.at(i)));
+    }
+    res = boost::algorithm::join(reslist, "|");
+    return res;
 }
 
 std::vector<std::string> Serialization::deserialize(const std::string &serialized) {
-    return MessagePack::deserialize<std::vector<std::string>>(serialized);
+    std::vector<std::string> res;
+    std::vector<std::string> reslist;
+    boost::algorithm::split(reslist, serialized, boost::algorithm::is_any_of("|"));
+    for (int i = 0; i < reslist.size(); i++) {
+        res.push_back(MessagePack::deserialize<std::string>(reslist.at(i)));
+    }
+    return res;
 }
 
 void Utils::wipeDataFiles() {
