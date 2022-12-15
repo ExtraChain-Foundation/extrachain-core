@@ -124,8 +124,8 @@ void TransactionManager::makeBlock() {
 
     // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);
-    QByteArray data = convertTxs(pendingTxs);
-    qDebug() << "convertTxs" << data;
+    std::string data = convertTxs(pendingTxs);
+    qDebug() << "convertTxs" << data.c_str();
     lastBlock = blockchain->getLastRealBlock();
     Block block(data, lastBlock);
     // QList<Transaction> x = block.extractTransactions();
@@ -157,13 +157,13 @@ void TransactionManager::proveTransactions() {
     }
 }
 
-QByteArray TransactionManager::convertTxs(const QList<Transaction> &txs) {
+std::string TransactionManager::convertTxs(const QList<Transaction> &txs) {
     std::vector<std::string> l;
     for (const Transaction &tx : txs) {
         l.push_back(tx.serialize());
     }
     std::string s = Serialization::serialize(l);
-    return QByteArray::fromStdString(s);
+    return s;
 }
 
 BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender) {

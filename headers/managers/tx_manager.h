@@ -73,7 +73,7 @@ private:
     void removeTransaction(int i);
 
 public:
-    static QByteArray convertTxs(const QList<Transaction> &txs);
+    static std::string convertTxs(const QList<Transaction> &txs);
     BigNumber checkPendingTxsList(const ActorId &sender);
     QList<Transaction *> getReceivedTxList() const;
 
