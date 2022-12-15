@@ -18,7 +18,6 @@
  */
 
 #include "datastorage/index/blockindex.h"
-#include "datastorage/dummy_block.h"
 #include "datastorage/reward_transaction.h"
 #include <QDir>
 #include <QFileInfoList>
@@ -81,7 +80,7 @@ Block BlockIndex::getLastRealBlock() const {
              << "\n      last saved id - " << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
-        if ((!block.isEmpty()) && (!DummyBlock::isDummyBlock(block.serialize()))) {
+        if ((!block.isEmpty()) && (block.getType() != Config::DUMMY_BLOCK_TYPE)) {
             return block;
         }
         --id;
@@ -120,9 +119,6 @@ Block BlockIndex::getBlockById(const BigNumber &id) const {
             return Block(serializedBlock);
         else if (GenesisBlock::isGenesisBlock(serializedBlock))
             return GenesisBlock(serializedBlock);
-        else if (DummyBlock::isDummyBlock(serializedBlock)) {
-            return DummyBlock(serializedBlock);
-        }
     } else {
         qDebug() << id << "is not block";
     }

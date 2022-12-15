@@ -454,11 +454,6 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
         return GenesisBlock();
 }
 
-std::unique_ptr<DummyBlock> Blockchain::createDummyBlock() const {
-    const std::string last_block_hash = getLastBlock().getHash();
-    const QByteArray last_block_hash_b = QByteArray::fromStdString(last_block_hash);
-    return std::make_unique<DummyBlock>(last_block_hash_b);
-}
 // Merging //
 
 int Blockchain::mergeBlockWithLocal(Block &received) {

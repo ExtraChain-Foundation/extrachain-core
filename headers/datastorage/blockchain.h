@@ -22,9 +22,7 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include "datastorage/dummy_block.h"
 #include "datastorage/genesis_block.h"
-#include "datastorage/index/actorindex.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
@@ -54,13 +52,6 @@ class TransactionManager;
  * - merging blocks
  *
  */
-
-enum class FreezeBalanceSearch {
-    AllStaking,
-    AllNotMyStaking,
-    OnlyMyStaking,
-    OnlySender
-};
 
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -124,7 +115,6 @@ private:
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
                                     QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
-    std::unique_ptr<DummyBlock> createDummyBlock() const;
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -288,10 +278,7 @@ public:
     BigNumber getRecords() const;
 
     BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
-    BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
-                                   FreezeBalanceSearch balanceSearch) const;
 
-    QMap<QByteArray, BigNumber> getAllStakingForMe(ActorId userId, ActorId tokenId) const;
     /**
      * @brief Show blockchain
      */
