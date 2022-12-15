@@ -124,8 +124,8 @@ const std::string &Block::getDataForDigSig() const {
 
 void Block::sign(const Actor<KeyPrivate> &actor) {
     calcHash();
-    QByteArray sign = QByteArray::fromStdString(actor.key().sign(getDataForDigSig()));
-    this->signatures.push_back({ actor.id().toStdString(), sign.toStdString(), true });
+    std::string sign = actor.key().sign(getDataForDigSig());
+    this->signatures.push_back({ actor.id().toStdString(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const {
