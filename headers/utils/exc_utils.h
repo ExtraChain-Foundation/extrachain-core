@@ -34,7 +34,6 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/split.hpp>
-#include <boost/beast/core/detail/base64.hpp>
 
 #include <fmt/chrono.h>
 #include <fmt/color.h>

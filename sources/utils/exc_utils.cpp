@@ -38,6 +38,7 @@
 // #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
+#include "cpp-base64/base64.h"
 #include "enc/enc_tools.h"
 #include "managers/data_mining_manager.h"
 #include "utils/dfs_utils.h"
@@ -349,7 +350,7 @@ std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode enco
     std::string res;
     switch (encode) {
     case HashEncode::Base64:
-        boost::beast::detail::base64::encode(res.data(), data.data(), data.size());
+        res = base64_encode(data);
         return res;
     case HashEncode::Hex:
         break;
@@ -362,7 +363,7 @@ std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode enco
     std::string res;
     switch (encode) {
     case HashEncode::Base64:
-        boost::beast::detail::base64::decode(res.data(), data.data(), data.size());
+        res = base64_decode(data);
         return res;
     case HashEncode::Hex:
         break;
