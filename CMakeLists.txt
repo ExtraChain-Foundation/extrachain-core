@@ -90,6 +90,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/cpp-base64/base64.h
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm.h
@@ -131,6 +132,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/cpp-base64/base64.cpp
     )
 
 # add_library(extrachainc
