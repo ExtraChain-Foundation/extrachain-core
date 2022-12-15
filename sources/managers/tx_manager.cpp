@@ -109,13 +109,16 @@ void TransactionManager::makeBlock() {
     if (pendingTxs.empty()) {
         Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
         qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
-        DummyBlock dummyBlock;
-        if (!lastRealBlock.isEmpty()) {
-            dummyBlock = DummyBlock(lastBlock, lastRealBlock);
-        } else {
-            GenesisBlock lastGenesisBlock = blockchain->getBlockIndex().getLastGenesisBlock();
-            dummyBlock = DummyBlock(lastBlock, lastGenesisBlock);
-        }
+        // creating dummy block in as ordinary block
+        Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
+        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
+        //        DummyBlock dummyBlock;
+        //        if (!lastRealBlock.isEmpty()) {
+        //            dummyBlock = DummyBlock(lastBlock, lastRealBlock);
+        //        } else {
+        //            GenesisBlock lastGenesisBlock = blockchain->getBlockIndex().getLastGenesisBlock();
+        //            dummyBlock = DummyBlock(lastBlock, lastGenesisBlock);
+        //        }
         blockchain->signBlock(dummyBlock);
         blockchain->addBlock(dummyBlock);
 
