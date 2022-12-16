@@ -64,10 +64,11 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
 
     Transaction rewardTx;
     rewardTx.setAmount(result);
+    rewardTx.setReceiver(mb.sender_id);
     rewardTx.setSender(node->actorIndex()->firstId());
     rewardTx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
     rewardTx.setToken(ActorId());
-    rewardTx.setData(mb.data);
+    rewardTx.setData(Utils::bytesEncodeStdString(mb.data));
     rewardTx.sign(node->accountController()->mainActor());
     qDebug() << rewardTx.getTypeTx();
     return rewardTx;

@@ -1127,7 +1127,7 @@ void Blockchain::proveTx(Transaction *tx) {
         targetSender = tx->getApprover();
         // TODO: add extended check of validity
         auto res = this->blockIndex.getLastTxByData(tx->getData());
-        if (res.first.isEmpty()) {
+        if (res.second == "-1") {
             txManager->addProvedTransaction(tx);
             return;
         }
