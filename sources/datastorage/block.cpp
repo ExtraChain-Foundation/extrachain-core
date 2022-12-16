@@ -148,7 +148,7 @@ std::vector<Transaction> Block::extractTransactions() const {
     std::vector<Transaction> transactions;
     for (const QByteArray &trData : txsData) {
         Transaction tx(trData);
-        if (!tx.isEmpty())
+        if (!tx.isEmpty() || tx.isRewardTransaction())
             transactions.push_back(tx);
     }
     return transactions;

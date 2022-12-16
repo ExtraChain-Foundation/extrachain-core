@@ -913,6 +913,10 @@ BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
             if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
                 balance += tx.getAmount();
             }
+
+            if(tx.isRewardTransaction()) {
+                balance += tx.getAmount();
+            }
         }
     }
 
@@ -1155,6 +1159,13 @@ void Blockchain::proveTx(Transaction *tx) {
         return;
     }
 
+    if(isRewardTx) {
+        txManager->addProvedTransaction(tx);
+        BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
+        senderCurrentBalance += txManager->checkRewardTxsList();
+        return;
+    }
+
     // if receiver is not exist
 
     if ((receiverActor.empty() && !targetReceiver.isEmpty())
@@ -1207,13 +1218,7 @@ void Blockchain::proveTx(Transaction *tx) {
         if (targetSender != node->actorIndex()->firstId()) {
             qDebug() << "we are here";
             BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
-            qDebug() << senderCurrentBalance;
-            if(isRewardTx) {
-                senderCurrentBalance += txManager->checkRewardTxsList();
-            } else {
-                senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
-            }
-            qDebug() << senderCurrentBalance;
+            senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
             if (tx->getAmount() <= 0) {
                 txManager->removeUnApprovedTransaction(tx);

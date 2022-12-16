@@ -182,7 +182,8 @@ BigNumber TransactionManager::checkRewardTxsList()
     BigNumber res = 0;
     if (!pendingTxs.isEmpty()) {
         for (const Transaction &tmp : qAsConst(pendingTxs)) {
-            res += tmp.getAmount();
+            if(tmp.isRewardTransaction())
+                res += tmp.getAmount();
         }
     }
     return res;
