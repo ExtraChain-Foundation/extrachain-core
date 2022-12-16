@@ -970,7 +970,7 @@ void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount, cons
         tx.setSender(mainActor.id());
         tx.setReceiver(receiver);
         tx.setAmount(amount);
-        node->network()->send_message(tx.serialize(), MessageType::BlockchainTransaction);
+        node->network()->send_message(tx, MessageType::BlockchainTransaction);
     } else {
         //        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin =
         //        amount }; node->network()->send_message(coinReward, MessageType::BlockchainCoinReward,

@@ -49,13 +49,12 @@ enum class MessageStatus {
 MSGPACK_ADD_ENUM(MessageStatus)
 FORMAT_ENUM(MessageStatus)
 
-template <class T>
 struct MessageBody {
     MessageType message_type;
     MessageStatus status;
     std::string message_id;
     ActorId sender_id;
-    T data;
+    std::string data;
 
     std::string serialize() const {
         return MessagePack::serialize(*this);
@@ -69,9 +68,8 @@ struct SocketIdentifier {
     std::string messageId;
 };
 
-template <class T>
-MessageBody<T> make_message(const T data, MessageType type, MessageStatus status, const ActorId &sender,
-                            std::string to_message_id) {
+inline MessageBody make_message(const std::string &data, MessageType type, MessageStatus status,
+                                const ActorId &sender, std::string to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         qFatal("make message error: incorrect message id size");
     }
@@ -80,11 +78,11 @@ MessageBody<T> make_message(const T data, MessageType type, MessageStatus status
                                            + std::to_string(QRandomGenerator::global()->bounded(100000)))
                                .substr(0, 15); // temp
 
-    MessageBody<T> message = { .message_type = type,
-                               .status = status,
-                               .message_id = !to_message_id.empty() ? to_message_id : randomId,
-                               .sender_id = sender.toStdString(),
-                               .data = data };
+    MessageBody message = { .message_type = type,
+                            .status = status,
+                            .message_id = !to_message_id.empty() ? to_message_id : randomId,
+                            .sender_id = sender.toStdString(),
+                            .data = data };
 
     return message;
 }

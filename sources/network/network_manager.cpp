@@ -354,11 +354,15 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     //            qDebug() << "[NetworkManager/messageReceived] Verify good";
     //        }
     //    }
-
-    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
-    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
-    auto serialized = msg.substr(40);
-    auto messId = msg.substr(4, 15);
+    MessageBody mb = MessagePack::deserialize<MessageBody>(msg);
+    MessageType type = mb.message_type;
+    MessageStatus status = mb.status;
+    std::string serialized = mb.data;
+    std::string messId = mb.message_id;
+    //    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
+    //    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
+    //    auto serialized = msg.substr(40);
+    //    auto messId = msg.substr(4, 15);
     std::string messageId(messId.begin(), messId.end());
 
     if (status == MessageStatus::Request) {

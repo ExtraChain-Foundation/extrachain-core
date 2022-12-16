@@ -347,7 +347,7 @@ void DfsController::addListFiles(const QStringList &files) {
                     Transaction transaction;
                     transaction.setData(MessagePack::serialize(
                         TransactionData { .hash = transaction.getHash(), .path = msg.FileHash }));
-                    node.network()->send_message(transaction.serialize(), MessageType::BlockchainTransaction);
+                    node.network()->send_message(transaction, MessageType::BlockchainTransaction);
                 }
             });
 
