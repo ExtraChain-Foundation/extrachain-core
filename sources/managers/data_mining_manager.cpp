@@ -18,110 +18,27 @@
  */
 
 #include "managers/data_mining_manager.h"
-#include "utils/exc_utils.h"
+#include "datastorage/blockchain.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "utils/bignumber_float.h"
+#include "utils/exc_utils.h"
 
-DataMiningManager::DataMiningManager(QObject *parent)
+DataMiningManager::DataMiningManager(ExtraChainNode *node, QObject *parent)
     : QObject(parent) {
+    this->node = node;
 }
 
-void DataMiningManager::rootMerkleHash(std::vector<std::string> &listHashes,
-                                       std::vector<MerkleDataBlocks> &branchesTree, const bool isHahsing,
-                                       std::string &result) {
-    if (listHashes.empty()) {
-        qFatal("Root merkle hash: list is empty");
-    };
-    const auto splittedList = splitListIntoPair(listHashes, isHahsing);
-    MerkleDataBlocks merkleBlocks;
-
-    for (int index = 0; index < splittedList.size(); index++) {
-        const auto pair = splittedList[index];
-
-        if (pair.size() == 1) {
-            merkleBlocks.push_back(pair[0]);
-        } else {
-            merkleBlocks.push_back(merkleFormula(pair[0], pair[1]));
-        }
-    }
-    branchesTree.push_back(merkleBlocks);
-
-    if (merkleBlocks.size() != 1) {
-        rootMerkleHash(merkleBlocks, branchesTree, false, result);
-    } else {
-        result = branchesTree[branchesTree.size() - 1][0];
-    }
-}
-
-std::string DataMiningManager::rootMerkleHash(std::string &data) {
-    std::string result;
-    std::vector<MerkleDataBlocks> branches;
-    std::vector<std::string> dataList;
-    dataList.push_back(data);
-    rootMerkleHash(dataList, branches, true, result);
-    return result;
-}
-
-std::vector<MerkleDataBlocks> DataMiningManager::splitListIntoPair(std::vector<std::string> &vector,
-                                                                   const bool isHahsing) {
-    std::vector<MerkleDataBlocks> result;
-
-    if (vector.empty())
-        return result;
-
-    if (isHahsing)
-        hashingElements(vector);
-
-    int position = 0;
-    int step = 2;
-    const int sizeVector = vector.size();
-    bool isLastPair = sizeVector <= 2;
-    const bool isPairVector = (sizeVector % 2 == 0) ? true : false;
-    const int next = 1;
-
-    while (position < sizeVector) {
-        std::vector<std::string> pair;
-        if (isLastPair) {
-            pair.push_back(vector[position]);
-            if (isLastPair)
-                pair.push_back(vector[position + next]);
-        } else {
-            pair.push_back(vector[position]);
-            pair.push_back(vector[position + next]);
-        }
-
-        if (!isPairVector) {
-            position += ((position + step) > sizeVector) ? 1 : 2;
-            isLastPair = ((sizeVector - 1) - position) < 1;
-        } else {
-            position += step;
-            isLastPair = (sizeVector - position) < 2;
-        }
-
-        result.push_back(pair);
-    }
-    return result;
-}
-
-void DataMiningManager::hashingElements(std::vector<std::string> &vector) {
-    for (int i = 0; i < vector.size(); i++) {
-        vector[i] = Utils::calcHash(vector[i]);
-    }
-}
-
-std::string DataMiningManager::merkleFormula(const std::string &hash1, const std::string &hash2) const {
-    return Utils::calcHash(hash1 + hash2);
-}
-
-BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored, BigNumberFloat dataAmountTotalStoredInNetwork,
-                                         BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
-                                         double coefficient) {
-    if(dataAmountStored == 0 || dataAmountTotalStoredInNetwork == 0 || circulativeSupply == 0
+BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored,
+                                                 BigNumberFloat dataAmountTotalStoredInNetwork,
+                                                 BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
+                                                 double coefficient) {
+    if (dataAmountStored == 0 || dataAmountTotalStoredInNetwork == 0 || circulativeSupply == 0
         || blockAmount == 0) {
         return BigNumberFloat();
     }
     BigNumberFloat coinProducedForNode(0);
-    coinProducedForNode = (dataAmountStored / dataAmountTotalStoredInNetwork)
-        * (circulativeSupply / blockAmount) * coefficient;
+    coinProducedForNode =
+        (dataAmountStored / dataAmountTotalStoredInNetwork) * (circulativeSupply / blockAmount) * coefficient;
 
     if (coinProducedForNode < 1) {
         coefficient *= 2;
@@ -129,4 +46,39 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
                                              circulativeSupply, blockAmount, coefficient);
     }
     return coinProducedForNode;
+}
+
+Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
+    DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(mb.data);
+    BigNumberFloat circulativeSupply(node->blockchain()->getCirculativeSuply().toStdString(10));
+    BigNumberFloat blockAmount(node->blockchain()->getRecords().toStdString(10));
+    BigNumberFloat dataAmountStoredInNetwork(std::to_string(node->dfs()->totalDfsSize()));
+
+    qDebug() << "circulativeSupply" << circulativeSupply << "blockAmount" << blockAmount
+             << "dataAmountStoredInNetwork" << dataAmountStoredInNetwork << "dataAmountStored"
+             << state.DataAmountStored << "coef" << state.Coefficient;
+
+    BigNumberFloat result = calculateCoins(BigNumberFloat(state.DataAmountStored), dataAmountStoredInNetwork,
+                                           circulativeSupply, blockAmount, state.Coefficient);
+    qDebug() << "result: " << result;
+
+    Transaction rewardTx;
+    rewardTx.setAmount(result);
+    rewardTx.setSender(node->actorIndex()->firstId());
+    rewardTx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
+    rewardTx.setToken(ActorId());
+    rewardTx.setData(mb.data);
+    rewardTx.sign(node->accountController()->mainActor());
+    qDebug() << rewardTx.getTypeTx();
+    return rewardTx;
+}
+
+void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
+    if (blockIndex % 3 == 0) {
+        qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
+        DFSP::StateMessage stateMessage;
+        stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
+        node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Response,
+                                      "234234234312345", Config::Net::TypeSend::All);
+    }
 }

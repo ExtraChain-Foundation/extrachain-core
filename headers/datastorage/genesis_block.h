@@ -29,14 +29,14 @@
 class EXTRACHAIN_EXPORT GenesisDataRow {
 public:
     ActorId actorId;
-    BigNumber state;
+    BigNumberFloat state;
     ActorId token;
     DataStorage::typeDataRow type;
 
 public:
     GenesisDataRow() = default;
 
-    explicit GenesisDataRow(const ActorId &actorId, const BigNumber &state, const ActorId &token,
+    explicit GenesisDataRow(const ActorId &actorId, const BigNumberFloat &state, const ActorId &token,
                             const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)

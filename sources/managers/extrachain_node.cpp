@@ -31,6 +31,7 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
+#include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
@@ -59,6 +60,9 @@ ExtraChainNode::ExtraChainNode() {
     m_dfs = new DfsController(*this);
 
     m_blockchain->setTxManager(m_txManager);
+
+    m_dmm = new DataMiningManager(this);
+
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -76,6 +80,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_txManager;
     delete m_blockchain;
     delete m_accountController;
+    delete m_dmm;
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -213,7 +218,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
     return tx;
 }
 
-Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount, ActorId token) {
+Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
         return Transaction();
@@ -235,37 +240,6 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
                     .arg(QString(receiver.toByteArray()));
     return Transaction();
-}
-
-RewardTransaction ExtraChainNode::createRewardTx(const std::vector<RecieveData> &recieveDataList,
-                                                 bool sendRequest, std::string messageId) {
-    ActorId actorId = accountController()->mainActor().id();
-    RewardTransaction rewardTransaction(actorId, TransactionRewardData(recieveDataList));
-
-    if (sendRequest) {
-        messageId =
-            network()->send_message(rewardTransaction, MessageType::BlockchainDataMiningRewardTransaction,
-                                    MessageStatus::Request, messageId, Config::Net::TypeSend::Focused);
-    }
-
-    return rewardTransaction;
-}
-
-void ExtraChainNode::verifyHashProcessing(RewardTransaction &rewardTransaction, std::string &messageId) {
-    const auto recieveDataList = rewardTransaction.getRewardData().getRecieveDataList();
-    for (const auto &recieveData : recieveDataList) {
-        FragmentStorage fs(recieveData);
-        DFSP::SegmentMessage segmentMessage = fs.getFragment(recieveData.fragmentHash);
-        if (!segmentMessage.FileHash.empty()) {
-            AdditionalData additionalData = { .actorVerifier =
-                                                  accountController()->mainActor().id().toStdString(),
-                                              .hashRecord = segmentMessage.FileHash };
-            rewardTransaction.insertAdditionalData(additionalData);
-        }
-    }
-
-    messageId = network()->send_message(rewardTransaction, MessageType::BlockchainDataMiningRewardTransaction,
-                                        MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
 }
 
 std::string ExtraChainNode::exportUser() {
@@ -319,7 +293,7 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
     return true;
 }
 
-Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount,
                                                   ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -449,6 +423,10 @@ DfsController *ExtraChainNode::dfs() const {
 
 TransactionManager *ExtraChainNode::txManager() const {
     return m_txManager;
+}
+
+DataMiningManager *ExtraChainNode::dataMiningManager() const {
+    return m_dmm;
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {

@@ -169,8 +169,8 @@ std::string TransactionManager::convertTxs(const QList<Transaction> &txs) {
     return s;
 }
 
-BigNumber TransactionManager::checkPendingTxsList(const ActorId &sender) {
-    BigNumber res = 0;
+BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
+    BigNumberFloat res = 0;
     if (!pendingTxs.isEmpty()) {
         for (const Transaction &tmp : qAsConst(pendingTxs)) {
             if (tmp.getSender() == sender) {

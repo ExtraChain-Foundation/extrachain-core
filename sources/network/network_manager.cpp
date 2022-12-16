@@ -25,6 +25,7 @@
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "utils/bignumber_float.h"
+
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -504,31 +505,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::DfsState: {
-        DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
-        BigNumberFloat circulativeSupply(node.blockchain()->getCirculativeSuply().toStdString(10));
-        BigNumberFloat blockAmount(node.blockchain()->getRecords().toStdString(10));
-        BigNumberFloat dataAmountStoredInNetwork(std::to_string(node.dfs()->totalDfsSize()));
-        BigNumberFloat dataAmountStored(std::to_string(node.dfs()->calculateDataAmountStored()));
-
-        std::cout << "circulativeSupply" << circulativeSupply << std::endl
-                  << "blockAmount" << blockAmount << std::endl
-                  << "dataAmountStoredInNetwork" << dataAmountStoredInNetwork << std::endl
-                  << "dataAmountStored" << dataAmountStored << std::endl
-                  << "coef" << state.Coefficient << std::endl;
-
-        DataMiningManager dmm;
-        auto result = dmm.calculateCoins(dataAmountStored, dataAmountStoredInNetwork, circulativeSupply,
-                                         blockAmount, state.Coefficient);
-        qDebug() << "result: " << result;
-
-        RewardTransaction rewardTx;
-        rewardTx.setSenderReceiver(node.accountController()->mainActor().id());
-        rewardTx.setAmount(BigNumber(200));
-        qDebug() << "Serialized rwTx:" << rewardTx.serialize().length() << rewardTx.serialize().c_str()
-                 << rewardTx.getTypeTx();
-        const auto tx = rewardTx.convertToTransaction();
-        qDebug() << tx.getTypeTx();
-        node.network()->send_message(rewardTx, MessageType::BlockchainDataMiningRewardTransaction);
+        Transaction reward = node.dataMiningManager()->makeRewardTx(mb);
+        this->send_message(reward, MessageType::BlockchainTransaction);
         break;
     }
 
@@ -564,42 +542,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
         std::string toPath = Scripts::folder + "/" + msg.FileName;
         std::filesystem::copy_file(fromPath, toPath);
-        break;
-    }
-
-    case MessageType::BlockchainDataMiningRewardTransaction: {
-        RewardTransaction rewardTx = MessagePack::deserialize<RewardTransaction>(serialized);
-        Transaction tx = rewardTx.convertToTransaction();
-        //        tx
-        //        tx.setData(QByteArray());
-        qDebug() << "BlockchainDataMiningRewardTransaction " << rewardTx.getTypeTx() << tx.getTypeTx();
-        //        rewardTx.setAmountReward(BigNumberFloat(300));
-        tx.setAmount(BigNumber(100));
-        //        tx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
-        //        Transaction tx = rewardTx.convertToTransaction();
-        //        tx.setAmount(100);
-        node.txManager()->addTransaction(tx);
-        //        node.txManager()->proveTransactions();
-
-        const auto actors = node.actorIndex()->allActorsStd();
-        for (int i = 0; i < actors.size(); i++) {
-            const auto balance = node.blockchain()->getUserBalance(ActorId(actors[i]), ActorId());
-            std::cout << "[Actor: " << actors[i].c_str() << "] | ["
-                      << "Balance: " << balance << "]" << std::endl;
-        }
-
-        switch (status) {
-        case MessageStatus::NoStatus:
-            break;
-        case MessageStatus::Request: {
-            //            node.verifyHashProcessing(rewardTx, messageId);
-            break;
-        }
-        case MessageStatus::Response: {
-            //            node.txManager()->addTransaction(rewardTx.convertToTransaction());
-            break;
-        }
-        }
         break;
     }
 

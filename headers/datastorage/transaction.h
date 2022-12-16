@@ -22,6 +22,7 @@
 
 #include "datastorage/actor.h"
 #include "utils/bignumber.h"
+#include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 #include <QDateTime>
 #include <QString>
@@ -42,7 +43,7 @@ protected:
      * Uses sha3.
      */
     void calcHash();
-    BigNumber amount; // coin amount
+    BigNumberFloat amount; // coin amount
     long long date;
     std::string data;    // additional payload field
     ActorId token;       // token contract address
@@ -63,10 +64,10 @@ public:
     Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount);
 
     // Construct transaction with data
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
                 const std::string &data);
 
     Transaction(const Transaction &other);
@@ -83,8 +84,8 @@ public:
     void sign(const Actor<KeyPrivate> &actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
-    void setSenderBalance(BigNumber balance);
-    void setReceiverBalance(BigNumber balance);
+    //    void setSenderBalance(BigNumber balance);
+    //    void setReceiverBalance(BigNumber balance);
     void setPrevBlock(const BigNumber &value);
     void setGas(int gas);
     void setHop(int hop);
@@ -99,7 +100,7 @@ public:
     int getHop() const;
     ActorId getSender() const;
     ActorId getReceiver() const;
-    BigNumber getAmount() const;
+    BigNumberFloat getAmount() const;
     BigNumber getPrevBlock() const;
     std::string getData() const;
     std::string getHash() const;
@@ -124,18 +125,18 @@ public:
      * @brief 1.1 -> 1.1 * 10e18 in BigNumber
      * @param amount
      */
-    static BigNumber visibleToAmount(std::string amount);
+    static BigNumberFloat visibleToAmount(std::string amount);
 
     /**
      * @brief 1 * 10e18 from BigNumber to number -> 1
      * @param number
      */
-    static QString amountToVisible(const BigNumber &number);
-    static BigNumber amountNormalizeMul(const BigNumber &number);
-    static BigNumber amountMul(const BigNumber &number1, const BigNumber &number2);
-    static BigNumber amountDiv(const BigNumber &number1, const BigNumber &number2);
-    static BigNumber amountPercent(BigNumber number, uint percent);
-    void setAmount(const BigNumber &value);
+    static QString amountToVisible(const BigNumberFloat &number);
+    static BigNumberFloat amountNormalizeMul(const BigNumberFloat &number);
+    static BigNumberFloat amountMul(const BigNumberFloat &number1, const BigNumberFloat &number2);
+    static BigNumberFloat amountDiv(const BigNumberFloat &number1, const BigNumberFloat &number2);
+    static BigNumberFloat amountPercent(BigNumberFloat number, uint percent);
+    void setAmount(const BigNumberFloat &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;

@@ -40,7 +40,6 @@
 // database
 #include "utils/db_connector.h"
 
-#include "datastorage/dfs/dfs_controller.h"
 class TransactionManager;
 
 /*
@@ -141,10 +140,6 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block) const;
-
-    std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
-
-    void makeCoinProduction(const BigNumber &indexBlock);
 
 public:
     /**
@@ -277,7 +272,7 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
+    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId) const;
 
     /**
      * @brief Show blockchain

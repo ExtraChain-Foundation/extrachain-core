@@ -53,6 +53,10 @@ BigNumberFloat::BigNumberFloat(const BigNumberFloat &other) {
     UPDATE_DEBUG()
 }
 
+BigNumberFloat::BigNumberFloat(const BigNumber &other) {
+    this->m_data = boost::multiprecision::cpp_bin_float_50(other.data());
+}
+
 BigNumberFloat::BigNumberFloat(const boost::multiprecision::cpp_bin_float_50 &number) {
     this->m_data = number;
     UPDATE_DEBUG()
@@ -64,6 +68,11 @@ BigNumberFloat::BigNumberFloat(int number) {
 }
 
 BigNumberFloat::BigNumberFloat(long long number) {
+    this->m_data = cpp_bin_float_50(number);
+    UPDATE_DEBUG()
+}
+
+BigNumberFloat::BigNumberFloat(uint64_t number) {
     this->m_data = cpp_bin_float_50(number);
     UPDATE_DEBUG()
 }

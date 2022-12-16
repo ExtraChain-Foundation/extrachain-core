@@ -20,7 +20,7 @@
 #include "datastorage/transaction.h"
 
 Transaction::Transaction() {
-    this->amount = BigNumber(0);
+    this->amount = BigNumberFloat(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = std::string();
     this->prevBlock = BigNumber(0);
@@ -41,7 +41,7 @@ Transaction::Transaction(const std::string &serialized) {
     calcHash();
 }
 
-Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount) {
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount) {
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
@@ -55,7 +55,7 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
     calcHash();
 }
 
-Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
                          const std::string &data)
     : Transaction(sender, receiver, amount) {
     this->data = data;
@@ -113,7 +113,7 @@ ActorId Transaction::getProducer() const {
     return producer;
 }
 
-void Transaction::setAmount(const BigNumber &value) {
+void Transaction::setAmount(const BigNumberFloat &value) {
     amount = value;
 }
 
@@ -198,7 +198,7 @@ void Transaction::decrementHop() {
 void Transaction::clear() {
     this->sender = "0";
     this->receiver = "0";
-    this->amount = BigNumber(0);
+    this->amount = BigNumberFloat(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = std::string();
     this->token = "0";
@@ -224,7 +224,7 @@ ActorId Transaction::getReceiver() const {
     return this->receiver;
 }
 
-BigNumber Transaction::getAmount() const {
+BigNumberFloat Transaction::getAmount() const {
     return this->amount;
 }
 
@@ -323,7 +323,7 @@ QString Transaction::toString() const {
         + ", approver:" + approver.toByteArray() + ", digitalSignature:" + QString::fromStdString(digSig);
 }
 
-BigNumber Transaction::visibleToAmount(std::string amount) {
+BigNumberFloat Transaction::visibleToAmount(std::string amount) {
     if (amount.empty())
         return 0;
 
@@ -334,10 +334,10 @@ BigNumber Transaction::visibleToAmount(std::string amount) {
     amount.append(18 - secondLength, '0');
     amount = std::regex_replace(amount, std::regex("."), "");
 
-    return BigNumber(amount, 10);
+    return BigNumberFloat(amount, 10);
 }
 
-QString Transaction::amountToVisible(const BigNumber &number) {
+QString Transaction::amountToVisible(const BigNumberFloat &number) {
     if (number == 0)
         return "0";
 
@@ -361,43 +361,43 @@ QString Transaction::amountToVisible(const BigNumber &number) {
     return (minus ? "-" : "") + numberDec;
 }
 
-BigNumber Transaction::amountNormalizeMul(const BigNumber &number) {
+BigNumberFloat Transaction::amountNormalizeMul(const BigNumberFloat &number) {
     QByteArray n = number.toByteArray(10);
     if (n.length() < 36)
         return number;
-    return BigNumber(n.chopped(18).toStdString(), 10);
+    return BigNumberFloat(n.chopped(18).toStdString(), 10);
 }
 
-BigNumber Transaction::amountMul(const BigNumber &number1, const BigNumber &number2) {
+BigNumberFloat Transaction::amountMul(const BigNumberFloat &number1, const BigNumberFloat &number2) {
     QByteArray one = Transaction::amountToVisible(number1).toLatin1();
     QByteArray two = Transaction::amountToVisible(number1).toLatin1();
     int index1 = one.indexOf(".");
     int index2 = two.indexOf(".");
     int div1 = one.size() - index1 - 1;
     int div2 = two.size() - index2 - 1;
-    BigNumber returned1 = index1 == -1 ? 1 : BigNumber(10).pow(div1);
-    BigNumber returned2 = index2 == -1 ? 1 : BigNumber(10).pow(div2);
+    BigNumberFloat returned1 = index1 == -1 ? 1 : BigNumberFloat(10).pow(div1);
+    BigNumberFloat returned2 = index2 == -1 ? 1 : BigNumberFloat(10).pow(div2);
 
-    BigNumber number = (number1 * returned1) * (number2 * returned2);
+    BigNumberFloat number = (number1 * returned1) * (number2 * returned2);
 
     return amountNormalizeMul(number) / returned1 / returned2;
 }
 
-BigNumber Transaction::amountDiv(const BigNumber &number1, const BigNumber &number2) {
+BigNumberFloat Transaction::amountDiv(const BigNumberFloat &number1, const BigNumberFloat &number2) {
     QByteArray two = Transaction::amountToVisible(number2).toLatin1();
     int index = two.indexOf(".");
     int div = two.size() - index - 1;
     QByteArray newTwoByte = two.remove(index, 1);
 
-    BigNumber returned = index == -1 ? 1 : BigNumber(10).pow(div);
-    auto second = BigNumber(newTwoByte.toStdString(), 10);
+    BigNumberFloat returned = index == -1 ? 1 : BigNumberFloat(10).pow(div);
+    auto second = BigNumberFloat(newTwoByte.toStdString(), 10);
     if (second == 0)
         return 0;
 
     return number1 * returned / second;
 }
 
-BigNumber Transaction::amountPercent(BigNumber number, uint percent) {
+BigNumberFloat Transaction::amountPercent(BigNumberFloat number, uint percent) {
     if (percent > 100)
         percent = 100;
     return number * percent / 100;

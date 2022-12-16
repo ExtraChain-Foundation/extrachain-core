@@ -33,6 +33,7 @@
 #include "msgpack.hpp"
 
 #include "extrachain_global.h"
+#include "utils/bignumber.h"
 
 #ifdef QT_DEBUG
     #define UPDATE_DEBUG()       \
@@ -42,10 +43,10 @@
     #define UPDATE_DEBUG()
 #endif
 
-//namespace BigNumberUtils {
-//const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-//                                   '2', '3', '4', '5', '6', '7', '8', '9' };
-//}
+// namespace BigNumberUtils {
+// const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+//                                    '2', '3', '4', '5', '6', '7', '8', '9' };
+// }
 
 /**
  * Data type for big hex numbers for addresses
@@ -56,8 +57,10 @@ public:
     BigNumberFloat();
     BigNumberFloat(const std::string &bigNumberFloat, int base = 16);
     BigNumberFloat(const BigNumberFloat &other);
+    BigNumberFloat(const BigNumber &other);
     BigNumberFloat(int number);
     BigNumberFloat(long long number);
+    BigNumberFloat(uint64_t number);
     BigNumberFloat(const boost::multiprecision::cpp_bin_float_50 &number);
     ~BigNumberFloat() = default;
 

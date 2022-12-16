@@ -20,6 +20,8 @@
 #include <QJsonObject>
 
 #include "datastorage/blockchain.h"
+#include "datastorage/index/actorindex.h"
+#include "managers/data_mining_manager.h"
 #include "managers/tx_manager.h"
 
 #undef qCritical // temp
@@ -168,8 +170,7 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
         }
 
         else {
-            resultData["State"] =
-                (BigNumber(extractData[0]["State"]) - BigNumber(q.getAmount())).toStdString();
+            resultData["State"] = (BigNumberFloat(extractData[0]["State"]) - q.getAmount()).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
@@ -193,8 +194,7 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
         }
 
         else {
-            resultData["State"] =
-                (BigNumber(extractData[0]["State"]) + BigNumber(q.getAmount())).toStdString();
+            resultData["State"] = (BigNumberFloat(extractData[0]["State"]) + q.getAmount()).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
@@ -646,15 +646,6 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
     return block;
 }
 
-void Blockchain::makeCoinProduction(const BigNumber &indexBlock) {
-    if (indexBlock % 3 == 0) {
-        qDebug() << "Make reward request" << std::stoi(indexBlock.toStdString(10));
-        DFSP::StateMessage stateMessage;
-        node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Response,
-                                      "234234234312345", Config::Net::TypeSend::Focused);
-    }
-}
-
 int Blockchain::addBlock(Block &block, bool isGenesis) {
     if (isGenesis) {
         qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
@@ -697,7 +688,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
         saveTxInfoInEC(block.getData());
         qDebug() << (blockType == Config::DATA_BLOCK_TYPE) << blockType.c_str();
-        makeCoinProduction(indexBlock);
+        node->dataMiningManager()->coinRewardRequest(indexBlock);
 
         break;
     }
@@ -882,8 +873,8 @@ BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
-    BigNumber balance;
+BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
+    BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
@@ -1128,14 +1119,19 @@ void Blockchain::VerifyTx(Transaction tx) {
 
 void Blockchain::proveTx(Transaction *tx) {
     qDebug() << "proveTx: started" << tx->getTypeTx();
-    const bool isRewardTx = tx->isRewardTransaction();
-    RewardTransaction txReward;
-    if (isRewardTx) {
-        txReward = RewardTransaction(*tx);
-        qDebug() << txReward.getAmountReward() << tx->getAmount();
+
+    ActorId targetSender = tx->getSender();
+    ActorId targetReceiver = tx->getReceiver();
+    // start reward check
+    if (tx->isRewardTransaction()) {
+        targetSender = tx->getApprover();
+        // TODO: add extended check of validity
+        auto res = this->blockIndex.getLastTxByData(tx->getData());
+        if (res.first.isEmpty()) {
+            txManager->addProvedTransaction(tx);
+            return;
+        }
     }
-    ActorId targetSender = isRewardTx ? txReward.getSenderReceiver() : tx->getSender();
-    ActorId targetReceiver = isRewardTx ? txReward.getSenderReceiver() : tx->getReceiver();
     Actor<KeyPublic> senderActor;
     if (!targetSender.isEmpty())
         senderActor = node->actorIndex()->getActor(targetSender);
@@ -1147,7 +1143,7 @@ void Blockchain::proveTx(Transaction *tx) {
         txManager->removeUnApprovedTransaction(tx);
         return;
     }
-    if (targetSender == targetReceiver && !isRewardTx) {
+    if (targetSender == targetReceiver) {
         txManager->removeUnApprovedTransaction(tx);
         qDebug() << "Transaction not approved: sender == receiver";
         return;
@@ -1202,7 +1198,7 @@ void Blockchain::proveTx(Transaction *tx) {
             return;
         }
         if (targetSender != node->actorIndex()->firstId()) {
-            BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
+            BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
             if (tx->getAmount() <= 0) {

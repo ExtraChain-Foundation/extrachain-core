@@ -23,15 +23,6 @@ FragmentStorage::FragmentStorage(DFS::Packets::SegmentMessage segmentMessage)
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
-FragmentStorage::FragmentStorage(RecieveData recieveData)
-    : storageFile(DFS_PATH::filePath(recieveData.actor, recieveData.fileName).string() + DFSF::Extension)
-    , actor(recieveData.actor)
-    , fileName(recieveData.fileName)
-    , fileHash(recieveData.fileHash) {
-    storageFile.open();
-    storageFile.query(DFSF::CreateTableQueryFragments);
-}
-
 bool FragmentStorage::initLocalFile(uint64_t filesize) {
     DBRow row = makeFragmentRow(0, 0, filesize);
     return storageFile.insert(DFSF::TableNameFragments, row);
@@ -132,8 +123,8 @@ DFSP::SegmentMessage FragmentStorage::getFragment(uint64_t pos) {
 DFS::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) {
     DFSP::SegmentMessage fragment;
 
-    std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments
-        + " WHERE fragHash = '" + fragHash + "' ORDER BY pos DESC LIMIT 1";
+    std::string GetStartFragmentQuery = "SELECT * FROM " + DFSF::TableNameFragments + " WHERE fragHash = '"
+        + fragHash + "' ORDER BY pos DESC LIMIT 1";
     std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow fragMap = array[0];

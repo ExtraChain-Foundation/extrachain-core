@@ -348,7 +348,16 @@ EXTRACHAIN_EXPORT qint64 diskTotalMemory();
 QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
+typedef std::vector<std::string> MerkleDataBlocks;
 
+EXTRACHAIN_EXPORT void rootMerkleHash(std::vector<std::string> &listHashes,
+                                      std::vector<MerkleDataBlocks> &branchesTree, const bool isHahsing,
+                                      std::string &result);
+EXTRACHAIN_EXPORT std::string rootMerkleHash(std::string &data);
+EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
+                                                                  const bool isHahsing);
+EXTRACHAIN_EXPORT void hashingElements(std::vector<std::string> &vector);
+EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Sha3_512);
 EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
                                               HashEncode encode = HashEncode::Sha3_512);
@@ -442,6 +451,7 @@ enum class TxParam {
     UserSenderOrReceiverOrToken,
     User, // sender or receiver or approver
     Hash,
+    Data,
     Null
 };
 
