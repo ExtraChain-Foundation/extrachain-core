@@ -126,7 +126,7 @@ public:
      * @return transaction list
      */
     std::vector<Transaction> extractTransactions() const;
-    Transaction getTransactionByHash(QByteArray hash) const;
+    Transaction getTransactionByHash(std::string hash) const;
 
     bool contain(Block &from) const;
 

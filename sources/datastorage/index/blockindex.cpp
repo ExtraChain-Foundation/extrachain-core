@@ -292,7 +292,7 @@ BlockIndex::getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param, con
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id.toZeroByteArray(43))
+                if (tx.getHash() == id.toZeroStdString(43))
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
@@ -365,8 +365,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnu
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (BigNumber(tx.getHash().toStdString()) == id
-                    && BigNumber(tx.getToken().toStdString()) == token) {
+                if (BigNumber(tx.getHash()) == id && BigNumber(tx.getToken().toStdString()) == token) {
                     currentTxs << tx;
                     ++currentCount;
                 }
@@ -522,13 +521,13 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });
                 rowRow.insert({ "date", QByteArray::number(tmp.getDate()).toStdString() });
                 rowRow.insert({ "token", tmp.getToken().toByteArray().toStdString() });
-                rowRow.insert({ "data", tmp.getData().toStdString() });
+                rowRow.insert({ "data", tmp.getData() });
                 rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
                 rowRow.insert({ "gas", QByteArray::number(tmp.getGas()).toStdString() });
                 rowRow.insert({ "hop", QByteArray::number(tmp.getHop()).toStdString() });
-                rowRow.insert({ "hash", tmp.getHash().toStdString() });
+                rowRow.insert({ "hash", tmp.getHash() });
                 rowRow.insert({ "approver", tmp.getApprover().toByteArray().toStdString() });
-                rowRow.insert({ "digSig", tmp.getDigSig().toStdString() });
+                rowRow.insert({ "digSig", tmp.getDigSig() });
                 if (tmp.getProducer().isEmpty())
                     rowRow.insert({ "producer", "0" });
                 else
@@ -744,7 +743,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
             tx.setReceiver(ActorId(tmp.at("receiver")));
             tx.setAmount(BigNumber(tmp.at("amount")));
             tx.setDate(std::stoll(tmp.at("date")));
-            tx.setData(QByteArray::fromStdString(tmp.at("data")));
+            tx.setData(tmp.at("data"));
             tx.setToken(ActorId(tmp.at("token")));
             tx.setPrevBlock(BigNumber(tmp.at("prevBlock")));
             tx.setGas(std::stoi(tmp.at("gas")));

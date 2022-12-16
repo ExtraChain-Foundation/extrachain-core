@@ -1068,7 +1068,7 @@ void Blockchain::addBlockToBlockchain(Block &block) {
         auto accounts = node->accountController()->accounts();
         for (const auto &tmp : qAsConst(accounts))
             list.append(tmp.id());
-        QByteArray data = tmp.getData();
+        //        std::string data = tmp.getData();
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
@@ -1168,18 +1168,17 @@ void Blockchain::proveTx(Transaction *tx) {
         if (!tx->getProducer().isEmpty())
             producerActor = node->actorIndex()->getActor(tx->getProducer());
         else {
-            qDebug() << "Tx" << tx->getHash() << "producer 0";
+            qDebug() << "Tx" << tx->getHash().c_str() << "producer 0";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (!producerActor.key().verify(tx->getDataForDigSig().toStdString(),
-                                        tx->getDigSig().toStdString())) {
-            qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
+        if (!producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+            qDebug() << "Tx" << tx->getHash().c_str() << "not approved: bad signature in fee tx";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (tx->getAmount() <= 0) {
-            qDebug() << "Tx" << tx->getHash() << "fee amount <= 0";
+            qDebug() << "Tx" << tx->getHash().c_str() << "fee amount <= 0";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }

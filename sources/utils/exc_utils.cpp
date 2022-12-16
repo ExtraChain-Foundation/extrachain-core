@@ -41,6 +41,7 @@
 #include "cpp-base64/base64.h"
 #include "enc/enc_tools.h"
 #include "managers/data_mining_manager.h"
+#include "sha3.h"
 #include "utils/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
@@ -48,13 +49,27 @@
 #endif
 
 std::string Utils::calcHash(const std::string &data, HashEncode encode) {
-    QByteArray hash = calcHash(QByteArray::fromStdString(data), encode);
-    return hash.toStdString();
-}
-
-QByteArray Utils::calcHash(const QByteArray &data, HashEncode encode) {
-    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Sha3_256);
-    return bytesEncode(hash, encode);
+    std::string res;
+    switch (encode) {
+    case HashEncode::Sha3_512: {
+        SHA3 sha3(SHA3::Bits::Bits512);
+        res = sha3(data);
+        break;
+    }
+    case HashEncode::Base64: {
+        res = base64_encode(data);
+        break;
+    }
+    case HashEncode::Hex: {
+        qDebug() << "Hex encode not supported!";
+        break;
+    }
+    default: {
+        qDebug() << "This encode not supported!";
+        break;
+    }
+    }
+    return res;
 }
 
 // SERIALIZATION //

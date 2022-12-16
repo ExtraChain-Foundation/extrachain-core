@@ -107,7 +107,7 @@ public:
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const;
     std::string toStdString(int base = 16) const;
-    QByteArray toZeroByteArray(int size) const;
+    std::string toZeroStdString(int size) const;
     BigNumber pow(unsigned long number);
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;

@@ -21,10 +21,10 @@
 #define REWARD_TRANSACTION_H
 
 #include "datastorage/actor.h"
+#include "datastorage/transaction.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/dfs_utils.h"
-#include "datastorage/transaction.h"
 #include <QByteArray>
 #include <QDateTime>
 #include <QString>
@@ -59,6 +59,7 @@ struct TransactionRewardData {
         return recieveDataList;
     }
     MSGPACK_DEFINE(recieveDataList, additionalData);
+
 private:
     std::vector<RecieveData> recieveDataList;
 };
@@ -73,40 +74,42 @@ public:
     RewardTransaction();
 
     // Deserialize already created transaction
-    RewardTransaction(const QByteArray &serialized);
+    RewardTransaction(const std::string &serialized);
 
     // Construct transaction
     RewardTransaction(const ActorId &senderReceiver);
 
     RewardTransaction(const ActorId &senderReceiver, const TransactionRewardData &rewardData);
 
-
     // Construct transaction with data
-    RewardTransaction(const ActorId &senderReceiver, const QByteArray &data,
+    RewardTransaction(const ActorId &senderReceiver, const std::string &data,
                       const TransactionRewardData &rewardData);
 
     RewardTransaction(const RewardTransaction &other);
 
     RewardTransaction(const Transaction &transaction);
 
-
     void setSenderReceiverBalance(BigNumber balance);
     void clear();
-    ActorId getSenderReceiver() const { return senderReceiver; }
-    TransactionRewardData getRewardData() const { return rewardData; }
+    ActorId getSenderReceiver() const {
+        return senderReceiver;
+    }
+    TransactionRewardData getRewardData() const {
+        return rewardData;
+    }
     virtual bool isEmpty() const override;
     bool operator==(const RewardTransaction &transaction) const;
     bool operator!=(const RewardTransaction &transaction) const;
     void operator=(const RewardTransaction &transaction);
     std::string serialize() const;
-    bool deserialize(const QByteArray &serialized);
+    bool deserialize(const std::string &serialized);
     QString toString() const;
     void setRewardData(const TransactionRewardData &transactionRewardData);
     void setSenderReceiver(const ActorId &value);
-    void insertAdditionalData(AdditionalData& additionalData);
+    void insertAdditionalData(AdditionalData &additionalData);
 
     Transaction convertToTransaction();
-    void setAmountReward(const BigNumber& value);
+    void setAmountReward(const BigNumber &value);
 
     BigNumber getAmountReward() const;
 

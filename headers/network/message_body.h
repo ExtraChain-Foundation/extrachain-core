@@ -76,13 +76,13 @@ MessageBody<T> make_message(const T data, MessageType type, MessageStatus status
         qFatal("make message error: incorrect message id size");
     }
 
-    QByteArray randomId = Utils::calcHash(QByteArray::number(QDateTime::currentSecsSinceEpoch())
-                                          + QByteArray::number(QRandomGenerator::global()->bounded(100000)))
-                              .left(15); // temp
+    std::string randomId = Utils::calcHash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                           + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                               .substr(0, 15); // temp
 
     MessageBody<T> message = { .message_type = type,
                                .status = status,
-                               .message_id = !to_message_id.empty() ? to_message_id : randomId.toStdString(),
+                               .message_id = !to_message_id.empty() ? to_message_id : randomId,
                                .sender_id = sender.toStdString(),
                                .data = data };
 

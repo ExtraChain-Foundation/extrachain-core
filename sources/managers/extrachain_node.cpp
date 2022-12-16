@@ -357,7 +357,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calcHash(BigNumber::random(64).toByteArray()));
+    file.write(Utils::calcHash(BigNumber::random(64).toStdString()).c_str());
     file.flush();
     file.close();
 }

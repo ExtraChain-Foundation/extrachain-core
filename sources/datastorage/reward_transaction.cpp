@@ -26,8 +26,8 @@ RewardTransaction::RewardTransaction()
     calcHash();
 }
 
-RewardTransaction::RewardTransaction(const QByteArray &serialized) {
-    if (serialized.isEmpty()) {
+RewardTransaction::RewardTransaction(const std::string &serialized) {
+    if (serialized.empty()) {
         qDebug() << "Incorrect TX";
         return;
     }
@@ -53,7 +53,7 @@ RewardTransaction::RewardTransaction(const ActorId &senderReceiver, const Transa
     calcHash();
 }
 
-RewardTransaction::RewardTransaction(const ActorId &senderReceiver, const QByteArray &data,
+RewardTransaction::RewardTransaction(const ActorId &senderReceiver, const std::string &data,
                                      const TransactionRewardData &rewardData)
     : RewardTransaction(senderReceiver) {
     this->rewardData = rewardData;
@@ -71,10 +71,9 @@ RewardTransaction::RewardTransaction(const RewardTransaction &other)
     calcHash();
 }
 
-RewardTransaction::RewardTransaction(const Transaction &transaction)
-{
-//    const auto serialized = transaction.getData().remove(0, TypeTransaction::rewardTx.length());
-    qDebug() << transaction.getData().length() << transaction.getData();
+RewardTransaction::RewardTransaction(const Transaction &transaction) {
+    //    const auto serialized = transaction.getData().remove(0, TypeTransaction::rewardTx.length());
+    qDebug() << transaction.getData().size() << transaction.getData().c_str();
     deserialize(transaction.getData());
     typeTx = TypeTransaction::TypeTx::RewardTransaction;
     calcHash();
@@ -89,14 +88,13 @@ void RewardTransaction::insertAdditionalData(AdditionalData &additionalData) {
     rewardData.additionalData.push_back(additionalData);
 }
 
-Transaction RewardTransaction::convertToTransaction()
-{
+Transaction RewardTransaction::convertToTransaction() {
     Transaction tx = *this;
     tx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
     tx.setData(serialize());
     tx.setSender(getSenderReceiver());
     tx.setReceiver(getSenderReceiver());
-    qDebug() << "txData:" << tx.getData().length() << tx.getData() << tx.getTypeTx();
+    qDebug() << "txData:" << tx.getData().length() << tx.getData().c_str() << tx.getTypeTx();
     return tx;
 }
 
@@ -134,7 +132,7 @@ bool RewardTransaction::isEmpty() const {
         && hash.empty() && rewardData.isEmpty();
 }
 
-bool RewardTransaction::deserialize(const QByteArray &serialized) {
+bool RewardTransaction::deserialize(const std::string &serialized) {
     *this = MessagePack::deserialize<RewardTransaction>(serialized);
     return true;
 }

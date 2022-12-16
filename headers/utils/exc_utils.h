@@ -331,6 +331,7 @@ enum PrintDebug {
 
 enum class HashEncode {
     Base64,
+    Sha3_512,
     Hex,
 };
 
@@ -348,10 +349,9 @@ QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 
-EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Base64);
-EXTRACHAIN_EXPORT QByteArray calcHash(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Sha3_512);
 EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
-                                              HashEncode encode = HashEncode::Base64);
+                                              HashEncode encode = HashEncode::Sha3_512);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);

@@ -49,7 +49,7 @@ Block::Block(const QByteArray &data, const Block &prev)
     if (prev.isEmpty()) {
         // qDebug() << "BLOCK: Construction first block";
         this->index = BigNumber("0");
-        this->prevHash = Utils::calcHash(QByteArray("0 index"));
+        this->prevHash = Utils::calcHash("0 index");
     } else {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
         //          << prev->getIndex();
@@ -67,7 +67,7 @@ Block::Block(const std::string &data, const Block &prev)
     if (prev.isEmpty()) {
         // qDebug() << "BLOCK: Construction first block";
         this->index = BigNumber("0");
-        this->prevHash = Utils::calcHash(QByteArray("0 index"));
+        this->prevHash = Utils::calcHash("0 index");
     } else {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
         //          << prev->getIndex();
@@ -174,7 +174,7 @@ std::vector<Transaction> Block::extractTransactions() const {
     return transactions;
 }
 
-Transaction Block::getTransactionByHash(QByteArray hash) const {
+Transaction Block::getTransactionByHash(std::string hash) const {
     auto txList = extractTransactions();
     for (const auto &i : txList)
         if (i.getHash() == hash)

@@ -308,11 +308,11 @@ bool NetworkManager::isActiveConnectionExists() {
     return false;
 }
 
-bool NetworkManager::checkMsgCount(const QByteArray &msg) {
+bool NetworkManager::checkMsgCount(const std::string &msg) {
     bool flag_result = true;
     bool value = 0;
-    QByteArray hashMsg = Utils::calcHash(msg);
-    QMap<QByteArray, int>::iterator it = msgHashList.find(hashMsg);
+    std::string hashMsg = Utils::calcHash(msg);
+    QMap<std::string, int>::iterator it = msgHashList.find(hashMsg);
 
     if (it == msgHashList.end())
         msgHashList.insert(hashMsg, value);
@@ -330,12 +330,7 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
-    //    if (m_messages.contains(identifier)) {
-    //        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
-    //        return;
-    //    }
-
-    if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
+    if (!checkMsgCount(message)) {
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
         return;
@@ -550,7 +545,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        if (!transaction.getData().isEmpty()) {
+        if (!transaction.getData().empty()) {
             TransactionData transactionData =
                 MessagePack::deserialize<TransactionData>(transaction.getData());
             qDebug() << "run code from " << transactionData.path.c_str()

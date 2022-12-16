@@ -166,10 +166,10 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto publicKey = this->m_key.publicKey();
-        auto hash = Utils::calcHash(QByteArray::fromStdString(publicKey), Utils::HashEncode::Hex);
+        std::string hash = Utils::calcHash(publicKey, Utils::HashEncode::Base64);
 
         if (hash.size() >= 20)
-            m_id = hash.left(20).toStdString();
+            m_id = hash.substr(0, 20);
         else
             qFatal("[Actor] Create: error size of hash");
     }

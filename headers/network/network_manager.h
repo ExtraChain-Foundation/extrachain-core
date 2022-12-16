@@ -81,7 +81,7 @@ private:
     bool active = false;
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
-    QMap<QByteArray, int> msgHashList = {};
+    QMap<std::string, int> msgHashList = {};
 
     ExtraChainNode &node;
     QNetworkAddressEntry *local = nullptr;
@@ -125,7 +125,7 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg);
+    bool checkMsgCount(const std::string &msg);
 
 private slots:
     void onNewWsConnection();
