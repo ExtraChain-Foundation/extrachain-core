@@ -97,15 +97,6 @@ public:
     Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
 
     Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
-    /**
-     * @brief createFreezeTransaction
-     * if receiver = 0 -> to me
-     * @param receiver
-     * @param amount
-     * @param token
-     * @return
-     */
-    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
 
     std::string exportUser();
     bool importUser(const std::string &data, const std::string &login, const std::string &password);
@@ -133,7 +124,6 @@ private:
 
 signals:
     void ready();
-    void NewTx(Transaction tx);
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
 

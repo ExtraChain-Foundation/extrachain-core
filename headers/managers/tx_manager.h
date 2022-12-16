@@ -94,7 +94,7 @@ public slots:
      */
 
     void proveTransactions();
-    void addTransaction(Transaction tx);
+    void addTransaction(Transaction &tx);
     void addProvedTransaction(Transaction *transaction);
     void removeUnApprovedTransaction(Transaction *tx);
     // Unapproved tx's //

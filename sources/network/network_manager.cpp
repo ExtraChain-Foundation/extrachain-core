@@ -527,7 +527,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        if (!transaction.getData().empty()) {
+        if (!(transaction.getData().empty())
+            && (transaction.getTypeTx() != TypeTransaction::TypeTx::RewardTransaction)) {
             TransactionData transactionData =
                 MessagePack::deserialize<TransactionData>(transaction.getData());
             qDebug() << "run code from " << transactionData.path.c_str()

@@ -160,13 +160,7 @@ void ExtraChainNode::showMessage(QString from, QString message) {
 // }
 
 void ExtraChainNode::connectTxManager() {
-    // TODOD delete later (s)
-    connect(this, &ExtraChainNode::NewTx, m_txManager, &TransactionManager::addTransaction);
 }
-
-// DFSIndex *ExtraChainNode::getDFSIndex(){
-//    return dfsIndex;
-//}
 
 Blockchain *ExtraChainNode::blockchain() {
     return m_blockchain;

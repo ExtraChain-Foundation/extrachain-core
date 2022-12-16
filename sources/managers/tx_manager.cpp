@@ -52,14 +52,12 @@ void TransactionManager::removeTransaction(int i) {
     this->pendingTxs.removeAt(i);
 }
 
-void TransactionManager::addTransaction(Transaction tx) {
+void TransactionManager::addTransaction(Transaction &tx) {
     qDebug() << "TRANSACTION MANAGER: addTransaction " << tx.toString();
 
     if (tx.isEmpty())
         return;
-
-    Transaction *trx = new Transaction(tx);
-    receivedTxList.append(trx);
+    receivedTxList.append(&tx);
 }
 
 void TransactionManager::addProvedTransaction(Transaction *tx) {
