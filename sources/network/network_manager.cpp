@@ -235,9 +235,6 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     if (!isActiveConnectionExists()) {
-        // TODO: remove
-        messageReceived(serialized_message, receiver_identifier);
-        // TODO: remove
         qDebug() << "[NetworkManager] Save message to cache";
         saveToCache(serialized_message, typeSend, receiver_identifier);
         return;

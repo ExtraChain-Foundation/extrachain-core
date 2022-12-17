@@ -30,6 +30,7 @@ class DataMiningManager : public QObject {
     Q_OBJECT
 private:
     ExtraChainNode *node;
+    const int CoinProductionRate = 100;
 
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);

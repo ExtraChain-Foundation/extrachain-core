@@ -76,7 +76,7 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
 }
 
 void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
-    if (blockIndex % 3 == 0) {
+    if (blockIndex % CoinProductionRate == 0) {
         qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
         DFSP::StateMessage stateMessage;
         stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
