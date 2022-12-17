@@ -26,6 +26,12 @@
 #include "utils/exc_utils.h"
 #include <QDateTime>
 #include <QString>
+enum class TypeTx {
+    Transaction = 0,
+    RewardTransaction = 1
+};
+MSGPACK_ADD_ENUM(TypeTx)
+FORMAT_ENUM(TypeTx)
 
 struct TransactionData {
     std::string hash;
@@ -55,7 +61,7 @@ protected:
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string digSig;
-    int typeTx;
+    TypeTx typeTx;
 
 public:
     // Construct empty transaction
@@ -140,8 +146,8 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
-    int getTypeTx() const;
-    virtual void setTypeTx(int newTypeTx);
+    TypeTx getTypeTx() const;
+    virtual void setTypeTx(TypeTx newTypeTx);
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
                    digSig, typeTx)

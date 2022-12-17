@@ -518,13 +518,6 @@ enum class TxParam {
 }
 } // namespace SearchEnum
 
-namespace TypeTransaction {
-
-enum TypeTx {
-    Transaction = 0,
-    RewardTransaction
-};
-}
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType {
         TxToUser,

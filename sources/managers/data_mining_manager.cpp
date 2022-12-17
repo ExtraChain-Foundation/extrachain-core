@@ -66,7 +66,7 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     rewardTx.setAmount(result);
     rewardTx.setReceiver(mb.sender_id);
     rewardTx.setSender(node->actorIndex()->firstId());
-    rewardTx.setTypeTx(TypeTransaction::TypeTx::RewardTransaction);
+    rewardTx.setTypeTx(TypeTx::RewardTransaction);
     rewardTx.setToken(ActorId());
     rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
     rewardTx.setData(Utils::bytesEncodeStdString(mb.data));

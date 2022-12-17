@@ -86,7 +86,7 @@ void Transaction::setReceiver(const ActorId &value) {
 }
 
 bool Transaction::isRewardTransaction() const {
-    return typeTx == TypeTransaction::TypeTx::RewardTransaction;
+    return typeTx == TypeTx::RewardTransaction;
 }
 
 void Transaction::setProducer(const ActorId &value) {
@@ -140,11 +140,11 @@ void Transaction::calcHash() {
     }
 }
 
-int Transaction::getTypeTx() const {
+TypeTx Transaction::getTypeTx() const {
     return typeTx;
 }
 
-void Transaction::setTypeTx(int newTypeTx) {
+void Transaction::setTypeTx(TypeTx newTypeTx) {
     typeTx = newTypeTx;
 }
 
