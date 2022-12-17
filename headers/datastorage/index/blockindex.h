@@ -55,7 +55,11 @@ public:
      * @return last block
      */
     Block getLastBlock() const;
-
+    /**
+     * @brief Get last real (not dummy) block
+     * @return last real block
+     */
+    Block getLastRealBlock() const;
     /**
      * @brief Get last genesis block
      * @return last genesis block
@@ -79,8 +83,10 @@ public:
     Block getBlockByData(const QByteArray &data) const;
 
     Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
+    Block getLastRealBlockById();
 
     std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByData(const std::string &data) const;
     std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
     std::pair<Transaction, QByteArray> getLastTxByReceiver(const BigNumber &id,
                                                            const QByteArray &token) const;
@@ -100,10 +106,14 @@ public:
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
     int removeById(const BigNumber &id);
+    void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;
+    BigNumberFloat calculateCirculativeBalance() const;
+    BigNumberFloat calculateCirculativeBalanceBlock(const Block &block) const;
+    BigNumberFloat calculateCirculativeBalanceLastGenesisBlock() const;
 
 private:
-    std::pair<Transaction, QByteArray> getLastTxByParam(const BigNumber &id, SearchEnum::TxParam param,
+    std::pair<Transaction, QByteArray> getLastTxByParam(const std::string &id, SearchEnum::TxParam param,
                                                         const QByteArray &token) const;
     QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
                                           int count = 10, BigNumber token = 0) const;

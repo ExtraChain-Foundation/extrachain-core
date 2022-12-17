@@ -19,6 +19,8 @@
 
 #include "datastorage/private_profile.h"
 
+#include <QJsonObject>
+
 #include "enc/enc_tools.h"
 #include "utils/exc_utils.h"
 

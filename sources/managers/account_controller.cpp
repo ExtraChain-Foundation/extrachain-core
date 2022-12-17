@@ -18,15 +18,15 @@
  */
 
 #include "managers/account_controller.h"
-
 #include "datastorage/blockchain.h"
+#include "datastorage/index/actorindex.h"
 
 AccountController::AccountController(ExtraChainNode &node)
     : node(node) {
 }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
-    if (hash.empty() || hash.size() != 43)
+    if (hash.empty())
         qFatal("[Accounts] Create actor: hash is empty");
 
     Actor<KeyPrivate> actor;

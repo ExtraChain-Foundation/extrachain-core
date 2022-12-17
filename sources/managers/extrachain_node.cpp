@@ -19,6 +19,9 @@
 
 #include "managers/extrachain_node.h"
 
+#include <QJsonObject>
+#include <sodium/core.h>
+
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
 #include "datastorage/blockchain.h"
@@ -28,11 +31,10 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
+#include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
-
-#include <sodium/core.h>
 
 ExtraChainNode::ExtraChainNode() {
     static bool singleton = false;
@@ -51,13 +53,16 @@ ExtraChainNode::ExtraChainNode() {
     m_accountController = new AccountController(*this);
 
     m_networkManager = new NetworkManager(*this);
-    ThreadPool::addThread(m_networkManager);
+    //    ThreadPool::addThread(m_networkManager);
 
     m_blockchain = new Blockchain(this, fileMode);
     m_txManager = new TransactionManager(m_accountController, m_blockchain, this);
     m_dfs = new DfsController(*this);
 
     m_blockchain->setTxManager(m_txManager);
+
+    m_dmm = new DataMiningManager(this);
+
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -75,6 +80,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_txManager;
     delete m_blockchain;
     delete m_accountController;
+    delete m_dmm;
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -100,8 +106,14 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
         m_blockchain->addBlock(tmp, true);
 
-        // emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
-        //                            tokenColor.toLatin1());
+        // TEST
+        Block lastBlock = m_blockchain->getLastBlock();
+        Block block(std::string(""), lastBlock);
+        //        m_blockchain->addBlock(block);
+        // TEST
+
+        //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
+        //                             tokenColor.toLatin1());
 
         //        // TODO: usernames: move to console
         //        DBConnector dbc(
@@ -148,13 +160,7 @@ void ExtraChainNode::showMessage(QString from, QString message) {
 // }
 
 void ExtraChainNode::connectTxManager() {
-    // TODOD delete later (s)
-    connect(this, &ExtraChainNode::NewTx, m_txManager, &TransactionManager::addTransaction);
 }
-
-// DFSIndex *ExtraChainNode::getDFSIndex(){
-//    return dfsIndex;
-//}
 
 Blockchain *ExtraChainNode::blockchain() {
     return m_blockchain;
@@ -176,61 +182,37 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
                         .arg(tx.toString(), QString(actor.id().toByteArray()));
 
         // 1) set prev block id
-        BigNumber lastBlockId = m_blockchain->getLastBlock().getIndex();
+        BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
         if (lastBlockId.isEmpty()) {
-            qDebug() << QString("Warning: can not create tx:[%1]. There no last block in "
+            qDebug() << QString("Warning: can not create tx:[%1]. There is no last block in "
                                 "blockchain")
                             .arg(tx.toString());
             return Transaction();
         }
         tx.setPrevBlock(lastBlockId);
-
-        // 2) sign transaction
+        // 2) check coin availability
+        if (blockchain()->getUserBalance(actor.id(), tx.getToken()) < tx.getAmount()) {
+            qDebug() << QString("Warning: can not create tx:[%1]. There is not enough coins/tokens in wallet")
+                            .arg(tx.toString());
+            return Transaction();
+        }
+        // 3) sign transaction
 
         tx.sign(actor);
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
-        // send without fee
         if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId()
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
-            emit NewTx(tx);
-        else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-            // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
-        } else {
-            BigNumber amountTemp(tx.getAmount());
-            if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
-                >= 0) {
-                // send with fee
-
-                Transaction txFee = tx;
-                // restructure tx for fee
-                {
-                    amountTemp /= 100;
-                    txFee.setAmount(amountTemp);
-                    txFee.setReceiver(actor.id()); // send fee to my freezeFee
-                    // ENUM | Tx hash that fee refer
-                    txFee.setData(Serialization::serialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
-                    txFee.sign(actor);
-                }
-
-                // send fee tx
-                // TODONEW emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
-                // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
-            } else {
-                qDebug() << "Not enough money ";
-                return Transaction();
-            }
-        }
-
-        return tx;
-    } else
-
+            m_txManager->addTransaction(tx);
+    } else {
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
+        return Transaction();
+    }
 
-    return Transaction();
+    return tx;
 }
 
-Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount, ActorId token) {
+Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
         return Transaction();
@@ -242,32 +224,6 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
         Transaction tx(actor.id(), receiver, amount);
         // add sent tx balances
 
-        tx.setToken(token);
-        //        if (actorIndex->m_firstId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
-        //                tx.setSenderBalance(BigNumber(0));
-
-        return this->createTransaction(tx);
-    }
-    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toByteArray()));
-    return Transaction();
-}
-
-Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
-                                                    ActorId token) {
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-
-    if (!actor.empty()) {
-        if (receiver.isEmpty()) {
-            qDebug() << "Create freeze tx to me";
-            receiver = actor.id();
-        } else
-            qDebug() << "Create freeze tx to" << receiver;
-
-        Transaction tx(actor.id(), receiver, amount);
-        // add sent tx balances
-        tx.setData(toFreeze ? Fee::FREEZE_TX : Fee::UNFREEZE_TX);
         tx.setToken(token);
         //        if (actorIndex->m_firstId != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
@@ -309,14 +265,14 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
         return false;
     }
 
-    auto extrachain = array[0].toString();
+    auto extrachainVersion = array[0].toString();
     auto date = array[1].toInteger();
     auto profile = array[2].toObject();
     auto profileBytes = QJsonDocument(profile).toJson(QJsonDocument::Compact);
     auto profileBytesEncrypted =
         QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
 
-    Q_UNUSED(extrachain)
+    Q_UNUSED(extrachainVersion)
     Q_UNUSED(date)
 
     QString privateProfile = "keystore/" + profile["main"].toString() + ".profile";
@@ -331,7 +287,7 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
     return true;
 }
 
-Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount,
                                                   ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -369,7 +325,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calcHash(BigNumber::random(64).toByteArray()));
+    file.write(Utils::calcHash(BigNumber::random(64).toStdString()).c_str());
     file.flush();
     file.close();
 }
@@ -402,6 +358,8 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
+    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
+    connect(m_networkManager, &NetworkManager::fetchFragments, m_dfs, &DfsController::fetchFragments);
     connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
@@ -424,6 +382,8 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
     connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
+    connect(m_networkManager, &NetworkManager::newSocket,
+            [this]() { m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id()); });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
 }
@@ -436,6 +396,8 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(DataStorage::TMP_FOLDER);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
+
+    QDir().mkpath(QString::fromStdString(Scripts::folder));
 
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
@@ -451,6 +413,14 @@ ActorIndex *ExtraChainNode::actorIndex() const {
 
 DfsController *ExtraChainNode::dfs() const {
     return m_dfs;
+}
+
+TransactionManager *ExtraChainNode::txManager() const {
+    return m_txManager;
+}
+
+DataMiningManager *ExtraChainNode::dataMiningManager() const {
+    return m_dmm;
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {
@@ -481,7 +451,7 @@ void ExtraChainNode::testPermissions() const {
     const std::string userPass1 = "12345678";
     const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
     Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
-    m_accountController->createActor(ActorType::Account, userHash1);
+        m_accountController->createActor(ActorType::Account, userHash1);
 
     DFSController dfsController;
     dfsController.initDB(actor);
@@ -517,34 +487,37 @@ void ExtraChainNode::testPermissions() const {
 
     struct SetPermission : public TestSet{
         SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
-    PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId, fileHash),
-            permission(permission),
-            resultSet(result) {}
-        PermissionManager::Permission permission;
-        bool resultSet;
+                      PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId,
+                      fileHash), permission(permission), resultSet(result) {} PermissionManager::Permission
+    permission; bool resultSet;
     };
 
     struct GetPermission : public TestSet{
         GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
-    PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash), resultGet(permission)
-    {} PermissionManager::Permission resultGet;
+                      PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash),
+            resultGet(permission)
+        {} PermissionManager::Permission resultGet;
     };
 
     std::vector<TestSet*> testSet;
     testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm",
-    PermissionManager::Read)); testSet.emplace_back(new GetPermission("get", actor, actor.idStd().c_str(),
-    ".perm", PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor,
-    actor1.idStd().c_str(), "fHashPublic", PermissionManager::NoPermission)); testSet.emplace_back(new
-    GetPermission("get", actor, actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
+                                           PermissionManager::Read)); testSet.emplace_back(new
+                         GetPermission("get", actor, actor.idStd().c_str(),
+                                       ".perm", PermissionManager::Edit)); testSet.emplace_back(new
+                         GetPermission("get", actor, actor1.idStd().c_str(), "fHashPublic",
+    PermissionManager::NoPermission)); testSet.emplace_back(new GetPermission("get", actor,
+    actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
 
     testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic",
-    PermissionManager::Edit, false)); testSet.emplace_back(new SetPermission("set", actor,
-    actor1.idStd().c_str(), ".perm", PermissionManager::Edit, true)); testSet.emplace_back(new
-    SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate", PermissionManager::Edit, true));
+                                           PermissionManager::Edit, false)); testSet.emplace_back(new
+                         SetPermission("set", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Edit,
+    true)); testSet.emplace_back(new SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate",
+                                           PermissionManager::Edit, true));
 
     testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate",
-    PermissionManager::Edit)); testSet.emplace_back(new GetPermission("get", actor1, actor1.idStd().c_str(),
-    ".perm", PermissionManager::Edit));
+                                           PermissionManager::Edit)); testSet.emplace_back(new
+                         GetPermission("get", actor1, actor1.idStd().c_str(),
+                                       ".perm", PermissionManager::Edit));
 
     for(auto & test: testSet)
     {
@@ -553,7 +526,7 @@ void ExtraChainNode::testPermissions() const {
             GetPermission* getPerm = static_cast<GetPermission*>(test);
             auto permission = permManager.getPermission(getPerm->actor,
                                                         {getPerm->userId.toStdString(),
-                                                         getPerm->fileHash.toStdString()});
+                                                          getPerm->fileHash.toStdString()});
             assert(permission == getPerm->resultGet);
         }
         else
@@ -561,8 +534,8 @@ void ExtraChainNode::testPermissions() const {
             SetPermission* setPerm = static_cast<SetPermission*>(test);
             auto permission = permManager.setPermission(setPerm->actor,
                                                         {setPerm->userId.toStdString(),
-                                                         setPerm->fileHash.toStdString(),
-                                                         permManager.permissions[setPerm->permission].toStdString()});
+                                                          setPerm->fileHash.toStdString(),
+                                                          permManager.permissions[setPerm->permission].toStdString()});
             assert(permission == setPerm->resultSet);
         }
     }
@@ -653,7 +626,7 @@ void ExtraChainNode::test() const {
 
     validate(newContent, newContent);
 
-    // Add segment tests
+         // Add segment tests
     newContent.insert(0, "qwe");
 
     DFSController::AddSegmentMsg addSegmentMsg;
@@ -669,7 +642,7 @@ void ExtraChainNode::test() const {
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    //
+         //
 
     newContent.insert(10, "qwe");
 
@@ -683,7 +656,7 @@ void ExtraChainNode::test() const {
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    //
+         //
 
     addSegmentMsg.offset = std::to_string(newContent.size());
     addSegmentMsg.fileHash = fHashPublic;
@@ -696,7 +669,7 @@ void ExtraChainNode::test() const {
     qDebug() << "New value: " << newContent;
     validate(newContent, newContent);
 
-    // Delete segment tests
+         // Delete segment tests
 
     newContent = newContent.toStdString().erase(0, 10).c_str();
 

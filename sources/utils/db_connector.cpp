@@ -60,6 +60,7 @@ QString DBConnector::sqlite_version() {
 bool DBConnector::open() {
     if (isOpen()) {
         qFatal("[DBConnector] Double open");
+        return false;
     }
     int rc = sqlite3_open(m_file.c_str(), &db);
     if (rc) {

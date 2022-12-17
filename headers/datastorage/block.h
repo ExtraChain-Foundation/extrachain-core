@@ -49,6 +49,7 @@ struct BlockCompare {
 
 namespace Config {
 static const std::string DATA_BLOCK_TYPE = "data";
+static const std::string DUMMY_BLOCK_TYPE = "dummy";
 static const std::string MERGE_BLOCK = "dataMerge";
 }
 
@@ -86,6 +87,13 @@ public:
      * @param prev
      */
     Block(const QByteArray &data, const Block &prev);
+    /**
+     * @brief Block
+     * Initial block construction, prev = nullptr for first block
+     * @param data
+     * @param prev
+     */
+    Block(const std::string &data, const Block &prev);
 
     virtual ~Block();
 
@@ -102,7 +110,7 @@ protected:
      * Override in subclasses
      * @return digSig data
      */
-    virtual QByteArray getDataForHash() const;
+    virtual std::string getDataForHash() const;
     virtual const std::string &getDataForDigSig() const;
 
 public:
@@ -112,13 +120,13 @@ public:
      * @brief add data to this block
      * @param data
      */
-    void addData(const QByteArray &data);
+    void addData(const std::string &data);
     /**
      * @brief extract non-empty transactions from data
      * @return transaction list
      */
     std::vector<Transaction> extractTransactions() const;
-    Transaction getTransactionByHash(QByteArray hash) const;
+    Transaction getTransactionByHash(std::string hash) const;
 
     bool contain(Block &from) const;
 
@@ -169,7 +177,7 @@ public:
         std::string index_str;
         msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
             .msgpack_unpack(msgpack_o);
-        index = QByteArray::fromStdString(index_str);
+        index = index_str;
     }
 };
 

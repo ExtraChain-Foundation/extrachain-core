@@ -31,7 +31,6 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
-#include "utils/coinprocess.h"
 
 class ExtraChainNode;
 
@@ -45,20 +44,16 @@ class EXTRACHAIN_EXPORT TransactionManager : public QObject {
 private:
     // to create block's from pending txs
     QTimer blockCreationTimer;
+    QTimer proveTimer;
 
     // received transactions that will be packed into block
-    QList<Transaction> pendingTxs;
-
-    QList<Transaction *> pendingForFeeTxs;
-    QList<Transaction *> pendingFeeSenderTxs;
-
-    QList<Transaction *> pendingFeeTxs;
+    std::vector<Transaction> pendingTxs;
 
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
     QList<QByteArray> unApprovedTxHashes;
 
-    QList<Transaction *> receivedTxList;
+    QList<Transaction> receivedTxList;
 
     // current user
     //    Actor<KeyPrivate> currentUser;
@@ -78,11 +73,11 @@ private:
     void removeTransaction(int i);
 
 public:
-    static QByteArray convertTxs(const QList<Transaction> &txs);
-    BigNumber checkPendingTxsList(const ActorId &sender);
-    QList<Transaction *> getReceivedTxList() const;
+    static std::string convertTxs(const std::vector<Transaction> &txs);
+    BigNumberFloat checkPendingTxsList(const ActorId &sender);
+    QList<Transaction> getReceivedTxList() const;
 
-    QList<Transaction> getPendingTxs() const;
+    std::vector<Transaction> getPendingTxs() const;
 
 public slots:
     /**
@@ -90,7 +85,7 @@ public slots:
      * Creates a memblock, and setup data field with serialized data.
      * Emits SendBlock signal.
      */
-    Block makeBlock();
+    void makeBlock();
 
     /**
      * If Transaction is valid, adds it to the txList.
@@ -98,13 +93,10 @@ public slots:
      * @return 0 is transaction is successfully added
      */
 
+    void proveTransactions();
     void addTransaction(Transaction tx);
-    void addProvedTransaction(Transaction *transaction);
-    void removeUnApprovedTransaction(Transaction *tx);
-
-    void addPendingForFeeTxs(Transaction *transaction);
-    void verifyApproverFeeTx(Transaction *transaction);
-    void addPendingFeeSenderTxs(Transaction *transaction);
+    void addProvedTransaction(Transaction transaction);
+    void removeUnApprovedTransaction(Transaction tx);
     // Unapproved tx's //
 
     /**

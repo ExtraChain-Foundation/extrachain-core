@@ -31,6 +31,9 @@ public:
     int bytesOutgoing() const;
     int bytesIncoming() const;
 
+public:
+    virtual void sendMessage(const QByteArray &data) = 0;
+
 protected slots:
     virtual void closeSocket();
 

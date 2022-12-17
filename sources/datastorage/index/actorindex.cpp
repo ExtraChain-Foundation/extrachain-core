@@ -68,7 +68,7 @@ bool ActorIndex::validateBlock(const Block &block) {
 bool ActorIndex::validateTx(const Transaction &tx) {
     Actor<KeyPublic> actor = this->getActor(tx.getApprover());
     if (actor.empty()) {
-        qWarning() << "Can not validate tx" << tx.getHash() << ": There no actor" << tx.getApprover()
+        qWarning() << "Can not validate tx" << tx.getHash().c_str() << ": There no actor" << tx.getApprover()
                    << " in local storage";
         return false;
     }

@@ -29,12 +29,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     endif (UNIX)
 endif()
 
+
 find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
+find_package(cpprestsdk REQUIRED)
+find_package(unofficial-hash-library CONFIG REQUIRED)
+
+
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
 
@@ -44,8 +49,9 @@ set(EXTRACHAIN_CORE_INCLUDES
     )
 
 set(EXTRACHAIN_CORE_SOURCES
-
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/fragment_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/historical_chain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
@@ -54,7 +60,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
+#    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/reward_transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/threds/inserter_files.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
@@ -64,6 +72,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/tx_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
@@ -75,12 +84,19 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/coinprocess.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/cpp-base64/base64.h
+#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
+#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm
+#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm.h
+#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm_rust_test.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/genesis_block.cpp
@@ -88,7 +104,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/memindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
+#    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/reward_transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/threds/inserter_files.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/enc_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
@@ -98,6 +116,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/tx_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
@@ -106,11 +125,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/coinprocess.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/cpp-base64/base64.cpp
     )
 
 # add_library(extrachainc
@@ -153,16 +174,9 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx fmt::fmt-header-only
-    magic_enum::magic_enum Boost::boost Boost::system Boost::thread) # extrachainc
+    magic_enum::magic_enum Boost::boost Boost::system Boost::thread cpprestsdk::cpprest unofficial::hash-library) # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpackc-cxx Boost::boost Boost::system Boost::thread)
-
-if (UNIX AND NOT IOS) # temp
-    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmp.a ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/libgmpxx.a)
-endif(UNIX AND NOT IOS)
-if (WIN32) # temp
-    target_link_libraries(extrachain ${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/mpir.lib)
-endif(WIN32)
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 
