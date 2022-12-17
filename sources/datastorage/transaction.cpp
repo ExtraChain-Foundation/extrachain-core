@@ -310,6 +310,7 @@ void Transaction::operator=(const Transaction &other) {
     this->approver = other.approver;
     this->digSig = other.digSig;
     this->producer = other.producer;
+    this->typeTx = other.typeTx;
 }
 
 std::string Transaction::serialize() const {
