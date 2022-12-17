@@ -31,6 +31,7 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
+#include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
@@ -59,6 +60,9 @@ ExtraChainNode::ExtraChainNode() {
     m_dfs = new DfsController(*this);
 
     m_blockchain->setTxManager(m_txManager);
+
+    m_dmm = new DataMiningManager(this);
+
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -76,6 +80,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_txManager;
     delete m_blockchain;
     delete m_accountController;
+    delete m_dmm;
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -103,8 +108,8 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
 
         // TEST
         Block lastBlock = m_blockchain->getLastBlock();
-        Block block("", lastBlock);
-//        m_blockchain->addBlock(block);
+        Block block(std::string(""), lastBlock);
+        //        m_blockchain->addBlock(block);
         // TEST
 
         //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
@@ -155,13 +160,7 @@ void ExtraChainNode::showMessage(QString from, QString message) {
 // }
 
 void ExtraChainNode::connectTxManager() {
-    // TODOD delete later (s)
-    connect(this, &ExtraChainNode::NewTx, m_txManager, &TransactionManager::addTransaction);
 }
-
-// DFSIndex *ExtraChainNode::getDFSIndex(){
-//    return dfsIndex;
-//}
 
 Blockchain *ExtraChainNode::blockchain() {
     return m_blockchain;
@@ -183,61 +182,37 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
                         .arg(tx.toString(), QString(actor.id().toByteArray()));
 
         // 1) set prev block id
-        BigNumber lastBlockId = m_blockchain->getLastBlock().getIndex();
+        BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
         if (lastBlockId.isEmpty()) {
-            qDebug() << QString("Warning: can not create tx:[%1]. There no last block in "
+            qDebug() << QString("Warning: can not create tx:[%1]. There is no last block in "
                                 "blockchain")
                             .arg(tx.toString());
             return Transaction();
         }
         tx.setPrevBlock(lastBlockId);
-
-        // 2) sign transaction
+        // 2) check coin availability
+        if (blockchain()->getUserBalance(actor.id(), tx.getToken()) < tx.getAmount()) {
+            qDebug() << QString("Warning: can not create tx:[%1]. There is not enough coins/tokens in wallet")
+                            .arg(tx.toString());
+            return Transaction();
+        }
+        // 3) sign transaction
 
         tx.sign(actor);
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
-        // send without fee
         if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId()
             || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
             m_txManager->addTransaction(tx);
-        else if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-            // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
-        } else {
-            BigNumber amountTemp(tx.getAmount());
-            if (m_blockchain->getUserBalance(tx.getSender(), tx.getToken()) - amountTemp - amountTemp / 100
-                >= 0) {
-                // send with fee
-
-                Transaction txFee = tx;
-                // restructure tx for fee
-                {
-                    amountTemp /= 100;
-                    txFee.setAmount(amountTemp);
-                    txFee.setReceiver(actor.id()); // send fee to my freezeFee
-                    // ENUM | Tx hash that fee refer
-                    txFee.setData(Serialization::serialize({ tx.getHash(), Fee::FEE_FREEZE_TX }));
-                    txFee.sign(actor);
-                }
-
-                // send fee tx
-                // TODONEW emit sendMsg(txFee.serialize(), Messages::ChainMessage::TxMessage); // send fee
-                // TODONEW emit sendMsg(tx.serialize(), Messages::ChainMessage::TxMessage);
-            } else {
-                qDebug() << "Not enough money ";
-                return Transaction();
-            }
-        }
-
-        return tx;
-    } else
-
+    } else {
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
+        return Transaction();
+    }
 
-    return Transaction();
+    return tx;
 }
 
-Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount, ActorId token) {
+Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
         return Transaction();
@@ -259,63 +234,6 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumber amount
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
                     .arg(QString(receiver.toByteArray()));
     return Transaction();
-}
-
-Transaction ExtraChainNode::createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze,
-                                                    ActorId token) {
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-
-    if (!actor.empty()) {
-        if (receiver.isEmpty()) {
-            qDebug() << "Create freeze tx to me";
-            receiver = actor.id();
-        } else
-            qDebug() << "Create freeze tx to" << receiver;
-
-        Transaction tx(actor.id(), receiver, amount);
-        // add sent tx balances
-        tx.setData(toFreeze ? Fee::FREEZE_TX : Fee::UNFREEZE_TX);
-        tx.setToken(token);
-        //        if (actorIndex->m_firstId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
-        //                tx.setSenderBalance(BigNumber(0));
-
-        return this->createTransaction(tx);
-    }
-    qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
-                    .arg(QString(receiver.toByteArray()));
-    return Transaction();
-}
-
-RewardTransaction ExtraChainNode::createRewardTx(const std::vector<RecieveData> &recieveDataList,
-                                                 bool sendRequest, std::string messageId) {
-    ActorId actorId = accountController()->mainActor().id();
-    RewardTransaction rewardTransaction(actorId, TransactionRewardData(recieveDataList));
-
-    if (sendRequest) {
-        messageId =
-            network()->send_message(rewardTransaction, MessageType::BlockchainDataMiningRewardTransaction,
-                                    MessageStatus::Request, messageId, Config::Net::TypeSend::Focused);
-    }
-
-    return rewardTransaction;
-}
-
-void ExtraChainNode::verifyHashProcessing(RewardTransaction &rewardTransaction, std::string &messageId) {
-    const auto recieveDataList = rewardTransaction.getRewardData().getRecieveDataList();
-    for (const auto &recieveData : recieveDataList) {
-        FragmentStorage fs(recieveData);
-        DFSP::SegmentMessage segmentMessage = fs.getFragment(recieveData.fragmentHash);
-        if (!segmentMessage.FileHash.empty()) {
-            AdditionalData additionalData = { .actorVerifier =
-                                                  accountController()->mainActor().id().toStdString(),
-                                              .hashRecord = segmentMessage.FileHash };
-            rewardTransaction.insertAdditionalData(additionalData);
-        }
-    }
-
-    messageId = network()->send_message(rewardTransaction, MessageType::BlockchainDataMiningRewardTransaction,
-                                        MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
 }
 
 std::string ExtraChainNode::exportUser() {
@@ -369,7 +287,7 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
     return true;
 }
 
-Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount,
+Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount,
                                                   ActorId token) {
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -407,7 +325,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calcHash(BigNumber::random(64).toByteArray()));
+    file.write(Utils::calcHash(BigNumber::random(64).toStdString()).c_str());
     file.flush();
     file.close();
 }
@@ -464,9 +382,8 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
     connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
-    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
-        m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
-    });
+    connect(m_networkManager, &NetworkManager::newSocket,
+            [this]() { m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id()); });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
 }
@@ -500,6 +417,10 @@ DfsController *ExtraChainNode::dfs() const {
 
 TransactionManager *ExtraChainNode::txManager() const {
     return m_txManager;
+}
+
+DataMiningManager *ExtraChainNode::dataMiningManager() const {
+    return m_dmm;
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {

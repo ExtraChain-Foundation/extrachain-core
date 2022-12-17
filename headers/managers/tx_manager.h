@@ -31,7 +31,6 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
-#include "utils/coinprocess.h"
 
 class ExtraChainNode;
 
@@ -48,12 +47,7 @@ private:
     QTimer proveTimer;
 
     // received transactions that will be packed into block
-    QList<Transaction> pendingTxs;
-
-    QList<Transaction *> pendingForFeeTxs;
-    QList<Transaction *> pendingFeeSenderTxs;
-
-    QList<Transaction *> pendingFeeTxs;
+    std::vector<Transaction> pendingTxs;
 
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
@@ -79,11 +73,11 @@ private:
     void removeTransaction(int i);
 
 public:
-    static QByteArray convertTxs(const QList<Transaction> &txs);
-    BigNumber checkPendingTxsList(const ActorId &sender);
+    static std::string convertTxs(const std::vector<Transaction> &txs);
+    BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction *> getReceivedTxList() const;
 
-    QList<Transaction> getPendingTxs() const;
+    std::vector<Transaction> getPendingTxs() const;
 
 public slots:
     /**
@@ -100,13 +94,9 @@ public slots:
      */
 
     void proveTransactions();
-    void addTransaction(Transaction tx);
+    void addTransaction(Transaction &tx);
     void addProvedTransaction(Transaction *transaction);
     void removeUnApprovedTransaction(Transaction *tx);
-
-    void addPendingForFeeTxs(Transaction *transaction);
-    void verifyApproverFeeTx(Transaction *transaction);
-    void addPendingFeeSenderTxs(Transaction *transaction);
     // Unapproved tx's //
 
     /**

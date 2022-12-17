@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "utils/bignumber.h"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <msgpack.hpp>
@@ -164,26 +165,13 @@ namespace Packets {
     struct StateMessage {
         StateMessageType StateTypeMessage;
         uint64_t DataAmountStored;
-        uint64_t DataAmountTotalStoredInNetwork;
-        uint64_t BlockAmount;
-        double Coefficient;
-        uint64_t TotalSupply;
+        double Coefficient = 0.5;
         double CoinProducedForNode = 0.0;
-        uint64_t CoinProductionAlgorithmTickBlocks;
-        float BlockProductionRate;
-        uint64_t CoinProductionAlgorithmTickPerHour;
+        uint64_t CoinProductionAlgorithmTickBlocks = 100;
+        float BlockProductionRate = 0.5;
+        uint64_t CoinProductionAlgorithmTickPerHour = 18;
 
-        void calc() {
-            CoinProducedForNode = ((double)DataAmountStored/(double)DataAmountTotalStoredInNetwork) *
-                ((double)TotalSupply/(double)BlockAmount) * Coefficient;
-
-            if(CoinProducedForNode < 1) {
-                Coefficient *= 2;
-                calc();
-            }
-        }
-        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, DataAmountTotalStoredInNetwork,
-                       BlockAmount, Coefficient, TotalSupply, CoinProducedForNode,
+        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, Coefficient, CoinProducedForNode,
                        CoinProductionAlgorithmTickBlocks, BlockProductionRate,
                        CoinProductionAlgorithmTickPerHour)
     };
@@ -210,7 +198,7 @@ namespace Fragments {
             qDebug() << "actor: [" << actor.c_str() << "]"
                      << "fileHash" << fileHash.c_str() << "]"
                      << "filePath" << filePath.c_str() << "]";
-            for(const auto& pair: fragmentPositionList) {
+            for (const auto &pair : fragmentPositionList) {
                 qDebug() << pair.first << pair.second;
             }
         }
@@ -240,6 +228,15 @@ namespace Historical {
           "hash       TEXT                NOT NULL "
           ");";
 }
+namespace Reward {
+    static const BigNumber coinProductionAlgorithmTick = BigNumber("100", 10);
+    struct CoinReward {
+        std::string Actor;
+        int Coin;
+        MSGPACK_DEFINE(Actor, Coin)
+    };
+}
+
 namespace Tables {
     namespace ActorDirFile {
         static const std::string TableName = "FilesTable";
@@ -255,10 +252,13 @@ namespace Tables {
         std::vector<DBRow> getFileDataByHash(DBConnector *db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector *db, std::string name);
         std::string getLastName(DBConnector &db);
+        int totalFileSize(const std::string &actorId);
+        uint64_t dataAmountStoredSize(const std::string &actorId, const std::string &storjName);
 
         // TODO: optional
         DBConnector actorDbConnector(const std::string &actorId);
         std::filesystem::path actorDbPath(const std::string &actorId);
+        std::filesystem::path storjDbPath(const std::string &actorId, const std::string &storjName);
         DFS::Packets::DirRow getDirRow(const std::string &actorId, const std::string &fileHash);
         std::vector<DFS::Packets::DirRow> getDirRows(const std::string &actorId, uint64_t lastModified = 0);
         bool addDirRows(const std::string &actorId, const std::vector<DFS::Packets::DirRow> &dirRows);
@@ -304,6 +304,7 @@ namespace STDFS = std::filesystem;
 namespace DFSHC = DFS::Historical;
 namespace DFSB = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
+namespace DFSR = DFS::Reward;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)

@@ -81,7 +81,7 @@ private:
     bool active = false;
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
-    QMap<QByteArray, int> msgHashList = {};
+    QMap<std::string, int> msgHashList = {};
 
     ExtraChainNode &node;
     QNetworkAddressEntry *local = nullptr;
@@ -125,7 +125,7 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg);
+    bool checkMsgCount(const std::string &msg);
 
 private slots:
     void onNewWsConnection();
@@ -177,7 +177,8 @@ public:
         }
 
         auto &mainActor = node.accountController()->mainActor();
-        MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
+        MessageBody message =
+            make_message(MessagePack::serialize(data), type, status, mainActor.id(), to_message_id);
         auto serialized = message.serialize();
         auto sign = mainActor.key().sign(serialized);
         std::string receiver_identifier;

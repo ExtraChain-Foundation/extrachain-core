@@ -120,6 +120,10 @@ BigNumber BigNumber::operator%(const BigNumber &bigNumber) {
     return BigNumber(m_data % bigNumber.data());
 }
 
+BigNumber BigNumber::operator%(const BigNumber &bigNumber) const {
+    return BigNumber(m_data % bigNumber.data());
+}
+
 BigNumber BigNumber::operator%(long long number) {
     return BigNumber(m_data % number);
 }
@@ -254,13 +258,12 @@ std::string BigNumber::toStdString(int base) const {
     }
 }
 
-QByteArray BigNumber::toZeroByteArray(int size) const {
-    auto number = this->toByteArray();
+std::string BigNumber::toZeroStdString(int size) const {
+    auto number = this->toStdString();
     if (size <= number.length())
         return number;
-
-    auto zero = QByteArray().fill('0', size - number.length());
-    return zero + number;
+    number.insert(0, size - number.size(), '0');
+    return number;
 }
 
 BigNumber BigNumber::pow(unsigned long number) {

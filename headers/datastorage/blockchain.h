@@ -22,14 +22,13 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
-#include "datastorage/dummy_block.h"
 #include "datastorage/genesis_block.h"
-#include "datastorage/index/actorindex.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/message_body.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QMutex>
@@ -53,13 +52,6 @@ class TransactionManager;
  *
  */
 
-enum class FreezeBalanceSearch {
-    AllStaking,
-    AllNotMyStaking,
-    OnlyMyStaking,
-    OnlySender
-};
-
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
@@ -79,7 +71,8 @@ private:
     int blocksFromLastGenesis = 0;
 
     bool launched;
-    int totalSupply;
+    BigNumber circulativeSupply;
+    bool possibleMining = true;
 
 public:
     explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
@@ -103,7 +96,7 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const QByteArray &data) const;
+    void saveTxInfoInEC(const std::string &data) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
@@ -111,8 +104,6 @@ private:
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
     QByteArray findRecordsInBlock(const Block &block);
     bool signCheckAdd(Block &block);
-    void sendFeeUnfreeze(Block &block);
-    void sendUnFee(Block &block);
     QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
@@ -123,15 +114,12 @@ private:
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
                                     QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
-    std::unique_ptr<DummyBlock> createDummyBlock() const;
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
-
-    bool checkHaveUNFreezeTx(const Transaction *tx, const BigNumber &indexBlock); // return true if haven`t
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -152,11 +140,6 @@ private:
      * @return block - if it is valid, empty block - if block is corrupted.
      */
     Block validateAndReturnBlock(const Block &block) const;
-    void stakingReward(const Block &block);
-
-    std::pair<BigNumber, BigNumber> getLastTxForStaking(const ActorId &receiver, const ActorId &token);
-
-    bool checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver);
 
 public:
     /**
@@ -172,6 +155,10 @@ public:
      * @return last blockchain block
      */
     Block getLastBlock() const;
+    /**
+     * @return last real blockchain block
+     */
+    Block getLastRealBlock() const;
     /**
      * Gets the block from blockchain by *value* of a certain *type*
      * @param value
@@ -213,14 +200,14 @@ public:
      */
     void removeAllDummyBlocks(const Block &block);
 
-        /**
-         * @brief Check if two blocks can be merged
-         * (has identical id and at least one common transaction)
-         * @param blockA
-         * @param blockB
-         * @return true, if blocks can be merged
-         */
-        bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
+    /**
+     * @brief Check if two blocks can be merged
+     * (has identical id and at least one common transaction)
+     * @param blockA
+     * @param blockB
+     * @return true, if blocks can be merged
+     */
+    bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
     /**
      * @brief Merge two blocks to one and sign it using approver
      * @param blockA
@@ -285,11 +272,8 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumber getUserBalance(ActorId userId, ActorId tokenId) const;
-    BigNumber getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
-                                   FreezeBalanceSearch balanceSearch) const;
+    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId) const;
 
-    QMap<QByteArray, BigNumber> getAllStakingForMe(ActorId userId, ActorId tokenId) const;
     /**
      * @brief Show blockchain
      */
@@ -300,14 +284,34 @@ public:
     void getSmContractMembers(const Block &block) const;
 
     /**
-     *  @brief Get total supply
+     *  @brief Get circulative supply
      */
-    int getTotalSuply() const;
+    BigNumber getCirculativeSuply() const;
 
     /**
-     * @brief Set new value total supply
+     * @brief Set new value circulative supply
      */
-    void setTotalSupply(const int &newValue);
+    void setCirculativeSupply(const BigNumber &newValue);
+
+    /**
+     * @brief Increase circulative supply value
+     */
+    void increaseCirculativeSupply(const BigNumber &value);
+
+    /**
+     * @brief Send reward amount
+     */
+    void sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId = "");
+
+    /**
+     * @brief Set possible mining
+     */
+    void setPossibleMining(const bool &value);
+
+    /**
+     * @brief Get possible mining
+     */
+    bool getPossibleMining() const;
 
 signals:
     void newNotify(Notification ntf);
@@ -352,6 +356,12 @@ signals:
     void updateLastTransactionList();
     void sendMessage(const QByteArray &data, const unsigned int &type);
     void finished();
+
+    /**
+     * @brief possibleMiningChange
+     * @param possibleMinig
+     */
+    void possibleMiningChange(const bool &possibleMinig);
 
 public:
     void addBlockToBlockchain(Block &block);

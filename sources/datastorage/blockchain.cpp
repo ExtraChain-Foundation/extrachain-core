@@ -20,6 +20,8 @@
 #include <QJsonObject>
 
 #include "datastorage/blockchain.h"
+#include "datastorage/index/actorindex.h"
+#include "managers/data_mining_manager.h"
 #include "managers/tx_manager.h"
 
 #undef qCritical // temp
@@ -29,6 +31,9 @@ Blockchain::Blockchain(ExtraChainNode *node, bool fileMode)
     : fileMode(fileMode) {
     this->node = node;
     genBlockData.clear();
+
+    //    setCirculativeSupply(blockIndex.calculateCirculativeBalance());
+    //    increaseCirculativeSupply(blockIndex.calculateCirculativeBalanceLastGenesisBlock());
 }
 
 Blockchain::~Blockchain() {
@@ -71,6 +76,11 @@ void Blockchain::setTxManager(TransactionManager *value) {
 
 Block Blockchain::getLastBlock() const {
     Block block = fileMode ? blockIndex.getLastBlock() : memIndex.getLastBlock();
+    return validateAndReturnBlock(block);
+}
+
+Block Blockchain::getLastRealBlock() const {
+    Block block = fileMode ? blockIndex.getLastRealBlock() : memIndex.getLastBlock();
     return validateAndReturnBlock(block);
 }
 
@@ -125,8 +135,8 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
     return fileMode ? blockIndex.getLastTxByApprover(id, token) : memIndex.getLastTxByApprover(id, token);
 }
 
-void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
-    QList<QByteArray> l = Serialization::deserialize(data, Serialization::TRANSACTION_FIELD_SIZE);
+void Blockchain::saveTxInfoInEC(const std::string &data) const {
+    std::vector<std::string> l = Serialization::deserialize(data);
     std::vector<DBRow> extractData;
     DBRow resultData;
 
@@ -160,8 +170,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         }
 
         else {
-            resultData["State"] =
-                (BigNumber(extractData[0]["State"]) - BigNumber(q.getAmount())).toStdString();
+            resultData["State"] = (BigNumberFloat(extractData[0]["State"]) - q.getAmount()).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
@@ -185,8 +194,7 @@ void Blockchain::saveTxInfoInEC(const QByteArray &data) const {
         }
 
         else {
-            resultData["State"] =
-                (BigNumber(extractData[0]["State"]) + BigNumber(q.getAmount())).toStdString();
+            resultData["State"] = (BigNumberFloat(extractData[0]["State"]) + q.getAmount()).toStdString();
             cacheDB.update("UPDATE cacheData "
                            "SET State ='"
                            + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
@@ -256,122 +264,6 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     return res;
 }
 
-QMap<QByteArray, BigNumber> Blockchain::getInvestmentsStaking(const ActorId &wallet, const ActorId &token) {
-    QMap<QByteArray, BigNumber> res;
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        auto listTx = blockIndex.getBlockById(i).extractTransactions();
-        for (const auto &tx : listTx) {
-            if (tx.getData().contains(Fee::FEE))
-                continue;
-            if (tx.getReceiver() == wallet && tx.getToken() == token
-                && tx.getData().contains(Fee::FREEZE_TX)) {
-                res[tx.getSender().toByteArray()] += tx.getAmount();
-            }
-            if (tx.getSender() == wallet && tx.getToken() == token
-                && tx.getData().contains(Fee::UNFREEZE_TX)) {
-                res[tx.getSender().toByteArray()] -= tx.getAmount();
-                if (res[tx.getSender().toByteArray()] == 0)
-                    res.remove(tx.getSender().toByteArray());
-            }
-        }
-    }
-    return res;
-}
-
-void Blockchain::stakingReward(const Block &block) {
-    auto listTx = block.extractTransactions();
-    for (const auto &tx : listTx) {
-        if (tx.getData().contains(Fee::FREEZE_TX) || tx.getData().contains(Fee::FEE)
-            || tx.getData().contains(Fee::STAKING_REWARD))
-            continue;
-
-        auto &listWallet = node->accountController()->accounts();
-
-        for (const auto &wallet : qAsConst(listWallet)) {
-            BigNumber myFullStaking =
-                getFreezeUserBalance(wallet.id(), tx.getToken(), ActorId(), FreezeBalanceSearch::AllStaking);
-
-            // BigNumber myStaking = getFreezeUserBalance(wallet, tx.getToken());
-            QMap<QByteArray, BigNumber> investments = getInvestmentsStaking(wallet.id(), tx.getToken());
-            if (myFullStaking == 0 && investments.isEmpty())
-                continue;
-
-            for (auto i = investments.begin(); i != investments.end(); i++) {
-                BigNumber fullSupply = getFullSupply(tx.getToken().toByteArray());
-                BigNumber MSP = Transaction::amountDiv(myFullStaking, fullSupply) * 100;
-                BigNumber RTx = tx.getAmount() / 1000;
-                BigNumber myPercent = Transaction::amountDiv(i.value(), myFullStaking) * 100;
-
-                BigNumber MSP_RTx = Transaction::amountMul(MSP, RTx);
-                BigNumber MSP_RTx_myPercent = Transaction::amountMul(MSP_RTx, myPercent);
-
-                if (MSP_RTx_myPercent == 0) {
-                    qDebug() << "0 on Staking (MSP_RTx_myPercent)";
-                    continue;
-                }
-
-                BigNumber StakingReward = MSP_RTx_myPercent * StakingCoef / 1000;
-                //                qDebug() << "STAKING: who " << i.key() << ";\n full supply "
-                //                         << Transaction::amountToVisible(fullSupply) << ";\n MSP "
-                //                         << Transaction::amountToVisible(MSP) << ";\n RTx "
-                //                         << Transaction::amountToVisible(RTx) << ";\n myPercent "
-                //                         << Transaction::amountToVisible(myPercent) << "\n StakingReward "
-                //                         << Transaction::amountToVisible(StakingReward) << ";\n
-                //                         myFullStaking "
-                //                         << Transaction::amountToVisible(myFullStaking);
-                if (StakingReward == 0) {
-                    qDebug() << "0 on Staking";
-                    continue;
-                }
-
-                if (StakingReward + fullSupply > Transaction::visibleToAmount("1000000000")) {
-                    qDebug() << "STAKING ENDED";
-                    continue;
-                }
-
-                if (checkStakingReward(tx.getHash(), tx.getToken(), wallet.id()))
-                    continue;
-
-                Transaction rtx(ActorId(), i.key().toStdString(), StakingReward);
-                rtx.setToken(tx.getToken());
-                auto [hash, blockId] = getLastTxForStaking(wallet.id(), tx.getToken());
-                rtx.setData(
-                    Serialization::serialize({ hash.toByteArray(), blockId.toByteArray(), tx.getHash(),
-                                               block.getIndex().toByteArray(), Fee::STAKING_REWARD }));
-                rtx.setProducer(wallet.id());
-                rtx.sign(node->accountController()->currentProfile().getActor(wallet.id()));
-                // TODONEW emit sendMessage(rtx.serialize(), Messages::ChainMessage::TxMessage);
-            }
-        }
-    }
-}
-
-std::pair<BigNumber, BigNumber> Blockchain::getLastTxForStaking(const ActorId &receiver,
-                                                                const ActorId &token) {
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        auto listTx = blockIndex.getBlockById(i).extractTransactions();
-        for (const auto &tx : listTx) {
-            if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token) {
-                return { tx.getHash().toStdString(), i };
-            }
-        }
-    }
-    return { 0, 0 };
-}
-
-bool Blockchain::checkStakingReward(const QByteArray &hash, const ActorId &token, const ActorId receiver) {
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        auto listTx = blockIndex.getBlockById(i).extractTransactions();
-        for (const auto &tx : listTx) {
-            if (tx.getSender().isEmpty() && tx.getReceiver() == receiver && tx.getToken() == token
-                && tx.getData().contains(hash)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 Block Blockchain::checkBlock(const Block &block) {
     if (GenesisBlock::isGenesisBlock(block.serialize()))
         return GenesisBlock(block.serialize());
@@ -416,27 +308,13 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block) {
         for (const Transaction &tx : qAsConst(transactions)) {
             if (tx.getReceiver() == node->actorIndex()->firstId())
                 break;
-            if (tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX) {
-                GenesisDataRow recSender =
-                    GenesisDataRow(tx.getSender(),
-                                   getFreezeUserBalance(tx.getSender(), tx.getToken(), ActorId(),
-                                                        FreezeBalanceSearch::OnlyMyStaking),
-                                   tx.getToken(), DataStorage::typeDataRow::STAKING);
-                GenesisDataRow recReceiver =
-                    GenesisDataRow(tx.getReceiver(),
-                                   getFreezeUserBalance(tx.getReceiver(), tx.getToken(), ActorId(),
-                                                        FreezeBalanceSearch::OnlyMyStaking),
-                                   tx.getToken(), DataStorage::typeDataRow::STAKING);
-                addRecordsIfNew(recReceiver, recSender);
-            } else {
-                GenesisDataRow recSender =
-                    GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender(), tx.getToken()),
-                                   tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
-                GenesisDataRow recReceiver =
-                    GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver(), tx.getToken()),
-                                   tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
-                addRecordsIfNew(recReceiver, recSender);
-            }
+            GenesisDataRow recSender =
+                GenesisDataRow(tx.getSender(), getUserBalance(tx.getSender(), tx.getToken()), tx.getToken(),
+                               DataStorage::typeDataRow::UNIVERSAL);
+            GenesisDataRow recReceiver =
+                GenesisDataRow(tx.getReceiver(), getUserBalance(tx.getReceiver(), tx.getToken()),
+                               tx.getToken(), DataStorage::typeDataRow::UNIVERSAL);
+            addRecordsIfNew(recReceiver, recSender);
         }
     }
     return QByteArray();
@@ -508,21 +386,9 @@ bool Blockchain::signCheckAdd(Block &block) {
                         count++;
                     }
                 }
-                if (count != 0) {
-                    if ((list.size() / 3) + 1 >= COUNT_UNFROZE_FEE) {
-                        sendUnFee(block);
-                    }
-                    return true;
-                }
             }
         }
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
-            if ((list.size() / 3) == COUNT_APPROVER_BLOCK) {
-                sendFeeUnfreeze(block);
-            }
-            if ((list.size() / 3) >= COUNT_UNFROZE_FEE) {
-                sendUnFee(block);
-            }
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
             QByteArray id = node->accountController()->mainActor().id().toByteArray();
@@ -535,89 +401,6 @@ bool Blockchain::signCheckAdd(Block &block) {
         }
     }
     return false;
-}
-
-void Blockchain::sendUnFee(Block &block) {
-    auto txList = block.extractTransactions();
-    for (const auto &tmpTx : txList) {
-        if (tmpTx.getData().contains(Fee::FREEZE_TX))
-            continue;
-        ActorId sender = tmpTx.getSender();
-        ActorId approver = block.getApprover();
-        if (approver.isEmpty())
-            continue;
-        BigNumber fee = tmpTx.getAmount() / 100;
-        Actor<KeyPrivate> actor = node->accountController()->currentWallet();
-        ActorId producer = actor.id();
-        if (producer == approver /* || producer == sender*/)
-            continue;
-        Transaction tx(sender, sender, fee);
-        tx.setToken(tmpTx.getToken());
-        BigNumber lastBlockId = getLastBlock().getIndex();
-        if (lastBlockId.isEmpty())
-            return;
-        tx.setPrevBlock(lastBlockId);
-        tx.setProducer(producer);
-        QByteArray dataForTxFee = "";
-        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-            Block tmpBlock = blockIndex.getBlockById(i);
-            auto listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs) {
-                if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
-                    && tmp.getData().contains(tmpTx.getHash())) {
-                    dataForTxFee = Serialization::serialize({ i.toByteArray(), tmpTx.getHash(), Fee::UNFEE });
-                    break;
-                }
-            }
-        }
-        if (dataForTxFee.isEmpty())
-            continue;
-        tx.setData(dataForTxFee);
-        tx.sign(actor);
-        // TODONEW emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
-    }
-}
-
-void Blockchain::sendFeeUnfreeze(Block &block) {
-    auto txList = block.extractTransactions();
-    for (const auto &tmpTx : txList) {
-        if (tmpTx.getData().contains(Fee::FREEZE_TX))
-            continue;
-        ActorId sender = tmpTx.getSender();
-        ActorId approver = block.getApprover();
-        if (approver.isEmpty())
-            continue;
-        BigNumber fee = tmpTx.getAmount() / 100 / 10;
-        Actor<KeyPrivate> actor = node->accountController()->currentWallet();
-        ActorId producer = actor.id();
-        if (producer == approver /*producer == sender || */)
-            continue;
-        Transaction tx(sender, approver, fee);
-        tx.setToken(tmpTx.getToken());
-        BigNumber lastBlockId = getLastBlock().getIndex();
-        if (lastBlockId.isEmpty())
-            return;
-        tx.setPrevBlock(lastBlockId);
-        tx.setProducer(producer);
-        QByteArray dataForTxFee = "";
-        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-            Block tmpBlock = blockIndex.getBlockById(i);
-            auto listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs) {
-                if (tmp.getSender() == sender && tmp.getData().contains(Fee::FEE_FREEZE_TX)
-                    && tmp.getData().contains(tmpTx.getHash())) {
-                    dataForTxFee = Serialization::serialize(
-                        { block.getIndex().toByteArray(), tmpTx.getHash(), Fee::FEE_UNFREEZE_TX });
-                    break;
-                }
-            }
-        }
-        if (dataForTxFee.isEmpty())
-            continue;
-        tx.setData(dataForTxFee);
-        tx.sign(actor);
-        // TODONEW emit sendMessage(tx.serialize(), Messages::ChainMessage::TxMessage);
-    }
 }
 
 GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<ActorId, BigNumber> states) {
@@ -671,11 +454,6 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<
         return GenesisBlock();
 }
 
-std::unique_ptr<DummyBlock> Blockchain::createDummyBlock() const {
-    const std::string last_block_hash = getLastBlock().getHash();
-    const QByteArray last_block_hash_b = QByteArray::fromStdString(last_block_hash);
-    return std::make_unique<DummyBlock>(last_block_hash_b);
-}
 // Merging //
 
 int Blockchain::mergeBlockWithLocal(Block &received) {
@@ -717,8 +495,7 @@ int Blockchain::mergeBlockWithLocal(Block &received) {
             tmpBlocks << getBlockByIndex(i);
         }
         if (tmpBlocks.isEmpty()) {
-            qWarning() << "Error: There is no blocks found locally while merging block"
-                       << receivedBlockIndex;
+            qWarning() << "Error: There is no blocks found locally while merging block" << receivedBlockIndex;
             return Errors::NO_BLOCKS;
         }
     }
@@ -771,8 +548,7 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
                 tmpBlocks << getBlockByIndex(i);
             }
             if (tmpBlocks.isEmpty()) {
-                qWarning() << "Error: There is no blocks found locally while merging block"
-                           << receivedIndex;
+                qWarning() << "Error: There is no blocks found locally while merging block" << receivedIndex;
                 return Errors::NO_BLOCKS;
             }
         }
@@ -910,8 +686,10 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-        saveTxInfoInEC(QByteArray::fromStdString(block.getData()));
-        stakingReward(block);
+        saveTxInfoInEC(block.getData());
+        qDebug() << (blockType == Config::DATA_BLOCK_TYPE) << blockType.c_str();
+        node->dataMiningManager()->coinRewardRequest(indexBlock);
+
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
@@ -1022,10 +800,10 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
             if (std::find(transactionsB.begin(), transactionsB.end(), tx) == transactionsB.end())
                 resultList.push_back(tx);
         }
-        QList<QByteArray> list;
+        std::vector<std::string> list;
         for (const Transaction &tx : resultList)
-            list << tx.serialize().c_str();
-        QByteArray dataBlock = Serialization::serialize(list);
+            list.push_back(tx.serialize());
+        std::string dataBlock = Serialization::serialize(list);
         Block mergedBlock(dataBlock, prev);
         signBlock(mergedBlock);
         return mergedBlock;
@@ -1065,13 +843,14 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
             } else
                 count++;
         }
-        QList<QByteArray> list;
+        std::vector<std::string> list;
         if (count < Config::NECESSARY_SAME_TX)
             return GenesisBlock();
         for (const GenesisDataRow &gn : resultList)
-            list << gn.serialize();
-        QByteArray genData = Serialization::serialize(list);
-        GenesisBlock mergedBlock(genData, prev, QByteArray::fromStdString(blockA.getPrevGenHash()));
+            list.push_back(gn.serialize());
+        std::string genData = Serialization::serialize(list);
+        GenesisBlock mergedBlock(QByteArray::fromStdString(genData), prev,
+                                 QByteArray::fromStdString(blockA.getPrevGenHash()));
         signBlock(mergedBlock);
         return mergedBlock;
     }
@@ -1094,8 +873,8 @@ BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
-    BigNumber balance;
+BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
+    BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
@@ -1118,108 +897,13 @@ BigNumber Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
         auto txs = currentBlock.extractTransactions();
 
         for (auto &tx : txs) {
-            if (tx.getSender() == userId && tx.getToken() == tokenId && tx.getData() != Fee::UNFREEZE_TX
-                && !tx.getData().contains(Fee::FEE_UNFREEZE_TX) && !tx.getData().contains(Fee::UNFEE)) {
-                balance -= tx.getAmount();
-            } else if (tx.getReceiver() == userId && tx.getToken() == tokenId
-                       && tx.getData() != Fee::FREEZE_TX && !tx.getData().contains(Fee::FEE_FREEZE_TX)) {
+            if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
                 balance += tx.getAmount();
             }
         }
     }
 
     return balance;
-}
-
-BigNumber Blockchain::getFreezeUserBalance(ActorId userId, ActorId tokenId, ActorId sender,
-                                           FreezeBalanceSearch balanceSearch) const {
-    BigNumber balance = 0;
-
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        Block currentBlock = blockIndex.getBlockById(i);
-
-        if (GenesisBlock::isGenesisBlock(currentBlock.serialize())) {
-            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
-            const auto rows = genesis.extractDataRows();
-
-            for (const auto &row : rows) {
-                if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
-                    return balance + row.state;
-            }
-
-            return balance;
-        }
-
-        if (currentBlock.isEmpty())
-            break;
-
-        auto txs = currentBlock.extractTransactions();
-
-        for (auto &tx : txs) {
-            bool isStaking = tx.getData() == Fee::FREEZE_TX || tx.getData() == Fee::UNFREEZE_TX;
-
-            if (tx.getSender() != userId && tx.getReceiver() != userId)
-                continue;
-            if (tx.getToken() != tokenId || !isStaking)
-                continue;
-
-            if (balanceSearch == FreezeBalanceSearch::AllStaking) {
-                if (tx.getData() == Fee::FREEZE_TX && tx.getReceiver() == userId) {
-                    balance += tx.getAmount();
-                } else if (tx.getData() == Fee::UNFREEZE_TX && tx.getSender() == userId) {
-                    balance -= tx.getAmount();
-                }
-            } else if (balanceSearch == FreezeBalanceSearch::AllNotMyStaking) {
-                if (tx.getSender() != userId && tx.getReceiver() == userId
-                    && tx.getData() == Fee::FREEZE_TX) {
-                    balance += tx.getAmount();
-                } else if (tx.getReceiver() != userId && tx.getSender() == userId
-                           && tx.getData() == Fee::UNFREEZE_TX) {
-                    balance -= tx.getAmount();
-                }
-            } else if (balanceSearch == FreezeBalanceSearch::OnlySender) {
-                if (tx.getSender() == sender && tx.getData() == Fee::FREEZE_TX) {
-                    balance += tx.getAmount();
-                } else if (tx.getReceiver() == sender && tx.getData() == Fee::UNFREEZE_TX) {
-                    balance -= tx.getAmount();
-                }
-            } else if (balanceSearch == FreezeBalanceSearch::OnlyMyStaking) {
-                if (tx.getSender() == userId && tx.getReceiver() == userId) {
-                    if (tx.getData() == Fee::UNFREEZE_TX)
-                        balance -= tx.getAmount();
-                    else if (tx.getData() == Fee::FREEZE_TX)
-                        balance += tx.getAmount();
-                }
-            }
-        }
-    }
-
-    return balance;
-}
-
-QMap<QByteArray, BigNumber> Blockchain::getAllStakingForMe(ActorId userId, ActorId tokenId) const {
-    QMap<QByteArray, BigNumber> res;
-    BigNumber balance;
-
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-        Block currentBlock = blockIndex.getBlockById(i);
-
-        if (GenesisBlock::isGenesisBlock(currentBlock.serialize())) {
-            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
-            const auto rows = genesis.extractDataRows();
-
-            for (const auto &row : rows) {
-                if (userId == row.actorId && row.type == DataStorage::typeDataRow::STAKING)
-                    balance += row.state;
-            }
-        }
-
-        if (currentBlock.isEmpty())
-            break;
-
-        // auto txs = currentBlock.extractTransactions();
-    }
-    return res;
 }
 
 void Blockchain::showBlockchain() const {
@@ -1257,12 +941,44 @@ void Blockchain::getSmContractMembers(const Block &block) const {
     }
 }
 
-int Blockchain::getTotalSuply() const {
-    return totalSupply;
+BigNumber Blockchain::getCirculativeSuply() const {
+    return circulativeSupply;
 }
 
-void Blockchain::setTotalSupply(const int &newValue) {
-    totalSupply = newValue;
+void Blockchain::setCirculativeSupply(const BigNumber &newValue) {
+    circulativeSupply = newValue;
+}
+
+void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
+    circulativeSupply += value;
+    setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
+}
+
+void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId) {
+    auto mainActor = node->accountController()->mainActor();
+    if (mainActor.id() == node->actorIndex()->firstId()) {
+        Transaction tx;
+        tx.setSender(mainActor.id());
+        tx.setReceiver(receiver);
+        tx.setAmount(amount);
+        node->network()->send_message(tx, MessageType::BlockchainTransaction);
+    } else {
+        //        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin =
+        //        amount }; node->network()->send_message(coinReward, MessageType::BlockchainCoinReward,
+        //        MessageStatus::Response,
+        //                                      messageId, Config::Net::TypeSend::All);
+    }
+}
+
+void Blockchain::setPossibleMining(const bool &value) {
+    if (value != possibleMining) {
+        emit possibleMiningChange(value);
+    }
+    possibleMining = value;
+}
+
+bool Blockchain::getPossibleMining() const {
+    return possibleMining;
 }
 
 void Blockchain::process() {
@@ -1343,13 +1059,11 @@ void Blockchain::addBlockToBlockchain(Block &block) {
         auto accounts = node->accountController()->accounts();
         for (const auto &tmp : qAsConst(accounts))
             list.append(tmp.id());
-        QByteArray data = tmp.getData();
-        if (list.contains(tmp.getSender()) && !data.contains(Fee::FREEZE_TX)
-            && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE)) {
+        //        std::string data = tmp.getData();
+        if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
-        } else if (list.contains(tmp.getReceiver()) && !data.contains(Fee::FREEZE_TX)
-                   && !data.contains(Fee::STAKING_REWARD) && !data.contains(Fee::FEE)) {
+        } else if (list.contains(tmp.getReceiver())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToMe,
                              tmp.getSender().toByteArray() });
         }
@@ -1403,34 +1117,21 @@ void Blockchain::VerifyTx(Transaction tx) {
     emit VerifiedTx(tx);
 }
 
-bool Blockchain::checkHaveUNFreezeTx(const Transaction *tx,
-                                     const BigNumber &indexBlock) // return true if haven`t
-{
-    auto listProve = txManager->getPendingTxs();
-    for (const auto &tmpTx : listProve) {
-        if (tmpTx.getSender() == tx->getSender() && tmpTx.getReceiver() == tx->getReceiver()
-            && tmpTx.getData() == tx->getData()) {
-            return false;
-        }
-    }
-    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= indexBlock; i--) {
-        Block tmpBlock = blockIndex.getBlockById(i);
-        auto listTxs = tmpBlock.extractTransactions();
-        for (const auto &tmp : listTxs) {
-            if (tmp.getSender() == tx->getSender() && tmp.getReceiver() == tx->getReceiver()
-                && tmp.getData() == tx->getData()) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 void Blockchain::proveTx(Transaction *tx) {
-    qDebug() << "proveTx: started";
+    qDebug() << "proveTx: started" << tx->getTypeTx();
 
     ActorId targetSender = tx->getSender();
     ActorId targetReceiver = tx->getReceiver();
+    // start reward check
+    if (tx->isRewardTransaction()) {
+        targetSender = tx->getApprover();
+        // TODO: add extended check of validity
+        auto res = this->blockIndex.getLastTxByData(tx->getData());
+        if (res.second == "-1") {
+            txManager->addProvedTransaction(tx);
+            return;
+        }
+    }
     Actor<KeyPublic> senderActor;
     if (!targetSender.isEmpty())
         senderActor = node->actorIndex()->getActor(targetSender);
@@ -1438,144 +1139,8 @@ void Blockchain::proveTx(Transaction *tx) {
     if (!targetReceiver.isEmpty())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
     if (tx->getAmount() < 0) {
+        qDebug() << "Transaction not approved: amount less 0";
         txManager->removeUnApprovedTransaction(tx);
-        return;
-    }
-    if (tx->getData().contains(Fee::UNFEE)) {
-        BigNumber fee = tx->getAmount();
-        QByteArrayList dataList = Serialization::deserialize(tx->getData());
-        if (dataList.size() != 3) {
-            qDebug() << "TX prove: incorrect data for unfreeze fee";
-            return;
-        }
-        BigNumber indexFreezeTxBlock = dataList.at(0).toStdString();
-        QByteArray hashTx = dataList.at(1);
-        if (!checkHaveUNFreezeTx(tx, indexFreezeTxBlock)) {
-            txManager->removeUnApprovedTransaction(tx);
-            qDebug() << "ProveTx: have this UNFee Tx";
-            return;
-        }
-        for (BigNumber i = indexFreezeTxBlock; i <= blockIndex.getLastSavedId(); i++) {
-            Block tmpBlock = blockIndex.getBlockById(i);
-            auto listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs) {
-                if (tmp.getSender() == tx->getSender() && tmp.getData().contains(Fee::FEE_UNFREEZE_TX)
-                    && tmp.getData().contains(hashTx)) {
-                    fee -= tmp.getAmount();
-                }
-            }
-        }
-
-        auto producerActor = node->actorIndex()->getActor(tx->getProducer());
-        if (producerActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
-            tx->setAmount(fee);
-            tx->sign(node->accountController()->currentWallet());
-            txManager->addProvedTransaction(tx);
-        } else {
-            txManager->removeUnApprovedTransaction(tx);
-        }
-    } else if (tx->getData().contains(Fee::FEE_FREEZE_TX)) {
-        BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
-
-        senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
-
-        if (tx->getAmount() <= 0) {
-            txManager->removeUnApprovedTransaction(tx);
-            qDebug() << "Transaction Freeze not approved: amount <= 0";
-            return;
-        }
-
-        if ((senderCurrentBalance - tx->getAmount()) < 0) {
-            qDebug() << "Transaction Freeze "
-                        "not approved: sender's balance will be < 0";
-            txManager->removeUnApprovedTransaction(tx);
-            return;
-        }
-        txManager->addProvedTransaction(tx);
-        return;
-    } else if (tx->getData().contains(Fee::FEE_UNFREEZE_TX)) {
-        QByteArrayList dataList = Serialization::deserialize(tx->getData());
-        if (dataList.size() != 3) {
-            qDebug() << "TX prove: incorrect data for unfreeze fee";
-            return;
-        }
-        BigNumber indexApBlock = dataList.at(0).toStdString();
-        QByteArray hashTx = dataList.at(1);
-        for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
-            Block tmpBlock = blockIndex.getBlockById(i);
-            auto listTxs = tmpBlock.extractTransactions();
-            for (const auto &tmp : listTxs) {
-                if (tmp.getSender() == tx->getSender() && tmp.getData().contains(Fee::FEE_FREEZE_TX)
-                    && tmp.getData().contains(hashTx)) {
-                    Block approverBlock = blockIndex.getBlockById(indexApBlock);
-                    QByteArrayList signs = approverBlock.getListSignatures();
-                    if (signs.contains(tx->getReceiver().toByteArray())) {
-                        int index = signs.indexOf(tx->getReceiver().toByteArray());
-                        if (signs[index + 2] == "1") {
-                            auto producerActor = node->actorIndex()->getActor(tx->getProducer());
-                            if (producerActor.key().verify(tx->getDataForDigSig().toStdString(),
-                                                           tx->getDigSig().toStdString())) {
-                                if (checkHaveUNFreezeTx(tx, indexApBlock)) {
-                                    txManager->addProvedTransaction(tx);
-                                    return;
-                                } else {
-                                    qDebug() << "ProveTx: We have this unFreeze tx";
-                                    txManager->removeUnApprovedTransaction(tx);
-                                    return;
-                                }
-                            } else {
-                                qDebug() << "TX prove: incorrect sign for unfreeze fee";
-                                txManager->removeUnApprovedTransaction(tx);
-                                return;
-                            }
-                        } else {
-                            qDebug() << "TX prove error: it`s checker -> not approver for unfreeze fee";
-                            txManager->removeUnApprovedTransaction(tx);
-                            return;
-                        }
-                    } else {
-                        qDebug() << "TX prove: haven`t approver in block for unfreeze fee";
-                        txManager->removeUnApprovedTransaction(tx);
-                        return;
-                    }
-                }
-            }
-        }
-    } else if (tx->getData() == Fee::FREEZE_TX) {
-        BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
-
-        senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
-
-        if (tx->getAmount() <= 0) {
-            txManager->removeUnApprovedTransaction(tx);
-            qDebug() << "Transaction Freeze not approved: amount <= 0";
-            return;
-        }
-
-        if ((senderCurrentBalance - tx->getAmount()) < 0) {
-            qDebug() << "Transaction Freeze "
-                        "not approved: sender's balance will be < 0";
-            txManager->removeUnApprovedTransaction(tx);
-            return;
-        }
-
-        tx->sign(node->accountController()->currentWallet());
-        txManager->addProvedTransaction(tx);
-        return;
-    } else if (tx->getData() == Fee::UNFREEZE_TX) {
-        BigNumber senderCurrentBalance = getFreezeUserBalance(targetReceiver, tx->getToken(), tx->getSender(),
-                                                              FreezeBalanceSearch::OnlySender);
-        ActorId sender = tx->getSender();
-        if ((senderCurrentBalance - tx->getAmount()) < 0) {
-            qDebug() << "Transaction UNFreeze "
-                        "not approved: sender's balance will be < 0";
-            txManager->removeUnApprovedTransaction(tx);
-            return;
-        }
-        tx->setSender(targetReceiver);
-        tx->setReceiver(sender);
-        tx->sign(node->accountController()->currentWallet());
-        txManager->addProvedTransaction(tx);
         return;
     }
     if (targetSender == targetReceiver) {
@@ -1593,23 +1158,23 @@ void Blockchain::proveTx(Transaction *tx) {
         return;
     }
 
+    // special conditions: receiver is null - coins burning
     if (targetSender.isEmpty()) {
         Actor<KeyPublic> producerActor;
         if (!tx->getProducer().isEmpty())
             producerActor = node->actorIndex()->getActor(tx->getProducer());
         else {
-            qDebug() << "Tx" << tx->getHash() << "producer 0";
+            qDebug() << "Tx" << tx->getHash().c_str() << "producer 0";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (!producerActor.key().verify(tx->getDataForDigSig().toStdString(),
-                                        tx->getDigSig().toStdString())) {
-            qDebug() << "Tx" << tx->getHash() << "not approved: bad signature in fee tx";
+        if (!producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
+            qDebug() << "Tx" << tx->getHash().c_str() << "not approved: bad signature in fee tx";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (tx->getAmount() <= 0) {
-            qDebug() << "Tx" << tx->getHash() << "fee amount <= 0";
+            qDebug() << "Tx" << tx->getHash().c_str() << "fee amount <= 0";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
@@ -1617,62 +1182,23 @@ void Blockchain::proveTx(Transaction *tx) {
         return;
     }
 
-    // if !sig
-    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString())) {
-        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
-        txManager->removeUnApprovedTransaction(tx);
-        return;
-    }
+    //    // if !sig
+    //    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString()))
+    //    {
+    //        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
+    //        txManager->removeUnApprovedTransaction(tx);
+    //        return;
+    //    }
 
+    // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.isEmpty()) {
-        if (Serialization::deserialize(tx->getData()).size() != 2) {
-            qDebug() << "Tx" << tx->getHash() << "fee from sender to NullActor not approved: data size !=2";
-            txManager->removeUnApprovedTransaction(tx);
-            return;
-        }
-        if (tx->getAmount() <= 0) {
-            qDebug() << "Tx" << tx->getHash() << "fee amount <=0";
-            txManager->removeUnApprovedTransaction(tx);
-            return;
-        }
-        txManager->addPendingFeeSenderTxs(tx);
-        return;
-    }
-
-    // if current transaction not fee
-    else {
+        //
+    } else {
         if (tx->getData() == "InitContract") {
-            /*
-            QByteArrayList profile = senderActor.profile().getListProfile();
-            if (profile.length() < 6) {
-                qDebug() << "Transaction not approved: no profile for" << senderActor.id();
-
-     // TODO: temp
-            node->actorIndex()->getActor(senderActor.id());
-            QTimer::singleShot(3000, this, [this, tx] {
-                qDebug() << "Transaction initcontract";
-                this->proveTx(tx);
-            });
-
             return;
         }
-        if (profile[0] == "6" && ActorId(profile[5].toStdString()) == targetReceiver
-            && (targetSender == tx->getToken())) {
-            qDebug() << "Contract tx proved";
-            tx->sign(node->accountController()->currentWallet());
-            emit tx->Approved(tx);
-            return;
-        }
-
-        qDebug() << "Transaction not approved: sender != token in genesis block";
-        emit tx->NotApproved(tx);
-        */
-
-            return;
-        }
-
         if (targetSender != node->actorIndex()->firstId()) {
-            BigNumber senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
+            BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
             if (tx->getAmount() <= 0) {
@@ -1681,7 +1207,10 @@ void Blockchain::proveTx(Transaction *tx) {
                 return;
             }
 
-            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0) {
+            auto mainActorId = node->accountController()->mainActor().id();
+            ActorId firstId = node->actorIndex()->firstId();
+            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0
+                && mainActorId == firstId) {
                 qDebug() << senderCurrentBalance << tx->getAmount();
                 qDebug() << "Transaction "
                             "not approved: sender's or receiver's balance will be < 0";
@@ -1695,8 +1224,6 @@ void Blockchain::proveTx(Transaction *tx) {
             txManager->addProvedTransaction(tx);
             return;
         }
-
-        // emit tx->addPendingForFeeTxs(tx);
         return;
     }
     qDebug() << "Undefine behaviour blockhain.cpp proveTx";

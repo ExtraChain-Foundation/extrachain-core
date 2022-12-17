@@ -18,11 +18,14 @@
  */
 
 #include "datastorage/dfs/dfs_controller.h"
+#include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
+#include "utils/bignumber_float.h"
+
 #include <fstream>
 
 const QList<SocketService *> &NetworkManager::connections() const {
@@ -232,6 +235,7 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     if (!isActiveConnectionExists()) {
+        messageReceived(serialized_message, receiver_identifier);
         qDebug() << "[NetworkManager] Save message to cache";
         saveToCache(serialized_message, typeSend, receiver_identifier);
         return;
@@ -281,11 +285,11 @@ void NetworkManager::sendFromCache() {
         return;
     }
 
-    QByteArrayList allPackages = Serialization::deserialize(file.readAll(), 8);
+    std::vector<std::string> allPackages = Serialization::deserialize(file.readAll().toStdString());
     file.close();
     file.remove();
 
-    for (const QByteArray &packageData : qAsConst(allPackages)) {
+    for (const std::string &packageData : qAsConst(allPackages)) {
         auto [serialized_message, typeSend, receiver_identifier] =
             MessagePack::deserialize<std::tuple<std::string, Config::Net::TypeSend, std::string>>(
                 packageData);
@@ -305,11 +309,11 @@ bool NetworkManager::isActiveConnectionExists() {
     return false;
 }
 
-bool NetworkManager::checkMsgCount(const QByteArray &msg) {
+bool NetworkManager::checkMsgCount(const std::string &msg) {
     bool flag_result = true;
     bool value = 0;
-    QByteArray hashMsg = Utils::calcHash(msg);
-    QMap<QByteArray, int>::iterator it = msgHashList.find(hashMsg);
+    std::string hashMsg = Utils::calcHash(msg);
+    QMap<std::string, int>::iterator it = msgHashList.find(hashMsg);
 
     if (it == msgHashList.end())
         msgHashList.insert(hashMsg, value);
@@ -327,12 +331,7 @@ bool NetworkManager::checkMsgCount(const QByteArray &msg) {
 }
 
 void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
-    //    if (m_messages.contains(identifier)) {
-    //        qDebug() << "[[Network Manager] current message contains in messages by identifier ";
-    //        return;
-    //    }
-
-    if (!checkMsgCount(QByteArray::fromStdString(message))) { // TODO: remove byte array
+    if (!checkMsgCount(message)) {
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
         return;
@@ -356,11 +355,15 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     //            qDebug() << "[NetworkManager/messageReceived] Verify good";
     //        }
     //    }
-
-    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
-    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
-    auto serialized = msg.substr(40);
-    auto messId = msg.substr(4, 15);
+    MessageBody mb = MessagePack::deserialize<MessageBody>(msg);
+    MessageType type = mb.message_type;
+    MessageStatus status = mb.status;
+    std::string serialized = mb.data;
+    std::string messId = mb.message_id;
+    //    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
+    //    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
+    //    auto serialized = msg.substr(40);
+    //    auto messId = msg.substr(4, 15);
     std::string messageId(messId.begin(), messId.end());
 
     if (status == MessageStatus::Request) {
@@ -502,31 +505,29 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::DfsState: {
-        DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(serialized);
-        state.calc();
-        node.blockchain()->setTotalSupply(state.TotalSupply);
-        break; // was added as build fix, check logic here mb it's unnecessary
+        Transaction reward = node.dataMiningManager()->makeRewardTx(mb);
+        this->send_message(reward, MessageType::BlockchainTransaction);
+        break;
     }
 
     case MessageType::BlockchainGenesisBlock: {
-        const auto serialezedData =
-            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
-        auto genesisBlock = GenesisBlock(serialezedData);
+        qDebug() << "BlockchainGenesisBlock";
+        auto genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
         node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         break;
     }
     case MessageType::BlockchainNewBlock: {
-        const auto serialezedData =
-            QByteArray::fromStdString(std::string { serialized.begin() + 1, serialized.end() });
-        auto block = Block(serialezedData);
+        qDebug() << "BlockchainNewBlock";
+
+        auto block = MessagePack::deserialize<Block>(serialized);
         node.blockchain()->addBlockToBlockchain(block);
         break;
     }
 
     case MessageType::BlockchainTransaction: {
-        const auto data = std::string { serialized.begin() + 3, serialized.end() };
-        Transaction transaction = MessagePack::deserialize<Transaction>(data);
-        if (!transaction.getData().isEmpty()) {
+        qDebug() << "BlockchainTransaction";
+        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
+        if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
             TransactionData transactionData =
                 MessagePack::deserialize<TransactionData>(transaction.getData());
             qDebug() << "run code from " << transactionData.path.c_str()
@@ -541,25 +542,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
         std::string toPath = Scripts::folder + "/" + msg.FileName;
         std::filesystem::copy_file(fromPath, toPath);
-        break;
-    }
-
-    case MessageType::BlockchainDataMiningRewardTransaction: {
-        switch (status) {
-        case MessageStatus::NoStatus:
-            break;
-        case MessageStatus::Request: {
-            RewardTransaction rewardTx =
-                MessagePack::deserialize<RewardTransaction>(serialized);
-            node.verifyHashProcessing(rewardTx, messageId);
-            break;
-        }
-        case MessageStatus::Response: {
-            RewardTransaction rewardTx =
-                MessagePack::deserialize<RewardTransaction>(serialized);
-            break;
-        }
-        }
         break;
     }
 
@@ -578,6 +560,22 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::BlockchainCoinReward: {
+        auto coinReward = MessagePack::deserialize<DFSR::CoinReward>(serialized);
+        switch (status) {
+        case MessageStatus::NoStatus:
+            break;
+        case MessageStatus::Request: {
+            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin);
+            break;
+        }
+        case MessageStatus::Response: {
+            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin, messageId);
+            break;
+        }
+        }
+    }
+
     default:
         qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
         break;
@@ -585,8 +583,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
-void NetworkManager::removeWsConnection() //
-{
+void NetworkManager::removeWsConnection() {
     if (QObject::sender() == nullptr)
         return;
 

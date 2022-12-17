@@ -22,10 +22,16 @@
 
 #include "datastorage/actor.h"
 #include "utils/bignumber.h"
+#include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
-#include <QByteArray>
 #include <QDateTime>
 #include <QString>
+enum class TypeTx {
+    Transaction = 0,
+    RewardTransaction = 1
+};
+MSGPACK_ADD_ENUM(TypeTx)
+FORMAT_ENUM(TypeTx)
 
 struct TransactionData {
     std::string hash;
@@ -34,15 +40,16 @@ struct TransactionData {
 };
 
 class EXTRACHAIN_EXPORT Transaction {
+    ActorId sender;
+    ActorId receiver;
+
+protected:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
     void calcHash();
-
-    ActorId sender;
-    ActorId receiver;
-    BigNumber amount;    // coin amount
+    BigNumberFloat amount; // coin amount
     long long date;
     std::string data;    // additional payload field
     ActorId token;       // token contract address
@@ -54,20 +61,20 @@ class EXTRACHAIN_EXPORT Transaction {
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string digSig;
+    TypeTx typeTx = TypeTx::Transaction;
 
 public:
     // Construct empty transaction
     Transaction();
-
     // Deserialize already created transaction
-    Transaction(const QByteArray &serialized);
+    Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount);
 
     // Construct transaction with data
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumber &amount,
-                const QByteArray &data);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
+                const std::string &data);
 
     Transaction(const Transaction &other);
 
@@ -76,15 +83,15 @@ public:
      * Override in subclasses
      * @return digSig data
      */
-    QByteArray getDataForHash() const;
-    QByteArray getDataForDigSig() const;
+    std::string getDataForHash() const;
+    std::string getDataForDigSig() const;
 
     // digital signature
     void sign(const Actor<KeyPrivate> &actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
-    void setSenderBalance(BigNumber balance);
-    void setReceiverBalance(BigNumber balance);
+    //    void setSenderBalance(BigNumber balance);
+    //    void setReceiverBalance(BigNumber balance);
     void setPrevBlock(const BigNumber &value);
     void setGas(int gas);
     void setHop(int hop);
@@ -99,50 +106,51 @@ public:
     int getHop() const;
     ActorId getSender() const;
     ActorId getReceiver() const;
-    BigNumber getAmount() const;
+    BigNumberFloat getAmount() const;
     BigNumber getPrevBlock() const;
-    QByteArray getData() const;
-    QByteArray getHash() const;
+    std::string getData() const;
+    std::string getHash() const;
     ActorId getToken() const;
     ActorId getApprover() const;
-    QByteArray getDigSig() const;
+    std::string getDigSig() const;
     ActorId getProducer() const;
 
-
-    bool isEmpty() const;
+    virtual bool isEmpty() const;
     bool operator==(const Transaction &transaction) const;
     bool operator!=(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);
 
     std::string serialize() const;
-    bool deserialize(const QByteArray &serialized);
+    bool deserialize(const std::string &serialized);
     QString toString() const;
     long long getDate() const;
     void setDate(long long value);
     void setToken(const ActorId &value);
-    void setData(const QByteArray &value);
     void setData(const std::string &value);
     /**
      * @brief 1.1 -> 1.1 * 10e18 in BigNumber
      * @param amount
      */
-    static BigNumber visibleToAmount(QByteArray amount);
+    static BigNumberFloat visibleToAmount(std::string amount);
 
     /**
      * @brief 1 * 10e18 from BigNumber to number -> 1
      * @param number
      */
-    static QString amountToVisible(const BigNumber &number);
-    static BigNumber amountNormalizeMul(const BigNumber &number);
-    static BigNumber amountMul(const BigNumber &number1, const BigNumber &number2);
-    static BigNumber amountDiv(const BigNumber &number1, const BigNumber &number2);
-    static BigNumber amountPercent(BigNumber number, uint percent);
-    void setAmount(const BigNumber &value);
+    static QString amountToVisible(const BigNumberFloat &number);
+    static BigNumberFloat amountNormalizeMul(const BigNumberFloat &number);
+    static BigNumberFloat amountMul(const BigNumberFloat &number1, const BigNumberFloat &number2);
+    static BigNumberFloat amountDiv(const BigNumberFloat &number1, const BigNumberFloat &number2);
+    static BigNumberFloat amountPercent(BigNumberFloat number, uint percent);
+    void setAmount(const BigNumberFloat &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
+    bool isRewardTransaction() const;
+    TypeTx getTypeTx() const;
+    virtual void setTypeTx(TypeTx newTypeTx);
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
-                   digSig)
+                   digSig, typeTx)
 };
 
 #endif // TRANSACTION_H

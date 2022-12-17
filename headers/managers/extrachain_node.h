@@ -25,7 +25,6 @@
 #include <QObject>
 
 #include "datastorage/transaction.h"
-#include "datastorage/reward_transaction.h"
 #include "extrachain_global.h"
 
 class DfsController;
@@ -37,6 +36,7 @@ class AccountController;
 class Transaction;
 class ActorId;
 class BigNumber;
+class DataMiningManager;
 template <typename T>
 class Actor;
 class KeyPrivate;
@@ -53,6 +53,7 @@ private:
     NetworkManager *m_networkManager = nullptr;
     TransactionManager *m_txManager = nullptr;
     AccountController *m_accountController = nullptr;
+    DataMiningManager *m_dmm = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
     bool fileMode = true;
@@ -72,6 +73,7 @@ public:
     ActorIndex *actorIndex() const;
     DfsController *dfs() const;
     TransactionManager *txManager() const;
+    DataMiningManager *dataMiningManager() const;
 
     // Remove this function before merge
     void test() const;
@@ -92,26 +94,9 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(ActorId receiver, BigNumber amount, ActorId token);
+    Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
 
-    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumber amount, ActorId token);
-    /**
-     * @brief createFreezeTransaction
-     * if receiver = 0 -> to me
-     * @param receiver
-     * @param amount
-     * @param token
-     * @return
-     */
-    Transaction createFreezeTransaction(ActorId receiver, BigNumber amount, bool toFreeze, ActorId token);
-
-    /**
-    @brief Create reward transaction
-    @param recieveDataList - list of data
-    */
-    RewardTransaction createRewardTx(const std::vector<RecieveData> &recieveDataList, bool sendRequest = false,
-                                   std::string messageId = "");
-    void verifyHashProcessing(RewardTransaction &rewardTransaction, std::string &messageId);
+    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
     std::string exportUser();
     bool importUser(const std::string &data, const std::string &login, const std::string &password);
@@ -139,7 +124,6 @@ private:
 
 signals:
     void ready();
-    void NewTx(Transaction tx);
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
 

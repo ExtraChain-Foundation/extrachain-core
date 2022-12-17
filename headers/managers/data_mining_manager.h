@@ -20,26 +20,26 @@
 #ifndef DATA_MINING_MANAGER_H
 #define DATA_MINING_MANAGER_H
 
+#include "utils/bignumber_float.h"
 #include <QObject>
+#include <managers/extrachain_node.h>
+#include <network/message_body.h>
 #include <string>
-
-typedef std::vector<std::string> MerkleDataBlocks;
 
 class DataMiningManager : public QObject {
     Q_OBJECT
+private:
+    ExtraChainNode *node;
 
 public:
-    explicit DataMiningManager(QObject *parent = nullptr);
+    DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
 
-    void rootMerkleHash(std::vector<std::string> &a, std::vector<MerkleDataBlocks> &branchesTree,
-                           const bool isHahsing, std::string &result);
-    std::string rootMerkleHash(std::string &data);
-
-private:
-    std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
-                                                          const bool isHahsing);
-    void hashingElements(std::vector<std::string> &vector);
-    std::string merkleFormula(const std::string &hash1, const std::string &hash2) const;
+    BigNumberFloat calculateCoins(BigNumberFloat dataAmountStored,
+                                  BigNumberFloat dataAmountTotalStoredInNetwork,
+                                  BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
+                                  double coefficient);
+    Transaction makeRewardTx(const MessageBody &mb);
+    void coinRewardRequest(const BigNumber &blockIndex);
 };
 
 #endif // DATA_MINING_MANAGER_H

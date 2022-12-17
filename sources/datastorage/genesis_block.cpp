@@ -40,14 +40,16 @@ GenesisBlock::GenesisBlock(const QByteArray &_data, const Block &prevBlock, cons
 }
 
 void GenesisBlock::addRow(const GenesisDataRow &row) {
-    this->data += Serialization::serialize({ row.serialize() }, Serialization::DEFAULT_FIELD_SIZE);
+    std::vector<std::string> v;
+    v.push_back(row.serialize());
+    this->data += Serialization::serialize(v);
 }
 
 const std::string &GenesisBlock::getDataForDigSig() const {
     return Block::getDataForDigSig();
 }
 
-QByteArray GenesisBlock::getDataForHash() const {
+std::string GenesisBlock::getDataForHash() const {
     return Block::getDataForHash();
 }
 
@@ -69,20 +71,18 @@ void GenesisBlock::initFields(QList<QByteArray> &list) {
     hash = list.takeFirst();
     prevGenHash = list.takeFirst();
     QByteArray signs = list.takeFirst();
-    QByteArrayList lists = Serialization::deserialize(signs, FIELDS_SIZE);
+    std::vector<std::string> lists = Serialization::deserialize(signs.toStdString());
     for (const auto &tmp : lists) {
-        QByteArrayList tmps = Serialization::deserialize(tmp, FIELDS_SIZE);
-        if (tmps.length() == 3)
-            signatures.push_back(
-                { tmps.at(0).toStdString(), tmps.at(1).toStdString(), bool(tmps.at(2).toInt()) });
+        std::vector<std::string> tmps = Serialization::deserialize(tmp);
+        if (tmps.size() == 3)
+            signatures.push_back({ tmps.at(0), tmps.at(1), bool(std::stoi(tmps.at(2))) });
     }
 }
 
 QList<GenesisDataRow> GenesisBlock::extractDataRows() const {
-    QList<QByteArray> txsData =
-        Serialization::deserialize(QByteArray::fromStdString(data), Serialization::DEFAULT_FIELD_SIZE);
+    std::vector<std::string> txsData = Serialization::deserialize(data);
     QList<GenesisDataRow> genesisDataRows;
-    for (const QByteArray &dataRow : txsData) {
+    for (const std::string &dataRow : txsData) {
         genesisDataRows.append(GenesisDataRow(dataRow));
     }
     return genesisDataRows;
