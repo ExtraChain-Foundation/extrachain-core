@@ -25,7 +25,7 @@ QList<Transaction *> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
 }
 
-QList<Transaction> TransactionManager::getPendingTxs() const {
+std::vector<Transaction> TransactionManager::getPendingTxs() const {
     return pendingTxs;
 }
 
@@ -49,7 +49,7 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
 }
 
 void TransactionManager::removeTransaction(int i) {
-    this->pendingTxs.removeAt(i);
+    this->pendingTxs.erase(pendingTxs.begin() + i);
 }
 
 void TransactionManager::addTransaction(Transaction &tx) {
@@ -62,8 +62,8 @@ void TransactionManager::addTransaction(Transaction &tx) {
 
 void TransactionManager::addProvedTransaction(Transaction *tx) {
     qDebug() << "addProvedTransaction";
-    if (!pendingTxs.contains(*tx))
-        pendingTxs.append(*tx);
+    if (std::find(pendingTxs.begin(), pendingTxs.end(), *tx) != pendingTxs.end())
+        pendingTxs.push_back(*tx);
 
     receivedTxList.removeOne(tx);
 }
@@ -92,17 +92,13 @@ void TransactionManager::addUnapprovedHash(QByteArray txHash) {
 
 void TransactionManager::addVerifiedTx(Transaction tx) {
     qDebug() << QString("Adding tx[%1] to pending list").arg(tx.toString());
-    pendingTxs.append(tx);
+    pendingTxs.push_back(tx);
 }
 
 // Block making
 
 void TransactionManager::makeBlock() {
-    //    int txs = pendingTxs.size();
-    //    qDebug() << QString("Attempting to make a block from [%1]
-    //    txs)").arg(txs);
-
-    qDebug() << "straty makeBlock";
+    qDebug() << "trying makeBlock";
     Block lastBlock = blockchain->getLastBlock();
     if (pendingTxs.empty()) {
         Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
@@ -110,13 +106,6 @@ void TransactionManager::makeBlock() {
         // creating dummy block in as ordinary block
         Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
         dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
-        //        DummyBlock dummyBlock;
-        //        if (!lastRealBlock.isEmpty()) {
-        //            dummyBlock = DummyBlock(lastBlock, lastRealBlock);
-        //        } else {
-        //            GenesisBlock lastGenesisBlock = blockchain->getBlockIndex().getLastGenesisBlock();
-        //            dummyBlock = DummyBlock(lastBlock, lastGenesisBlock);
-        //        }
         blockchain->signBlock(dummyBlock);
         blockchain->addBlock(dummyBlock);
 
@@ -133,43 +122,26 @@ void TransactionManager::makeBlock() {
     blockchain->signBlock(block);
     qDebug() << "Created block:" << block.getIndex() << block.getDigSig().c_str();
     blockchain->addBlock(block);
-
-    // fee section start
-    //    QList<Transaction> feeTxs = CoinProcess::blockDataToFeeTxs(pendingTxs, block.getHash(),
-    //                                                               accountController->getMainActor()->getId(),
-    //                                                               accountController->getActorIndex()->m_firstId);
-    //    for (const auto &i : feeTxs)
-    //        extraChainNode->createTransaction(i);
-    // fee section end
     this->pendingTxs.clear();
 }
 
 void TransactionManager::proveTransactions() {
-    //    const auto dummyBlockCreator = [this]() -> std::unique_ptr<DummyBlock> {
-    //        if (pendingTxs.empty()) {
-    //            return blockchain->createDummyBlock();
-    //        } else {
-    //            return std::unique_ptr<DummyBlock> { nullptr };
-    //        }
-    //    };
-
     for (auto tx : receivedTxList) {
         blockchain->proveTx(tx);
     }
 }
 
-std::string TransactionManager::convertTxs(const QList<Transaction> &txs) {
+std::string TransactionManager::convertTxs(const std::vector<Transaction> &txs) {
     std::vector<std::string> l;
     for (const Transaction &tx : txs) {
         l.push_back(tx.serialize());
     }
-    std::string s = Serialization::serialize(l);
-    return s;
+    return Serialization::serialize(l);
 }
 
 BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
     BigNumberFloat res = 0;
-    if (!pendingTxs.isEmpty()) {
+    if (!pendingTxs.empty()) {
         for (const Transaction &tmp : qAsConst(pendingTxs)) {
             if (tmp.getSender() == sender) {
                 res -= tmp.getAmount();

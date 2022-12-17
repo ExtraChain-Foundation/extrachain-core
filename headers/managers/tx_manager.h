@@ -47,7 +47,7 @@ private:
     QTimer proveTimer;
 
     // received transactions that will be packed into block
-    QList<Transaction> pendingTxs;
+    std::vector<Transaction> pendingTxs;
 
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
@@ -73,11 +73,11 @@ private:
     void removeTransaction(int i);
 
 public:
-    static std::string convertTxs(const QList<Transaction> &txs);
+    static std::string convertTxs(const std::vector<Transaction> &txs);
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction *> getReceivedTxList() const;
 
-    QList<Transaction> getPendingTxs() const;
+    std::vector<Transaction> getPendingTxs() const;
 
 public slots:
     /**

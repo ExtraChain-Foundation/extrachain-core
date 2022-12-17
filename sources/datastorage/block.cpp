@@ -167,9 +167,11 @@ std::vector<Transaction> Block::extractTransactions() const {
     std::vector<std::string> txsData = Serialization::deserialize(data);
     std::vector<Transaction> transactions;
     for (const std::string &trData : txsData) {
-        Transaction tx(trData);
-        if (!tx.isEmpty())
-            transactions.push_back(tx);
+        if (!trData.empty()) {
+            Transaction tx(trData);
+            if (!tx.isEmpty())
+                transactions.push_back(tx);
+        }
     }
     return transactions;
 }
