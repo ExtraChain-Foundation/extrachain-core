@@ -166,7 +166,7 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto publicKey = this->m_key.publicKey();
-        std::string hash = Utils::calcHash(publicKey, Utils::HashEncode::Base64);
+        std::string hash = Utils::calcHash(publicKey, Utils::HashEncode::Sha3_512);
 
         if (hash.size() >= 20)
             m_id = hash.substr(0, 20);
