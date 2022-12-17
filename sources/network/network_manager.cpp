@@ -576,6 +576,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         default:
             break;
         }
+        break;
     }
 
     default:
