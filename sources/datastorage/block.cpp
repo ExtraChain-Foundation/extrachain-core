@@ -277,7 +277,7 @@ bool Block::operator<(const Block &other) {
 }
 
 bool Block::isBlock(const QByteArray &data) {
-    return data.contains(Config::DATA_BLOCK_TYPE);
+    return (data.contains(Config::DATA_BLOCK_TYPE) || data.contains(Config::DUMMY_BLOCK_TYPE));
 }
 
 bool Block::isApprover(const ActorId &actorId) const {
