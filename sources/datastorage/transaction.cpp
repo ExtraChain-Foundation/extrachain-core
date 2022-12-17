@@ -28,6 +28,7 @@ Transaction::Transaction() {
     this->hop = 0;
     this->hash = "";
     this->digSig = std::string();
+    this->typeTx = TypeTx::Transaction;
     calcHash();
 }
 
@@ -52,6 +53,7 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
     this->hop = 0;
     this->hash = "";
     this->digSig = std::string();
+    this->typeTx = TypeTx::Transaction;
     calcHash();
 }
 
@@ -59,7 +61,7 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
                          const std::string &data)
     : Transaction(sender, receiver, amount) {
     this->data = data;
-
+    this->typeTx = TypeTx::Transaction;
     calcHash();
 }
 

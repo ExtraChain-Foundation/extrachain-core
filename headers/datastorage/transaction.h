@@ -61,7 +61,7 @@ protected:
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string digSig;
-    TypeTx typeTx;
+    TypeTx typeTx = TypeTx::Transaction;
 
 public:
     // Construct empty transaction
