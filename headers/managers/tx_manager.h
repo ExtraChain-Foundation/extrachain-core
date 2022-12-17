@@ -53,7 +53,7 @@ private:
     // hashes of sent transactions, that are not approved yet
     QList<QByteArray> unApprovedTxHashes;
 
-    QList<Transaction *> receivedTxList;
+    QList<Transaction> receivedTxList;
 
     // current user
     //    Actor<KeyPrivate> currentUser;
@@ -75,7 +75,7 @@ private:
 public:
     static std::string convertTxs(const std::vector<Transaction> &txs);
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
-    QList<Transaction *> getReceivedTxList() const;
+    QList<Transaction> getReceivedTxList() const;
 
     std::vector<Transaction> getPendingTxs() const;
 
@@ -94,9 +94,9 @@ public slots:
      */
 
     void proveTransactions();
-    void addTransaction(Transaction &tx);
-    void addProvedTransaction(Transaction *transaction);
-    void removeUnApprovedTransaction(Transaction *tx);
+    void addTransaction(Transaction tx);
+    void addProvedTransaction(Transaction transaction);
+    void removeUnApprovedTransaction(Transaction tx);
     // Unapproved tx's //
 
     /**

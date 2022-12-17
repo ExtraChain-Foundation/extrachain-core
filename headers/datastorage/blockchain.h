@@ -395,11 +395,11 @@ public slots:
      * adds this tx to the list and emits VerifiedTx signal
      * @param tx
      */
-    void VerifyTx(Transaction tx);
+    void VerifyTx(Transaction &tx);
 
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    void proveTx(Transaction *tx);
+    void proveTx(Transaction &tx);
 };
 #endif // BLOCKCHAIN_H

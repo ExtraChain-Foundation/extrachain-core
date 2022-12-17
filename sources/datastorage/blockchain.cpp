@@ -686,7 +686,9 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-        saveTxInfoInEC(block.getData());
+        if (blockType == Config::DATA_BLOCK_TYPE) {
+            saveTxInfoInEC(block.getData());
+        }
         qDebug() << (blockType == Config::DATA_BLOCK_TYPE) << blockType.c_str();
         node->dataMiningManager()->coinRewardRequest(indexBlock);
 
@@ -1103,7 +1105,7 @@ void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QBy
     }
 }
 
-void Blockchain::VerifyTx(Transaction tx) {
+void Blockchain::VerifyTx(Transaction &tx) {
     Block last = getLastBlock();
     auto lastBlockTxs = last.extractTransactions();
 
@@ -1117,16 +1119,16 @@ void Blockchain::VerifyTx(Transaction tx) {
     emit VerifiedTx(tx);
 }
 
-void Blockchain::proveTx(Transaction *tx) {
-    qDebug() << "proveTx: started" << tx->getTypeTx();
+void Blockchain::proveTx(Transaction &tx) {
+    qDebug() << "proveTx: started" << tx.getTypeTx();
 
-    ActorId targetSender = tx->getSender();
-    ActorId targetReceiver = tx->getReceiver();
+    ActorId targetSender = tx.getSender();
+    ActorId targetReceiver = tx.getReceiver();
     // start reward check
-    if (tx->isRewardTransaction()) {
-        targetSender = tx->getApprover();
+    if (tx.isRewardTransaction()) {
+        targetSender = tx.getApprover();
         // TODO: add extended check of validity
-        auto res = this->blockIndex.getLastTxByData(tx->getData());
+        auto res = this->blockIndex.getLastTxByData(tx.getData());
         if (res.second == "-1") {
             txManager->addProvedTransaction(tx);
             return;
@@ -1138,7 +1140,7 @@ void Blockchain::proveTx(Transaction *tx) {
     Actor<KeyPublic> receiverActor;
     if (!targetReceiver.isEmpty())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
-    if (tx->getAmount() < 0) {
+    if (tx.getAmount() < 0) {
         qDebug() << "Transaction not approved: amount less 0";
         txManager->removeUnApprovedTransaction(tx);
         return;
@@ -1161,20 +1163,20 @@ void Blockchain::proveTx(Transaction *tx) {
     // special conditions: receiver is null - coins burning
     if (targetSender.isEmpty()) {
         Actor<KeyPublic> producerActor;
-        if (!tx->getProducer().isEmpty())
-            producerActor = node->actorIndex()->getActor(tx->getProducer());
+        if (!tx.getProducer().isEmpty())
+            producerActor = node->actorIndex()->getActor(tx.getProducer());
         else {
-            qDebug() << "Tx" << tx->getHash().c_str() << "producer 0";
+            qDebug() << "Tx" << tx.getHash().c_str() << "producer 0";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (!producerActor.key().verify(tx->getDataForDigSig(), tx->getDigSig())) {
-            qDebug() << "Tx" << tx->getHash().c_str() << "not approved: bad signature in fee tx";
+        if (!producerActor.key().verify(tx.getDataForDigSig(), tx.getDigSig())) {
+            qDebug() << "Tx" << tx.getHash().c_str() << "not approved: bad signature in fee tx";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (tx->getAmount() <= 0) {
-            qDebug() << "Tx" << tx->getHash().c_str() << "fee amount <= 0";
+        if (tx.getAmount() <= 0) {
+            qDebug() << "Tx" << tx.getHash().c_str() << "fee amount <= 0";
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
@@ -1194,14 +1196,14 @@ void Blockchain::proveTx(Transaction *tx) {
     if (targetReceiver.isEmpty()) {
         //
     } else {
-        if (tx->getData() == "InitContract") {
+        if (tx.getData() == "InitContract") {
             return;
         }
         if (targetSender != node->actorIndex()->firstId()) {
-            BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx->getToken());
+            BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx.getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
-            if (tx->getAmount() <= 0) {
+            if (tx.getAmount() <= 0) {
                 txManager->removeUnApprovedTransaction(tx);
                 qDebug() << "Transaction not approved: amount <= 0";
                 return;
@@ -1209,9 +1211,8 @@ void Blockchain::proveTx(Transaction *tx) {
 
             auto mainActorId = node->accountController()->mainActor().id();
             ActorId firstId = node->actorIndex()->firstId();
-            if (senderCurrentBalance - tx->getAmount() - tx->getAmount() / 100 < 0
-                && mainActorId == firstId) {
-                qDebug() << senderCurrentBalance << tx->getAmount();
+            if (senderCurrentBalance - tx.getAmount() - tx.getAmount() / 100 < 0 && mainActorId == firstId) {
+                qDebug() << senderCurrentBalance << tx.getAmount();
                 qDebug() << "Transaction "
                             "not approved: sender's or receiver's balance will be < 0";
                 txManager->removeUnApprovedTransaction(tx);
@@ -1220,7 +1221,7 @@ void Blockchain::proveTx(Transaction *tx) {
 
             txManager->addProvedTransaction(tx);
         } else {
-            tx->sign(node->accountController()->currentWallet());
+            tx.sign(node->accountController()->currentWallet());
             txManager->addProvedTransaction(tx);
             return;
         }

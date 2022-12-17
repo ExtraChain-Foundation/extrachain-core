@@ -21,7 +21,7 @@
 
 #include "managers/extrachain_node.h"
 
-QList<Transaction *> TransactionManager::getReceivedTxList() const {
+QList<Transaction> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
 }
 
@@ -52,23 +52,23 @@ void TransactionManager::removeTransaction(int i) {
     this->pendingTxs.erase(pendingTxs.begin() + i);
 }
 
-void TransactionManager::addTransaction(Transaction &tx) {
+void TransactionManager::addTransaction(Transaction tx) {
     qDebug() << "TRANSACTION MANAGER: addTransaction " << tx.toString();
 
     if (tx.isEmpty())
         return;
-    receivedTxList.append(&tx);
+    receivedTxList.append(tx);
 }
 
-void TransactionManager::addProvedTransaction(Transaction *tx) {
+void TransactionManager::addProvedTransaction(Transaction tx) {
     qDebug() << "addProvedTransaction";
-    if (std::find(pendingTxs.begin(), pendingTxs.end(), *tx) != pendingTxs.end())
-        pendingTxs.push_back(*tx);
+    if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end())
+        pendingTxs.push_back(tx);
 
     receivedTxList.removeOne(tx);
 }
 
-void TransactionManager::removeUnApprovedTransaction(Transaction *tx) {
+void TransactionManager::removeUnApprovedTransaction(Transaction tx) {
     receivedTxList.removeOne(tx);
 }
 
