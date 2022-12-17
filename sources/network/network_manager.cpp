@@ -573,6 +573,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin, messageId);
             break;
         }
+        default:
+            break;
         }
     }
 
