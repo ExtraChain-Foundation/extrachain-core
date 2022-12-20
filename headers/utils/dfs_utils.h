@@ -292,6 +292,21 @@ namespace Path {
     std::filesystem::path filePath(const ActorId &actorId, const std::string &fileName);
 }
 
+namespace Balances {
+    const std::string balanceDbPath = "blockchain/balance.db";
+    const std::string balancesTableName = "balances";
+    const std::string createBalanceTable = "CREATE TABLE IF NOT EXISTS balances("
+                                           "actor_id       TEXT   NOT NULL, "
+                                           "balance       TEXT   NOT NULL, "
+                                           "last_update    TEXT   NOT NULL );";
+    const std::string loadBalancesQuery = "SELECT * FROM balances";
+
+    struct Balance {
+        std::string Actor;
+        std::string Balance;
+    };
+}
+
 enum class Encryption {
     Public = 0,
     Encrypted = 1
