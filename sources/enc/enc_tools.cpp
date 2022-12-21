@@ -15,7 +15,7 @@ string SecretKey::keygen() {
 string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
     vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
     if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES) {
-        std::fill(vsalt.begin(), vsalt.end(), '\0');
+        std::fill(vsalt.begin(), vsalt.end(), '0');
     } else {
         vsalt = vector<unsigned char>(salt.begin(), salt.end());
     }
@@ -37,13 +37,14 @@ std::string SecretKey::sign(const std::string &data, const std::string &secret_k
     std::vector<unsigned char> vsig(crypto_sign_BYTES);
     crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
     std::string sig = std::string(vsig.begin(), vsig.end());
-    return sig;
+    return base64_encode(sig);
 }
 
 bool SecretKey::verify(const std::string &data, const std::string &public_key, const std::string &signature) {
+    std::string sig = base64_decode(signature);
     std::vector<unsigned char> pk(public_key.begin(), public_key.end());
     std::vector<unsigned char> vmsg(data.begin(), data.end());
-    std::vector<unsigned char> vsig(signature.begin(), signature.end());
+    std::vector<unsigned char> vsig(sig.begin(), sig.end());
     int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
     return res == 0;
 }

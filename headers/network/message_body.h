@@ -23,8 +23,23 @@ enum class MessageType {
     DfsAddSegment = 57,
     DfsDeleteSegment = 58,
     DfsSendingFileDone = 59,
+    DfsVerifyList = 60,
+    RequestDfsSize = 61,
+    ResponseDfsSize = 62,
+    DfsState = 63,
+
+    BlockchainGenesisBlock = 80,
+    BlockchainNewBlock = 81,
+    BlockchainTransaction = 82,
+    BlockchainCopyScript = 83,
+    BlockchainDataMiningRewardTransaction = 84,
+    BlockchainCoinReward = 85,
+
+    FragmentDataInfo = 90,
+    FragmentsDataListInfo = 91
 };
 MSGPACK_ADD_ENUM(MessageType)
+FORMAT_ENUM(MessageType)
 
 enum class MessageStatus {
     NoStatus,
@@ -32,14 +47,14 @@ enum class MessageStatus {
     Response
 };
 MSGPACK_ADD_ENUM(MessageStatus)
+FORMAT_ENUM(MessageStatus)
 
-template <class T>
 struct MessageBody {
     MessageType message_type;
     MessageStatus status;
     std::string message_id;
     ActorId sender_id;
-    T data;
+    std::string data;
 
     std::string serialize() const {
         return MessagePack::serialize(*this);
@@ -53,22 +68,21 @@ struct SocketIdentifier {
     std::string messageId;
 };
 
-template <class T>
-MessageBody<T> make_message(const T data, MessageType type, MessageStatus status, const ActorId &sender,
-                            std::string to_message_id) {
+inline MessageBody make_message(const std::string &data, MessageType type, MessageStatus status,
+                                const ActorId &sender, std::string to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         qFatal("make message error: incorrect message id size");
     }
 
-    QByteArray randomId = Utils::calcHash(QByteArray::number(QDateTime::currentSecsSinceEpoch())
-                                            + QByteArray::number(QRandomGenerator::global()->bounded(100000)))
-                              .left(15); // temp
+    std::string randomId = Utils::calcHash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                           + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                               .substr(0, 15); // temp
 
-    MessageBody<T> message = { .message_type = type,
-                               .status = status,
-                               .message_id = !to_message_id.empty() ? to_message_id : randomId.toStdString(),
-                               .sender_id = sender.toStdString(),
-                               .data = data };
+    MessageBody message = { .message_type = type,
+                            .status = status,
+                            .message_id = !to_message_id.empty() ? to_message_id : randomId,
+                            .sender_id = sender.toStdString(),
+                            .data = data };
 
     return message;
 }

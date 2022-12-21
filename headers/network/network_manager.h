@@ -36,6 +36,7 @@
 #include "managers/account_controller.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
+#include "utils/dfs_utils.h"
 #include "utils/exc_utils.h"
 
 class SocketService;
@@ -80,7 +81,7 @@ private:
     bool active = false;
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
-    QMap<QByteArray, int> msgHashList = {};
+    QMap<std::string, int> msgHashList = {};
 
     ExtraChainNode &node;
     QNetworkAddressEntry *local = nullptr;
@@ -113,6 +114,8 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
+    void addFragSignal(const DFSP::SegmentMessage &msg);
+    void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
 
 protected:
     void connectToWebSocket(const QString &ip, quint16 port);
@@ -122,7 +125,7 @@ protected:
      * @param msg
      * @return
      */
-    bool checkMsgCount(const QByteArray &msg);
+    bool checkMsgCount(const std::string &msg);
 
 private slots:
     void onNewWsConnection();
@@ -174,15 +177,15 @@ public:
         }
 
         auto &mainActor = node.accountController()->mainActor();
-        MessageBody<T> message = make_message(data, type, status, mainActor.id(), to_message_id);
+        MessageBody message =
+            make_message(MessagePack::serialize(data), type, status, mainActor.id(), to_message_id);
         auto serialized = message.serialize();
         auto sign = mainActor.key().sign(serialized);
-
         std::string receiver_identifier;
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];
-            if (receiver_identifier.empty())
-                qFatal("Network send message error: receiver_identifier is empty");
+            //            if (receiver_identifier.empty())
+            //                qFatal("Network send message error: receiver_identifier is empty");
             m_messages.erase(to_message_id);
         }
 
@@ -191,8 +194,8 @@ public:
             msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object deserialized = oh.get();
             qDebug() << fmt::format(
-                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body {}",
-                            int(message.message_type), int(message.status), message.message_id, int(typeSend),
+                            "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+                            message.message_type, message.status, message.message_id, typeSend,
                             (std::stringstream() << deserialized).str())
                             .c_str();
         }

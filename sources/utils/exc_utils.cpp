@@ -21,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QMimeDatabase>
 #include <QNetworkInterface>
@@ -28,6 +29,7 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTcpSocket>
+
 #include <string>
 #include <string_view>
 
@@ -36,7 +38,10 @@
 // #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
+#include "cpp-base64/base64.h"
 #include "enc/enc_tools.h"
+#include "managers/data_mining_manager.h"
+#include "sha3.h"
 #include "utils/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
@@ -44,13 +49,27 @@
 #endif
 
 std::string Utils::calcHash(const std::string &data, HashEncode encode) {
-    QByteArray hash = calcHash(QByteArray::fromStdString(data), encode);
-    return hash.toStdString();
-}
-
-QByteArray Utils::calcHash(const QByteArray &data, HashEncode encode) {
-    QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Algorithm::Sha3_256);
-    return bytesEncode(hash, encode);
+    std::string res;
+    switch (encode) {
+    case HashEncode::Sha3_512: {
+        SHA3 sha3(SHA3::Bits::Bits512);
+        res = sha3(data);
+        break;
+    }
+    case HashEncode::Base64: {
+        res = base64_encode(data);
+        break;
+    }
+    case HashEncode::Hex: {
+        qDebug() << "Hex encode not supported!";
+        break;
+    }
+    default: {
+        qDebug() << "This encode not supported!";
+        break;
+    }
+    }
+    return res;
 }
 
 // SERIALIZATION //
@@ -120,15 +139,97 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     int res = num.toInt();
     return res;
 }
+void Utils::rootMerkleHash(std::vector<std::string> &listHashes, std::vector<MerkleDataBlocks> &branchesTree,
+                           const bool isHahsing, std::string &result) {
+    if (listHashes.empty()) {
+        qFatal("Root merkle hash: list is empty");
+    };
+    const auto splittedList = splitListIntoPair(listHashes, isHahsing);
+    MerkleDataBlocks merkleBlocks;
 
+    for (int index = 0; index < splittedList.size(); index++) {
+        const auto pair = splittedList[index];
+
+        if (pair.size() == 1) {
+            merkleBlocks.push_back(pair[0]);
+        } else {
+            merkleBlocks.push_back(merkleFormula(pair[0], pair[1]));
+        }
+    }
+    branchesTree.push_back(merkleBlocks);
+
+    if (merkleBlocks.size() != 1) {
+        rootMerkleHash(merkleBlocks, branchesTree, false, result);
+    } else {
+        result = branchesTree[branchesTree.size() - 1][0];
+    }
+}
+
+std::string Utils::rootMerkleHash(std::string &data) {
+    std::string result;
+    std::vector<MerkleDataBlocks> branches;
+    std::vector<std::string> dataList;
+    dataList.push_back(data);
+    rootMerkleHash(dataList, branches, true, result);
+    return result;
+}
+
+std::vector<Utils::MerkleDataBlocks> Utils::splitListIntoPair(std::vector<std::string> &vector,
+                                                              const bool isHahsing) {
+    std::vector<MerkleDataBlocks> result;
+
+    if (vector.empty())
+        return result;
+
+    if (isHahsing)
+        hashingElements(vector);
+
+    int position = 0;
+    int step = 2;
+    const int sizeVector = vector.size();
+    bool isLastPair = sizeVector <= 2;
+    const bool isPairVector = (sizeVector % 2 == 0) ? true : false;
+    const int next = 1;
+
+    while (position < sizeVector) {
+        std::vector<std::string> pair;
+        if (isLastPair) {
+            pair.push_back(vector[position]);
+            if (isLastPair)
+                pair.push_back(vector[position + next]);
+        } else {
+            pair.push_back(vector[position]);
+            pair.push_back(vector[position + next]);
+        }
+
+        if (!isPairVector) {
+            position += ((position + step) > sizeVector) ? 1 : 2;
+            isLastPair = ((sizeVector - 1) - position) < 1;
+        } else {
+            position += step;
+            isLastPair = (sizeVector - position) < 2;
+        }
+
+        result.push_back(pair);
+    }
+    return result;
+}
+
+void Utils::hashingElements(std::vector<std::string> &vector) {
+    for (int i = 0; i < vector.size(); i++) {
+        vector[i] = Utils::calcHash(vector[i]);
+    }
+}
+
+std::string Utils::merkleFormula(const std::string &hash1, const std::string &hash2) {
+    return Utils::calcHash(hash1 + hash2);
+}
 std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        QCryptographicHash cryptographicHash(QCryptographicHash::Algorithm::Sha3_256);
-        if (cryptographicHash.addData(&file)) {
-            auto hash = cryptographicHash.result();
-            return bytesEncode(hash, encode).toStdString();
-        }
+        std::string data = file.readAll().toStdString();
+        std::string hash = rootMerkleHash(data);
+        return bytesEncodeStdString(hash, encode);
     }
 
     qFatal("Utils::calcHashForFile");
@@ -233,45 +334,34 @@ QString Utils::fileMimeSuffix(const QString &filePath) {
     return type.preferredSuffix();
 }
 
-QByteArray Serialization::serialize(const QList<QByteArray> &list, const int &fiels_size) {
-    QByteArray serialized = "";
-    for (const QByteArray &param : list) {
-        serialized += Utils::intToByteArray(param.size(), fiels_size);
-        serialized += param;
+std::string Serialization::serialize(const std::vector<std::string> &list) {
+    std::string res;
+    std::vector<std::string> reslist;
+    for (int i = 0; i < list.size(); i++) {
+        reslist.push_back(Utils::bytesEncodeStdString(list.at(i)));
     }
-    return serialized;
+    res = boost::algorithm::join(reslist, "|");
+    return res;
 }
 
-QList<QByteArray> Serialization::deserialize(const QByteArray &serialized, const int &fiels_size) {
-    if (serialized.isEmpty() || serialized.length() <= fiels_size) {
-        return {};
+std::vector<std::string> Serialization::deserialize(const std::string &serialized) {
+    std::vector<std::string> templist;
+    std::vector<std::string> reslist;
+    boost::algorithm::split(templist, serialized, boost::algorithm::is_any_of("|"));
+    if (templist.empty()) {
+        qDebug() << "decerialize error - empty list after split";
     }
-
-    QList<QByteArray> list = {};
-    int pos = 0;
-    while (pos < serialized.size()) {
-        bool ok = true;
-        int count = serialized.mid(pos, fiels_size)
-                        .toInt(&ok); // Utils::qByteArrayToInt(serialized.mid(pos, fiels_size));
-        if (!ok)
-            return list;
-        pos += fiels_size;
-        QByteArray el = serialized.mid(pos, count);
-        pos += count;
-        if (el.isEmpty())
-            list.append(el);
-        else
-            list << el;
+    for (int i = 0; i < templist.size(); i++) {
+        reslist.push_back(Utils::bytesDecodeStdString(templist.at(i)));
     }
-    //    serialized.remove(0, pos);
-    return list;
+    return reslist;
 }
 
 void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
-    QDir(QString::fromStdString(DFS::Basic::fsActrRoot)).removeRecursively();
+    QDir(QString::fromStdString(DFSB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile(".settings").remove();
@@ -292,15 +382,13 @@ void Utils::wipeDataFiles() {
     QDir::setCurrent(current);
 }
 
-qint64 Utils::checkMemoryFree() {
+qint64 Utils::diskFreeMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Free memory" << x.bytesFree() / 1024 / 1024 << "MB";
     return x.bytesFree();
 }
 
-qint64 Utils::checkMemoryTotal() {
+qint64 Utils::diskTotalMemory() {
     QStorageInfo x(qApp->applicationDirPath());
-    qDebug() << "Total memory" << x.bytesTotal() / 1024 / 1024 << "MB";
     return x.bytesTotal();
 }
 
@@ -359,14 +447,38 @@ std::string Utils::hexStringToByte(const std::string &data) {
     return res;
 }
 
+std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode encode) {
+    std::string res;
+    switch (encode) {
+    case HashEncode::Base64:
+        res = base64_encode(data);
+        return res;
+    case HashEncode::Hex:
+        break;
+        //        return data.toHex();
+    }
+    return res;
+}
+
+std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode encode) {
+    std::string res;
+    switch (encode) {
+    case HashEncode::Base64:
+        res = base64_decode(data);
+        return res;
+    case HashEncode::Hex:
+        break;
+        //        return data.toHex();
+    }
+    return res;
+}
+
 QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
     switch (encode) {
     case HashEncode::Base64:
         return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return data.toHex();
-    default:
-        break;
     }
     return data;
 }
@@ -377,8 +489,6 @@ QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
         return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return QByteArray::fromHex(data);
-    default:
-        break;
     }
     return data;
 }
@@ -399,6 +509,9 @@ QString Utils::detectCompiler() {
 
 #if __GNUC__ > 4
     QString gcc = "GCC";
+    #ifdef __MINGW32__
+    gcc = "MinGW";
+    #endif
     return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
 #endif
 
