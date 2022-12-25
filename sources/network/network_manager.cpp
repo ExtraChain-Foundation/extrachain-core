@@ -25,8 +25,10 @@
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "utils/bignumber_float.h"
+#include <filesystem>
 
 #include <fstream>
+#include <vector>
 
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
@@ -263,23 +265,54 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 void NetworkManager::saveToCache(const std::string &serialized_message, Config::Net::TypeSend typeSend,
                                  const std::string &receiver_identifier) {
     std::ofstream file;
-    file.open("tmp/network.cache", std::ios_base::out | std::ios_base::app | std::ios_base::binary);
+    file.open(NetworkCacheFile, std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
         qFatal("[NetworkManager/saveToCache] Error open cache file");
     }
+    auto size = std::filesystem::file_size(NetworkCacheFile);
+    auto typeSendToString = [=](Config::Net::TypeSend ts) -> std::string {
+        switch (ts) {
+        case Config::Net::TypeSend::All:
+            return "All";
+        case Config::Net::TypeSend::Except:
+            return "Except";
+        case Config::Net::TypeSend::Focused:
+            return "Focused";
+        }
+        return "";
+    };
 
-    std::tuple tuple = { serialized_message, typeSend, receiver_identifier };
-    std::string package = MessagePack::serialize(tuple);
-    file << Utils::intToStdString(int(package.length()), 8);
-    file << package;
+    if (size == 0) {
+        std::string serializedMessage = Serialization::serialize(
+            std::vector<std::string> { serialized_message, typeSendToString(typeSend), receiver_identifier });
+        std::string package = Utils::bytesEncodeStdString(serializedMessage);
+        file << Serialization::serialize(std::vector<std::string> { serializedMessage });
+        file.flush();
+        file.close();
+    } else {
+        std::ifstream inputFile;
+        inputFile.open(NetworkCacheFile, std::ios::binary);
+        std::string data;
+        if (inputFile.is_open()) {
+            inputFile >> data;
+        }
+        inputFile.close();
 
-    file.close();
+        std::vector<std::string> list = Serialization::deserialize(data);
+        std::string serializedMessage = Serialization::serialize(
+            std::vector<std::string> { serialized_message, typeSendToString(typeSend), receiver_identifier });
+        list.push_back(serializedMessage);
+        file.close();
+        file.open(NetworkCacheFile, std::ofstream::out | std::ofstream::trunc);
+        file << Serialization::serialize(list);
+        file.close();
+    }
 }
 
 void NetworkManager::sendFromCache() {
     qDebug() << "[NetworkManager] Load from cache";
 
-    QFile file("tmp/network.cache");
+    QFile file(QString::fromStdString(NetworkCacheFile));
     if (!file.exists() || !file.open(QFile::ReadOnly)) {
         return;
     }
@@ -288,11 +321,26 @@ void NetworkManager::sendFromCache() {
     file.close();
     file.remove();
 
-    for (const std::string &packageData : qAsConst(allPackages)) {
-        auto [serialized_message, typeSend, receiver_identifier] =
-            MessagePack::deserialize<std::tuple<std::string, Config::Net::TypeSend, std::string>>(
-                packageData);
-        sendMessage(serialized_message, typeSend, receiver_identifier);
+    auto typeSendFromString = [=](std::string typeSendStr) -> Config::Net::TypeSend {
+        if (typeSendStr == "All")
+            return Config::Net::TypeSend::All;
+        else if (typeSendStr == "Except")
+            return Config::Net::TypeSend::Except;
+        else if (typeSendStr == "Focused")
+            return Config::Net::TypeSend::Focused;
+        return Config::Net::TypeSend::All;
+    };
+
+    for (int numberPackage = 0; numberPackage < allPackages.size(); numberPackage++) {
+        const std::vector<std::string> deserializedList = Serialization::deserialize(allPackages[numberPackage]);
+        if(deserializedList.size() < 3) {
+            qWarning("Size deserialized data in not correct");
+            continue;
+        }
+        const std::string deserialized_message = deserializedList[0];
+        const Config::Net::TypeSend typeSend = typeSendFromString(deserializedList[1]);
+        const std::string receiver_identifier = deserializedList[2];
+        sendMessage(deserialized_message, typeSend, receiver_identifier);
     }
 }
 

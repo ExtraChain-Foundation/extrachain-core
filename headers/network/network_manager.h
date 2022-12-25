@@ -69,6 +69,8 @@ struct MessageIdDataReceived {
     qint64 time;
 };
 
+static const std::string NetworkCacheFile = "tmp/network.cache";
+
 /**
  * @brief The NetworkManager class
  * Creates Discovery, Server and Sockets services
