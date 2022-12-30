@@ -7,12 +7,7 @@
 
 FileDataManager::FileDataManager(QObject *parent)
     : QObject(parent) {
-}
-
-FileDataManager::FileDataManager(std::string actorId, QObject *parent)
-    : QObject(parent)
-    , savedActorId(actorId) {
-    files = updateFileList(savedActorId);
+    updateAllTree();
 }
 
 QJsonDocument FileDataManager::getFileTree(std::string actorId, const bool &shouldUpdateList) {
@@ -30,6 +25,10 @@ QJsonDocument FileDataManager::getFileTree(std::string actorId, const bool &shou
 
     if (shouldUpdateList || files.empty())
         files = updateFileList(actorId);
+
+    if (!shouldUpdateList) {
+        files = cachedData[actorId];
+    }
 
     for (const auto &file : files) {
         QJsonObject object;
@@ -59,14 +58,19 @@ std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId
         if (std::filesystem::exists(pathToStorjFile)) {
             DBConnector db(pathToStorjFile);
             if (db.open()) {
-                auto rows = db.select(DFSF::GetSizeFragmants);
-                if (!rows.empty()) {
-                    const int sizeFragments = std::stoi(rows.at(0)["SUM(size)"]);
-                    const auto fileSize = entry.file_size();
-                    if (fileSize == sizeFragments) {
-                        status = FileStatus::Downloaded;
-                    } else if (fileSize > sizeFragments) {
-                        status = FileStatus::NotLoaded;
+                auto countRow = db.select(DFSF::GetCountFragmants)[0];
+                if (std::stoi(countRow["COUNT(size)"]) == 0) {
+                    status = FileStatus::NotLoaded;
+                } else {
+                    auto rows = db.select(DFSF::GetSizeFragmants);
+                    if (!rows.empty()) {
+                        const int sizeFragments = std::stoi(rows.at(0)["SUM(size)"]);
+                        const auto fileSize = entry.file_size();
+                        if (fileSize == sizeFragments) {
+                            status = FileStatus::Downloaded;
+                        } else if (fileSize > sizeFragments) {
+                            status = FileStatus::NotLoaded;
+                        }
                     }
                 }
                 db.close();
@@ -78,7 +82,14 @@ std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId
         fileStructs.emplace_back(fileStruct);
     }
 
+    // save to cache
+    cachedData[actorId] = fileStructs;
+
     return fileStructs;
+}
+
+const std::map<std::string, std::vector<FileData>> &FileDataManager::getCachedData() const {
+    return cachedData;
 }
 
 bool FileDataManager::updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus) {
@@ -133,4 +144,13 @@ QJsonDocument FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus
 
 void FileDataManager::setActorId(const std::string &actorId) {
     savedActorId = actorId;
+}
+
+void FileDataManager::updateAllTree() {
+    for (const auto &entry : std::filesystem::directory_iterator(DFSB::fsActrRoot)) {
+        if (entry.is_directory()) {
+            const std::string actorId = entry.path().filename().string();
+            updateFileList(actorId);
+        }
+    }
 }

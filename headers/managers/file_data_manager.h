@@ -29,12 +29,14 @@ class FileDataManager : public QObject {
     Q_OBJECT
 public:
     FileDataManager(QObject *parent = nullptr);
-    FileDataManager(std::string actorId, QObject *parent = nullptr);
     QJsonDocument getFileTree(std::string actorId = "", const bool &shouldUpdateList = false);
     bool updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus);
     QJsonObject getFileDataByName(const std::string &nameFile, const bool &shouldUpdateList = false);
     QJsonDocument getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList = false);
     void setActorId(const std::string &actorId);
+    void updateAllTree();
+
+    const std::map<std::string, std::vector<FileData> > &getCachedData() const;
 
 signals:
     void structuraChanged(FileData fileStruct);
@@ -45,5 +47,6 @@ protected:
 
 private:
     std::vector<FileData> files;
+    std::map<std::string, std::vector<FileData>> cachedData;
     std::string savedActorId;
 };
