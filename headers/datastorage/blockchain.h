@@ -113,7 +113,7 @@ private:
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
-                                    QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
+                                    QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
@@ -301,7 +301,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId = "");
+    void sendCoinReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining

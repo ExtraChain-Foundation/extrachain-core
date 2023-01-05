@@ -403,7 +403,8 @@ bool Blockchain::signCheckAdd(Block &block) {
     return false;
 }
 
-GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<ActorId, BigNumber> states) {
+GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor,
+                                            QMap<ActorId, BigNumberFloat> states) {
     qDebug() << "Creating genesis block";
     genBlockData.clear();
     // QByteArray previousGenHash;
@@ -956,13 +957,15 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
-void Blockchain::sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId) {
+void Blockchain::sendCoinReward(const ActorId &receiver, const BigNumberFloat &amount,
+                                const std::string &messageId) {
     auto mainActor = node->accountController()->mainActor();
     if (mainActor.id() == node->actorIndex()->firstId()) {
         Transaction tx;
         tx.setSender(mainActor.id());
         tx.setReceiver(receiver);
         tx.setAmount(amount);
+        tx.setDate(QDateTime::currentMSecsSinceEpoch());
         node->network()->send_message(tx, MessageType::BlockchainTransaction);
     } else {
         //        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin =

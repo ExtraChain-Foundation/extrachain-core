@@ -62,7 +62,7 @@ public:
         std::vector<std::string> l = Serialization::deserialize(serialized);
         if (l.size() == 4) {
             actorId = l.at(0);
-            state = BigNumber(l.at(1));
+            state = BigNumberFloat(l.at(1));
             token = l.at(2);
             type = DataStorage::typeDataRow(std::stoi(l.at(3)));
         }
