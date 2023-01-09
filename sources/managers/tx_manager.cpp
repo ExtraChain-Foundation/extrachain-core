@@ -62,8 +62,11 @@ void TransactionManager::addTransaction(Transaction tx) {
 
 void TransactionManager::addProvedTransaction(Transaction tx) {
     qDebug() << "addProvedTransaction";
-    if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end())
+    if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end()
+        || pendingTxs.empty()) {
         pendingTxs.push_back(tx);
+        emit addToCache(tx.getReceiver().toStdString(), tx);
+    }
 
     receivedTxList.removeOne(tx);
 }

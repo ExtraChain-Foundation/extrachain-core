@@ -888,7 +888,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
 
             for (const auto &row : rows) {
                 if (userId == row.actorId)
-                    return balance + row.state;
+                    balance += row.state;
             }
 
             return balance;
@@ -898,10 +898,13 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
             break;
 
         auto txs = currentBlock.extractTransactions();
-
         for (auto &tx : txs) {
             if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
                 balance += tx.getAmount();
+            }
+
+            if(tx.getSender() == userId) {
+                balance -= tx.getAmount();
             }
         }
     }

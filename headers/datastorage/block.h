@@ -121,6 +121,8 @@ public:
      * @param data
      */
     void addData(const std::string &data);
+
+    void initializeData(const std::string &serializedData);
     /**
      * @brief extract non-empty transactions from data
      * @return transaction list

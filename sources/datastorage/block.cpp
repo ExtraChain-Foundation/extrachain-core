@@ -155,9 +155,13 @@ BlockCompare Block::compareBlock(const Block &b) const {
 }
 
 void Block::addData(const std::string &data) {
-    std::vector<std::string> v;
+    std::vector<std::string> v = Serialization::deserialize(this->data);
     v.push_back(data);
-    this->data += Serialization::serialize(v);
+    this->data = Serialization::serialize(v);
+}
+
+void Block::initializeData(const std::string &serializedData) {
+    this->data = serializedData;
 }
 
 std::vector<Transaction> Block::extractTransactions() const {
@@ -165,6 +169,7 @@ std::vector<Transaction> Block::extractTransactions() const {
         return {};
 
     std::vector<std::string> txsData = Serialization::deserialize(data);
+
     std::vector<Transaction> transactions;
     for (const std::string &trData : txsData) {
         if (!trData.empty()) {
