@@ -112,6 +112,7 @@ namespace Packets {
         uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset)
     };
+
     enum SegmentMessageType {
         add = 0,
         insert = 1,
@@ -174,6 +175,13 @@ namespace Packets {
         MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, Coefficient, CoinProducedForNode,
                        CoinProductionAlgorithmTickBlocks, BlockProductionRate,
                        CoinProductionAlgorithmTickPerHour)
+    };
+
+    struct Connection {
+        std::string port;
+        std::string address;
+        bool active;
+        MSGPACK_DEFINE(port, address, active)
     };
 }
 namespace Fragments {

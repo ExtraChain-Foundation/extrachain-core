@@ -41,6 +41,7 @@ template <typename T>
 class Actor;
 class KeyPrivate;
 class KeyPublic;
+class ConnectionsManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -54,6 +55,7 @@ private:
     TransactionManager *m_txManager = nullptr;
     AccountController *m_accountController = nullptr;
     DataMiningManager *m_dmm = nullptr;
+    ConnectionsManager *m_connectionsManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
     bool fileMode = true;
@@ -74,6 +76,7 @@ public:
     DfsController *dfs() const;
     TransactionManager *txManager() const;
     DataMiningManager *dataMiningManager() const;
+    ConnectionsManager *connectionsManager() const;
 
     // Remove this function before merge
     void test() const;

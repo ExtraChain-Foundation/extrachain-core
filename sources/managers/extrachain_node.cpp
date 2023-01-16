@@ -31,6 +31,7 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
+#include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
@@ -62,6 +63,8 @@ ExtraChainNode::ExtraChainNode() {
     m_blockchain->setTxManager(m_txManager);
 
     m_dmm = new DataMiningManager(this);
+    //test port and address
+    m_connectionsManager = new ConnectionsManager("12.12.12.12", "1212", this);
 
     connectSignals();
 
@@ -81,6 +84,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_blockchain;
     delete m_accountController;
     delete m_dmm;
+    delete m_connectionsManager;
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -421,6 +425,10 @@ TransactionManager *ExtraChainNode::txManager() const {
 
 DataMiningManager *ExtraChainNode::dataMiningManager() const {
     return m_dmm;
+}
+
+ConnectionsManager *ExtraChainNode::connectionsManager() const {
+    return m_connectionsManager;
 }
 
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {

@@ -36,7 +36,12 @@ enum class MessageType {
     BlockchainCoinReward = 85,
 
     FragmentDataInfo = 90,
-    FragmentsDataListInfo = 91
+    FragmentsDataListInfo = 91,
+
+    NewListConnections = 100,
+    GetListConnections = 101,
+    ProcessNewConnections = 102
+
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)

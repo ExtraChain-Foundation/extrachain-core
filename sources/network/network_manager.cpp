@@ -18,6 +18,7 @@
  */
 
 #include "datastorage/dfs/dfs_controller.h"
+#include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/thread_pool.h"
@@ -332,8 +333,9 @@ void NetworkManager::sendFromCache() {
     };
 
     for (int numberPackage = 0; numberPackage < allPackages.size(); numberPackage++) {
-        const std::vector<std::string> deserializedList = Serialization::deserialize(allPackages[numberPackage]);
-        if(deserializedList.size() < 3) {
+        const std::vector<std::string> deserializedList =
+            Serialization::deserialize(allPackages[numberPackage]);
+        if (deserializedList.size() < 3) {
             qWarning("Size deserialized data in not correct");
             continue;
         }
@@ -623,6 +625,27 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         default:
             break;
         }
+        break;
+    }
+
+    case MessageType::NewListConnections: {
+        DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
+        node.connectionsManager()->addNewConnection(connection);
+        break;
+    }
+
+    case MessageType::GetListConnections: {
+        DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
+        node.connectionsManager()->addConnection(connection);
+        for (const auto &connection : node.connectionsManager()->getActiveConnection()) {
+            this->send_message(connection, MessageType::NewListConnections);
+        }
+        this->send_message("", MessageType::ProcessNewConnections);
+
+        break;
+    }
+    case MessageType::ProcessNewConnections: {
+        node.connectionsManager()->tryToNewConnect();
         break;
     }
 
