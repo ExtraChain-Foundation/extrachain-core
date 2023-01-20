@@ -63,8 +63,9 @@ ExtraChainNode::ExtraChainNode() {
     m_blockchain->setTxManager(m_txManager);
 
     m_dmm = new DataMiningManager(this);
-    //test port and address
-    m_connectionsManager = new ConnectionsManager("12.12.12.12", "1212", this);
+    // test port and address
+    m_connectionsManager = new ConnectionsManager("12.12.12.12", "1212",
+                                                  actorIndex()->firstId().toByteArray(), this);
 
     connectSignals();
 
