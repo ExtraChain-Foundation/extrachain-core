@@ -10,7 +10,6 @@ using DFSP::Connection;
 
 static const std::string ConnectionsTableName = "Connections";
 static const std::string dbPath = "tmp/temp.dat";
-static const std::string dbPathEcrypted = "tmp/tempE.dat";
 
 class ConnectionsManager : public QObject {
     Q_OBJECT
@@ -23,7 +22,7 @@ class ConnectionsManager : public QObject {
 
 public:
     ConnectionsManager(const std::string address, const std::string port, const QByteArray key, QObject *parent = nullptr);
-    ~ConnectionsManager();
+
     void addConnection(const Connection &connection);
     void tryToNewConnect();
     void addNewConnection(const Connection &connection);
@@ -35,9 +34,15 @@ public:
     void setAddress(const std::string &newAddress);
     const std::vector<Connection> &getActiveConnection() const;
 
+    DBRow ecryptConnection(const Connection &connection);
+    Connection decryptConnection(const DBRow &row);
+    void loadRecords();
+    void removeConnection(const Connection &connection);
+
 protected:
     bool createTable();
     bool insertConnection(const Connection &connection);
-    void loadRecords();
-    void decryptDb();
+
+private:
+    std::string hashConnection(const Connection &connection);
 };

@@ -1,4 +1,5 @@
 #include "managers/connections_manager.h"
+#include "enc/enc_tools.h"
 #include "utils/exc_utils.h"
 
 ConnectionsManager::ConnectionsManager(const std::string address, const std::string port,
@@ -8,18 +9,10 @@ ConnectionsManager::ConnectionsManager(const std::string address, const std::str
     , m_port(port)
     , m_key(key)
     , dbConnector(dbPath) {
-    decryptDb();
     const bool createdTable = createTable();
     if (!createdTable) {
         loadRecords();
         tryToNewConnect();
-    }
-}
-
-ConnectionsManager::~ConnectionsManager() {
-    Utils::encryptFile(QString::fromStdString(dbPath), QString::fromStdString(dbPathEcrypted), m_key);
-    if (std::filesystem::exists(dbPath)) {
-        std::filesystem::remove(dbPath);
     }
 }
 
@@ -29,9 +22,10 @@ bool ConnectionsManager::createTable() {
 
     if (dbConnector.selectAll(ConnectionsTableName).empty()) {
         static const std::string CreateTableQuery = "CREATE TABLE Connections("
-                                                    "address     TEXT             NOT NULL,"
-                                                    "port        TEXT             NOT NULL,"
-                                                    "active      INTEGER          NOT NULL);";
+                                                    "hash        TEXT             NOT NULL, "
+                                                    "address     TEXT             NOT NULL, "
+                                                    "port        TEXT             NOT NULL, "
+                                                    "active      TEXT             NOT NULL);";
         createdTableConnnections = dbConnector.createTable(CreateTableQuery);
     }
     dbConnector.close();
@@ -60,12 +54,8 @@ const std::vector<Connection> &ConnectionsManager::getActiveConnection() const {
 
 bool ConnectionsManager::insertConnection(const DFS::Packets::Connection &connection) {
     dbConnector.open();
-    bool result = dbConnector.insert(ConnectionsTableName,
-                                     DBRow {
-                                         { "address", connection.address },
-                                         { "port", connection.port },
-                                         { "active", std::to_string(connection.active) },
-                                     });
+    DBRow row = ecryptConnection(connection);
+    bool result = dbConnector.insert(ConnectionsTableName, row);
     dbConnector.close();
     return result;
 }
@@ -76,9 +66,7 @@ void ConnectionsManager::loadRecords() {
     const auto rows = dbConnector.selectAll(ConnectionsTableName);
     if (!rows.empty()) {
         for (const auto &row : rows) {
-            Connection connection = { .port = row.at("port"),
-                                      .address = row.at("address"),
-                                      .active = std::stoi(row.at("active")) == 1 ? true : false };
+            Connection connection = decryptConnection(row);
             newConnections.push_back(connection);
         }
     }
@@ -86,11 +74,40 @@ void ConnectionsManager::loadRecords() {
     dbConnector.close();
 }
 
-void ConnectionsManager::decryptDb() {
-    if (std::filesystem::exists(dbPathEcrypted)) {
-        Utils::decryptFile(QString::fromStdString(dbPathEcrypted), QString::fromStdString(dbPath), m_key);
-        std::filesystem::remove(dbPathEcrypted);
-    }
+void ConnectionsManager::removeConnection(const DFS::Packets::Connection &connection) {
+    dbConnector.open();
+    dbConnector.query(fmt::format("DELETE FROM Connections WHERE hash = '{}'", hashConnection(connection)));
+    dbConnector.close();
+}
+
+std::string ConnectionsManager::hashConnection(const DFS::Packets::Connection &connection) {
+    return Utils::calcHash(connection.address + connection.port);
+}
+
+DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &connection) {
+    std::string hash = hashConnection(connection);
+    std::string rkey = SecretKey::getKeyFromPass(hash);
+
+    std::string ecryptedAddress = SecretKey::encrypt(connection.address, rkey);
+    std::string encryptedPort = SecretKey::encrypt(connection.port, rkey);
+    std::string encryptedAddress = SecretKey::encrypt(connection.address, rkey);
+    std::string encryptedActive = SecretKey::encrypt(std::to_string(connection.active), rkey);
+
+    return DBRow { { "hash", hash },
+                   { "port", encryptedPort },
+                   { "address", encryptedAddress },
+                   { "active", SecretKey::encrypt(std::to_string(connection.active), rkey) } };
+}
+
+Connection ConnectionsManager::decryptConnection(const DBRow &row) {
+    Connection connection;
+    std::string rkey = SecretKey::getKeyFromPass(row.at("hash"));
+
+    connection.port = SecretKey::decrypt(row.at("port"), rkey);
+    connection.address = SecretKey::decrypt(row.at("address"), rkey);
+    connection.active = std::stoi(SecretKey::decrypt(row.at("active"), rkey));
+    connection.print();
+    return connection;
 }
 
 void ConnectionsManager::addConnection(const DFS::Packets::Connection &connection) {
