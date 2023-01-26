@@ -84,6 +84,7 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                 uint64_t fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
+    void loadBytesLimit();
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;

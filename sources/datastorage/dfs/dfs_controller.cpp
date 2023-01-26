@@ -8,9 +8,12 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
     dirsFile.query(DFST::DirsFile::CreateTableQuery);
+    dirsFile.query(DFST::DirsFile::CreateParametersTableQuery);
+    dirsFile.close();
 
     m_sizeTaken = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
+    loadBytesLimit();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
 }
@@ -814,6 +817,13 @@ float DfsController::percentVerified(std::vector<DFS::Packets::VerifyFileMessage
     return result;
 }
 
+void DfsController::loadBytesLimit() {
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+    const auto row = dirsFile.select(DFST::DirsFile::BytesLimitQuery).at(0);
+    m_bytesLimit = std::stoll(row.at("value"));
+}
+
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)
@@ -933,6 +943,20 @@ uint64_t DfsController::bytesLimit() const {
 
 void DfsController::setBytesLimit(uint64_t bytesLimit) {
     m_bytesLimit = bytesLimit;
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+
+    const bool noLimit = dirsFile.select(DFST::DirsFile::BytesLimitQuery).empty();
+    if (!noLimit) {
+        dirsFile.update(fmt::format("UPDATE {} SET value='{}' WHERE parameter = '{}'",
+                                    DFST::DirsFile::ParametersDfs, std::to_string(bytesLimit),
+                                    DFST::DirsFile::BytesLimit));
+    } else {
+        dirsFile.insert(
+            DFST::DirsFile::ParametersDfs,
+            DBRow { { "parameter", DFST::DirsFile::BytesLimit }, { "value", std::to_string(bytesLimit) } });
+    }
+
     qDebug() << "[Dfs] Changed limit:" << m_bytesLimit;
 }
 
