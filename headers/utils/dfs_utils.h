@@ -60,6 +60,7 @@ namespace Basic {
     static const std::string dirsPath = "dfs/.dirs";
     static const uint64_t sectionSize = /*2097152*/ 524228;
     static const uint64_t maxSectionSize = 209715200;
+    static const uint64_t minDfsLimit = 2147483648;
     static const uint64_t historicalChainSectionSize = 209715200;
 
     static const uint64_t encSectionSize = 256;

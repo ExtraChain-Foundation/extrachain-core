@@ -148,9 +148,8 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     return addFile(msg, false);
 }
 
-bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
+bool DfsController::removeLocalFile(const std::string &actorId, const std::string &filePath) {
     std::string fileHash = Utils::calcHashForFile(filePath); // TODO: get hash
-    const auto actorId = actor.id().toStdString();
     DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = std::filesystem::path(filePath).filename().string() };
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
@@ -163,8 +162,33 @@ bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::s
 
 std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadBytes) {
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
-    std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
+    std::string actorFolderPath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
+    std::string actrDirFilePath = actorFolderPath + DFSB::fsMapName;
+    std::string realFilePath = actorFolderPath + msg.FileName;
+
+    if (!writeAvailable(msg.Size) && !std::filesystem::is_empty(actorFolderPath)) {
+        std::vector<std::filesystem::path> files;
+        for (const auto &file : std::filesystem::directory_iterator(actorFolderPath)) {
+            const auto fileName = file.path().filename();
+            if (fileName == ".dir" || fileName == ".DS_Store") {
+                continue;
+            }
+
+            if (file.is_regular_file()) {
+                files.push_back(file);
+            }
+        }
+
+        std::sort(files.begin(), files.end(),
+                  [=](const std::filesystem::path p1, const std::filesystem::path p2) {
+                      return std::filesystem::last_write_time(p1).time_since_epoch()
+                          > std::filesystem::last_write_time(p2).time_since_epoch();
+                  });
+
+        while (!writeAvailable(msg.Size) || std::filesystem::is_empty(actorFolderPath)) {
+            removeLocalFile(msg.Actor, files.at(files.size() - 1));
+        }
+    }
 
     if (loadBytes) {
         if (std::filesystem::exists(realFilePath)) {
@@ -942,7 +966,8 @@ uint64_t DfsController::bytesLimit() const {
 }
 
 void DfsController::setBytesLimit(uint64_t bytesLimit) {
-    m_bytesLimit = bytesLimit;
+    m_bytesLimit = bytesLimit < DFSB::minDfsLimit ? DFSB::minDfsLimit : bytesLimit;
+
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
 
