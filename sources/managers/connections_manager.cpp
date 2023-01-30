@@ -21,11 +21,12 @@ bool ConnectionsManager::createTable() {
     bool createdTableConnnections = false;
 
     if (dbConnector.selectAll(ConnectionsTableName).empty()) {
-        static const std::string CreateTableQuery = "CREATE TABLE Connections("
-                                                    "hash        TEXT             NOT NULL, "
-                                                    "address     TEXT             NOT NULL, "
-                                                    "port        TEXT             NOT NULL, "
-                                                    "active      TEXT             NOT NULL);";
+        static const std::string CreateTableQuery = fmt::format("CREATE TABLE IF NOT EXISTS {}("
+                                                                "hash        TEXT             NOT NULL, "
+                                                                "address     TEXT             NOT NULL, "
+                                                                "port        TEXT             NOT NULL, "
+                                                                "active      TEXT             NOT NULL);",
+                                                                ConnectionsTableName);
         createdTableConnnections = dbConnector.createTable(CreateTableQuery);
     }
     dbConnector.close();
@@ -55,6 +56,7 @@ const std::vector<Connection> &ConnectionsManager::getActiveConnection() const {
 bool ConnectionsManager::insertConnection(const DFS::Packets::Connection &connection) {
     dbConnector.open();
     DBRow row = ecryptConnection(connection);
+
     bool result = dbConnector.insert(ConnectionsTableName, row);
     dbConnector.close();
     return result;
@@ -76,7 +78,8 @@ void ConnectionsManager::loadRecords() {
 
 void ConnectionsManager::removeConnection(const DFS::Packets::Connection &connection) {
     dbConnector.open();
-    dbConnector.query(fmt::format("DELETE FROM Connections WHERE hash = '{}'", hashConnection(connection)));
+    dbConnector.query(
+        fmt::format("DELETE FROM {} WHERE hash = '{}'", ConnectionsTableName, hashConnection(connection)));
     dbConnector.close();
 }
 
@@ -86,27 +89,27 @@ std::string ConnectionsManager::hashConnection(const DFS::Packets::Connection &c
 
 DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &connection) {
     std::string hash = hashConnection(connection);
-    std::string rkey = SecretKey::getKeyFromPass(hash);
+    std::string key = SecretKey::getKeyFromPass(hash);
 
-    std::string ecryptedAddress = SecretKey::encrypt(connection.address, rkey);
-    std::string encryptedPort = SecretKey::encrypt(connection.port, rkey);
-    std::string encryptedAddress = SecretKey::encrypt(connection.address, rkey);
-    std::string encryptedActive = SecretKey::encrypt(std::to_string(connection.active), rkey);
+    std::string ecryptedAddress = SecretKey::encrypt(connection.address, key);
+    std::string encryptedPort = SecretKey::encrypt(connection.port, key);
+    std::string encryptedActive = SecretKey::encrypt(std::to_string(connection.active), key);
 
-    return DBRow { { "hash", hash },
-                   { "port", encryptedPort },
-                   { "address", encryptedAddress },
-                   { "active", SecretKey::encrypt(std::to_string(connection.active), rkey) } };
+    DBRow row { { hash_connection, hash },
+                { port_connection, encryptedPort },
+                { address_connection, ecryptedAddress },
+                { active_connection, encryptedActive } };
+
+    return row;
 }
 
 Connection ConnectionsManager::decryptConnection(const DBRow &row) {
     Connection connection;
-    std::string rkey = SecretKey::getKeyFromPass(row.at("hash"));
+    std::string key = SecretKey::getKeyFromPass(row.at(hash_connection));
 
-    connection.port = SecretKey::decrypt(row.at("port"), rkey);
-    connection.address = SecretKey::decrypt(row.at("address"), rkey);
-    connection.active = std::stoi(SecretKey::decrypt(row.at("active"), rkey));
-    connection.print();
+    connection.port = SecretKey::decrypt(row.at(port_connection), key);
+    connection.address = SecretKey::decrypt(row.at(address_connection), key);
+    connection.active = std::stoi(SecretKey::decrypt(row.at(active_connection), key));
     return connection;
 }
 

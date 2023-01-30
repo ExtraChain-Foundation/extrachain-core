@@ -10,6 +10,11 @@ using DFSP::Connection;
 
 static const std::string ConnectionsTableName = "Connections";
 static const std::string dbPath = "tmp/temp.dat";
+static const std::string hash_connection = "hash";
+static const std::string port_connection = "port";
+static const std::string address_connection = "address";
+static const std::string active_connection = "active";
+
 
 class ConnectionsManager : public QObject {
     Q_OBJECT
