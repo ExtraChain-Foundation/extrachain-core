@@ -1006,8 +1006,9 @@ DFSP::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std
 }
 
 uint64_t DfsController::bytesAvailable() {
-    auto freeDfs = m_bytesLimit <= m_sizeTaken ? 0 : m_bytesLimit - m_sizeTaken;
+    auto freeDfs = m_bytesLimit <= m_sizeTaken ? DFS::Basic::minDfsLimit : m_bytesLimit - m_sizeTaken;
     uint64_t freeDisk = Utils::diskFreeMemory();
+    qDebug() << m_sizeTaken;
     auto min = m_bytesLimit == 0 ? freeDisk : std::min(freeDfs, freeDisk);
     return min;
 }
