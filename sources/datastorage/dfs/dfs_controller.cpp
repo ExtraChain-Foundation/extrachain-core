@@ -844,8 +844,15 @@ float DfsController::percentVerified(std::vector<DFS::Packets::VerifyFileMessage
 void DfsController::loadBytesLimit() {
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
-    const auto row = dirsFile.select(DFST::DirsFile::BytesLimitQuery).at(0);
-    m_bytesLimit = std::stoll(row.at("value"));
+    const auto rows = dirsFile.select(DFST::DirsFile::BytesLimitQuery);
+    if(!rows.empty()) {
+        const auto row = rows.at(0);
+        m_bytesLimit = std::stoll(row.at("value"));
+    } else {
+        m_bytesLimit = DFSB::minDfsLimit;
+    }
+    qDebug() << "Limit dfs is " << m_bytesLimit;
+    dirsFile.close();
 }
 
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
