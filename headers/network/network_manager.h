@@ -173,7 +173,7 @@ public:
             typeSend = Config::Net::TypeSend::Focused;
         }
 
-        if (node.accountController()->count() == 0) {
+        if (node.accountController()->empty()) {
             // qFatal("Can't send");
             return "";
         }

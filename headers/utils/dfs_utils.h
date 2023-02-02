@@ -66,6 +66,7 @@ namespace Basic {
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
     static const int miningReward = 1;
+    static const std::string dsStoreExtention = ".DS_Store";
 }
 
 namespace Packets {
@@ -188,6 +189,7 @@ namespace Packets {
 }
 namespace Fragments {
     static const std::string Extension = ".storj";
+    static const std::string ExtensionJournal = ".storj-journal";
     static const std::string TableNameFragments = "Fragments";
     static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
         + "("

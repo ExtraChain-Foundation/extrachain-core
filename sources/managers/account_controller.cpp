@@ -121,6 +121,11 @@ int AccountController::count() const {
     return m_profiles.size();
 }
 
+bool AccountController::empty() const
+{
+    return m_profiles.empty();
+}
+
 void AccountController::changeCurrentProfile(const ActorId &actorId) {
     if (!getProfile(actorId).actors().empty()) {
         m_currentProfile = actorId.toStdString();
