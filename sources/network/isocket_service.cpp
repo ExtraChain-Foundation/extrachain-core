@@ -15,18 +15,6 @@ SocketService::SocketService(ExtraChainNode &node, QObject *parent)
     priv.generate();
 }
 
-/*
-SocketService::SocketService(const SocketService &socket) {
-    qFatal("SocketService copy TODO");
-    m_identifier = socket.m_identifier;
-    m_ip = socket.m_ip;
-    m_activated = socket.m_activated;
-    m_bytesIncoming = socket.m_bytesIncoming;
-    m_bytesOutgoing = socket.m_bytesOutgoing;
-    m_bytesCompressed = socket.m_bytesCompressed;
-}
-*/
-
 const QString &SocketService::identifier() const {
     return m_identifier;
 }
@@ -63,7 +51,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
     if (json.isEmpty()) {
-        qDebug() << "[Socket] First message:" << message;
+        qDebug() << QString("[Socket] First message:%1").arg(message);
         qFatal("[Socket] Can't check first message");
     }
 
@@ -75,7 +63,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     bool isFirstIdsContains = currentFirstId == jsonFirstId;
     bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
 
-    qDebug() << "[Socket] First message:" << json << "| Current first:" << currentFirstId;
+    qDebug() << QString("[Socket] First message:%1 | Current first:%2").arg(json.toJson()).arg(currentFirstId.toString());
 
     if (currentFirstId.isEmpty() && !jsonFirstId.isEmpty()) { // TODO: remove hack
         node.actorIndex()->setFirstId(jsonFirstId);
@@ -140,7 +128,6 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
 
     auto result = QByteArray::fromStdString(priv.encrypt(message.toStdString(), pub.publicKey()));
     m_bytesOutgoing += result.length();
-    // m_bytesCompressed += message.length() - result.length();
     return result;
 }
 
@@ -152,6 +139,5 @@ QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     if (result.isEmpty())
         return "";
     m_bytesIncoming += message.length();
-    // m_bytesCompressed += result.length() - message.length();
     return result;
 }

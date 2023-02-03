@@ -52,11 +52,8 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    // if (m_networkStatus.status() == NetworkStatus::Status::Online) {
-    // TODO: move to slot or process
     local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-    // }
 
     if (local == nullptr) {
         qDebug() << "[NetworkManager] Local not found";
@@ -94,7 +91,6 @@ void NetworkManager::reconnection() {
     for (const auto &el : qAsConst(m_reconnections)) {
         bool finded = false;
         for (SocketService *service : qAsConst(m_connections)) {
-            // qDebug() << "Reconnection" << service << service->ip() << service->serverPort() << el.first;
             if (service->ip() == el.ip) {
                 finded = true;
                 break;
@@ -143,7 +139,6 @@ NetworkManager::~NetworkManager() {
     delete upnpNet;
     delete upnpDis;
     delete local;
-    // delete discoveryService;
 
     for (const auto &connection : qAsConst(m_connections)) {
         emit connection->close();
@@ -195,7 +190,7 @@ void NetworkManager::startNetwork() {
     }
 }
 
-void NetworkManager::startDiscovery() {
+[[maybe_unused]] void NetworkManager::startDiscovery() {
     qDebug() << "NetworkManager::startDiscovery()";
     // discoveryService = new DiscoveryService(extPort, tcpPort, local);
     // ThreadPool::addThread(discoveryService);
@@ -213,8 +208,10 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
         return;
 
     const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
-    qDebug().noquote().nospace() << "[NetworkManager] Connect to " << ip << ", protocol: " << protocol
-                                 << ", port: " << port;
+    qDebug().noquote().nospace() << QString("[NetworkManager] Connect to %1. protocol: %2. port: %3")
+                                        .arg(ip)
+                                        .arg((int)protocol)
+                                        .arg(port);
     m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
@@ -391,28 +388,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     std::string_view msg = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
 
-    // TODO: no check new actor
-    //    {
-    //        auto sender = std::string(msg.begin() + 20, msg.begin() + 40);
-    //        auto actor = node.actorIndex()->getActor(sender);
-
-    //        bool verify = actor.key().verify(QByteArray::fromStdString(std::string(msg)),
-    //                                         QByteArray::fromStdString(std::string(sign)));
-    //        if (!verify) {
-    //            // qDebug() << "[NetworkManager/messageReceived] Error verify message";
-    //        } else {
-    //            qDebug() << "[NetworkManager/messageReceived] Verify good";
-    //        }
-    //    }
     MessageBody mb = MessagePack::deserialize<MessageBody>(msg);
     MessageType type = mb.message_type;
     MessageStatus status = mb.status;
     std::string serialized = mb.data;
     std::string messId = mb.message_id;
-    //    MessageType type = MessagePack::deserialize<MessageType>(msg.substr(1, 1));
-    //    auto status = MessagePack::deserialize<MessageStatus>(msg.substr(2, 1));
-    //    auto serialized = msg.substr(40);
-    //    auto messId = msg.substr(4, 15);
     std::string messageId(messId.begin(), messId.end());
 
     if (status == MessageStatus::Request) {

@@ -287,9 +287,6 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }
 
-    // qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" <<
-    // orig.size()
-    //    << encrypt.size();
     encrypt.close();
     decrypt.close();
     return QFile::exists(decryptName);
@@ -371,7 +368,6 @@ void Utils::wipeDataFiles() {
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
     QString dataName = Utils::dataDir();
-    // qDebug() << "[Wipe] Remove path:" << dataName;
     QDir(dataName).removeRecursively();
     QDir().mkpath(dataName);
 
@@ -451,11 +447,11 @@ std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode enco
     std::string res;
     switch (encode) {
     case HashEncode::Base64:
-        res = base64_encode(data);
-        return res;
+        return base64_encode(data);
     case HashEncode::Hex:
         break;
-        //        return data.toHex();
+    case HashEncode::Sha3_512:
+        break;
     }
     return res;
 }
@@ -464,11 +460,11 @@ std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode enco
     std::string res;
     switch (encode) {
     case HashEncode::Base64:
-        res = base64_decode(data);
-        return res;
+        return base64_decode(data);
     case HashEncode::Hex:
         break;
-        //        return data.toHex();
+    case HashEncode::Sha3_512:
+        break;
     }
     return res;
 }
@@ -479,8 +475,10 @@ QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
         return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return data.toHex();
+    case HashEncode::Sha3_512:
+        return QByteArray();
     }
-    return data;
+    return QByteArray();
 }
 
 QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
@@ -489,8 +487,10 @@ QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
         return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     case HashEncode::Hex:
         return QByteArray::fromHex(data);
+    case HashEncode::Sha3_512:
+        return QByteArray();
     }
-    return data;
+    return QByteArray();
 }
 
 QString Utils::detectCompiler() {
@@ -638,41 +638,9 @@ QString Utils::boostVersion() {
     return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
 }
 
-QString Utils::boostAsioVersion() {
+[[maybe_unused]] QString Utils::boostAsioVersion() {
     return "";
-    // int major = BOOST_ASIO_VERSION / 100000;
-    // int minor = BOOST_ASIO_VERSION / 100 % 1000;
-    // int patch = BOOST_ASIO_VERSION % 100;
-    // return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
 }
-
-// QString FileSystem::createSubDirectory(const QString &parentDirStr, const QString &subDirStr) {
-//     QString destPathStr = FileSystem::pathConcat(parentDirStr, subDirStr);
-//     QDir parentDir(parentDirStr);
-//     if (!parentDir.exists(subDirStr)) {
-//         if (!parentDir.mkdir(subDirStr)) {
-//             destPathStr = "";
-//         }
-//     }
-//     return destPathStr;
-// }
-
-// QList<std::tuple<QString, QString>> FileSystem::listFiles(const QString &dirPath,
-//                                                           const QStringList &ignoreList) {
-//     QList<std::tuple<QString, QString>> dirList;
-
-//    QDir dir(dirPath, QString::fromLatin1("*"), QDir::SortFlag::Name, QDir::Files | QDir::NoDotAndDotDot);
-//    QDirIterator dirItor(dir, QDirIterator::Subdirectories);
-//    while (dirItor.hasNext()) {
-//        dirItor.next();
-//        const QFileInfo &fi = dirItor.fileInfo();
-//        if (fi.isFile() && !ignoreList.contains(fi.fileName())) {
-//            dirList.emplaceBack(std::make_tuple<QString, QString>(fi.fileName(), fi.filePath()));
-//        }
-//    }
-
-//    return dirList;
-//}
 
 std::string Utils::platformDelimeter() {
 #ifdef _WIN32

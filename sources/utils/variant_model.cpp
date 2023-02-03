@@ -79,7 +79,6 @@ void VariantModel::remove(int index, int count = 0) {
 }
 
 QVariantMap VariantModel::get(int index) {
-    // qDebug() << "GET" << index << m_count - 1 << (index > m_count - 1);
     if (index > m_count - 1 || index < 0)
         return {};
     return m_datas[index];
