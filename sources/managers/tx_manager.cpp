@@ -53,7 +53,7 @@ void TransactionManager::removeTransaction(int i) {
 }
 
 void TransactionManager::addTransaction(Transaction tx) {
-    qDebug() << "TRANSACTION MANAGER: addTransaction " << tx.toString();
+    qDebug() << QString("TRANSACTION MANAGER: addTransaction [%1]").arg(tx.toString());
 
     if (tx.isEmpty())
         return;
@@ -71,8 +71,6 @@ void TransactionManager::addProvedTransaction(Transaction tx) {
 void TransactionManager::removeUnApprovedTransaction(Transaction tx) {
     receivedTxList.removeOne(tx);
 }
-
-// Tx hashes (for network)
 
 bool TransactionManager::isUnapproved(const QByteArray &txHash) {
     return unApprovedTxHashes.contains(txHash);
@@ -108,7 +106,6 @@ void TransactionManager::makeBlock() {
         dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
         blockchain->signBlock(dummyBlock);
         blockchain->addBlock(dummyBlock);
-
         return;
     }
 
@@ -151,7 +148,4 @@ BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
         }
     }
     return res;
-}
-
-void TransactionManager::process() {
 }

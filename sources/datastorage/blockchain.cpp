@@ -41,7 +41,6 @@ Blockchain::~Blockchain() {
 
 Block Blockchain::getBlockByIndex(const BigNumber &index) {
     Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-    //        Block block2 = validateAndReturnBlock(block);
     return block;
 }
 
@@ -147,18 +146,20 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
     cacheDB.open();
     cacheDB.createTable("CREATE TABLE IF NOT EXISTS cacheData"
                         " ("
-                        "ActorId  TEXT   NOT NULL, "
-                        "State     TEXT              NOT NULL, "
-                        "Token     TEXT              NOT NULL, "
-                        "Type   TEXT              NOT NULL );");
+                        "ActorId   TEXT     NOT NULL, "
+                        "State     TEXT     NOT NULL, "
+                        "Token     TEXT     NOT NULL, "
+                        "Type      TEXT     NOT NULL );");
 
     for (const auto &i : l) {
         auto q = MessagePack::deserialize<Transaction>(i);
 
         // modify sender data in db
         extractData =
-            cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getSender().toStdString()
-                           + "' AND Token='" + q.getToken().toStdString() + "';");
+            cacheDB.select(fmt::format("SELECT State FROM cacheData WHERE ActorId ='{}' AND Token='{}';",
+                                       q.getSender().toStdString(), q.getToken().toStdString()));
+        cacheDB.select(fmt::format("SELECT State FROM cacheData WHERE ActorId ='{}' AND Token='{}';",
+                                   q.getSender().toStdString(), q.getToken().toStdString()));
 
         resultData["ActorId"] = q.getSender().toStdString();
         resultData["Token"] = q.getToken().toStdString();
@@ -171,10 +172,8 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
 
         else {
             resultData["State"] = (BigNumberFloat(extractData[0]["State"]) - q.getAmount()).toStdString();
-            cacheDB.update("UPDATE cacheData "
-                           "SET State ='"
-                           + resultData["State"] + "' WHERE ActorId ='" + resultData["ActorId"]
-                           + "' AND Token='" + resultData["Token"] + "';");
+            cacheDB.update(fmt::format("UPDATE cacheData SET State ='{}' WHERE ActorId ='{}' AND Token='{}';",
+                                       resultData["State"], resultData["ActorId"], resultData["Token"]));
         }
 
         extractData.clear();
@@ -182,8 +181,8 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
 
         // modify receiver data in db
         extractData =
-            cacheDB.select("SELECT State FROM cacheData WHERE ActorId ='" + q.getReceiver().toStdString()
-                           + "' AND Token='" + q.getToken().toStdString() + "';");
+            cacheDB.select(fmt::format("SELECT State FROM cacheData WHERE ActorId ='{}' AND Token='{}';",
+                                       q.getReceiver().toStdString(), q.getToken().toStdString()));
 
         resultData["ActorId"] = q.getReceiver().toStdString();
         resultData["Token"] = q.getToken().toStdString();
@@ -191,22 +190,17 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
         if (extractData.empty()) {
             resultData["State"] = q.getAmount().toStdString();
             cacheDB.insert("cacheData", resultData);
-        }
-
-        else {
+        } else {
             resultData["State"] = (BigNumberFloat(extractData[0]["State"]) + q.getAmount()).toStdString();
-            cacheDB.update("UPDATE cacheData "
-                           "SET State ='"
-                           + resultData["State"] + "' WHERE ActorId='" + resultData["ActorId"]
-                           + "' AND Token='" + resultData["Token"] + "';");
+            cacheDB.update(fmt::format("UPDATE cacheData SET State ='{}' WHERE ActorId='{}' AND Token='{}';",
+                                       resultData["State"], resultData["ActorId"], resultData["Token"]));
         }
     }
 }
 
 QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count,
                                                              BigNumber token) {
-    return /*fileMode ?*/ blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
-    // : memIndex.getLastTxBySenderOrReceiver(id);
+    return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
 }
 
 void Blockchain::getBlockZero() {
@@ -227,8 +221,8 @@ BigNumber Blockchain::getSupply(const QByteArray &idToken) {
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
     cacheDB.open();
-    std::vector<DBRow> extractData =
-        cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "';");
+    std::vector<DBRow> extractData = cacheDB.select(
+        fmt::format("SELECT * FROM GenesisDataRow WHERE token = '{}';", idToken.toStdString()));
     BigNumber res = 0;
     for (const auto &tmp : extractData) {
         res += BigNumber(tmp.at("state")).abs();
@@ -241,20 +235,16 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     std::string path = blockIndex.buildFilePath(id).toStdString();
     DBConnector cacheDB(path);
     cacheDB.open();
-    std::vector<DBRow> extractData =
-        cacheDB.select("SELECT * FROM GenesisDataRow WHERE token = '" + idToken.toStdString() + "' ;");
+    std::vector<DBRow> extractData = cacheDB.select(
+        fmt::format("SELECT * FROM GenesisDataRow WHERE token = '{}';", idToken.toStdString()));
     BigNumber res = 0;
     for (const auto &tmp : extractData) {
         res += BigNumber(tmp.at("state")).abs();
     }
     DBConnector cacheDB2("blockchain/cacheEC.db");
     cacheDB2.open();
-    std::vector<DBRow> extractData2 = cacheDB2.select(
-        "SELECT * FROM cacheData WHERE Token = '"
-        + idToken.toStdString()
-        /* + "' AND ActorId != '" + actorIndex->m_firstId->toStdString() + "' AND ActorId != '"
-         + BigNumber(0).toActorId().toStdString()*/
-        + "';");
+    std::vector<DBRow> extractData2 =
+        cacheDB2.select(fmt::format("SELECT * FROM cacheData WHERE Token = '{}';", idToken.toStdString()));
     for (const auto &tmp : extractData2) {
         std::string sum = tmp.at("State");
         if (sum[0] == '-')
@@ -361,10 +351,6 @@ bool Blockchain::signCheckAdd(Block &block) {
                 return true;
             }
         }
-        //        else
-        //        {
-        //            block.sign(*accountController->getMainActor());
-        //        }
     } else {
         const auto blockData = getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray());
         if (blockData.isEmpty())
@@ -603,15 +589,13 @@ Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
 }
 
 QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArray &value) {
-    QByteArray res = "";
     switch (type) {
     case SearchEnum::BlockParam::Id:
-        res = getBlockDataByIndex(BigNumber(value.toStdString()));
-        break;
+        return getBlockDataByIndex(BigNumber(value.toStdString()));
     default:
-        break;
+        return QByteArray();
     }
-    return res;
+    return QByteArray();
 }
 
 std::pair<Transaction, QByteArray>
@@ -917,7 +901,7 @@ void Blockchain::showBlockchain() const {
         currentBlock = blockIndex.getBlockById(i);
     } while (!currentBlock.isEmpty());
     GenesisBlock genBlock = blockIndex.getLastGenesisBlock();
-    qDebug() << "Genesis block: ";
+    qDebug() << "Genesis block";
 
     auto extra = genBlock.extractDataRows();
     for (const auto &dataGen : qAsConst(extra)) {
@@ -982,17 +966,16 @@ void Blockchain::setPossibleMining(const bool &value) {
 bool Blockchain::getPossibleMining() const {
     return possibleMining;
 }
-
-void Blockchain::process() {
+[[maybe_unused]] void Blockchain::process() {
     //
 }
 
-void Blockchain::updateBlockchain() {
+[[maybe_unused]] void Blockchain::updateBlockchain() {
     // TODONEW Messages::BlockCount request;
     // emit sendMessage(request.serialize(), Messages::GeneralRequest::GetBlockCount);
 }
 
-void Blockchain::checkBlockExistence(Block &block) {
+[[maybe_unused]] void Blockchain::checkBlockExistence(Block &block) {
     Block last = getLastBlock();
 
     /*
@@ -1013,12 +996,11 @@ void Blockchain::checkBlockExistence(Block &block) {
             if (merged.isEmpty())
                 return;
             addBlock(merged);
-            //      emit SendMergedBlock(last, block, merged);
         }
     }
 }
 
-void Blockchain::blockCountResponse(const BigNumber &count) {
+[[maybe_unused]] void Blockchain::blockCountResponse(const BigNumber &count) {
     if (blockIndex.getLastSavedId() < count
         || getBlock(SearchEnum::BlockParam::Id, count.toByteArray()).isEmpty()) {
         // TODONEW Messages::GetBlockMessage request;
@@ -1028,7 +1010,7 @@ void Blockchain::blockCountResponse(const BigNumber &count) {
     }
 }
 
-void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
+[[maybe_unused]] void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
                                         const QByteArray &requestHash, const std::string &messageId) {
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
@@ -1037,7 +1019,7 @@ void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, con
     // receiver);
 }
 
-void Blockchain::getBlockCount(const QByteArray &requestHash, const std::string &messageId) {
+[[maybe_unused]] void Blockchain::getBlockCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
     //
@@ -1061,7 +1043,6 @@ void Blockchain::addBlockToBlockchain(Block &block) {
         auto accounts = node->accountController()->accounts();
         for (const auto &tmp : qAsConst(accounts))
             list.append(tmp.id());
-        //        std::string data = tmp.getData();
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
@@ -1089,19 +1070,20 @@ Actor<KeyPrivate> Blockchain::getApprover() const {
     return node->accountController()->currentWallet();
 }
 
-void Blockchain::setApprover(const Actor<KeyPrivate> &value) {
+[[maybe_unused]] void Blockchain::setApprover(const Actor<KeyPrivate> &value) {
     qFatal("Blockchain setApprover");
     // node->accountController()->currentWallet() = value;
 }
 
-void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                                     const std::string &messageId, const QByteArray &request) {
+[[maybe_unused]] void Blockchain::getTxFromBlockchain(const SearchEnum::TxParam &param,
+                                                      const QByteArray &value, const std::string &messageId,
+                                                      const QByteArray &request) {
     Transaction transaction = getTransaction(param, value).first;
     if (!transaction.isEmpty()) {
         // TODONEW emit responseReady(transaction.serialize(), Messages::GeneralResponse::GetTxResponse,
         // request, receiver);
     } else {
-        qDebug() << "The transaction with" << SearchEnum::toString(param) << "parametr is not found";
+        qDebug() << QString("The transaction with %1 parametr is not found").arg(SearchEnum::toString(param));
     }
 }
 
@@ -1166,17 +1148,17 @@ void Blockchain::proveTx(Transaction &tx) {
         if (!tx.getProducer().isEmpty())
             producerActor = node->actorIndex()->getActor(tx.getProducer());
         else {
-            qDebug() << "Tx" << tx.getHash().c_str() << "producer 0";
+            qDebug() << QString("Tx %1 producer 0").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (!producerActor.key().verify(tx.getDataForDigSig(), tx.getDigSig())) {
-            qDebug() << "Tx" << tx.getHash().c_str() << "not approved: bad signature in fee tx";
+            qDebug() << QString("Tx %1 not approved: bad signature in fee tx").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
         if (tx.getAmount() <= 0) {
-            qDebug() << "Tx" << tx.getHash().c_str() << "fee amount <= 0";
+            qDebug() << QString("Tx %1 fee amount <= 0").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
@@ -1246,7 +1228,6 @@ BlockIndex &Blockchain::getBlockIndex() {
 }
 
 void Blockchain::removeAll() {
-    // node->actorIndex()->removeAll();
     this->memIndex.removeAll();
     this->blockIndex.removeAll();
     QFile(DataStorage::TMP_GENESIS_BLOCK).remove();

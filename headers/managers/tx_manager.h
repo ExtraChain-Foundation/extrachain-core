@@ -52,15 +52,12 @@ private:
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
     QList<QByteArray> unApprovedTxHashes;
-
     QList<Transaction> receivedTxList;
 
     // current user
     //    Actor<KeyPrivate> currentUser;
     AccountController *accountController;
-
     ExtraChainNode *extraChainNode;
-
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
@@ -76,7 +73,6 @@ public:
     static std::string convertTxs(const std::vector<Transaction> &txs);
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction> getReceivedTxList() const;
-
     std::vector<Transaction> getPendingTxs() const;
 
 public slots:
@@ -123,7 +119,6 @@ public slots:
      * @param tx - already verified transaction
      */
     void addVerifiedTx(Transaction tx);
-    void process();
 
 signals:
     /**
