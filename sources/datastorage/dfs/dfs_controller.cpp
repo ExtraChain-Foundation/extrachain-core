@@ -142,7 +142,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     dirsFile.replace(DFST::DirsFile::TableName,
                      { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
 
-    sendFile(actor.id(), fileName);
+    sendFile(actor.id().toStdString(), fileName);
     return addFile(msg, false);
 }
 
@@ -709,14 +709,14 @@ void DfsController::requestFile(const ActorId &actorId, const std::string &fileN
                                  MessageStatus::Request);
 }
 
-void DfsController::sendFile(const ActorId &actorId, const std::string &fileName,
+void DfsController::sendFile(const std::string &actorId, const std::string &fileName,
                              const std::string &messageId) {
     if (fileName.empty()) {
         qFatal("[Dfs] Empty file name");
     }
 
-    auto dirRow = DFST::ActorDirFile::getDirRow(actorId.toStdString(), fileName);
-    DFSP::AddFileMessage msg = { .Actor = actorId.toStdString(),
+    auto dirRow = DFST::ActorDirFile::getDirRow(actorId, fileName);
+    DFSP::AddFileMessage msg = { .Actor = actorId,
                                  .FileName = fileName,
                                  .FileHash = dirRow.fileHash,
                                  .Path = dirRow.filePath,
@@ -885,7 +885,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
-    //    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
+    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
@@ -907,12 +907,14 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
     FragmentWriter fw(msg, m_compliteFiles);
 
-    connect(&fw, &FragmentWriter::downloadProgress, this, &DfsController::downloadProgress);
+        connect(&fw, &FragmentWriter::downloadProgress, this,
+                [=](const std::string& actor, const std::string& fileName, const double progress) {
+                    downloadProgress(ActorId(actor), fileName, progress);
+                });
     connect(&fw, &FragmentWriter::eraseFromFiles, this,
             [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
-    connect(&fw, &FragmentWriter::sendFile, this,
-            [&](const std::string &actorId, const std::string &fileName) { sendFile(actorId, fileName); });
+    connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
     connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
     connect(&fw, &FragmentWriter::compliteFile, this,
             [&](const std::string &fileName) { m_compliteFiles.push_back(fileName); });

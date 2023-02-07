@@ -95,7 +95,7 @@ public:
     void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);
     void addDirData(const ActorId &actorId, const std::vector<DFSP::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileName);
-    void sendFile(const ActorId &actorId, const std::string &fileName, const std::string &messageId = "");
+    void sendFile(const std::string &actorId, const std::string &fileName, const std::string &messageId = "");
 
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
