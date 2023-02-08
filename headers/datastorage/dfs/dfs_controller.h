@@ -44,6 +44,7 @@ private:
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
     std::vector<std::string> m_compliteFiles;
+    std::vector<std::string> m_unsynchonizedDirs;
     uint64_t m_totalDfsSize = 0;
 
 public:
@@ -85,11 +86,13 @@ private:
                                 uint64_t fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
     void loadBytesLimit();
+    void eraseFirstUnsynchronizedDir();
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
     void sendSizeReponseMsg(const DFSP::RequestDfsSize &msg, const std::string &messageId) const;
     void requestSync();
+    void requestDirFileAllActors();
     void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
     void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);

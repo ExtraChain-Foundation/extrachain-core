@@ -16,6 +16,9 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     loadBytesLimit();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
+
+    if(!node.accountController()->empty())
+        requestDirFileAllActors();
 }
 
 DfsController::~DfsController() {
@@ -667,6 +670,12 @@ void DfsController::requestSync() {
                                  MessageStatus::Request);
 }
 
+void DfsController::requestDirFileAllActors() {
+    m_unsynchonizedDirs = node.actorIndex()->allActorsStd();
+    if (!m_unsynchonizedDirs.empty())
+        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
+}
+
 void DfsController::sendSync(uint64_t lastModified, const std::string &messageId) {
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
@@ -689,6 +698,8 @@ void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, c
     if (!rows.empty()) {
         node.network()->send_message(std::pair { actorId, rows }, MessageType::DfsDirData,
                                      MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+    } else {
+        eraseFirstUnsynchronizedDir();
     }
 }
 
@@ -696,14 +707,34 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
     bool res = DFST::ActorDirFile::addDirRows(actorId.toStdString(), dirRows);
     qDebug() << "[Dfs] addDirData result:" << res;
 
-    // temp
+           // temp
     for (auto &row : dirRows) {
-        requestFile(actorId, row.fileHash);
+        if (!row.fileName.empty()) {
+            const auto path = DFS_PATH::filePath(actorId, row.fileName);
+            const bool fileExist = std::filesystem::exists(path);
+            if (!fileExist) {
+                requestFile(actorId, row.fileName);
+            } else {
+                if(std::filesystem::file_size(path) < row.fileSize ) {
+                    DFSP::RequestFileSegmentMessage reqMessage = { .Actor = actorId.toStdString(),
+                                                                   .FileName = row.fileName,
+                                                                   .FileHash = row.fileHash,
+                                                                   .Path = row.filePath,
+                                                                   .Offset = 0 };
+                    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
+                                                 MessageStatus::Request);
+                }
+            }
+        }
     }
+    eraseFirstUnsynchronizedDir();
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
     qDebug() << fileName.c_str();
+    if (fileName.empty())
+        return;
+
     std::filesystem::remove(DFS_PATH::filePath(actorId, fileName));
     node.network()->send_message(std::pair { actorId, fileName }, MessageType::DfsRequestFile,
                                  MessageStatus::Request);
@@ -858,6 +889,14 @@ void DfsController::loadBytesLimit() {
     dirsFile.close();
 }
 
+void DfsController::eraseFirstUnsynchronizedDir()
+{
+    if (!m_unsynchonizedDirs.empty())
+        m_unsynchonizedDirs.erase(m_unsynchonizedDirs.begin());
+    if (!m_unsynchonizedDirs.empty())
+        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
+}
+
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)
@@ -907,10 +946,10 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
     FragmentWriter fw(msg, m_compliteFiles);
 
-        connect(&fw, &FragmentWriter::downloadProgress, this,
-                [=](const std::string& actor, const std::string& fileName, const double progress) {
-                    downloadProgress(ActorId(actor), fileName, progress);
-                });
+    connect(&fw, &FragmentWriter::downloadProgress, this,
+            [=](const std::string &actor, const std::string &fileName, const double progress) {
+                downloadProgress(ActorId(actor), fileName, progress);
+            });
     connect(&fw, &FragmentWriter::eraseFromFiles, this,
             [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
@@ -1023,7 +1062,6 @@ DFSP::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std
 uint64_t DfsController::bytesAvailable() {
     auto freeDfs = m_bytesLimit <= m_sizeTaken ? DFS::Basic::minDfsLimit : m_bytesLimit - m_sizeTaken;
     uint64_t freeDisk = Utils::diskFreeMemory();
-    qDebug() << m_sizeTaken;
     auto min = m_bytesLimit == 0 ? freeDisk : std::min(freeDfs, freeDisk);
     return min;
 }
