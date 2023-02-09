@@ -26,6 +26,7 @@
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
+#include <QTimer>
 #include <algorithm>
 #include <string>
 #include <string_view>
@@ -95,6 +96,7 @@ private:
     std::map<std::string, std::string> m_messages;
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
+    QTimer *m_reconnectTimer;
 
 public:
     explicit NetworkManager(ExtraChainNode &node);

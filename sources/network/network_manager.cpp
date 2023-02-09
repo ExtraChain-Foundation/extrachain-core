@@ -49,42 +49,15 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node) {
-    connect(&m_networkStatus, &NetworkStatus::statusChanged,
-            [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
-
-    local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
-    qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
-
-    if (local == nullptr) {
-        qDebug() << "[NetworkManager] Local not found";
-        return;
-    }
-
-    bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
-    qDebug() << "Sub:" << sub;
-
-    if (!sub) {
-        // startDiscovery();
-        return;
-    }
-
-    upnpDis = new UPNPConnection(*local);
-    upnpNet = new UPNPConnection(*local);
-    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
-    // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
-    connect(upnpNet, &UPNPConnection::upnpError,
-            [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
-    connect(upnpDis, &UPNPConnection::upnpError,
-            [](QString msg) { qDebug() << "[NetworkManager] UPnP Discovery error:" << msg; });
-    // qDebug() << "Tunnel creation started!";
-    // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
-    // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
+   localInizialization();
 }
 
 void NetworkManager::process() {
-    auto tempTimer = new QTimer(this);
-    connect(tempTimer, &QTimer::timeout, [this] { this->reconnection(); });
-    tempTimer->start(5000);
+    m_reconnectTimer = new QTimer(this);
+    connect(m_reconnectTimer, &QTimer::timeout, [this] {
+            this->reconnection();
+    });
+    m_reconnectTimer->start(Utils::intervalReconnect);
 }
 
 void NetworkManager::reconnection() {
@@ -97,11 +70,18 @@ void NetworkManager::reconnection() {
             }
         }
 
-        if (finded)
-            continue;
+//        if (finded)
+//            continue;
 
         qDebug().noquote() << "[NetworkManager] Reconnection to" << el.ip << el.protocol;
         connectToNode(el.ip, el.protocol);
+    }
+    if(m_connections.empty()) {
+        localInizialization();
+    }
+
+    if(!m_connections.empty()) {
+        m_reconnectTimer->stop();
     }
 }
 
@@ -150,10 +130,11 @@ NetworkManager::~NetworkManager() {
 void NetworkManager::checkConnectionsStatus() {
     bool flag = false;
     int count = 0;
-    std::for_each(m_connections.begin(), m_connections.end(), [&flag, &count](SocketService *el) {
+    std::for_each(m_connections.begin(), m_connections.end(), [&](SocketService *el) {
         flag = flag || el->isActive();
-        if (el->isActive())
+        if (el->isActive()) {
             count++;
+        }
     });
     emit connectionStatusChanged(flag);
     emit connectionsCountChanged(count); // TODO: check prev count value
@@ -647,6 +628,10 @@ void NetworkManager::removeWsConnection() {
     qDebug() << "[WS] Removed" << connection;
     connection->deleteLater();
     checkConnectionsStatus();
+    if(m_connections.empty())
+        process();
+    else
+        qDebug() << "Not empty" << m_connections.size();
 }
 
 void NetworkManager::socketError(Network::SocketServiceError error, QString errorData) {
@@ -671,6 +656,41 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
         || error == Network::SocketServiceError::IncompatibleVersion) {
         emit connectionError(error, service->identifier(), errorData);
     }
+}
+
+void NetworkManager::localInizialization()
+{
+    qDebug() << "Doesn't find service. Start find local service.";
+    connect(&m_networkStatus, &NetworkStatus::statusChanged,
+            [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
+
+    local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
+    qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
+
+    if (local == nullptr) {
+        qDebug() << "[NetworkManager] Local not found";
+        return;
+    }
+
+    bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
+    qDebug() << "Sub:" << sub;
+
+    if (!sub) {
+        // startDiscovery();
+        return;
+    }
+
+    upnpDis = new UPNPConnection(*local);
+    upnpNet = new UPNPConnection(*local);
+    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
+    // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
+    connect(upnpNet, &UPNPConnection::upnpError,
+            [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
+    connect(upnpDis, &UPNPConnection::upnpError,
+            [](QString msg) { qDebug() << "[NetworkManager] UPnP Discovery error:" << msg; });
+    // qDebug() << "Tunnel creation started!";
+    // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
+    // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 }
 
 QString NetworkManager::localIp() {
