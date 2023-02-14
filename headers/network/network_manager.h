@@ -18,27 +18,27 @@
  */
 
 #ifndef NETWORK_MANAGER_H
-#define NETWORK_MANAGER_H
+    #define NETWORK_MANAGER_H
 
-#include <QtCore/QMutex>
-#include <QtCore/QRandomGenerator>
-#include <QtNetwork/QNetworkAddressEntry>
-#include <QtNetwork/QNetworkInterface>
-#include <QtNetwork/QNetworkProxy>
-#include <QtWebSockets/QWebSocketServer>
-#include <QTimer>
-#include <algorithm>
-#include <string>
-#include <string_view>
+    #include <QTimer>
+    #include <QtCore/QMutex>
+    #include <QtCore/QRandomGenerator>
+    #include <QtNetwork/QNetworkAddressEntry>
+    #include <QtNetwork/QNetworkInterface>
+    #include <QtNetwork/QNetworkProxy>
+    #include <QtWebSockets/QWebSocketServer>
+    #include <algorithm>
+    #include <string>
+    #include <string_view>
 
-#include "datastorage/block.h"
-#include "datastorage/blockchain.h"
-#include "datastorage/index/actorindex.h"
-#include "managers/account_controller.h"
-#include "network/message_body.h"
-#include "network/network_status.h"
-#include "utils/dfs_utils.h"
-#include "utils/exc_utils.h"
+    #include "datastorage/block.h"
+    #include "datastorage/blockchain.h"
+    #include "datastorage/index/actorindex.h"
+    #include "managers/account_controller.h"
+    #include "network/message_body.h"
+    #include "network/network_status.h"
+    #include "utils/dfs_utils.h"
+    #include "utils/exc_utils.h"
 
 class SocketService;
 class WebSocketService;
@@ -96,14 +96,16 @@ private:
     std::map<std::string, std::string> m_messages;
     std::map<std::string, MessageIdDataWaiting> m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
+    std::vector<DFSP::WSConnection> m_wsConnections;
     QTimer *m_reconnectTimer;
 
 public:
     explicit NetworkManager(ExtraChainNode &node);
     ~NetworkManager();
+    void localInizialization();
 
-    // protected:
-    // quint16 tcpPort = 2222;
+           // protected:
+           // quint16 tcpPort = 2222;
     quint16 wsPort = 2233;
 
 private:
@@ -193,7 +195,7 @@ public:
             m_messages.erase(to_message_id);
         }
 
-#ifdef QT_DEBUG
+    #ifdef QT_DEBUG
         if (Network::networkDebug) {
             msgpack::object_handle oh = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object deserialized = oh.get();
@@ -203,13 +205,14 @@ public:
                             (std::stringstream() << deserialized).str())
                             .c_str();
         }
-#endif
+    #endif
 
         this->sendMessage(serialized + sign, typeSend, receiver_identifier);
 
         return message.message_id;
     }
 
+    void requestWSNodeList(std::string message_id);
 signals:
     void newSocket();
     void connectionStatusChanged(bool status);

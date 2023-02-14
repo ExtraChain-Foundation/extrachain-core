@@ -37,7 +37,9 @@
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode() {
+ExtraChainNode::ExtraChainNode(bool isClientApp) :
+    isClientApplication(isClientApp)
+{
     static bool singleton = false;
     if (!singleton)
         singleton = true;

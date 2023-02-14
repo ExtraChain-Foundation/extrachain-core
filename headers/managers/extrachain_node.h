@@ -60,15 +60,18 @@ private:
 
     bool fileMode = true;
     bool started = false;
+    bool isClientApplication = false;
 
 public:
-    ExtraChainNode();
+    ExtraChainNode(bool isClientApp = false);
     ~ExtraChainNode();
 
-public:
     bool createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
                           const QString &tokenCount, const QString &tokenColor);
     void start();
+    bool isClientApp() {
+        return isClientApplication;
+    };
     Blockchain *blockchain();
     NetworkManager *network();
     AccountController *accountController() const;

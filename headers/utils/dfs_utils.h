@@ -186,6 +186,12 @@ namespace Packets {
         bool active;
         MSGPACK_DEFINE(port, address, active)
     };
+
+    struct WSConnection {
+        std::string address;
+        uint64_t port;
+        MSGPACK_DEFINE(address, port)
+    };
 }
 namespace Fragments {
     static const std::string Extension = ".storj";
