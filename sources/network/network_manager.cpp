@@ -50,35 +50,40 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node) {
     localInizialization();
+    m_reconnectTimer = new QTimer(this);
 }
 
 void NetworkManager::process() {
     if (!node.isClientApp())
         return;
-    m_reconnectTimer = new QTimer(this);
-    connect(m_reconnectTimer, &QTimer::timeout, [this] { this->reconnection(); });
-    m_reconnectTimer->start(5000);
-    });
-    m_reconnectTimer->start(Utils::intervalReconnect);
+    connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
+    m_reconnectTimer->start(Utils::ReconnectInterval);
 }
 
 void NetworkManager::reconnection() {
     qDebug() << "Count reconnections" << m_reconnections.size();
+    QString ip = Utils::findLocalIp().ip().toString();
+    connectToNode(ip, Network::Protocol::WebSocket, false);
+    /*
     for (const auto &el : qAsConst(m_reconnections)) {
         bool finded = false;
-        for (SocketService *service : qAsConst(m_connections)) {
-            if (service->ip() == el.ip) {
-                finded = true;
-                break;
-            }
-        }
+        //        for (SocketService *service : qAsConst(m_connections)) {
+        //            if (service->ip() == el.ip) {
+        //                finded = true;
+        //                break;
+        //            }
+        //        }
 
-//        if (finded)
-//            continue;
+        //        if (finded)
+        //            continue;
 
-        qDebug().noquote() << "[NetworkManager] Reconnection to" << el.ip << el.protocol;
-        connectToNode(el.ip, el.protocol);
-    }
+        qDebug().noquote() << "[NetworkManager] Reconnection to" << el.ip << el.protocol << el.port
+                           << m_connections.size();
+
+        wsPort = el.port;
+//        connectToNode(el.ip, Network::Protocol::WebSocket, false);
+    }*/
+
     if (m_connections.empty()) {
         localInizialization();
     }
@@ -99,15 +104,15 @@ void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &ho
     QNetworkProxy::setApplicationProxy(proxy);
 }
 
-void NetworkManager::connectWsService(WebSocketService *service) {
+void NetworkManager::connectWsService(WebSocketService *service, bool requestListNodes) {
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
 
     if (!m_connections.contains(service)) {
         m_connections.append(service);
-        if(node.isClientApp())
-            send_message(std::string{}, MessageType::RequestListNodes, MessageStatus::Request);
+        if (node.isClientApp() && requestListNodes)
+            send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
     }
 }
 
@@ -134,6 +139,7 @@ NetworkManager::~NetworkManager() {
 }
 
 void NetworkManager::checkConnectionsStatus() {
+    m_reconnectTimer->stop();
     bool flag = false;
     int count = 0;
     std::for_each(m_connections.begin(), m_connections.end(), [&](SocketService *el) {
@@ -222,7 +228,7 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol) {
+void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol, const bool request) {
     if (m_connections.length() >= Network::maxConnections) {
         qDebug() << "[NetworkManager] Can't connect because the maximum number of connections";
         return;
@@ -236,24 +242,24 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
                                         .arg(ip)
                                         .arg((int)protocol)
                                         .arg(port);
-    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
+//    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
     switch (protocol) {
     case Protocol::Udp:
         break;
     case Protocol::WebSocket:
-        connectToWebSocket(ip.simplified(), port);
+        connectToWebSocket(ip.simplified(), port, request);
         break;
     case Protocol::Undefined:
         qFatal("Undefined connectToNode");
     }
 }
 
-void NetworkManager::connectToWebSocket(const QString &ip, quint16 port) {
+void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool requestListNodes) {
     auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
-    connectWsService(service);
+    connectWsService(service, requestListNodes);
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
@@ -674,7 +680,13 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                 m_reconnections.insert(NetworkReconnect { .ip = QString::fromStdString(c.address),
                                                           .port = static_cast<quint16>(c.port),
                                                           .protocol = Network::Protocol::WebSocket });
+                wsPort = c.port;
+                connectToWebSocket(QString::fromStdString(c.address), wsPort, false);
             }
+
+            qDebug() << "count reconnect urls:" << m_reconnections.size();
+            for(const auto& r : m_reconnections)
+                r.print();
 
         } else if (status == MessageStatus::Request) {
             requestWSNodeList(messageId);
@@ -705,15 +717,11 @@ void NetworkManager::removeWsConnection() {
 
     auto connection = qobject_cast<SocketService *>(QObject::sender());
     auto removed = m_connections.removeAll(connection);
-    if (removed == 0)
-        return;
     qDebug() << "[WS] Removed" << connection;
+    m_reconnections.remove(NetworkReconnect {
+        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
     connection->deleteLater();
     checkConnectionsStatus();
-    if (m_connections.empty())
-        process();
-    else
-        qDebug() << "Not empty" << m_connections.size();
 }
 
 void NetworkManager::socketError(Network::SocketServiceError error, QString errorData) {

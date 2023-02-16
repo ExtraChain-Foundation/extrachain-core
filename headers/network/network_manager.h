@@ -52,6 +52,10 @@ struct NetworkReconnect {
     auto operator==(const NetworkReconnect &reconnect) const {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
     }
+
+    void print() const {
+        qDebug() << "ip: " << ip << "port:" << port;
+    }
 };
 
 inline size_t qHash(const NetworkReconnect &reconnect) {
@@ -82,6 +86,7 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
 private:
     bool reservedActorListUse = false;
     bool active = false;
+    bool shouldRequest = false;
     UPNPConnection *upnpDis;
     UPNPConnection *upnpNet;
     QMap<std::string, int> msgHashList = {};
@@ -109,7 +114,7 @@ public:
     quint16 wsPort = 2233;
 
 private:
-    void connectWsService(WebSocketService *ws);
+    void connectWsService(WebSocketService *ws, bool requestListNodes = false);
 
 public:
     const QList<SocketService *> &connections() const;
@@ -124,7 +129,7 @@ signals:
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
 
 protected:
-    void connectToWebSocket(const QString &ip, quint16 port);
+    void connectToWebSocket(const QString &ip, quint16 port, bool requestListNodes = false);
 
     /**
      * @brief NetworkManager::checkMsgCount
@@ -142,7 +147,7 @@ protected slots:
 
 public slots:
     void startNetwork();
-    void connectToNode(const QString &ip, Network::Protocol protocol);
+    void connectToNode(const QString &ip, Network::Protocol protocol, const bool request = false);
     void process();
     void reconnection();
     void setupProxy(QNetworkProxy::ProxyType type, const QString &hostName, quint16 port, const QString &user,
