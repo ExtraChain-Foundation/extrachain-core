@@ -666,6 +666,9 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                                                   .port = static_cast<quint16>(wsConnection.port),
                                                   .protocol = Network::Protocol::WebSocket });
         m_wsConnections.push_back(wsConnection);
+        if(!node.isClientApp()) {
+            send_message(wsConnection, MessageType::NewNode);
+        }
         break;
     }
 
