@@ -62,35 +62,8 @@ void NetworkManager::process() {
 
 void NetworkManager::reconnection() {
     qDebug() << "Count reconnections" << m_reconnections.size();
-    QString ip = Utils::findLocalIp().ip().toString();
-    connectToNode(ip, Network::Protocol::WebSocket, false);
-    /*
-    for (const auto &el : qAsConst(m_reconnections)) {
-        bool finded = false;
-        //        for (SocketService *service : qAsConst(m_connections)) {
-        //            if (service->ip() == el.ip) {
-        //                finded = true;
-        //                break;
-        //            }
-        //        }
-
-        //        if (finded)
-        //            continue;
-
-        qDebug().noquote() << "[NetworkManager] Reconnection to" << el.ip << el.protocol << el.port
-                           << m_connections.size();
-
-        wsPort = el.port;
-//        connectToNode(el.ip, Network::Protocol::WebSocket, false);
-    }*/
-
-    if (m_connections.empty()) {
-        localInizialization();
-    }
-
-    if (!m_connections.empty()) {
-        m_reconnectTimer->stop();
-    }
+    for (const auto &connect : m_reconnections)
+        connectToWebSocket(connect.ip, connect.port);
 }
 
 void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &hostName, quint16 port,
@@ -183,7 +156,7 @@ void NetworkManager::startNetwork() {
         DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
                                                   .port = static_cast<uint64_t>((int)wsPort) };
         m_wsConnections.push_back(wsConnection);
-    } else if (!wsServer->listen(QHostAddress::Any, wsPort) && !node.isClientApp()) {
+    } else if (!wsServer->listen(QHostAddress::Any, wsPort) /* && !node.isClientApp()*/) {
         bool listen = false;
         connectToNode(local->ip().toString(), Network::Protocol::WebSocket);
 
@@ -191,6 +164,7 @@ void NetworkManager::startNetwork() {
             wsPort += 1;
             if (wsServer->listen(QHostAddress::Any, wsPort)) {
                 connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
+
                 connect(wsServer, &QWebSocketServer::serverError,
                         [](QWebSocketProtocol::CloseCode closeCode) {
                             qDebug() << "[WS] Server error code:" << closeCode;
@@ -204,18 +178,18 @@ void NetworkManager::startNetwork() {
                 qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
                                    << wsServer->serverPort() << wsServer->serverName();
                 listen = true;
-            }
-        }
+                if (listen) {
+                    DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
+                                                              .port = static_cast<uint64_t>((int)wsPort) };
+                    send_message(wsConnection, MessageType::NewNodeConnected);
+                    m_wsConnections.push_back(wsConnection);
 
-        if (listen) {
-            DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
-                                                      .port = static_cast<uint64_t>((int)wsPort) };
-            send_message(wsConnection, MessageType::NewNode);
-            m_wsConnections.push_back(wsConnection);
-            //            //diconnect from all servers
-            //            for(auto connection : m_connections) {
-            //                connection->disconnected();
-            //            }
+                    //            //diconnect from all servers
+                    //            for(auto connection : m_connections) {
+                    //                connection->disconnected();
+                    //            }
+                }
+            }
         }
     }
 }
@@ -260,6 +234,11 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool re
     auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
     connectWsService(service, requestListNodes);
+    m_reconnections.insert(NetworkReconnect {
+        .ip = ip,
+        .port = port,
+        .protocol = Network::Protocol::WebSocket
+    });
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
@@ -659,15 +638,25 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
-    case MessageType::NewNode: {
+    case MessageType::NewNodeConnected: {
         qDebug() << "Get new node";
         DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
-        m_reconnections.insert(NetworkReconnect { .ip = QString::fromStdString(wsConnection.address),
-                                                  .port = static_cast<quint16>(wsConnection.port),
-                                                  .protocol = Network::Protocol::WebSocket });
+        m_reconnections.insert(NetworkReconnect::fromWsConnection(wsConnection));
         m_wsConnections.push_back(wsConnection);
-        if(!node.isClientApp()) {
-            send_message(wsConnection, MessageType::NewNode);
+        if (!node.isClientApp()) {
+            send_message(wsConnection, MessageType::SpreadNodeConnection);
+        }
+        break;
+    }
+
+    case MessageType::SpreadNodeConnection: {
+        qDebug() << "received new node connection";
+        DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
+        wsConnection.print();
+        if (wsConnection.address == local->ip().toString().toStdString() && wsConnection.port == wsPort) {
+            qDebug() << "[WS] connection port" << wsPort << "address:" << local->ip().toString();
+        } else {
+            connectToWebSocket(QString::fromStdString(wsConnection.address), wsConnection.port, true);
         }
         break;
     }
@@ -688,7 +677,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             }
 
             qDebug() << "count reconnect urls:" << m_reconnections.size();
-            for(const auto& r : m_reconnections)
+            for (const auto &r : m_reconnections)
                 r.print();
 
         } else if (status == MessageStatus::Request) {
@@ -721,8 +710,8 @@ void NetworkManager::removeWsConnection() {
     auto connection = qobject_cast<SocketService *>(QObject::sender());
     auto removed = m_connections.removeAll(connection);
     qDebug() << "[WS] Removed" << connection;
-    m_reconnections.remove(NetworkReconnect {
-        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
+    //    m_reconnections.remove(NetworkReconnect {
+    //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
     connection->deleteLater();
     checkConnectionsStatus();
 }
@@ -741,7 +730,7 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
                                     return recon.ip == service->ip() && recon.protocol == service->protocol();
                                 });
         if (res != m_reconnections.end()) {
-            m_reconnections.remove(*res);
+            //            m_reconnections.remove(*res);
         }
     }
 
@@ -802,4 +791,6 @@ void NetworkManager::onNewWsConnection() {
     auto service = new WebSocketService(ws, node);
     connectWsService(service);
     emit newSocket();
+    m_reconnections.insert(NetworkReconnect {
+        .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket });
 }

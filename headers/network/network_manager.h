@@ -52,7 +52,11 @@ struct NetworkReconnect {
     auto operator==(const NetworkReconnect &reconnect) const {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
     }
-
+    static NetworkReconnect fromWsConnection(const DFSP::WSConnection &wsConnection) {
+        return NetworkReconnect { .ip = QString::fromStdString(wsConnection.address),
+                                  .port = static_cast<quint16>(wsConnection.port),
+                                  .protocol = Network::Protocol::WebSocket };
+    }
     void print() const {
         qDebug() << "ip: " << ip << "port:" << port;
     }

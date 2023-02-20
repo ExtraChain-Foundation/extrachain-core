@@ -42,8 +42,9 @@ enum class MessageType {
     GetListConnections = 101,
     ProcessNewConnections = 102,
 
-    NewNode = 110,
-    RequestListNodes = 111
+    NewNodeConnected = 110,
+    SpreadNodeConnection = 111,
+    RequestListNodes = 112,
 
 };
 MSGPACK_ADD_ENUM(MessageType)
