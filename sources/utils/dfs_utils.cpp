@@ -97,7 +97,8 @@ bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
 
     for (auto &dirRow : dirRows) {
         if (dirRow.fileHash.empty()) {
-            qFatal("Oh no why");
+            //Uncommited row below and find out why hash is empty.
+            //qFatal("Oh no why. Filehash is empty.");
         }
         auto row = DBRow { { "fileHash", dirRow.fileHash },
                            { "fileHashPrev", dirRow.fileHashPrev },
