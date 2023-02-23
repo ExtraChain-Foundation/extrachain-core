@@ -8,6 +8,7 @@
 #include "utils/bignumber.h"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
+#include <fmt/format.h>
 #include <msgpack.hpp>
 
 class ActorId;
@@ -59,11 +60,13 @@ namespace Basic {
     static const std::string dirsPath = "dfs/.dirs";
     static const uint64_t sectionSize = /*2097152*/ 524228;
     static const uint64_t maxSectionSize = 209715200;
+    static const uint64_t minDfsLimit = 2147483648;
     static const uint64_t historicalChainSectionSize = 209715200;
 
     static const uint64_t encSectionSize = 256;
     static std::wstring separator = std::wstring(1, std::filesystem::path::preferred_separator);
     static const int miningReward = 1;
+    static const std::string dsStoreExtention = ".DS_Store";
 }
 
 namespace Packets {
@@ -112,6 +115,7 @@ namespace Packets {
         uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset)
     };
+
     enum SegmentMessageType {
         add = 0,
         insert = 1,
@@ -175,9 +179,23 @@ namespace Packets {
                        CoinProductionAlgorithmTickBlocks, BlockProductionRate,
                        CoinProductionAlgorithmTickPerHour)
     };
+
+    struct Connection {
+        std::string port;
+        std::string address;
+        bool active;
+        MSGPACK_DEFINE(port, address, active)
+    };
+
+    struct WSConnection {
+        std::string address;
+        uint64_t port;
+        MSGPACK_DEFINE(address, port)
+    };
 }
 namespace Fragments {
     static const std::string Extension = ".storj";
+    static const std::string ExtensionJournal = ".storj-journal";
     static const std::string TableNameFragments = "Fragments";
     static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
         + "("
@@ -271,6 +289,15 @@ namespace Tables {
               "actorId      TEXT PRIMARY KEY NOT NULL,"
               "lastModified INTEGER          NOT NULL "
               ");";
+        static const std::string ParametersDfs = "Parameters";
+        static const std::string CreateParametersTableQuery = fmt::format("CREATE TABLE IF NOT EXISTS {}("
+                                                                          "parameter    TEXT    NOT NULL, "
+                                                                          "value        TEXT    NOT NULL) ",
+                                                                          ParametersDfs);
+        static const std::string BytesLimit = "bytes_limit";
+        static const std::string BytesLimitQuery =
+            fmt::format("SELECT * FROM {} WHERE parameter = '{}'", ParametersDfs, BytesLimit);
+
     }
 
     static const std::string permissionTable = "PermissionTable";

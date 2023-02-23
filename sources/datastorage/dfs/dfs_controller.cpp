@@ -8,11 +8,17 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
     dirsFile.query(DFST::DirsFile::CreateTableQuery);
+    dirsFile.query(DFST::DirsFile::CreateParametersTableQuery);
+    dirsFile.close();
 
     m_sizeTaken = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
+    loadBytesLimit();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
+
+    if(!node.accountController()->empty())
+        requestDirFileAllActors();
 }
 
 DfsController::~DfsController() {
@@ -23,8 +29,6 @@ void DfsController::initializeActor(const ActorId &actorId) {
     std::filesystem::create_directories(DFSB::fsActrRoot + pathDelim + actorId.toStdString());
     DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.query(DFST::ActorDirFile::CreateTableQuery);
-
-    //
     requestDirData(actorId);
 }
 
@@ -141,13 +145,12 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     dirsFile.replace(DFST::DirsFile::TableName,
                      { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
 
-    sendFile(actor.id(), fileName);
+    sendFile(actor.id().toStdString(), fileName);
     return addFile(msg, false);
 }
 
-bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath) {
+bool DfsController::removeLocalFile(const std::string &actorId, const std::string &filePath) {
     std::string fileHash = Utils::calcHashForFile(filePath); // TODO: get hash
-    const auto actorId = actor.id().toStdString();
     DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = std::filesystem::path(filePath).filename().string() };
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
@@ -160,8 +163,33 @@ bool DfsController::removeLocalFile(const Actor<KeyPrivate> &actor, const std::s
 
 std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadBytes) {
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
-    std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
+    std::string actorFolderPath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
+    std::string actrDirFilePath = actorFolderPath + DFSB::fsMapName;
+    std::string realFilePath = actorFolderPath + msg.FileName;
+
+    if (!writeAvailable(msg.Size) && !std::filesystem::is_empty(actorFolderPath)) {
+        std::vector<std::filesystem::path> files;
+        for (const auto &file : std::filesystem::directory_iterator(actorFolderPath)) {
+            const auto fileName = file.path().filename();
+            if (fileName == DFSB::fsMapName || fileName == DFSB::dsStoreExtention) {
+                continue;
+            }
+
+            if (file.is_regular_file()) {
+                files.push_back(file);
+            }
+        }
+
+        std::sort(files.begin(), files.end(),
+                  [=](const std::filesystem::path p1, const std::filesystem::path p2) {
+                      return std::filesystem::last_write_time(p1).time_since_epoch()
+                          > std::filesystem::last_write_time(p2).time_since_epoch();
+                  });
+
+        while (!writeAvailable(msg.Size) || std::filesystem::is_empty(actorFolderPath)) {
+            removeLocalFile(msg.Actor, files.at(files.size() - 1));
+        }
+    }
 
     if (loadBytes) {
         if (std::filesystem::exists(realFilePath)) {
@@ -194,9 +222,11 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     const DBRow rowData = makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
 
     if (!actrDirFile.insert(DFST::ActorDirFile::TableName, rowData)) {
-        qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
-                 << DFST::ActorDirFile::TableName.c_str();
-        qFatal("Error 2");
+        const auto errorStr =
+            fmt::format("[Dfs] addFile: insert failed:{} {}", actrDirFile.file().c_str(),
+                        DFST::ActorDirFile::TableName.c_str()).c_str();
+        qDebug() << errorStr;
+        qFatal("Error 2: %s", errorStr);
         return "";
     }
     actrDirFile.close();
@@ -229,10 +259,9 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileName) {
     Actor<KeyPrivate> localOwner = node.accountController()->currentProfile().getActor(owner);
     std::string pathDelim = Utils::platformDelimeter();
-    std::filesystem::path realFilePath =
-        DFSB::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + fileName;
-    std::string actrDirFilePath =
-        DFSB::fsActrRoot + pathDelim + owner.toStdString() + pathDelim + DFSB::fsMapName;
+    const std::string ownerPath = DFSB::fsActrRoot + pathDelim + owner.toStdString() + pathDelim;
+    std::filesystem::path realFilePath = fmt::format("{}{}", ownerPath, fileName);
+    std::string actrDirFilePath = fmt::format("{}{}", ownerPath, DFSB::fsMapName);
     DBConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         qFatal("Can't open %s", actrDirFilePath.c_str());
@@ -240,8 +269,8 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
     }
 
     std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, fileName);
-    std::filesystem::path tempFilePath = "temp" + pathDelim + owner.toStdString();
-    if (actrDirData.size() > 0) {
+    std::filesystem::path tempFilePath = fmt::format("temp{}{}", pathDelim, owner.toStdString());
+    if (!actrDirData.empty()) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("filePath");
         if ((virtualFilePath.end()--)->string() == "secured") {
             if (!localOwner.empty()) {
@@ -259,8 +288,9 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
     qDebug() << "[Dfs] Remove file message:" << msg.FileName.c_str();
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
-    std::filesystem::path realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
+    std::string actorPath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
+    std::string actrDirFilePath = fmt::format("{}{}", actorPath, DFSB::fsMapName);
+    std::filesystem::path realFilePath = fmt::format("{}{}", actorPath, msg.FileName);
     DBConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
@@ -277,8 +307,8 @@ bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
             }
         }
         if ((it->at("fileHashPrev") == msg.FileName) && (!prevHash.empty())) {
-            actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileHashPrev = " + "'"
-                               + prevHash + "' " + "WHERE " + "fileHash = " + "'" + it->at("fileHash") + "'");
+            actrDirFile.update(fmt::format("UPDATE {} SET fileHashPrev = '{}' WHERE fileHash = '{}'",
+                                           DFST::ActorDirFile::TableName, prevHash, it->at("fileHash")));
         }
     }
 
@@ -309,8 +339,9 @@ bool DfsController::renameFile(const ActorId &actor, const std::string &fileHash
 std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
     qDebug() << "[Dfs] Edit file:" << msg.FileHash.c_str();
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
-    std::filesystem::path realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
+    std::string actorPath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
+    std::string actrDirFilePath = fmt::format("{}{}", actorPath, DFSB::fsMapName);
+    std::filesystem::path realFilePath = fmt::format("{}{}", actorPath, msg.FileName);
     DBConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
@@ -319,14 +350,15 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 
     if (actrDirData.empty()) {
         qDebug() << "[Dfs] editFile: Skipped because of empty result";
-        qFatal("actrDirData || localDirData empty");
+        qFatal("[Dfs] editFile: Skipped because of empty result: actrDirData || localDirData empty");
         return "";
     }
 
     if (actrDirData.size() > 2) {
-        qDebug() << "[Dfs] editFile: Query select failed: Query result has unsupported size:"
-                 << actrDirData.size();
-        qFatal("Error 4");
+        const auto errorStr = fmt::format(
+            "[Dfs] editFile: Query select failed: Query result has unsupported size:{}", actrDirData.size());
+        qDebug() << QString::fromStdString(errorStr);
+        qFatal("Error 4: %s", errorStr.c_str());
         return "";
     }
     insertDataChunk(msg.Data, msg.Offset, realFilePath);
@@ -553,8 +585,9 @@ void DfsController::exportFile(const std::string &pathTo, const std::string &pat
         if (pathFrom.find('/') != std::string::npos) {
             for (std::filesystem::directory_entry const &entry :
                  std::filesystem::directory_iterator(pathFrom)) {
-                if (entry.path().extension() != ".storj" && entry.path().extension() != ".storj-journal"
-                    && entry.path().filename() != ".dir") {
+                if (entry.path().extension() != DFSF::Extension
+                    && entry.path().extension() != DFSF::ExtensionJournal
+                    && entry.path().filename() != DFSB::fsMapName) {
                     auto copyTo = (pathTo + "/" + actorId);
                     exportFile(copyTo, pathFrom, entry.path().filename().string());
                 }
@@ -637,11 +670,17 @@ void DfsController::requestSync() {
                                  MessageStatus::Request);
 }
 
+void DfsController::requestDirFileAllActors() {
+    m_unsynchonizedDirs = node.actorIndex()->allActorsStd();
+    if (!m_unsynchonizedDirs.empty())
+        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
+}
+
 void DfsController::sendSync(uint64_t lastModified, const std::string &messageId) {
     DBConnector dirsFile(DFSB::dirsPath);
     dirsFile.open();
-    auto actors = dirsFile.select("SELECT actorId FROM " + DFST::DirsFile::TableName
-                                  + " WHERE lastModified = " + std::to_string(lastModified));
+    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {} WHERE lastModified = {}",
+                                              DFST::DirsFile::TableName, std::to_string(lastModified)));
     for (auto &row : actors) {
         sendDirData(row["actorId"], lastModified, messageId);
     }
@@ -659,6 +698,8 @@ void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, c
     if (!rows.empty()) {
         node.network()->send_message(std::pair { actorId, rows }, MessageType::DfsDirData,
                                      MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+    } else {
+        eraseFirstUnsynchronizedDir();
     }
 }
 
@@ -666,27 +707,47 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<DFSP::D
     bool res = DFST::ActorDirFile::addDirRows(actorId.toStdString(), dirRows);
     qDebug() << "[Dfs] addDirData result:" << res;
 
-    // temp
+           // temp
     for (auto &row : dirRows) {
-        requestFile(actorId, row.fileHash);
+        if (!row.fileName.empty()) {
+            const auto path = DFS_PATH::filePath(actorId, row.fileName);
+            const bool fileExist = std::filesystem::exists(path);
+            if (!fileExist) {
+                requestFile(actorId, row.fileName);
+            } else {
+                if(std::filesystem::file_size(path) < row.fileSize ) {
+                    DFSP::RequestFileSegmentMessage reqMessage = { .Actor = actorId.toStdString(),
+                                                                   .FileName = row.fileName,
+                                                                   .FileHash = row.fileHash,
+                                                                   .Path = row.filePath,
+                                                                   .Offset = 0 };
+                    node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
+                                                 MessageStatus::Request);
+                }
+            }
+        }
     }
+    eraseFirstUnsynchronizedDir();
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
     qDebug() << fileName.c_str();
+    if (fileName.empty())
+        return;
+
     std::filesystem::remove(DFS_PATH::filePath(actorId, fileName));
     node.network()->send_message(std::pair { actorId, fileName }, MessageType::DfsRequestFile,
                                  MessageStatus::Request);
 }
 
-void DfsController::sendFile(const ActorId &actorId, const std::string &fileName,
+void DfsController::sendFile(const std::string &actorId, const std::string &fileName,
                              const std::string &messageId) {
     if (fileName.empty()) {
         qFatal("[Dfs] Empty file name");
     }
 
-    auto dirRow = DFST::ActorDirFile::getDirRow(actorId.toStdString(), fileName);
-    DFSP::AddFileMessage msg = { .Actor = actorId.toStdString(),
+    auto dirRow = DFST::ActorDirFile::getDirRow(actorId, fileName);
+    DFSP::AddFileMessage msg = { .Actor = actorId,
                                  .FileName = fileName,
                                  .FileHash = dirRow.fileHash,
                                  .Path = dirRow.filePath,
@@ -814,6 +875,28 @@ float DfsController::percentVerified(std::vector<DFS::Packets::VerifyFileMessage
     return result;
 }
 
+void DfsController::loadBytesLimit() {
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+    const auto rows = dirsFile.select(DFST::DirsFile::BytesLimitQuery);
+    if (!rows.empty()) {
+        const auto row = rows.at(0);
+        m_bytesLimit = std::stoll(row.at("value"));
+    } else {
+        m_bytesLimit = DFSB::minDfsLimit;
+    }
+    qDebug() << "Limit dfs is " << m_bytesLimit;
+    dirsFile.close();
+}
+
+void DfsController::eraseFirstUnsynchronizedDir()
+{
+    if (!m_unsynchonizedDirs.empty())
+        m_unsynchonizedDirs.erase(m_unsynchonizedDirs.begin());
+    if (!m_unsynchonizedDirs.empty())
+        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
+}
+
 std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     auto fileName = DFS_PATH::filePath(msg.Actor, msg.FileName);
     if (!std::filesystem::exists(fileName)
@@ -826,11 +909,11 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         qFatal("Error addFragment 1");
         exit(EXIT_FAILURE);
     }
-    std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, msg.FileName);
-    actrDirData = actrDirFile.select("SELECT * FROM " + DFST::ActorDirFile::TableName + " WHERE fileName = '"
-                                     + msg.FileName + "';");
-    std::string virtualPath = actrDirData[0].at("filePath");
-    uint64_t fileSize = std::stoull(actrDirData[0].at("fileSize"));
+    std::vector<DBRow> actrDirData = actrDirFile.select(
+        fmt::format("SELECT * FROM {} WHERE fileName = '{}';", DFST::ActorDirFile::TableName, msg.FileName));
+    DBRow firstActrDirData = actrDirData[0];
+    std::string virtualPath = firstActrDirData.at("filePath");
+    uint64_t fileSize = std::stoull(firstActrDirData.at("fileSize"));
     auto currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
         m_compliteFiles.push_back(msg.FileName);
@@ -841,7 +924,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     FragmentStorage fs(msg);
     fs.insertFragment(msg);
     currentFileSize = std::filesystem::file_size(fileName);
-    //    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
+    emit downloadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
@@ -863,12 +946,14 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
     FragmentWriter fw(msg, m_compliteFiles);
 
-    connect(&fw, &FragmentWriter::downloadProgress, this, &DfsController::downloadProgress);
+    connect(&fw, &FragmentWriter::downloadProgress, this,
+            [=](const std::string &actor, const std::string &fileName, const double progress) {
+                downloadProgress(ActorId(actor), fileName, progress);
+            });
     connect(&fw, &FragmentWriter::eraseFromFiles, this,
             [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
-    connect(&fw, &FragmentWriter::sendFile, this,
-            [&](const std::string &actorId, const std::string &fileName) { sendFile(actorId, fileName); });
+    connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
     connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
     connect(&fw, &FragmentWriter::compliteFile, this,
             [&](const std::string &fileName) { m_compliteFiles.push_back(fileName); });
@@ -879,8 +964,9 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
 
 std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg) {
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
-    std::filesystem::path realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileHash;
+    std::string pathActor = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
+    std::string actrDirFilePath = fmt::format("{}{}", pathActor, DFSB::fsMapName);
+    std::filesystem::path realFilePath = fmt::format("{}{}", pathActor, msg.FileHash);
     DBConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
@@ -932,7 +1018,22 @@ uint64_t DfsController::bytesLimit() const {
 }
 
 void DfsController::setBytesLimit(uint64_t bytesLimit) {
-    m_bytesLimit = bytesLimit;
+    m_bytesLimit = bytesLimit < DFSB::minDfsLimit ? DFSB::minDfsLimit : bytesLimit;
+
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+
+    const bool noLimit = dirsFile.select(DFST::DirsFile::BytesLimitQuery).empty();
+    if (!noLimit) {
+        dirsFile.update(fmt::format("UPDATE {} SET value='{}' WHERE parameter = '{}'",
+                                    DFST::DirsFile::ParametersDfs, std::to_string(bytesLimit),
+                                    DFST::DirsFile::BytesLimit));
+    } else {
+        dirsFile.insert(
+            DFST::DirsFile::ParametersDfs,
+            DBRow { { "parameter", DFST::DirsFile::BytesLimit }, { "value", std::to_string(bytesLimit) } });
+    }
+
     qDebug() << "[Dfs] Changed limit:" << m_bytesLimit;
 }
 
@@ -946,18 +1047,20 @@ DFSP::AddFileMessage DfsController::getFileHeader(const ActorId actor, const std
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
     }
-    std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, fileName);
+    std::vector<DBRow> actrDirDataList = DFST::ActorDirFile::getFileDataByName(&actrDirFile, fileName);
     actrDirFile.close();
-    ret.FileHash = actrDirData.at(0).at("fileHash");
+    DBRow firstActrDirData = actrDirDataList.at(0);
+
+    ret.FileHash = firstActrDirData.at("fileHash");
     ret.FileName = fileName;
     ret.Actor = actor.toStdString();
-    ret.Path = actrDirData.at(0).at("filePath");
-    ret.Size = std::stoull(actrDirData.at(0).at("fileSize"));
+    ret.Path = firstActrDirData.at("filePath");
+    ret.Size = std::stoull(firstActrDirData.at("fileSize"));
     return ret;
 }
 
 uint64_t DfsController::bytesAvailable() {
-    auto freeDfs = m_bytesLimit <= m_sizeTaken ? 0 : m_bytesLimit - m_sizeTaken;
+    auto freeDfs = m_bytesLimit <= m_sizeTaken ? DFS::Basic::minDfsLimit : m_bytesLimit - m_sizeTaken;
     uint64_t freeDisk = Utils::diskFreeMemory();
     auto min = m_bytesLimit == 0 ? freeDisk : std::min(freeDfs, freeDisk);
     return min;
@@ -1066,9 +1169,10 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
         m_dfsController->makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
 
     if (!actrDirFile.insert(DFST::ActorDirFile::TableName, rowData)) {
-        qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
-                 << DFST::ActorDirFile::TableName.c_str();
-        qFatal("Insert failed");
+        std::string errorStr = fmt::format("[Dfs] addFile: insert failed: {}: {}", actrDirFile.file().c_str(),
+                                           DFST::ActorDirFile::TableName.c_str());
+        qDebug() << QString::fromStdString(errorStr);
+        qFatal("%s", fmt::format("Insert failed: {}", errorStr).c_str());
         emit error("ErrorDirError", filePath.string());
         return;
     }
@@ -1085,8 +1189,9 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     emit sendMessage(msg, MessageType::DfsAddFile);
 
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + DFSB::fsMapName;
-    std::string realFilePath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim + msg.FileName;
+    std::string actorPath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
+    std::string actrDirFilePath = fmt::format("{}{}", actorPath, DFSB::fsMapName);
+    std::string realFilePath = fmt::format("{}{}", actorPath, msg.FileName);
 
     DBConnector actrDirPathFile(actrDirFilePath);
 
@@ -1097,9 +1202,11 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     auto result = actrDirPathFile.select(DFST::filesTableLast);
 
     if (!actrDirPathFile.insert(DFST::ActorDirFile::TableName, rowData)) {
-        qDebug() << "[Dfs] addFile: insert failed:" << actrDirPathFile.file().c_str() << " :"
-                 << DFST::ActorDirFile::TableName.c_str();
-        qFatal("Error 2");
+        const std::string error =
+            fmt::format("[Dfs] addFile: insert failed: {} : {}", actrDirPathFile.file().c_str(),
+                        DFST::ActorDirFile::TableName.c_str());
+        qDebug() << QString::fromStdString(error);
+        qFatal("%s", fmt::format("Error 2: {}", error).c_str());
         return;
     }
     actrDirPathFile.close();

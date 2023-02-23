@@ -171,7 +171,7 @@ std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
 }
 
 std::vector<DBRow> DBConnector::selectAll(std::string table, int limit) {
-    std::string query = "SELECT * FROM " + table + (limit > 0 ? " LIMIT " + std::to_string(limit) : "");
+    std::string query = fmt::format("SELECT * FROM {}{}", table, limit > 0 ? " LIMIT " + std::to_string(limit) : "");
     return select(query);
 }
 
@@ -202,7 +202,7 @@ bool DBConnector::deleteRow(const std::string &tableName, const DBRow &data) {
         return false;
     }
 
-    std::string query = "DELETE FROM " + tableName + " WHERE ";
+    std::string query = fmt::format("DELETE FROM {} WHERE ", tableName);
     std::string where;
 
     for (auto &el : data) {
@@ -251,23 +251,24 @@ bool DBConnector::deleteRow(const std::string &tableName, const DBRow &data) {
 }
 
 bool DBConnector::deleteTable(const std::string &name) {
-    std::string query = "DROP TABLE " + name + ";";
+    std::string query = fmt::format("DROP TABLE {};", name);
     return this->query(query);
 }
 
 bool DBConnector::tableExists(const std::string &table) {
-    std::string query = "SELECT name FROM sqlite_master WHERE type='table' AND name='" + table + "';";
+    std::string query =
+        fmt::format("SELECT name FROM sqlite_master WHERE type='table' AND name='{}';", table);
     return select(query).size() > 0;
 }
 
 bool DBConnector::dropTable(const std::string &table) {
-    return query("DROP TABLE IF EXISTS " + table);
+    return query(fmt::format("DROP TABLE IF EXISTS {}", table));
 }
 
 qint64 DBConnector::count(const std::string &table, const std::string &where) {
-    std::string query = "SELECT COUNT(*) FROM " + table;
+    std::string query = fmt::format("SELECT COUNT(*) FROM {}", table);
     if (!where.empty())
-        query += " WHERE " + where;
+        query += fmt::format(" WHERE {}", where);
 
     auto res = select(query);
     if (res.empty())
@@ -423,18 +424,18 @@ bool DBConnector::implementationInsert(const std::string &tableName, const DBRow
     }
 
     std::string queryType = isReplace ? "REPLACE" : "IGNORE";
-    std::string query = "INSERT OR " + queryType + " INTO " + tableName + " ";
+    std::string query = fmt::format("INSERT OR {} INTO {} ", queryType, tableName);
     std::string fields;
     std::string values;
 
     for (auto &el : data) {
-        fields += "'" + el.first + "', ";
+        fields += fmt::format("'{}', ", el.first);
         values += "?, ";
     }
 
     fields.erase(fields.size() - 2, 2);
     values.erase(values.size() - 2, 2);
-    query += "(" + fields + ") VALUES (" + values + ")";
+    query += fmt::format("({}) VALUES ({})", fields, values);
 
     dbmutex.lock();
     sqlite3_stmt *stmt = NULL;

@@ -306,6 +306,7 @@ std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer
 
 namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
+const static int ReconnectInterval = 5000;
 
 static uint64_t currentDateSecs() {
     using namespace std::chrono;

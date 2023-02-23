@@ -31,12 +31,15 @@
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
+#include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode() {
+ExtraChainNode::ExtraChainNode(bool isClientApp) :
+    isClientApplication(isClientApp)
+{
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -62,6 +65,9 @@ ExtraChainNode::ExtraChainNode() {
     m_blockchain->setTxManager(m_txManager);
 
     m_dmm = new DataMiningManager(this);
+    // test port and address
+    m_connectionsManager = new ConnectionsManager("12.12.12.12", "1212",
+                                                  actorIndex()->firstId().toByteArray(), this);
 
     connectSignals();
 
@@ -81,6 +87,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_blockchain;
     delete m_accountController;
     delete m_dmm;
+    delete m_connectionsManager;
 }
 
 bool ExtraChainNode::createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
@@ -423,6 +430,10 @@ DataMiningManager *ExtraChainNode::dataMiningManager() const {
     return m_dmm;
 }
 
+ConnectionsManager *ExtraChainNode::connectionsManager() const {
+    return m_connectionsManager;
+}
+
 bool ExtraChainNode::login(const std::string &login, const std::string &password) {
     return m_accountController->load(Utils::calcHash(login + password));
 }
@@ -437,264 +448,3 @@ void ExtraChainNode::logout() {
     std::exit(0);
 }
 
-void ExtraChainNode::testPermissions() const {
-    /*
-    // Mock actor create
-    const std::string userEmail = "test@test.com";
-    const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
-    m_accountController->createActor(ActorType::Account, userHash);
-
-    // Mock actor create
-    const std::string userEmail1 = "test@test.com";
-    const std::string userPass1 = "12345678";
-    const QByteArray userHash1 = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor1 =
-        m_accountController->createActor(ActorType::Account, userHash1);
-
-    DFSController dfsController;
-    dfsController.initDB(actor);
-
-    QStringList testFiles = {
-        FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-2.txt")
-    };
-
-    auto orgFilePublic = QFile(testFiles[0]);
-    orgFilePublic.open(QIODevice::ReadOnly);
-    auto orgFilePrivate = QFile(testFiles[1]);
-    orgFilePrivate.open(QIODevice::ReadOnly);
-
-    QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
-    QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
-
-    PermissionManager permManager;
-    permManager.initPermissionDB(actor);
-
-    struct TestSet {
-        TestSet(){}
-        TestSet(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash) :
-            cmd(cmd),
-            actor(actor),
-            userId(userId),
-            fileHash(fileHash) {}
-        QString cmd;
-        Actor<KeyPrivate> actor;
-        QString userId;
-        QString fileHash;
-    };
-
-    struct SetPermission : public TestSet{
-        SetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
-                      PermissionManager::Permission permission, bool result) : TestSet(cmd, actor, userId,
-                      fileHash), permission(permission), resultSet(result) {} PermissionManager::Permission
-    permission; bool resultSet;
-    };
-
-    struct GetPermission : public TestSet{
-        GetPermission(QString cmd, Actor<KeyPrivate> actor, QString userId, QString fileHash,
-                      PermissionManager::Permission permission) : TestSet(cmd, actor, userId, fileHash),
-            resultGet(permission)
-        {} PermissionManager::Permission resultGet;
-    };
-
-    std::vector<TestSet*> testSet;
-    testSet.emplace_back(new GetPermission("get", actor, actor1.idStd().c_str(), ".perm",
-                                           PermissionManager::Read)); testSet.emplace_back(new
-                         GetPermission("get", actor, actor.idStd().c_str(),
-                                       ".perm", PermissionManager::Edit)); testSet.emplace_back(new
-                         GetPermission("get", actor, actor1.idStd().c_str(), "fHashPublic",
-    PermissionManager::NoPermission)); testSet.emplace_back(new GetPermission("get", actor,
-    actor.idStd().c_str(), "fHashPrivate", PermissionManager::NoPermission));
-
-    testSet.emplace_back(new SetPermission("set", actor1, actor1.idStd().c_str(), "fHashPublic",
-                                           PermissionManager::Edit, false)); testSet.emplace_back(new
-                         SetPermission("set", actor, actor1.idStd().c_str(), ".perm", PermissionManager::Edit,
-    true)); testSet.emplace_back(new SetPermission("set", actor1, actor.idStd().c_str(), "fHashPrivate",
-                                           PermissionManager::Edit, true));
-
-    testSet.emplace_back(new GetPermission("get", actor1, actor.idStd().c_str(), "fHashPrivate",
-                                           PermissionManager::Edit)); testSet.emplace_back(new
-                         GetPermission("get", actor1, actor1.idStd().c_str(),
-                                       ".perm", PermissionManager::Edit));
-
-    for(auto & test: testSet)
-    {
-        if(test->cmd == "get")
-        {
-            GetPermission* getPerm = static_cast<GetPermission*>(test);
-            auto permission = permManager.getPermission(getPerm->actor,
-                                                        {getPerm->userId.toStdString(),
-                                                          getPerm->fileHash.toStdString()});
-            assert(permission == getPerm->resultGet);
-        }
-        else
-        {
-            SetPermission* setPerm = static_cast<SetPermission*>(test);
-            auto permission = permManager.setPermission(setPerm->actor,
-                                                        {setPerm->userId.toStdString(),
-                                                          setPerm->fileHash.toStdString(),
-                                                          permManager.permissions[setPerm->permission].toStdString()});
-            assert(permission == setPerm->resultSet);
-        }
-    }
-
-    for(auto & ptr: testSet)
-    {
-        delete ptr;
-    }
-    */
-}
-
-void ExtraChainNode::test() const {
-    /*
-    // Mock actor create
-    const std::string userEmail = "test@test.com";
-    const std::string userPass = "12345678";
-    const QByteArray userHash = QByteArray::fromStdString(userEmail + userPass); //
-    Utils::calcHash(userEmail.toUtf8() + userPass.toUtf8()); auto actor =
-    m_accountController->createActor(ActorType::ServiceProvider, userHash);
-
-    DFSController dfsController;
-    dfsController.initDB(actor);
-    dfsController.flushDirContent(actor.idStd().c_str());
-
-    QStringList testFiles = {
-        FileSystem::pathConcat(QDir::homePath(), "test-file-1.txt"),
-        FileSystem::pathConcat(QDir::homePath(), "test-file-2.txt")
-    };
-
-    auto orgFilePublic = QFile(testFiles[0]);
-    orgFilePublic.open(QIODevice::ReadOnly);
-
-    auto orgFilePrivate = QFile(testFiles[1]);
-    orgFilePrivate.open(QIODevice::ReadOnly);
-
-
-    QByteArray fHashPublic = dfsController.addFile(actor, testFiles[0], DFSController::Public);
-    QByteArray fHashPrivate = dfsController.addFile(actor, testFiles[1], DFSController::Private);
-    if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
-        qDebug() << "addFile succeeded";
-    else
-        qDebug() << "addFile failed";
-
-    auto validate = [&](const QString & publicCompare, const QString & privateCompare){
-        auto fileContentPublic = dfsController.readFile(actor, fHashPublic);
-        if(fileContentPublic == publicCompare)
-            qDebug() << "Files are equal";
-        else
-            qDebug() << "Files are different '" << fileContentPublic << "' != '" << publicCompare << "'";
-
-        auto fileContentPrivate = dfsController.readFile(actor, fHashPrivate);
-        if(fileContentPrivate == privateCompare)
-            qDebug() << "Files are equal";
-        else
-            qDebug() << "Files are different '" << fileContentPrivate << "' != '" << privateCompare << "'";
-    };
-
-    validate(orgFilePublic.readAll(), orgFilePrivate.readAll());
-
-    DFSController::AddFileMsg addFileMsg;
-    addFileMsg.userId = actor.idStd();
-    addFileMsg.fileHash = "test_file_hash";
-    addFileMsg.path = "dfs/public/test_file_name";
-    addFileMsg.size = "123";
-
-    dfsController.addFile(actor, addFileMsg);
-
-    addFileMsg.fileHash = "test_file_hash_private";
-    addFileMsg.path = "dfs/private/test_file_name_private";
-    addFileMsg.size = "321";
-
-    dfsController.addFile(actor, addFileMsg);
-    QByteArray newContent = "Completely new content!";
-
-    DFSController::EditFileMsg editFileMsg;
-    editFileMsg.userId = actor.idStd();
-    editFileMsg.fileHash = fHashPublic;
-    editFileMsg.data = newContent;
-    editFileMsg.offset = "0";
-    fHashPublic = dfsController.insertFragment(actor, editFileMsg);
-
-    editFileMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.insertFragment(actor, editFileMsg);
-    if (!fHashPublic.isEmpty() || !fHashPrivate.isEmpty())
-        qDebug() << "editFile succeeded";
-    else
-        qDebug() << "editFile failed";
-
-    validate(newContent, newContent);
-
-         // Add segment tests
-    newContent.insert(0, "qwe");
-
-    DFSController::AddSegmentMsg addSegmentMsg;
-    addSegmentMsg.userId = actor.idStd();
-    addSegmentMsg.fileHash = fHashPublic;
-    addSegmentMsg.data = "qwe";
-    addSegmentMsg.offset = "0";
-    fHashPublic = dfsController.addFileSegment(actor, addSegmentMsg);
-
-    addSegmentMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.addFileSegment(actor, addSegmentMsg);
-
-    qDebug() << "New value: " << newContent;
-    validate(newContent, newContent);
-
-         //
-
-    newContent.insert(10, "qwe");
-
-    addSegmentMsg.offset = "10";
-    addSegmentMsg.fileHash = fHashPublic;
-    fHashPublic = dfsController.addFileSegment(actor, addSegmentMsg);
-
-    addSegmentMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.addFileSegment(actor, addSegmentMsg);
-
-    qDebug() << "New value: " << newContent;
-    validate(newContent, newContent);
-
-         //
-
-    addSegmentMsg.offset = std::to_string(newContent.size());
-    addSegmentMsg.fileHash = fHashPublic;
-    fHashPublic = dfsController.addFileSegment(actor, addSegmentMsg);
-
-    addSegmentMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.addFileSegment(actor, addSegmentMsg);
-
-    newContent.insert(newContent.size(), "qwe");
-    qDebug() << "New value: " << newContent;
-    validate(newContent, newContent);
-
-         // Delete segment tests
-
-    newContent = newContent.toStdString().erase(0, 10).c_str();
-
-    DFSController::DeleteSegmentMsg delSegmentMsg;
-    delSegmentMsg.userId = actor.idStd();
-    delSegmentMsg.fileHash = fHashPublic;
-    delSegmentMsg.offset = "0";
-    delSegmentMsg.size = "10";
-
-    fHashPublic = dfsController.deleteFileSegment(actor, delSegmentMsg);
-
-    delSegmentMsg.fileHash = fHashPrivate;
-    fHashPrivate = dfsController.deleteFileSegment(actor, delSegmentMsg);
-    qDebug() << "New value: " << newContent;
-    validate(newContent, newContent);
-
-    DFSController::RemoveFileMsg removeFileMsg;
-    removeFileMsg.userId = actor.idStd().c_str();
-    removeFileMsg.fileHash = fHashPublic;
-
-    bool result = dfsController.removeFile(actor, removeFileMsg);
-    qDebug() << "Remove file:" << fHashPublic << ", status:" << result;
-
-    removeFileMsg.fileHash = fHashPrivate;
-    result = dfsController.removeFile(actor, removeFileMsg);
-    qDebug() << "Remove file:" << fHashPrivate << ", status:" << result;
-    */
-}

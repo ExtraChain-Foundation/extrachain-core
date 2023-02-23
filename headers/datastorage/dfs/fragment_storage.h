@@ -64,12 +64,12 @@ protected:
     void run() override;
 
 signals:
-    void downloadedFile(std::string& actor, std::string& fileName);
-    void eraseFromFiles(DFSP::SegmentMessage m_msg);
-    void sendFile(std::string& actor, std::string& fileName);
-    void downloadProgress(std::string& actor, std::string& fileName, double progress);
-    void requestFile(std::string& actor, std::string& fileName);
-    void compliteFile(std::string& fileName);
+    void downloadedFile(const std::string& actor, const std::string& fileName);
+    void eraseFromFiles(const DFSP::SegmentMessage m_msg);
+    void sendFile(const std::string& actor, const std::string& fileName, const std::string &messageId = "");
+    void downloadProgress(const std::string& actor, const std::string& fileName, const double progress);
+    void requestFile(const std::string& actor, const std::string& fileName);
+    void compliteFile(const std::string& fileName);
 };
 
 #endif // FRAGMENT_STORAGE_H

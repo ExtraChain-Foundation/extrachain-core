@@ -14,12 +14,6 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject
     }
 }
 
-// WebSocketService::WebSocketService(const WebSocketService &service)
-//     : SocketService(service) {
-//     qFatal("[WS] Copy");
-//     this->m_ws = service.m_ws;
-// }
-
 WebSocketService::~WebSocketService() {
     qDebug() << "[WS] I'm socket, i'm death";
     m_ws->deleteLater();
@@ -106,7 +100,6 @@ void WebSocketService::sendMessage(const QByteArray &data) {
         qFatal("[WS] Error send size");
 
     m_ws->sendBinaryMessage(prepareSendMessage(data));
-    // m_ws->flush();
 }
 
 void WebSocketService::onConnected() {

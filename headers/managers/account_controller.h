@@ -58,6 +58,7 @@ public:
     const PrivateProfile &currentProfile() const;
 
     int count() const;
+    bool empty() const;
     void changeCurrentProfile(const ActorId &actorId);
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;

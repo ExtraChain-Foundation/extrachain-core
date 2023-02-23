@@ -44,6 +44,7 @@ private:
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
     std::vector<std::string> m_compliteFiles;
+    std::vector<std::string> m_unsynchonizedDirs;
     uint64_t m_totalDfsSize = 0;
 
 public:
@@ -55,7 +56,7 @@ public:
     // Internal use only
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
-    bool removeLocalFile(const Actor<KeyPrivate> &actor, const std::string &filePath);
+    bool removeLocalFile(const std::string &actorId, const std::string &filePath);
     // visualMoveFile
 
     // External interfaces
@@ -84,17 +85,20 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                 uint64_t fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
+    void loadBytesLimit();
+    void eraseFirstUnsynchronizedDir();
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
     void sendSizeReponseMsg(const DFSP::RequestDfsSize &msg, const std::string &messageId) const;
     void requestSync();
+    void requestDirFileAllActors();
     void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
     void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);
     void addDirData(const ActorId &actorId, const std::vector<DFSP::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileName);
-    void sendFile(const ActorId &actorId, const std::string &fileName, const std::string &messageId = "");
+    void sendFile(const std::string &actorId, const std::string &fileName, const std::string &messageId = "");
 
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
