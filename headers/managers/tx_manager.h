@@ -152,6 +152,8 @@ signals:
     void GetTxResponse(Transaction tx);
 
     void finished();
+
+    void addToCache(std::string actor, Transaction tx);
 };
 
 #endif // TX_MANAGER_H

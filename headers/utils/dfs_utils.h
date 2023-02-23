@@ -205,7 +205,7 @@ namespace Fragments {
           "fragHash   TEXT                NOT NULL"
           ");";
 
-//    static const std::string GetCountFragmants = "SELECT COUNT(size) FROM Fragments";
+    static const std::string GetCountFragmants = "SELECT COUNT(size) FROM Fragments";
     static const std::string GetSizeFragmants = "SELECT SUM(size) FROM Fragments";
 
     struct FragmentsInfo {
