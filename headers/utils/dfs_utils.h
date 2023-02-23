@@ -333,8 +333,8 @@ namespace Balances {
     const std::string loadBalancesQuery = "SELECT * FROM balances";
 
     struct Balance {
-        std::string Actor;
-        std::string Balance;
+        std::string actor = "";
+        std::string balance = "";
     };
 }
 

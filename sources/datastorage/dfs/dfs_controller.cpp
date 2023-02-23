@@ -187,7 +187,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
                   });
 
         while (!writeAvailable(msg.Size) || std::filesystem::is_empty(actorFolderPath)) {
-            removeLocalFile(msg.Actor, files.at(files.size() - 1));
+            removeLocalFile(msg.Actor, files.at(files.size() - 1).string());
         }
     }
 

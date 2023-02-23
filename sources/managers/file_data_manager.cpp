@@ -78,7 +78,7 @@ std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId
         }
 
         FileData fileStruct =
-            FileData { .nameFile = entry.path().filename(), .pathFile = entry.path(), .status = status };
+            FileData { .nameFile = entry.path().filename().string(), .pathFile = entry.path().string(), .status = status };
         fileStructs.emplace_back(fileStruct);
     }
 
