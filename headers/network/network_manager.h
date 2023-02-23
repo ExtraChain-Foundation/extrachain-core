@@ -115,7 +115,7 @@ public:
 
            // protected:
            // quint16 tcpPort = 2222;
-    quint16 wsPort = 2233;
+    quint16 wsPort = 2222;
 
 private:
     void connectWsService(WebSocketService *ws, bool requestListNodes = false);
