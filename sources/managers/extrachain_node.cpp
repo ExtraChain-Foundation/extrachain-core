@@ -108,7 +108,7 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         auto &first = m_accountController->mainActor();
         // QString firstId = first.id().toString();
 
-        QMap<ActorId, BigNumber> tm;
+        QMap<ActorId, BigNumberFloat> tm;
         tm.insert(ActorId(), 0);
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
         m_blockchain->addBlock(tmp, true);
