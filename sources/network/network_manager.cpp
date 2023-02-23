@@ -655,7 +655,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::SpreadNodeConnection: {
         qDebug() << "received new node connection";
         DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
-        wsConnection.print();
         if (wsConnection.address == local->ip().toString().toStdString() && wsConnection.port == wsPort) {
             qDebug() << "[WS] connection port" << wsPort << "address:" << local->ip().toString();
         } else {
