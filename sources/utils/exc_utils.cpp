@@ -227,9 +227,12 @@ std::string Utils::merkleFormula(const std::string &hash1, const std::string &ha
 std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
-        std::string data = file.readAll().toStdString();
-        std::string hash = rootMerkleHash(data);
-        return bytesEncodeStdString(hash, encode);
+        SHA3 sha3(SHA3::Bits::Bits512);
+        while(!file.atEnd()) {
+            QByteArray data = file.read(1024);
+            sha3.add(data.data(), data.length());
+        }
+        return bytesEncodeStdString(sha3.getHash(), encode);
     }
 
     qFatal("Utils::calcHashForFile");
