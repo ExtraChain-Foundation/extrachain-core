@@ -127,6 +127,11 @@ std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::str
         + fileName;
 }
 
+std::filesystem::path DFS::Path::actorPath(const ActorId &actorId) {
+    return DFSB::fsActrRoot +  Utils::platformDelimeter() + actorId.toStdString();
+}
+
+
 int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
