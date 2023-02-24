@@ -38,14 +38,10 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
     connect(&blockCreationTimer, &QTimer::timeout, this, &TransactionManager::makeBlock);
-    blockCreationTimer.start();
 
     // prove timer
     proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
     connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
-
-    qDebug() << "start timer:";
-    proveTimer.start();
 }
 
 void TransactionManager::removeTransaction(int i) {
@@ -94,6 +90,13 @@ void TransactionManager::addUnapprovedHash(QByteArray txHash) {
 void TransactionManager::addVerifiedTx(Transaction tx) {
     qDebug() << QString("Adding tx[%1] to pending list").arg(tx.toString());
     pendingTxs.push_back(tx);
+}
+
+void TransactionManager::runMakeAndProveBlockTimers()
+{
+    qDebug() << "start timer:";
+    blockCreationTimer.start();
+    proveTimer.start();
 }
 
 // Block making

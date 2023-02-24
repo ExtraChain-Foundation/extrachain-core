@@ -18,6 +18,7 @@
  */
 
 #include "managers/account_controller.h"
+#include "managers/tx_manager.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 
@@ -41,6 +42,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     qDebug() << "[Accounts] Created new profile" << actor.id();
 
     node.start(); // TODO: remove
+    node.txManager()->runMakeAndProveBlockTimers();
 
     if (!m_profiles.empty()) // TODO: remove
         node.blockchain()->getBlockZero();
@@ -74,6 +76,7 @@ bool AccountController::load(const std::string &hash) {
             m_profiles.push_back(profile);
             m_currentProfile = profile.main().id();
             node.start();             // TODO: remove
+            node.txManager()->runMakeAndProveBlockTimers();
             autologinHash.save(hash); // TODO: add arg
             return true;
         }

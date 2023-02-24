@@ -74,6 +74,10 @@ public:
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction> getReceivedTxList() const;
     std::vector<Transaction> getPendingTxs() const;
+    /**
+     * Run make_block and prove_block timers
+     */
+    void runMakeAndProveBlockTimers();
 
 public slots:
     /**
