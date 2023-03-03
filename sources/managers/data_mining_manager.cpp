@@ -80,7 +80,7 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
         qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
         DFSP::StateMessage stateMessage;
         stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
-        node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Response,
-                                      "234234234312345", Config::Net::TypeSend::All);
+        if(stateMessage.DataAmountStored > 0)
+            node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
     }
 }
