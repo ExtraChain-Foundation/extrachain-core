@@ -20,25 +20,23 @@
 #ifndef NETWORK_MANAGER_H
     #define NETWORK_MANAGER_H
 
-    #include <QTimer>
-    #include <QtCore/QMutex>
-    #include <QtCore/QRandomGenerator>
-    #include <QtNetwork/QNetworkAddressEntry>
-    #include <QtNetwork/QNetworkInterface>
-    #include <QtNetwork/QNetworkProxy>
-    #include <QtWebSockets/QWebSocketServer>
-    #include <algorithm>
-    #include <string>
-    #include <string_view>
+#include <QTimer>
+#include <QtCore/QMutex>
+#include <QtCore/QRandomGenerator>
+#include <QtNetwork/QNetworkAddressEntry>
+#include <QtNetwork/QNetworkInterface>
+#include <QtNetwork/QNetworkProxy>
+#include <QtWebSockets/QWebSocketServer>
+#include <algorithm>
+#include <string>
+#include <string_view>
 
-    #include "datastorage/block.h"
-    #include "datastorage/blockchain.h"
-    #include "datastorage/index/actorindex.h"
-    #include "managers/account_controller.h"
-    #include "network/message_body.h"
-    #include "network/network_status.h"
-    #include "utils/dfs_utils.h"
-    #include "utils/exc_utils.h"
+#include "managers/account_controller.h"
+#include "managers/extrachain_node.h"
+#include "network/message_body.h"
+#include "network/network_status.h"
+#include "utils/dfs_utils.h"
+#include "utils/exc_utils.h"
 
 class SocketService;
 class WebSocketService;

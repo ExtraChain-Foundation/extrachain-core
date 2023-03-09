@@ -1,5 +1,5 @@
 #include "network/isocket_service.h"
-
+#include "datastorage/index/actorindex.h"
 #include <QJsonObject>
 
 #include "enc/enc_tools.h"
