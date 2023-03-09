@@ -121,7 +121,7 @@ public:
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
-    void sendBlockByNumber(const Block &index) const;
+    void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
 
 private:

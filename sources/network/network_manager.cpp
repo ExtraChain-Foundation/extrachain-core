@@ -599,7 +599,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         qDebug() << "BlockchainRequestBlock";
         auto block = MessagePack::deserialize<Block>(serialized);
         if (block.getType() == Config::DATA_BLOCK_TYPE)
-            node.blockchain()->sendBlockByNumber(block);
+            node.blockchain()->sendBlockByNumber(block.getIndex());
         else if (block.getType() == Config::GENESIS_BLOCK_TYPE)
             node.blockchain()->sendLastGenesisBlock();
 

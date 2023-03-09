@@ -254,8 +254,8 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     return res;
 }
 
-void Blockchain::sendBlockByNumber(const Block &block) const {
-    const Block answerBlock = blockIndex.getBlockById(block.getIndex());
+void Blockchain::sendBlockByNumber(const BigNumber &index) const {
+    const Block answerBlock = blockIndex.getBlockById(index);
     const auto data = answerBlock.serialize();
     node->network()->send_message(data, MessageType::BlockchainNewBlock);
 }
