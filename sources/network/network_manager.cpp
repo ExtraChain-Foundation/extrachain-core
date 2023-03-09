@@ -565,6 +565,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         break;
     }
+
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
 
@@ -591,6 +592,13 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
         std::string toPath = Scripts::folder + "/" + msg.FileName;
         std::filesystem::copy_file(fromPath, toPath);
+        break;
+    }
+
+    case MessageType::BlockchainRequestBlock: {
+        qDebug() << "BlockchainRequestBlock";
+        auto block = MessagePack::deserialize<Block>(serialized);
+        node.blockchain()->addBlockToBlockchain(block);
         break;
     }
 

@@ -28,6 +28,7 @@
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "managers/network_manager.h"
 #include "network/message_body.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
@@ -120,6 +121,8 @@ public:
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
+    void sendBlockByNumber(const BigNumber &index) const;
+    void sendGenesisBlock() const;
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);

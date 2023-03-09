@@ -254,6 +254,19 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     return res;
 }
 
+void Blockchain::sendBlockByNumber(const BigNumber &index) const {
+    const Block block = blockIndex.getBlockById(index);
+    const auto data = block.serialize();
+    node->network()->send_message(data, MessageType::BlockchainRequestBlock);
+}
+
+void Blockchain::sendGenesisBlock() const
+{
+    const GenesisBlock genesisBlock = blockIndex.getLastGenesisBlock();
+    const auto data = genesisBlock.serialize();
+    node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
+}
+
 Block Blockchain::checkBlock(const Block &block) {
     if (GenesisBlock::isGenesisBlock(block.serialize()))
         return GenesisBlock(block.serialize());
