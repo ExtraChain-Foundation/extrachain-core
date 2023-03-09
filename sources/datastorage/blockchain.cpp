@@ -41,6 +41,10 @@ Blockchain::~Blockchain() {
 
 Block Blockchain::getBlockByIndex(const BigNumber &index) {
     Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
+    if (block.isEmpty()) {
+        std::pair<std::string, BigNumber> requestData(Config::DATA_BLOCK_TYPE, index);
+        node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
+    }
     return block;
 }
 
@@ -84,7 +88,13 @@ Block Blockchain::getLastRealBlock() const {
 }
 
 QByteArray Blockchain::getBlockDataByIndex(const BigNumber &index) {
-    return blockIndex.getBlockDataById(index);
+    const QByteArray blockData = blockIndex.getBlockDataById(index);
+    if (blockData.isEmpty()) {
+        std::pair<std::string, BigNumber> requestData(
+            index != 0 ? Config::DATA_BLOCK_TYPE : Config::GENESIS_BLOCK_TYPE, index);
+        node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
+    }
+    return blockData;
 }
 
 Block Blockchain::getBlockByApprover(const BigNumber &approver) {
@@ -260,8 +270,7 @@ void Blockchain::sendBlockByNumber(const BigNumber &index) const {
     node->network()->send_message(data, MessageType::BlockchainNewBlock);
 }
 
-void Blockchain::sendLastGenesisBlock() const
-{
+void Blockchain::sendLastGenesisBlock() const {
     const GenesisBlock genesisBlock = blockIndex.getLastGenesisBlock();
     const auto data = genesisBlock.serialize();
     node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
@@ -664,7 +673,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
             }
         }
     }
-    if ((indexBlock == 0)&&(block.getType() != Config::DUMMY_BLOCK_TYPE)) {
+    if ((indexBlock == 0) && (block.getType() != Config::DUMMY_BLOCK_TYPE)) {
         node->actorIndex()->setFirstId(block.getApprover());
     }
     if (indexBlock < 0)
@@ -900,7 +909,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
                 balance += tx.getAmount();
             }
 
-            if(tx.getSender() == userId) {
+            if (tx.getSender() == userId) {
                 balance -= tx.getAmount();
             }
         }
@@ -1029,8 +1038,10 @@ bool Blockchain::getPossibleMining() const {
     }
 }
 
-[[maybe_unused]] void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                        const QByteArray &requestHash, const std::string &messageId) {
+[[maybe_unused]] void Blockchain::getBlockFromBlockchain(const SearchEnum::BlockParam &param,
+                                                         const QByteArray &value,
+                                                         const QByteArray &requestHash,
+                                                         const std::string &messageId) {
     QByteArray srBlock = getBlockData(param, value);
     if (srBlock.isEmpty())
         return;
