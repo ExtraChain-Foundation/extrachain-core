@@ -47,6 +47,11 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
+QSet<NetworkReconnect> &NetworkManager::reconnections()
+{
+    return m_reconnections;
+}
+
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node) {
     localInizialization();

@@ -220,6 +220,8 @@ public:
     }
 
     void requestWSNodeList(std::string message_id);
+    QSet<NetworkReconnect> &reconnections();
+
 signals:
     void newSocket();
     void connectionStatusChanged(bool status);
