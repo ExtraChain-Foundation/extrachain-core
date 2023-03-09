@@ -121,8 +121,8 @@ public:
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
-    void sendBlockByNumber(const BigNumber &index) const;
-    void sendGenesisBlock() const;
+    void sendBlockByNumber(const Block &index) const;
+    void sendLastGenesisBlock() const;
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);

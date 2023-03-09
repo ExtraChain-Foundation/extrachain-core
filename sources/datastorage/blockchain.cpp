@@ -254,13 +254,13 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
     return res;
 }
 
-void Blockchain::sendBlockByNumber(const BigNumber &index) const {
-    const Block block = blockIndex.getBlockById(index);
-    const auto data = block.serialize();
-    node->network()->send_message(data, MessageType::BlockchainRequestBlock);
+void Blockchain::sendBlockByNumber(const Block &block) const {
+    const Block answerBlock = blockIndex.getBlockById(block.getIndex());
+    const auto data = answerBlock.serialize();
+    node->network()->send_message(data, MessageType::BlockchainNewBlock);
 }
 
-void Blockchain::sendGenesisBlock() const
+void Blockchain::sendLastGenesisBlock() const
 {
     const GenesisBlock genesisBlock = blockIndex.getLastGenesisBlock();
     const auto data = genesisBlock.serialize();
