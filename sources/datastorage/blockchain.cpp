@@ -651,7 +651,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
             }
         }
     }
-    if (indexBlock == 0) {
+    if ((indexBlock == 0)&&(block.getType() != Config::DUMMY_BLOCK_TYPE)) {
         node->actorIndex()->setFirstId(block.getApprover());
     }
     if (indexBlock < 0)
