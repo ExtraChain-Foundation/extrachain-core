@@ -139,6 +139,16 @@ const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
     return currentProfile().actors();
 }
 
+const std::vector<ActorId> AccountController::accountsIds() const
+{
+    std::vector<ActorId> ids;
+    for (int i = 0; i < currentProfile().actors().size();i++)
+    {
+        ids.push_back(currentProfile().actors()[i].id());
+    }
+    return ids;
+}
+
 const Actor<KeyPrivate> &AccountController::currentWallet() const {
     return currentProfile().current();
 }
