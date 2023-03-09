@@ -104,7 +104,7 @@ void TransactionManager::runMakeAndProveBlockTimers()
 void TransactionManager::makeBlock() {
     qDebug() << "trying makeBlock";
     Block lastBlock = blockchain->getLastBlock();
-//    if (pendingTxs.empty()) {
+    if (pendingTxs.empty()) {
 //        Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
 //        qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
 //        // creating dummy block in as ordinary block
@@ -112,8 +112,8 @@ void TransactionManager::makeBlock() {
 //        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
 //        blockchain->signBlock(dummyBlock);
 //        blockchain->addBlock(dummyBlock);
-//        return;
-//    }
+        return;
+    }
 
     // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);

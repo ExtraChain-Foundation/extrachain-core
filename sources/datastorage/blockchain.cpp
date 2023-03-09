@@ -632,7 +632,7 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
 }
 
 int Blockchain::addBlock(Block &block, bool isGenesis) {
-    if (isGenesis) {
+    if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
         qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
     } else {
         qDebug() << "Adding a block" << block.getIndex() << "to storage";
