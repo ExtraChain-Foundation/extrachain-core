@@ -119,7 +119,7 @@ bool Block::deserialize(const std::string &serialized) {
     if (serialized.empty()) {
         return false;
     } else {
-        *this = MessagePack::deserialize<Block>(serialized);
+        *this = MessagePack::deserialize<Block>(Utils::bytesDecodeStdString(serialized));
         return true;
     }
 }
@@ -187,7 +187,7 @@ bool Block::contain(Block &from) const {
 }
 
 std::string Block::serialize() const {
-    return MessagePack::serialize(*this);
+    return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
 }
 
 QString Block::toString() const {
