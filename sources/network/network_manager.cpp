@@ -47,8 +47,7 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
-QSet<NetworkReconnect> &NetworkManager::reconnections()
-{
+QSet<NetworkReconnect> &NetworkManager::reconnections() {
     return m_reconnections;
 }
 
@@ -221,7 +220,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
                                         .arg(ip)
                                         .arg((int)protocol)
                                         .arg(port);
-//    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
+    //    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
     switch (protocol) {
@@ -561,16 +560,24 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
-        auto genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
-        node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+        GenesisBlock genesisBlock(serialized);
+        if (!genesisBlock.isEmpty()) {
+            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+        } else {
+            qDebug() << "false genesis block";
+        }
         break;
     }
 
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
 
-        auto block = MessagePack::deserialize<Block>(serialized);
-        node.blockchain()->addBlockToBlockchain(block);
+        Block block(serialized);
+        if (!block.isEmpty()) {
+            node.blockchain()->addBlockToBlockchain(block);
+        } else {
+            qDebug() << "false data block";
+        }
         break;
     }
 
