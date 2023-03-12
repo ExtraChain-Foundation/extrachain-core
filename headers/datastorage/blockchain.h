@@ -28,7 +28,7 @@
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
-#include "managers/network_manager.h"
+#include "network/network_manager.h"
 #include "network/message_body.h"
 #include "utils/bignumber.h"
 #include <QByteArray>

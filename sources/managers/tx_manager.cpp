@@ -108,9 +108,9 @@ void TransactionManager::makeBlock() {
 //        Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
 //        qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
 //        // creating dummy block in as ordinary block
-        Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
-        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
-        blockchain->signBlock(dummyBlock);
+//        Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
+//        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
+//        blockchain->signBlock(dummyBlock);
 //        blockchain->addBlock(dummyBlock);
         return;
     }
