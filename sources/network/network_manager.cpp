@@ -560,7 +560,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
-        GenesisBlock genesisBlock(serialized);
+        std::string stddata = MessagePack::deserialize<std::string>(serialized);
+        GenesisBlock genesisBlock(stddata);
         if (!genesisBlock.isEmpty()) {
             node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         } else {
@@ -571,8 +572,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
-
-        Block block(serialized);
+        std::string stddata = MessagePack::deserialize<std::string>(serialized);
+        Block block(stddata);
         if (!block.isEmpty()) {
             node.blockchain()->addBlockToBlockchain(block);
         } else {
