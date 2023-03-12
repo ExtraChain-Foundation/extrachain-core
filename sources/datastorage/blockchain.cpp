@@ -265,9 +265,16 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
 }
 
 void Blockchain::sendBlockByNumber(const BigNumber &index) const {
-    const Block answerBlock = blockIndex.getBlockById(index);
-    const std::string data = answerBlock.serialize();
-    node->network()->send_message(data, MessageType::BlockchainNewBlock);
+    Block answerBlock = blockIndex.getBlockById(index);
+    std::string data;
+    if (answerBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
+        GenesisBlock genesisBlock = blockIndex.getGenesisBlockById(index);
+        data = genesisBlock.serialize();
+        node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
+    } else {
+        data = answerBlock.serialize();
+        node->network()->send_message(data, MessageType::BlockchainNewBlock);
+    }
 }
 
 void Blockchain::sendLastGenesisBlock() const {
@@ -779,7 +786,8 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
 }
 
 Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    qDebug() << "Attempting to merge block:" << QByteArray::fromStdString(blockA.serialize()) << "and block:" << QByteArray::fromStdString(blockB.serialize());
+    qDebug() << "Attempting to merge block:" << QByteArray::fromStdString(blockA.serialize())
+             << "and block:" << QByteArray::fromStdString(blockB.serialize());
 
     if (blockA.getIndex() == BigNumber(0))
         return Block();
@@ -858,8 +866,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         for (const GenesisDataRow &gn : resultList)
             list.push_back(gn.serialize());
         std::string genData = Serialization::serialize(list);
-        GenesisBlock mergedBlock(genData, prev,
-                                 blockA.getPrevGenHash());
+        GenesisBlock mergedBlock(genData, prev, blockA.getPrevGenHash());
         signBlock(mergedBlock);
         return mergedBlock;
     }
