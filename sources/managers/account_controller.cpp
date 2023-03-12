@@ -18,9 +18,9 @@
  */
 
 #include "managers/account_controller.h"
-#include "managers/tx_manager.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
+#include "managers/tx_manager.h"
 
 AccountController::AccountController(ExtraChainNode &node)
     : node(node) {
@@ -44,7 +44,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     node.start(); // TODO: remove
     node.txManager()->runMakeAndProveBlockTimers();
 
-    if (!m_profiles.empty()) // TODO: remove
+    if (!(type == ActorType::ServiceProvider)) // TODO: remove
         node.blockchain()->getBlockZero();
 
     return actor;
@@ -75,7 +75,7 @@ bool AccountController::load(const std::string &hash) {
 
             m_profiles.push_back(profile);
             m_currentProfile = profile.main().id();
-            node.start();             // TODO: remove
+            node.start(); // TODO: remove
             node.txManager()->runMakeAndProveBlockTimers();
             autologinHash.save(hash); // TODO: add arg
             return true;
@@ -124,8 +124,7 @@ int AccountController::count() const {
     return m_profiles.size();
 }
 
-bool AccountController::empty() const
-{
+bool AccountController::empty() const {
     return m_profiles.empty();
 }
 
@@ -139,11 +138,9 @@ const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
     return currentProfile().actors();
 }
 
-const std::vector<ActorId> AccountController::accountsIds() const
-{
+const std::vector<ActorId> AccountController::accountsIds() const {
     std::vector<ActorId> ids;
-    for (int i = 0; i < currentProfile().actors().size();i++)
-    {
+    for (int i = 0; i < currentProfile().actors().size(); i++) {
         ids.push_back(currentProfile().actors()[i].id());
     }
     return ids;
