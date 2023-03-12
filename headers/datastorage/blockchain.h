@@ -85,7 +85,7 @@ private:
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
 
-    QByteArray getBlockDataByIndex(const BigNumber &index);
+    std::string getBlockDataByIndex(const BigNumber &index);
 
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
@@ -175,7 +175,7 @@ public:
      * @param type of param
      * @return last blockchain block
      */
-    QByteArray getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
+    std::string getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
      * @param value

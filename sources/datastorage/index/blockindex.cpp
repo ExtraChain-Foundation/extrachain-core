@@ -104,19 +104,21 @@ GenesisBlock BlockIndex::getLastGenesisBlock() const {
 }
 
 GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const {
-    QByteArray serializedBlock = this->getById(id);
-    if (!serializedBlock.isEmpty() && GenesisBlock::isGenesisBlock(serializedBlock)) {
+    std::string serializedBlock = this->getById(id);
+    Block bl(serializedBlock);
+    if (!serializedBlock.empty() && bl.getType() == Config::GENESIS_BLOCK_TYPE) {
         return GenesisBlock(serializedBlock);
     }
     return GenesisBlock();
 }
 
 Block BlockIndex::getBlockById(const BigNumber &id) const {
-    QByteArray serializedBlock = this->getById(id);
-    if (!serializedBlock.isEmpty()) {
-        if (Block::isBlock(serializedBlock))
+    std::string serializedBlock = this->getById(id);
+    Block bl(serializedBlock);
+    if (!serializedBlock.empty()) {
+        if (bl.getType() == Config::DATA_BLOCK_TYPE)
             return Block(serializedBlock);
-        else if (GenesisBlock::isGenesisBlock(serializedBlock))
+        else if (bl.getType() == Config::GENESIS_BLOCK_TYPE)
             return GenesisBlock(serializedBlock);
     } else {
         qDebug() << id << "is not block";
@@ -124,10 +126,10 @@ Block BlockIndex::getBlockById(const BigNumber &id) const {
     return Block();
 }
 
-QByteArray BlockIndex::getBlockDataById(const BigNumber &id) const {
-    QByteArray serializedBlock = this->getById(id);
+std::string BlockIndex::getBlockDataById(const BigNumber &id) const {
+    std::string serializedBlock = this->getById(id);
     //    qDebug() << "BLOCK: " << serializedBlock;
-    if (!serializedBlock.isEmpty()) {
+    if (!serializedBlock.empty()) {
         return serializedBlock;
     } else {
         qDebug() << "is not block";
@@ -452,7 +454,7 @@ BigNumberFloat BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const {
     }
     return circulativeBalanceGenesisBlock;
 }
-int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
+int BlockIndex::add(const BigNumber &id, const std::string &_data) {
     QString path = buildFilePath(id);
     QFile file(path);
 
@@ -472,7 +474,8 @@ int BlockIndex::add(const BigNumber &id, const QByteArray &_data) {
 
     DBConnector DB(path.toStdString());
     if (DB.open()) {
-        if (GenesisBlock::isGenesisBlock(_data)) {
+        Block bl(_data);
+        if (bl.getType() == Config::GENESIS_BLOCK_TYPE) {
             GenesisBlock block(_data);
             DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
             DB.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
@@ -658,13 +661,13 @@ BigNumber BlockIndex::getRecords() const {
     return this->records;
 }
 
-QByteArray BlockIndex::getById(const BigNumber &id) const {
+std::string BlockIndex::getById(const BigNumber &id) const {
     QString path = buildFilePath(id);
     QFile file(path);
 
     if (!file.exists()) {
         qDebug() << "Can't get the file" << path << "(File is not exits)";
-        return QByteArray();
+        return "";
     }
 
     DBConnector DB(path.toStdString());
@@ -675,7 +678,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
         std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::GenesisBlockTable + " ;");
         if (res.size() == 0) {
             qDebug() << "Can't get the file" << path << "(File is empty)";
-            return QByteArray();
+            return "";
         }
         QByteArrayList list;
         list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str()) << res[0].at("date").c_str()
@@ -717,7 +720,7 @@ QByteArray BlockIndex::getById(const BigNumber &id) const {
         std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::BlockTable + " ;");
         if (res.size() == 0) {
             qDebug() << "Can't get the file" << path << "(File is empty)";
-            return QByteArray();
+            return "";
         }
         QByteArrayList list;
         list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str()) << res[0].at("date").c_str()

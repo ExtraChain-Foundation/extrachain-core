@@ -87,9 +87,9 @@ Block Blockchain::getLastRealBlock() const {
     return validateAndReturnBlock(block);
 }
 
-QByteArray Blockchain::getBlockDataByIndex(const BigNumber &index) {
-    const QByteArray blockData = blockIndex.getBlockDataById(index);
-    if (blockData.isEmpty()) {
+std::string Blockchain::getBlockDataByIndex(const BigNumber &index) {
+    const std::string blockData = blockIndex.getBlockDataById(index);
+    if (blockData.empty()) {
         std::pair<std::string, BigNumber> requestData(
             index != 0 ? Config::DATA_BLOCK_TYPE : Config::GENESIS_BLOCK_TYPE, index);
         node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
@@ -266,18 +266,18 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
 
 void Blockchain::sendBlockByNumber(const BigNumber &index) const {
     const Block answerBlock = blockIndex.getBlockById(index);
-    const auto data = answerBlock.serialize().toStdString();
+    const std::string data = answerBlock.serialize();
     node->network()->send_message(data, MessageType::BlockchainNewBlock);
 }
 
 void Blockchain::sendLastGenesisBlock() const {
     const GenesisBlock genesisBlock = blockIndex.getLastGenesisBlock();
-    const auto data = genesisBlock.serialize().toStdString();
+    const std::string data = genesisBlock.serialize();
     node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
 }
 
 Block Blockchain::checkBlock(const Block &block) {
-    if (GenesisBlock::isGenesisBlock(block.serialize()))
+    if (block.getType() == Config::GENESIS_BLOCK_TYPE)
         return GenesisBlock(block.serialize());
     else
         return Block(block);
@@ -375,7 +375,7 @@ bool Blockchain::signCheckAdd(Block &block) {
         }
     } else {
         const auto blockData = getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray());
-        if (blockData.isEmpty())
+        if (blockData.empty())
             return false;
         Block saved(blockData);
         QByteArrayList savedList = saved.getListSignatures();
@@ -611,14 +611,14 @@ Block Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray &value)
     return res;
 }
 
-QByteArray Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArray &value) {
+std::string Blockchain::getBlockData(SearchEnum::BlockParam type, const QByteArray &value) {
     switch (type) {
     case SearchEnum::BlockParam::Id:
         return getBlockDataByIndex(BigNumber(value.toStdString()));
     default:
-        return QByteArray();
+        return "";
     }
-    return QByteArray();
+    return "";
 }
 
 std::pair<Transaction, QByteArray>
@@ -661,7 +661,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     }
 
     const auto indexBlock = block.getIndex();
-    if (!GenesisBlock::isGenesisBlock(block.serialize())) {
+    if (!(block.getType() == Config::GENESIS_BLOCK_TYPE)) {
         if (indexBlock != 0) {
             BigNumber id = block.getIndex() - 1;
             if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
@@ -779,7 +779,7 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
 }
 
 Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    qDebug() << "Attempting to merge block:" << blockA.serialize() << "and block:" << blockB.serialize();
+    qDebug() << "Attempting to merge block:" << QByteArray::fromStdString(blockA.serialize()) << "and block:" << QByteArray::fromStdString(blockB.serialize());
 
     if (blockA.getIndex() == BigNumber(0))
         return Block();
@@ -795,7 +795,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
 
     // Case 1 - equal payload
     if (dataA == dataB) {
-        Block merged(QByteArray::fromStdString(dataA), prev);
+        Block merged(dataA, prev);
         signBlock(merged);
         return merged;
     } else // Case 2 - different payload
@@ -820,8 +820,8 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
 }
 
 GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB) {
-    qDebug() << "Attempting to merge genesis block:" << blockA.serialize()
-             << "and block:" << blockB.serialize();
+    qDebug() << "Attempting to merge genesis block:" << QByteArray::fromStdString(blockA.serialize())
+             << "and block:" << QByteArray::fromStdString(blockB.serialize());
 
     Block prev = getBlockByIndex(blockA.getIndex() - 1);
 
@@ -831,12 +831,12 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         return GenesisBlock();
     }
 
-    QByteArray dataA = QByteArray::fromStdString(blockA.getData());
-    const QByteArray dataB = QByteArray::fromStdString(blockB.getData());
+    std::string dataA = blockA.getData();
+    const std::string dataB = blockB.getData();
 
     // Case 1 - equal payload
     if (dataA == dataB) {
-        GenesisBlock merged(dataA, prev, QByteArray::fromStdString(blockA.getPrevGenHash()));
+        GenesisBlock merged(dataA, prev, blockA.getPrevGenHash());
         signBlock(merged);
         return merged;
     } else // Case 2 - different payload
@@ -858,8 +858,8 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         for (const GenesisDataRow &gn : resultList)
             list.push_back(gn.serialize());
         std::string genData = Serialization::serialize(list);
-        GenesisBlock mergedBlock(QByteArray::fromStdString(genData), prev,
-                                 QByteArray::fromStdString(blockA.getPrevGenHash()));
+        GenesisBlock mergedBlock(genData, prev,
+                                 blockA.getPrevGenHash());
         signBlock(mergedBlock);
         return mergedBlock;
     }
@@ -888,7 +888,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (GenesisBlock::isGenesisBlock(currentBlock.serialize())) {
+        if (currentBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.extractDataRows();
 
@@ -1042,8 +1042,8 @@ bool Blockchain::getPossibleMining() const {
                                                          const QByteArray &value,
                                                          const QByteArray &requestHash,
                                                          const std::string &messageId) {
-    QByteArray srBlock = getBlockData(param, value);
-    if (srBlock.isEmpty())
+    std::string srBlock = getBlockData(param, value);
+    if (srBlock.empty())
         return;
     // TODONEW emit responseReady(srBlock, Messages::GeneralResponse::GetBlockResponse, requestHash,
     // receiver);
