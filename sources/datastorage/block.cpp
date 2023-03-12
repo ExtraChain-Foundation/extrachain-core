@@ -116,8 +116,12 @@ bool Block::verify(const Actor<KeyPublic> &actor) const {
 }
 
 bool Block::deserialize(const std::string &serialized) {
-    *this = MessagePack::deserialize<Block>(serialized);
-    return true;
+    if (serialized.empty()) {
+        return false;
+    } else {
+        *this = MessagePack::deserialize<Block>(serialized);
+        return true;
+    }
 }
 
 bool Block::equals(const Block &block) const {
