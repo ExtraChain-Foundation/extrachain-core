@@ -61,6 +61,9 @@ private:
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
+    Block lastBlock;
+    Block lastRealBlock;
+
 public:
     // todo: add ref to blockchain
     TransactionManager(AccountController *accountController, Blockchain *blockchain,
@@ -86,6 +89,7 @@ public slots:
      * Emits SendBlock signal.
      */
     void makeBlock();
+    void makeBlockAndProveTransactionsInThread();
 
     /**
      * If Transaction is valid, adds it to the txList.
