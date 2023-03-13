@@ -302,9 +302,18 @@ public:
     void increaseCirculativeSupply(const BigNumber &value);
 
     /**
+     * @brief Coin request
+     * */
+    void requestCoins(const ActorId &receiver, const BigNumberFloat &amount);
+
+    /**
+     * @brief Receive coins
+     */
+    void receiveCoins(const ActorId &receiver, const BigNumberFloat &amount) {}
+    /**
      * @brief Send reward amount
      */
-    void sendCoinReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId = "");
+    void sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining

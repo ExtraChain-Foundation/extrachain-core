@@ -973,7 +973,13 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
-void Blockchain::sendCoinReward(const ActorId &receiver, const BigNumberFloat &amount,
+void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amount)
+{
+    DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
+    node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+}
+
+void Blockchain::sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount,
                                 const std::string &messageId) {
     auto mainActor = node->accountController()->mainActor();
     if (mainActor.id() == node->actorIndex()->firstId()) {
@@ -984,10 +990,9 @@ void Blockchain::sendCoinReward(const ActorId &receiver, const BigNumberFloat &a
         tx.setDate(QDateTime::currentMSecsSinceEpoch());
         node->network()->send_message(tx, MessageType::BlockchainTransaction);
     } else {
-        //        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin =
-        //        amount }; node->network()->send_message(coinReward, MessageType::BlockchainCoinReward,
-        //        MessageStatus::Response,
-        //                                      messageId, Config::Net::TypeSend::All);
+        DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
+        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
+                                      messageId);
     }
 }
 

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "utils/bignumber.h"
+#include "utils/bignumber_float.h"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <fmt/format.h>
@@ -253,7 +254,7 @@ namespace Reward {
     static const BigNumber coinProductionAlgorithmTick = BigNumber("100", 10);
     struct CoinReward {
         std::string Actor;
-        int Coin;
+        BigNumberFloat Coin;
         MSGPACK_DEFINE(Actor, Coin)
     };
 }

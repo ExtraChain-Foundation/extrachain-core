@@ -636,11 +636,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin);
+            node.blockchain()->sendCoinsReward(coinReward.Actor, coinReward.Coin, messageId);
             break;
         }
         case MessageStatus::Response: {
-            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin, messageId);
+            node.blockchain()->receiveCoins(coinReward.Actor, coinReward.Coin);
             break;
         }
         default:
