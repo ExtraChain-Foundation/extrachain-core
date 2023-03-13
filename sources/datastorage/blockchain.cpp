@@ -20,6 +20,7 @@
 #include <QJsonObject>
 
 #include "datastorage/blockchain.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/data_mining_manager.h"
 #include "managers/tx_manager.h"
@@ -973,26 +974,29 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
-void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amount)
-{
-    DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
-    node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amount) {
+    uint64_t dataStoredSize = 100000;//node->dfs()->calculateDataAmountStored();
+    DFSR::RequestReward requestReward { .Actor = receiver.toStdString(),
+                                        .DataStoredSize = dataStoredSize,
+                                        .TypeFunctioning = DFSR::TypeFunctioning::Test };
+    node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
 }
 
-void Blockchain::sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount,
-                                const std::string &messageId) {
-    auto mainActor = node->accountController()->mainActor();
-    if (mainActor.id() == node->actorIndex()->firstId()) {
-        Transaction tx;
-        tx.setSender(mainActor.id());
-        tx.setReceiver(receiver);
-        tx.setAmount(amount);
-        tx.setDate(QDateTime::currentMSecsSinceEpoch());
-        node->network()->send_message(tx, MessageType::BlockchainTransaction);
-    } else {
-        DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
-        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
-                                      messageId);
+void Blockchain::sendCoinsReward(DFSR::RequestReward &requestReward, const std::string &messageId) {
+    Transaction rewardTx = node->dataMiningManager()->makeRewardTx(requestReward);
+
+    switch (requestReward.TypeFunctioning) {
+    case DFSR::TypeFunctioning::Base: {
+        node->network()->send_message(rewardTx, MessageType::BlockchainTransaction,
+                                      MessageStatus::Response, messageId);
+        break;
+    }
+    case DFSR::TypeFunctioning::Test: {
+        requestReward.RewardAmount = rewardTx.getAmount();
+        node->network()->send_message(requestReward, MessageType::BlockchainCoinReward,
+                                      MessageStatus::Response, messageId);
+        break;
+    }
     }
 }
 

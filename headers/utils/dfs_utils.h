@@ -257,6 +257,19 @@ namespace Reward {
         BigNumberFloat Coin;
         MSGPACK_DEFINE(Actor, Coin)
     };
+
+    enum TypeFunctioning {
+        Base,
+        Test
+    };
+
+    struct RequestReward {
+        std::string Actor;
+        uint64_t DataStoredSize;
+        TypeFunctioning TypeFunctioning;
+        BigNumberFloat RewardAmount;
+        MSGPACK_DEFINE(Actor, DataStoredSize, TypeFunctioning, RewardAmount)
+    };
 }
 
 namespace Tables {
@@ -355,5 +368,7 @@ namespace DFSR = DFS::Reward;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)
+MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
+
 
 #endif // DFS_UTILS_H

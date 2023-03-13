@@ -25,6 +25,7 @@
 #include <managers/extrachain_node.h>
 #include <network/message_body.h>
 #include <string>
+#include <utils/dfs_utils.h>
 
 class DataMiningManager : public QObject {
     Q_OBJECT
@@ -39,7 +40,9 @@ public:
                                   BigNumberFloat dataAmountTotalStoredInNetwork,
                                   BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
                                   double coefficient);
-    Transaction makeRewardTx(const MessageBody &mb);
+    Transaction makeRewardTx(const MessageBody &state);
+    Transaction makeRewardTx(const DFSR::RequestReward &requestReward, const double coefficient = 0.5);
+
     void coinRewardRequest(const BigNumber &blockIndex);
 };
 

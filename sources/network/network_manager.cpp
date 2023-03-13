@@ -631,16 +631,25 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::BlockchainCoinReward: {
-        auto coinReward = MessagePack::deserialize<DFSR::CoinReward>(serialized);
+        auto requestReward = MessagePack::deserialize<DFSR::RequestReward>(serialized);
         switch (status) {
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.blockchain()->sendCoinsReward(coinReward.Actor, coinReward.Coin, messageId);
+            node.blockchain()->sendCoinsReward(requestReward, messageId);
             break;
         }
         case MessageStatus::Response: {
-            node.blockchain()->receiveCoins(coinReward.Actor, coinReward.Coin);
+            switch(requestReward.TypeFunctioning) {
+            case DFSR::TypeFunctioning::Test: {
+                qDebug() << "[TEST] You could receive" << requestReward.RewardAmount;
+                break;
+            }
+            case DFS::Reward::Base:
+                break;
+            }
+
+//            node.blockchain()->receiveCoins(requestReward.);
             break;
         }
         default:

@@ -313,7 +313,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId = "");
+    void sendCoinsReward(DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining
