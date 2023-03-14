@@ -8,7 +8,7 @@ HistoricalChain::HistoricalChain(std::string chainFilePath, std::string objectFi
     }
     objectPath = objectFilePath;
     chainFile.query(DFS::Historical::CreateTableHistoricalChain);
-    chainFile.close();
+    //    chainFile.close();
 }
 
 HistoricalChain::~HistoricalChain() {
@@ -16,7 +16,6 @@ HistoricalChain::~HistoricalChain() {
 }
 
 bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
-    chainFile.open();
     DBRow lastRow = getLastRow();
     uint64_t num;
     uint64_t prevNum;
@@ -28,26 +27,14 @@ bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
         num = prevNum + 1;
     }
     if (STDFS::is_directory(objectPath) && msg.Offset == 0) {
-        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data))) {
-            chainFile.close();
-            return true;
-        } else {
-            chainFile.close();
-            return false;
-        }
+        return chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));
     } else if (STDFS::is_regular_file(objectPath)) {
         DFSHC::FileChange fc;
         fc.pos = msg.Offset;
         fc.data = msg.Data;
-        if (chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toStdString()))) {
-            chainFile.close();
-            return true;
-        } else {
-            chainFile.close();
-            return false;
-        }
+        return chainFile.insert(DFSHC::TableNameHC,
+                                makeDBRow(num, prevNum, msg.ActionType, fc.toStdString()));
     } else {
-        chainFile.close();
         return false;
     }
 }
@@ -163,17 +150,17 @@ bool HistoricalChain::initLocal(const std::string &actor, const std::string &fil
     }
 
     std::ifstream ifs(filePath, std::ios::binary);
-    ifs.seekg(0, std::ios::beg);
-    std::vector<char> buffer(DFS::Basic::historicalChainSectionSize);
+    ifs.seekg(0, ifs.beg);
 
+    char *buffer = new char[DFS::Basic::historicalChainSectionSize];
+    DFSP::EditSegmentMessage esm {
+        .Actor = actor, .FileHash = fileHash, .Offset = 0, .ActionType = DFSP::SegmentMessageType::insert
+    };
     do {
-        apply(DFSP::EditSegmentMessage { .Actor = actor,
-                                         .FileHash = fileHash,
-                                         .Data = std::string(buffer.data(), buffer.size()),
-                                         .Offset = 0,
-                                         .ActionType = DFSP::SegmentMessageType::insert });
-    } while (ifs.read(buffer.data(), DFS::Basic::historicalChainSectionSize));
-    ifs.close();
+        esm.Data = std::move(std::string(buffer, sizeof(buffer)));
+        apply(esm);
+    } while (ifs.read(buffer, DFS::Basic::historicalChainSectionSize));
+    delete[] buffer;
     return true;
 }
 
