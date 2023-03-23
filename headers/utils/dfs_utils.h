@@ -149,9 +149,10 @@ namespace Packets {
         std::string fileHashPrev;
         std::string filePath;
         std::string fileName;
+        std::string Actor;
         uint64_t fileSize;
         uint64_t lastModified;
-        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, fileSize, lastModified)
+        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, Actor, fileSize, lastModified)
     };
 
     struct VerifyFileMessage {

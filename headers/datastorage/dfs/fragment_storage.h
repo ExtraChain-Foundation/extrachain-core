@@ -70,6 +70,7 @@ signals:
     void downloadProgress(const std::string& actor, const std::string& fileName, const double progress);
     void requestFile(const std::string& actor, const std::string& fileName);
     void compliteFile(const std::string& fileName);
+    void requestNextFragment(const DFSP::RequestFileSegmentMessage &);
 };
 
 #endif // FRAGMENT_STORAGE_H

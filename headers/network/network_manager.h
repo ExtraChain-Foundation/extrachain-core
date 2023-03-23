@@ -128,7 +128,7 @@ public slots:
 signals:
     void finished(); // ThreadPool
     void addFragSignal(const DFSP::SegmentMessage &msg);
-    void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
+    void fetchFragment(DFSP::RequestFileSegmentMessage &msg, std::string &messageId);
 
 protected:
     void connectToWebSocket(const QString &ip, quint16 port, bool requestListNodes = false);
