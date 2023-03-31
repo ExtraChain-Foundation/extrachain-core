@@ -162,7 +162,7 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
                         "Type      TEXT     NOT NULL );");
 
     for (const auto &i : l) {
-        auto q = MessagePack::deserialize<Transaction>(i);
+        auto q = Transaction(i);
 
         // modify sender data in db
         extractData =
@@ -1180,6 +1180,9 @@ void Blockchain::proveTx(Transaction &tx) {
     if ((receiverActor.empty() && !targetReceiver.isEmpty())
         || (senderActor.empty() && !targetSender.isEmpty())) {
         txManager->removeUnApprovedTransaction(tx);
+        if (receiverActor.empty()) {
+            txManager->addProvedTransaction(tx);
+        }
         qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }
@@ -1218,7 +1221,11 @@ void Blockchain::proveTx(Transaction &tx) {
 
     // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.isEmpty()) {
-        //
+        qDebug() << "target received is empty";
+        tx.sign(node->accountController()->currentWallet());
+
+        txManager->addProvedTransaction(tx);
+        return;
     } else {
         if (tx.getData() == "InitContract") {
             return;

@@ -207,8 +207,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         tx.sign(actor);
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
-        if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId()
-            || tx.getReceiver().isEmpty() || tx.getReceiver() == m_actorIndex->firstId())
+        if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId())
             m_txManager->addTransaction(tx);
     } else {
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
@@ -295,12 +294,48 @@ bool ExtraChainNode::importUser(const std::string &data, const std::string &logi
 
 Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount,
                                                   ActorId token) {
+    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
+        if (receiver.isEmpty() && !amount.isEmpty()) {
+            if (!actor.empty()) {
+                Transaction tx(actor.id(), receiver, amount);
+                tx.setToken(token);
+
+                qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
+                                .arg(tx.toString(), QString(actor.id().toByteArray()));
+
+                // 1) set prev block id
+                BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
+                if (lastBlockId.isEmpty()) {
+                    qDebug() << QString("Warning: can not create tx:[%1]. There is no last block in "
+                                        "blockchain")
+                                    .arg(tx.toString());
+                    return Transaction();
+                }
+                tx.setPrevBlock(lastBlockId);
+                // 2) check coin availability
+                //                if (blockchain()->getUserBalance(actor.id(), tx.getToken()) <
+                //                tx.getAmount()) {
+                //                    qDebug() << QString("Warning: can not create tx:[%1]. There is not
+                //                    enough "
+                //                                        "coins/tokens in wallet")
+                //                                    .arg(tx.toString());
+                //                    return Transaction();
+                //                }
+                // 3) sign transaction
+
+                tx.sign(actor);
+                qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to"
+                         << tx.getReceiver();
+
+                m_txManager->addTransaction(tx);
+                return this->createTransaction(tx);
+            }
+        }
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
     if (!actor.empty()) {
         qDebug() << actor.id();
         Transaction tx(actor.id(), receiver, amount);
@@ -349,8 +384,10 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto &publicKey = first.key().publicKey();
 
     // std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
-    //                                            { "token", mainKey.encrypt(token.toStdString(), publicKey)
-    //                                            }, { "os", mainKey.encrypt(os.toStdString(), publicKey) } };
+    //                                            { "token", mainKey.encrypt(token.toStdString(),
+    //                                            publicKey)
+    //                                            }, { "os", mainKey.encrypt(os.toStdString(), publicKey)
+    //                                            } };
 
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
