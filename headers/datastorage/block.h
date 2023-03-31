@@ -115,6 +115,8 @@ public:
      */
     void addData(const std::string &data);
 
+    void setData(const std::string &data);
+
     void initializeData(const std::string &serializedData);
     /**
      * @brief extract non-empty transactions from data

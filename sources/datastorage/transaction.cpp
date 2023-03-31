@@ -255,6 +255,12 @@ std::string Transaction::getDigSig() const {
 }
 
 bool Transaction::isEmpty() const {
+    return sender.isEmpty() && receiver.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
+        && approver.isEmpty() && hash.empty();
+}
+
+bool Transaction::isBurn() const
+{
     return sender.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
         && approver.isEmpty() && hash.empty();
 }

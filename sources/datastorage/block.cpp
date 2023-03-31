@@ -146,6 +146,11 @@ void Block::addData(const std::string &data) {
     this->data = Serialization::serialize(v);
 }
 
+void Block::setData(const std::string &data)
+{
+    this->data = data;
+}
+
 void Block::initializeData(const std::string &serializedData) {
     this->data = serializedData;
 }
@@ -154,13 +159,13 @@ std::vector<Transaction> Block::extractTransactions() const {
     if (m_type != Config::DATA_BLOCK_TYPE)
         return {};
 
+    std::vector<Transaction> transactions;
     std::vector<std::string> txsData = Serialization::deserialize(data);
 
-    std::vector<Transaction> transactions;
     for (const std::string &trData : txsData) {
         if (!trData.empty()) {
             Transaction tx(trData);
-            if (!tx.isEmpty())
+            if (!tx.isEmpty() || tx.isBurn())
                 transactions.push_back(tx);
         }
     }

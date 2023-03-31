@@ -177,7 +177,7 @@ NetworkManager *ExtraChainNode::network() {
 }
 
 Transaction ExtraChainNode::createTransaction(Transaction tx) {
-    if (tx.isEmpty()) {
+    if (tx.isEmpty() && !tx.isBurn()) {
         qDebug() << QString("Warning: can not create tx:[%1]. Transaction is empty").arg(tx.toString());
         return Transaction();
     }
