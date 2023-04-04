@@ -114,11 +114,11 @@ GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const {
 
 Block BlockIndex::getBlockById(const BigNumber &id) const {
     std::string serializedBlock = this->getById(id);
-    Block bl(serializedBlock);
-    if (!serializedBlock.empty()) {
-        if (bl.getType() == Config::DATA_BLOCK_TYPE)
+    Block block(serializedBlock);
+    if (!block.isEmpty()) {
+        if (block.getType() == Config::DATA_BLOCK_TYPE)
             return Block(serializedBlock);
-        else if (bl.getType() == Config::GENESIS_BLOCK_TYPE)
+        else if (block.getType() == Config::GENESIS_BLOCK_TYPE)
             return GenesisBlock(serializedBlock);
     } else {
         qDebug() << id << "is not block";
@@ -746,6 +746,7 @@ std::string BlockIndex::getById(const BigNumber &id) const {
         b.initFields(list);
 
         std::vector<DBRow> rows = DB.select("SELECT * FROM " + Config::DataStorage::TxBlockTable + " ;");
+        std::vector<std::string> v;
         for (const auto &tmp : rows) {
             QByteArrayList list;
             Transaction tx;
@@ -762,8 +763,9 @@ std::string BlockIndex::getById(const BigNumber &id) const {
             tx.setApprover(ActorId(tmp.at("approver").c_str()));
             tx.setDigSig(tmp.at("digSig").c_str());
             tx.setProducer(ActorId(tmp.at("producer").c_str()));
-            b.addData(tx.serialize().c_str());
+            v.push_back(tx.serialize());
         }
+        b.setData(Serialization::serialize(v));
 
         return b.serialize();
     }
