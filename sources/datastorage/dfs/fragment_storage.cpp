@@ -459,10 +459,18 @@ void FragmentWriter::run() {
             emit eraseFromFiles(m_msg);
             emit downloadedFile(m_msg.Actor, m_msg.FileName);
             emit sendFile(m_msg.Actor, m_msg.FileName);
-            fs.initHistoricalChain();
+//            fs.initHistoricalChain();
             qDebug() << "File " << fileName.c_str() << " downloaded";
         } else {
             emit requestFile(m_msg.Actor, m_msg.FileName);
         }
+    } else {
+        DFSP::RequestFileSegmentMessage requestMsg {
+            .Actor = m_msg.Actor,
+            .FileName = m_msg.FileName,
+            .FileHash = m_msg.FileHash,
+            .Offset = m_msg.Offset,
+        };
+        emit requestNextFragment(requestMsg);
     }
 }

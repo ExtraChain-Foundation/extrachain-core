@@ -365,7 +365,7 @@ void ExtraChainNode::connectActorIndex() {
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
     connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
-    connect(m_networkManager, &NetworkManager::fetchFragments, m_dfs, &DfsController::fetchFragments);
+    connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
     connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);

@@ -46,6 +46,7 @@ private:
     std::vector<std::string> m_compliteFiles;
     std::vector<std::string> m_unsynchonizedDirs;
     uint64_t m_totalDfsSize = 0;
+    std::vector<DFSP::DirRow> m_dirRows;
 
 public:
     explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
@@ -87,6 +88,7 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
     void loadBytesLimit();
     void eraseFirstUnsynchronizedDir();
+    void requestFileSegment(const DFSP::DirRow &row);
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
@@ -99,10 +101,12 @@ public:
     void addDirData(const ActorId &actorId, const std::vector<DFSP::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileName);
     void sendFile(const std::string &actorId, const std::string &fileName, const std::string &messageId = "");
-
+    void beginFetchNextFile();
+    void requestNextFragment(const DFSP::RequestFileSegmentMessage &msg);
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
+    void fetchFragment(DFSP::RequestFileSegmentMessage &msg, std::string &messageId);
     void verifyFiles(std::vector<DFSP::VerifyFileMessage> &fileList, std::string &messageId);
     float percentVerified(std::vector<DFSP::VerifyFileMessage> &fileList);
 
