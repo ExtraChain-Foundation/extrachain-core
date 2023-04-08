@@ -47,8 +47,7 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
-QSet<NetworkReconnect> &NetworkManager::reconnections()
-{
+QSet<NetworkReconnect> &NetworkManager::reconnections() {
     return m_reconnections;
 }
 
@@ -221,7 +220,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
                                         .arg(ip)
                                         .arg((int)protocol)
                                         .arg(port);
-//    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
+    //    m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
     switch (protocol) {
@@ -561,16 +560,25 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
-        auto genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
-        node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+        std::string stddata = MessagePack::deserialize<std::string>(serialized);
+        GenesisBlock genesisBlock(stddata);
+        if (!genesisBlock.isEmpty()) {
+            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+        } else {
+            qDebug() << "false genesis block";
+        }
         break;
     }
 
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
-
-        auto block = MessagePack::deserialize<Block>(serialized);
-        node.blockchain()->addBlockToBlockchain(block);
+        std::string stddata = MessagePack::deserialize<std::string>(serialized);
+        Block block(stddata);
+        if (!block.isEmpty()) {
+            node.blockchain()->addBlockToBlockchain(block);
+        } else {
+            qDebug() << "false data block";
+        }
         break;
     }
 
@@ -623,16 +631,25 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::BlockchainCoinReward: {
-        auto coinReward = MessagePack::deserialize<DFSR::CoinReward>(serialized);
+        auto requestReward = MessagePack::deserialize<DFSR::RequestReward>(serialized);
         switch (status) {
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin);
+            node.blockchain()->sendCoinsReward(requestReward, messageId);
             break;
         }
         case MessageStatus::Response: {
-            node.blockchain()->sendCoinReward(coinReward.Actor, coinReward.Coin, messageId);
+            switch(requestReward.TypeFunctioning) {
+            case DFSR::TypeFunctioning::Test: {
+                qDebug() << "[TEST] You could receive" << requestReward.RewardAmount;
+                break;
+            }
+            case DFS::Reward::Base:
+                break;
+            }
+
+//            node.blockchain()->receiveCoins(requestReward.);
             break;
         }
         default:

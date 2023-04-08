@@ -54,12 +54,16 @@ std::string GenesisBlock::getDataForHash() const {
 }
 
 bool GenesisBlock::deserialize(const std::string &serialized) {
-    *this = MessagePack::deserialize<GenesisBlock>(serialized);
-    return true;
+    if (serialized.empty()) {
+        return false;
+    } else {
+        *this = MessagePack::deserialize<GenesisBlock>(Utils::bytesDecodeStdString(serialized));
+        return true;
+    }
 }
 
 std::string GenesisBlock::serialize() const {
-    return MessagePack::serialize(*this);
+    return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
 }
 
 void GenesisBlock::initFields(QList<QByteArray> &list) {

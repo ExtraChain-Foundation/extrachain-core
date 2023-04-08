@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "utils/bignumber.h"
+#include "utils/bignumber_float.h"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <fmt/format.h>
@@ -253,8 +254,21 @@ namespace Reward {
     static const BigNumber coinProductionAlgorithmTick = BigNumber("100", 10);
     struct CoinReward {
         std::string Actor;
-        int Coin;
+        BigNumberFloat Coin;
         MSGPACK_DEFINE(Actor, Coin)
+    };
+
+    enum TypeFunctioning {
+        Base,
+        Test
+    };
+
+    struct RequestReward {
+        std::string Actor;
+        uint64_t DataStoredSize;
+        TypeFunctioning TypeFunctioning;
+        BigNumberFloat RewardAmount;
+        MSGPACK_DEFINE(Actor, DataStoredSize, TypeFunctioning, RewardAmount)
     };
 }
 
@@ -354,5 +368,7 @@ namespace DFSR = DFS::Reward;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)
+MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
+
 
 #endif // DFS_UTILS_H

@@ -37,9 +37,8 @@
 #include "managers/tx_manager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp) :
-    isClientApplication(isClientApp)
-{
+ExtraChainNode::ExtraChainNode(bool isClientApp)
+    : isClientApplication(isClientApp) {
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -66,8 +65,8 @@ ExtraChainNode::ExtraChainNode(bool isClientApp) :
 
     m_dmm = new DataMiningManager(this);
     // test port and address
-    m_connectionsManager = new ConnectionsManager("12.12.12.12", "1212",
-                                                  actorIndex()->firstId().toByteArray(), this);
+    m_connectionsManager =
+        new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
 
     connectSignals();
 
@@ -114,8 +113,8 @@ bool ExtraChainNode::createNewNetwork(const QString &email, const QString &passw
         m_blockchain->addBlock(tmp, true);
 
         // TEST
-        Block lastBlock = m_blockchain->getLastBlock();
-        Block block(std::string(""), lastBlock);
+        //        Block lastBlock = m_blockchain->getLastBlock();
+        //        Block block(std::string(""), lastBlock);
         //        m_blockchain->addBlock(block);
         // TEST
 
@@ -447,4 +446,3 @@ void ExtraChainNode::logout() {
     // auto hash remove
     std::exit(0);
 }
-

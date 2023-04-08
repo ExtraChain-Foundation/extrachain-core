@@ -20,6 +20,7 @@
 #include <QJsonObject>
 
 #include "datastorage/blockchain.h"
+#include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/data_mining_manager.h"
 #include "managers/tx_manager.h"
@@ -265,9 +266,16 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
 }
 
 void Blockchain::sendBlockByNumber(const BigNumber &index) const {
-    const Block answerBlock = blockIndex.getBlockById(index);
-    const std::string data = answerBlock.serialize();
-    node->network()->send_message(data, MessageType::BlockchainNewBlock);
+    Block answerBlock = blockIndex.getBlockById(index);
+    std::string data;
+    if (answerBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
+        GenesisBlock genesisBlock = blockIndex.getGenesisBlockById(index);
+        data = genesisBlock.serialize();
+        node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
+    } else {
+        data = answerBlock.serialize();
+        node->network()->send_message(data, MessageType::BlockchainNewBlock);
+    }
 }
 
 void Blockchain::sendLastGenesisBlock() const {
@@ -779,7 +787,8 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
 }
 
 Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    qDebug() << "Attempting to merge block:" << QByteArray::fromStdString(blockA.serialize()) << "and block:" << QByteArray::fromStdString(blockB.serialize());
+    qDebug() << "Attempting to merge block:" << QByteArray::fromStdString(blockA.serialize())
+             << "and block:" << QByteArray::fromStdString(blockB.serialize());
 
     if (blockA.getIndex() == BigNumber(0))
         return Block();
@@ -858,8 +867,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         for (const GenesisDataRow &gn : resultList)
             list.push_back(gn.serialize());
         std::string genData = Serialization::serialize(list);
-        GenesisBlock mergedBlock(genData, prev,
-                                 blockA.getPrevGenHash());
+        GenesisBlock mergedBlock(genData, prev, blockA.getPrevGenHash());
         signBlock(mergedBlock);
         return mergedBlock;
     }
@@ -966,21 +974,29 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
-void Blockchain::sendCoinReward(const ActorId &receiver, const BigNumberFloat &amount,
-                                const std::string &messageId) {
-    auto mainActor = node->accountController()->mainActor();
-    if (mainActor.id() == node->actorIndex()->firstId()) {
-        Transaction tx;
-        tx.setSender(mainActor.id());
-        tx.setReceiver(receiver);
-        tx.setAmount(amount);
-        tx.setDate(QDateTime::currentMSecsSinceEpoch());
-        node->network()->send_message(tx, MessageType::BlockchainTransaction);
-    } else {
-        //        DFSR::CoinReward coinReward = DFSR::CoinReward { .Actor = receiver.toStdString(), .Coin =
-        //        amount }; node->network()->send_message(coinReward, MessageType::BlockchainCoinReward,
-        //        MessageStatus::Response,
-        //                                      messageId, Config::Net::TypeSend::All);
+void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amount) {
+    uint64_t dataStoredSize = 100000;//node->dfs()->calculateDataAmountStored();
+    DFSR::RequestReward requestReward { .Actor = receiver.toStdString(),
+                                        .DataStoredSize = dataStoredSize,
+                                        .TypeFunctioning = DFSR::TypeFunctioning::Test };
+    node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+}
+
+void Blockchain::sendCoinsReward(DFSR::RequestReward &requestReward, const std::string &messageId) {
+    Transaction rewardTx = node->dataMiningManager()->makeRewardTx(requestReward);
+
+    switch (requestReward.TypeFunctioning) {
+    case DFSR::TypeFunctioning::Base: {
+        node->network()->send_message(rewardTx, MessageType::BlockchainTransaction,
+                                      MessageStatus::Response, messageId);
+        break;
+    }
+    case DFSR::TypeFunctioning::Test: {
+        requestReward.RewardAmount = rewardTx.getAmount();
+        node->network()->send_message(requestReward, MessageType::BlockchainCoinReward,
+                                      MessageStatus::Response, messageId);
+        break;
+    }
     }
 }
 

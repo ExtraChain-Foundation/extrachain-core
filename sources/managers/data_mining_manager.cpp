@@ -75,6 +75,27 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     return rewardTx;
 }
 
+Transaction DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &requestReward, const double coefficient)
+{
+    BigNumberFloat circulativeSupply(node->blockchain()->getCirculativeSuply().toStdString(10));
+    BigNumberFloat blockAmount(node->blockchain()->getRecords().toStdString(10));
+    BigNumberFloat dataAmountStoredInNetwork(std::to_string(node->dfs()->totalDfsSize()));
+
+    BigNumberFloat result = 100; //Test
+//    BigNumberFloat result = calculateCoins(BigNumberFloat(requestReward.DataStoredSize), dataAmountStoredInNetwork,
+                                  //         circulativeSupply, blockAmount, coefficient);
+
+    Transaction rewardTx;
+    rewardTx.setAmount(result);
+    rewardTx.setReceiver(requestReward.Actor);
+    rewardTx.setSender(node->actorIndex()->firstId());
+    rewardTx.setTypeTx(TypeTx::RewardTransaction);
+    rewardTx.setToken(ActorId());
+    rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
+    rewardTx.sign(node->accountController()->mainActor());
+    return rewardTx;
+}
+
 void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
     if (blockIndex % CoinProductionRate == 0) {
         qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
