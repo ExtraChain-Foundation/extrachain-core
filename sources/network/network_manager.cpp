@@ -47,6 +47,11 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
+QSet<NetworkReconnect> &NetworkManager::reconnections()
+{
+    return m_reconnections;
+}
+
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node) {
     localInizialization();
@@ -81,14 +86,11 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
-    connect(service, &WebSocketService::activated, this, [&]{
-        node.dfs()->requestDirFileAllActors();
-    });
+    connect(service, &WebSocketService::activated, this, [&] { node.dfs()->requestDirFileAllActors(); });
     if (!m_connections.contains(service)) {
         m_connections.append(service);
         if (node.isClientApp() && requestListNodes)
             send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
-
     }
 }
 
@@ -133,7 +135,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    qDebug() << "[NetworkManager] Start servers..." << (wsPort == 2233 ? "Network" : "DFS");
+    qDebug() << "[NetworkManager] Start servers..." << (wsPort == 2222 ? "Network" : "DFS");
 
     if (local == nullptr) {
         qDebug() << "[NetworkManager] Can't detect local ip";
@@ -237,11 +239,8 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool re
     auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
     connectWsService(service, requestListNodes);
-    m_reconnections.insert(NetworkReconnect {
-        .ip = ip,
-        .port = port,
-        .protocol = Network::Protocol::WebSocket
-    });
+    m_reconnections.insert(
+        NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket });
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
@@ -546,8 +545,17 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::DfsState: {
-        Transaction reward = node.dataMiningManager()->makeRewardTx(mb);
-        this->send_message(reward, MessageType::BlockchainTransaction);
+        switch (status) {
+        case MessageStatus::Request: {
+            Transaction reward = node.dataMiningManager()->makeRewardTx(mb);
+            this->send_message(reward, MessageType::BlockchainTransaction);
+            break;
+        }
+        case MessageStatus::NoStatus:
+        case MessageStatus::Response:
+            break;
+        }
+
         break;
     }
 
@@ -557,6 +565,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         break;
     }
+
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
 
@@ -583,6 +592,18 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
         std::string toPath = Scripts::folder + "/" + msg.FileName;
         std::filesystem::copy_file(fromPath, toPath);
+        break;
+    }
+
+    case MessageType::BlockchainRequestBlock: {
+        qDebug() << "BlockchainRequestBlock";
+        std::pair<std::string, BigNumber> requestData =
+            MessagePack::deserialize<std::pair<std::string, BigNumber>>(serialized);
+        if (requestData.first == Config::DATA_BLOCK_TYPE)
+            node.blockchain()->sendBlockByNumber(requestData.second);
+        else if (requestData.first == Config::GENESIS_BLOCK_TYPE)
+            node.blockchain()->sendLastGenesisBlock();
+
         break;
     }
 

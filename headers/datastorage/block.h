@@ -79,14 +79,7 @@ public:
      * Deserialize already constructed block
      * @param serialized
      */
-    Block(const QByteArray &serialized);
-    /**
-     * @brief Block
-     * Initial block construction, prev = nullptr for first block
-     * @param data
-     * @param prev
-     */
-    Block(const QByteArray &data, const Block &prev);
+    Block(const std::string &serialized);
     /**
      * @brief Block
      * Initial block construction, prev = nullptr for first block
@@ -121,6 +114,8 @@ public:
      * @param data
      */
     void addData(const std::string &data);
+
+    void initializeData(const std::string &serializedData);
     /**
      * @brief extract non-empty transactions from data
      * @return transaction list
@@ -136,8 +131,8 @@ public:
 
     // serialization
 
-    virtual QByteArray serialize() const;
-    virtual bool deserialize(const QByteArray &serialized);
+    virtual std::string serialize() const;
+    virtual bool deserialize(const std::string &serialized);
 
     bool equals(const Block &block) const;
     BlockCompare compareBlock(const Block &b) const;
@@ -149,7 +144,6 @@ public:
 
 public:
     virtual void initFields(QList<QByteArray> &list);
-    QList<Block> getDataFromAllBlocks(QList<QByteArray>);
     void setPrevHash(const std::string &value);
     std::string getType() const;
     ActorId getApprover() const;

@@ -61,6 +61,9 @@ private:
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
+    Block lastBlock;
+    Block lastRealBlock;
+
 public:
     // todo: add ref to blockchain
     TransactionManager(AccountController *accountController, Blockchain *blockchain,
@@ -74,6 +77,10 @@ public:
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction> getReceivedTxList() const;
     std::vector<Transaction> getPendingTxs() const;
+    /**
+     * Run make_block and prove_block timers
+     */
+    void runMakeAndProveBlockTimers();
 
 public slots:
     /**
@@ -82,6 +89,7 @@ public slots:
      * Emits SendBlock signal.
      */
     void makeBlock();
+    void makeBlockAndProveTransactionsInThread();
 
     /**
      * If Transaction is valid, adds it to the txList.
@@ -152,6 +160,8 @@ signals:
     void GetTxResponse(Transaction tx);
 
     void finished();
+
+    void addToCache(std::string actor, Transaction tx);
 };
 
 #endif // TX_MANAGER_H

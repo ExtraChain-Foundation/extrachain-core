@@ -205,6 +205,9 @@ namespace Fragments {
           "fragHash   TEXT                NOT NULL"
           ");";
 
+    static const std::string GetCountFragmants = "SELECT COUNT(size) FROM Fragments";
+    static const std::string GetSizeFragmants = "SELECT SUM(size) FROM Fragments";
+
     struct FragmentsInfo {
         std::string actor;
         std::string fileHash;
@@ -317,6 +320,7 @@ namespace Tables {
 namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path &path);
     std::filesystem::path filePath(const ActorId &actorId, const std::string &fileName);
+    std::filesystem::path actorPath(const ActorId &actorId);
 }
 
 namespace Balances {
@@ -329,8 +333,8 @@ namespace Balances {
     const std::string loadBalancesQuery = "SELECT * FROM balances";
 
     struct Balance {
-        std::string Actor;
-        std::string Balance;
+        std::string actor = "";
+        std::string balance = "";
     };
 }
 

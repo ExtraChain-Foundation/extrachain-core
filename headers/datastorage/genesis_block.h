@@ -62,7 +62,7 @@ public:
         std::vector<std::string> l = Serialization::deserialize(serialized);
         if (l.size() == 4) {
             actorId = l.at(0);
-            state = BigNumber(l.at(1));
+            state = BigNumberFloat(l.at(1));
             token = l.at(2);
             type = DataStorage::typeDataRow(std::stoi(l.at(3)));
         }
@@ -92,18 +92,18 @@ public:
     GenesisBlock(const GenesisBlock &block);
 
     // Deserialize already constructed block
-    explicit GenesisBlock(const QByteArray &serialized);
+    explicit GenesisBlock(const std::string &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    explicit GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash);
+    explicit GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash);
 
     // Block interface
 public:
     void addRow(const GenesisDataRow &row);
     std::string getDataForHash() const override;          // deprecate?
     const std::string &getDataForDigSig() const override; // deprecate?
-    bool deserialize(const QByteArray &serialized) override;
-    QByteArray serialize() const override;
+    bool deserialize(const std::string &serialized) override;
+    std::string serialize() const override;
     void initFields(QList<QByteArray> &list) override;
 
     /**
@@ -111,7 +111,6 @@ public:
      * @return genesis data row list
      */
     QList<GenesisDataRow> extractDataRows() const;
-    static bool isGenesisBlock(const QByteArray &serialized);
 
 public:
     std::string getPrevGenHash() const;

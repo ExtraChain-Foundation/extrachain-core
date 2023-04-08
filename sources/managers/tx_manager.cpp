@@ -20,6 +20,8 @@
 #include "managers/tx_manager.h"
 
 #include "managers/extrachain_node.h"
+#include <QtConcurrent>
+#include <QFuture>
 
 QList<Transaction> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
@@ -37,15 +39,11 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
 
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
-    connect(&blockCreationTimer, &QTimer::timeout, this, &TransactionManager::makeBlock);
-    blockCreationTimer.start();
+    connect(&blockCreationTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
 
     // prove timer
-    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
-    connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
-
-    qDebug() << "start timer:";
-    proveTimer.start();
+//    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
+//    connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
 }
 
 void TransactionManager::removeTransaction(int i) {
@@ -62,8 +60,11 @@ void TransactionManager::addTransaction(Transaction tx) {
 
 void TransactionManager::addProvedTransaction(Transaction tx) {
     qDebug() << "addProvedTransaction";
-    if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end())
+    if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end()
+        || pendingTxs.empty()) {
         pendingTxs.push_back(tx);
+        emit addToCache(tx.getReceiver().toStdString(), tx);
+    }
 
     receivedTxList.removeOne(tx);
 }
@@ -93,36 +94,60 @@ void TransactionManager::addVerifiedTx(Transaction tx) {
     pendingTxs.push_back(tx);
 }
 
+void TransactionManager::runMakeAndProveBlockTimers()
+{
+    qDebug() << "start timer:";
+    blockCreationTimer.start();
+    proveTimer.start();
+}
+
 // Block making
 
 void TransactionManager::makeBlock() {
-    qDebug() << "trying makeBlock";
-    Block lastBlock = blockchain->getLastBlock();
     if (pendingTxs.empty()) {
-        Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
-        qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
-        // creating dummy block in as ordinary block
-        Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
-        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
-        blockchain->signBlock(dummyBlock);
-        blockchain->addBlock(dummyBlock);
+//        if(lastRealBlock.isEmpty())
+//            lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
+//        Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
+//        qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
+//        // creating dummy block in as ordinary block
+//        Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
+//        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
+//        blockchain->signBlock(dummyBlock);
+//        const int addedBlock = blockchain->addBlock(dummyBlock);
+//        if(addedBlockResult == 0) {
+//            lastBlock = dummyBlock;
+//        }
+//        lastBlock = block;
         return;
     }
-
+    if(lastBlock.isEmpty())
+        lastBlock = blockchain->getLastBlock();
     // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);
+
+    if(lastRealBlock.isEmpty())
+        lastRealBlock = blockchain->getLastRealBlock();
     std::string data = convertTxs(pendingTxs);
-    qDebug() << "convertTxs" << data.c_str();
-    lastBlock = blockchain->getLastRealBlock();
-    Block block(data, lastBlock);
-    // QList<Transaction> x = block.extractTransactions();
+    Block block(data, lastRealBlock);
     blockchain->signBlock(block);
-    qDebug() << "Created block:" << block.getIndex() << block.getDigSig().c_str();
-    blockchain->addBlock(block);
+    const int addedBlock = blockchain->addBlock(block);
+    if(addedBlock == 0) {
+        lastBlock = block;
+        lastRealBlock = block;
+    }
     this->pendingTxs.clear();
 }
 
+void TransactionManager::makeBlockAndProveTransactionsInThread()
+{
+    QtConcurrent::run([=, this]{
+        makeBlock();
+        proveTransactions();
+    });
+}
+
 void TransactionManager::proveTransactions() {
+    qDebug() << "trying prove transactions in thread" << QThread::currentThreadId();
     for (auto tx : receivedTxList) {
         blockchain->proveTx(tx);
     }

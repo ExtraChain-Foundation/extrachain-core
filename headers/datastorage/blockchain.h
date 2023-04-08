@@ -28,6 +28,7 @@
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/network_manager.h"
 #include "network/message_body.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
@@ -84,7 +85,7 @@ private:
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
 
-    QByteArray getBlockDataByIndex(const BigNumber &index);
+    std::string getBlockDataByIndex(const BigNumber &index);
 
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
@@ -113,13 +114,15 @@ private:
 
 public:
     GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
-                                    QMap<ActorId, BigNumber> states = QMap<ActorId, BigNumber>());
+                                    QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
                                                      BigNumber token = 0);
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
+    void sendBlockByNumber(const BigNumber &index) const;
+    void sendLastGenesisBlock() const;
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -172,7 +175,7 @@ public:
      * @param type of param
      * @return last blockchain block
      */
-    QByteArray getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
+    std::string getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
      * @param value
@@ -301,7 +304,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinReward(const ActorId &receiver, const int &amount, const std::string &messageId = "");
+    void sendCoinReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining

@@ -29,11 +29,11 @@ GenesisBlock::GenesisBlock(const GenesisBlock &block)
     this->prevGenHash = block.getPrevGenHash();
 }
 
-GenesisBlock::GenesisBlock(const QByteArray &serialized) {
+GenesisBlock::GenesisBlock(const std::string &serialized) {
     deserialize(serialized);
 }
 
-GenesisBlock::GenesisBlock(const QByteArray &_data, const Block &prevBlock, const QByteArray &prevGenHash)
+GenesisBlock::GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash)
     : Block(_data, prevBlock)
     , prevGenHash(prevGenHash) {
     this->m_type = Config::GENESIS_BLOCK_TYPE;
@@ -53,13 +53,13 @@ std::string GenesisBlock::getDataForHash() const {
     return Block::getDataForHash();
 }
 
-bool GenesisBlock::deserialize(const QByteArray &serialized) {
+bool GenesisBlock::deserialize(const std::string &serialized) {
     *this = MessagePack::deserialize<GenesisBlock>(serialized);
     return true;
 }
 
-QByteArray GenesisBlock::serialize() const {
-    return QByteArray::fromStdString(MessagePack::serialize(*this));
+std::string GenesisBlock::serialize() const {
+    return MessagePack::serialize(*this);
 }
 
 void GenesisBlock::initFields(QList<QByteArray> &list) {
@@ -86,10 +86,6 @@ QList<GenesisDataRow> GenesisBlock::extractDataRows() const {
         genesisDataRows.append(GenesisDataRow(dataRow));
     }
     return genesisDataRows;
-}
-
-bool GenesisBlock::isGenesisBlock(const QByteArray &serialized) {
-    return serialized.contains(Config::GENESIS_BLOCK_TYPE);
 }
 
 void GenesisBlock::setPrevGenHash(const std::string &value) {

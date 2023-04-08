@@ -27,7 +27,7 @@ void CasheBalanceManager::load() {
     for (const auto &balanceRow : balanceQueryResult) {
         std::string actor = balanceRow.at("actor_id");
         std::string balance = balanceRow.at("balance");
-        balances.push_back(DFS::Balances::Balance { .Actor = actor, .Balance = balance });
+        balances.push_back(DFS::Balances::Balance { .actor = actor, .balance = balance });
     }
 }
 
@@ -59,7 +59,7 @@ bool CasheBalanceManager::add(const std::string &actor_id, const std::string &ba
     const bool result = connector.insert(DFS::Balances::balancesTableName, dbRow);
     connector.close();
     if(result)
-        balances.push_back(DFS::Balances::Balance{.Actor = actor_id, .Balance = balance});
+        balances.push_back(DFS::Balances::Balance{.actor = actor_id, .balance = balance});
     return result;
 }
 
@@ -85,5 +85,5 @@ DFS::Balances::Balance CasheBalanceManager::getBalanceByActorId(const std::strin
     std::string actor = data.at("actor_id");
     std::string balance = data.at("balance");
 
-    return DFS::Balances::Balance { .Actor = actor, .Balance = balance };
+    return DFS::Balances::Balance { .actor = actor, .balance = balance };
 }

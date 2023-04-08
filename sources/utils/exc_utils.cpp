@@ -232,7 +232,7 @@ std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEn
             QByteArray data = file.read(1024);
             sha3.add(data.data(), data.length());
         }
-        return bytesEncodeStdString(sha3.getHash(), encode);
+        return sha3.getHash();
     }
 
     qFatal("Utils::calcHashForFile");

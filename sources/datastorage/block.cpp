@@ -39,27 +39,9 @@ Block::Block(const Block &block) {
     this->signatures = block.signatures;
 }
 
-Block::Block(const QByteArray &serialized)
+Block::Block(const std::string &serialized)
     : Block() {
     this->deserialize(serialized);
-}
-
-Block::Block(const QByteArray &data, const Block &prev)
-    : Block() {
-    if (prev.isEmpty()) {
-        // qDebug() << "BLOCK: Construction first block";
-        this->index = BigNumber("0");
-        this->prevHash = Utils::calcHash("0 index");
-    } else {
-        // qDebug() << "BLOCK: Construction block. Previous block id - "
-        //          << prev->getIndex();
-        this->index = prev.getIndex() + 1;
-        this->prevHash = prev.getHash();
-    }
-
-    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
-
-    this->data = data;
 }
 
 Block::Block(const std::string &data, const Block &prev)
@@ -133,7 +115,7 @@ bool Block::verify(const Actor<KeyPublic> &actor) const {
     return signatures.empty() ? false : res;
 }
 
-bool Block::deserialize(const QByteArray &serialized) {
+bool Block::deserialize(const std::string &serialized) {
     *this = MessagePack::deserialize<Block>(serialized);
     return true;
 }
@@ -155,9 +137,13 @@ BlockCompare Block::compareBlock(const Block &b) const {
 }
 
 void Block::addData(const std::string &data) {
-    std::vector<std::string> v;
+    std::vector<std::string> v = Serialization::deserialize(this->data);
     v.push_back(data);
-    this->data += Serialization::serialize(v);
+    this->data = Serialization::serialize(v);
+}
+
+void Block::initializeData(const std::string &serializedData) {
+    this->data = serializedData;
 }
 
 std::vector<Transaction> Block::extractTransactions() const {
@@ -165,6 +151,7 @@ std::vector<Transaction> Block::extractTransactions() const {
         return {};
 
     std::vector<std::string> txsData = Serialization::deserialize(data);
+
     std::vector<Transaction> transactions;
     for (const std::string &trData : txsData) {
         if (!trData.empty()) {
@@ -195,12 +182,12 @@ bool Block::contain(Block &from) const {
     return true;
 }
 
-QByteArray Block::serialize() const {
-    return QByteArray::fromStdString(MessagePack::serialize(*this));
+std::string Block::serialize() const {
+    return MessagePack::serialize(*this);
 }
 
 QString Block::toString() const {
-    return this->serialize();
+    return QString::fromStdString(this->serialize());
 }
 
 bool Block::isEmpty() const {
@@ -301,37 +288,6 @@ void Block::initFields(QList<QByteArray> &list) {
     }
 }
 
-QList<Block> Block::getDataFromAllBlocks(QList<QByteArray> paths) {
-    // need to realize -- read only to genesis block
-    QList<Block> res;
-
-    //  QString temp;
-    int size = paths.size();
-    for (int count = 0; count < size; ++count) {
-        QFile file(paths.at(count));
-        //        deserialize(file.readAll());
-
-        Block temp(file.readAll());
-        //    QList<QByteArray> list = Serialization::deserialize(
-        //                file.readAll(), Serialization::BLOCK_FIELD_SPLITTER);
-        //    if (list.length() == 7)
-        //    {
-
-        //        temp.type = list.at(0);
-        //        temp.index = BigNumber(list.at(1));
-        //        temp.approver = BigNumber(list.at(2));
-        //        temp.data = list.at(3);
-        //        temp.prevHash = list.at(4);
-        //        temp.hash = list.at(5);
-        //        temp.digSig = list.at(6);
-        //        //return true;
-
-        //    }/
-        res.append(temp);
-    }
-
-    return res;
-}
 long long Block::getDate() const {
     return date;
 }

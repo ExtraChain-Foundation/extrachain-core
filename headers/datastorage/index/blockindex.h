@@ -74,7 +74,7 @@ public:
      */
     Block getBlockById(const BigNumber &id) const;
 
-    QByteArray getBlockDataById(const BigNumber &id) const;
+    std::string getBlockDataById(const BigNumber &id) const;
 
     // todo: if genesis block is found -> return empty block, or skip in search logic
     Block getBlockByPosition(const BigNumber &position) const;
@@ -118,13 +118,13 @@ private:
     QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
                                           int count = 10, BigNumber token = 0) const;
 
-    int add(const BigNumber &id, const QByteArray &_data);
+    int add(const BigNumber &id, const std::string &_data);
     bool hasRecordLimit() const;
     bool recordLimitIsReached() const;
     QString getFolderPath() const;
     QString getFolderName() const;
     BigNumber calcSection(BigNumber id) const;
-    QByteArray getById(const BigNumber &id) const;
+    std::string getById(const BigNumber &id) const;
     BigNumber loadFirstId();
     BigNumber loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,
                                   std::function<QString(const QStringList &files)> getFile);
