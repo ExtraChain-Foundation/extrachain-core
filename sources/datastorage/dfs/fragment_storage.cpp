@@ -254,6 +254,8 @@ DBRow FragmentStorage::makeFragmentRow(uint64_t pos, uint64_t storedPos, uint64_
     row.insert({ "pos", std::to_string(pos) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(size) });
+    row.insert({ "fragHash", fileHash });
+
     return row;
 }
 

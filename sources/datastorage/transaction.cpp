@@ -259,6 +259,12 @@ bool Transaction::isEmpty() const {
         && approver.isEmpty() && hash.empty();
 }
 
+bool Transaction::isBurn() const
+{
+    return sender.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
+        && approver.isEmpty() && hash.empty();
+}
+
 bool Transaction::deserialize(const std::string &serialized) {
     *this = MessagePack::deserialize<Transaction>(serialized);
     return true;

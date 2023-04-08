@@ -53,8 +53,8 @@ void TransactionManager::removeTransaction(int i) {
 void TransactionManager::addTransaction(Transaction tx) {
     qDebug() << QString("TRANSACTION MANAGER: addTransaction [%1]").arg(tx.toString());
 
-    if (tx.isEmpty())
-        return;
+//    if (tx.isEmpty())
+//        return;
     receivedTxList.append(tx);
 }
 

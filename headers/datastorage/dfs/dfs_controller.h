@@ -57,7 +57,7 @@ public:
     // Internal use only
     std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
-    bool removeLocalFile(const std::string &actorId, const std::string &filePath);
+    bool removeLocalFile(const std::string &actorId, const std::string &fileHash);
     // visualMoveFile
 
     // External interfaces
@@ -88,6 +88,7 @@ private:
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
     void loadBytesLimit();
     void eraseFirstUnsynchronizedDir();
+    void removeRowFromDB(const DFSP::RemoveFileMessage &msg);
     void requestFileSegment(const DFSP::DirRow &row);
 
 public:

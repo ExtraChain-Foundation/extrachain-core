@@ -163,7 +163,7 @@ void Blockchain::saveTxInfoInEC(const std::string &data) const {
                         "Type      TEXT     NOT NULL );");
 
     for (const auto &i : l) {
-        auto q = MessagePack::deserialize<Transaction>(i);
+        auto q = Transaction(i);
 
         // modify sender data in db
         extractData =
@@ -975,28 +975,24 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
 }
 
 void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amount) {
-    uint64_t dataStoredSize = 100000;//node->dfs()->calculateDataAmountStored();
-    DFSR::RequestReward requestReward { .Actor = receiver.toStdString(),
-                                        .DataStoredSize = dataStoredSize,
-                                        .TypeFunctioning = DFSR::TypeFunctioning::Test };
-    node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+    DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
+    node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
 }
 
-void Blockchain::sendCoinsReward(DFSR::RequestReward &requestReward, const std::string &messageId) {
-    Transaction rewardTx = node->dataMiningManager()->makeRewardTx(requestReward);
-
-    switch (requestReward.TypeFunctioning) {
-    case DFSR::TypeFunctioning::Base: {
-        node->network()->send_message(rewardTx, MessageType::BlockchainTransaction,
-                                      MessageStatus::Response, messageId);
-        break;
-    }
-    case DFSR::TypeFunctioning::Test: {
-        requestReward.RewardAmount = rewardTx.getAmount();
-        node->network()->send_message(requestReward, MessageType::BlockchainCoinReward,
-                                      MessageStatus::Response, messageId);
-        break;
-    }
+void Blockchain::sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount,
+                                 const std::string &messageId) {
+    auto mainActor = node->accountController()->mainActor();
+    if (mainActor.id() == node->actorIndex()->firstId()) {
+        Transaction tx;
+        tx.setSender(mainActor.id());
+        tx.setReceiver(receiver);
+        tx.setAmount(amount);
+        tx.setDate(QDateTime::currentMSecsSinceEpoch());
+        node->network()->send_message(tx, MessageType::BlockchainTransaction);
+    } else {
+        DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
+        node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
+                                      messageId);
     }
 }
 
@@ -1184,6 +1180,9 @@ void Blockchain::proveTx(Transaction &tx) {
     if ((receiverActor.empty() && !targetReceiver.isEmpty())
         || (senderActor.empty() && !targetSender.isEmpty())) {
         txManager->removeUnApprovedTransaction(tx);
+        if (receiverActor.empty()) {
+            txManager->addProvedTransaction(tx);
+        }
         qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }
@@ -1222,7 +1221,11 @@ void Blockchain::proveTx(Transaction &tx) {
 
     // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.isEmpty()) {
-        //
+        qDebug() << "target received is empty";
+        tx.sign(node->accountController()->currentWallet());
+
+        txManager->addProvedTransaction(tx);
+        return;
     } else {
         if (tx.getData() == "InitContract") {
             return;

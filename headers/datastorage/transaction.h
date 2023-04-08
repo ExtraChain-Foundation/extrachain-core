@@ -116,6 +116,7 @@ public:
     ActorId getProducer() const;
 
     virtual bool isEmpty() const;
+    virtual bool isBurn() const;
     bool operator==(const Transaction &transaction) const;
     bool operator!=(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);
