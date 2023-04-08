@@ -591,7 +591,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             qDebug() << "run code from " << transactionData.path.c_str()
                      << "with hash: " << transactionData.hash.c_str();
         }
-        node.txManager()->addTransaction(transaction);
+        node.createTransaction(transaction);
         break;
     }
 
