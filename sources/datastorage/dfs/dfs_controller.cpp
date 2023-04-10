@@ -659,6 +659,36 @@ uint64_t DfsController::calculateDataAmountStored(const std::string &folder) con
     return size;
 }
 
+std::string DfsController::makeReferenceFile(const std::string &actor, const std::string &nameFile, const DFS::Packets::ReferenceData &referenceData) {
+    std::string result;
+    result.append(DFS_PATH::filePath(actor, nameFile));
+    result.append("|");
+    result.append(referenceData.toString());
+    return result;
+}
+
+void DfsController::dataFromReferenceString(const std::string &referenceStr, std::string &actor, std::string &nameFile, DFS::Packets::ReferenceData &referenceData) {
+    std::string delimiter = "|";
+    int posDelimiter = referenceStr.find(delimiter);
+    std::string filePath = referenceStr.substr(0, posDelimiter);
+    filePath.erase(0, 4);
+    std::string pathdelimiter = "/";
+    int posPathDelimiter = filePath.find(pathdelimiter);
+    actor = filePath.substr(0, posPathDelimiter);
+    nameFile = filePath.substr(posPathDelimiter+1, filePath.length()-1);
+
+    std::string referenceDataStr = referenceStr.substr(posDelimiter+2, referenceStr.size()-2);
+    std::string comadelimiter = ",";
+    std::string keyData = referenceDataStr.substr(0, referenceDataStr.find(comadelimiter)-1);
+    keyData.erase(0, keyData.find(":") + 2);
+
+    std::string allowData = referenceDataStr.substr(referenceDataStr.find(comadelimiter) +2,
+                                                    referenceDataStr.length()-2);
+    allowData.erase(0, allowData.find(":") + 2);
+    allowData.erase(allowData.size() -2, allowData.size()-1);
+    referenceData = DFS::Packets::ReferenceData(keyData,allowData);
+}
+
 std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
                                            uint64_t fragmentSize) {
     boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset,
