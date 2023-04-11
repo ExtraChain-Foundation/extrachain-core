@@ -996,6 +996,10 @@ void Blockchain::sendCoinsReward(const ActorId &receiver, const BigNumberFloat &
     }
 }
 
+void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId) {
+    sendCoinsReward(requestReward.Actor, requestReward.RewardAmount, messageId);
+}
+
 void Blockchain::setPossibleMining(const bool &value) {
     if (value != possibleMining) {
         emit possibleMiningChange(value);

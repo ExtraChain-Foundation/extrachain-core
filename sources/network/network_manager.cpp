@@ -648,8 +648,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             case DFS::Reward::Base:
                 break;
             }
-
-//            node.blockchain()->receiveCoins(requestReward.);
             break;
         }
         default:

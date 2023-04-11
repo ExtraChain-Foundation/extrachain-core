@@ -28,8 +28,8 @@
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
-#include "network/network_manager.h"
 #include "network/message_body.h"
+#include "network/network_manager.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QMutex>
@@ -123,6 +123,11 @@ public:
     BigNumber getFullSupply(const QByteArray &idToken);
     void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
+    /**
+     * @brief Send coins reward
+     */
+    void sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId);
+    void sendCoinsReward(const DFSR::RequestReward &requestReward, const std::string &messageId);
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -309,7 +314,8 @@ public:
     /**
      * @brief Receive coins
      */
-    void receiveCoins(const ActorId &receiver, const BigNumberFloat &amount) {}
+    void receiveCoins(const ActorId &receiver, const BigNumberFloat &amount) {
+    }
     /**
      * @brief Send reward amount
      */
