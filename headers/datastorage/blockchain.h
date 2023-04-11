@@ -127,7 +127,6 @@ public:
      * @brief Send coins reward
      */
     void sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId);
-    void sendCoinsReward(const DFSR::RequestReward &requestReward, const std::string &messageId);
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -319,7 +318,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinsReward(DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
+    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining
