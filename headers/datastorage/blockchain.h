@@ -81,7 +81,7 @@ public:
     ~Blockchain();
 
 private:
-    Block getBlockByIndex(const BigNumber &index);
+    Block getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
 

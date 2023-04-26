@@ -40,9 +40,9 @@ Blockchain::Blockchain(ExtraChainNode *node, bool fileMode)
 Blockchain::~Blockchain() {
 }
 
-Block Blockchain::getBlockByIndex(const BigNumber &index) {
+Block Blockchain::getBlockByIndex(const BigNumber &index, const bool makeRequestBlock) {
     Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-    if (block.isEmpty()) {
+    if (block.isEmpty() && index >= 0 && makeRequestBlock) {
         std::pair<std::string, BigNumber> requestData(Config::DATA_BLOCK_TYPE, index);
         node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
     }
@@ -215,7 +215,7 @@ QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id
 }
 
 void Blockchain::getBlockZero() {
-    Block zero = getBlockByIndex(0);
+    Block zero = getBlockByIndex(0, true);
     if (zero.isEmpty()) {
         // TODONEW
         // Messages::GetBlockMessage request;
@@ -274,7 +274,7 @@ void Blockchain::sendBlockByNumber(const BigNumber &index) const {
         node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
     } else {
         data = answerBlock.serialize();
-        node->network()->send_message(data, MessageType::BlockchainNewBlock);
+//        node->network()->send_message(data, MessageType::BlockchainNewBlock);
     }
 }
 
