@@ -80,14 +80,15 @@ public:
     Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
-private:
     Block getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
+    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+
+private:
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
 
     std::string getBlockDataByIndex(const BigNumber &index);
 
-    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxBySenderOrReceiver(const BigNumber &id,

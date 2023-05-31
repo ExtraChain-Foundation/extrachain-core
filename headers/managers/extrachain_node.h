@@ -42,6 +42,7 @@ class Actor;
 class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
+class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -56,6 +57,7 @@ private:
     AccountController *m_accountController = nullptr;
     DataMiningManager *m_dmm = nullptr;
     ConnectionsManager *m_connectionsManager = nullptr;
+    RestApiServerManager *m_restApiServerManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
     bool fileMode = true;
@@ -63,7 +65,7 @@ private:
     bool isClientApplication = false;
 
 public:
-    ExtraChainNode(bool isClientApp = false);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
 
     bool createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
