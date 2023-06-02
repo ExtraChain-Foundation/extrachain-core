@@ -996,7 +996,8 @@ void Blockchain::sendCoinsReward(const ActorId &receiver, const BigNumberFloat &
     }
 }
 
-void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId) {
+void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward,
+                                 const std::string &messageId) {
     sendCoinsReward(requestReward.Actor, requestReward.RewardAmount, messageId);
 }
 
@@ -1010,6 +1011,11 @@ void Blockchain::setPossibleMining(const bool &value) {
 bool Blockchain::getPossibleMining() const {
     return possibleMining;
 }
+
+BigNumber Blockchain::getBlockIndexLastFarmingTx() const {
+    return blockIndex.getIndexBlockByLastFarmingTx();
+}
+
 [[maybe_unused]] void Blockchain::process() {
     //
 }

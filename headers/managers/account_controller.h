@@ -64,6 +64,7 @@ public:
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
     const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
     const std::vector<ActorId> accountsIds() const;
+    const std::vector<ActorId> farmingIds() const;
     const Actor<KeyPrivate> &currentWallet() const;         // temp
     void clear();
 

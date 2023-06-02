@@ -331,6 +331,11 @@ public:
      */
     bool getPossibleMining() const;
 
+    /**
+     * @brief Get block index contains farming transaction
+     */
+    BigNumber getBlockIndexLastFarmingTx() const;
+
 signals:
     void newNotify(Notification ntf);
     void addActorInActorIndex(Actor<KeyPublic> actor);

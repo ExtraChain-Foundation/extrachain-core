@@ -105,6 +105,7 @@ public:
     BigNumber getLastSavedId() const;
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
+    BigNumber getIndexBlockByLastFarmingTx() const;
     int removeById(const BigNumber &id);
     void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;

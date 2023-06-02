@@ -28,7 +28,8 @@
 #include <QString>
 enum class TypeTx {
     Transaction = 0,
-    RewardTransaction = 1
+    RewardTransaction = 1,
+    UnlockFarmingTransaction = 2
 };
 MSGPACK_ADD_ENUM(TypeTx)
 FORMAT_ENUM(TypeTx)
@@ -147,6 +148,7 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
+    bool isUnlockFarmingTransaction() const;
     TypeTx getTypeTx() const;
     virtual void setTypeTx(TypeTx newTypeTx);
 

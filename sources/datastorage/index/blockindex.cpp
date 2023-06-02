@@ -661,6 +661,26 @@ BigNumber BlockIndex::getRecords() const {
     return this->records;
 }
 
+BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const
+{
+    if(getRecords().isEmpty())
+        return BigNumber(-1);
+
+    BigNumber lastBlockId = getLastSavedId();
+
+    while (lastBlockId >= getFirstSavedId()) {
+        Block lastBlock = getBlockById(lastBlockId);
+        auto txs = lastBlock.extractTransactions();
+
+        for (const Transaction &tx : txs) {
+            if(tx.isUnlockFarmingTransaction())
+                return lastBlockId;
+        }
+        --lastBlockId;
+    }
+    return BigNumber(-1);
+}
+
 std::string BlockIndex::getById(const BigNumber &id) const {
     QString path = buildFilePath(id);
     QFile file(path);
