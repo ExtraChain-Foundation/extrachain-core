@@ -102,6 +102,7 @@ public:
 
     Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
+    Transaction createFarmingTransaction(ActorId sender);
     std::string exportUser();
     bool importUser(const std::string &data, const std::string &login, const std::string &password);
     // TODO: prepareImportUser: get visual info about file

@@ -359,6 +359,13 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
     return Transaction();
 }
 
+Transaction ExtraChainNode::createFarmingTransaction(ActorId sender) {
+    qDebug() << sender;
+    Transaction tx(sender, sender, 0);
+    tx.setTypeTx(TypeTx::UnlockFarmingTransaction);
+    return this->createTransaction(tx);
+}
+
 void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
         ActorId actorId = m_accountController->mainActor().id();
