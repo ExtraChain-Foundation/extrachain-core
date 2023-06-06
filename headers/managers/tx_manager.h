@@ -64,6 +64,8 @@ private:
     Block lastBlock;
     Block lastRealBlock;
 
+    std::list<FarmingTransactionData> farmingTxs;
+
 public:
     // todo: add ref to blockchain
     TransactionManager(AccountController *accountController, Blockchain *blockchain,

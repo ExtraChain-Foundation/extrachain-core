@@ -212,6 +212,9 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         tx.sign(actor);
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
+        if(tx.isFarmingTransaction()) {
+            m_txManager->addTransaction(tx);
+        }
         if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId())
             m_txManager->addTransaction(tx);
     } else {
@@ -362,7 +365,7 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
 Transaction ExtraChainNode::createFarmingTransaction(ActorId sender) {
     qDebug() << sender;
     Transaction tx(sender, sender, 0);
-    tx.setTypeTx(TypeTx::UnlockFarmingTransaction);
+    tx.setTypeTx(TypeTx::FarmingTransaction);
     return this->createTransaction(tx);
 }
 

@@ -661,9 +661,8 @@ BigNumber BlockIndex::getRecords() const {
     return this->records;
 }
 
-BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const
-{
-    if(getRecords().isEmpty())
+BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const {
+    if (getRecords().isEmpty())
         return BigNumber(-1);
 
     BigNumber lastBlockId = getLastSavedId();
@@ -673,12 +672,37 @@ BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const
         auto txs = lastBlock.extractTransactions();
 
         for (const Transaction &tx : txs) {
-            if(tx.isUnlockFarmingTransaction())
+            if (tx.isFarmingTransaction())
                 return lastBlockId;
         }
         --lastBlockId;
     }
     return BigNumber(-1);
+}
+
+std::list<FarmingTransactionData> BlockIndex::getAllLockedFarmingTransactions() const {
+    std::list<FarmingTransactionData> farmingsTxs;
+    if (getRecords().isEmpty())
+        return farmingsTxs;
+
+    BigNumber lastBlockId = getLastSavedId();
+    BigNumber farmingBlockIndex = BigNumber(302400);
+    BigNumber toBlockIndex =
+        (lastBlockId - farmingBlockIndex) > 0 ? (lastBlockId - farmingBlockIndex) : getFirstSavedId();
+
+    while (lastBlockId >= getFirstSavedId() || lastBlockId >= toBlockIndex) {
+        Block lastBlock = getBlockById(lastBlockId);
+        auto txs = lastBlock.extractTransactions();
+
+        for (const Transaction &tx : txs) {
+            if (tx.isFarmingTransaction())
+                farmingsTxs.push_front(
+                    FarmingTransactionData { .index = farmingBlockIndex - lastBlockId, .transaction = tx });
+        }
+        --lastBlockId;
+    }
+
+    return farmingsTxs;
 }
 
 std::string BlockIndex::getById(const BigNumber &id) const {

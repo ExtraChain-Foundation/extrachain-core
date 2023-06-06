@@ -91,9 +91,9 @@ bool Transaction::isRewardTransaction() const {
     return typeTx == TypeTx::RewardTransaction;
 }
 
-bool Transaction::isUnlockFarmingTransaction() const
+bool Transaction::isFarmingTransaction() const
 {
-    return typeTx == TypeTx::UnlockFarmingTransaction;
+    return typeTx == TypeTx::FarmingTransaction;
 }
 
 void Transaction::setProducer(const ActorId &value) {

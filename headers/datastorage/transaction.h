@@ -29,7 +29,7 @@
 enum class TypeTx {
     Transaction = 0,
     RewardTransaction = 1,
-    UnlockFarmingTransaction = 2
+    FarmingTransaction = 2
 };
 MSGPACK_ADD_ENUM(TypeTx)
 FORMAT_ENUM(TypeTx)
@@ -148,12 +148,25 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
-    bool isUnlockFarmingTransaction() const;
+    bool isFarmingTransaction() const;
     TypeTx getTypeTx() const;
     virtual void setTypeTx(TypeTx newTypeTx);
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
                    digSig, typeTx)
+};
+
+struct FarmingTransactionData {
+    BigNumber index;
+    Transaction transaction;
+
+    void decrementIndex() {
+        index -= BigNumber(1);
+    }
+
+    bool canImproveTx() {
+        return index <= 0;
+    }
 };
 
 #endif // TRANSACTION_H

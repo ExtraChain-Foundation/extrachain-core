@@ -336,6 +336,12 @@ public:
      */
     BigNumber getBlockIndexLastFarmingTx() const;
 
+    /**
+     * @brief Get all farming txs
+     */
+
+    std::list<FarmingTransactionData> getFarmingTxs() const;
+
 signals:
     void newNotify(Notification ntf);
     void addActorInActorIndex(Actor<KeyPublic> actor);

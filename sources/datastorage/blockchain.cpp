@@ -1016,6 +1016,11 @@ BigNumber Blockchain::getBlockIndexLastFarmingTx() const {
     return blockIndex.getIndexBlockByLastFarmingTx();
 }
 
+std::list<FarmingTransactionData> Blockchain::getFarmingTxs() const
+{
+    return blockIndex.getAllLockedFarmingTransactions();
+}
+
 [[maybe_unused]] void Blockchain::process() {
     //
 }

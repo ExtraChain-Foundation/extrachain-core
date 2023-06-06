@@ -23,6 +23,7 @@
 #include "datastorage/block.h"
 #include "datastorage/genesis_block.h"
 #include "utils/db_connector.h"
+#include <list>
 
 class EXTRACHAIN_EXPORT BlockIndex {
 public:
@@ -106,6 +107,7 @@ public:
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
     BigNumber getIndexBlockByLastFarmingTx() const;
+    std::list<FarmingTransactionData> getAllLockedFarmingTransactions() const;
     int removeById(const BigNumber &id);
     void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;
