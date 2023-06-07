@@ -890,7 +890,7 @@ BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
+BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeTx typeTx) const {
     BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
@@ -913,6 +913,9 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
 
         auto txs = currentBlock.extractTransactions();
         for (auto &tx : txs) {
+            if(tx.getTypeTx() != typeTx)
+                continue;
+
             if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
                 balance += tx.getAmount();
             }

@@ -280,7 +280,8 @@ public:
      */
     BigNumber getRecords() const;
 
-    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId) const;
+    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId = ActorId(),
+                                  TypeTx typeTx = TypeTx::Transaction) const;
 
     /**
      * @brief Show blockchain
