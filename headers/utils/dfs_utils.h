@@ -169,6 +169,7 @@ namespace Packets {
     };
 
     struct StateMessage {
+        std::string FarmingActor;
         StateMessageType StateTypeMessage;
         uint64_t DataAmountStored;
         double Coefficient = 0.5;
@@ -177,7 +178,7 @@ namespace Packets {
         float BlockProductionRate = 0.5;
         uint64_t CoinProductionAlgorithmTickPerHour = 18;
 
-        MSGPACK_DEFINE(StateTypeMessage, DataAmountStored, Coefficient, CoinProducedForNode,
+        MSGPACK_DEFINE(FarmingActor, StateTypeMessage, DataAmountStored, Coefficient, CoinProducedForNode,
                        CoinProductionAlgorithmTickBlocks, BlockProductionRate,
                        CoinProductionAlgorithmTickPerHour)
     };

@@ -64,7 +64,7 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
 
     Transaction rewardTx;
     rewardTx.setAmount(result);
-    rewardTx.setReceiver(mb.sender_id);
+    rewardTx.setReceiver(node->accountController()->currentProfile().farmings()[0].id());
     rewardTx.setSender(node->actorIndex()->firstId());
     rewardTx.setTypeTx(TypeTx::RewardTransaction);
     rewardTx.setToken(ActorId());
@@ -100,6 +100,7 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
     if (blockIndex % CoinProductionRate == 0) {
         qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
         DFSP::StateMessage stateMessage;
+        stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
         stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
         if(stateMessage.DataAmountStored > 0)
             node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
