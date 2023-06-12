@@ -1167,7 +1167,7 @@ void Blockchain::proveTx(Transaction &tx) {
     ActorId targetSender = tx.getSender();
     ActorId targetReceiver = tx.getReceiver();
     // start reward check
-    if (tx.isRewardTransaction()) {
+    if (tx.isRewardTransaction() || tx.isFarmingTransaction()) {
         targetSender = tx.getApprover();
         // TODO: add extended check of validity
         auto res = this->blockIndex.getLastTxByData(tx.getData());

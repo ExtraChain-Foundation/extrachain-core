@@ -29,7 +29,8 @@
 enum class TypeTx {
     Transaction = 0,
     RewardTransaction = 1,
-    FarmingTransaction = 2
+    FarmingTransaction = 2,
+    FarmingLockedTransaction = 3
 };
 MSGPACK_ADD_ENUM(TypeTx)
 FORMAT_ENUM(TypeTx)
@@ -149,6 +150,7 @@ public:
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
     bool isFarmingTransaction() const;
+    bool isLockedFarmingTransaction() const;
     TypeTx getTypeTx() const;
     virtual void setTypeTx(TypeTx newTypeTx);
 

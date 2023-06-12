@@ -182,6 +182,13 @@ namespace DataStorage {
           "type INT              NOT NULL  "
           ");";
 
+    static const std::string farmingCacheTable = "FarmingCache";
+    static const std::string farmingTableCreate = "CREATE TABLE IF NOT EXISTS " + farmingCacheTable
+        + " ("
+          "id   TEXT PRIMARY KEY NOT NULL, "
+          "blockIndex INT              NOT NULL  "
+          ");";
+
     // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 

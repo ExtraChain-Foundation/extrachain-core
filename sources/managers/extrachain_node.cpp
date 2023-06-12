@@ -75,7 +75,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
 
-    if(allowRunRestApiServer) {
+    if (allowRunRestApiServer) {
         m_restApiServerManager = new RestApiServerManager(this);
     }
 
@@ -212,7 +212,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         tx.sign(actor);
         qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
 
-        if(tx.isFarmingTransaction()) {
+        if (tx.isFarmingTransaction() || tx.isLockedFarmingTransaction()) {
             m_txManager->addTransaction(tx);
         }
         if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId())
@@ -362,10 +362,12 @@ Transaction ExtraChainNode::createTransactionFrom(ActorId sender, ActorId receiv
     return Transaction();
 }
 
-Transaction ExtraChainNode::createFarmingTransaction(ActorId sender) {
+Transaction ExtraChainNode::createFarmingTransaction(ActorId sender, const BigNumberFloat &amount,
+                                                     const TypeTx &typeTx) {
     qDebug() << sender;
     Transaction tx(sender, sender, 0);
-    tx.setTypeTx(TypeTx::FarmingTransaction);
+    tx.setTypeTx(typeTx);
+    tx.setAmount(amount);
     return this->createTransaction(tx);
 }
 

@@ -31,6 +31,7 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
+#include "data_mining_manager.h"
 
 class ExtraChainNode;
 

@@ -43,7 +43,7 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
             &TransactionManager::makeBlockAndProveTransactionsInThread);
 
     farmingTxs = blockchain->getFarmingTxs();
-
+    blockCreationTimer.start();
     // prove timer
     //    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
     //    connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
@@ -109,6 +109,10 @@ void TransactionManager::makeBlock() {
         if(farmingTransactionData.canImproveTx())
             pendingTxs.push_back(farmingTransactionData.transaction);
     }
+
+    extraChainNode->dataMiningManager()->interestAccrual();
+
+
     if (pendingTxs.empty()) {
         //        if(lastRealBlock.isEmpty())
         //            lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
