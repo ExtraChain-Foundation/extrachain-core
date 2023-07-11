@@ -745,7 +745,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
 }
 
 int Blockchain::removeBlock(const Block &block) {
-    return fileMode ? blockIndex.removeById(block.getIndex()) : memIndex.removeById(block.getIndex());
+    return fileMode ? blockIndex.removeById(block) : memIndex.removeById(block.getIndex());
 }
 
 void Blockchain::removeAllDummyBlocks(const Block &block) {
@@ -877,10 +877,6 @@ void Blockchain::signBlock(Block &block) const {
     block.sign(node->accountController()->currentWallet());
 }
 
-BigNumber Blockchain::getBlockChainLength() const {
-    return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
-}
-
 QString Blockchain::getLastBlockData() const {
     return fileMode ? QString::fromStdString(blockIndex.getLastBlock().getData())
                     : QString::fromStdString(memIndex.getLastBlock().getData());
@@ -888,6 +884,16 @@ QString Blockchain::getLastBlockData() const {
 
 BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
+}
+
+BigNumber Blockchain::getCountRealBlockRecords() const
+{
+    return blockIndex.getCountRealBlocks();
+}
+
+int Blockchain::getCountTransactionsInBlocks() const
+{
+    return blockIndex.getCountTransactionsInBlocks();
 }
 
 BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {

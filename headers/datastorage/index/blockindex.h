@@ -41,6 +41,8 @@ public:
     BigNumber records = 0;
     BigNumber firstSavedId = -1;
     BigNumber lastSavedId = -1;
+    BigNumber realBlockRecords = 0;
+    int countTransactions = 0;
 
 public:
     /**
@@ -105,12 +107,16 @@ public:
     BigNumber getLastSavedId() const;
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
-    int removeById(const BigNumber &id);
+    BigNumber getCountRealBlocks() const;
+    int getCountTransactionsInBlocks() const;
+    int removeById(const Block &block);
     void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;
     BigNumberFloat calculateCirculativeBalance() const;
     BigNumberFloat calculateCirculativeBalanceBlock(const Block &block) const;
     BigNumberFloat calculateCirculativeBalanceLastGenesisBlock() const;
+
+    void calculationCountBlock();
 
 private:
     std::pair<Transaction, QByteArray> getLastTxByParam(const std::string &id, SearchEnum::TxParam param,

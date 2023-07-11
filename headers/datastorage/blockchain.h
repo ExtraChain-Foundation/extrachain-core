@@ -265,11 +265,6 @@ public:
     BlockIndex &getBlockIndex();
 
     /**
-     * @brief Gets block count in a local storage
-     * @return block count
-     */
-    BigNumber getBlockChainLength() const;
-    /**
      * @brief Gets last block data field
      * @return data
      */
@@ -279,6 +274,18 @@ public:
      * @return records
      */
     BigNumber getRecords() const;
+    /**
+     * @brief getCountRealBlockRecords
+     * @return count real blocks
+     */
+    BigNumber getCountRealBlockRecords() const;
+
+    /**
+     * @brief getCountTransactionsInBlocks
+     * @return count transactions in blocks
+     */
+
+    int getCountTransactionsInBlocks() const;
 
     BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId) const;
 
