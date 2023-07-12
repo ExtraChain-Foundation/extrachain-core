@@ -1,10 +1,14 @@
 #include "managers/restApiServerManager.h"
 
 RestApiServerManager::RestApiServerManager(ExtraChainNode *extrachainNode, QObject *parent)
-    : QObject(parent),
-    timer(new QTimer(this)){
+    : QObject(parent)
+    , timer(new QTimer(this))
+    , COUNT_BLOCKS("/extrachain/count_blocks")
+    , CONTENT_BLOCK("/extrachain/listener_contents_block")
+    , TRANSACTIONS_BY_HASH("/extrachain/listener_transactions_by_hash")
+    , COUNT_REAL_BLOCKS("/extrachain/listener_count_real_blocks")
+    , TRANSACTIONS_IN_BLOCKS("/extrachain/listener_transactions_in_blocks") {
     _extrachainNode = extrachainNode;
-
     timer->setInterval(ANSWER_INTERVAL_IN_SEC);
     connect(timer, &QTimer::timeout, this, &RestApiServerManager::runRequests);
     run();
@@ -26,14 +30,16 @@ void RestApiServerManager::handle_get_contents_block(http_request request) {
     qDebug() << "\nhandle GET contents block\n";
 
     auto answer = json::value::object();
-    actorIdRequest(request, answer);
     auto queries = request.relative_uri().split_query(request.relative_uri().query());
     auto it = queries.find("block_number");
     if (it->first.empty()) {
         qDebug() << "no block number";
+        answer["answer"] = json::value::string("no block number");
         request.reply(status_codes::OK, answer);
         return;
     }
+
+    actorIdRequest(request, answer);
 
     Block block = _extrachainNode->blockchain()->getBlockByIndex(BigNumber(it->second, 10));
 
@@ -53,7 +59,6 @@ void RestApiServerManager::handle_get_transactions_by_hash(http_request request)
     qDebug() << "\nhandle GET transactions by hash\n" << request.headers().size();
 
     auto answer = json::value::object();
-    actorIdRequest(request, answer);
     auto queries = request.relative_uri().split_query(request.relative_uri().query());
 
     auto it = queries.find("hash_tx");
@@ -63,6 +68,8 @@ void RestApiServerManager::handle_get_transactions_by_hash(http_request request)
         request.reply(status_codes::OK, answer);
         return;
     }
+
+    actorIdRequest(request, answer);
 
     const std::pair<Transaction, QByteArray> txByHash =
         _extrachainNode->blockchain()->getTxByHash(QByteArray::fromStdString(it->second));
@@ -116,6 +123,14 @@ void RestApiServerManager::handle_get_count_transactions_in_blocks(http_request 
     request.reply(status_codes::OK, answer);
 }
 
+void RestApiServerManager::setIntervalRequestReply(const int &interval) {
+    timer->setInterval(interval);
+}
+
+int RestApiServerManager::port() const {
+    return listeningPort;
+}
+
 void RestApiServerManager::runRequests() {
     qDebug() << "Size mapOfNoAnswerRequests: " << listOfNoAnswerRequests.size();
     for (const auto request : listOfNoAnswerRequests) {
@@ -128,19 +143,19 @@ void RestApiServerManager::runRequests() {
                 handle_get_count_blocks(request);
             }
 
-            else if (requestUri.starts_with(CONTENT_BLOCK)) {
+            if (requestUri.starts_with(CONTENT_BLOCK)) {
                 handle_get_contents_block(request);
             }
 
-            else if (requestUri.starts_with(TRANSACTIONS_BY_HASH)) {
+            if (requestUri.starts_with(TRANSACTIONS_BY_HASH)) {
                 handle_get_transactions_by_hash(request);
             }
 
-            else if (requestUri.starts_with(COUNT_REAL_BLOCKS)) {
+            if (requestUri.starts_with(COUNT_REAL_BLOCKS)) {
                 handle_get_count_real_blocks(request);
             }
 
-            else if (requestUri.starts_with(TRANSACTIONS_IN_BLOCKS)) {
+            if (requestUri.starts_with(TRANSACTIONS_IN_BLOCKS)) {
                 handle_get_count_transactions_in_blocks(request);
             }
         }
@@ -170,7 +185,7 @@ void RestApiServerManager::run() {
                 })
                 .wait();
 
-            // data block
+                   // data block
             listener_contents_block = http_listener(
                 QString("http://localhost:%1%2").arg(port).arg(CONTENT_BLOCK.c_str()).toStdString());
 
@@ -181,7 +196,7 @@ void RestApiServerManager::run() {
                 .then([=]() { qDebug() << "\nstarting to listen contents block\n"; })
                 .wait();
 
-            // transaction by hash
+                   // transaction by hash
             listener_transactions_by_hash = http_listener(
                 QString("http://localhost:%1%2").arg(port).arg(TRANSACTIONS_BY_HASH.c_str()).toStdString());
             listener_transactions_by_hash.support(
@@ -193,7 +208,7 @@ void RestApiServerManager::run() {
                 .then([=]() { qDebug() << "\nstarting to listen transactions by hash\n"; })
                 .wait();
 
-            // count real blocks
+                   // count real blocks
             listener_count_real_blocks = http_listener(
                 QString("http://localhost:%1%2").arg(port).arg(COUNT_REAL_BLOCKS.c_str()).toStdString());
 
@@ -205,7 +220,7 @@ void RestApiServerManager::run() {
                 .then([=]() { qDebug() << "\nstarting to listen count real blocks\n"; })
                 .wait();
 
-            // count transactions in blocks
+                   // count transactions in blocks
             listener_transactions_in_blocks = http_listener(
                 QString("http://localhost:%1%2").arg(port).arg(TRANSACTIONS_IN_BLOCKS.c_str()).toStdString());
 
@@ -217,6 +232,8 @@ void RestApiServerManager::run() {
             listener_transactions_in_blocks.open()
                 .then([=]() { qDebug() << "\nstarting to listen count transactions in blocks\n"; })
                 .wait();
+
+            listeningPort = port;
 
             while (true)
                 ;
@@ -238,6 +255,18 @@ void RestApiServerManager::actorIdRequest(http_request request, json::value answ
     }
 
     std::string actorId = actorIdIt->second;
+    auto delayed_request = queries.find("is_delayed");
+    if (!delayed_request->first.empty() && std::stoi(delayed_request->second) == 1) {
+        qDebug() << "Current request is delayed";
+        std::vector<http_request> requests;
+        requests.push_back(std::move(request));
+        listOfNoAnswerRequests.insert(
+            std::pair<std::string, std::vector<http_request>>(actorId, requests));
+        answer["answer"] = json::value::string("query is delayed. Answer will be later.");
+        request.reply(status_codes::OK, answer);
+        return;
+    }
+
     int currentSecsSinceEpoch = QDateTime::currentSecsSinceEpoch();
     auto historyItem = mapOfHistory.find(actorId);
     if (!historyItem->first.empty()) {
