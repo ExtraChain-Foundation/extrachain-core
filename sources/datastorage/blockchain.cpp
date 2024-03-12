@@ -979,18 +979,17 @@ void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amo
     node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
 }
 
-void Blockchain::sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount,
-                                 const std::string &messageId) {
+void Blockchain::sendCoinsReward(DFS::Reward::RequestReward &requestReward, const std::string &messageId) {
     auto mainActor = node->accountController()->mainActor();
     if (mainActor.id() == node->actorIndex()->firstId()) {
         Transaction tx;
         tx.setSender(mainActor.id());
-        tx.setReceiver(receiver);
-        tx.setAmount(amount);
+        tx.setReceiver(requestReward.Actor);
+        tx.setAmount(requestReward.RewardAmount);
         tx.setDate(QDateTime::currentMSecsSinceEpoch());
         node->network()->send_message(tx, MessageType::BlockchainTransaction);
     } else {
-        DFSR::CoinReward coinReward { .Actor = receiver.toStdString(), .Coin = amount };
+        DFSR::CoinReward coinReward { .Actor = requestReward.Actor, .Coin = requestReward.RewardAmount };
         node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
                                       messageId);
     }

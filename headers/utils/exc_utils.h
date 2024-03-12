@@ -43,6 +43,7 @@
 #include <fmt/ranges.h>
 
 #include <magic_enum.hpp>
+#include <magic_enum_iostream.hpp>
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
