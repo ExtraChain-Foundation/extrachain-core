@@ -194,6 +194,18 @@ namespace Packets {
         uint64_t port;
         MSGPACK_DEFINE(address, port)
     };
+
+    struct ReferenceData{
+        std::string key;
+        std::string access;
+        ReferenceData() {}
+        ReferenceData(std::string _key, std::string _access) : key(_key), access(_access) { };
+        std::string toString() const {
+            return std::string(
+                fmt::format("[\"key\":\"{}\",\"access\":\"{}\"]", key, access));
+        }
+
+    };
 }
 namespace Fragments {
     static const std::string Extension = ".storj";

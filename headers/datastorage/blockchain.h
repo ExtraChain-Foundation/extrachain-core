@@ -28,8 +28,8 @@
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
-#include "network/network_manager.h"
 #include "network/message_body.h"
+#include "network/network_manager.h"
 #include "utils/bignumber.h"
 #include <QByteArray>
 #include <QMutex>
@@ -80,14 +80,15 @@ public:
     Block getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
+    Block getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
+    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+
 private:
-    Block getBlockByIndex(const BigNumber &index);
     Block getBlockByApprover(const BigNumber &approver);
     Block getBlockByData(const QByteArray &data);
 
     std::string getBlockDataByIndex(const BigNumber &index);
 
-    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxBySenderOrReceiver(const BigNumber &id,
@@ -123,6 +124,10 @@ public:
     BigNumber getFullSupply(const QByteArray &idToken);
     void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
+    /**
+     * @brief Send coins reward
+     */
+    void sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId);
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
@@ -260,11 +265,6 @@ public:
     BlockIndex &getBlockIndex();
 
     /**
-     * @brief Gets block count in a local storage
-     * @return block count
-     */
-    BigNumber getBlockChainLength() const;
-    /**
      * @brief Gets last block data field
      * @return data
      */
@@ -274,6 +274,18 @@ public:
      * @return records
      */
     BigNumber getRecords() const;
+    /**
+     * @brief getCountRealBlockRecords
+     * @return count real blocks
+     */
+    BigNumber getCountRealBlockRecords() const;
+
+    /**
+     * @brief getCountTransactionsInBlocks
+     * @return count transactions in blocks
+     */
+
+    int getCountTransactionsInBlocks() const;
 
     BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId) const;
 
@@ -309,11 +321,12 @@ public:
     /**
      * @brief Receive coins
      */
-    void receiveCoins(const ActorId &receiver, const BigNumberFloat &amount) {}
+    void receiveCoins(const ActorId &receiver, const BigNumberFloat &amount) {
+    }
     /**
      * @brief Send reward amount
      */
-    void sendCoinsReward(DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
+    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
 
     /**
      * @brief Set possible mining

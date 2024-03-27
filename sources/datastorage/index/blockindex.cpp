@@ -28,12 +28,7 @@ BlockIndex::BlockIndex() {
     lastSavedId = loadLastId();
     QDir dir(DataStorage::BLOCKCHAIN_INDEX + '/' + folderName);
     QFileInfoList sectionList = dir.entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
-    int count = 0;
-    for (auto &el : sectionList) {
-        QFileInfoList files = el.dir().entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
-        count += files.size();
-    }
-    records = count;
+    calculationCountBlock();
 }
 
 BlockIndex::BlockIndex(const BigNumber &recordsLimit)
@@ -454,6 +449,27 @@ BigNumberFloat BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const {
     }
     return circulativeBalanceGenesisBlock;
 }
+
+void BlockIndex::calculationCountBlock() {
+    BigNumber id = this->lastSavedId;
+    qDebug() << "BLOCK INDEX: getLastBlock:"
+             << "\n      last saved id - " << this->lastSavedId;
+    while (id >= firstSavedId) {
+        Block block = this->getBlockById(id);
+        if (!block.isEmpty()) {
+            if (block.getType() == Config::DATA_BLOCK_TYPE) {
+                qDebug() << "\n Block by index[" << block.getIndex() << "] is real.";
+                realBlockRecords++;
+                qDebug() << "\n Count real blocks [" << realBlockRecords << "].";
+            }
+            countTransactions += block.extractTransactions().size();
+            records++;
+        }
+        --id;
+    }
+    qDebug() << "\n Count records [" << records << "].";
+}
+
 int BlockIndex::add(const BigNumber &id, const std::string &_data) {
     QString path = buildFilePath(id);
     QFile file(path);
@@ -467,7 +483,7 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
 
     if (recordLimitIsReached()) {
         if (this->firstSavedId != 0) {
-            this->removeById(this->getFirstSavedId());
+            this->removeById(getBlockById(getFirstSavedId()));
             this->firstSavedId++; // todo: check!
         }
     }
@@ -542,7 +558,9 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
                     rowRow.insert({ "producer", "0" });
                 else
                     rowRow.insert({ "producer", tmp.getProducer().toByteArray().toStdString() });
-                DB.insert(Config::DataStorage::TxBlockTable, rowRow);
+                bool txInserted = DB.insert(Config::DataStorage::TxBlockTable, rowRow);
+                if (txInserted)
+                    countTransactions++;
             }
             QByteArrayList listSign = block.getListSignatures();
             for (int i = 0; i < listSign.size(); i += 3) {
@@ -552,6 +570,9 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
                 rowRow.insert({ "type", listSign[i + 2].toStdString() });
                 DB.insert(Config::DataStorage::SignTable, rowRow);
             }
+
+            if (block.getType() == Config::DATA_BLOCK_TYPE)
+                realBlockRecords++;
         }
         this->records = records + 1;
 
@@ -580,7 +601,11 @@ bool BlockIndex::recordLimitIsReached() const {
     return this->hasRecordLimit() && (this->records >= this->recordsLimit);
 }
 
-int BlockIndex::removeById(const BigNumber &id) {
+int BlockIndex::removeById(const Block &block) {
+    //    block.getIndex(), block.getType()
+    auto id = block.getIndex();
+    auto typeBlock = block.getType();
+    auto countTxInBlock = block.extractTransactions().size();
     qDebug() << "Removing record with id" << id.toByteArray();
     if (id < firstSavedId) {
         removeAll();
@@ -598,6 +623,11 @@ int BlockIndex::removeById(const BigNumber &id) {
             if (isRemoved) {
                 this->records--;
             }
+
+            if (isRemoved && typeBlock == Config::DATA_BLOCK_TYPE) {
+                this->realBlockRecords--;
+                countTransactions -= countTxInBlock;
+            }
         }
         currentIdToRemove++;
     }
@@ -614,7 +644,7 @@ void BlockIndex::removeDummyBlocks(const BigNumber &id) {
         if (block.getType() != Config::DUMMY_BLOCK_TYPE) {
             isNotDummyBlock = true;
         } else {
-            removeById(lastId);
+            removeById(block);
             lastId--;
         }
     }
@@ -636,6 +666,8 @@ void BlockIndex::removeAll() {
     this->records = 0;
     this->firstSavedId = 0;
     this->lastSavedId = 0;
+    this->realBlockRecords = 0;
+    this->countTransactions = 0;
 }
 QString BlockIndex::getFolderPath() const {
     return DataStorage::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
@@ -659,6 +691,15 @@ BigNumber BlockIndex::getLastSavedId() const {
 
 BigNumber BlockIndex::getRecords() const {
     return this->records;
+}
+
+BigNumber BlockIndex::getCountRealBlocks() const {
+    return this->realBlockRecords;
+}
+
+int BlockIndex::getCountTransactionsInBlocks() const
+{
+    return countTransactions;
 }
 
 std::string BlockIndex::getById(const BigNumber &id) const {

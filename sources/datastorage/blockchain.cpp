@@ -40,9 +40,9 @@ Blockchain::Blockchain(ExtraChainNode *node, bool fileMode)
 Blockchain::~Blockchain() {
 }
 
-Block Blockchain::getBlockByIndex(const BigNumber &index) {
+Block Blockchain::getBlockByIndex(const BigNumber &index, const bool makeRequestBlock) {
     Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
-    if (block.isEmpty()) {
+    if (block.isEmpty() && index >= 0 && makeRequestBlock) {
         std::pair<std::string, BigNumber> requestData(Config::DATA_BLOCK_TYPE, index);
         node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
     }
@@ -215,7 +215,7 @@ QList<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id
 }
 
 void Blockchain::getBlockZero() {
-    Block zero = getBlockByIndex(0);
+    Block zero = getBlockByIndex(0, true);
     if (zero.isEmpty()) {
         // TODONEW
         // Messages::GetBlockMessage request;
@@ -274,7 +274,7 @@ void Blockchain::sendBlockByNumber(const BigNumber &index) const {
         node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
     } else {
         data = answerBlock.serialize();
-        node->network()->send_message(data, MessageType::BlockchainNewBlock);
+//        node->network()->send_message(data, MessageType::BlockchainNewBlock);
     }
 }
 
@@ -745,7 +745,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
 }
 
 int Blockchain::removeBlock(const Block &block) {
-    return fileMode ? blockIndex.removeById(block.getIndex()) : memIndex.removeById(block.getIndex());
+    return fileMode ? blockIndex.removeById(block) : memIndex.removeById(block.getIndex());
 }
 
 void Blockchain::removeAllDummyBlocks(const Block &block) {
@@ -877,10 +877,6 @@ void Blockchain::signBlock(Block &block) const {
     block.sign(node->accountController()->currentWallet());
 }
 
-BigNumber Blockchain::getBlockChainLength() const {
-    return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
-}
-
 QString Blockchain::getLastBlockData() const {
     return fileMode ? QString::fromStdString(blockIndex.getLastBlock().getData())
                     : QString::fromStdString(memIndex.getLastBlock().getData());
@@ -888,6 +884,16 @@ QString Blockchain::getLastBlockData() const {
 
 BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
+}
+
+BigNumber Blockchain::getCountRealBlockRecords() const
+{
+    return blockIndex.getCountRealBlocks();
+}
+
+int Blockchain::getCountTransactionsInBlocks() const
+{
+    return blockIndex.getCountTransactionsInBlocks();
 }
 
 BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
@@ -993,6 +999,10 @@ void Blockchain::sendCoinsReward(DFS::Reward::RequestReward &requestReward, cons
         node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
                                       messageId);
     }
+}
+
+void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId) {
+    sendCoinsReward(requestReward.Actor, requestReward.RewardAmount, messageId);
 }
 
 void Blockchain::setPossibleMining(const bool &value) {

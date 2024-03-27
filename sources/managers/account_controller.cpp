@@ -44,9 +44,9 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     node.start(); // TODO: remove
     node.txManager()->runMakeAndProveBlockTimers();
 
-    if (!(type == ActorType::ServiceProvider)) // TODO: remove
-        node.blockchain()->getBlockZero();
-
+    node.blockchain()->getBlockZero();
+//    if (!(type == ActorType::ServiceProvider)) // TODO: remove
+//        node.blockchain()->getBlockZero();
     return actor;
 }
 
