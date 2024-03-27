@@ -94,7 +94,7 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
         return;
 
     std::vector<std::string> result = allActorsStd();
-    result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
+    result.erase(std::remove(result.begin(), result.end(), ignoredActorId.toStdString()), result.end());
     if (!result.empty()) {
         node.network()->send_message(result, MessageType::ActorAll, MessageStatus::Response, messageId,
                                      Config::Net::TypeSend::Focused);
