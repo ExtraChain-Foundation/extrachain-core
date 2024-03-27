@@ -124,10 +124,6 @@ public:
     BigNumber getFullSupply(const QByteArray &idToken);
     void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
-    /**
-     * @brief Send coins reward
-     */
-    void sendCoinsReward(const ActorId &receiver, const BigNumberFloat &amount, const std::string &messageId);
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);

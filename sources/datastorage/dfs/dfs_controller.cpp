@@ -661,7 +661,7 @@ uint64_t DfsController::calculateDataAmountStored(const std::string &folder) con
 
 std::string DfsController::makeReferenceFile(const std::string &actor, const std::string &nameFile, const DFS::Packets::ReferenceData &referenceData) {
     std::string result;
-    result.append(DFS_PATH::filePath(actor, nameFile));
+    result.append(DFS_PATH::filePath(actor, nameFile).string());
     result.append("|");
     result.append(referenceData.toString());
     return result;

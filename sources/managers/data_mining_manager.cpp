@@ -20,6 +20,7 @@
 #include "managers/data_mining_manager.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/dfs/dfs_controller.h"
+#include "managers/tx_manager.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
