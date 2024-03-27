@@ -24,11 +24,13 @@
 #include "enc/enc_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash,
+                                      const Actor<KeyPrivate> &farmingAddress) {
     PrivateProfile user;
     user.m_actors.push_back(actor);
     user.m_main = actor.id();
     user.m_hash = hash;
+    user.m_farmingAddress.push_back(farmingAddress);
     user.save();
     return user;
 }
@@ -55,6 +57,11 @@ const Actor<KeyPrivate> &PrivateProfile::current() const {
 
 const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
     return m_actors;
+}
+
+const std::vector<Actor<KeyPrivate> > &PrivateProfile::farmings() const
+{
+    return m_farmingAddress;
 }
 
 bool PrivateProfile::changeCurrent(const ActorId &actorId) {
@@ -100,13 +107,21 @@ QJsonObject PrivateProfile::toJson() const {
         actors.append(actor.toJsonArray());
     }
     json["actors"] = actors;
+
+    QJsonArray farmings;
+    for (const auto &farming : m_farmingAddress) {
+        farmings.append(farming.toJsonArray());
+    }
+
+    json["farming"] = farmings;
+    qDebug() << json;
     return json;
 }
 
 void PrivateProfile::save() {
     auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact);
     auto data = QByteArray::fromStdString(SecretKey::encryptWithPassword(jsonBytes.toStdString(), m_hash));
-
+    qDebug() << "Save data: " << data;
     QFile file(path().string().c_str());
     file.open(QFile::WriteOnly);
     if (file.write(data) == 0)
@@ -127,6 +142,13 @@ void PrivateProfile::load() {
         auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
         auto a = Actor<KeyPrivate>::fromJson(json);
         m_actors.push_back(a);
+    }
+
+    const auto farmings = json["farming"].toArray();
+    for (const auto &farming : farmings) {
+        auto json = QJsonDocument(farming.toArray()).toJson(QJsonDocument::Compact);
+        auto a = Actor<KeyPrivate>::fromJson(json);
+        m_farmingAddress.push_back(a);
     }
 }
 

@@ -287,7 +287,8 @@ public:
 
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId) const;
+    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId = ActorId(),
+                                  TypeTx typeTx = TypeTx::Transaction) const;
 
     /**
      * @brief Show blockchain
@@ -337,6 +338,17 @@ public:
      * @brief Get possible mining
      */
     bool getPossibleMining() const;
+
+    /**
+     * @brief Get block index contains farming transaction
+     */
+    BigNumber getBlockIndexLastFarmingTx() const;
+
+    /**
+     * @brief Get all farming txs
+     */
+
+    std::list<FarmingTransactionData> getFarmingTxs() const;
 
 signals:
     void newNotify(Notification ntf);

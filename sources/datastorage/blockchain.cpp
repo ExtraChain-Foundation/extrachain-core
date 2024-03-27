@@ -896,7 +896,7 @@ int Blockchain::getCountTransactionsInBlocks() const
     return blockIndex.getCountTransactionsInBlocks();
 }
 
-BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const {
+BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeTx typeTx) const {
     BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
@@ -919,6 +919,9 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId) const
 
         auto txs = currentBlock.extractTransactions();
         for (auto &tx : txs) {
+            if(tx.getTypeTx() != typeTx)
+                continue;
+
             if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
                 balance += tx.getAmount();
             }
@@ -1001,7 +1004,8 @@ void Blockchain::sendCoinsReward(DFS::Reward::RequestReward &requestReward, cons
     }
 }
 
-void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId) {
+void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward,
+                                 const std::string &messageId) {
     sendCoinsReward(requestReward.Actor, requestReward.RewardAmount, messageId);
 }
 
@@ -1015,6 +1019,16 @@ void Blockchain::setPossibleMining(const bool &value) {
 bool Blockchain::getPossibleMining() const {
     return possibleMining;
 }
+
+BigNumber Blockchain::getBlockIndexLastFarmingTx() const {
+    return blockIndex.getIndexBlockByLastFarmingTx();
+}
+
+std::list<FarmingTransactionData> Blockchain::getFarmingTxs() const
+{
+    return blockIndex.getAllLockedFarmingTransactions();
+}
+
 [[maybe_unused]] void Blockchain::process() {
     //
 }
@@ -1158,7 +1172,7 @@ void Blockchain::proveTx(Transaction &tx) {
     ActorId targetSender = tx.getSender();
     ActorId targetReceiver = tx.getReceiver();
     // start reward check
-    if (tx.isRewardTransaction()) {
+    if (tx.isRewardTransaction() || tx.isFarmingTransaction()) {
         targetSender = tx.getApprover();
         // TODO: add extended check of validity
         auto res = this->blockIndex.getLastTxByData(tx.getData());

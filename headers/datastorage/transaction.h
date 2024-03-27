@@ -28,7 +28,9 @@
 #include <QString>
 enum class TypeTx {
     Transaction = 0,
-    RewardTransaction = 1
+    RewardTransaction = 1,
+    FarmingTransaction = 2,
+    FarmingLockedTransaction = 3
 };
 MSGPACK_ADD_ENUM(TypeTx)
 FORMAT_ENUM(TypeTx)
@@ -147,11 +149,26 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
+    bool isFarmingTransaction() const;
+    bool isLockedFarmingTransaction() const;
     TypeTx getTypeTx() const;
     virtual void setTypeTx(TypeTx newTypeTx);
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
                    digSig, typeTx)
+};
+
+struct FarmingTransactionData {
+    BigNumber index;
+    Transaction transaction;
+
+    void decrementIndex() {
+        index -= BigNumber(1);
+    }
+
+    bool canImproveTx() {
+        return index <= 0;
+    }
 };
 
 #endif // TRANSACTION_H
