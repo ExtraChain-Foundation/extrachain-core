@@ -988,7 +988,8 @@ void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amo
     node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
 }
 
-void Blockchain::sendCoinsReward(DFS::Reward::RequestReward &requestReward, const std::string &messageId) {
+void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward,
+                                 const std::string &messageId) {
     auto mainActor = node->accountController()->mainActor();
     if (mainActor.id() == node->actorIndex()->firstId()) {
         Transaction tx;
@@ -1002,11 +1003,6 @@ void Blockchain::sendCoinsReward(DFS::Reward::RequestReward &requestReward, cons
         node->network()->send_message(coinReward, MessageType::BlockchainCoinReward, MessageStatus::Response,
                                       messageId);
     }
-}
-
-void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward,
-                                 const std::string &messageId) {
-    sendCoinsReward(requestReward.Actor, requestReward.RewardAmount, messageId);
 }
 
 void Blockchain::setPossibleMining(const bool &value) {
