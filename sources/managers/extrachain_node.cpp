@@ -35,7 +35,7 @@
 #include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
-#include "managers/restApiServerManager.h"
+// #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
@@ -76,7 +76,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     getAllActorsTimer.start(30000);
 
     if (allowRunRestApiServer) {
-        m_restApiServerManager = new RestApiServerManager(this);
+        // m_restApiServerManager = new RestApiServerManager(this);
     }
 
     // ThreadPool::addThread(m_blockchain);
