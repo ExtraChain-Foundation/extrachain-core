@@ -190,6 +190,13 @@ namespace Packets {
         MSGPACK_DEFINE(port, address, active)
     };
 
+    struct Activity {
+        uint64_t timeactivity;
+        bool active;
+        uint64_t score;
+        MSGPACK_DEFINE(timeactivity, active, score)
+    };
+
     struct WSConnection {
         std::string address;
         uint64_t port;

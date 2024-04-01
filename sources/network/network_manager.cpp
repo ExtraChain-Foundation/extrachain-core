@@ -658,6 +658,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::NewListConnections: {
         DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
         node.connectionsManager()->addNewConnection(connection);
+        node.connectionsManager()->addActivity(connection);
         break;
     }
 
