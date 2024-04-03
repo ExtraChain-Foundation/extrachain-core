@@ -23,7 +23,7 @@ ConnectionsManager::ConnectionsManager(const std::string address, const std::str
 
 ConnectionsManager::~ConnectionsManager()
 {
-    synchroActivityDB();
+    // synchroActivityDB();
 }
 
 bool ConnectionsManager::createTable() {
@@ -50,15 +50,15 @@ bool ConnectionsManager::createActivityTable()
 
     if (dbActivity.selectAll(ActivityTableName).empty()) {
         static const std::string CreateTableQuery = fmt::format("CREATE TABLE IF NOT EXISTS {}("
-                                                                "hash          TEXT   PRIMARY   NOT NULL, "
-                                                                "timeactivity  INTEGER          NOT NULL, "
-                                                                "activity      BOOLEAN          NOT NULL, "
-                                                                "score         INTEGER          NOT NULL);",
+                                                                "hash          TEXT          NOT NULL, "
+                                                                "timeactivity  TEXT          NOT NULL, "
+                                                                "activity      TEXT          NOT NULL, "
+                                                                "score         TEXT          NOT NULL);",
                                                                 ActivityTableName);
 
         createdTableActivity = dbActivity.createTable(CreateTableQuery);
     }
-
+    dbActivity.close();
     return createdTableActivity;
 }
 
@@ -92,6 +92,17 @@ bool ConnectionsManager::insertConnection(const DFS::Packets::Connection &connec
     return result;
 }
 
+bool ConnectionsManager::insertActivity(const std::string hash, const DFS::Packets::Activity &activity)
+{
+    dbActivity.open();
+    DBRow row = ecryptActivity(hash, activity);
+
+    bool result = dbActivity.insert(ActivityTableName, row);
+    dbActivity.close();
+
+    return result;
+}
+
 void ConnectionsManager::loadRecords() {
     dbConnector.open();
 
@@ -113,8 +124,8 @@ void ConnectionsManager::loadActivityRecords()
     if (!rows.empty()) {
         for (const auto &row : rows) {
             auto act = decryptActivity(row);
-            act.second.timeactivity = std::time(nullptr);
-            clientActivity.insert(act);
+    //         // act.second.timeactivity = std::time(nullptr);
+    //         // clientActivity.insert(act);
         }
     }
     dbActivity.close();
@@ -147,6 +158,22 @@ DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &conne
     return row;
 }
 
+DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity)
+{
+    std::string key = SecretKey::getKeyFromPass(hash);
+
+    std::string timeactivity = SecretKey::encrypt(std::to_string(activity.timeactivity), key);
+    std::string active = SecretKey::encrypt(std::to_string(activity.active), key);
+    std::string score = SecretKey::encrypt(std::to_string(activity.score), key);
+
+    DBRow row { { hash_connection, hash },
+              { active_connection, active },
+              { score_act, score },
+              { time_act, timeactivity } };
+
+    return row;
+}
+
 Connection ConnectionsManager::decryptConnection(const DBRow &row) {
     Connection connection;
     std::string key = SecretKey::getKeyFromPass(row.at(hash_connection));
@@ -162,8 +189,8 @@ std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DBRow
     Activity activity;
     std::string key = SecretKey::getKeyFromPass(row.at(hash_connection));
 
-    activity.timeactivity = std::stoi(SecretKey::decrypt(row.at(time_act), key));
-    activity.active = std::stoi(SecretKey::decrypt(row.at(status_act), key));
+    activity.timeactivity = std::stoull(SecretKey::decrypt(row.at(time_act), key));
+    activity.active = SecretKey::decrypt(row.at(active_connection), key) == "1"? true: false;
     activity.score = std::stoi(SecretKey::decrypt(row.at(score_act), key));
     return std::make_pair(key, activity);
 }
@@ -195,15 +222,14 @@ void ConnectionsManager::addNewConnection(const DFS::Packets::Connection &connec
 
 void ConnectionsManager::addActivity(const Connection &connection)
 {
-    std::string hash = hashConnection(connection);
-    std::string key = SecretKey::getKeyFromPass(hash);
+    std::string key = hashConnection(connection);
+    // std::string key = SecretKey::getKeyFromPass(hash);
 
     auto it = clientActivity.find(key);
     if (it != clientActivity.end()) {
         it->second.active = true;
-        auto score = std::time(nullptr) - clientActivity.at("key").timeactivity;
+        it->second.score =  std::time(nullptr) - clientActivity.at(key).timeactivity;
         it->second.timeactivity = std::time(nullptr);
-        it->second.score =  score <= 0 ? 0 : score;
         clientActivity.insert(std::make_pair(key, it->second));
     } else {
         Activity act;
@@ -216,31 +242,33 @@ void ConnectionsManager::addActivity(const Connection &connection)
 
 void ConnectionsManager::removeActivity(const Connection &connection)
 {
-    std::string hash = hashConnection(connection);
-    std::string key = SecretKey::getKeyFromPass(hash);
+    std::string key = hashConnection(connection);
     Activity act;
     act.active = false;
     act.score =  std::time(nullptr) - clientActivity.at(key).timeactivity;
     act.timeactivity = std::time(nullptr);
-    clientActivity.at("key") = act;
+    clientActivity.at(key) = act;
 }
 
 uint64_t ConnectionsManager::getActivityScore(const Connection &connection)
 {
-    std::string hash = hashConnection(connection);
-    std::string key = SecretKey::getKeyFromPass(hash);
+    std::string key = hashConnection(connection);
 
     auto it = clientActivity.find(key);
     if (it != clientActivity.end()) {
-        if(clientActivity.at(key).timeactivity == 0 && !clientActivity.at(key).active)
+        if(it->second.timeactivity == 0 && !it->second.active)
             return 0;
-        auto delta_score = std::time(nullptr) - clientActivity.at(key).timeactivity;
-        if(clientActivity.at(key).active){
-            return clientActivity.at(key).score + delta_score;
+        else if(it->second.timeactivity != 0 && it->second.active){
+            return it->second.score + (std::time(nullptr) - it->second.timeactivity);
         }
-        else{
-            auto score = clientActivity.at(key).score - delta_score;
-            return  score <= 0 ? 0 : score;
+        else if(it->second.timeactivity != 0 && !it->second.active){
+            uint64_t score;
+            if(it->second.score != 0){
+                auto delta_score = std::time(nullptr) - it->second.timeactivity;
+                return it->second.score <= delta_score ? 0 : it->second.score - delta_score;
+            }
+            else
+                return std::time(nullptr) - it->second.timeactivity;
         }
     }
 
@@ -261,8 +289,14 @@ void ConnectionsManager::synchroActivityDB()
             if(score <= 0)
                 score = 0 ;
         }
-        dbActivity.update(fmt::format("UPDATE Activity SET timeactivity ='{}' activity = {} score = {} WHERE hash ='{}';",
-                                   std::time(nullptr), pair.second.active, score, pair.first));
+        // if(dbActivity.query(fmt::format("SELECT COUNT(*) FROM Activity WHERE hash ='{}';", pair.first))){
+        //     // dbActivity.update(fmt::format("UPDATE Activity SET timeactivity ='{}' activity = {} score = {} WHERE hash ='{}';",
+        //     //                        std::time(nullptr), pair.second.active, score, pair.first));
+        // }
+        // else{
+        //     dbActivity.close();
+            insertActivity(pair.first, pair.second);
+        // }
     }
 }
 

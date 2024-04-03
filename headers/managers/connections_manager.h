@@ -16,7 +16,7 @@ static const std::string dbActPath = "tmp/activity.dat";
 static const std::string hash_connection = "hash";
 static const std::string port_connection = "port";
 static const std::string address_connection = "address";
-static const std::string active_connection = "active";
+static const std::string active_connection = "activity";
 static const std::string time_act = "timeactivity";
 static const std::string status_act = "active";
 static const std::string score_act = "score";
@@ -53,6 +53,7 @@ public:
     const std::vector<Connection> &getActiveConnection() const;
 
     DBRow ecryptConnection(const Connection &connection);
+    DBRow ecryptActivity(const std::string hash, const Activity &activity);
     Connection decryptConnection(const DBRow &row);
     std::pair<std::string, Activity> decryptActivity(const DBRow &row);
     void loadRecords();
@@ -63,6 +64,7 @@ protected:
     bool createTable();
     bool createActivityTable();
     bool insertConnection(const Connection &connection);
+    bool insertActivity(const std::string hash, const Activity &activity);
 
 private:
     std::string hashConnection(const Connection &connection);
