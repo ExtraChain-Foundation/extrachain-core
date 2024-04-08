@@ -31,6 +31,8 @@
 #include <fstream>
 #include <vector>
 
+CalculateTraffic* CalculateTraffic::calculateTraffic_= nullptr;
+
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
 }
@@ -55,6 +57,7 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node) {
     localInizialization();
     m_reconnectTimer = new QTimer(this);
+    calculateTraffic = CalculateTraffic::GetInstance();
 }
 
 void NetworkManager::process() {
@@ -265,6 +268,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
 
     for (const auto &service : qAsConst(m_connections)) {
         if (service->isActive() && service->sendType() == SocketService::SendType::All) {
+            calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->sendMessage(QByteArray::fromStdString(serialized_message));
         }
     }
@@ -418,6 +422,9 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         .c_str();
     }
 #endif
+
+    DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
+    calculateTraffic->addBytesReceived(connection.address, message.size());
 
     // try {
     switch (type) {
@@ -656,7 +663,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::NewListConnections: {
-        DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
         node.connectionsManager()->addNewConnection(connection);
         break;
     }
@@ -830,4 +836,40 @@ void NetworkManager::onNewWsConnection() {
     emit newSocket();
     m_reconnections.insert(NetworkReconnect {
         .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket });
+}
+
+CalculateTraffic *CalculateTraffic::GetInstance()
+{
+    if(calculateTraffic_==nullptr){
+        calculateTraffic_ = new CalculateTraffic();
+    }
+    return calculateTraffic_;
+}
+
+void CalculateTraffic::addBytesSent(const std::string &ip, qint64 bytes){
+    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    m_trafficStats[ip].bytesSent += bytes;
+}
+
+void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes){
+    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    m_trafficStats[ip].bytesReceived += bytes;
+}
+
+qint64 CalculateTraffic::totalBytesSent(const std::string &ip)  {
+    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    auto it = m_trafficStats.find(ip);
+    if (it != m_trafficStats.end()) {
+        return it->second.bytesSent;
+    }
+    return 0;
+}
+
+qint64 CalculateTraffic::totalBytesReceived(const std::string &ip){
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_trafficStats.find(ip);
+    if (it != m_trafficStats.end()) {
+        return it->second.bytesReceived;
+    }
+    return 0;
 }

@@ -42,6 +42,42 @@ class SocketService;
 class WebSocketService;
 class UPNPConnection;
 
+class CalculateTraffic {
+private:
+    struct TrafficStats {
+        qint64 bytesSent = 0;
+        qint64 bytesReceived = 0;
+    };
+
+    std::unordered_map<std::string, TrafficStats> m_trafficStats; // Container for storing traffic of each connection
+    std::mutex m_mutex; // Mutex for thread safety in Singleton instance access
+
+    // Private constructor to prevent instantiation
+    CalculateTraffic() {}
+
+    static CalculateTraffic* calculateTraffic_;
+
+public:
+    // Deleted copy constructor and assignment operator to prevent copying
+    CalculateTraffic(const CalculateTraffic&) = delete;
+    CalculateTraffic& operator=(const CalculateTraffic&) = delete;
+
+    // Static method to access the Singleton instance
+    static CalculateTraffic *GetInstance();
+
+    // Method for adding sent bytes data for a specific connection
+    void addBytesSent(const std::string &ip, qint64 bytes);
+
+    // Method for adding received bytes data for a specific connection
+    void addBytesReceived(const std::string& connectionId, qint64 bytes);
+
+    // Method for getting the total number of sent bytes data for a specific connection
+    qint64 totalBytesSent(const std::string& ip);
+
+    // Method for getting the total number of received bytes data for a specific connection
+    qint64 totalBytesReceived(const std::string& ip);
+};
+
 struct NetworkReconnect {
     QString ip;
     quint16 port;
@@ -105,6 +141,7 @@ private:
     std::map<std::string, MessageIdDataReceived> m_messages_received;
     std::vector<DFSP::WSConnection> m_wsConnections;
     QTimer *m_reconnectTimer;
+    CalculateTraffic* calculateTraffic;
 
 public:
     explicit NetworkManager(ExtraChainNode &node);
