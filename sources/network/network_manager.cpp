@@ -664,6 +664,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::NewListConnections: {
         node.connectionsManager()->addNewConnection(connection);
+        node.connectionsManager()->addActivity(connection);
         break;
     }
 
