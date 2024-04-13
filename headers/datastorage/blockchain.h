@@ -400,6 +400,7 @@ public:
     void addBlockToBlockchain(Block &block);
     void addGenBlockToBlockchain(GenesisBlock block);
     void setTxManager(TransactionManager *value);
+    BigNumber getBlockCount();
 
 public slots:
     void process();
@@ -421,7 +422,6 @@ public slots:
 
     void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
                                 const QByteArray &requestHash, const std::string &messageId);
-    void getBlockCount(const QByteArray &requestHash, const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block

@@ -63,7 +63,8 @@ private:
     bool fileMode = true;
     bool started = false;
     bool isClientApplication = false;
-
+    uint64_t blockCount;
+    std::vector<BigNumber> resiveCounts;
 public:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
@@ -109,6 +110,8 @@ public:
 
     void createNetworkIdentifier();
 
+    uint64_t getBlockCount() const;
+
 private:
     void showMessage(QString from, QString message);
     /**
@@ -127,6 +130,8 @@ private:
      */
     void prepareFolders();
 
+    void calculateBlockCount();
+
 signals:
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
@@ -137,5 +142,7 @@ private slots:
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);
+    void handleCountMessageReceived(BigNumber count);
+
 };
 #endif // EXTRACHAIN_NODE_H

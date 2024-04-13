@@ -264,6 +264,8 @@ signals:
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
+    void messageCountReceived(BigNumber count);
+
 
     friend class DfsNetworkManager;
 };

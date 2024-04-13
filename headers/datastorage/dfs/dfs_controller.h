@@ -100,6 +100,8 @@ private:
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
     void sendSizeReponseMsg(const DFSP::RequestDfsSize &msg, const std::string &messageId) const;
+    void sendCountRequestMsg(const ActorId &actorId) const;
+    void sendCountReponseMsg(const DFS::Packets::RequestBlockCount &msg, const std::string &messageId, BigNumber dfsCount) const;
     void requestSync();
     void requestDirFileAllActors();
     void sendSync(uint64_t lastModified, const std::string &messageId);
