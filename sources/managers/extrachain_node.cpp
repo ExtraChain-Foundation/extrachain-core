@@ -38,6 +38,7 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
+
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     : isClientApplication(isClientApp) {
     static bool singleton = false;
@@ -79,8 +80,15 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
         // m_restApiServerManager = new RestApiServerManager(this);
     }
 
+    calculateBlockCount();
+
     // ThreadPool::addThread(m_blockchain);
     // ThreadPool::addThread(m_txManager);
+}
+
+uint64_t ExtraChainNode::getBlockCount() const
+{
+    return blockCount;
 }
 
 ExtraChainNode::~ExtraChainNode() {
@@ -409,6 +417,31 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
+void ExtraChainNode::handleCountMessageReceived(BigNumber count)
+{
+    size_t connection = m_connectionsManager->getActiveConnection().size();
+    resiveCounts.push_back(count);
+    if(m_connectionsManager->getActiveConnection().size() == resiveCounts.size()){
+        BigNumber sum = 0;
+        for (const BigNumber& number : resiveCounts) {
+            sum += number;
+        }
+        BigNumber middleCount  = sum / resiveCounts.size();
+
+        // Ef = Tc / Tu
+        // Tc - current coefficient
+        // Tu - total network uptime. Blocks are formed every 2 seconds. Therefore, by taking the total number
+        //      of blocks in the network and multiplying them by 2, it is possible to determine how many seconds the
+        //      network has been online.
+        // Ef - efficiency coefficient
+
+        std::string ip = m_networkManager->localIp().toStdString();
+        std::string port = QString::number(m_networkManager->wsPort).toStdString();
+        blockCount = m_connectionsManager->getActivityScore(Connection{ip, port, true})/
+                         ( std::stoi(middleCount.toStdString()) * 2);
+    }
+}
+
 void ExtraChainNode::connectContractManager() {
 }
 
@@ -444,6 +477,8 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocket, [this]() { m_dfs->requestSync(); });
     connect(m_networkManager, &NetworkManager::newSocket,
             [this]() { m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id()); });
+    connect(m_networkManager, &NetworkManager::newSocket,
+            [this]() { m_dfs->sendCountRequestMsg(m_accountController->mainActor().id()); });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
 }
@@ -461,6 +496,15 @@ void ExtraChainNode::prepareFolders() {
 
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
+}
+
+void ExtraChainNode::calculateBlockCount()
+{
+    ActorId actorId = m_accountController->mainActor().id();
+    DFSP::RequestDfsSize msg { actorId.toStdString() };
+
+    m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
+
 }
 
 AccountController *ExtraChainNode::accountController() const {

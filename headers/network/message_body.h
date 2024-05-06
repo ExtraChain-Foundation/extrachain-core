@@ -27,6 +27,8 @@ enum class MessageType {
     RequestDfsSize = 61,
     ResponseDfsSize = 62,
     DfsState = 63,
+    RequestBlockCount = 64,
+    ResponseBlockCount = 65,
 
     BlockchainGenesisBlock = 80,
     BlockchainNewBlock = 81,

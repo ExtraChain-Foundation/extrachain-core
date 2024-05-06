@@ -715,6 +715,17 @@ void DfsController::sendSizeReponseMsg(const DFS::Packets::RequestDfsSize &msg,
     node.network()->send_message(response, MessageType::ResponseDfsSize, MessageStatus::Response, messageId);
 }
 
+void DfsController::sendCountRequestMsg(const ActorId &actorId) const {
+    DFSP::RequestDfsSize msg { actorId.toStdString() };
+    node.network()->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
+}
+
+void DfsController::sendCountReponseMsg(const DFS::Packets::RequestBlockCount &msg,
+                                       const std::string &messageId, BigNumber dfsCount) const {
+    DFSP::ResponseBlockCount response { .Actor = msg.Actor, .blockCount = dfsCount };
+    node.network()->send_message(response, MessageType::ResponseBlockCount, MessageStatus::Response, messageId);
+}
+
 void DfsController::requestSync() {
     node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified,
                                  MessageStatus::Request);

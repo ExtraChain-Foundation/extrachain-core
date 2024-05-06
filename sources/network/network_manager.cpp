@@ -440,6 +440,18 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         node.dfs()->sendSizeReponseMsg(msgStruct, messageId);
         break;
     }
+    case MessageType::ResponseBlockCount: {
+        const auto msgStruct = MessagePack::deserialize<DFSP::ResponseBlockCount>(serialized);
+        BigNumber count = msgStruct.blockCount;
+        emit messageCountReceived(count);
+        break;
+    }
+    case MessageType::RequestBlockCount: {
+        const auto msgStruct = MessagePack::deserialize<DFSP::RequestBlockCount>(serialized);
+        BigNumber dfsCount = node.blockchain()->getBlockCount();
+        node.dfs()->sendCountReponseMsg(msgStruct, messageId, dfsCount);
+        break;
+    }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         node.actorIndex()->handleNewActor(actor);

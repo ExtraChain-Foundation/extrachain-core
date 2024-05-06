@@ -84,6 +84,19 @@ namespace Packets {
         MSGPACK_DEFINE(Actor)
     };
 
+    struct ResponseBlockCount {
+        std::string Actor;
+        BigNumber blockCount;
+
+        MSGPACK_DEFINE(Actor, blockCount)
+    };
+
+    struct RequestBlockCount {
+        std::string Actor;
+
+        MSGPACK_DEFINE(Actor)
+    };
+
     struct AddFileMessage {
         std::string Actor;
         std::string FileName;

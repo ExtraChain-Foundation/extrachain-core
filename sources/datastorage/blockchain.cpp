@@ -1080,20 +1080,10 @@ std::list<FarmingTransactionData> Blockchain::getFarmingTxs() const
     // receiver);
 }
 
-[[maybe_unused]] void Blockchain::getBlockCount(const QByteArray &requestHash, const std::string &messageId) {
+BigNumber Blockchain::getBlockCount() {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
-    //
-    QByteArray lastSavedId = this->blockIndex.getLastSavedId().toByteArray();
-    BigNumber res = this->blockIndex.getRecords();
-
-    QJsonObject obj;
-    obj["lastId"] = QString(lastSavedId);
-    obj["count"] = QString(res.toByteArray());
-    // QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-
-    // TODONEW emit responseReady(this->blockIndex.getLastSavedId().toByteArray(),
-    // Messages::GeneralResponse::GetBlockCountResponse, requestHash, receiver);
+    return this->blockIndex.getLastSavedId();
 }
 
 void Blockchain::addBlockToBlockchain(Block &block) {
