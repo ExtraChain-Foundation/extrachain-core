@@ -80,7 +80,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
         // m_restApiServerManager = new RestApiServerManager(this);
     }
 
-    calculateBlockCount();
 
     // ThreadPool::addThread(m_blockchain);
     // ThreadPool::addThread(m_txManager);
