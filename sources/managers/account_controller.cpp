@@ -46,6 +46,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     node.txManager()->runMakeAndProveBlockTimers();
 
     node.blockchain()->getBlockZero();
+    node.calculateBlockCount();
 //    if (!(type == ActorType::ServiceProvider)) // TODO: remove
 //        node.blockchain()->getBlockZero();
     return actor;
@@ -77,7 +78,8 @@ bool AccountController::load(const std::string &hash) {
             m_profiles.push_back(profile);
             m_currentProfile = profile.main().id();
             node.start(); // TODO: remove
-            node.txManager()->runMakeAndProveBlockTimers();
+            if (this->empty())
+                node.txManager()->runMakeAndProveBlockTimers();
             autologinHash.save(hash); // TODO: add arg
             return true;
         }

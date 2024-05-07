@@ -130,8 +130,6 @@ private:
      */
     void prepareFolders();
 
-    void calculateBlockCount();
-
 signals:
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
@@ -143,6 +141,8 @@ private slots:
 public slots:
     void notificationToken(QString os, QString actorId, QString token);
     void handleCountMessageReceived(BigNumber count);
+
+    void calculateBlockCount();
 
 };
 #endif // EXTRACHAIN_NODE_H

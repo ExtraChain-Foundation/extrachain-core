@@ -105,6 +105,9 @@ void TransactionManager::runMakeAndProveBlockTimers() {
 // Block making
 
 void TransactionManager::makeBlock() {
+    if(extraChainNode->accountController()->empty())
+        return;
+
     for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
         if(farmingTransactionData.canImproveTx())
             pendingTxs.push_back(farmingTransactionData.transaction);
@@ -114,19 +117,18 @@ void TransactionManager::makeBlock() {
 
 
     if (pendingTxs.empty()) {
-        //        if(lastRealBlock.isEmpty())
-        //            lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
-        //        Block lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
-        //        qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType().c_str();
-        //        // creating dummy block in as ordinary block
-        //        Block dummyBlock(lastRealBlock.getIndex().toStdString(), lastBlock);
-        //        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
-        //        blockchain->signBlock(dummyBlock);
-        //        const int addedBlock = blockchain->addBlock(dummyBlock);
-        //        if(addedBlockResult == 0) {
-        //            lastBlock = dummyBlock;
-        //        }
-        //        lastBlock = block;
+        if(lastRealBlock.isEmpty())
+            lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
+        Block lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
+        qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType().c_str();
+        // creating dummy block in as ordinary block
+        Block dummyBlock(lastRealBlockTemp.getIndex().toStdString(), lastBlock);
+        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
+        blockchain->signBlock(dummyBlock);
+        const int addedBlock = blockchain->addBlock(dummyBlock);
+        if(addedBlock == 0)
+           lastBlock = dummyBlock;
+        lastBlock = blockchain->getLastBlock();
         return;
     }
     if (lastBlock.isEmpty())
