@@ -253,7 +253,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
         return;
     }
 
-    auto isSendCheck = [typeSend, receiver_identifier](std::string_view socket_identifier) {
+    auto isSendCheck = [typeSend, receiver_identifier](std::string socket_identifier) {
         switch (typeSend) {
         case Config::Net::TypeSend::Except:
             return socket_identifier != receiver_identifier;
@@ -266,8 +266,8 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
         }
     };
 
-    for (const auto &service : qAsConst(m_connections)) {
-        if (service->isActive() && service->sendType() == SocketService::SendType::All) {
+    for (const auto &service : std::as_const(m_connections)) {
+        if (service->isActive() && isSendCheck(service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->sendMessage(QByteArray::fromStdString(serialized_message));
         }
