@@ -245,16 +245,16 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool re
         NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket });
 }
 
-void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend typeSend,
+void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
                                  const std::string &receiver_identifier) {
     if (!isActiveConnectionExists()) {
         qDebug() << "[NetworkManager] Save message to cache";
-        saveToCache(serialized_message, typeSend, receiver_identifier);
+        saveToCache(serialized_message, type_send, receiver_identifier);
         return;
     }
 
-    auto isSendCheck = [typeSend, receiver_identifier](std::string socket_identifier) {
-        switch (typeSend) {
+    static auto isSendCheck = [](const Config::Net::TypeSend& type_send, const std::string& receiver_identifier, const std::string& socket_identifier) {
+        switch (type_send) {
         case Config::Net::TypeSend::Except:
             return socket_identifier != receiver_identifier;
         case Config::Net::TypeSend::Focused:
@@ -267,7 +267,7 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : std::as_const(m_connections)) {
-        if (service->isActive() && isSendCheck(service->identifier().toStdString())) {
+        if (service->isActive() && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->sendMessage(QByteArray::fromStdString(serialized_message));
         }
