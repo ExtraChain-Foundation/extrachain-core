@@ -31,7 +31,7 @@
 #include <fstream>
 #include <vector>
 
-CalculateTraffic* CalculateTraffic::calculateTraffic_= nullptr;
+CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
 const QList<SocketService *> &NetworkManager::connections() const {
     return m_connections;
@@ -253,7 +253,9 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
         return;
     }
 
-    static auto isSendCheck = [](const Config::Net::TypeSend& type_send, const std::string& receiver_identifier, const std::string& socket_identifier) {
+    static auto isSendCheck = [](const Config::Net::TypeSend &type_send,
+                                 const std::string &receiver_identifier,
+                                 const std::string &socket_identifier) {
         switch (type_send) {
         case Config::Net::TypeSend::Except:
             return socket_identifier != receiver_identifier;
@@ -267,7 +269,8 @@ void NetworkManager::sendMessage(const std::string &serialized_message, Config::
     };
 
     for (const auto &service : std::as_const(m_connections)) {
-        if (service->isActive() && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
+        if (service->isActive()
+            && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->sendMessage(QByteArray::fromStdString(serialized_message));
         }
@@ -608,7 +611,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             qDebug() << "run code from " << transactionData.path.c_str()
                      << "with hash: " << transactionData.hash.c_str();
         }
-//        node.createTransaction(transaction);
+        //        node.createTransaction(transaction);
         node.txManager()->addTransaction(transaction);
         break;
     }
@@ -658,7 +661,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             break;
         }
         case MessageStatus::Response: {
-            switch(requestReward.TypeFunctioning) {
+            switch (requestReward.TypeFunctioningObj) {
             case DFSR::TypeFunctioning::Test: {
                 qDebug() << "[TEST] You could receive" << requestReward.RewardAmount;
                 break;
@@ -830,6 +833,23 @@ void NetworkManager::localInizialization() {
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 }
 
+std::string NetworkManager::getNetworkVPNHash() noexcept {
+    return m_networkHashForVPN;
+}
+
+void NetworkManager::setNetworkVPNHash() noexcept {
+    boost::mt11213b rng(std::chrono::system_clock::now().time_since_epoch().count());
+    boost::random::uniform_int_distribution<> dist(0, INT_MAX);
+    std::string salt = Tools::typeToStdStringBytes<int>(dist(rng));
+
+    KeyPrivate key;
+    key.generate();
+    m_networkHashForVPN =
+        Utils::calcHash(key.publicKey() + node.accountController()->mainActor().id().toString().toStdString()
+                            + salt,
+                        Utils::HashEncode::Sha3_512).substr(0, 64);
+}
+
 QString NetworkManager::localIp() {
     return local->ip().toString();
 }
@@ -851,25 +871,24 @@ void NetworkManager::onNewWsConnection() {
         .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket });
 }
 
-CalculateTraffic *CalculateTraffic::GetInstance()
-{
-    if(calculateTraffic_==nullptr){
+CalculateTraffic *CalculateTraffic::GetInstance() {
+    if (calculateTraffic_ == nullptr) {
         calculateTraffic_ = new CalculateTraffic();
     }
     return calculateTraffic_;
 }
 
-void CalculateTraffic::addBytesSent(const std::string &ip, qint64 bytes){
+void CalculateTraffic::addBytesSent(const std::string &ip, qint64 bytes) {
     std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesSent += bytes;
 }
 
-void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes){
+void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes) {
     std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesReceived += bytes;
 }
 
-qint64 CalculateTraffic::totalBytesSent(const std::string &ip)  {
+qint64 CalculateTraffic::totalBytesSent(const std::string &ip) {
     std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
     auto it = m_trafficStats.find(ip);
     if (it != m_trafficStats.end()) {
@@ -878,7 +897,7 @@ qint64 CalculateTraffic::totalBytesSent(const std::string &ip)  {
     return 0;
 }
 
-qint64 CalculateTraffic::totalBytesReceived(const std::string &ip){
+qint64 CalculateTraffic::totalBytesReceived(const std::string &ip) {
     std::lock_guard<std::mutex> lock(m_mutex);
     auto it = m_trafficStats.find(ip);
     if (it != m_trafficStats.end()) {
