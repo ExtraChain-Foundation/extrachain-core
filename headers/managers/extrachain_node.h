@@ -26,6 +26,7 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
+#include "managers/vpn_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -49,43 +50,54 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 
 private:
     // common object for
-    DfsController *m_dfs = nullptr;
-    ActorIndex *m_actorIndex = nullptr;
-    Blockchain *m_blockchain = nullptr;
-    NetworkManager *m_networkManager = nullptr;
-    TransactionManager *m_txManager = nullptr;
-    AccountController *m_accountController = nullptr;
-    DataMiningManager *m_dmm = nullptr;
-    ConnectionsManager *m_connectionsManager = nullptr;
+    DfsController*      m_dfs                = nullptr;
+    ActorIndex*         m_actorIndex         = nullptr;
+    Blockchain*         m_blockchain         = nullptr;
+    NetworkManager*     m_networkManager     = nullptr;
+    TransactionManager* m_txManager          = nullptr;
+    AccountController*  m_accountController  = nullptr;
+    DataMiningManager*  m_dmm                = nullptr;
+    ConnectionsManager* m_connectionsManager = nullptr;
     // RestApiServerManager *m_restApiServerManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
-    bool fileMode = true;
-    bool started = false;
-    bool isClientApplication = false;
-    uint64_t blockCount;
+    bool                   fileMode            = true;
+    bool                   started             = false;
+    bool                   isClientApplication = false;
+    uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
+
+    std::shared_ptr<VPNManager> m_vpnManager;
+    std::string                 m_vpnFileAddedHash;
+
 public:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
 
-    bool createNewNetwork(const QString &email, const QString &password, const QString &tokenName,
-                          const QString &tokenCount, const QString &tokenColor);
+    bool createNewNetwork(
+        const QString& email,
+        const QString& password,
+        const QString& tokenName,
+        const QString& tokenCount,
+        const QString& tokenColor);
     void start();
+
     bool isClientApp() {
         return isClientApplication;
     };
-    Blockchain *blockchain();
-    NetworkManager *network();
-    AccountController *accountController() const;
-    ActorIndex *actorIndex() const;
-    DfsController *dfs() const;
-    TransactionManager *txManager() const;
-    DataMiningManager *dataMiningManager() const;
-    ConnectionsManager *connectionsManager() const;
+    void createVPNKeys();
 
-    bool login(const std::string &login, const std::string &password);
-    bool login(const std::string &hash);
+    Blockchain*         blockchain();
+    NetworkManager*     network();
+    AccountController*  accountController() const;
+    ActorIndex*         actorIndex() const;
+    DfsController*      dfs() const;
+    TransactionManager* txManager() const;
+    DataMiningManager*  dataMiningManager() const;
+    ConnectionsManager* connectionsManager() const;
+
+    bool login(const std::string& login, const std::string& password);
+    bool login(const std::string& hash);
     void logout();
 
     /**
@@ -103,9 +115,9 @@ public:
 
     Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
-    Transaction createFarmingTransaction(ActorId sender, const BigNumberFloat &amount, const TypeTx &typeTx);
+    Transaction createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TypeTx& typeTx);
     std::string exportUser();
-    bool importUser(const std::string &data, const std::string &login, const std::string &password);
+    bool        importUser(const std::string& data, const std::string& login, const std::string& password);
     // TODO: prepareImportUser: get visual info about file
 
     void createNetworkIdentifier();
@@ -143,6 +155,5 @@ public slots:
     void handleCountMessageReceived(BigNumber count);
 
     void calculateBlockCount();
-
 };
 #endif // EXTRACHAIN_NODE_H
