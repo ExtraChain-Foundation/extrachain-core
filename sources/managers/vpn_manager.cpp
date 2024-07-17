@@ -30,8 +30,8 @@ VPNManager::VPNManager(const QString& keysPrefix, const QString& interfaceName)
 VPNManager::~VPNManager() {
     stopService();
 
-    QDir dir(QString::fromStdString(m_wireguardFolderPath) + "keys");
-    dir.removeRecursively();
+    // QDir dir(QString::fromStdString(m_wireguardFolderPath) + "keys");
+    // dir.removeRecursively();
     qInfo() << "VPNManager succeffuly cleared!";
 }
 
@@ -121,7 +121,7 @@ void VPNManager::createKeys() {
 }
 
 QString VPNManager::getPublicKeyFilePath() const {
-    return QString::fromStdString(m_wireguardFolderPath) + "keys/" + m_keysPrefix + "_publicKey";
+    return "";//QString::fromStdString(m_wireguardFolderPath) + "keys/" + m_keysPrefix + "_publicKey";
 }
 
 void VPNManager::stopService() {
@@ -235,7 +235,7 @@ void VPNManager::startServerInternal(
     const Peer&      serverPeer,
     const QString&   postUp,
     const QString&   postDown) {
-    QString filePath = QString::fromStdString(m_wireguardFolderPath) + m_interfaceName + ".conf";
+    QString filePath = "";//QString::fromStdString(m_wireguardFolderPath) + m_interfaceName + ".conf";
 
     QFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
