@@ -26,7 +26,6 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
-#include "managers/vpn_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -67,9 +66,6 @@ private:
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
 
-    std::shared_ptr<VPNManager> m_vpnManager;
-    std::string                 m_vpnFileAddedHash;
-
 public:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
@@ -95,6 +91,7 @@ public:
     TransactionManager* txManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
+    std::string         vpnFileAddedHash;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);

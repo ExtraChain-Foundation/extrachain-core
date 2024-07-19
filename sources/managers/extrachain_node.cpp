@@ -88,8 +88,8 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    if (m_vpnManager && !m_vpnFileAddedHash.empty())
-        m_dfs->removeLocalFile(m_accountController->mainActor().id().toStdString(), m_vpnFileAddedHash);
+    if (!vpnFileAddedHash.empty())
+        m_dfs->removeLocalFile(m_accountController->mainActor().id().toStdString(), vpnFileAddedHash);
 
     emit m_networkManager->finished();
     delete m_dfs;
@@ -152,26 +152,6 @@ bool ExtraChainNode::createNewNetwork(
     }
 
     return true;
-}
-
-void ExtraChainNode::createVPNKeys() {
-    #ifdef Q_OS_LINUX
-    m_networkManager->setNetworkVPNHash();
-    auto hash    = QString::fromStdString(m_networkManager->getNetworkVPNHash());
-    m_vpnManager = VPNManager::Instance(m_accountController->mainActor().id().toString() + "_" + hash);
-
-    auto filePath      = m_vpnManager->getPublicKeyFilePath();
-    m_vpnFileAddedHash =
-        m_dfs->addLocalFile(
-            m_accountController->mainActor(),
-            filePath.toStdString(),
-            QFileInfo(filePath).fileName().toStdString(),
-            DFS::Encryption::Public);
-
-    qInfo() << "ExtraChainNode::createVPNKeys, add VPN public server key file: " << m_vpnFileAddedHash;
-    #elif defined(Q_OS_WIN)
-    qCritical() << "ExtraChainNode::createVPNKeys, not supported for Windows";
-    #endif
 }
 
 void ExtraChainNode::start() {
