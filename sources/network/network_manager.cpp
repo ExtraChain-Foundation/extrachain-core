@@ -426,9 +426,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 #endif
 
-    DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
-    calculateTraffic->addBytesReceived(connection.address, message.size());
-
     // try {
     switch (type) {
     case MessageType::ResponseDfsSize: {
@@ -678,6 +675,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::NewListConnections: {
+        DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
+        // calculateTraffic->addBytesReceived(connection.address, message.size());
         node.connectionsManager()->addNewConnection(connection);
         node.connectionsManager()->addActivity(connection);
         break;
