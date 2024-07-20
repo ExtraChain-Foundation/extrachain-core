@@ -26,6 +26,7 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
+#include "network/message_body.h"
 
 class DfsController;
 class ActorIndex;
@@ -43,6 +44,19 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 // class RestApiServerManager;
+
+namespace raccoon::vpn
+{
+    class VPNManager;
+}
+
+enum class VPNFunctionType
+{
+    SET_CLIENT,
+    SET_SERVER,
+    CHECK_SERVER,
+    GET_PUBLIC_IP
+};
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -67,7 +81,7 @@ private:
     std::vector<BigNumber> resiveCounts;
 
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(VPNMessage&, VPNFunctionType, std::string&)> vpnFunctions = nullptr);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -92,6 +106,7 @@ public:
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
     std::string         vpnFileAddedHash;
+    std::function<bool(VPNMessage&, VPNFunctionType, std::string&)> vpnFunctions;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);

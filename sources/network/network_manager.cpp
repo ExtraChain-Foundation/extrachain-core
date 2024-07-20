@@ -745,6 +745,65 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
 
+    case MessageType::VPNHandshake:
+    {
+        const auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+        if (status == MessageStatus::Response)
+        {
+            qInfo() << "Achieved VPNHandshake(Response)";
+            inputMsg.publicIP;
+            //achieved response from server -> send command to initialise server
+            VPNMessage outputMsg;
+            outputMsg.msgType = MessageType::VPNConnection;
+            outputMsg.vpnType = VPNType::SERVER;
+            outputMsg.localIP = "10.10.0.1";
+            outputMsg.publicKeyFile = node.vpnFileAddedHash;
+            node.network()->send_message(outputMsg, MessageType::VPNConnection,
+                                         MessageStatus::Request, messageId, Config::Net::TypeSend::Focused);
+        }
+        else if (status == MessageStatus::Request)
+        {
+            qInfo() << "Achieved VPNHandshake(Request)";
+            //achieved request connection from client -> If node can be setup as VPN server than send response.
+            VPNMessage inputMsg;
+            std::string output;
+            if (node.vpnFunctions && node.vpnFunctions(inputMsg, VPNFunctionType::CHECK_SERVER, output))
+            {
+                VPNMessage outputMsg;
+                outputMsg.msgType = MessageType::VPNHandshake;
+                outputMsg.vpnType = VPNType::SERVER;
+
+
+                if (!node.vpnFunctions(inputMsg, VPNFunctionType::GET_PUBLIC_IP, outputMsg.publicIP))
+                {
+                    qCritical() << "Achieved VPNHandshake(Request) command but cannot get Public IP";
+                    break;
+                }
+
+                node.network()->send_message(outputMsg, MessageType::VPNHandshake,
+                                             MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+            }
+            else
+                qCritical()  << "Achieved VPNHandshake(Request) command but Server is impossible to create.";
+        }
+        break;
+    }
+    case MessageType::VPNConnection:
+    {
+        const auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+        if (status == MessageStatus::Response)
+        {
+            //here open client VPN
+        }
+        else if (status == MessageStatus::Request)
+        {
+            // here open server
+
+            // if server is opened, send response to client
+        }
+        break;
+    }
+
     default:
         qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
         break;

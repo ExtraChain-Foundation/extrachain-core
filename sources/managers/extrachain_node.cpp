@@ -38,8 +38,9 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
-    : isClientApplication(isClientApp) {
+ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, std::function<bool(VPNMessage&, VPNFunctionType, std::string&)> vpnFunctions)
+    : isClientApplication(isClientApp), vpnFunctions(vpnFunctions)
+{
     static bool singleton = false;
     if (!singleton)
         singleton = true;
