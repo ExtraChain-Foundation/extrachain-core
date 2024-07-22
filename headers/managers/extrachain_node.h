@@ -55,7 +55,8 @@ enum class VPNFunctionType
     SET_CLIENT,
     SET_SERVER,
     CHECK_SERVER,
-    GET_PUBLIC_IP
+    GET_PUBLIC_IP,
+    IS_CONNECTED
 };
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
@@ -81,7 +82,7 @@ private:
     std::vector<BigNumber> resiveCounts;
 
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(VPNMessage&, VPNFunctionType, std::string&)> vpnFunctions = nullptr);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions = nullptr);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -106,7 +107,7 @@ public:
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
     std::string         vpnFileAddedHash;
-    std::function<bool(VPNMessage&, VPNFunctionType, std::string&)> vpnFunctions;
+    std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);

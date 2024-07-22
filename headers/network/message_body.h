@@ -112,13 +112,12 @@ FORMAT_ENUM(VPNType)
 
 struct VPNMessage
 {
-    MessageType msgType;
     VPNType     vpnType;
     std::string localIP;
     std::string publicIP;
     std::string publicKeyFile;
 
-    MSGPACK_DEFINE(msgType, vpnType, localIP, publicIP, publicKeyFile)
+    MSGPACK_DEFINE(vpnType, localIP, publicIP, publicKeyFile)
 };
 
 #endif // MESSAGEBODY_H
