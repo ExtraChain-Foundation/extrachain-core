@@ -131,8 +131,16 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
 }
 
 void ActorIndex::handleNewAllActors(const std::vector<std::string> &actors) {
+    static bool firstExec = true;
     for (const std::string &actor : actors)
-        getActor(actor);
+    {
+        auto actorRes = getActor(actor);
+        if (firstExec && !actorRes.empty())
+        {
+            emit node.actorInitiated();
+            firstExec = false;
+        }
+    }
 }
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {

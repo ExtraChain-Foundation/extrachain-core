@@ -160,6 +160,7 @@ signals:
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
     void vpnConnected();
+    void actorInitiated();
 
 private slots:
     void getAllActorsTimerCall();

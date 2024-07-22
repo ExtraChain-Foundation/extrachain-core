@@ -219,7 +219,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
         return;
 
     const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
-    qDebug().noquote().nospace() << QString("[NetworkManager] Connect to %1. protocol: %2. port: %3")
+    qInfo().noquote().nospace() << QString("[NetworkManager] Connect to %1. protocol: %2. port: %3")
                                         .arg(ip)
                                         .arg((int)protocol)
                                         .arg(port);
