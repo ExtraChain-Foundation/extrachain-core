@@ -111,7 +111,7 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
 
 void DataMiningManager::interestAccrual() {
     indexBlock++;
-    updateLastIndex();
+    // updateLastIndex();
     if (indexBlock % indexBlockFarming == 0) {
         if(!isRecalculate) {
             calculateFarmingBalanceMainUser();

@@ -378,7 +378,7 @@ bool DBConnector::implementationPrepare(const std::string &tableName, const DBRo
         auto it = std::find_if(columns.begin(), columns.end(),
                                [&toFind](const DBColumn &column) { return column.name == toFind; });
         if (it == columns.end()) {
-            qDebug() << "[DBConnector] ImplementationPrepare: Column find error";
+            qDebug() << "[DBConnector] ImplementationPrepare: Column find error. Table name: " << tableName << "Data:" << data.begin()->first << data.begin()->second;
             sqlite3_finalize(stmt);
             return false;
         }
