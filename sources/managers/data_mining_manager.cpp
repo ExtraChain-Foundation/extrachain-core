@@ -71,7 +71,7 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     rewardTx.setToken(ActorId());
     rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
     rewardTx.setData(Utils::bytesEncodeStdString(mb.data));
-    rewardTx.sign(node->accountController()->mainActor());
+    rewardTx.sign(*node->accountController()->mainActor());
     qDebug() << rewardTx.getTypeTx();
     return rewardTx;
 }
@@ -94,7 +94,7 @@ Transaction DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &re
     rewardTx.setTypeTx(TypeTx::RewardTransaction);
     rewardTx.setToken(ActorId());
     rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
-    rewardTx.sign(node->accountController()->mainActor());
+    rewardTx.sign(*node->accountController()->mainActor());
     return rewardTx;
 }
 
@@ -118,7 +118,7 @@ void DataMiningManager::interestAccrual() {
         }
         BigNumberFloat result = balanceFarming * farmingPercent;
         balanceFarming += result;
-        ActorId actorId = node->accountController()->mainActor().id();
+        ActorId actorId = node->accountController()->mainActor()->id();
         Transaction tx = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
         node->txManager()->addTransaction(tx);
     }
@@ -129,7 +129,7 @@ BigNumberFloat DataMiningManager::farmingBalance() const {
 }
 
 void DataMiningManager::calculateFarmingBalanceMainUser() {
-    auto currentActorId = node->accountController()->currentProfile().current().id();
+    auto currentActorId = node->accountController()->currentProfile().current()->id();
     balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TypeTx::FarmingTransaction);
     isRecalculate = true;
 }

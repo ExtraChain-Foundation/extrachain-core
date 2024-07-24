@@ -757,11 +757,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             outputMsg.localIP = "10.10.0.1";
             outputMsg.publicKeyFile = node.vpnFileAddedHash;
 
-            auto&       mainActor = node.accountController()->mainActor();
+            auto       mainActor = node.accountController()->mainActor();
             MessageBody message   =
-                make_message(MessagePack::serialize(outputMsg), MessageType::VPNConnection, MessageStatus::Request, mainActor.id(), "");
+                make_message(MessagePack::serialize(outputMsg), MessageType::VPNConnection, MessageStatus::Request, mainActor->id(), "");
             auto        serialized = message.serialize();
-            auto        sign       = mainActor.key().sign(serialized);
+            auto        sign       = mainActor->key().sign(serialized);
             this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
 
 
@@ -810,23 +810,32 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                 // open VPN server
                 if (node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::SET_SERVER, output))
                 {
-                    // if server is opened, send response to client
-                    output.clear();
-                    if (node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::IS_CONNECTED, output))
+                    VPNMessage outputMsg;
+                    outputMsg.publicKeyFile = node.vpnFileAddedHash;
+
+                    if (!node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::GET_PUBLIC_IP, outputMsg.publicIP))
                     {
-                        VPNMessage outputMsg;
-                        outputMsg.publicKeyFile = node.vpnFileAddedHash;
-
-                        if (!node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::GET_PUBLIC_IP, outputMsg.publicIP))
-                        {
-                            qCritical() << "Achieved VPNConnection(Request) command but cannot get Public IP";
-                            break;
-                        }
-
-                        node.network()->send_message(outputMsg, MessageType::VPNConnection,
-                                                     MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+                        qCritical() << "Achieved VPNConnection(Request) command but cannot get Public IP";
+                        break;
                     }
+
+                    node.network()->send_message(outputMsg, MessageType::VPNConnection,
+                                                 MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
                 }
+            }
+        }
+        break;
+    }
+    case MessageType::VPNDisconnect:
+    {
+        auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+        if (status == MessageStatus::Request)
+        {
+            qInfo() << "Achieved VPNDisconnect(Request)";
+            if (node.vpnFunctions)
+            {
+                std::string output;
+                node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::DISCONNECT, output);
             }
         }
         break;
@@ -931,7 +940,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     KeyPrivate key;
     key.generate();
     m_networkHashForVPN =
-        Utils::calcHash(key.publicKey() + node.accountController()->mainActor().id().toString().toStdString()
+        Utils::calcHash(key.publicKey() + node.accountController()->mainActor()->id().toString().toStdString()
                             + salt,
                         Utils::HashEncode::Sha3_512).substr(0, 64);
 }

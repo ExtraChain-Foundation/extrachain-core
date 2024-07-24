@@ -373,10 +373,10 @@ bool Blockchain::signCheckAdd(Block &block) {
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = node->accountController()->mainActor().id().toByteArray();
+            QByteArray id = node->accountController()->mainActor()->id().toByteArray();
             if (!list.contains(id)) {
                 QByteArray sign = QByteArray::fromStdString(
-                    node->accountController()->mainActor().key().sign(block.getHash()));
+                    node->accountController()->mainActor()->key().sign(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -407,10 +407,10 @@ bool Blockchain::signCheckAdd(Block &block) {
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = node->accountController()->mainActor().id().toByteArray();
+            QByteArray id = node->accountController()->mainActor()->id().toByteArray();
             if (!list.contains(id)) {
                 QByteArray sign = QByteArray::fromStdString(
-                    node->accountController()->mainActor().key().sign(block.getHash()));
+                    node->accountController()->mainActor()->key().sign(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -438,7 +438,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor,
                 }
 
                 // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
-                nb.sign(node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
+                nb.sign(*node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
             } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
             return nb;
@@ -730,7 +730,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     if (!isGenesis && resultCode == 0) {
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation()) {
-            GenesisBlock gB = createGenesisBlock(node->accountController()->mainActor());
+            GenesisBlock gB = createGenesisBlock(*node->accountController()->mainActor());
             if (blockIndex.addBlock(gB) == 0) {
                 qDebug() << "Block" << gB.getIndex() << QByteArray::fromStdString(gB.getType())
                          << "is successfully added to blockchain";
@@ -874,7 +874,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
 }
 
 void Blockchain::signBlock(Block &block) const {
-    block.sign(node->accountController()->currentWallet());
+    block.sign(*node->accountController()->currentWallet());
 }
 
 QString Blockchain::getLastBlockData() const {
@@ -991,9 +991,9 @@ void Blockchain::requestCoins(const ActorId &receiver, const BigNumberFloat &amo
 void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward,
                                  const std::string &messageId) {
     auto mainActor = node->accountController()->mainActor();
-    if (mainActor.id() == node->actorIndex()->firstId()) {
+    if (mainActor->id() == node->actorIndex()->firstId()) {
         Transaction tx;
-        tx.setSender(mainActor.id());
+        tx.setSender(mainActor->id());
         tx.setReceiver(requestReward.Actor);
         tx.setAmount(requestReward.RewardAmount);
         tx.setDate(QDateTime::currentMSecsSinceEpoch());
@@ -1093,7 +1093,7 @@ void Blockchain::addBlockToBlockchain(Block &block) {
         QList<ActorId> list;
         auto accounts = node->accountController()->accounts();
         for (const auto &tmp : qAsConst(accounts))
-            list.append(tmp.id());
+            list.append(tmp->id());
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
@@ -1117,7 +1117,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block) {
 }
 
 // Actors //
-Actor<KeyPrivate> Blockchain::getApprover() const {
+std::shared_ptr<Actor<KeyPrivate>> Blockchain::getApprover() const {
     return node->accountController()->currentWallet();
 }
 
@@ -1231,7 +1231,7 @@ void Blockchain::proveTx(Transaction &tx) {
     // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.isEmpty()) {
         qDebug() << "target received is empty";
-        tx.sign(node->accountController()->currentWallet());
+        tx.sign(*node->accountController()->currentWallet());
 
         txManager->addProvedTransaction(tx);
         return;
@@ -1249,7 +1249,7 @@ void Blockchain::proveTx(Transaction &tx) {
                 return;
             }
 
-            auto mainActorId = node->accountController()->mainActor().id();
+            auto mainActorId = node->accountController()->mainActor()->id();
             ActorId firstId = node->actorIndex()->firstId();
             if (senderCurrentBalance - tx.getAmount() - tx.getAmount() / 100 < 0 && mainActorId == firstId) {
                 qDebug() << senderCurrentBalance << tx.getAmount();
@@ -1261,7 +1261,7 @@ void Blockchain::proveTx(Transaction &tx) {
 
             txManager->addProvedTransaction(tx);
         } else {
-            tx.sign(node->accountController()->currentWallet());
+            tx.sign(*node->accountController()->currentWallet());
             txManager->addProvedTransaction(tx);
             return;
         }

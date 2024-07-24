@@ -56,7 +56,8 @@ enum class VPNFunctionType
     SET_SERVER,
     CHECK_SERVER,
     GET_PUBLIC_IP,
-    IS_CONNECTED
+    IS_CONNECTED,
+    DISCONNECT
 };
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
@@ -108,6 +109,7 @@ public:
     ConnectionsManager* connectionsManager() const;
     std::string         vpnFileAddedHash;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
+    std::string vpnClientToServerIdentifier;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);

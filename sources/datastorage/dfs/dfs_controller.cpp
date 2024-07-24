@@ -32,7 +32,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
     requestDirData(actorId);
 }
 
-std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+std::string DfsController::addLocalFile(const std::shared_ptr<Actor<KeyPrivate>> actor, const std::filesystem::path &filePath,
                                         std::string targetVirtualFilePath, DFS::Encryption securityLevel) {
     std::filesystem::path fpath = DFS_PATH::convertPathToPlatform(filePath);
     std::filesystem::path newFilePath = fpath;
@@ -76,7 +76,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
         if (!std::filesystem::exists(newFilePath)) {
             std::filesystem::copy(filePath, newFilePath);
         }
-        actor.key().encryptFile(fpath, newFilePath);
+        actor->key().encryptFile(fpath, newFilePath);
 
         std::filesystem::path nvp = targetVirtualFilePath;
         std::filesystem::path nfn = nvp.filename();
@@ -89,8 +89,8 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     std::string fileName = createFileName(filePath);
     std::string fileHash = Utils::calcHashForFile(newFilePath);
     std::filesystem::path placeInDFS =
-        DFSB::fsActrRootW + DFSB::separator + actor.id().toString().toStdWString() + DFSB::separator;
-    std::filesystem::path dfsPath = DFS_PATH::filePath(actor.id(), fileName);
+        DFSB::fsActrRootW + DFSB::separator + actor->id().toString().toStdWString() + DFSB::separator;
+    std::filesystem::path dfsPath = DFS_PATH::filePath(actor->id(), fileName);
 
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
@@ -114,16 +114,16 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     if (std::filesystem::exists(newFilePath) && securityLevel == DFS::Encryption::Encrypted)
         std::filesystem::remove(newFilePath);
 
-    FragmentStorage fs(actor.id(), fileName, fileHash);
+    FragmentStorage fs(actor->id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
 
-    const auto actorId = actor.id().toStdString();
+    const auto actorId = actor->id().toStdString();
     DFSP::AddFileMessage msg = { .Actor = actorId,
                                  .FileName = fileName,
                                  .FileHash = fileHash,
                                  .Path = newTargetVirtualFilePath,
                                  .Size = fileSize };
-    qDebug() << "AddFileMessage" << actor.id().toString() << fileName.c_str()
+    qDebug() << "AddFileMessage" << actor->id().toString() << fileName.c_str()
              << newTargetVirtualFilePath.c_str() << fileSize;
 
     auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
@@ -145,7 +145,7 @@ std::string DfsController::addLocalFile(const Actor<KeyPrivate> &actor, const st
     dirsFile.replace(DFST::DirsFile::TableName,
                      { { "actorId", actorId }, { "lastModified", rowData.at("lastModified") } });
 
-    sendFile(actor.id().toStdString(), fileName);
+    sendFile(actor->id().toStdString(), fileName);
     return addFile(msg, false);
 }
 
@@ -256,7 +256,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
 }
 
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileName) {
-    Actor<KeyPrivate> localOwner = node.accountController()->currentProfile().getActor(owner);
+    auto localOwner = node.accountController()->currentProfile().getActor(owner);
     std::string pathDelim = Utils::platformDelimeter();
     const std::string ownerPath = DFSB::fsActrRoot + pathDelim + owner.toStdString() + pathDelim;
     std::filesystem::path realFilePath = fmt::format("{}{}", ownerPath, fileName);
@@ -272,10 +272,10 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
     if (!actrDirData.empty()) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("filePath");
         if ((virtualFilePath.end()--)->string() == "secured") {
-            if (!localOwner.empty()) {
+            if (!localOwner->empty()) {
                 std::filesystem::create_directories(tempFilePath);
                 tempFilePath /= virtualFilePath.filename();
-                localOwner.key().decryptFile(realFilePath, tempFilePath);
+                localOwner->key().decryptFile(realFilePath, tempFilePath);
                 return tempFilePath.string();
             }
         }
@@ -285,7 +285,7 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 }
 
 bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
-    if (msg.Actor == node.accountController()->mainActor().id().toStdString()) {
+    if (msg.Actor == node.accountController()->mainActor()->id().toStdString()) {
         qDebug() << "[Dfs] Remove file - file has been removed";
         return false;
     }
@@ -1222,7 +1222,7 @@ bool DfsController::writeAvailable(uint64_t size) {
     return bytesAvailable() > size + 10000;
 }
 
-ThreadAddFiles::ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor,
+ThreadAddFiles::ThreadAddFiles(DfsController *dfsController, const std::shared_ptr<Actor<KeyPrivate>> actor,
                                const QStringList &files, QObject *parent)
     : QThread(parent)
     , m_dfsController(dfsController)
@@ -1242,7 +1242,7 @@ void ThreadAddFiles::run() {
     }
 }
 
-void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+void ThreadAddFiles::addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath) {
     std::filesystem::path fpath = DFS_PATH::convertPathToPlatform(filePath);
     std::filesystem::path newFilePath = fpath;
@@ -1285,8 +1285,8 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     std::string fileName = m_dfsController->createFileName(filePath);
     std::string fileHash = Utils::calcHashForFile(newFilePath);
     std::filesystem::path placeInDFS =
-        DFSB::fsActrRootW + DFSB::separator + actor.id().toString().toStdWString() + DFSB::separator;
-    std::filesystem::path dfsPath = DFS_PATH::filePath(actor.id(), fileName);
+        DFSB::fsActrRootW + DFSB::separator + actor->id().toString().toStdWString() + DFSB::separator;
+    std::filesystem::path dfsPath = DFS_PATH::filePath(actor->id(), fileName);
 
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
@@ -1308,7 +1308,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
         qDebug() << "[Dfs] Copy error:" << err.what();
     }
 
-    const auto actorId = actor.id().toStdString();
+    const auto actorId = actor->id().toStdString();
     DFSP::AddFileMessage msg = { .Actor = actorId,
                                  .FileName = fileName,
                                  .FileHash = fileHash,
@@ -1366,7 +1366,7 @@ void ThreadAddFiles::addFile(const Actor<KeyPrivate> &actor, const std::filesyst
     dirsFile.replace(DFST::DirsFile::TableName,
                      { { "actorId", msg.Actor }, { "lastModified", rowData.at("lastModified") } });
 
-    FragmentStorage fs(actor.id(), fileName, fileHash);
+    FragmentStorage fs(actor->id(), fileName, fileHash);
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
 

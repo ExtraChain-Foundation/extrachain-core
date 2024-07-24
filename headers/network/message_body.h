@@ -50,7 +50,8 @@ enum class MessageType {
     RequestListNodes = 112,
 
     VPNHandshake = 113,
-    VPNConnection = 114
+    VPNConnection = 114,
+    VPNDisconnect = 115
 
 };
 MSGPACK_ADD_ENUM(MessageType)

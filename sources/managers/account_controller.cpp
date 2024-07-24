@@ -70,13 +70,13 @@ bool AccountController::load(const std::string &hash) {
         if (profile.loaded()) {
             const auto &actors = profile.actors();
             for (auto &actor : actors) {
-                if (node.actorIndex()->getById(actor.id()).isEmpty()) {
-                    node.actorIndex()->addActor(actor.convertToPublic());
+                if (node.actorIndex()->getById(actor->id()).isEmpty()) {
+                    node.actorIndex()->addActor(actor->convertToPublic());
                 }
             }
 
             m_profiles.push_back(profile);
-            m_currentProfile = profile.main().id();
+            m_currentProfile = profile.main()->id();
             node.start(); // TODO: remove
             if (this->empty())
                 node.txManager()->runMakeAndProveBlockTimers();
@@ -88,7 +88,7 @@ bool AccountController::load(const std::string &hash) {
     return false;
 }
 
-const Actor<KeyPrivate> &AccountController::mainActor() {
+const std::shared_ptr<Actor<KeyPrivate>> AccountController::mainActor() {
     if (m_profiles.empty()) {
         qFatal("[AccountController] No main actor");
         std::exit(-1);
@@ -98,12 +98,12 @@ const Actor<KeyPrivate> &AccountController::mainActor() {
 
 PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
     for (auto &profile : m_profiles) {
-        if (actorId == profile.main().id()) {
+        if (actorId == profile.main()->id()) {
             return profile;
         }
     }
 
-    qFatal("Can't find actor");
+    qFatal("AccountController::getProfile, Can't find actor");
     std::exit(-123);
     return m_profiles.front();
 }
@@ -113,12 +113,12 @@ const PrivateProfile &AccountController::currentProfile() const {
         qFatal("Incorrect current profile");
 
     for (auto &profile : m_profiles) {
-        if (m_currentProfile == profile.main().id()) {
+        if (m_currentProfile == profile.main()->id()) {
             return profile;
         }
     }
 
-    qFatal("Can't find actor");
+    qFatal("AccountController::currentProfile, Can't find actor");
     std::exit(-123);
     return m_profiles.front();
 }
@@ -137,14 +137,14 @@ void AccountController::changeCurrentProfile(const ActorId &actorId) {
     }
 }
 
-const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
+const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &AccountController::accounts() const {
     return currentProfile().actors();
 }
 
 const std::vector<ActorId> AccountController::accountsIds() const {
     std::vector<ActorId> ids;
     for (int i = 0; i < currentProfile().actors().size(); i++) {
-        ids.push_back(currentProfile().actors()[i].id());
+        ids.push_back(currentProfile().actors()[i]->id());
     }
     return ids;
 }
@@ -159,7 +159,7 @@ const std::vector<ActorId> AccountController::farmingIds() const
     return ids;
 }
 
-const Actor<KeyPrivate> &AccountController::currentWallet() const {
+const std::shared_ptr<Actor<KeyPrivate>> AccountController::currentWallet() const {
     return currentProfile().current();
 }
 
