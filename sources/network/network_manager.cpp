@@ -797,7 +797,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             {
                 output.clear();
                 if (node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::IS_CONNECTED, output))
+                {
+                    node.vpnClientToServerIdentifier = identifier;
                     emit node.vpnConnected();
+                }
             }
         }
         else if (status == MessageStatus::Request)
@@ -829,14 +832,13 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::VPNDisconnect:
     {
         auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
-        if (status == MessageStatus::Request)
+
+        qInfo() << "Achieved VPNDisconnect(Request)";
+
+        if (node.vpnFunctions)
         {
-            qInfo() << "Achieved VPNDisconnect(Request)";
-            if (node.vpnFunctions)
-            {
-                std::string output;
-                node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::DISCONNECT, output);
-            }
+            std::string output;
+            node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::DISCONNECT, output);
         }
         break;
     }
