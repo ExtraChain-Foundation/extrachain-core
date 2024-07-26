@@ -123,7 +123,7 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
     //    connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
     connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
-    connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this,
+    connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::errorOccurred), this,
             &WebSocketService::onSocketError);
 }
 
