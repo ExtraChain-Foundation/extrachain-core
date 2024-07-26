@@ -109,7 +109,7 @@ public:
     ConnectionsManager* connectionsManager() const;
     std::string         vpnFileAddedHash;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
-    std::string vpnClientToServerIdentifier;
+    std::string vpnRequesterIdentifier;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);

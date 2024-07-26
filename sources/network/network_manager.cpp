@@ -798,7 +798,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                 output.clear();
                 if (node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::IS_CONNECTED, output))
                 {
-                    node.vpnClientToServerIdentifier = identifier;
+                    node.vpnRequesterIdentifier = identifier;
                     emit node.vpnConnected();
                 }
             }
@@ -821,6 +821,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         qCritical() << "Achieved VPNConnection(Request) command but cannot get Public IP";
                         break;
                     }
+                    node.vpnRequesterIdentifier = identifier;
 
                     node.network()->send_message(outputMsg, MessageType::VPNConnection,
                                                  MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
@@ -839,6 +840,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         {
             std::string output;
             node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::DISCONNECT, output);
+            node.vpnRequesterIdentifier.clear();
         }
         break;
     }
@@ -866,6 +868,19 @@ void NetworkManager::removeWsConnection() {
     auto connection = qobject_cast<SocketService *>(QObject::sender());
     auto removed = m_connections.removeAll(connection);
     qDebug() << "[WS] Removed" << connection;
+
+    if (node.vpnRequesterIdentifier == connection->identifier().toStdString())
+    {
+        std::string output;
+        ActorId senderId;
+        VPNMessage message;
+        if (node.vpnFunctions && node.vpnFunctions(node, message, senderId, VPNFunctionType::IS_CONNECTED, output))
+        {
+            node.vpnFunctions(node, message, senderId, VPNFunctionType::DISCONNECT, output);
+        }
+    }
+
+
     //    m_reconnections.remove(NetworkReconnect {
     //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
     connection->deleteLater();
