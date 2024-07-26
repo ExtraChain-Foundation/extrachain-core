@@ -79,6 +79,11 @@ static const std::string GENESIS_BLOCK_TYPE = "genesis";
 static const std::string GENESIS_BLOCK_MERGE = "genesisMerge";
 }
 
+namespace Token {
+static const std::string EXTRACHAIN_TOKEN = "";
+static const std::string ROCC_TOKEN = "ROCC";
+}
+
 /**
  * @brief Genesis block it's an extended block, with has specific data field
  * and one additional field - prevGenHash.

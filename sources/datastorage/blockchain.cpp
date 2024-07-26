@@ -907,7 +907,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeT
             const auto rows = genesis.extractDataRows();
 
             for (const auto &row : rows) {
-                if (userId == row.actorId)
+                if (userId == row.actorId && tokenId == row.token)
                     balance += row.state;
             }
 
@@ -919,10 +919,11 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeT
 
         auto txs = currentBlock.extractTransactions();
         for (auto &tx : txs) {
-            if(tx.getTypeTx() != typeTx)
+            if(tx.getTypeTx() != typeTx ||
+               tx.getToken() != tokenId)
                 continue;
 
-            if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
+            if (tx.getReceiver() == userId ) {
                 balance += tx.getAmount();
             }
 

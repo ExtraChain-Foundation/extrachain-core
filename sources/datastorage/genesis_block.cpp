@@ -41,8 +41,10 @@ GenesisBlock::GenesisBlock(const std::string &_data, const Block &prevBlock, con
 
 void GenesisBlock::addRow(const GenesisDataRow &row) {
     std::vector<std::string> v;
+    if(!this->data.empty())
+        v = Serialization::deserialize(this->data);
     v.push_back(row.serialize());
-    this->data += Serialization::serialize(v);
+    this->data = Serialization::serialize(v);
 }
 
 const std::string &GenesisBlock::getDataForDigSig() const {

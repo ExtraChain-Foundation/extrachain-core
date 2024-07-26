@@ -26,6 +26,7 @@
 #include "utils/exc_utils.h"
 #include <QDateTime>
 #include <QString>
+
 enum class TypeTx {
     Transaction = 0,
     RewardTransaction = 1,
