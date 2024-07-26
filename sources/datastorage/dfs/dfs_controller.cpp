@@ -1097,11 +1097,11 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
 
     connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment);
     connect(&fw, &FragmentWriter::downloadProgress, this,
-            [=](const std::string &actor, const std::string &fileName, const double progress) {
+            [=, this](const std::string &actor, const std::string &fileName, const double progress) {
                 downloadProgress(ActorId(actor), fileName, progress);
             });
     connect(&fw, &FragmentWriter::eraseFromFiles, this,
-            [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
+            [=, this](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
     connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
     connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
