@@ -100,7 +100,7 @@ void NetworkManager::removeConnection(const QString &identifier) {
     if (identifier.isEmpty())
         qFatal("Try remove with empty identifier");
 
-    for (auto connection : qAsConst(m_connections)) {
+    for (auto connection : std::as_const(m_connections)) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
@@ -111,7 +111,7 @@ NetworkManager::~NetworkManager() {
     delete upnpDis;
     delete local;
 
-    for (const auto &connection : qAsConst(m_connections)) {
+    for (const auto &connection : std::as_const(m_connections)) {
         emit connection->close();
         emit connection->finished();
     }
@@ -364,7 +364,7 @@ bool NetworkManager::isActiveConnectionExists() {
     if (this->m_connections.isEmpty())
         return false;
 
-    for (const auto &el : qAsConst(this->m_connections)) {
+    for (const auto &el : std::as_const(this->m_connections)) {
         if (el->isActive())
             return true;
     }

@@ -179,7 +179,7 @@ std::string TransactionManager::convertTxs(const std::vector<Transaction> &txs) 
 BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
     BigNumberFloat res = 0;
     if (!pendingTxs.empty()) {
-        for (const Transaction &tmp : qAsConst(pendingTxs)) {
+        for (const Transaction &tmp : std::as_const(pendingTxs)) {
             if (tmp.getSender() == sender) {
                 res -= tmp.getAmount();
             } else if (tmp.getReceiver() == sender) {
