@@ -100,7 +100,7 @@ public:
     explicit GenesisBlock(const std::string &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    explicit GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash, ActorId actorId = ActorId());
+    explicit GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash);
 
     // Block interface
 public:

@@ -437,7 +437,6 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor,
                         GenesisDataRow(i.key(), i.value(), ActorId(), DataStorage::typeDataRow::UNIVERSAL));
                 }
 
-                // nb.setApprover(BigNumber(*(actorIndex->m_firstId)));
                 nb.sign(*node->accountController()->currentProfile().getActor(node->actorIndex()->firstId()));
             } else
                 qCritical() << "Can't create genesis block, there no blocks in blockIndex";
