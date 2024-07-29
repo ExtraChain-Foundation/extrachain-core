@@ -107,6 +107,8 @@ public:
     TransactionManager* txManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
+    std::pair<std::atomic_bool, QDateTime>    vpnConnectionInProccess = {false, QDateTime()};
+    std::string         vpnMainCountry;
     std::string         vpnFileAddedHash;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
     std::string vpnRequesterIdentifier;

@@ -51,7 +51,9 @@ enum class MessageType {
 
     VPNHandshake = 113,
     VPNConnection = 114,
-    VPNDisconnect = 115
+    VPNDisconnect = 115,
+
+    ShareConnections = 116
 
 };
 MSGPACK_ADD_ENUM(MessageType)
@@ -114,11 +116,12 @@ FORMAT_ENUM(VPNType)
 struct VPNMessage
 {
     VPNType     vpnType;
+    std::string country;
     std::string localIP;
     std::string publicIP;
     std::string publicKeyFile;
 
-    MSGPACK_DEFINE(vpnType, localIP, publicIP, publicKeyFile)
+    MSGPACK_DEFINE(vpnType, country, localIP, publicIP, publicKeyFile)
 };
 
 #endif // MESSAGEBODY_H

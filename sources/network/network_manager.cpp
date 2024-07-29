@@ -94,6 +94,15 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (node.isClientApp() && requestListNodes)
             send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
     }
+    connect(service, &WebSocketService::shareConnections, this, [&](const std::string& identifier)
+    {
+        auto       mainActor = node.accountController()->mainActor();
+        MessageBody message   =
+            make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
+        auto        serialized = message.serialize();
+        auto        sign       = mainActor->key().sign(serialized);
+        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+    });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -428,6 +437,49 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     // try {
     switch (type) {
+    case MessageType::ShareConnections:{
+        if (status == MessageStatus::Request)
+        {
+            qInfo() << "Achieved ShareConnections(Request)" << messageId;
+            std::vector<std::string> ips;
+            for (const auto& item : m_connections)
+            {
+                if (identifier != item->identifier().toStdString())
+                {
+                    qDebug() << item->ip().toStdString();
+                    ips.emplace_back(item->ip().toStdString());
+                }
+            }
+
+            if (!ips.empty())
+            {
+                node.network()->send_message(MessagePack::serializeContainer(ips), MessageType::ShareConnections,
+                                             MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+            }
+        }
+        else if (status == MessageStatus::Response)
+        {
+            qInfo() << "Achieved ShareConnections(Response)" << messageId;
+            auto ipsInput = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            auto ips = MessagePack::deserializeContainer<std::string>(ipsInput);
+            for (const auto& item : ips)
+            {
+                bool canConnect = true;
+                for (const auto& connItem : m_connections)
+                {
+                    if (item == connItem->ip().toStdString())
+                    {
+                        canConnect = false;
+                        break;
+                    }
+                }
+
+                if (canConnect)
+                    connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
+            }
+        }
+        break;
+    }
     case MessageType::ResponseDfsSize: {
         const auto msgStruct = MessagePack::deserialize<DFSP::ResponseDfsSize>(serialized);
         if (Utils::globalVariableOfDfsSize < msgStruct.Size) {
@@ -747,38 +799,64 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::VPNHandshake:
     {
-        const auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+        auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
         if (status == MessageStatus::Response)
         {
-            qInfo() << "Achieved VPNHandshake(Response)" << messageId;
-            //achieved response from server -> send command to initialise server
-            VPNMessage outputMsg;
-            outputMsg.vpnType = VPNType::SERVER;
-            outputMsg.localIP = "10.10.0.1";
-            outputMsg.publicKeyFile = node.vpnFileAddedHash;
+            if (node.vpnConnectionInProccess.first)
+            {
+                QDateTime currentTime = QDateTime::currentDateTime();
+                if (node.vpnConnectionInProccess.second.secsTo(currentTime) >= 3)
+                    node.vpnConnectionInProccess.first = false;
+            }
 
-            auto       mainActor = node.accountController()->mainActor();
-            MessageBody message   =
-                make_message(MessagePack::serialize(outputMsg), MessageType::VPNConnection, MessageStatus::Request, mainActor->id(), "");
-            auto        serialized = message.serialize();
-            auto        sign       = mainActor->key().sign(serialized);
-            this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+            if (!node.vpnConnectionInProccess.first)
+            {
+                qInfo() << "Achieved VPNHandshake(Response)" << messageId;
+                //achieved response from server -> send command to initialise server
+                VPNMessage outputMsg;
+                outputMsg.vpnType = VPNType::SERVER;
+                outputMsg.localIP = "10.10.0.1";
+                outputMsg.publicKeyFile = node.vpnFileAddedHash;
 
+                auto       mainActor = node.accountController()->mainActor();
+                MessageBody message   =
+                    make_message(MessagePack::serialize(outputMsg), MessageType::VPNConnection, MessageStatus::Request, mainActor->id(), "");
+                auto        serialized = message.serialize();
+                auto        sign       = mainActor->key().sign(serialized);
+                this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
 
-            qInfo() << "VPNConnection(Request) sended ";
+                node.vpnConnectionInProccess.first = true;
+                node.vpnConnectionInProccess.second = QDateTime::currentDateTime();
+                qInfo() << "VPNConnection(Request) sended ";
+            }
         }
         else if (status == MessageStatus::Request)
         {
             qInfo() << "Achieved VPNHandshake(Request)" << messageId;
             //achieved request connection from client -> If node can be setup as VPN server than send response.
-            VPNMessage inputMsg;
+
+            if (node.vpnConnectionInProccess.first)
+            {
+                QDateTime currentTime = QDateTime::currentDateTime();
+                if (node.vpnConnectionInProccess.second.secsTo(currentTime) >= 3)
+                    node.vpnConnectionInProccess.first = false;
+            }
+
+            qDebug() << "Country:" << inputMsg.country << node.vpnMainCountry;
+
+            if (!inputMsg.country.empty() && inputMsg.country != node.vpnMainCountry)
+                return;
+
             std::string output;
-            if (node.vpnFunctions && node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::CHECK_SERVER, output))
+            if (node.vpnFunctions && !node.vpnConnectionInProccess.first && node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::CHECK_SERVER, output))
             {
                 VPNMessage outputMsg;
                 outputMsg.vpnType = VPNType::SERVER;
                 node.network()->send_message(outputMsg, MessageType::VPNHandshake,
                                              MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+
+                node.vpnConnectionInProccess.first = true;
+                node.vpnConnectionInProccess.second = QDateTime::currentDateTime();
             }
             else
                 qCritical()  << "Achieved VPNHandshake(Request) command but Server is impossible to create.";
@@ -798,6 +876,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                 output.clear();
                 if (node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::IS_CONNECTED, output))
                 {
+                    node.vpnConnectionInProccess.first = false;
                     node.vpnRequesterIdentifier = identifier;
                     emit node.vpnConnected();
                 }
@@ -825,6 +904,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
                     node.network()->send_message(outputMsg, MessageType::VPNConnection,
                                                  MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+
+                    node.vpnConnectionInProccess.first = false;
                 }
             }
         }

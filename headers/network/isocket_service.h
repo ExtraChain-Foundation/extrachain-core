@@ -44,6 +44,7 @@ signals:
     void close();
     void activated();
     void finished(); // if threads
+    void shareConnections(const std::string& identifier);
 
 protected:
     bool checkFirstMessage(const QString &message);

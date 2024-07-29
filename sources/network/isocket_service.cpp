@@ -104,6 +104,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     qDebug() << "[Socket] Activated" << this << protocol();
     m_activated = true;
     emit activated();
+    emit shareConnections(m_identifier.toStdString());
     return true;
 }
 
