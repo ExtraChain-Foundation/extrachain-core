@@ -110,6 +110,7 @@ public:
     std::pair<std::atomic_bool, QDateTime>    vpnConnectionInProccess = {false, QDateTime()};
     std::string         vpnMainCountry;
     std::string         vpnFileAddedHash;
+    QString             vpnFileLocalPath;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
     std::string vpnRequesterIdentifier;
 
