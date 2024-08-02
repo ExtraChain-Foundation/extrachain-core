@@ -36,6 +36,7 @@ public:
     bool loaded();
     const std::string &hash() const;
     QJsonObject toJson() const;
+    void renameWallet(const std::string& oldWalletName, const std::string& newWalletName);
 
 private:
     PrivateProfile() = default;
