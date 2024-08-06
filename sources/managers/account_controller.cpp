@@ -53,7 +53,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     return actor;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor) {
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &nameWallet, const std::string &tokenName) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
     if(nameWallet.empty()) {
