@@ -278,7 +278,6 @@ public:
             array << secret;
         }
 
-
         return array;
     }
 
@@ -301,8 +300,6 @@ public:
             auto sec = Utils::bytesDecode(array[5].toString().toLatin1());
             actor.setSecretKey(sec.toStdString(), pub.toStdString());
         }
-
-        qDebug() << actor.walletName();
 
         return actor;
     }
