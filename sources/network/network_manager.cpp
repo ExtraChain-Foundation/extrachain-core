@@ -879,29 +879,23 @@ CalculateTraffic *CalculateTraffic::GetInstance() {
 }
 
 void CalculateTraffic::addBytesSent(const std::string &ip, qint64 bytes) {
-    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    std::unique_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesSent += bytes;
 }
 
 void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes) {
-    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    std::unique_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesReceived += bytes;
 }
 
 qint64 CalculateTraffic::totalBytesSent(const std::string &ip) {
-    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     auto it = m_trafficStats.find(ip);
-    if (it != m_trafficStats.end()) {
-        return it->second.bytesSent;
-    }
-    return 0;
+    return (it != m_trafficStats.end()) ? it->second.bytesSent : 0;
 }
 
 qint64 CalculateTraffic::totalBytesReceived(const std::string &ip) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
     auto it = m_trafficStats.find(ip);
-    if (it != m_trafficStats.end()) {
-        return it->second.bytesReceived;
-    }
-    return 0;
+    return (it!=m_trafficStats.end()) ? it->second.bytesReceived : 0;
 }
