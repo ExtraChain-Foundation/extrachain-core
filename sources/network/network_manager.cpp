@@ -474,8 +474,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                     }
                 }
 
-                // if (canConnect)
-                    // connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
+                if (canConnect)
+                    connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
             }
         }
         break;
