@@ -809,25 +809,32 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                     node.vpnConnectionInProccess.first = false;
             }
 
-            if (!node.vpnConnectionInProccess.first)
+            if (inputMsg.vpnType == VPNType::SERVER)
             {
-                qInfo() << "Achieved VPNHandshake(Response)" << messageId;
-                //achieved response from server -> send command to initialise server
-                VPNMessage outputMsg;
-                outputMsg.vpnType = VPNType::SERVER;
-                outputMsg.localIP = "10.10.0.1";
-                outputMsg.publicKeyFile = node.vpnFileAddedHash;
+                if (!node.vpnConnectionInProccess.first)
+                {
+                    qInfo() << "Achieved VPNHandshake(Response)" << messageId;
+                    //achieved response from server -> send command to initialise server
+                    VPNMessage outputMsg;
+                    outputMsg.vpnType = VPNType::SERVER;
+                    outputMsg.localIP = "10.10.0.1";
+                    outputMsg.publicKeyFile = node.vpnFileAddedHash;
 
-                auto       mainActor = node.accountController()->mainActor();
-                MessageBody message   =
-                    make_message(MessagePack::serialize(outputMsg), MessageType::VPNConnection, MessageStatus::Request, mainActor->id(), "");
-                auto        serialized = message.serialize();
-                auto        sign       = mainActor->key().sign(serialized);
-                this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+                    auto       mainActor = node.accountController()->mainActor();
+                    MessageBody message   =
+                        make_message(MessagePack::serialize(outputMsg), MessageType::VPNConnection, MessageStatus::Request, mainActor->id(), "");
+                    auto        serialized = message.serialize();
+                    auto        sign       = mainActor->key().sign(serialized);
+                    this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
 
-                node.vpnConnectionInProccess.first = true;
-                node.vpnConnectionInProccess.second = QDateTime::currentDateTime();
-                qInfo() << "VPNConnection(Request) sended ";
+                    node.vpnConnectionInProccess.first = true;
+                    node.vpnConnectionInProccess.second = QDateTime::currentDateTime();
+                    qInfo() << "VPNConnection(Request) sended ";
+                }
+            }
+            else if (inputMsg.vpnType == VPNType::PROXY)
+            {
+
             }
         }
         else if (status == MessageStatus::Request)
@@ -842,24 +849,29 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                     node.vpnConnectionInProccess.first = false;
             }
 
-            qDebug() << "Country:" << inputMsg.country << node.vpnMainCountry;
-
             if (!inputMsg.country.empty() && inputMsg.country != node.vpnMainCountry)
                 return;
 
-            std::string output;
-            if (node.vpnFunctions && !node.vpnConnectionInProccess.first && node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::CHECK_SERVER, output))
+            if (inputMsg.vpnType == VPNType::SERVER)
             {
-                VPNMessage outputMsg;
-                outputMsg.vpnType = VPNType::SERVER;
-                node.network()->send_message(outputMsg, MessageType::VPNHandshake,
-                                             MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+                std::string output;
+                if (node.vpnFunctions && !node.vpnConnectionInProccess.first && node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::CHECK_SERVER, output))
+                {
+                    VPNMessage outputMsg;
+                    outputMsg.vpnType = VPNType::SERVER;
+                    node.network()->send_message(outputMsg, MessageType::VPNHandshake,
+                                                 MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
 
-                node.vpnConnectionInProccess.first = true;
-                node.vpnConnectionInProccess.second = QDateTime::currentDateTime();
+                    node.vpnConnectionInProccess.first = true;
+                    node.vpnConnectionInProccess.second = QDateTime::currentDateTime();
+                }
+                else
+                    qCritical()  << "Achieved VPNHandshake(Request) command but Server is impossible to create.";
             }
-            else
-                qCritical()  << "Achieved VPNHandshake(Request) command but Server is impossible to create.";
+            else if (inputMsg.vpnType == VPNType::PROXY)
+            {
+
+            }
         }
         break;
     }

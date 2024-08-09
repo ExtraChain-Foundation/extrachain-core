@@ -181,7 +181,7 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
 
 void ActorIndex::setFirstId(const ActorId &value) {
     if (!m_firstId.isEmpty()) {
-        if (firstId() != value)
+        //if (firstId() != value)
         // if (firstId() != value)
             // qFatal("Another FirstId");
         // return;
