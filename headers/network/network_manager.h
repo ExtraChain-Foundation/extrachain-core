@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <shared_mutex>
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
@@ -51,7 +52,7 @@ private:
 
     std::unordered_map<std::string, TrafficStats>
     m_trafficStats;     // Container for storing traffic of each connection
-    std::mutex m_mutex; // Mutex for thread safety in Singleton instance access
+    std::shared_mutex m_mutex; // Mutex for thread safety in Singleton instance access
 
     // Private constructor to prevent instantiation
     CalculateTraffic() {
