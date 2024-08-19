@@ -193,31 +193,29 @@ NetworkManager* ExtraChainNode::network() {
     return m_networkManager;
 }
 
-Transaction ExtraChainNode::createTransaction(Transaction tx) {
+Transaction ExtraChainNode::createTransaction(Transaction tx, QString &expError) {
     if (tx.isEmpty() && !tx.isBurn()) {
         qDebug() << QString("Warning: can not create tx:[%1]. Transaction is empty").arg(tx.toString());
+        expError = QString("Can not create transaction. Transaction is empty");
         return Transaction();
     }
 
     auto actor = m_accountController->currentWallet();
     if (!actor->empty()) {
-        qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                        .arg(tx.toString(), QString(actor->id().toByteArray()));
+        qDebug() << QString("Attempting to create transaction from user [%2]").arg(QString(actor->id().toByteArray()));
 
         // 1) set prev block id
         BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
         if (lastBlockId.isEmpty()) {
-            qDebug() << QString(
-                    "Warning: can not create tx:[%1]. There is no last block in "
-                    "blockchain")
-                .arg(tx.toString());
+            qDebug() << QString("Warning: can not create tx:[%1]. There is no last block in blockchain").arg(tx.toString());
+            expError = QString("Can not create transaction. There is no last block in blockchain.");
             return Transaction();
         }
         tx.setPrevBlock(lastBlockId);
         // 2) check coin availability
         if (blockchain()->getUserBalance(actor->id(), tx.getToken()) < tx.getAmount()) {
-            qDebug() << QString("Warning: can not create tx:[%1]. There is not enough coins/tokens in wallet")
-                .arg(tx.toString());
+            qDebug() << QString("Warning: can not create tx:[%1]. There is not enough coins/tokens in wallet").arg(tx.toString());
+            expError = QString("Can not create transaction. There is not enough coins/tokens in wallet.");
             return Transaction();
         }
         // 3) sign transaction
@@ -232,6 +230,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
             m_txManager->addTransaction(tx);
     } else {
         qDebug() << QString("Warning: can not create tx:[%1]. There no current user").arg(tx.toString());
+        expError = QString("Can not create transaction. There no current user.");
         return Transaction();
     }
 
@@ -255,7 +254,8 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat a
         //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
         //                tx.setSenderBalance(BigNumber(0));
 
-        return this->createTransaction(tx);
+        QString expError;
+        return this->createTransaction(tx, expError);
     }
     qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
         .arg(QString(receiver.toByteArray()));
@@ -357,7 +357,8 @@ Transaction ExtraChainNode::createTransactionFrom(
                     << tx.getReceiver();
 
                 m_txManager->addTransaction(tx);
-                return this->createTransaction(tx);
+                QString expError;
+                return this->createTransaction(tx, expError);
             }
         }
         return Transaction();
@@ -373,7 +374,8 @@ Transaction ExtraChainNode::createTransactionFrom(
         //        if (actorIndex->m_firstId != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
         //                tx.setSenderBalance(BigNumber(0));
-        return this->createTransaction(tx);
+        QString expError;
+        return this->createTransaction(tx, expError);
     } else {
         qDebug() << QString("Warning: can not create tx to [%1]. There no current user")
             .arg(QString(receiver.toByteArray()));
@@ -389,7 +391,8 @@ Transaction ExtraChainNode::createFarmingTransaction(
     Transaction tx(sender, sender, 0);
     tx.setTypeTx(typeTx);
     tx.setAmount(amount);
-    return this->createTransaction(tx);
+    QString expError;
+    return this->createTransaction(tx, expError);
 }
 
 void ExtraChainNode::getAllActorsTimerCall() {

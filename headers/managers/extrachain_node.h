@@ -122,7 +122,7 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    Transaction createTransaction(Transaction tx);
+    Transaction createTransaction(Transaction tx, QString& expError);
 
     /**
      * @brief Shortcut for another createTransaction method
