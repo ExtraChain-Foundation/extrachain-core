@@ -107,6 +107,7 @@ inline MessageBody make_message(const std::string &data, MessageType type, Messa
 
 enum class VPNType
 {
+    CLIENT,
     SERVER,
     PROXY
 };

@@ -148,9 +148,19 @@ public:
     std::string         vpnFileAddedHash;
     QString             vpnFileLocalPath;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions;
-    std::string vpnRequesterIdentifier;
-    std::pair<std::atomic_bool, QDateTime>    vpnConnectionInProccess = {false, QDateTime()};
     std::pair<QString, QString> vpnInitPublicIPAndCountry;
+
+    struct VPNWorkers
+    {
+        std::string uuid;
+        int chainIndex;
+        std::string requesterIdentifier;
+        std::string nextIdentifier;
+    };
+
+    std::mutex vpnUuidToVPNWorkersMutex;
+    std::map<std::string, VPNWorkers> vpnUuidToVPNWorkers;
+    std::optional<VPNType> vpnConnectedType;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);
