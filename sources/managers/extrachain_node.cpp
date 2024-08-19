@@ -38,7 +38,7 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions)
+ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions)
     : isClientApplication(isClientApp), vpnFunctions(vpnFunctions)
 {
     static bool singleton = false;
@@ -575,4 +575,28 @@ void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
     std::exit(0);
+}
+
+bool ExtraChainNode::CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter)
+{
+    std::unique_lock<std::mutex> lock(vpnHandhakeCacheMutex);
+    bool requesterFound = true;
+    for (auto it = vpnHandhakeCacheInProccess.begin(); it != vpnHandhakeCacheInProccess.end(); )
+    {
+        if (it->requesterIdentifier == requesterIdentifier)
+        {
+            it->timestamp = QDateTime::currentDateTime();
+            requesterFound = true;
+            continue;
+        }
+        QDateTime currentTime = QDateTime::currentDateTime();
+        if (it->timestamp.secsTo(currentTime) >= 3)
+            it = vpnHandhakeCacheInProccess.erase(it);
+        else
+            ++it;
+    }
+
+    if (requesterFound)
+        return true;
+    return vpnHandhakeCacheInProccess.size() < counter;
 }

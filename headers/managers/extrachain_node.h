@@ -54,10 +54,19 @@ enum class VPNFunctionType
 {
     SET_CLIENT,
     SET_SERVER,
+    SET_PROXY,
     CHECK_SERVER,
+    CHECK_PROXY,
     GET_PUBLIC_IP,
     IS_CONNECTED,
-    DISCONNECT
+    DISCONNECT,
+    GET_LOCKED_CHAIN_INDEXES
+};
+
+struct VPNFunctionsResult
+{
+    std::string str;
+    std::set<int> blockedChainIndexes;
 };
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
@@ -83,7 +92,7 @@ private:
     std::vector<BigNumber> resiveCounts;
 
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions = nullptr);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions = nullptr);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -107,12 +116,41 @@ public:
     TransactionManager* txManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
-    std::pair<std::atomic_bool, QDateTime>    vpnConnectionInProccess = {false, QDateTime()};
-    std::string         vpnMainCountry;
+
+    struct VPNHandhakeCache
+    {
+        std::string uuid;
+        std::string requesterIdentifier;
+        std::string nextIdentifier;
+        VPNType nextIdentifierType;
+        int chainIndex;
+        int proxyIndex;
+        int internalIndex;
+        QDateTime timestamp = QDateTime();
+        std::string proxyResponseMessageID;
+        std::string localIPForSetup;
+        std::string proxyCounter;
+        std::vector<std::string> allIPsToSet;
+        std::string requesterPublicKeyFile;
+        ActorId requesterId;
+        std::string nextPublicKeyFile;
+        std::string nextPublicIP;
+    };
+    std::mutex vpnHandhakeCacheMutex;
+    QList<VPNHandhakeCache> vpnHandhakeCacheInProccess;
+
+    std::mutex vpnLockedChainIndexesMutex;
+    std::set<int> vpnLockedChainIndexes;
+
+    bool CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter);
+
+    bool vpnIsClient = false;
     std::string         vpnFileAddedHash;
     QString             vpnFileLocalPath;
-    std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
+    std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions;
     std::string vpnRequesterIdentifier;
+    std::pair<std::atomic_bool, QDateTime>    vpnConnectionInProccess = {false, QDateTime()};
+    std::pair<QString, QString> vpnInitPublicIPAndCountry;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);
