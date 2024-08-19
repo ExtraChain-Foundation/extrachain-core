@@ -62,6 +62,7 @@ Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, c
         actor.setWalletName(nameWallet);
     }
     actor.setTokenName(tokenName);
+
     auto &profile = getProfile(profileActor.isEmpty() ? m_currentProfile : profileActor);
     profile.addWalet(actor);
     node.actorIndex()->addActor(actor.convertToPublic());
@@ -153,6 +154,7 @@ const std::vector<ActorId> AccountController::accountsIds() const {
     std::vector<ActorId> ids;
     auto actors = currentProfile().actors();
     for (int i = 0; i < actors.size(); i++) {
+        qDebug() << "accounts: " << actors[i]->walletName();
         ids.push_back(actors[i]->id());
     }
     return ids;

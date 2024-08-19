@@ -104,8 +104,8 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
         DFSP::StateMessage stateMessage;
         stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
         stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
-        if (stateMessage.DataAmountStored > 0)
-            node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
+        // if (stateMessage.DataAmountStored > 0)
+            // node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
     }
 }
 
