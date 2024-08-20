@@ -20,7 +20,6 @@ bool AutologinHash::load() {
 void AutologinHash::save(const std::string& hash) {
     auto hashBytes = QByteArray::fromStdString(hash);
     QFile file(".auth_hash");
-    if (!file.open(QFile::WriteOnly) && file.write(hashBytes) > 0) {
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate) && file.write(hashBytes) > 0) {
         qFatal("[Autologin Hash] Can't write to auth hash file");
         return;
