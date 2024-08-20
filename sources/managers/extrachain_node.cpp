@@ -521,6 +521,7 @@ void ExtraChainNode::prepareFolders() {
     qDebug() << "Working directory:" << QDir::currentPath();
 
     QDir().mkpath(QString::fromStdString(KeyStore::folder));
+    QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(DataStorage::TMP_FOLDER);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
