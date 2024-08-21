@@ -579,14 +579,19 @@ void ExtraChainNode::logout() {
 
 bool ExtraChainNode::CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter)
 {
-    std::unique_lock<std::mutex> lock(vpnHandhakeCacheMutex);
+    qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess";
+    qInfo() << "MUTEX 4";
+    std::lock_guard<std::mutex> lock(vpnHandhakeCacheMutex);
+    qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess 1, size:" << vpnHandhakeCacheInProccess.size();
     bool requesterFound = true;
     for (auto it = vpnHandhakeCacheInProccess.begin(); it != vpnHandhakeCacheInProccess.end(); )
     {
         if (it->requesterIdentifier == requesterIdentifier)
         {
+            qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess found";
             it->timestamp = QDateTime::currentDateTime();
             requesterFound = true;
+            ++it;
             continue;
         }
         QDateTime currentTime = QDateTime::currentDateTime();
@@ -598,5 +603,6 @@ bool ExtraChainNode::CheckVPNHandshakeAccess(const std::string& requesterIdentif
 
     if (requesterFound)
         return true;
+    qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess not found" << (vpnHandhakeCacheInProccess.size() < counter);
     return vpnHandhakeCacheInProccess.size() < counter;
 }
