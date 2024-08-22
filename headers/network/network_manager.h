@@ -46,8 +46,8 @@ class UPNPConnection;
 class CalculateTraffic {
 private:
     struct TrafficStats {
-        qint64 bytesSent     = 0;
-        qint64 bytesReceived = 0;
+        uint64_t bytesSent     = 0;
+        uint64_t bytesReceived = 0;
     };
 
     std::unordered_map<std::string, TrafficStats>
@@ -75,10 +75,13 @@ public:
     void addBytesReceived(const std::string& connectionId, qint64 bytes);
 
     // Method for getting the total number of sent bytes data for a specific connection
-    qint64 totalBytesSent(const std::string& ip);
+    qint64 totalBytesSentFromConnection(const std::string& ip);
 
     // Method for getting the total number of received bytes data for a specific connection
-    qint64 totalBytesReceived(const std::string& ip);
+    qint64 totalBytesReceivedFromConnection(const std::string& ip);
+
+    //Method for gettint pair of sent and recieved bytes from all connections
+    std::pair<uint64_t, uint64_t> totalBytes();
 };
 
 struct NetworkReconnect {
@@ -283,6 +286,8 @@ public:
     void                    requestWSNodeList(std::string message_id);
     QSet<NetworkReconnect>& reconnections();
 
+    CalculateTraffic* getCalculateTraffic() const;
+    
 signals:
     void newSocket();
     void connectionStatusChanged(bool status);

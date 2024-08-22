@@ -52,6 +52,10 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 QSet<NetworkReconnect> &NetworkManager::reconnections() {
     return m_reconnections;
 }
+CalculateTraffic* NetworkManager::getCalculateTraffic() const
+{
+    return calculateTraffic;
+}
 
 NetworkManager::NetworkManager(ExtraChainNode &node)
     : node(node) {
@@ -585,7 +589,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         std::string stddata = MessagePack::deserialize<std::string>(serialized);
         GenesisBlock genesisBlock(stddata);
         if (!genesisBlock.isEmpty()) {
-            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+            node.blockchain()->addGenBlockToBlockchain(genesisBlock);            
         } else {
             qDebug() << "false genesis block";
         }
@@ -604,15 +608,22 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
-        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
+        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);        
         if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
             TransactionData transactionData =
                 MessagePack::deserialize<TransactionData>(transaction.getData());
             qDebug() << "run code from " << transactionData.path.c_str()
                      << "with hash: " << transactionData.hash.c_str();
         }
-        //        node.createTransaction(transaction);
-        node.txManager()->addTransaction(transaction);
+
+        auto& transactionList = node.txManager()->getReceivedTxListByReference();
+
+        auto found = std::find(transactionList.begin(), transactionList.end(), transaction);
+        if(found != transactionList.end())
+        {
+            transactionList.erase(found);
+        }
+        node.txManager()->addTransaction(transaction);      
         break;
     }
 
@@ -657,7 +668,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.blockchain()->sendCoinsReward(requestReward, messageId);
+            node.blockchain()->sendCoinsReward(requestReward);
             break;
         }
         case MessageStatus::Response: {
@@ -888,14 +899,23 @@ void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes) {
     m_trafficStats[ip].bytesReceived += bytes;
 }
 
-qint64 CalculateTraffic::totalBytesSent(const std::string &ip) {
+qint64 CalculateTraffic::totalBytesSentFromConnection(const std::string &ip) {
     std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     auto it = m_trafficStats.find(ip);
     return (it != m_trafficStats.end()) ? it->second.bytesSent : 0;
 }
 
-qint64 CalculateTraffic::totalBytesReceived(const std::string &ip) {
+qint64 CalculateTraffic::totalBytesReceivedFromConnection(const std::string &ip) {
     std::shared_lock<std::shared_mutex> lock(m_mutex);
     auto it = m_trafficStats.find(ip);
-    return (it!=m_trafficStats.end()) ? it->second.bytesReceived : 0;
+    return (it!=m_trafficStats.end()) ? it->second.bytesReceived : 0;}
+
+std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
+    std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
+    return std::accumulate(m_trafficStats.begin(), m_trafficStats.end(), std::make_pair(uint64_t{0}, uint64_t{0}),
+    [](std::pair<uint64_t, uint64_t> acc, const auto& connection) {
+        acc.first += connection.second.bytesSent;
+        acc.second += connection.second.bytesReceived;
+        return acc;
+    });
 }
