@@ -87,6 +87,14 @@ Block MemIndex::getLastBlock() const {
     return Block();
 }
 
+Block MemIndex::getFirstBlock() const
+{
+    if (blocks.size() > 0) {
+        return blocks.at(0);
+    }
+    return Block();
+}
+
 Block MemIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const {
     int index = getRecords() - 1;
 

@@ -77,11 +77,11 @@ public:
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
     uint64_t calculateDataAmountStored(const std::string &folder = DFSB::fsActrRoot) const;
     std::string makeReferenceFile(const std::string &actor, const std::string &nameFile,
-                                  const DFSP::ReferenceData &referenceData);;
+                                  const DFSP::ReferenceData &referenceData);
 
     void dataFromReferenceString(const std::string &referenceStr, std::string &actor,
                                  std::string &nameFile,
-                                 DFSP::ReferenceData &referenceData);;
+                                 DFSP::ReferenceData &referenceData);
 
 private:
     bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
