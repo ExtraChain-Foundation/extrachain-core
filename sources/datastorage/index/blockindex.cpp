@@ -68,23 +68,6 @@ Block BlockIndex::getLastBlock() const {
     return Block();
 }
 
-Block BlockIndex::getFirstBlock() const
-{
-    BigNumber id = this->firstSavedId;
-    qDebug() << "BLOCK INDEX: getFirstBlock:"
-             << "\n      first saved id - " << this->firstSavedId;
-    while (id <= getLastSavedId()) {
-        Block block = this->getBlockById(id);
-        if (!block.isEmpty()) {
-            qDebug() << "\n      " << block.getIndex() << " block is not empty";
-            return block;
-        }
-        ++id;
-    }
-
-    return Block();
-}
-
 Block BlockIndex::getLastRealBlock() const {
     BigNumber id = this->lastSavedId;
     qDebug() << "BLOCK INDEX: getLastBlock:"

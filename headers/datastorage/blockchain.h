@@ -174,11 +174,6 @@ public:
     Block getLastBlock() const;
 
     /**
-     * @return first blockchain block
-     */
-    Block getFirstBlock() const;
-
-    /**
      * @return Amount of blockchain blocks
      */
     BigNumber getBlocksStored() const;
