@@ -83,15 +83,9 @@ Block Blockchain::getLastBlock() const {
     return validateAndReturnBlock(block);
 }
 
-Block Blockchain::getFirstBlock() const
-{
-    Block block = fileMode ? blockIndex.getFirstBlock() : memIndex.getFirstBlock();
-    return validateAndReturnBlock(block);
-}
-
 BigNumber Blockchain::getBlocksStored() const
 {
-    return getLastBlock().getIndex() - getFirstBlock().getIndex() + 1;
+    return blockIndex.getLastSavedId() - blockIndex.getFirstSavedId() + 1;
 }
 
 Block Blockchain::getLastRealBlock() const {

@@ -60,12 +60,6 @@ public:
     Block getLastBlock() const;
 
     /**
-     * @brief Get first block (only Block, not Genesis block)
-     * @return first block
-     */
-    Block getFirstBlock() const;
-
-    /**
      * @brief Get last real (not dummy) block
      * @return last real block
      */

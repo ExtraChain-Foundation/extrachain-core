@@ -44,7 +44,6 @@ public:
     Block operator[](const BigNumber &blockId) const;
     Block getByPosition(int pos) const;    
     Block getLastBlock() const;
-    Block getFirstBlock() const;
     Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam) const;
     Block getByApprover(const BigNumber &approver) const;
     Block getByData(const QByteArray &data) const;

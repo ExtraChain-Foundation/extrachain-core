@@ -616,8 +616,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                      << "with hash: " << transactionData.hash.c_str();
         }
 
+        //TODO deep analisys
         auto& transactionList = node.txManager()->getReceivedTxListByReference();
-
         auto found = std::find(transactionList.begin(), transactionList.end(), transaction);
         if(found != transactionList.end())
         {
