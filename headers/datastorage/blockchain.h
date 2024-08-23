@@ -145,6 +145,19 @@ private:
      */
     Block validateAndReturnBlock(const Block &block) const;
 
+    /**
+     * @brief calculate reward amound
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount() const;
+
+    /**
+     * @brief calculate reward amound of income reward request
+     * @param requestReward - request reward data
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
+
 public:
     /**
      * Compares prevHash field of every block
@@ -159,6 +172,12 @@ public:
      * @return last blockchain block
      */
     Block getLastBlock() const;
+
+    /**
+     * @return Amount of blockchain blocks
+     */
+    BigNumber getBlocksStored() const;
+
     /**
      * @return last real blockchain block
      */
@@ -313,7 +332,7 @@ public:
     /**
      * @brief Coin request
      * */
-    void requestCoins(const ActorId &receiver, const BigNumberFloat &amount);
+    void requestCoins(const ActorId &receiver, const DFS::Reward::RequestReward &requestReward);
 
     /**
      * @brief Receive coins
@@ -323,7 +342,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
+    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
 
     /**
      * @brief Set possible mining

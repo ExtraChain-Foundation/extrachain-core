@@ -58,6 +58,7 @@ public:
      * @return last block
      */
     Block getLastBlock() const;
+
     /**
      * @brief Get last real (not dummy) block
      * @return last real block

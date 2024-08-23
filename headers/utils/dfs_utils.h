@@ -314,13 +314,16 @@ namespace Reward {
         Base,
         Test
     };
-
+        
     struct RequestReward {
         std::string     Actor;
         uint64_t        DataStoredSize;
         TypeFunctioning TypeFunctioningObj;
         BigNumberFloat  RewardAmount;
-        MSGPACK_DEFINE(Actor, DataStoredSize, TypeFunctioningObj, RewardAmount)
+        std::uint64_t   BytesSent;
+        std::uint64_t   BytesReceived;
+        BigNumber       BlocksStored;
+        MSGPACK_DEFINE(Actor, DataStoredSize, TypeFunctioningObj, RewardAmount, BytesSent, BytesReceived, BlocksStored)
     };
 }
 

@@ -42,7 +42,7 @@ public:
 public:
     bool contains(const BigNumber &blockId) const;
     Block operator[](const BigNumber &blockId) const;
-    Block getByPosition(int pos) const;
+    Block getByPosition(int pos) const;    
     Block getLastBlock() const;
     Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam) const;
     Block getByApprover(const BigNumber &approver) const;
