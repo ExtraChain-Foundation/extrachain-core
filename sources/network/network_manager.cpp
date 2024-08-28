@@ -507,6 +507,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         node.actorIndex()->handleNewActor(actor);
+
+        Transaction tx(ActorId(), actor.id(), BigNumberFloat(1000), ActorId(Token::ROCC_TOKEN));
+        node.txManager()->addTransaction(tx);
+
         break;
     }
     case MessageType::Actor: {
