@@ -996,17 +996,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         outputMsg.networkIdentifiersToIgnore = inputMsg.networkIdentifiersToIgnore;
                         outputMsg.networkIdentifiersToIgnore.emplace(node.accountController()->mainActor()->id().toStdString());
 
-                        qInfo() << "Request proxy 2 1 2";
-
                         output = {};
                         node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::GET_LOCKED_CHAIN_INDEXES, output);
 
-                        qInfo() << "Request proxy 2 1 3";
-
                         outputMsg.lockedChainIndex = inputMsg.lockedChainIndex;
                         outputMsg.lockedChainIndex.insert(output.blockedChainIndexes.begin(), output.blockedChainIndexes.end());
-
-                        qInfo() << "Request proxy 2 1 4";
 
                         if (inputMsg.proxyCounter - 1 > 0)
                         {
@@ -1017,8 +1011,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         {
                             outputMsg.vpnType = VPNType::SERVER;
                         }
-
-                        qInfo() << "Request proxy 2 1 5";
 
                         qInfo() << "MUTEX 7";
                         std::lock_guard<std::mutex> lock(node.vpnHandhakeCacheMutex);
@@ -1220,8 +1212,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         outputMsg.resultChainIndex = inputMsg.resultChainIndex;
                         outputMsg.uuid = inputMsg.uuid;
 
-                        qInfo() << "Request server 2 1 2";
-
                         output = {};
                         if (!node.vpnFunctions(node, inputMsg, mb.sender_id, VPNFunctionType::GET_PUBLIC_IP, output))
                         {
@@ -1282,7 +1272,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                     qInfo() << "inside check" << it.chainIndex << it.uuid << it.requesterIdentifier;
                     if (it.chainIndex == inputMsg.resultChainIndex && it.uuid == inputMsg.uuid && it.requesterIdentifier == identifier)
                     {
-                        qInfo() << "Request proxy 2";
                         it.timestamp = QDateTime::currentDateTime();
                         std::string chainIndexStr = inputMsg.resultChainIndex < 10 ? "0" + std::to_string(inputMsg.resultChainIndex) : std::to_string(inputMsg.resultChainIndex);
 
@@ -1299,8 +1288,6 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         outputMsg.publicKeyFile = node.vpnFileAddedHash[node.vpnUuidToVPNWorkers.size()];
                         outputMsg.proxyCounter = inputMsg.proxyCounter + 1;
                         outputMsg.uuid = inputMsg.uuid;
-
-                        qInfo() << "Request proxy 2 1";
 
                         auto       mainActor = node.accountController()->mainActor();
                         MessageBody message   =
