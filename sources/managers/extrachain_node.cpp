@@ -90,7 +90,10 @@ uint64_t ExtraChainNode::getBlockCount() const {
 
 ExtraChainNode::~ExtraChainNode() {
     if (!vpnFileAddedHash.empty())
-        m_dfs->removeLocalFile(m_accountController->mainActor()->id().toStdString(), vpnFileAddedHash);
+    {
+        for(auto& it : vpnFileAddedHash)
+            m_dfs->removeLocalFile(m_accountController->mainActor()->id().toStdString(), it);
+    }
 
     emit m_networkManager->finished();
     delete m_dfs;
@@ -592,13 +595,18 @@ bool ExtraChainNode::CheckVPNHandshakeAccess(const std::string& requesterIdentif
             it->timestamp = QDateTime::currentDateTime();
             requesterFound = true;
             ++it;
-            continue;
         }
-        QDateTime currentTime = QDateTime::currentDateTime();
-        if (it->timestamp.secsTo(currentTime) >= 3)
-            it = vpnHandhakeCacheInProccess.erase(it);
         else
-            ++it;
+        {
+            QDateTime currentTime = QDateTime::currentDateTime();
+            if (it->timestamp.secsTo(currentTime) >= 3)
+            {
+                qInfo() << "DELETED vpnHandhakeCacheInProccess" << it->uuid;
+                it = vpnHandhakeCacheInProccess.erase(it);
+            }
+            else
+                ++it;
+        }
     }
 
     if (requesterFound)

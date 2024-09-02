@@ -145,7 +145,7 @@ public:
     bool CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter);
 
     bool vpnIsClient = false;
-    std::string         vpnFileAddedHash;
+    std::vector<std::string>         vpnFileAddedHash;
     QString             vpnFileLocalPath;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions;
     std::pair<QString, QString> vpnInitPublicIPAndCountry;
@@ -155,12 +155,18 @@ public:
         std::string uuid;
         int chainIndex;
         std::string requesterIdentifier;
+        QString requesterIP;
+        quint16 requesterPort;
         std::string nextIdentifier;
+        QString nextIP;
+        quint16 nextPort;
     };
 
     std::mutex vpnUuidToVPNWorkersMutex;
     std::map<std::string, VPNWorkers> vpnUuidToVPNWorkers;
     std::optional<VPNType> vpnConnectedType;
+    std::optional<std::tuple<QString, quint16, QString>> vpnLastDestroyed;
+
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);
