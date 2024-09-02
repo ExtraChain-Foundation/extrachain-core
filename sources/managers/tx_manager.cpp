@@ -105,32 +105,38 @@ void TransactionManager::runMakeAndProveBlockTimers() {
 // Block making
 
 void TransactionManager::makeBlock() {
-    if(extraChainNode->accountController()->empty())
+    if(extraChainNode->accountController()->empty()) {
+        qDebug() << "Return: account controller is empty";
         return;
-
-    for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
-        if(farmingTransactionData.canImproveTx())
-            pendingTxs.push_back(farmingTransactionData.transaction);
     }
 
-    extraChainNode->dataMiningManager()->interestAccrual();
+    // for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
+    //     if(farmingTransactionData.canImproveTx())
+    //         pendingTxs.push_back(farmingTransactionData.transaction);
+    // }
 
+    // extraChainNode->dataMiningManager()->interestAccrual();
 
     if (pendingTxs.empty()) {
+        qDebug() << "Pendings tx is empty" << lastBlock.getIndex();
         if(lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
         Block lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
-        qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType().c_str();
+        auto lb = blockchain->getBlockIndex().getLastBlock();
+        qDebug() << lb.getIndex() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType().c_str();
         // creating dummy block in as ordinary block
-        Block dummyBlock(lastRealBlockTemp.getIndex().toStdString(), lastBlock);
+        // lastBlock = blockchain->getLastBlock();
+        Block dummyBlock(lastRealBlockTemp.getIndex().toStdString(), lb);
         dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
         blockchain->signBlock(dummyBlock);
         const int addedBlock = blockchain->addBlock(dummyBlock);
-        if(addedBlock == 0)
+        if(addedBlock == Errors::NO) {
            lastBlock = dummyBlock;
-        lastBlock = blockchain->getLastBlock();
+        }
         return;
     }
+    qDebug() << "Pendings tx is not empty";
+
     if (lastBlock.isEmpty())
         lastBlock = blockchain->getLastBlock();
     // remove all dummy blocks
@@ -142,17 +148,18 @@ void TransactionManager::makeBlock() {
     Block block(data, lastRealBlock);
     blockchain->signBlock(block);
     const int addedBlock = blockchain->addBlock(block);
-    if (addedBlock == 0) {
+    qDebug() << "Added block result" << addedBlock;
+    if (addedBlock == Errors::NO) {
         lastBlock = block;
         lastRealBlock = block;
 
-        for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
-            if(farmingTransactionData.canImproveTx()) {
-                farmingTxs.pop_front();
-                continue;
-            }
-            farmingTransactionData.decrementIndex();
-        }
+        // for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
+        //     if(farmingTransactionData.canImproveTx()) {
+        //         farmingTxs.pop_front();
+        //         continue;
+        //     }
+        //     farmingTransactionData.decrementIndex();
+        // }
     }
     this->pendingTxs.clear();
 }

@@ -506,10 +506,17 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        node.actorIndex()->handleNewActor(actor);
-
-        Transaction tx(ActorId(), actor.id(), BigNumberFloat(1000), ActorId(Token::ROCC_TOKEN));
-        node.txManager()->addTransaction(tx);
+        auto result = node.actorIndex()->handleNewActor(actor);
+        qDebug() << "New actor " << actor.id().toString();
+        if(result == Errors::NO) {
+            qDebug() << "New actor must receive free 1000 tokens.";
+            Transaction tx(ActorId(), actor.id(), BigNumberFloat(1000), ActorId(Token::ROCC_TOKEN));
+            tx.setDate(QDateTime::currentMSecsSinceEpoch());
+            node.txManager()->addTransaction(tx);
+            node.network()->send_message(tx, MessageType::BlockchainTransaction);
+        } else {
+            qDebug() << "New actor exist. It can not receive 1000 tokens.";
+        }
 
         break;
     }

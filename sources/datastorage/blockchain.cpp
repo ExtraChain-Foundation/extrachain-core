@@ -694,7 +694,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     const auto blockType = block.getType();
 
     switch (resultCode) {
-    case 0: {
+    case Errors::NO: {
         emit updateLastTransactionList(); // TODO: ?
         qDebug() << "Block" << indexBlock << "is successfully added to blockchain";
         getSmContractMembers(block);
