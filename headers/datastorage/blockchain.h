@@ -143,13 +143,7 @@ private:
      * @param block
      * @return block - if it is valid, empty block - if block is corrupted.
      */
-    Block validateAndReturnBlock(const Block &block) const;
-
-    /**
-     * @brief calculate reward amound
-     * @return amount of reward
-     */
-    BigNumberFloat calculateRewardAmount() const;
+    Block validateAndReturnBlock(const Block &block) const;    
 
     /**
      * @brief calculate reward amound of income reward request
@@ -332,7 +326,7 @@ public:
     /**
      * @brief Coin request
      * */
-    void requestCoins(const ActorId &receiver, const DFS::Reward::RequestReward &requestReward);
+    void requestCoins(const DFS::Reward::RequestReward &requestReward);
 
     /**
      * @brief Receive coins
@@ -364,6 +358,12 @@ public:
      */
 
     std::list<FarmingTransactionData> getFarmingTxs() const;
+
+    /**
+     * @brief calculate reward amound
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount() const;
 
 signals:
     void newNotify(Notification ntf);
