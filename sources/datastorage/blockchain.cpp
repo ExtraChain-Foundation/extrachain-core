@@ -752,13 +752,13 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         if (shouldStartGenesisCreation()) {
             const auto& actor = *node->accountController()->mainActor();
             const auto& totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-            requestCoins(actor.id(),{ .Actor = actor.id().toStdString(),
-                                         .DataStoredSize = node->dfs()->sizeTaken(),
-                                         .TypeFunctioningObj = DFS::Reward::Base,
-                                         .RewardAmount = calculateRewardAmount(),
-                                         .BytesSent = totalBytes.first,
-                                         .BytesReceived = totalBytes.second,
-                                         .BlocksStored = getBlocksStored()});
+            requestCoins({ .Actor = actor.id().toStdString(),
+                            .DataStoredSize = node->dfs()->sizeTaken(),
+                            .TypeFunctioningObj = DFS::Reward::Base,
+                            .RewardAmount = calculateRewardAmount(),
+                            .BytesSent = totalBytes.first,
+                            .BytesReceived = totalBytes.second,
+                            .BlocksStored = getBlocksStored()});
 
             GenesisBlock gB = createGenesisBlock(actor);
             if (blockIndex.addBlock(gB) == 0) {
@@ -1014,7 +1014,7 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
-void Blockchain::requestCoins(const ActorId &receiver, const DFS::Reward::RequestReward &requestReward)
+void Blockchain::requestCoins(const DFS::Reward::RequestReward &requestReward)
 {
     node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
 }
