@@ -505,18 +505,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         break;
     }
     case MessageType::NewActor: {
-        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        auto result = node.actorIndex()->handleNewActor(actor);
-        qDebug() << "New actor " << actor.id().toString();
-        if(result == Errors::NO) {
-            qDebug() << "New actor must receive free 1000 tokens.";
-            Transaction tx(ActorId(), actor.id(), BigNumberFloat(1000), ActorId(Token::ROCC_TOKEN));
-            tx.setDate(QDateTime::currentMSecsSinceEpoch());
-            node.txManager()->addTransaction(tx);
-            node.network()->send_message(tx, MessageType::BlockchainTransaction);
-        } else {
-            qDebug() << "New actor exist. It can not receive 1000 tokens.";
-        }
+
 
         break;
     }
@@ -665,13 +654,14 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
-            TransactionData transactionData =
-                MessagePack::deserialize<TransactionData>(transaction.getData());
-            qDebug() << "run code from " << transactionData.path.c_str()
-                     << "with hash: " << transactionData.hash.c_str();
-        }
-        //        node.createTransaction(transaction);
+        // if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
+        //     TransactionData transactionData =
+        //         MessagePack::deserialize<TransactionData>(transaction.getData());
+        //     qDebug() << "run code from " << transactionData.path.c_str()
+        //              << "with hash: " << transactionData.hash.c_str();
+        // }
+        // node.createTransaction(transaction);
+        qDebug() << "Receive_tx_amount:" << transaction.getAmount().toStdString(NumSystem::DEC);
         node.txManager()->addTransaction(transaction);
         break;
     }
@@ -948,6 +938,19 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         }
         break;
     }
+
+    case MessageType::Accrual:
+    {
+        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+        qDebug() << "Begin accrual for actor " << actor.id().toString();
+        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumSystem::DEC), ActorId(Token::ROCC_TOKEN));
+        tx.setDate(QDateTime::currentMSecsSinceEpoch());
+        tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
+        node.txManager()->addTransaction(tx);
+        node.network()->send_message(tx, MessageType::BlockchainTransaction);
+        break;
+    }
+
 
     default:
         qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));

@@ -53,7 +53,8 @@ enum class MessageType {
     VPNConnection = 114,
     VPNDisconnect = 115,
 
-    ShareConnections = 116
+    ShareConnections = 116,
+    Accrual = 120
 
 };
 MSGPACK_ADD_ENUM(MessageType)
