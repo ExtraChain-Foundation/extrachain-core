@@ -1024,7 +1024,7 @@ void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward
     if((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100)
     {
         Transaction transaction;
-        transaction.setSender(node->accountController()->mainActor().id());
+        transaction.setSender(node->accountController()->mainActor()->id());
         transaction.setReceiver(requestReward.Actor);
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());

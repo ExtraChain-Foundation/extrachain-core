@@ -1579,12 +1579,12 @@ CalculateTraffic *CalculateTraffic::GetInstance() {
 }
 
 void CalculateTraffic::addBytesSent(const std::string &ip, qint64 bytes) {
-    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    std::unique_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesSent += bytes;
 }
 
 void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes) {
-    std::lock_guard<std::mutex> lock(m_mutex); // Lock mutex for thread safety
+    std::unique_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesReceived += bytes;
 }
 
