@@ -51,7 +51,7 @@ using namespace magic_enum::bitwise_operators;
     template <>                                               \
     struct fmt::formatter<E> : formatter<string_view> {       \
         template <typename FormatContext>                     \
-        auto format(E Enum, FormatContext &ctx) {             \
+        auto format(E Enum, FormatContext &ctx) const {       \
             static_assert(std::is_enum_v<E>);                 \
             string_view name = "unknown";                     \
             name = magic_enum::enum_name(Enum);               \
