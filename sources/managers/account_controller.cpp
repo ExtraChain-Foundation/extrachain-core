@@ -32,9 +32,9 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
 
     Actor<KeyPrivate> actor, farming;
     actor.create(type);
-    actor.setWalletName(QString("wallet_%1").arg(QDateTime::currentSecsSinceEpoch()).toStdString());
     farming.create(type);
     auto profile = PrivateProfile::create(actor, hash, farming);
+    actor.setWalletName(QString("wallet_%1").arg(actor.id().toString()).toStdString());
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());

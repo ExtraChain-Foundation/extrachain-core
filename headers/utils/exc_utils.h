@@ -238,7 +238,9 @@ MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
+static const int UNEXPECT = -1;
 // IO
+static const int NO = 0;
 static const int FILE_ALREADY_EXISTS = 101;
 static const int FILE_IS_NOT_OPENED = 102;
 

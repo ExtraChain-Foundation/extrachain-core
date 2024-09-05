@@ -99,14 +99,14 @@ Transaction DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &re
 }
 
 void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
-    if (blockIndex % CoinProductionRate == 0) {
-        qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
-        DFSP::StateMessage stateMessage;
-        stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
-        stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
-        // if (stateMessage.DataAmountStored > 0)
-            // node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
-    }
+    // if (blockIndex % CoinProductionRate == 0) {
+    //     qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
+    //     DFSP::StateMessage stateMessage;
+    //     stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
+    //     stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
+    //     // if (stateMessage.DataAmountStored > 0)
+    //         // node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
+    // }
 }
 
 void DataMiningManager::interestAccrual() {

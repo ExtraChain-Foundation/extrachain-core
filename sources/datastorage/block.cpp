@@ -52,7 +52,7 @@ Block::Block(const std::string &data, const Block &prev)
         this->prevHash = Utils::calcHash("0 index");
     } else {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
-        //          << prev->getIndex();
+        this->index = ++prev.getIndex();
         this->index = prev.getIndex() + 1;
         this->prevHash = prev.getHash();
     }
