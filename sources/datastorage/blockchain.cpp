@@ -83,8 +83,7 @@ Block Blockchain::getLastBlock() const {
     return validateAndReturnBlock(block);
 }
 
-BigNumber Blockchain::getBlocksStored() const
-{
+BigNumber Blockchain::getBlocksStored() const {
     return blockIndex.getLastSavedId() - blockIndex.getFirstSavedId() + 1;
 }
 
@@ -666,20 +665,27 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
     return block;
 }
 
-BigNumberFloat Blockchain::calculateRewardAmount() const
-{
+BigNumberFloat Blockchain::calculateRewardAmount() const {
     //(dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
-    const auto& totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-    return (BigNumberFloat{node->dfs()->sizeTaken()}/node->dfs()->totalDfsSize()
-            + BigNumberFloat{totalBytes.second}/totalBytes.first 
-            + (BigNumberFloat{getBlocksStored()}/getLastBlock().getIndex() * 100));
+    const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+
+    if (totalBytes.first == 0)
+        return 0;
+
+    return (
+        BigNumberFloat { node->dfs()->sizeTaken() } / node->dfs()->totalDfsSize()
+        + BigNumberFloat { totalBytes.second } / totalBytes.first
+        + (BigNumberFloat { getBlocksStored() } / getLastBlock().getIndex() * 100));
 }
 
-BigNumberFloat Blockchain::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const
-{
-    return(BigNumberFloat{requestReward.DataStoredSize}/node->dfs()->totalDfsSize()
-            + BigNumberFloat{requestReward.BytesReceived}/requestReward.BytesSent
-            + (BigNumberFloat{requestReward.BlocksStored}/getLastBlock().getIndex() * 100));
+BigNumberFloat Blockchain::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const {
+    if (requestReward.BytesSent == 0)
+        return 0;
+
+    return (
+        BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+        + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+        + (BigNumberFloat { requestReward.BlocksStored } / getLastBlock().getIndex() * 100));
 }
 
 int Blockchain::addBlock(Block &block, bool isGenesis) {
