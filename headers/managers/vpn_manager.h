@@ -102,8 +102,8 @@ private:
         const QString&   postUp,
         const QString&   postDown);
 
-    static VPNManagerPtr               m_instance;
-    static constexpr const std::string m_wireguardFolderPath = "/etc/wireguard/";
+    static VPNManagerPtr            m_instance;
+    static inline const std::string m_wireguardFolderPath = "/etc/wireguard/";
 
     const QString m_interfaceName;
     const QString m_keysPrefix;
