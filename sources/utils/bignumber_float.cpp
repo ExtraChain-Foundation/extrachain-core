@@ -21,8 +21,6 @@
 #include "utils/bignumber.h"
 #include <exception>
 
-using boost::multiprecision::cpp_bin_float_50;
-
 BigNumberFloat::BigNumberFloat()
     : m_data(0) {
 }
@@ -30,14 +28,12 @@ BigNumberFloat::BigNumberFloat()
 BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, int base) {
     try {
         if (bigNumberFloat.empty()) {
-            this->m_data = cpp_bin_float_50(0);
+            this->m_data = cpp_dec_float_exc(0);
         } else {
             if (base == 10) {
-                this->m_data = cpp_bin_float_50(bigNumberFloat);
+                this->m_data = cpp_dec_float_exc(bigNumberFloat);
             } else {
-                std::stringstream ss;
-                ss << std::hex << bigNumberFloat;
-                ss >> m_data;
+                *this = fromHex(bigNumberFloat);
             }
         }
     } catch (std::exception &) {
@@ -54,26 +50,26 @@ BigNumberFloat::BigNumberFloat(const BigNumberFloat &other) {
 }
 
 BigNumberFloat::BigNumberFloat(const BigNumber &other) {
-    this->m_data = boost::multiprecision::cpp_bin_float_50(other.data());
+    this->m_data = cpp_dec_float_exc(other.data());
 }
 
-BigNumberFloat::BigNumberFloat(const boost::multiprecision::cpp_bin_float_50 &number) {
+BigNumberFloat::BigNumberFloat(const cpp_dec_float_exc &number) {
     this->m_data = number;
     UPDATE_DEBUG()
 }
 
 BigNumberFloat::BigNumberFloat(int number) {
-    this->m_data = cpp_bin_float_50(number);
+    this->m_data = cpp_dec_float_exc(number);
     UPDATE_DEBUG()
 }
 
 BigNumberFloat::BigNumberFloat(long long number) {
-    this->m_data = cpp_bin_float_50(number);
+    this->m_data = cpp_dec_float_exc(number);
     UPDATE_DEBUG()
 }
 
 BigNumberFloat::BigNumberFloat(uint64_t number) {
-    this->m_data = cpp_bin_float_50(number);
+    this->m_data = cpp_dec_float_exc(number);
     UPDATE_DEBUG()
 }
 
@@ -198,7 +194,7 @@ BigNumberFloat BigNumberFloat::operator-() const {
     return BigNumberFloat(-m_data);
 }
 
-const cpp_bin_float_50 &BigNumberFloat::data() const {
+const cpp_dec_float_exc &BigNumberFloat::data() const {
     return m_data;
 }
 
@@ -209,21 +205,39 @@ bool BigNumberFloat::isEmpty() const // TODO
 
 QByteArray BigNumberFloat::toByteArray(int base) const {
     auto res = toStdString(base);
-    return res.c_str();
+    return QByteArray::fromStdString(res);
 }
 
 std::string BigNumberFloat::toStdString(int base) const {
     if (base == 10) {
-        return m_data.str();
-    } else {
         std::stringstream ss;
-        if (m_data >= 0) {
-            ss << std::hex << m_data;
-            return ss.str();
-        } else {
-            ss << std::hex << boost::multiprecision::abs(m_data);
-            return "-" + ss.str();
+        ss << std::setprecision(float_size) << std::fixed << m_data;
+        std::string str = ss.str();
+
+        str.erase(str.find_last_not_of('0') + 1, std::string::npos);
+        if (str.back() == '.') {
+            str.pop_back();
         }
+
+        return str;
+    } else if (base == 16) {
+        std::string str     = toStdString(10);
+        size_t      dot_pos = str.find('.');
+        if (dot_pos == std::string::npos)
+            return str;
+
+        std::string integer_part    = str.substr(0, dot_pos);
+        std::string fractional_part = str.substr(dot_pos + 1);
+
+        size_t sizeBefore = fractional_part.size();
+        fractional_part.erase(0, fractional_part.find_first_not_of('0'));
+        size_t zeros = sizeBefore - fractional_part.size();
+
+        BigNumber one(integer_part, 10);
+        BigNumber two(fractional_part, 10);
+        return one.toStdString(16) + "." + std::string(zeros, '0') + two.toStdString(16);
+    } else {
+        throw std::invalid_argument("Unsupported base");
     }
 }
 
@@ -296,13 +310,29 @@ BigNumberFloat BigNumberFloat::random(BigNumberFloat max, bool zeroAllowed) {
     return t;
 }
 
+BigNumberFloat BigNumberFloat::fromHex(const std::string &number) {
+    size_t dot_pos = number.find('.');
+    if (dot_pos == std::string::npos) {
+        return BigNumberFloat(BigNumber(number));
+    }
+
+    std::string integer_part    = number.substr(0, dot_pos);
+    std::string fractional_part = number.substr(dot_pos + 1);
+    size_t      sizeBefore      = fractional_part.size();
+    fractional_part.erase(0, fractional_part.find_first_not_of('0'));
+    size_t    zeros = sizeBefore - fractional_part.size();
+    BigNumber one(integer_part, 16);
+    BigNumber two(fractional_part, 16);
+    return BigNumberFloat(one.toStdString(10) + "." + std::string(zeros, '0') + two.toStdString(10), 10);
+}
+
 QDebug operator<<(QDebug debug, const BigNumberFloat &bigNumberFloat) {
     QDebugStateSaver saver(debug);
     debug.nospace().noquote() << bigNumberFloat.toByteArray();
     return debug;
 }
 
-QDebug operator<<(QDebug debug, const cpp_bin_float_50 &bigNumberFloat) {
+QDebug operator<<(QDebug debug, const cpp_dec_float_exc &bigNumberFloat) {
     QDebugStateSaver saver(debug);
     debug.nospace().noquote() << BigNumberFloat(bigNumberFloat).toByteArray();
     return debug;

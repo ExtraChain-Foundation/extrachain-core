@@ -29,7 +29,7 @@
 #include <sstream>
 #include <string>
 
-#include "boost/multiprecision/cpp_bin_float.hpp"
+#include "boost/multiprecision/cpp_dec_float.hpp"
 #include "msgpack.hpp"
 
 #include "extrachain_global.h"
@@ -47,6 +47,9 @@
 // const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
 //                                    '2', '3', '4', '5', '6', '7', '8', '9' };
 // }
+
+const int float_size = 100;
+using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::cpp_dec_float<float_size>>;
 
 enum NumSystem {
     DEC = 10,
@@ -66,11 +69,11 @@ public:
     BigNumberFloat(int number);
     BigNumberFloat(long long number);
     BigNumberFloat(uint64_t number);
-    BigNumberFloat(const boost::multiprecision::cpp_bin_float_50 &number);
+    BigNumberFloat(const cpp_dec_float_exc &number);
     ~BigNumberFloat() = default;
 
 private:
-    boost::multiprecision::cpp_bin_float_50 m_data;
+    cpp_dec_float_exc m_data;
 
 #ifdef QT_DEBUG
     std::string qdata;
@@ -103,7 +106,7 @@ public:
     BigNumberFloat operator-() const;
 
 public:
-    const boost::multiprecision::cpp_bin_float_50 &data() const;
+    const cpp_dec_float_exc &data() const;
     bool isEmpty() const;
     QByteArray toByteArray(int base = 16) const;
     std::string toStdString(int base = 16) const;
@@ -114,6 +117,7 @@ public:
     static BigNumberFloat random(int n, bool zeroAllowed = true);
     static BigNumberFloat random(int n, const BigNumberFloat &max, bool zeroAllowed = true);
     static BigNumberFloat random(BigNumberFloat max, bool zeroAllowed = true);
+    static BigNumberFloat fromHex(const std::string &number);
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
@@ -181,7 +185,7 @@ inline size_t qHash(const BigNumberFloat &key, size_t seed) {
 }
 
 QDebug operator<<(QDebug debug, const BigNumberFloat &BigNumberFloat);
-QDebug operator<<(QDebug debug, const boost::multiprecision::cpp_bin_float_50 &BigNumberFloat);
+QDebug operator<<(QDebug debug, const cpp_dec_float_exc &BigNumberFloat);
 std::ostream &operator<<(std::ostream &os, const BigNumberFloat &BigNumberFloat);
 
 #endif // BIGNUMBER_FLOAT_H
