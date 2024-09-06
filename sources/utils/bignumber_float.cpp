@@ -224,7 +224,7 @@ std::string BigNumberFloat::toStdString(int base) const {
         std::string str     = toStdString(10);
         size_t      dot_pos = str.find('.');
         if (dot_pos == std::string::npos)
-            return str;
+            return BigNumber(str, 10).toStdString(16);
 
         std::string integer_part    = str.substr(0, dot_pos);
         std::string fractional_part = str.substr(dot_pos + 1);
