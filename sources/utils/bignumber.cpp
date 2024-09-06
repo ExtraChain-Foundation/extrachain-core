@@ -32,7 +32,9 @@ BigNumber::BigNumber(const std::string &bigNumber, int base) {
             this->m_data = cpp_int(0);
         } else {
             if (base == 10) {
-                this->m_data = cpp_int(bigNumber);
+                std::string trimmed = bigNumber;
+                trimmed.erase(0, trimmed.find_first_not_of('0'));
+                this->m_data = cpp_int(trimmed);
             } else {
                 std::stringstream ss;
                 ss << std::hex << bigNumber;
@@ -313,7 +315,7 @@ BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
     BigNumber t(b.toStdString());
 
     while (t >= max) {
-        int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
+        int        size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
         QByteArray res;
         res.clear();
         for (int i = 0; i < size; i++) {
