@@ -52,6 +52,7 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 QMap<NetworkReconnect, QString> &NetworkManager::reconnections() {
     return m_reconnectionsToIdentifier;
 }
+
 CalculateTraffic* NetworkManager::getCalculateTraffic() const
 {
     return calculateTraffic;
