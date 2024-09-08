@@ -39,7 +39,7 @@
 #include "network/network_manager.h"
 
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions)
-    : isClientApplication(isClientApp), vpnFunctions(vpnFunctions)
+    : isClientApplication(isClientApp), vpnManager(this, vpnFunctions)
 {
     static bool singleton = false;
     if (!singleton)
@@ -89,9 +89,9 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    if (!vpnFileAddedHash.empty())
+    if (!vpnManager.vpnFileAddedHash.empty())
     {
-        for(auto& it : vpnFileAddedHash)
+        for(auto& it : vpnManager.vpnFileAddedHash)
             m_dfs->removeLocalFile(m_accountController->mainActor()->id().toStdString(), it);
     }
 
@@ -578,39 +578,4 @@ void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
     std::exit(0);
-}
-
-bool ExtraChainNode::CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter)
-{
-    qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess";
-    qInfo() << "MUTEX 4";
-    std::lock_guard<std::mutex> lock(vpnHandhakeCacheMutex);
-    qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess 1, size:" << vpnHandhakeCacheInProccess.size();
-    bool requesterFound = true;
-    for (auto it = vpnHandhakeCacheInProccess.begin(); it != vpnHandhakeCacheInProccess.end(); )
-    {
-        if (it->requesterIdentifier == requesterIdentifier)
-        {
-            qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess found";
-            it->timestamp = QDateTime::currentDateTime();
-            requesterFound = true;
-            ++it;
-        }
-        else
-        {
-            QDateTime currentTime = QDateTime::currentDateTime();
-            if (it->timestamp.secsTo(currentTime) >= 3)
-            {
-                qInfo() << "DELETED vpnHandhakeCacheInProccess" << it->uuid;
-                it = vpnHandhakeCacheInProccess.erase(it);
-            }
-            else
-                ++it;
-        }
-    }
-
-    if (requesterFound)
-        return true;
-    qInfo() << "ExtraChainNode::CheckVPNHandshakeAccess not found" << (vpnHandhakeCacheInProccess.size() < counter);
-    return vpnHandhakeCacheInProccess.size() < counter;
 }

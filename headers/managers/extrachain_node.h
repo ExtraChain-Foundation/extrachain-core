@@ -27,6 +27,7 @@
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
 #include "network/message_body.h"
+#include "managers/vpn_connector_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -44,30 +45,6 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 // class RestApiServerManager;
-
-namespace raccoon::vpn
-{
-    class VPNManager;
-}
-
-enum class VPNFunctionType
-{
-    SET_CLIENT,
-    SET_SERVER,
-    SET_PROXY,
-    CHECK_SERVER,
-    CHECK_PROXY,
-    GET_PUBLIC_IP,
-    IS_CONNECTED,
-    DISCONNECT,
-    GET_LOCKED_CHAIN_INDEXES
-};
-
-struct VPNFunctionsResult
-{
-    std::string str;
-    std::set<int> blockedChainIndexes;
-};
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -117,55 +94,7 @@ public:
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
 
-    struct VPNHandhakeCache
-    {
-        std::string uuid;
-        std::string requesterIdentifier;
-        std::string nextIdentifier;
-        VPNType nextIdentifierType;
-        int chainIndex;
-        int proxyIndex;
-        int internalIndex;
-        QDateTime timestamp = QDateTime();
-        std::string proxyResponseMessageID;
-        std::string localIPForSetup;
-        std::string proxyCounter;
-        std::vector<std::string> allIPsToSet;
-        std::string requesterPublicKeyFile;
-        ActorId requesterId;
-        std::string nextPublicKeyFile;
-        std::string nextPublicIP;
-    };
-    std::mutex vpnHandhakeCacheMutex;
-    QList<VPNHandhakeCache> vpnHandhakeCacheInProccess;
-
-    std::mutex vpnLockedChainIndexesMutex;
-    std::set<int> vpnLockedChainIndexes;
-
-    bool CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter);
-
-    bool vpnIsClient = false;
-    std::vector<std::string>         vpnFileAddedHash;
-    QString             vpnFileLocalPath;
-    std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions;
-    std::pair<QString, QString> vpnInitPublicIPAndCountry;
-
-    struct VPNWorkers
-    {
-        std::string uuid;
-        int chainIndex;
-        std::string requesterIdentifier;
-        QString requesterIP;
-        quint16 requesterPort;
-        std::string nextIdentifier;
-        QString nextIP;
-        quint16 nextPort;
-    };
-
-    std::mutex vpnUuidToVPNWorkersMutex;
-    std::map<std::string, VPNWorkers> vpnUuidToVPNWorkers;
-    std::optional<VPNType> vpnConnectedType;
-    std::optional<std::tuple<QString, quint16, QString>> vpnLastDestroyed;
+    VPNConnectorManager vpnManager;
 
 
     bool login(const std::string& login, const std::string& password);

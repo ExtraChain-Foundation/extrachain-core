@@ -52,8 +52,9 @@ enum class MessageType {
     VPNHandshake = 113,
     VPNConnection = 114,
     VPNDisconnect = 115,
+    VPNUpdateConnection = 116,
 
-    ShareConnections = 116,
+    ShareConnections = 117,
     Accrual = 120
 
 };
