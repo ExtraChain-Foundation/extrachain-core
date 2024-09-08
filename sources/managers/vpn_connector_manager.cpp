@@ -97,6 +97,7 @@ void VPNWorkerThread::run()
                 }
                 if (m_vpnManager->vpnConnectedType != VPNType::SERVER)
                 {
+                    bool isClient = m_vpnManager->vpnConnectedType == VPNType::CLIENT;
                     QDateTime currentTime = QDateTime::currentDateTime();
                     if (it->second.lastUpdateNextTS.secsTo(currentTime) >= 20)
                     {
@@ -104,6 +105,11 @@ void VPNWorkerThread::run()
                         lock.unlock();
                         deleteFunc(uuid, m_node, m_vpnManager);
                         break;
+                    }
+
+                    if (isClient)
+                    {
+                        //TODO: need to update UI (VPN disconnected)
                     }
                 }
 
