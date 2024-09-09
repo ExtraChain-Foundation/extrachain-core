@@ -86,8 +86,8 @@ void VPNWorkerThread::run()
             {
                 if (m_vpnManager->vpnConnectedType != VPNType::CLIENT)
                 {
-                    QDateTime currentTime = QDateTime::currentDateTime();
-                    if (it->second.lastUpdateRequsterTS.secsTo(currentTime) >= 20)
+                    qint64 currentTimestamp = QDateTime::currentMSecsSinceEpoch();
+                    if (currentTimestamp - it->second.lastUpdateRequsterTS >= 20000)
                     {
                         auto uuid = it->first;
                         lock.unlock();
@@ -98,25 +98,23 @@ void VPNWorkerThread::run()
                 if (m_vpnManager->vpnConnectedType != VPNType::SERVER)
                 {
                     bool isClient = m_vpnManager->vpnConnectedType == VPNType::CLIENT;
-                    QDateTime currentTime = QDateTime::currentDateTime();
-                    if (it->second.lastUpdateNextTS.secsTo(currentTime) >= 20)
+                    qint64 currentTimestamp = QDateTime::currentMSecsSinceEpoch();
+                    if (currentTimestamp - it->second.lastUpdateNextTS >= 20000)
                     {
                         auto uuid = it->first;
                         lock.unlock();
                         deleteFunc(uuid, m_node, m_vpnManager);
-                        break;
-                    }
 
-                    if (isClient)
-                    {
-                        //TODO: need to update UI (VPN disconnected)
+                        if (isClient)
+                            emit m_node->vpnDisconnect();
+                        break;
                     }
                 }
 
-                QDateTime currentTime = QDateTime::currentDateTime();
-                if (m_vpnManager->vpnConnectedType != VPNType::SERVER && it->second.lastSendedNextTS.secsTo(currentTime) >= 5)
+                qint64 currentTimestamp = QDateTime::currentMSecsSinceEpoch();
+                if (m_vpnManager->vpnConnectedType != VPNType::SERVER && currentTimestamp - it->second.lastSendedNextTS >= 5000)
                 {
-                    it->second.lastSendedNextTS = QDateTime::currentDateTime();
+                    it->second.lastSendedNextTS = QDateTime::currentMSecsSinceEpoch();
 
                     VPNMessage outputMsg;
                     outputMsg.uuid = it->second.uuid;

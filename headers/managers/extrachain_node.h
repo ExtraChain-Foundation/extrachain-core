@@ -149,6 +149,7 @@ signals:
     void pushNotification(QString actorId, Notification notification);
     void vpnConnected();
     void actorInitiated();
+    void vpnDisconnect();
 
 private slots:
     void getAllActorsTimerCall();

@@ -1081,8 +1081,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                                 qInfo() << "MUTEX 8";
                                 std::lock_guard<std::mutex> lock(node.vpnManager.vpnUuidToVPNWorkersMutex);
                                 node.vpnManager.vpnUuidToVPNWorkers.emplace(inputMsg.uuid, VPNConnectorManager::VPNWorkers{.uuid = inputMsg.uuid, .chainIndex = inputMsg.resultChainIndex,
-                                                                                                             .nextIdentifier = identifier, .nextIP = ip, .nextPort = port, .lastUpdateNextTS = QDateTime::currentDateTime(),
-                                                                                                             .lastSendedNextTS = QDateTime::currentDateTime()});
+                                                                                                             .nextIdentifier = identifier, .nextIP = ip, .nextPort = port, .lastUpdateNextTS = QDateTime::currentMSecsSinceEpoch(),
+                                                                                                             .lastSendedNextTS = QDateTime::currentMSecsSinceEpoch()});
                                 node.vpnManager.vpnConnectedType = VPNType::CLIENT;
                                 // node.network()->reconnection();
 
@@ -1161,7 +1161,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                                                         .uuid = inputMsg.uuid, .chainIndex = inputMsg.resultChainIndex,
                                                         .requesterIdentifier = requesterIdent, .requesterIP = requesterIP, .requesterPort = requesterPort,
                                                         .nextIdentifier = nextIdent, .nextIP = nextIP, .nextPort = nextPort,
-                                                        .lastUpdateRequsterTS = QDateTime::currentDateTime(), .lastUpdateNextTS = QDateTime::currentDateTime(), .lastSendedNextTS = QDateTime::currentDateTime()});
+                                                        .lastUpdateRequsterTS = QDateTime::currentMSecsSinceEpoch(), .lastUpdateNextTS = QDateTime::currentMSecsSinceEpoch(), .lastSendedNextTS = QDateTime::currentMSecsSinceEpoch()});
                                     node.vpnManager.vpnConnectedType = VPNType::PROXY;
                                 }
                                 else
@@ -1252,7 +1252,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                             qInfo() << "MUTEX 12";
                             std::lock_guard<std::mutex> lock(node.vpnManager.vpnUuidToVPNWorkersMutex);
                             node.vpnManager.vpnUuidToVPNWorkers.emplace(inputMsg.uuid, VPNConnectorManager::VPNWorkers{.uuid = inputMsg.uuid, .chainIndex = inputMsg.resultChainIndex,
-                                                                                                                .requesterIdentifier = identifier, .requesterIP = ip, .requesterPort = port, .lastUpdateRequsterTS = QDateTime::currentDateTime()});
+                                                                                                                .requesterIdentifier = identifier, .requesterIP = ip, .requesterPort = port, .lastUpdateRequsterTS = QDateTime::currentMSecsSinceEpoch()});
                             node.vpnManager.vpnConnectedType = VPNType::SERVER;
                         }
 
@@ -1369,10 +1369,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
             if (res != node.vpnManager.vpnUuidToVPNWorkers.end())
             {
                 if (status == MessageStatus::Response)
-                    res->second.lastUpdateNextTS = QDateTime();
+                    res->second.lastUpdateNextTS = QDateTime::currentMSecsSinceEpoch();
                 else if (status == MessageStatus::Request)
                 {
-                    res->second.lastUpdateRequsterTS = QDateTime();
+                    res->second.lastUpdateRequsterTS = QDateTime::currentMSecsSinceEpoch();
 
                     VPNMessage outputMsg;
                     outputMsg.uuid = inputMsg.uuid;

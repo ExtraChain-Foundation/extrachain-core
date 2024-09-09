@@ -69,9 +69,9 @@ public:
         std::string nextIdentifier;
         QString nextIP;
         quint16 nextPort;
-        QDateTime lastUpdateRequsterTS;
-        QDateTime lastUpdateNextTS;
-        QDateTime lastSendedNextTS;
+        qint64  lastUpdateRequsterTS;
+        qint64  lastUpdateNextTS;
+        qint64  lastSendedNextTS;
     };
 
 
