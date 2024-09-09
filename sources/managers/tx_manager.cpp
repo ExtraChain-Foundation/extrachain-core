@@ -152,7 +152,8 @@ void TransactionManager::makeBlock() {
         lastRealBlock = block;
 
         for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
-            if(farmingTransactionData.canImproveTx()) {
+            continue; // farming not farm
+            if (farmingTransactionData.canImproveTx()) {
                 farmingTxs.pop_front();
                 continue;
             }

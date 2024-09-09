@@ -27,6 +27,8 @@ BigNumber::BigNumber()
 }
 
 BigNumber::BigNumber(const std::string &bigNumber, int base) {
+    if (bigNumber == "inf")
+        qFatal("BigNumber: infinity");
     try {
         if (bigNumber.empty()) {
             this->m_data = cpp_int(0);

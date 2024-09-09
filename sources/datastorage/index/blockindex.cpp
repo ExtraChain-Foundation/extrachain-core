@@ -53,15 +53,16 @@ int BlockIndex::addBlock(const Block &block) {
 
 Block BlockIndex::getLastBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "BLOCK INDEX: getLastBlock:"
-             << "\n      last saved id - " << this->lastSavedId;
+    qDebug() << "[BlockIndex] Last saved id:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
         //        qDebug() << "BLOCK - : " << block.serialize();
         if (!block.isEmpty()) {
-            qDebug() << "\n      " << block.getIndex() << " block is not empty";
+            qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is not empty, return this block";
             return block;
         }
+
+        // qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is empty, can't return this block";
         --id;
     }
 
@@ -111,7 +112,7 @@ Block BlockIndex::getBlockById(const BigNumber &id) const {
     std::string serializedBlock = this->getById(id);
     Block block(serializedBlock);
     if (!block.isEmpty()) {
-        if (block.getType() == Config::DATA_BLOCK_TYPE)
+        if (block.getType() == Config::DATA_BLOCK_TYPE || block.getType() == Config::DUMMY_BLOCK_TYPE)
             return Block(serializedBlock);
         else if (block.getType() == Config::GENESIS_BLOCK_TYPE)
             return GenesisBlock(serializedBlock);
