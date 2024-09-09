@@ -44,7 +44,7 @@ signals:
     void close();
     void activated();
     void finished(); // if threads
-    void shareConnections(const std::string& identifier);
+    void shareConnections(const std::string& identifier, const QString ip, const quint16 port);
 
 protected:
     bool checkFirstMessage(const QString &message);
@@ -55,6 +55,7 @@ protected:
     ExtraChainNode &node;
     QString m_identifier;
     QString m_ip;
+    quint16 m_port = 0;
     bool m_activated = false;
     int m_bytesIncoming = 0;
     int m_bytesOutgoing = 0;

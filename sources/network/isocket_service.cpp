@@ -89,7 +89,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     bool flag = false;
-    auto &connections = node.network()->connections();
+    auto connections = node.network()->connections();
     std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
@@ -104,7 +104,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     qDebug() << "[Socket] Activated" << this << protocol();
     m_activated = true;
     emit activated();
-    emit shareConnections(m_identifier.toStdString());
+    emit shareConnections(m_identifier.toStdString(), m_ip, m_port);
     return true;
 }
 

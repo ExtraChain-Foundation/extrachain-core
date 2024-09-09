@@ -52,8 +52,9 @@ enum class MessageType {
     VPNHandshake = 113,
     VPNConnection = 114,
     VPNDisconnect = 115,
+    VPNUpdateConnection = 116,
 
-    ShareConnections = 116,
+    ShareConnections = 117,
     Accrual = 120
 
 };
@@ -108,6 +109,7 @@ inline MessageBody make_message(const std::string &data, MessageType type, Messa
 
 enum class VPNType
 {
+    CLIENT,
     SERVER,
     PROXY
 };
@@ -117,12 +119,18 @@ FORMAT_ENUM(VPNType)
 struct VPNMessage
 {
     VPNType     vpnType;
-    std::string country;
+    int resultChainIndex;
+    std::set<int> lockedChainIndex;
+    std::string countryEndpoint;
+    int proxyCounter;
+    std::set<std::string> networkIdentifiersToIgnore;
     std::string localIP;
     std::string publicIP;
     std::string publicKeyFile;
+    std::string uuid;
+    std::vector<std::string> allIPsToSet;
 
-    MSGPACK_DEFINE(vpnType, country, localIP, publicIP, publicKeyFile)
+    MSGPACK_DEFINE(vpnType, resultChainIndex, lockedChainIndex, countryEndpoint, proxyCounter, networkIdentifiersToIgnore, localIP, publicIP, publicKeyFile, uuid, allIPsToSet)
 };
 
 #endif // MESSAGEBODY_H

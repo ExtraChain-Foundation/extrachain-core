@@ -38,8 +38,8 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions)
-    : isClientApplication(isClientApp), vpnFunctions(vpnFunctions)
+ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions)
+    : isClientApplication(isClientApp), vpnManager(this, vpnFunctions)
 {
     static bool singleton = false;
     if (!singleton)
@@ -89,8 +89,11 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    if (!vpnFileAddedHash.empty())
-        m_dfs->removeLocalFile(m_accountController->mainActor()->id().toStdString(), vpnFileAddedHash);
+    if (!vpnManager.vpnFileAddedHash.empty())
+    {
+        for(auto& it : vpnManager.vpnFileAddedHash)
+            m_dfs->removeLocalFile(m_accountController->mainActor()->id().toStdString(), it);
+    }
 
     emit m_networkManager->finished();
     delete m_dfs;

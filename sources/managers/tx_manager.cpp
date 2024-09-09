@@ -27,6 +27,11 @@ QList<Transaction> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
 }
 
+QList<Transaction>& TransactionManager::getReceivedTxListByReference()
+{
+    return receivedTxList;
+}
+
 std::vector<Transaction> TransactionManager::getPendingTxs() const {
     return pendingTxs;
 }

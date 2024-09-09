@@ -80,6 +80,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/cache_balance_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/vpn_connector_manager.h
     # ${CMAKE_CURRENT_LIST_DIR}/headers/managers/restApiServerManager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
@@ -130,6 +131,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/cache_balance_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/vpn_connector_manager.cpp
     # ${CMAKE_CURRENT_LIST_DIR}/sources/managers/restApiServerManager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp

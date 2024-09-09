@@ -143,7 +143,14 @@ private:
      * @param block
      * @return block - if it is valid, empty block - if block is corrupted.
      */
-    Block validateAndReturnBlock(const Block &block) const;
+    Block validateAndReturnBlock(const Block &block) const;    
+
+    /**
+     * @brief calculate reward amound of income reward request
+     * @param requestReward - request reward data
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
 
 public:
     /**
@@ -159,6 +166,12 @@ public:
      * @return last blockchain block
      */
     Block getLastBlock() const;
+
+    /**
+     * @return Amount of blockchain blocks
+     */
+    BigNumber getBlocksStored() const;
+
     /**
      * @return last real blockchain block
      */
@@ -313,7 +326,7 @@ public:
     /**
      * @brief Coin request
      * */
-    void requestCoins(const ActorId &receiver, const BigNumberFloat &amount);
+    void requestCoins(const DFS::Reward::RequestReward &requestReward);
 
     /**
      * @brief Receive coins
@@ -323,7 +336,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward, const std::string &messageId = "");
+    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
 
     /**
      * @brief Set possible mining
@@ -345,6 +358,12 @@ public:
      */
 
     std::list<FarmingTransactionData> getFarmingTxs() const;
+
+    /**
+     * @brief calculate reward amound
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount() const;
 
 signals:
     void newNotify(Notification ntf);

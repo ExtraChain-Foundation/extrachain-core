@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <shared_mutex>
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
@@ -45,13 +46,13 @@ class UPNPConnection;
 class CalculateTraffic {
 private:
     struct TrafficStats {
-        qint64 bytesSent     = 0;
-        qint64 bytesReceived = 0;
+        uint64_t bytesSent     = 0;
+        uint64_t bytesReceived = 0;
     };
 
     std::unordered_map<std::string, TrafficStats>
     m_trafficStats;     // Container for storing traffic of each connection
-    std::mutex m_mutex; // Mutex for thread safety in Singleton instance access
+    std::shared_mutex m_mutex; // Mutex for thread safety in Singleton instance access
 
     // Private constructor to prevent instantiation
     CalculateTraffic() {
@@ -74,10 +75,13 @@ public:
     void addBytesReceived(const std::string& connectionId, qint64 bytes);
 
     // Method for getting the total number of sent bytes data for a specific connection
-    qint64 totalBytesSent(const std::string& ip);
+    qint64 totalBytesSentFromConnection(const std::string& ip);
 
     // Method for getting the total number of received bytes data for a specific connection
-    qint64 totalBytesReceived(const std::string& ip);
+    qint64 totalBytesReceivedFromConnection(const std::string& ip);
+
+    //Method for gettint pair of sent and recieved bytes from all connections
+    std::pair<uint64_t, uint64_t> totalBytes();
 };
 
 struct NetworkReconnect {
@@ -85,8 +89,22 @@ struct NetworkReconnect {
     quint16           port;
     Network::Protocol protocol;
     // quint64 lastTry;
-    auto operator==(const NetworkReconnect& reconnect) const {
+    bool operator==(const NetworkReconnect& reconnect) const {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
+    }
+
+    bool operator<(const NetworkReconnect& other) const {
+        if (ip < other.ip)
+            return true;
+        if (ip == other.ip)
+        {
+            if (port < other.port)
+                return true;
+            if (port == other.port)
+                return protocol < other.protocol;
+        }
+
+        return false;
     }
 
     static NetworkReconnect fromWsConnection(const DFSP::WSConnection& wsConnection) {
@@ -137,7 +155,7 @@ private:
     QNetworkAddressEntry*  local    = nullptr;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
-    QSet<NetworkReconnect> m_reconnections;
+    QMap<NetworkReconnect, QString> m_reconnectionsToIdentifier;
     NetworkStatus          m_networkStatus;
 
     std::map<std::string, std::string>           m_messages;
@@ -175,6 +193,8 @@ signals:
     void finished(); // ThreadPool
     void addFragSignal(const DFSP::SegmentMessage& msg);
     void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
+    void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                            const std::string &receiver_identifier);
 
 protected:
     void connectToWebSocket(const QString& ip, quint16 port, bool requestListNodes = false);
@@ -198,12 +218,15 @@ public slots:
     void connectToNode(const QString& ip, Network::Protocol protocol, const bool request = false);
     void process();
     void reconnection();
+    void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
     void setupProxy(
         QNetworkProxy::ProxyType type,
         const QString&           hostName,
         quint16                  port,
         const QString&           user,
         const QString&           password);
+    void sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                                const std::string &receiver_identifier);
 
 private slots:
     void removeWsConnection();
@@ -224,6 +247,8 @@ public:
     bool isActiveConnectionExists();
 
     void messageReceived(const std::string& message, const std::string& identifier);
+
+    QString foundCurrentIdentifier(QString ip, quint16 port);
 
     template <class T>
     std::string send_message(
@@ -280,8 +305,10 @@ public:
     }
 
     void                    requestWSNodeList(std::string message_id);
-    QSet<NetworkReconnect>& reconnections();
+    QMap<NetworkReconnect, QString>& reconnections();
 
+    CalculateTraffic* getCalculateTraffic() const;
+    
 signals:
     void newSocket();
     void connectionStatusChanged(bool status);

@@ -27,6 +27,7 @@
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
 #include "network/message_body.h"
+#include "managers/vpn_connector_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -44,21 +45,6 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 // class RestApiServerManager;
-
-namespace raccoon::vpn
-{
-    class VPNManager;
-}
-
-enum class VPNFunctionType
-{
-    SET_CLIENT,
-    SET_SERVER,
-    CHECK_SERVER,
-    GET_PUBLIC_IP,
-    IS_CONNECTED,
-    DISCONNECT
-};
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -83,7 +69,7 @@ private:
     std::vector<BigNumber> resiveCounts;
 
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions = nullptr);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions = nullptr);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -107,12 +93,9 @@ public:
     TransactionManager* txManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
-    std::pair<std::atomic_bool, QDateTime>    vpnConnectionInProccess = {false, QDateTime()};
-    std::string         vpnMainCountry;
-    std::string         vpnFileAddedHash;
-    QString             vpnFileLocalPath;
-    std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, std::string&)> vpnFunctions;
-    std::string vpnRequesterIdentifier;
+
+    VPNConnectorManager vpnManager;
+
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);
@@ -166,6 +149,7 @@ signals:
     void pushNotification(QString actorId, Notification notification);
     void vpnConnected();
     void actorInitiated();
+    void vpnDisconnect();
 
 private slots:
     void getAllActorsTimerCall();

@@ -53,17 +53,23 @@
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
-    #define FORMAT_ENUM(E)                                        \
-template <>                                               \
-    struct fmt::formatter<E> : formatter<string_view> {       \
-        template <typename FormatContext>                     \
-        auto format(E Enum, FormatContext &ctx) {             \
-            static_assert(std::is_enum_v<E>);                 \
-            string_view name = "unknown";                     \
-            name = magic_enum::enum_name(Enum);               \
-            return formatter<string_view>::format(name, ctx); \
-    }                                                     \
-};
+#define FORMAT_ENUM(E)                                                                                       \
+    template <>                                                                                              \
+    struct fmt::formatter<E> : formatter<string_view> {                                                      \
+        template <typename FormatContext>                                                                    \
+        auto format(E Enum, FormatContext &ctx) const {                                                      \
+            static_assert(std::is_enum_v<E>);                                                                \
+            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
+            string_view value_name = magic_enum::enum_name(Enum);                                            \
+            return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
+        }                                                                                                    \
+    };                                                                                                       \
+    inline QDebug operator<<(QDebug debug, const E &value) {                                                 \
+        QDebugStateSaver saver(debug);                                                                       \
+        debug.nospace().noquote() << magic_enum::enum_type_name<E>()                                         \
+                                  << "::" << magic_enum::enum_name(value);                                   \
+        return debug;                                                                                        \
+    }
 
 namespace fmt {
 template <typename... Args>
