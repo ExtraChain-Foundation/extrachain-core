@@ -47,17 +47,21 @@ struct BlockCompare {
     int digitalSigDiff;
 };
 
-namespace Config {
-static const std::string DATA_BLOCK_TYPE = "data";
-static const std::string DUMMY_BLOCK_TYPE = "dummy";
-static const std::string MERGE_BLOCK = "dataMerge";
-}
+enum class BlockType {
+    Data,
+    Genesis,
+    DataMerge,
+    GenesisMerge,
+    Dummy,
+};
+MSGPACK_ADD_ENUM(BlockType)
+FORMAT_ENUM(BlockType)
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
-    std::string m_data;                           // payload (serialized tx's, or other)
-    BigNumber m_index = BigNumber(-1);            // block id
+    BlockType m_type;                  // simple block, or genesis block (or other)
+    std::string m_data;                // payload (serialized tx's, or other)
+    BigNumber m_index = BigNumber(-1); // block id
     // BigNumber approver = BigNumber(-1);        // block approver id
 
     long long m_date;
@@ -155,7 +159,8 @@ public:
 
 public:
     void setPrevHash(const std::string &value);
-    std::string getType() const;
+    BlockType getType() const;
+    std::string getTypeStr() const;
     ActorId getApprover() const;
     BigNumber getIndex() const;
     std::string getData() const;
@@ -172,6 +177,7 @@ public:
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
+    void setType(BlockType value);
     void setType(const std::string &value);
 
     template <typename Packer>

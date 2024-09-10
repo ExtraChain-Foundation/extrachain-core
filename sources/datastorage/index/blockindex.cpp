@@ -76,7 +76,7 @@ Block BlockIndex::getLastRealBlock() const {
     qDebug() << "[BlockIndex] getLastBlock: last saved id -" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
-        if ((!block.isEmpty()) && (block.getType() != Config::DUMMY_BLOCK_TYPE)) {
+        if ((!block.isEmpty()) && (block.getType() != BlockType::Dummy)) {
             return block;
         }
         --id;
@@ -102,7 +102,7 @@ GenesisBlock BlockIndex::getLastGenesisBlock() const {
 GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const {
     std::string serializedBlock = this->getById(id);
     Block bl(serializedBlock);
-    if (!serializedBlock.empty() && bl.getType() == Config::GENESIS_BLOCK_TYPE) {
+    if (!serializedBlock.empty() && bl.getType() == BlockType::Genesis) {
         return GenesisBlock(serializedBlock);
     }
     return GenesisBlock();
@@ -112,9 +112,9 @@ Block BlockIndex::getBlockById(const BigNumber &id) const {
     std::string serializedBlock = this->getById(id);
     Block block(serializedBlock);
     if (!block.isEmpty()) {
-        if (block.getType() == Config::DATA_BLOCK_TYPE || block.getType() == Config::DUMMY_BLOCK_TYPE)
+        if (block.getType() == BlockType::Data || block.getType() == BlockType::Dummy)
             return Block(serializedBlock);
-        else if (block.getType() == Config::GENESIS_BLOCK_TYPE)
+        else if (block.getType() == BlockType::Genesis)
             return GenesisBlock(serializedBlock);
     } else {
         qDebug() << "[BlockIndex]" << id << "is not block";
@@ -192,7 +192,7 @@ Block BlockIndex::getLastRealBlockById() {
     BigNumber id = this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
-        if (!block.isEmpty() && block.getType() != Config::DUMMY_BLOCK_TYPE) {
+        if (!block.isEmpty() && block.getType() != BlockType::Dummy) {
             return block;
         }
         --id;
@@ -299,7 +299,7 @@ std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(
                 break;
             }
             case SearchEnum::TxParam::Data: {
-                if (lastBlock.getType() == Config::GENESIS_BLOCK_TYPE)
+                if (lastBlock.getType() == BlockType::Genesis)
                     return { Transaction(), "-1" };
                 if (tx.getData() == id)
                     return { tx, lastBlockId.toByteArray() };
@@ -418,7 +418,7 @@ BigNumberFloat BlockIndex::calculateCirculativeBalance() const {
     auto lastId = lastSavedId;
     while (!isGenesisBlockFounde) {
         const auto block = getBlockById(lastId);
-        if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
+        if (block.getType() == BlockType::Genesis) {
             isGenesisBlockFounde = true;
         } else {
             circulativeBalance += calculateCirculativeBalanceBlock(block);
@@ -463,7 +463,7 @@ void BlockIndex::calculationCountBlock() {
     while (id >= firstSavedId) {
         Block block = this->getBlockById(id);
         if (!block.isEmpty()) {
-            if (block.getType() == Config::DATA_BLOCK_TYPE) {
+            if (block.getType() == BlockType::Data) {
                 qDebug() << "[BlockIndex] Block by index" << block.getIndex() << " is real";
                 realBlockRecords++;
                 qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
@@ -497,14 +497,14 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
     DBConnector DB(path.toStdString());
     if (DB.open()) {
         Block bl(_data);
-        if (bl.getType() == Config::GENESIS_BLOCK_TYPE) {
+        if (bl.getType() == BlockType::Genesis) {
             GenesisBlock block(_data);
             DB.createTable(Config::DataStorage::GenesisBlockTableCreate);
             DB.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
             DB.createTable(Config::DataStorage::SignBlockTableCreate);
             DBRow row;
 
-            row.insert({ "type", block.getType() });
+            row.insert({ "type", block.getTypeStr() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
             row.insert({ "data", "" });
@@ -537,7 +537,7 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
             DB.createTable(Config::DataStorage::SignBlockTableCreate);
             DBRow row;
 
-            row.insert({ "type", block.getType() });
+            row.insert({ "type", block.getTypeStr() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
             row.insert({ "data", "" });
@@ -577,7 +577,7 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
                 DB.insert(Config::DataStorage::SignTable, rowRow);
             }
 
-            if (block.getType() == Config::DATA_BLOCK_TYPE)
+            if (block.getType() == BlockType::Data)
                 realBlockRecords++;
         }
         this->records = records + 1;
@@ -633,7 +633,7 @@ int BlockIndex::removeById(const Block &block) {
                 this->records--;
             }
 
-            if (isRemoved && typeBlock == Config::DATA_BLOCK_TYPE) {
+            if (isRemoved && typeBlock == BlockType::Data) {
                 this->realBlockRecords--;
                 countTransactions -= countTxInBlock;
             }
@@ -651,7 +651,7 @@ void BlockIndex::removeDummyBlocks(const BigNumber &id) {
     auto lastId = lastSavedId;
     while (!isNotDummyBlock) {
         const auto block = getBlockById(lastId);
-        if (block.getType() != Config::DUMMY_BLOCK_TYPE) {
+        if (block.getType() != BlockType::Dummy) {
             isNotDummyBlock = true;
         } else {
             removeById(block);

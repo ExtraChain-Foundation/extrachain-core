@@ -20,8 +20,7 @@
 #include "datastorage/block.h"
 
 Block::Block() {
-    this->m_type = Config::DATA_BLOCK_TYPE;
-
+    this->m_type = BlockType::Data;
     this->m_index = BigNumber(-1);
     this->m_date = QDateTime::currentDateTime().toMSecsSinceEpoch();
     this->m_data = "";
@@ -72,14 +71,14 @@ Block::Block(
     std::string &&hash,
     std::vector<Approvers> &&signatures,
     std::vector<Transaction> &&transactions)
-    : m_type(std::move(type))
-    , m_data(std::move(data))
+    : m_data(std::move(data))
     , m_index(std::move(idx))
     , m_date(date)
     , m_prevHash(std::move(prevHash))
     , m_hash(std::move(hash))
     , m_signatures(std::move(signatures))
     , m_transactions(std::move(transactions)) {
+    setType(type);
 }
 
 Block::~Block() {
@@ -104,8 +103,15 @@ void Block::calcHash() {
     }
 }
 
-void Block::setType(const std::string &value) {
+void Block::setType(BlockType value) {
     m_type = value;
+}
+
+void Block::setType(const std::string &value) {
+    auto maybe_type = magic_enum::enum_cast<BlockType>(value);
+    if (!maybe_type.has_value())
+        qFatal("Wrong block type");
+    m_type = *maybe_type;
 }
 
 std::string Block::getDataForHash() const {
@@ -176,8 +182,10 @@ void Block::initializeData(const std::string &serializedData) {
 }
 
 std::vector<Transaction> Block::extractTransactions() const {
-    if (m_type != Config::DATA_BLOCK_TYPE)
+    if (m_type != BlockType::Data) {
+        // TODO: qFatal("Wrong transaction extract?");
         return {};
+    }
 
     return transactions();
 }
@@ -213,8 +221,12 @@ bool Block::isEmpty() const {
     return this->getHash().empty() && this->getSignature().empty() && this->getPrevHash().empty();
 }
 
-std::string Block::getType() const {
+BlockType Block::getType() const {
     return m_type;
+}
+
+std::string Block::getTypeStr() const {
+    return std::string(magic_enum::enum_name(m_type));
 }
 
 std::string Block::getSignature() const {
@@ -243,10 +255,6 @@ QByteArrayList Block::getListSignatures() const {
 void Block::addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover) {
     this->m_signatures.push_back({ id.toStdString(), sign.toStdString(), isApprover });
 }
-
-// void Block::setType(QByteArray type) {
-//    this->type = type;
-//}
 
 void Block::setPrevHash(const std::string &value) {
     m_prevHash = value;

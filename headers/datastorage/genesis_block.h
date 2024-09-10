@@ -70,14 +70,9 @@ public:
 
     bool operator==(const GenesisDataRow &other) const {
         return this->actorId == other.actorId && this->state == other.state && this->token == other.token
-            && this->type == other.type;
+               && this->type == other.type;
     }
 };
-
-namespace Config {
-static const std::string GENESIS_BLOCK_TYPE = "genesis";
-static const std::string GENESIS_BLOCK_MERGE = "genesisMerge";
-}
 
 /**
  * @brief Genesis block it's an extended block, with has specific data field

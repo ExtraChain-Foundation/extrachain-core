@@ -637,11 +637,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainRequestBlock: {
         qDebug() << "BlockchainRequestBlock";
-        std::pair<std::string, BigNumber> requestData =
-            MessagePack::deserialize<std::pair<std::string, BigNumber>>(serialized);
-        if (requestData.first == Config::DATA_BLOCK_TYPE)
+        std::pair<BlockType, BigNumber> requestData =
+            MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
+        if (requestData.first == BlockType::Data)
             node.blockchain()->sendBlockByNumber(requestData.second);
-        else if (requestData.first == Config::GENESIS_BLOCK_TYPE)
+        else if (requestData.first == BlockType::Genesis)
             node.blockchain()->sendLastGenesisBlock();
 
         break;

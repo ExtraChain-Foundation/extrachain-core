@@ -21,7 +21,7 @@
 
 GenesisBlock::GenesisBlock()
     : Block() {
-    this->m_type = Config::GENESIS_BLOCK_TYPE;
+    this->m_type = BlockType::Genesis;
 }
 
 GenesisBlock::GenesisBlock(const GenesisBlock &block)
@@ -36,7 +36,7 @@ GenesisBlock::GenesisBlock(const std::string &serialized) {
 GenesisBlock::GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash)
     : Block(_data, prevBlock)
     , m_prevGenHash(prevGenHash) {
-    this->m_type = Config::GENESIS_BLOCK_TYPE;
+    this->m_type = BlockType::Genesis;
 }
 
 GenesisBlock::GenesisBlock(

@@ -114,7 +114,7 @@ void TransactionManager::makeBlock() {
         return;
 
     for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
-        if(farmingTransactionData.canImproveTx())
+        if (farmingTransactionData.canImproveTx())
             pendingTxs.push_back(farmingTransactionData.transaction);
     }
 
@@ -122,17 +122,17 @@ void TransactionManager::makeBlock() {
 
 
     if (pendingTxs.empty()) {
-        if(lastRealBlock.isEmpty())
+        if (lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
         Block lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
-        qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType().c_str();
+        qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType();
         // creating dummy block in as ordinary block
         Block dummyBlock(lastRealBlockTemp.getIndex().toStdString(), lastBlock);
-        dummyBlock.setType(Config::DUMMY_BLOCK_TYPE);
+        dummyBlock.setType(BlockType::Dummy);
         blockchain->signBlock(dummyBlock);
         const int addedBlock = blockchain->addBlock(dummyBlock);
-        if(addedBlock == 0)
-           lastBlock = dummyBlock;
+        if (addedBlock == 0)
+            lastBlock = dummyBlock;
         lastBlock = blockchain->getLastBlock();
         return;
     }

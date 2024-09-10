@@ -43,7 +43,7 @@ Blockchain::~Blockchain() {
 Block Blockchain::getBlockByIndex(const BigNumber &index, const bool makeRequestBlock) {
     Block block = fileMode ? blockIndex.getBlockById(index) : memIndex[index];
     if (block.isEmpty() && index >= 0 && makeRequestBlock) {
-        std::pair<std::string, BigNumber> requestData(Config::DATA_BLOCK_TYPE, index);
+        std::pair<BlockType, BigNumber> requestData(BlockType::Data, index);
         node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
     }
     return block;
@@ -95,8 +95,7 @@ Block Blockchain::getLastRealBlock() const {
 std::string Blockchain::getBlockDataByIndex(const BigNumber &index) {
     const std::string blockData = blockIndex.getBlockDataById(index);
     if (blockData.empty()) {
-        std::pair<std::string, BigNumber> requestData(
-            index != 0 ? Config::DATA_BLOCK_TYPE : Config::GENESIS_BLOCK_TYPE, index);
+        std::pair<BlockType, BigNumber> requestData(index != 0 ? BlockType::Data : BlockType::Genesis, index);
         node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
     }
     return blockData;
@@ -272,7 +271,7 @@ BigNumber Blockchain::getFullSupply(const QByteArray &idToken) {
 void Blockchain::sendBlockByNumber(const BigNumber &index) const {
     Block answerBlock = blockIndex.getBlockById(index);
     std::string data;
-    if (answerBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
+    if (answerBlock.getType() == BlockType::Genesis) {
         GenesisBlock genesisBlock = blockIndex.getGenesisBlockById(index);
         data = genesisBlock.serialize();
         node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
@@ -289,7 +288,7 @@ void Blockchain::sendLastGenesisBlock() const {
 }
 
 Block Blockchain::checkBlock(const Block &block) {
-    if (block.getType() == Config::GENESIS_BLOCK_TYPE)
+    if (block.getType() == BlockType::Genesis)
         return GenesisBlock(block.serialize());
     else
         return Block(block);
@@ -325,11 +324,11 @@ void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRo
 }
 
 QByteArray Blockchain::findRecordsInBlock(const Block &block) {
-    if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
+    if (block.getType() == BlockType::Genesis) {
         return QByteArray::fromStdString(block.getHash());
     } else if (!block.isEmpty()) {
         const auto transactions = block.extractTransactions();
-        for (const Transaction &tx : qAsConst(transactions)) {
+        for (const Transaction &tx : std::as_const(transactions)) {
             if (tx.getReceiver() == node->actorIndex()->firstId())
                 break;
             GenesisDataRow recSender =
@@ -350,7 +349,7 @@ bool Blockchain::signCheckAdd(Block &block) {
     QByteArrayList list = block.getListSignatures();
 
     int count = 0;
-    if (block.getType() == "genesis") {
+    if (block.getType() == BlockType::Genesis) {
         GenesisBlock saved(getBlockData(SearchEnum::BlockParam::Id, block.getIndex().toByteArray()));
 
         QByteArrayList savedList = saved.getListSignatures();
@@ -450,7 +449,7 @@ GenesisBlock Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor,
             Block b;
             BigNumber i = blockIndex.getLastSavedId();
             nb = GenesisBlock("", blockIndex.getBlockById(blockIndex.getLastSavedId()), "");
-            while ((blockIndex.getBlockById(i).getType() != Config::GENESIS_BLOCK_TYPE)
+            while ((blockIndex.getBlockById(i).getType() != BlockType::Genesis)
                    && (i >= blockIndex.getFirstSavedId())) {
                 b = blockIndex.getBlockById(i);
                 findRecordsInBlock(b);
@@ -528,7 +527,7 @@ int Blockchain::mergeBlockWithLocal(Block &received) {
         if (b.getPrevHash() == oldHash) {
             oldHash = b.getHash();
             b.setPrevHash(newHash);
-            b.setType(Config::MERGE_BLOCK);
+            b.setType(BlockType::DataMerge);
             signBlock(b);
             newHash = b.getHash();
         }
@@ -581,7 +580,7 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
             if (b.getPrevHash() == oldHash) {
                 oldHash = b.getHash();
                 b.setPrevHash(newHash);
-                b.setType(Config::GENESIS_BLOCK_MERGE);
+                b.setType(BlockType::GenesisMerge);
                 signBlock(b);
                 newHash = b.getHash();
             }
@@ -689,14 +688,14 @@ BigNumberFloat Blockchain::calculateRewardAmount(const DFS::Reward::RequestRewar
 }
 
 int Blockchain::addBlock(Block &block, bool isGenesis) {
-    if (block.getType() == Config::GENESIS_BLOCK_TYPE) {
+    if (block.getType() == BlockType::Genesis) {
         qDebug() << "Adding a GENESIS block" << block.getIndex() << "to storage";
     } else {
         qDebug() << "Adding a block" << block.getIndex() << "to storage";
     }
 
     const auto indexBlock = block.getIndex();
-    if (!(block.getType() == Config::GENESIS_BLOCK_TYPE)) {
+    if (!(block.getType() == BlockType::Genesis)) {
         if (indexBlock != 0) {
             BigNumber id = block.getIndex() - 1;
             if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
@@ -708,7 +707,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
             }
         }
     }
-    if ((indexBlock == 0) && (block.getType() != Config::DUMMY_BLOCK_TYPE)) {
+    if ((indexBlock == 0) && (block.getType() != BlockType::Dummy)) {
         node->actorIndex()->setFirstId(block.getApprover());
     }
     if (indexBlock < 0)
@@ -724,25 +723,24 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
     switch (resultCode) {
     case 0: {
         emit updateLastTransactionList(); // TODO: ?
-        qDebug() << "Block" << indexBlock << "is successfully added to blockchain";
+        qDebug() << "[Blockchain] Block" << indexBlock << "is successfully added to blockchain";
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
-        if (blockType == Config::DATA_BLOCK_TYPE) {
+        if (blockType == BlockType::Data) {
             saveTxInfoInEC(block.getData());
         }
-        qDebug() << (blockType == Config::DATA_BLOCK_TYPE) << blockType.c_str();
+        qDebug() << (blockType == BlockType::Data) << blockType;
         node->dataMiningManager()->coinRewardRequest(indexBlock);
 
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
-        qDebug() << "Block" << indexBlock << blockType.c_str() << "is already in blockchain";
-        if (blockType == Config::DATA_BLOCK_TYPE || blockType == Config::MERGE_BLOCK
-            || blockType == Config::DUMMY_BLOCK_TYPE) {
+        qDebug() << "[Blockchain] Block" << indexBlock << blockType << "is already in blockchain";
+        if (blockType == BlockType::Data || blockType == BlockType::DataMerge
+            || blockType == BlockType::Dummy) {
             resultCode = mergeBlockWithLocal(block);
-        } else if ((blockType == Config::GENESIS_BLOCK_TYPE)
-                   || (block.getType() == Config::GENESIS_BLOCK_MERGE)) {
+        } else if ((blockType == BlockType::Genesis) || (block.getType() == BlockType::GenesisMerge)) {
             resultCode = mergeGenesisBlockWithLocal(dynamic_cast<const GenesisBlock &>(block));
         } else {
             qCritical() << "Unsupported block type in block: " << block.getIndex();
@@ -750,7 +748,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         break;
     }
     default:
-        qCritical() << "While adding a new block" << block.toString();
+        qCritical() << "[Blockchain] While adding a new block" << block.toString();
     }
 
     // after adding genesis block we don't need to increment counter
@@ -769,7 +767,7 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
 
             GenesisBlock gB = createGenesisBlock(actor);
             if (blockIndex.addBlock(gB) == 0) {
-                qDebug() << "Block" << gB.getIndex() << QByteArray::fromStdString(gB.getType())
+                qDebug() << "[Blockchain] Block" << gB.getIndex() << gB.getType()
                          << "is successfully added to blockchain";
                 // TODONEW emit sendMessage(gB.serialize(),
                 // Messages::ChainMessage::GenesisBlockMessage);
@@ -796,11 +794,10 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
     if (!receivedBlock.getSignature().empty() && !existedBlock.getSignature().empty()
         && receivedBlock.getType() == existedBlock.getType()
         && receivedBlock.getIndex() == existedBlock.getIndex()) {
-        if ((receivedBlock.getType() == Config::DATA_BLOCK_TYPE)
-            || (receivedBlock.getType() == Config::GENESIS_BLOCK_TYPE)
-            || (receivedBlock.getType() == Config::DUMMY_BLOCK_TYPE))
+        if ((receivedBlock.getType() == BlockType::Data) || (receivedBlock.getType() == BlockType::Genesis)
+            || (receivedBlock.getType() == BlockType::Dummy))
             return true;
-        else if (receivedBlock.getType() == Config::GENESIS_BLOCK_MERGE) {
+        else if (receivedBlock.getType() == BlockType::GenesisMerge) {
             // 4) at least one common data row
             std::vector<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(receivedBlock).dataRows();
             std::vector<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(existedBlock).dataRows();
@@ -809,7 +806,7 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
                     return true;
                 }
             }
-        } else if (receivedBlock.getType() == Config::MERGE_BLOCK) {
+        } else if (receivedBlock.getType() == BlockType::DataMerge) {
             // 4) at least one common transaction
             auto transactionsA = receivedBlock.extractTransactions();
             auto transactionsB = existedBlock.extractTransactions();
@@ -851,7 +848,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
         // ListContainer<Transaction> txs;
         auto resultList = transactionsA;
 
-        for (const Transaction &tx : qAsConst(transactionsA)) {
+        for (const Transaction &tx : std::as_const(transactionsA)) {
             if (std::find(transactionsB.begin(), transactionsB.end(), tx) == transactionsB.end())
                 resultList.push_back(tx);
         }
@@ -937,7 +934,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeT
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         Block currentBlock = blockIndex.getBlockById(i);
 
-        if (currentBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
+        if (currentBlock.getType() == BlockType::Genesis) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto rows = genesis.dataRows();
 
@@ -1116,10 +1113,10 @@ BigNumber Blockchain::getBlockCount() {
 void Blockchain::addBlockToBlockchain(Block &block) {
     addBlock(block);
     auto list = block.extractTransactions();
-    for (const auto &tmp : qAsConst(list)) {
+    for (const auto &tmp : std::as_const(list)) {
         QList<ActorId> list;
         auto accounts = node->accountController()->accounts();
-        for (const auto &tmp : qAsConst(accounts))
+        for (const auto &tmp : std::as_const(accounts))
             list.append(tmp.id());
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
