@@ -135,6 +135,7 @@ private:
     QString getFolderPath() const;
     QString getFolderName() const;
     BigNumber calcSection(BigNumber id) const;
+    std::string getByIdUnsafe(const BigNumber &id) const;
     std::string getById(const BigNumber &id) const;
     BigNumber loadFirstId();
     BigNumber loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,

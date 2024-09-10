@@ -53,7 +53,7 @@ using namespace magic_enum::bitwise_operators;
         template <typename FormatContext>                                                                    \
         auto format(E Enum, FormatContext &ctx) const {                                                      \
             static_assert(std::is_enum_v<E>);                                                                \
-            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
+            string_view enum_name = magic_enum::enum_type_name<E>();                                         \
             string_view value_name = magic_enum::enum_name(Enum);                                            \
             return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
         }                                                                                                    \
@@ -71,6 +71,11 @@ void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
     fmt::print("{}\n",
                fmt::format(std::forward<fmt::format_string<Args...>>(fmt_str), std::forward<Args>(args)...));
 }
+}
+
+template <typename T>
+bool vector_contains(const std::vector<T> &vec, const T &element) {
+    return std::find(vec.begin(), vec.end(), element) != vec.end();
 }
 
 namespace Network {
@@ -142,15 +147,15 @@ namespace DataStorage {
           "hop          TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
           "approver     TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL, "
+          "signature    TEXT  NOT NULL, "
           "producer     TEXT  NOT NULL "
           ");";
     static const std::string SignTable = "Signatures";
     static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
         + " ("
           "actorId      TEXT PRIMARY KEY NOT NULL, "
-          "digSig       TEXT             NOT NULL, "
-          "type         TEXT             NOT NULL  "
+          "signature    TEXT             NOT NULL, "
+          "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
           ");";
 
     static const std::string GenesisBlockTable = "GenesisBlock";

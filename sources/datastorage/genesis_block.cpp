@@ -26,7 +26,7 @@ GenesisBlock::GenesisBlock()
 
 GenesisBlock::GenesisBlock(const GenesisBlock &block)
     : Block(block) {
-    this->prevGenHash = block.getPrevGenHash();
+    this->m_prevGenHash = block.getPrevGenHash();
 }
 
 GenesisBlock::GenesisBlock(const std::string &serialized) {
@@ -35,18 +35,39 @@ GenesisBlock::GenesisBlock(const std::string &serialized) {
 
 GenesisBlock::GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash)
     : Block(_data, prevBlock)
-    , prevGenHash(prevGenHash) {
+    , m_prevGenHash(prevGenHash) {
     this->m_type = Config::GENESIS_BLOCK_TYPE;
 }
 
-void GenesisBlock::addRow(const GenesisDataRow &row) {
-    std::vector<std::string> v;
-    v.push_back(row.serialize());
-    this->data += Serialization::serialize(v);
+GenesisBlock::GenesisBlock(
+    std::string &&type,
+    std::string &&data,
+    BigNumber idx,
+    long long date,
+    std::string &&prevHash,
+    std::string &&hash,
+    std::string &&prevGenHash,
+    std::vector<Approvers> &&signatures,
+    std::vector<GenesisDataRow> &&dataRows)
+    : Block(
+          std::move(type),
+          std::move(data),
+          std::move(idx),
+          date,
+          std::move(prevHash),
+          std::move(hash),
+          std::move(signatures),
+          {})
+    , m_prevGenHash(std::move(prevGenHash))
+    , m_dataRows(std::move(dataRows)) {
 }
 
-const std::string &GenesisBlock::getDataForDigSig() const {
-    return Block::getDataForDigSig();
+void GenesisBlock::addRow(const GenesisDataRow &row) {
+    m_dataRows.push_back(row);
+}
+
+const std::string &GenesisBlock::getDataForSignature() const {
+    return Block::getDataForSignature();
 }
 
 std::string GenesisBlock::getDataForHash() const {
@@ -66,36 +87,14 @@ std::string GenesisBlock::serialize() const {
     return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
 }
 
-void GenesisBlock::initFields(QList<QByteArray> &list) {
-    m_type = list.takeFirst();
-    index = BigNumber(list.takeFirst().toStdString());
-    date = list.takeFirst().toLongLong();
-    data = list.takeFirst();
-    prevHash = list.takeFirst();
-    hash = list.takeFirst();
-    prevGenHash = list.takeFirst();
-    QByteArray signs = list.takeFirst();
-    std::vector<std::string> lists = Serialization::deserialize(signs.toStdString());
-    for (const auto &tmp : lists) {
-        std::vector<std::string> tmps = Serialization::deserialize(tmp);
-        if (tmps.size() == 3)
-            signatures.push_back({ tmps.at(0), tmps.at(1), bool(std::stoi(tmps.at(2))) });
-    }
-}
-
-QList<GenesisDataRow> GenesisBlock::extractDataRows() const {
-    std::vector<std::string> txsData = Serialization::deserialize(data);
-    QList<GenesisDataRow> genesisDataRows;
-    for (const std::string &dataRow : txsData) {
-        genesisDataRows.append(GenesisDataRow(dataRow));
-    }
-    return genesisDataRows;
+const std::vector<GenesisDataRow> &GenesisBlock::dataRows() const {
+    return m_dataRows;
 }
 
 void GenesisBlock::setPrevGenHash(const std::string &value) {
-    prevGenHash = value;
+    m_prevGenHash = value;
 }
 
 std::string GenesisBlock::getPrevGenHash() const {
-    return prevGenHash;
+    return m_prevGenHash;
 }

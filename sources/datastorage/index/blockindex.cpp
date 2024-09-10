@@ -34,11 +34,11 @@ BlockIndex::BlockIndex() {
 BlockIndex::BlockIndex(const BigNumber &recordsLimit)
     : BlockIndex() {
     this->recordsLimit = recordsLimit;
-    qDebug() << "BLOCK INDEX: constructor: recordLimits - " << recordsLimit;
+    qDebug() << "[BlockIndex] constructor: recordLimits - " << recordsLimit;
 }
 
 BlockIndex::BlockIndex(const QString &folderName) {
-    qDebug() << "BLOCK INDEX: constructor: folder name - " << folderName;
+    qDebug() << "[BlockIndex] constructor: folder name - " << folderName;
 }
 
 BlockIndex::BlockIndex(const QString &folderName, const BigNumber &recordsLimit)
@@ -56,13 +56,15 @@ Block BlockIndex::getLastBlock() const {
     qDebug() << "[BlockIndex] Last saved id:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
-        //        qDebug() << "BLOCK - : " << block.serialize();
+
         if (!block.isEmpty()) {
-            qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is not empty, return this block";
+            // qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is not empty, return this
+            // block";
             return block;
         }
 
-        // qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is empty, can't return this block";
+        // qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is empty, can't return this
+        // block";
         --id;
     }
 
@@ -71,8 +73,7 @@ Block BlockIndex::getLastBlock() const {
 
 Block BlockIndex::getLastRealBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "BLOCK INDEX: getLastBlock:"
-             << "\n      last saved id - " << this->lastSavedId;
+    qDebug() << "[BlockIndex] getLastBlock: last saved id -" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         Block block = this->getBlockById(id);
         if ((!block.isEmpty()) && (block.getType() != Config::DUMMY_BLOCK_TYPE)) {
@@ -86,12 +87,11 @@ Block BlockIndex::getLastRealBlock() const {
 
 GenesisBlock BlockIndex::getLastGenesisBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "BLOCK INDEX: getLastGenesisBlock:"
-             << "      last saved id - " << this->lastSavedId;
+    qDebug() << "[BlockIndex] getLastGenesisBlock: last saved id -" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         GenesisBlock block = this->getGenesisBlockById(id);
         if (!block.isEmpty()) {
-            qDebug() << "      " << block.getIndex() << " block is empty";
+            qDebug() << "[BlockIndex]" << block.getIndex() << "block is empty";
             return block;
         }
         --id;
@@ -117,7 +117,7 @@ Block BlockIndex::getBlockById(const BigNumber &id) const {
         else if (block.getType() == Config::GENESIS_BLOCK_TYPE)
             return GenesisBlock(serializedBlock);
     } else {
-        qDebug() << id << "is not block";
+        qDebug() << "[BlockIndex]" << id << "is not block";
     }
     return Block();
 }
@@ -128,7 +128,7 @@ std::string BlockIndex::getBlockDataById(const BigNumber &id) const {
     if (!serializedBlock.empty()) {
         return serializedBlock;
     } else {
-        qDebug() << "is not block";
+        qDebug() << "[BlockIndex] is not block";
         return "";
     }
 }
@@ -200,8 +200,8 @@ Block BlockIndex::getLastRealBlockById() {
     return Block();
 }
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxByHash(const QByteArray &hash,
-                                                               const QByteArray &token) const {
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxByHash(const QByteArray &hash, const QByteArray &token) const {
     return getLastTxByParam(hash.toStdString(), SearchEnum::TxParam::Hash, token);
 }
 
@@ -209,18 +209,18 @@ std::pair<Transaction, QByteArray> BlockIndex::getLastTxByData(const std::string
     return getLastTxByParam(data, SearchEnum::TxParam::Data, "token");
 }
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxBySender(const BigNumber &id,
-                                                                 const QByteArray &token) const {
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxBySender(const BigNumber &id, const QByteArray &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserSender, token);
 }
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxByReceiver(const BigNumber &id,
-                                                                   const QByteArray &token) const {
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserReceiver, token);
 }
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id,
-                                                                           const QByteArray &token) const {
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
@@ -229,13 +229,14 @@ BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByte
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxByApprover(const BigNumber &id,
-                                                                   const QByteArray &token) const {
+std::pair<Transaction, QByteArray>
+BlockIndex::getLastTxByApprover(const BigNumber &id, const QByteArray &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserApprover, token);
 }
 
-QList<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count,
-                                                             BigNumber token) const {
+QList<Transaction>
+BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, BigNumber token)
+    const {
     return getTxsByParamInRow(id, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
 
@@ -244,14 +245,15 @@ QList<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id
 
 //}
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(const std::string &id,
-                                                                SearchEnum::TxParam param,
-                                                                const QByteArray &token) const {
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(
+    const std::string &id,
+    SearchEnum::TxParam param,
+    const QByteArray &token) const {
     BigNumber records = getRecords();
     ActorId tokenActor = token.toStdString();
 
     if (records == 0) {
-        qDebug() << "There no tx's in blockIndex";
+        qDebug() << "[BlockIndex] There no tx's in block index";
         return { Transaction(), "-1" };
     }
 
@@ -313,13 +315,17 @@ std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(const std::strin
     return { Transaction(), "-1" };
 }
 
-QList<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param,
-                                                  BigNumber from, int count, BigNumber token) const {
+QList<Transaction> BlockIndex::getTxsByParamInRow(
+    const BigNumber &id,
+    SearchEnum::TxParam param,
+    BigNumber from,
+    int count,
+    BigNumber token) const {
     QList<Transaction> currentTxs;
     BigNumber records = getRecords();
 
     if (records == 0) {
-        qDebug() << "There no tx's in blockIndex";
+        qDebug() << "[BlockIndex] There no tx's in block index";
         return currentTxs;
     }
 
@@ -398,7 +404,7 @@ QString BlockIndex::buildFilePath(const BigNumber &id) const {
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {
-        qDebug() << "Creating dir:" << pathToFolder;
+        qDebug() << "[BlockIndex] Creating dir:" << pathToFolder;
         dir = QDir();
         dir.mkpath(pathToFolder);
     }
@@ -441,7 +447,7 @@ BigNumberFloat BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const {
     BigNumberFloat circulativeBalanceGenesisBlock(0);
     const auto genesisBlock = getLastGenesisBlock();
 
-    const auto dataRows = genesisBlock.extractDataRows();
+    const auto dataRows = genesisBlock.dataRows();
     for (int numberRow = 0; numberRow < dataRows.size(); numberRow++) {
         const GenesisDataRow dataRow = dataRows[numberRow];
         if (dataRow.type == DataStorage::typeDataRow::UNIVERSAL && dataRow.token == ActorId()) {
@@ -453,32 +459,31 @@ BigNumberFloat BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const {
 
 void BlockIndex::calculationCountBlock() {
     BigNumber id = this->lastSavedId;
-    qDebug() << "BLOCK INDEX: getLastBlock:"
-             << "\n      last saved id - " << this->lastSavedId;
+    qDebug() << "[BlockIndex] getLastBlock: last saved id:" << this->lastSavedId;
     while (id >= firstSavedId) {
         Block block = this->getBlockById(id);
         if (!block.isEmpty()) {
             if (block.getType() == Config::DATA_BLOCK_TYPE) {
-                qDebug() << "\n Block by index[" << block.getIndex() << "] is real.";
+                qDebug() << "[BlockIndex] Block by index" << block.getIndex() << " is real";
                 realBlockRecords++;
-                qDebug() << "\n Count real blocks [" << realBlockRecords << "].";
+                qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
             }
             countTransactions += block.extractTransactions().size();
             records++;
         }
         --id;
     }
-    qDebug() << "\n Count records [" << records << "].";
+    qDebug() << "[BlockIndex] Count records:" << records << "";
 }
 
 int BlockIndex::add(const BigNumber &id, const std::string &_data) {
     QString path = buildFilePath(id);
     QFile file(path);
 
-    qDebug() << "Saving the file:" << path;
+    qDebug() << "[BlockIndex] Saving the file:" << path;
 
     if (file.exists()) {
-        qDebug() << "Can't save the file" << path << "(File already exits)";
+        qDebug() << "[BlockIndex] Can't save the file" << path << "(file already exits)";
         return Errors::FILE_ALREADY_EXISTS;
     }
 
@@ -508,8 +513,8 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
             row.insert({ "prevGenHash", block.getPrevGenHash() });
             DB.insert(Config::DataStorage::GenesisBlockTable, row);
 
-            QList<GenesisDataRow> rows = block.extractDataRows();
-            for (const auto &tmp : rows) {
+            auto rows = block.dataRows();
+            for (const auto &tmp : std::as_const(rows)) {
                 DBRow rowRow;
                 rowRow.insert({ "actorId", tmp.actorId.toStdString() });
                 rowRow.insert({ "state", tmp.state.toStdString() });
@@ -521,8 +526,8 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
             for (int i = 0; i < listSign.size(); i += 3) {
                 DBRow rowRow;
                 rowRow.insert({ "actorId", listSign[i].toStdString() });
-                rowRow.insert({ "digSig", listSign[i + 1].toStdString() });
-                rowRow.insert({ "type", listSign[i + 2].toStdString() });
+                rowRow.insert({ "signature", listSign[i + 1].toStdString() });
+                rowRow.insert({ "isApprove", listSign[i + 2].toStdString() });
                 DB.insert(Config::DataStorage::SignTable, rowRow);
             }
         } else {
@@ -554,7 +559,7 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
                 rowRow.insert({ "hop", QByteArray::number(tmp.getHop()).toStdString() });
                 rowRow.insert({ "hash", tmp.getHash() });
                 rowRow.insert({ "approver", tmp.getApprover().toByteArray().toStdString() });
-                rowRow.insert({ "digSig", tmp.getDigSig() });
+                rowRow.insert({ "signature", tmp.getSignature() });
                 if (tmp.getProducer().isEmpty())
                     rowRow.insert({ "producer", "0" });
                 else
@@ -567,8 +572,8 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
             for (int i = 0; i < listSign.size(); i += 3) {
                 DBRow rowRow;
                 rowRow.insert({ "actorId", listSign[i].toStdString() });
-                rowRow.insert({ "digSig", listSign[i + 1].toStdString() });
-                rowRow.insert({ "type", listSign[i + 2].toStdString() });
+                rowRow.insert({ "signature", listSign[i + 1].toStdString() });
+                rowRow.insert({ "isApprove", listSign[i + 2].toStdString() });
                 DB.insert(Config::DataStorage::SignTable, rowRow);
             }
 
@@ -584,13 +589,13 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
 
         // but updating the first saved id is rarely (should be logged)
         if (id < this->firstSavedId || firstSavedId.isEmpty()) {
-            qDebug() << "First saved id is updated from" << firstSavedId << "to" << id;
+            qDebug() << "[BlockIndex] First saved id is updated from" << firstSavedId << "to" << id;
             this->firstSavedId = id;
         }
 
         return 0;
     }
-    qDebug() << "Can't save the file" << path << "(File is not opened)";
+    qDebug() << "[BlockIndex] Can't save the file" << path << "(file is not opened)";
     return Errors::FILE_IS_NOT_OPENED;
 }
 
@@ -601,8 +606,7 @@ bool BlockIndex::hasRecordLimit() const {
 bool BlockIndex::recordLimitIsReached() const {
     return this->hasRecordLimit() && (this->records >= this->recordsLimit);
 }
-int BlockIndex::removeById(const BigNumber &id)
-{
+int BlockIndex::removeById(const BigNumber &id) {
     return removeById(getBlockById(id));
 }
 
@@ -611,17 +615,17 @@ int BlockIndex::removeById(const Block &block) {
     auto id = block.getIndex();
     auto typeBlock = block.getType();
     auto countTxInBlock = block.extractTransactions().size();
-    qDebug() << "Removing record with id" << id.toByteArray();
+    qDebug() << "[BlockIndex] Removing record with id" << id.toByteArray();
     if (id < firstSavedId) {
         removeAll();
     }
-    qDebug() << lastSavedId << "(last saved id)" << id << "(id to remove)";
+    qDebug() << "[BlockIndex]" << lastSavedId << "(last saved id)" << id << "(id to remove)";
 
     BigNumber currentIdToRemove = id;
 
     while (currentIdToRemove <= lastSavedId) {
         QString pathToFile = buildFilePath(currentIdToRemove);
-        qDebug() << "To remove:" << pathToFile;
+        qDebug() << "[BlockIndex] To remove:" << pathToFile;
         QFile file(pathToFile);
         if (file.exists() && !file.isOpen()) {
             bool isRemoved = file.remove();
@@ -642,6 +646,7 @@ int BlockIndex::removeById(const Block &block) {
 }
 
 void BlockIndex::removeDummyBlocks(const BigNumber &id) {
+    qDebug() << "[BlockIndex] remove dummy blocks";
     bool isNotDummyBlock = false;
     auto lastId = lastSavedId;
     while (!isNotDummyBlock) {
@@ -662,7 +667,7 @@ void BlockIndex::removeAll() {
     QDir folder(folderPath);
     const auto folders =
         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
-    for (const QString &section : qAsConst(folders)) {
+    for (const QString &section : std::as_const(folders)) {
         QDir dir(folderPath + QString("/") + section);
         dir.removeRecursively();
     }
@@ -674,6 +679,7 @@ void BlockIndex::removeAll() {
     this->realBlockRecords = 0;
     this->countTransactions = 0;
 }
+
 QString BlockIndex::getFolderPath() const {
     return DataStorage::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
 }
@@ -702,8 +708,7 @@ BigNumber BlockIndex::getCountRealBlocks() const {
     return this->realBlockRecords;
 }
 
-int BlockIndex::getCountTransactionsInBlocks() const
-{
+int BlockIndex::getCountTransactionsInBlocks() const {
     return countTransactions;
 }
 
@@ -751,94 +756,78 @@ std::list<FarmingTransactionData> BlockIndex::getAllLockedFarmingTransactions() 
     return farmingsTxs;
 }
 
-std::string BlockIndex::getById(const BigNumber &id) const {
-    QString path = buildFilePath(id);
-    QFile file(path);
+std::string BlockIndex::getByIdUnsafe(const BigNumber &id) const {
+    std::string path = buildFilePath(id).toStdString();
 
-    if (!file.exists()) {
-        qDebug() << "Can't get the file" << path << "(File is not exits)";
+    if (!std::filesystem::exists(path)) {
+        qDebug() << "Can't get the file" << path << "(file is not exits)";
         return "";
     }
 
-    DBConnector DB(path.toStdString());
-    DB.open();
-    if (DB.tableNames().size() == 0)
+    DBConnector db(path);
+    db.open();
+
+    if (db.tableNames().empty()) {
         return "";
-    if (DB.tableNames()[0] == "GenesisBlock") {
-        std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::GenesisBlockTable + " ;");
-        if (res.size() == 0) {
-            qDebug() << "Can't get the file" << path << "(File is empty)";
-            return "";
-        }
-        QByteArrayList list;
-        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str()) << res[0].at("date").c_str()
-             << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str()
-             << res[0].at("prevGenHash").c_str();
-        GenesisBlock b;
-        std::vector<DBRow> rowsSign = DB.select("SELECT * FROM " + Config::DataStorage::SignTable + " ;");
-        QByteArray signes = "";
-        for (const auto &tmp : rowsSign) {
-            std::string key, value, type;
-            key = tmp.at("actorId");
-            value = tmp.at("digSig");
-            type = tmp.at("type");
-            std::vector<std::string> v;
-            v.push_back(key);
-            v.push_back(value);
-            v.push_back(type);
-            std::string sign = Serialization::serialize(v);
-            std::vector<std::string> v1;
-            v1.push_back(sign);
-            signes += Serialization::serialize(v1);
-        }
-        list << signes;
-        b.initFields(list);
+    }
 
-        std::vector<DBRow> rows =
-            DB.select("SELECT * FROM " + Config::DataStorage::RowGenesisBlockTable + " ;");
-        for (const auto &tmp : rows) {
+    bool isGenesis = db.tableNames()[0] == "GenesisBlock";
+    const std::string blockTable =
+        isGenesis ? Config::DataStorage::GenesisBlockTable : Config::DataStorage::BlockTable;
+
+    std::vector<DBRow> res = db.selectAll(blockTable);
+    if (res.empty()) {
+        qDebug() << "[BlockIndex] Can't get the file" << path << "(file is empty)";
+        return "";
+    }
+
+    BigNumber blockId = BigNumber(res[0].at("id"));
+    long long date = std::stoll(res[0].at("date"));
+
+    if (id != blockId)
+        qFatal("getById: Why?");
+
+    std::vector<DBRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");
+    std::vector<Approvers> signatures;
+
+    for (const auto &dbSign : dbSigns) {
+        auto block_sign = Approvers { .actorId = dbSign.at("actorId"),
+                                      .sign = dbSign.at("signature"),
+                                      .isApprove = boost::lexical_cast<bool>(dbSign.at("isApprove")) };
+        signatures.push_back(block_sign);
+    }
+
+    if (isGenesis) {
+        std::string prevGenHash = std::move(res[0].at("prevGenHash"));
+
+        std::vector<DBRow> rows = db.selectAll(Config::DataStorage::RowGenesisBlockTable);
+        std::vector<GenesisDataRow> dataRows;
+        for (const auto &row : rows) {
             GenesisDataRow dRow;
-            dRow.type = DataStorage::typeDataRow(QByteArray(tmp.at("type").c_str()).toInt());
-            dRow.state = BigNumber(tmp.at("state"));
-            dRow.token = tmp.at("token");
-            dRow.actorId = tmp.at("actorId");
-            b.addRow(dRow);
+            dRow.type = DataStorage::typeDataRow(QByteArray(row.at("type").c_str()).toInt());
+            dRow.state = BigNumber(row.at("state"));
+            dRow.token = row.at("token");
+            dRow.actorId = row.at("actorId");
+            dataRows.push_back(dRow);
         }
 
-        return b.serialize();
+        auto block = GenesisBlock(
+            std::move(res[0].at("type")),
+            std::move(res[0].at("data")),
+            blockId,
+            date,
+            std::move(res[0].at("prevHash")),
+            std::move(res[0].at("hash")),
+            std::move(prevGenHash),
+            std::move(signatures),
+            std::move(dataRows));
+
+        return block.serialize();
     } else {
-        std::vector<DBRow> res = DB.select("SELECT * FROM " + Config::DataStorage::BlockTable + " ;");
-        if (res.size() == 0) {
-            qDebug() << "Can't get the file" << path << "(File is empty)";
-            return "";
-        }
-        QByteArrayList list;
-        list << res[0].at("type").c_str() << QByteArray(res[0].at("id").c_str()) << res[0].at("date").c_str()
-             << res[0].at("data").c_str() << res[0].at("prevHash").c_str() << res[0].at("hash").c_str();
-        Block b;
-        std::vector<DBRow> rowsSign = DB.select("SELECT * FROM " + Config::DataStorage::SignTable + " ;");
-        QByteArray signes = "";
-        for (const auto &tmp : rowsSign) {
-            std::string key, value, type;
-            key = tmp.at("actorId");
-            value = tmp.at("digSig");
-            type = tmp.at("type");
-            std::vector<std::string> v;
-            v.push_back(key);
-            v.push_back(value);
-            v.push_back(type);
-            std::string sign = Serialization::serialize(v);
-            std::vector<std::string> v1;
-            v1.push_back(sign);
-            signes += Serialization::serialize(v1);
-        }
-        list << signes;
-        b.initFields(list);
+        std::vector<DBRow> rows = db.selectAll(Config::DataStorage::TxBlockTable);
+        std::vector<Transaction> transactions;
 
-        std::vector<DBRow> rows = DB.select("SELECT * FROM " + Config::DataStorage::TxBlockTable + " ;");
-        std::vector<std::string> v;
         for (const auto &tmp : rows) {
-            QByteArrayList list;
             Transaction tx;
             tx.setSender(ActorId(tmp.at("sender")));
             tx.setReceiver(ActorId(tmp.at("receiver")));
@@ -850,32 +839,60 @@ std::string BlockIndex::getById(const BigNumber &id) const {
             tx.setGas(std::stoi(tmp.at("gas")));
             tx.setHop(std::stoi(tmp.at("hop")));
             tx.setHash(tmp.at("hash").c_str());
-            tx.setApprover(ActorId(tmp.at("approver").c_str()));
-            tx.setDigSig(tmp.at("digSig").c_str());
-            tx.setProducer(ActorId(tmp.at("producer").c_str()));
-            v.push_back(tx.serialize());
-        }
-        b.setData(Serialization::serialize(v));
+            tx.setApprover(ActorId(tmp.at("approver")));
+            tx.setSignature(tmp.at("signature").c_str());
+            tx.setProducer(ActorId(tmp.at("producer")));
 
-        return b.serialize();
+            if (!tx.isEmpty() || tx.isBurn()) // TODO: ?
+                transactions.push_back(tx);
+        }
+
+        auto block = Block(
+            std::move(res[0].at("type")),
+            std::move(res[0].at("data")),
+            blockId,
+            date,
+            std::move(res[0].at("prevHash")),
+            std::move(res[0].at("hash")),
+            std::move(signatures),
+            std::move(transactions));
+
+        return block.serialize();
     }
 }
 
+std::string BlockIndex::getById(const BigNumber &id) const {
+    try {
+        auto res = getByIdUnsafe(id);
+        return res;
+    } catch (const std::exception &e) {
+        qFatal("[BlockIndex] Wrong getById: %s", e.what());
+    }
+
+    return "";
+}
+
 BigNumber BlockIndex::loadFirstId() {
-    BigNumber firstSavedId = loadFileFromSection([](const QStringList &folders) { return folders[0]; },
-                                                 [](const QStringList &files) { return files[0]; });
+    BigNumber firstSavedId = loadFileFromSection(
+        [](const QStringList &folders) {
+            return folders[0];
+        },
+        [](const QStringList &files) {
+            return files[0];
+        });
 
     if (!firstSavedId.isEmpty()) {
-        qDebug() << "FIFE INDEX: loadFirsId: Loaded first saved id:" << firstSavedId;
+        qDebug() << "[BlockIndex] loadFirsId: Loaded first saved id:" << firstSavedId;
     } else {
-        qDebug() << "FIFE INDEX: loadFirsId: First saved id is not loaded";
+        qDebug() << "[BlockIndex] loadFirsId: First saved id is not loaded";
     }
 
     return firstSavedId;
 }
 
-BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,
-                                          std::function<QString(const QStringList &files)> getFile) {
+BigNumber BlockIndex::loadFileFromSection(
+    std::function<QString(const QStringList &folders)> getFolder,
+    std::function<QString(const QStringList &files)> getFile) {
     auto asBigNumComparator = [](const QString &file1, const QString &file2) {
         return BigNumber(file1.toStdString()) < BigNumber(file2.toStdString());
     };
@@ -883,44 +900,42 @@ BigNumber BlockIndex::loadFileFromSection(std::function<QString(const QStringLis
     QDir folder(getFolderPath());
 
     // sections
-    qDebug() << "FILE INDEX:"
-             << "loadFileFromSection():" << folder.path();
+    qDebug() << "[BlockIndex] loadFileFromSection():" << folder.path();
     QStringList list = folder.entryList(QDir::Filter::Dirs | QDir::Filter::NoDotAndDotDot);
     if (list.isEmpty()) {
-        qDebug() << "FILE INDEX:"
-                 << "loadFileFromSection():"
-                 << "folder.entryList: empty";
+        qDebug() << "[BlockIndex] loadFileFromSection(): folder.entryList: empty";
         return BigNumber();
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
     folder.cd(getFolder(list)); // go to section
 
     // files in sections
-    qDebug() << "FILE INDEX:"
-             << "loadFileFromSection():" << folder.path();
+    qDebug() << "[BlockIndex] loadFileFromSection():" << folder.path();
     list = folder.entryList(QDir::Filter::Files | QDir::Filter::NoDotAndDotDot);
     if (list.isEmpty()) {
-        qDebug() << "FILE INDEX:"
-                 << "loadFileFromSection():"
-                 << "folder.entryList->folder.entryList: empty";
+        qDebug() << "[BlockIndex] loadFileFromSection(): folder.entryList->folder.entryList: empty";
         return BigNumber();
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
 
-    qDebug() << "FILE INDEX:"
-             << "loadFileFromSection(): lastId -"
+    qDebug() << "[BlockIndex] loadFileFromSection(): lastId -"
              << (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString()));
     return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString());
 }
 
 BigNumber BlockIndex::loadLastId() {
-    BigNumber lastSavedId = loadFileFromSection([](const QStringList &folders) { return folders.last(); },
-                                                [](const QStringList &files) { return files.last(); });
+    BigNumber lastSavedId = loadFileFromSection(
+        [](const QStringList &folders) {
+            return folders.last();
+        },
+        [](const QStringList &files) {
+            return files.last();
+        });
 
     if (!lastSavedId.isEmpty()) {
-        qDebug() << "Loaded last saved id:" << lastSavedId;
+        qDebug() << "[BlockIndex] Loaded last saved id:" << lastSavedId;
     } else {
-        qDebug() << "Last saved id is not loaded";
+        qDebug() << "[BlockIndex] Last saved id is not loaded";
     }
     return lastSavedId;
 }

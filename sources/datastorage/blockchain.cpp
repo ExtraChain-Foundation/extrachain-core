@@ -278,7 +278,7 @@ void Blockchain::sendBlockByNumber(const BigNumber &index) const {
         node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
     } else {
         data = answerBlock.serialize();
-//        node->network()->send_message(data, MessageType::BlockchainNewBlock);
+        // node->network()->send_message(data, MessageType::BlockchainNewBlock);
     }
 }
 
@@ -363,8 +363,8 @@ bool Blockchain::signCheckAdd(Block &block) {
                         DB.open();
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
-                        rowRow.insert({ "digSig", list[i + 1].toStdString() });
-                        rowRow.insert({ "type", list[i + 2].toStdString() });
+                        rowRow.insert({ "signature", list[i + 1].toStdString() });
+                        rowRow.insert({ "isApprove", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                         count++;
                     }
@@ -400,8 +400,8 @@ bool Blockchain::signCheckAdd(Block &block) {
                         DB.open();
                         DBRow rowRow;
                         rowRow.insert({ "actorId", list[i].toStdString() });
-                        rowRow.insert({ "digSig", list[i + 1].toStdString() });
-                        rowRow.insert({ "type", list[i + 2].toStdString() });
+                        rowRow.insert({ "signature", list[i + 1].toStdString() });
+                        rowRow.insert({ "isApprove", list[i + 2].toStdString() });
                         DB.insert(Config::DataStorage::SignTable, rowRow);
                         count++;
                     }
@@ -793,7 +793,7 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
-    if (!receivedBlock.getDigSig().empty() && !existedBlock.getDigSig().empty()
+    if (!receivedBlock.getSignature().empty() && !existedBlock.getSignature().empty()
         && receivedBlock.getType() == existedBlock.getType()
         && receivedBlock.getIndex() == existedBlock.getIndex()) {
         if ((receivedBlock.getType() == Config::DATA_BLOCK_TYPE)
@@ -802,10 +802,10 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
             return true;
         else if (receivedBlock.getType() == Config::GENESIS_BLOCK_MERGE) {
             // 4) at least one common data row
-            QList<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(receivedBlock).extractDataRows();
-            QList<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(existedBlock).extractDataRows();
+            std::vector<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(receivedBlock).dataRows();
+            std::vector<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(existedBlock).dataRows();
             for (const GenesisDataRow &g : rowsA) {
-                if (rowsB.contains(g)) {
+                if (vector_contains(rowsB, g)) {
                     return true;
                 }
             }
@@ -888,13 +888,13 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
     } else // Case 2 - different payload
     {
         // todo: make utils::combine(list, list) function;
-        QList<GenesisDataRow> genDataRowsA = blockA.extractDataRows();
-        QList<GenesisDataRow> genDataRowsB = blockB.extractDataRows();
-        QList<GenesisDataRow> resultList = genDataRowsA;
+        auto genDataRowsA = blockA.dataRows();
+        auto genDataRowsB = blockB.dataRows();
+        auto resultList = genDataRowsA;
         int count = 0;
-        for (const GenesisDataRow &r : qAsConst(genDataRowsA)) {
-            if (!genDataRowsB.contains(r)) {
-                resultList.append(r);
+        for (const GenesisDataRow &r : std::as_const(genDataRowsA)) {
+            if (!vector_contains(genDataRowsB, r)) {
+                resultList.push_back(r);
             } else
                 count++;
         }
@@ -923,13 +923,11 @@ BigNumber Blockchain::getRecords() const {
     return fileMode ? blockIndex.getRecords() : memIndex.getRecords();
 }
 
-BigNumber Blockchain::getCountRealBlockRecords() const
-{
+BigNumber Blockchain::getCountRealBlockRecords() const {
     return blockIndex.getCountRealBlocks();
 }
 
-int Blockchain::getCountTransactionsInBlocks() const
-{
+int Blockchain::getCountTransactionsInBlocks() const {
     return blockIndex.getCountTransactionsInBlocks();
 }
 
@@ -941,7 +939,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeT
 
         if (currentBlock.getType() == Config::GENESIS_BLOCK_TYPE) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
-            const auto rows = genesis.extractDataRows();
+            const auto rows = genesis.dataRows();
 
             for (const auto &row : rows) {
                 if (userId == row.actorId)
@@ -956,7 +954,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TypeT
 
         auto txs = currentBlock.extractTransactions();
         for (auto &tx : txs) {
-            if(tx.getTypeTx() != typeTx)
+            if (tx.getTypeTx() != typeTx)
                 continue;
 
             if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
@@ -983,8 +981,8 @@ void Blockchain::showBlockchain() const {
     GenesisBlock genBlock = blockIndex.getLastGenesisBlock();
     qDebug() << "Genesis block";
 
-    auto extra = genBlock.extractDataRows();
-    for (const auto &dataGen : qAsConst(extra)) {
+    auto extra = genBlock.dataRows();
+    for (const auto &dataGen : std::as_const(extra)) {
         qDebug() << &dataGen;
     }
 }
@@ -1020,15 +1018,12 @@ void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
 }
 
-void Blockchain::requestCoins(const ActorId &receiver, const DFS::Reward::RequestReward &requestReward)
-{
+void Blockchain::requestCoins(const ActorId &receiver, const DFS::Reward::RequestReward &requestReward) {
     node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
 }
 
-void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward)
-{
-    if((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100)
-    {
+void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {
+    if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100) {
         Transaction transaction;
         transaction.setSender(node->accountController()->mainActor().id());
         transaction.setReceiver(requestReward.Actor);
@@ -1053,8 +1048,7 @@ BigNumber Blockchain::getBlockIndexLastFarmingTx() const {
     return blockIndex.getIndexBlockByLastFarmingTx();
 }
 
-std::list<FarmingTransactionData> Blockchain::getFarmingTxs() const
-{
+std::list<FarmingTransactionData> Blockchain::getFarmingTxs() const {
     return blockIndex.getAllLockedFarmingTransactions();
 }
 
@@ -1239,7 +1233,7 @@ void Blockchain::proveTx(Transaction &tx) {
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (!producerActor.key().verify(tx.getDataForDigSig(), tx.getDigSig())) {
+        if (!producerActor.key().verify(tx.getDataForSignature(), tx.getSignature())) {
             qDebug() << QString("Tx %1 not approved: bad signature in fee tx").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
@@ -1254,7 +1248,8 @@ void Blockchain::proveTx(Transaction &tx) {
     }
 
     //    // if !sig
-    //    if (!senderActor.key().verify(tx->getDataForDigSig().toStdString(), tx->getDigSig().toStdString()))
+    //    if (!senderActor.key().verify(tx->getDataForSignature().toStdString(),
+    //    tx->getSignature().toStdString()))
     //    {
     //        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
     //        txManager->removeUnApprovedTransaction(tx);

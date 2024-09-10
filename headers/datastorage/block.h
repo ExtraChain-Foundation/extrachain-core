@@ -55,17 +55,17 @@ static const std::string MERGE_BLOCK = "dataMerge";
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    const int FIELDS_SIZE = 4;
     std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
-    std::string data;                             // payload (serialized tx's, or other)
-    BigNumber index = BigNumber(-1);              // block id
-    //    BigNumber approver = BigNumber(-1);        // block approver id
+    std::string m_data;                           // payload (serialized tx's, or other)
+    BigNumber m_index = BigNumber(-1);            // block id
+    // BigNumber approver = BigNumber(-1);        // block approver id
 
-    long long date;
-    std::string prevHash; // previous block hash
-    std::string hash;     // this block hash (from all previous fields)
-    //    QByteArray digSig;   // digital signature (from all fields)
-    std::vector<Approvers> signatures;
+    long long m_date;
+    std::string m_prevHash; // previous block hash
+    std::string m_hash;     // this block hash (from all previous fields)
+    // QByteArray signature;   // digital signature (from all fields)
+    std::vector<Approvers> m_signatures;     // digital signature
+    std::vector<Transaction> m_transactions; // all transactions
 
 public:
     Block();
@@ -88,6 +88,16 @@ public:
      */
     Block(const std::string &data, const Block &prev);
 
+    Block(
+        std::string &&type,
+        std::string &&data,
+        BigNumber idx,
+        long long date,
+        std::string &&prevHash,
+        std::string &&hash,
+        std::vector<Approvers> &&signatures,
+        std::vector<Transaction> &&transactions);
+
     virtual ~Block();
 
 private:
@@ -99,12 +109,12 @@ private:
 
 protected:
     /**
-     * @brief Concatenates all fields that are used for digSig calculation
+     * @brief Concatenates all fields that are used for signature calculation
      * Override in subclasses
-     * @return digSig data
+     * @return signature data
      */
     virtual std::string getDataForHash() const;
-    virtual const std::string &getDataForDigSig() const;
+    virtual const std::string &getDataForSignature() const;
 
 public:
     // data operations
@@ -141,11 +151,9 @@ public:
     bool isEmpty() const;
     QString toString() const;
     bool operator<(const Block &other);
-    static bool isBlock(const QByteArray &data);
     bool isApprover(const ActorId &) const;
 
 public:
-    virtual void initFields(QList<QByteArray> &list);
     void setPrevHash(const std::string &value);
     std::string getType() const;
     ActorId getApprover() const;
@@ -153,7 +161,11 @@ public:
     std::string getData() const;
     std::string getHash() const;
     std::string getPrevHash() const;
-    std::string getDigSig() const;
+    std::string getSignature() const;
+    const std::vector<Approvers> &signatures() const;
+    const std::vector<Transaction> &transactions() const;
+
+    // TODO: replace to signatures()
     QByteArrayList getListSignatures() const;
     void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
     // void setType(QByteArray type);
@@ -164,16 +176,16 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = index.toStdString();
-        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+        std::string index_str = m_index.toStdString();
+        msgpack::type::make_define_array(m_type, index_str, m_date, m_data, m_hash, m_prevHash, m_signatures)
             .msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string index_str;
-        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+        msgpack::type::make_define_array(m_type, index_str, m_date, m_data, m_hash, m_prevHash, m_signatures)
             .msgpack_unpack(msgpack_o);
-        index = index_str;
+        m_index = index_str;
     }
 };
 
@@ -183,7 +195,7 @@ inline bool operator<(const Block &l, const Block &r) {
 
 inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-        && l.extractTransactions() == r.extractTransactions();
+           && l.extractTransactions() == r.extractTransactions();
 }
 
 #endif // MEMBLOCK_H

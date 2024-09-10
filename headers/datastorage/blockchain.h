@@ -242,7 +242,7 @@ public:
 
     /**
      * @brief Sign Block with current approver
-     * @param block with digSig
+     * @param block with signature
      */
     void signBlock(Block &block) const;
 

@@ -84,8 +84,9 @@ static const std::string GENESIS_BLOCK_MERGE = "genesisMerge";
  * and one additional field - prevGenHash.
  */
 class EXTRACHAIN_EXPORT GenesisBlock : public Block {
-public:
-    std::string prevGenHash; // previous genesis block hashes
+private:
+    std::string m_prevGenHash; // previous genesis block hashes
+    std::vector<GenesisDataRow> m_dataRows;
 
 public:
     GenesisBlock();
@@ -97,20 +98,30 @@ public:
     // Initial block construction, prev = nullptr for first block
     explicit GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash);
 
+    explicit GenesisBlock(
+        std::string &&type,
+        std::string &&data,
+        BigNumber idx,
+        long long date,
+        std::string &&prevHash,
+        std::string &&hash,
+        std::string &&prevGenHash,
+        std::vector<Approvers> &&signatures,
+        std::vector<GenesisDataRow> &&dataRows);
+
     // Block interface
 public:
     void addRow(const GenesisDataRow &row);
-    std::string getDataForHash() const override;          // deprecate?
-    const std::string &getDataForDigSig() const override; // deprecate?
+    std::string getDataForHash() const override;             // deprecate?
+    const std::string &getDataForSignature() const override; // deprecate?
     bool deserialize(const std::string &serialized) override;
     std::string serialize() const override;
-    void initFields(QList<QByteArray> &list) override;
 
     /**
      * @brief extract non-empty genesisDataRows from data
      * @return genesis data row list
      */
-    QList<GenesisDataRow> extractDataRows() const;
+    const std::vector<GenesisDataRow> &dataRows() const;
 
 public:
     std::string getPrevGenHash() const;
@@ -118,17 +129,31 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = index.toStdString();
-        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
-                                         prevGenHash)
+        std::string index_str = m_index.toStdString();
+        msgpack::type::make_define_array(
+            m_type,
+            index_str,
+            m_date,
+            m_data,
+            m_hash,
+            m_prevHash,
+            m_signatures,
+            m_prevGenHash)
             .msgpack_pack(msgpack_pk);
     }
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string index_str;
-        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures,
-                                         prevGenHash)
+        msgpack::type::make_define_array(
+            m_type,
+            index_str,
+            m_date,
+            m_data,
+            m_hash,
+            m_prevHash,
+            m_signatures,
+            m_prevGenHash)
             .msgpack_unpack(msgpack_o);
-        index = index_str;
+        m_index = index_str;
     }
 };
 

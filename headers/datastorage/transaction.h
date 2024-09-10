@@ -62,7 +62,7 @@ protected:
     std::string hash;    // hash from all fields
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
-    std::string digSig;
+    std::string signature;
     TypeTx typeTx = TypeTx::Transaction;
 
 public:
@@ -81,12 +81,12 @@ public:
     Transaction(const Transaction &other);
 
     /**
-     * @brief Concatenates all fields that are used for digSig calculation
+     * @brief Concatenates all fields that are used for signature calculation
      * Override in subclasses
-     * @return digSig data
+     * @return signature data
      */
     std::string getDataForHash() const;
-    std::string getDataForDigSig() const;
+    std::string getDataForSignature() const;
 
     // digital signature
     void sign(const Actor<KeyPrivate> &actor);
@@ -98,7 +98,7 @@ public:
     void setGas(int gas);
     void setHop(int hop);
     void setProducer(const ActorId &value);
-    void setDigSig(const std::string &value);
+    void setSignature(const std::string &value);
     void setApprover(const ActorId &value);
     void setHash(const std::string &value);
     void decrementHop();
@@ -114,7 +114,7 @@ public:
     std::string getHash() const;
     ActorId getToken() const;
     ActorId getApprover() const;
-    std::string getDigSig() const;
+    std::string getSignature() const;
     ActorId getProducer() const;
 
     virtual bool isEmpty() const;
@@ -155,7 +155,7 @@ public:
     virtual void setTypeTx(TypeTx newTypeTx);
 
     MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
-                   digSig, typeTx)
+                   signature, typeTx)
 };
 
 struct FarmingTransactionData {
