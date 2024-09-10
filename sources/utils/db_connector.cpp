@@ -27,10 +27,29 @@
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
-DBConnector::DBConnector(const std::string &filePath) {
+DBConnector::DBConnector(const std::string &filePath, DBConnectorType type) {
     if (filePath.empty()) {
         qFatal("[DBConnector] Empty file name");
     }
+
+    if (type == DBConnectorType::Compressed) {
+        m_type = type;
+        this->m_file = filePath + ".temp"; // TODO: + random str?
+
+        if (!QFile::exists(filePath.c_str()))
+            return;
+        QFile file(filePath.c_str());
+        if (!file.open(QFile::ReadOnly)) {
+            qFatal("Can't open db file");
+        }
+        auto data_uncompressed = qUncompress(file.readAll());
+        QFile fileTemp(QString::fromStdString(filePath) + ".temp");
+        fileTemp.open(QFile::WriteOnly);
+        fileTemp.write(data_uncompressed);
+        fileTemp.close();
+        return;
+    }
+
     this->m_file = filePath;
 }
 
@@ -48,7 +67,7 @@ DBConnector::~DBConnector() {
     // TODO: check if sqlite pointer is active
     if (db != nullptr) {
         close();
-        //        sqlite3_db_release_memory(db);
+        // sqlite3_db_release_memory(db);
     }
     // close();
 }
@@ -88,12 +107,28 @@ bool DBConnector::close() {
         return false;
     } else {
         m_open = false;
+
+        if (m_type == DBConnectorType::Compressed) {
+            QFile file(m_file.c_str());
+            if (!file.open(QFile::ReadOnly)) {
+                qFatal("Can't open db file");
+            }
+            auto data_compressed = qCompress(file.readAll());
+            QFile fileTemp(QString::fromStdString(m_file).mid(0, m_file.size() - 4));
+            fileTemp.open(QFile::WriteOnly);
+            fileTemp.write(data_compressed);
+            fileTemp.close();
+            file.remove();
+        }
+
         return true;
     }
 }
 
-std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
-                                       DBRow binds) { // std::pair with status?
+std::vector<DBRow> DBConnector::select(
+    std::string query,
+    std::string tableName,
+    DBRow binds) { // std::pair with status?
     if (!isOpen()) {
         qFatal("[DBConnector] Database not open");
     }
@@ -161,7 +196,7 @@ std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
             qDebug().nospace() << "[DBConnector] " << file().c_str() << "("
                                << (rs == SQLITE_DONE ? "true" : "false") << "): " << query.c_str();
     if (rs != SQLITE_DONE) {
-        qDebug() << "[DBConnector]" << file().c_str() << "error: " << sqlite3_errmsg(db);
+        qDebug() << "[DBConnector]" << m_file << m_type << "error:" << sqlite3_errmsg(db);
         sqlite3_finalize(stmt);
         return {};
     }
@@ -171,7 +206,8 @@ std::vector<DBRow> DBConnector::select(std::string query, std::string tableName,
 }
 
 std::vector<DBRow> DBConnector::selectAll(std::string table, int limit) {
-    std::string query = fmt::format("SELECT * FROM {}{}", table, limit > 0 ? " LIMIT " + std::to_string(limit) : "");
+    std::string query =
+        fmt::format("SELECT * FROM {}{}", table, limit > 0 ? " LIMIT " + std::to_string(limit) : "");
     return select(query);
 }
 
@@ -375,8 +411,9 @@ bool DBConnector::implementationPrepare(const std::string &tableName, const DBRo
 
     for (auto &el : data) {
         std::string toFind = el.first;
-        auto it = std::find_if(columns.begin(), columns.end(),
-                               [&toFind](const DBColumn &column) { return column.name == toFind; });
+        auto it = std::find_if(columns.begin(), columns.end(), [&toFind](const DBColumn &column) {
+            return column.name == toFind;
+        });
         if (it == columns.end()) {
             qDebug() << "[DBConnector] ImplementationPrepare: Column find error";
             sqlite3_finalize(stmt);

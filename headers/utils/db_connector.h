@@ -31,6 +31,7 @@
 #include <QMutex>
 
 #include "extrachain_global.h"
+#include "utils/exc_utils.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
@@ -47,9 +48,15 @@ struct DBColumn {
 
     operator QString() const {
         return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type)
-            + ")";
+               + ")";
     }
 };
+
+enum class DBConnectorType {
+    Regular,
+    Compressed
+};
+FORMAT_ENUM(DBConnectorType)
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 
@@ -58,9 +65,10 @@ private:
     std::string m_file;
     bool m_open = false;
     sqlite3 *db = nullptr;
+    DBConnectorType m_type = DBConnectorType::Regular;
 
 public:
-    explicit DBConnector(const std::string &filePath);
+    explicit DBConnector(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular);
     DBConnector(DBConnector &&db);
     ~DBConnector();
 
