@@ -802,7 +802,7 @@ bool Blockchain::canMergeBlocks(const Block &receivedBlock, const Block &existed
             std::vector<GenesisDataRow> rowsA = dynamic_cast<const GenesisBlock &>(receivedBlock).dataRows();
             std::vector<GenesisDataRow> rowsB = dynamic_cast<const GenesisBlock &>(existedBlock).dataRows();
             for (const GenesisDataRow &g : rowsA) {
-                if (vector_contains(rowsB, g)) {
+                if (Utils::vector_contains(rowsB, g)) {
                     return true;
                 }
             }
@@ -890,7 +890,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         auto resultList = genDataRowsA;
         int count = 0;
         for (const GenesisDataRow &r : std::as_const(genDataRowsA)) {
-            if (!vector_contains(genDataRowsB, r)) {
+            if (!Utils::vector_contains(genDataRowsB, r)) {
                 resultList.push_back(r);
             } else
                 count++;

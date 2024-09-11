@@ -104,20 +104,12 @@ public:
 
     virtual ~Block();
 
-private:
+protected:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    void calcHash();
-
-protected:
-    /**
-     * @brief Concatenates all fields that are used for signature calculation
-     * Override in subclasses
-     * @return signature data
-     */
-    virtual std::string getDataForHash() const;
+    virtual void calcHash();
     virtual const std::string &getDataForSignature() const;
 
 public:

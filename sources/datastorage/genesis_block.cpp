@@ -19,6 +19,8 @@
 
 #include "datastorage/genesis_block.h"
 
+#include "sha3.h"
+
 GenesisBlock::GenesisBlock()
     : Block() {
     this->m_type = BlockType::Genesis;
@@ -70,8 +72,21 @@ const std::string &GenesisBlock::getDataForSignature() const {
     return Block::getDataForSignature();
 }
 
-std::string GenesisBlock::getDataForHash() const {
-    return Block::getDataForHash();
+void GenesisBlock::calcHash() {
+    SHA3 sha3(SHA3::Bits::Bits512);
+    std::string index = m_index.toStdString(16);
+    sha3.add(index.c_str(), index.size());
+    sha3.add(m_data.c_str(), m_data.size());
+    qDebug() << "!!! ADD TO HASH index:" << index;
+    qDebug() << "!!! ADD TO HASH data:" << m_data;
+
+    for (const auto &dataRow : std::as_const(m_dataRows)) {
+        auto dataRowSerialize = dataRow.serialize();
+        sha3.add(dataRowSerialize.c_str(), dataRowSerialize.size());
+        qDebug() << "!!! ADD TO HASH dataRow:" << dataRow.serialize().size();
+    }
+
+    this->m_hash = sha3.getHash();
 }
 
 bool GenesisBlock::deserialize(const std::string &serialized) {

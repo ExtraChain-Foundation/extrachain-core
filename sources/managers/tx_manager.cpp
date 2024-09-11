@@ -27,8 +27,7 @@ QList<Transaction> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
 }
 
-QList<Transaction>& TransactionManager::getReceivedTxListByReference()
-{
+QList<Transaction> &TransactionManager::getReceivedTxListByReference() {
     return receivedTxList;
 }
 
@@ -110,7 +109,7 @@ void TransactionManager::runMakeAndProveBlockTimers() {
 // Block making
 
 void TransactionManager::makeBlock() {
-    if(extraChainNode->accountController()->empty())
+    if (extraChainNode->accountController()->empty())
         return;
 
     for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
@@ -119,7 +118,6 @@ void TransactionManager::makeBlock() {
     }
 
     extraChainNode->dataMiningManager()->interestAccrual();
-
 
     if (pendingTxs.empty()) {
         if (lastRealBlock.isEmpty())

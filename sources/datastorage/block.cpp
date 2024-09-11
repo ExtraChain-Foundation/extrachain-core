@@ -19,6 +19,8 @@
 
 #include "datastorage/block.h"
 
+#include "sha3.h"
+
 Block::Block() {
     this->m_type = BlockType::Data;
     this->m_index = BigNumber(-1);
@@ -97,10 +99,20 @@ Block Block::operator=(const Block &block) {
 }
 
 void Block::calcHash() {
-    std::string resultHash = Utils::calcHash(getDataForHash());
-    if (!resultHash.empty()) {
-        this->m_hash = resultHash;
+    SHA3 sha3(SHA3::Bits::Bits512);
+    std::string index = m_index.toStdString(16);
+    sha3.add(index.c_str(), index.size());
+    sha3.add(m_data.c_str(), m_data.size());
+    qDebug() << "!!! ADD TO HASH index:" << index;
+    qDebug() << "!!! ADD TO HASH data:" << m_data;
+
+    for (const auto &tx : std::as_const(m_transactions)) {
+        auto txSerialize = tx.serialize();
+        sha3.add(txSerialize.c_str(), txSerialize.size());
+        qDebug() << "!!! ADD TO HASH tx:" << tx.serialize().size();
     }
+
+    this->m_hash = sha3.getHash();
 }
 
 void Block::setType(BlockType value) {
@@ -108,23 +120,19 @@ void Block::setType(BlockType value) {
 }
 
 void Block::setType(const std::string &value) {
-    auto maybe_type = magic_enum::enum_cast<BlockType>(value);
-    if (!maybe_type.has_value())
+    if (value == "data") {
+        m_type = BlockType::Data;
+    } else if (value == "genesis") {
+        m_type = BlockType::Genesis;
+    } else if (value == "datamerge") {
+        m_type = BlockType::DataMerge;
+    } else if (value == "genesismerge") {
+        m_type = BlockType::GenesisMerge;
+    } else if (value == "dummy") {
+        m_type = BlockType::Dummy;
+    } else {
         qFatal("Wrong block type");
-    m_type = *maybe_type;
-}
-
-std::string Block::getDataForHash() const {
-    std::string idHash = Utils::calcHash(getIndex().toStdString());
-    auto list = extractTransactions();
-    if (list.empty())
-        return idHash;
-    std::string txHash = Utils::calcHash(list[0].serialize());
-    for (int i = 1; i < list.size(); i++) {
-        std::string tmpTxHash = Utils::calcHash(list[i].serialize());
-        txHash = Utils::calcHash(txHash + tmpTxHash);
     }
-    return idHash + txHash;
 }
 
 const std::string &Block::getDataForSignature() const {
@@ -226,7 +234,8 @@ BlockType Block::getType() const {
 }
 
 std::string Block::getTypeStr() const {
-    return std::string(magic_enum::enum_name(m_type));
+    auto type = std::string(magic_enum::enum_name(m_type));
+    return Utils::str_to_lower(type);
 }
 
 std::string Block::getSignature() const {

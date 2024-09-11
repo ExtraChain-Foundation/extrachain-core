@@ -73,11 +73,6 @@ void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
 }
 }
 
-template <typename T>
-bool vector_contains(const std::vector<T> &vec, const T &element) {
-    return std::find(vec.begin(), vec.end(), element) != vec.end();
-}
-
 namespace Network {
 Q_NAMESPACE
 
@@ -339,6 +334,11 @@ static uint64_t currentDateMs() {
     return ms;
 }
 
+template <typename T>
+bool vector_contains(const std::vector<T> &vec, const T &element) {
+    return std::find(vec.begin(), vec.end(), element) != vec.end();
+}
+
 EXTRACHAIN_EXPORT QString extrachainVersion();
 EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();
@@ -364,6 +364,9 @@ static QString filePrefix = "file://";
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64 diskFreeMemory();
 EXTRACHAIN_EXPORT qint64 diskTotalMemory();
+
+EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
+EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
 
 QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);

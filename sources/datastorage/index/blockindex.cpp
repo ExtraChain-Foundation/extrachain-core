@@ -46,6 +46,10 @@ BlockIndex::BlockIndex(const QString &folderName, const BigNumber &recordsLimit)
     this->recordsLimit = recordsLimit;
 }
 
+void BlockIndex::setBlockCompress(bool newBlockCompress) {
+    m_blockCompress = newBlockCompress;
+}
+
 int BlockIndex::addBlock(const Block &block) {
     int result = this->add(block.getIndex(), block.serialize());
     return result;
@@ -494,7 +498,9 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
         }
     }
 
-    DBConnector DB(path.toStdString());
+    DBConnector DB(
+        path.toStdString(),
+        m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
     if (DB.open()) {
         Block bl(_data);
         if (bl.getType() == BlockType::Genesis) {
@@ -507,7 +513,7 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
             row.insert({ "type", block.getTypeStr() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
-            row.insert({ "data", "" });
+            row.insert({ "data", block.getData() });
             row.insert({ "prevHash", block.getPrevHash() });
             row.insert({ "hash", block.getHash() });
             row.insert({ "prevGenHash", block.getPrevGenHash() });
@@ -540,7 +546,7 @@ int BlockIndex::add(const BigNumber &id, const std::string &_data) {
             row.insert({ "type", block.getTypeStr() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
-            row.insert({ "data", "" });
+            row.insert({ "data", block.getData() });
             row.insert({ "prevHash", block.getPrevHash() });
             row.insert({ "hash", block.getHash() });
             DB.insert(Config::DataStorage::BlockTable, row);
@@ -764,7 +770,7 @@ std::string BlockIndex::getByIdUnsafe(const BigNumber &id) const {
         return "";
     }
 
-    DBConnector db(path);
+    DBConnector db(path, m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
     db.open();
 
     if (db.tableNames().empty()) {

@@ -45,7 +45,11 @@ public:
     BigNumber realBlockRecords = 0;
     int countTransactions = 0;
 
+    bool m_blockCompress = true;
+
 public:
+    void setBlockCompress(bool newBlockCompress);
+
     /**
      * Serializes a block and make a file in fs.
      * @param block

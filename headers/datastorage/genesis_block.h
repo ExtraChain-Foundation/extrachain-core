@@ -36,8 +36,11 @@ public:
 public:
     GenesisDataRow() = default;
 
-    explicit GenesisDataRow(const ActorId &actorId, const BigNumberFloat &state, const ActorId &token,
-                            const DataStorage::typeDataRow &type)
+    explicit GenesisDataRow(
+        const ActorId &actorId,
+        const BigNumberFloat &state,
+        const ActorId &token,
+        const DataStorage::typeDataRow &type)
         : actorId(actorId)
         , state(state)
         , token(token)
@@ -107,7 +110,7 @@ public:
     // Block interface
 public:
     void addRow(const GenesisDataRow &row);
-    std::string getDataForHash() const override;             // deprecate?
+    void calcHash() override;
     const std::string &getDataForSignature() const override; // deprecate?
     bool deserialize(const std::string &serialized) override;
     std::string serialize() const override;
