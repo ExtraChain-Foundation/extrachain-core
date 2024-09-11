@@ -62,9 +62,6 @@ private:
     Blockchain *blockchain;
     // received transactions that we need to compare between network and blockchain
 
-    Block lastBlock;
-    Block lastRealBlock;
-
     std::list<FarmingTransactionData> farmingTxs;
 
 public:
@@ -79,7 +76,7 @@ public:
     static std::string convertTxs(const std::vector<Transaction> &txs);
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction> getReceivedTxList() const;
-    QList<Transaction>& getReceivedTxListByReference();
+    QList<Transaction> &getReceivedTxListByReference();
     std::vector<Transaction> getPendingTxs() const;
     /**
      * Run make_block and prove_block timers

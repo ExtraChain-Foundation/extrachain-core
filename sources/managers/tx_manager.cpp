@@ -119,6 +119,9 @@ void TransactionManager::makeBlock() {
 
     extraChainNode->dataMiningManager()->interestAccrual();
 
+    Block lastRealBlock = blockchain->getLastRealBlock();
+    Block lastBlock = blockchain->getLastBlock();
+
     if (pendingTxs.empty()) {
         if (lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
@@ -134,8 +137,7 @@ void TransactionManager::makeBlock() {
         lastBlock = blockchain->getLastBlock();
         return;
     }
-    if (lastBlock.isEmpty())
-        lastBlock = blockchain->getLastBlock();
+
     // remove all dummy blocks
     blockchain->removeAllDummyBlocks(lastBlock);
 

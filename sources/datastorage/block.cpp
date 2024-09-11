@@ -103,13 +103,10 @@ void Block::calcHash() {
     std::string index = m_index.toStdString(16);
     sha3.add(index.c_str(), index.size());
     sha3.add(m_data.c_str(), m_data.size());
-    qDebug() << "!!! ADD TO HASH index:" << index;
-    qDebug() << "!!! ADD TO HASH data:" << m_data;
 
     for (const auto &tx : std::as_const(m_transactions)) {
         auto txSerialize = tx.serialize();
         sha3.add(txSerialize.c_str(), txSerialize.size());
-        qDebug() << "!!! ADD TO HASH tx:" << tx.serialize().size();
     }
 
     this->m_hash = sha3.getHash();
