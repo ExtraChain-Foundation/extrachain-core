@@ -397,7 +397,10 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     return flag_result;
 }
 
-void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
+void NetworkManager::messageReceived(
+    const std::string &message,
+    const std::string &ip,
+    const std::string &identifier) {
     if (!checkMsgCount(message)) {
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
@@ -430,8 +433,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 #endif
 
-    DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
-    calculateTraffic->addBytesReceived(connection.address, message.size());
+    calculateTraffic->addBytesReceived(ip, message.size());
 
     // try {
     switch (type) {
@@ -689,6 +691,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::NewListConnections: {
+        auto connection = MessagePack::deserialize<DFSP::Connection>(serialized);
         node.connectionsManager()->addNewConnection(connection);
         node.connectionsManager()->addActivity(connection);
         break;
