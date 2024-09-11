@@ -227,7 +227,7 @@ public:
     void sendFromCache();
     bool isActiveConnectionExists();
 
-    void messageReceived(const std::string& message, const std::string& identifier);
+    void messageReceived(const std::string& message, const std::string &ip, const std::string& identifier);
 
     template <class T>
     std::string send_message(
