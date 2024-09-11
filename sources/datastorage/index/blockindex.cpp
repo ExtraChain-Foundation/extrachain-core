@@ -662,7 +662,7 @@ void BlockIndex::removeAll() {
     QDir folder(folderPath);
     const auto folders =
         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
-    for (const QString &section : qAsConst(folders)) {
+    for (const QString &section : std::as_const(folders)) {
         QDir dir(folderPath + QString("/") + section);
         dir.removeRecursively();
     }

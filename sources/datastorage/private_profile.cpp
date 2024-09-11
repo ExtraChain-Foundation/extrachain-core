@@ -79,7 +79,7 @@ void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
 }
 
 const Actor<KeyPrivate> &PrivateProfile::getActor(const ActorId &actorId) const {
-    for (const auto &actor : qAsConst(m_actors)) {
+    for (const auto &actor : std::as_const(m_actors)) {
         if (actorId == actor.id()) {
             return actor;
         }

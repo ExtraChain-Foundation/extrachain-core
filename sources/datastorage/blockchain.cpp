@@ -329,7 +329,7 @@ QByteArray Blockchain::findRecordsInBlock(const Block &block) {
         return QByteArray::fromStdString(block.getHash());
     } else if (!block.isEmpty()) {
         const auto transactions = block.extractTransactions();
-        for (const Transaction &tx : qAsConst(transactions)) {
+        for (const Transaction &tx : std::as_const(transactions)) {
             if (tx.getReceiver() == node->actorIndex()->firstId())
                 break;
             GenesisDataRow recSender =
@@ -851,7 +851,7 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
         // ListContainer<Transaction> txs;
         auto resultList = transactionsA;
 
-        for (const Transaction &tx : qAsConst(transactionsA)) {
+        for (const Transaction &tx : std::as_const(transactionsA)) {
             if (std::find(transactionsB.begin(), transactionsB.end(), tx) == transactionsB.end())
                 resultList.push_back(tx);
         }
@@ -892,7 +892,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         QList<GenesisDataRow> genDataRowsB = blockB.extractDataRows();
         QList<GenesisDataRow> resultList = genDataRowsA;
         int count = 0;
-        for (const GenesisDataRow &r : qAsConst(genDataRowsA)) {
+        for (const GenesisDataRow &r : std::as_const(genDataRowsA)) {
             if (!genDataRowsB.contains(r)) {
                 resultList.append(r);
             } else
@@ -984,7 +984,7 @@ void Blockchain::showBlockchain() const {
     qDebug() << "Genesis block";
 
     auto extra = genBlock.extractDataRows();
-    for (const auto &dataGen : qAsConst(extra)) {
+    for (const auto &dataGen : std::as_const(extra)) {
         qDebug() << &dataGen;
     }
 }
@@ -1122,10 +1122,10 @@ BigNumber Blockchain::getBlockCount() {
 void Blockchain::addBlockToBlockchain(Block &block) {
     addBlock(block);
     auto list = block.extractTransactions();
-    for (const auto &tmp : qAsConst(list)) {
+    for (const auto &tmp : std::as_const(list)) {
         QList<ActorId> list;
         auto accounts = node->accountController()->accounts();
-        for (const auto &tmp : qAsConst(accounts))
+        for (const auto &tmp : std::as_const(accounts))
             list.append(tmp.id());
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
