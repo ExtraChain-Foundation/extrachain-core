@@ -119,21 +119,22 @@ void TransactionManager::makeBlock() {
 
     extraChainNode->dataMiningManager()->interestAccrual();
 
-    Block lastRealBlock = blockchain->getLastRealBlock();
-    Block lastBlock = blockchain->getLastBlock();
+    BlockVariant lastRealBlock = blockchain->getLastRealBlock();
+    BlockVariant lastBlock = blockchain->getLastBlock();
 
     if (pendingTxs.empty()) {
         if (lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
-        Block lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
+        BlockVariant lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
         qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType();
         // creating dummy block in as ordinary block
         Block dummyBlock(lastRealBlockTemp.getIndex().toStdString(), lastBlock);
         dummyBlock.setType(BlockType::Dummy);
-        blockchain->signBlock(dummyBlock);
-        const int addedBlock = blockchain->addBlock(dummyBlock);
+        auto dummyBlockVariant = BlockVariant(dummyBlock);
+        blockchain->signBlock(dummyBlockVariant);
+        const int addedBlock = blockchain->addBlock(dummyBlockVariant);
         if (addedBlock == 0)
-            lastBlock = dummyBlock;
+            lastBlock = dummyBlockVariant;
         lastBlock = blockchain->getLastBlock();
         return;
     }
@@ -143,13 +144,18 @@ void TransactionManager::makeBlock() {
 
     if (lastRealBlock.isEmpty())
         lastRealBlock = blockchain->getLastRealBlock();
-    std::string data = convertTxs(pendingTxs);
-    Block block(data, lastRealBlock);
-    blockchain->signBlock(block);
-    const int addedBlock = blockchain->addBlock(block);
+    Block block("", lastRealBlock);
+    if (pendingTxs.size() > 0) {
+        qDebug() << "Wow";
+    }
+    block.addTransactions(pendingTxs);
+
+    auto blockVariant = BlockVariant(block);
+    blockchain->signBlock(blockVariant);
+    const int addedBlock = blockchain->addBlock(blockVariant);
     if (addedBlock == 0) {
-        lastBlock = block;
-        lastRealBlock = block;
+        lastBlock = blockVariant;
+        lastRealBlock = blockVariant;
 
         for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
             continue; // farming not farm
@@ -174,18 +180,10 @@ void TransactionManager::proveTransactions() {
     }
 }
 
-std::string TransactionManager::convertTxs(const std::vector<Transaction> &txs) {
-    std::vector<std::string> l;
-    for (const Transaction &tx : txs) {
-        l.push_back(tx.serialize());
-    }
-    return Serialization::serialize(l);
-}
-
 BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
     BigNumberFloat res = 0;
     if (!pendingTxs.empty()) {
-        for (const Transaction &tmp : qAsConst(pendingTxs)) {
+        for (const Transaction &tmp : std::as_const(pendingTxs)) {
             if (tmp.getSender() == sender) {
                 res -= tmp.getAmount();
             } else if (tmp.getReceiver() == sender) {

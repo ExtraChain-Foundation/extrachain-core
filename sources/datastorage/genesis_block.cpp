@@ -35,7 +35,10 @@ GenesisBlock::GenesisBlock(const std::string &serialized) {
     deserialize(serialized);
 }
 
-GenesisBlock::GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash)
+GenesisBlock::GenesisBlock(
+    const std::string &_data,
+    const BlockVariant &prevBlock,
+    const std::string &prevGenHash)
     : Block(_data, prevBlock)
     , m_prevGenHash(prevGenHash) {
     this->m_type = BlockType::Genesis;
@@ -105,6 +108,22 @@ const std::vector<GenesisDataRow> &GenesisBlock::dataRows() const {
 
 void GenesisBlock::setPrevGenHash(const std::string &value) {
     m_prevGenHash = value;
+}
+
+void GenesisBlock::setType(BlockType value) {
+    if (value != BlockType::Genesis || value != BlockType::GenesisMerge)
+        qFatal("GenesisBlock: try to set not genesis type");
+    m_type = value;
+}
+
+void GenesisBlock::setType(const std::string &value) {
+    if (value == "genesis") {
+        m_type = BlockType::Genesis;
+    } else if (value == "genesismerge") {
+        m_type = BlockType::GenesisMerge;
+    } else {
+        qFatal("GenesisBlock: try to set not genesis type");
+    }
 }
 
 std::string GenesisBlock::getPrevGenHash() const {

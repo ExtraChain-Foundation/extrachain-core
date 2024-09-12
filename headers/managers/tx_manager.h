@@ -73,7 +73,6 @@ private:
     void removeTransaction(int i);
 
 public:
-    static std::string convertTxs(const std::vector<Transaction> &txs);
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
     QList<Transaction> getReceivedTxList() const;
     QList<Transaction> &getReceivedTxListByReference();

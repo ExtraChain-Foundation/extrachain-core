@@ -52,8 +52,7 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 QSet<NetworkReconnect> &NetworkManager::reconnections() {
     return m_reconnections;
 }
-CalculateTraffic* NetworkManager::getCalculateTraffic() const
-{
+CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
@@ -588,10 +587,11 @@ void NetworkManager::messageReceived(
 
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
+        // TODO: why temp std::string?
         std::string stddata = MessagePack::deserialize<std::string>(serialized);
         GenesisBlock genesisBlock(stddata);
         if (!genesisBlock.isEmpty()) {
-            node.blockchain()->addGenBlockToBlockchain(genesisBlock);            
+            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         } else {
             qDebug() << "false genesis block";
         }
@@ -603,14 +603,15 @@ void NetworkManager::messageReceived(
         std::string stddata = MessagePack::deserialize<std::string>(serialized);
         Block block(stddata);
         if (!block.isEmpty()) {
-            node.blockchain()->addBlockToBlockchain(block);
+            auto blockVariant = BlockVariant(block);
+            node.blockchain()->addBlockToBlockchain(blockVariant);
         }
         break;
     }
 
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
-        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);        
+        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
         if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
             TransactionData transactionData =
                 MessagePack::deserialize<TransactionData>(transaction.getData());
@@ -618,14 +619,13 @@ void NetworkManager::messageReceived(
                      << "with hash: " << transactionData.hash.c_str();
         }
 
-        //TODO deep analisys
-        auto& transactionList = node.txManager()->getReceivedTxListByReference();
+        // TODO deep analisys
+        auto &transactionList = node.txManager()->getReceivedTxListByReference();
         auto found = std::find(transactionList.begin(), transactionList.end(), transaction);
-        if(found != transactionList.end())
-        {
+        if (found != transactionList.end()) {
             transactionList.erase(found);
         }
-        node.txManager()->addTransaction(transaction);      
+        node.txManager()->addTransaction(transaction);
         break;
     }
 

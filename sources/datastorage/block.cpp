@@ -18,6 +18,7 @@
  */
 
 #include "datastorage/block.h"
+#include "datastorage/block_variant.h"
 
 #include "sha3.h"
 
@@ -46,8 +47,12 @@ Block::Block(const std::string &serialized)
     this->deserialize(serialized);
 }
 
-Block::Block(const std::string &data, const Block &prev)
+Block::Block(const std::string &data, const BlockVariant &prev)
     : Block() {
+    if (data.size() > 4) {
+        // qFatal("Test: Please, check data");
+    }
+
     if (prev.isEmpty()) {
         // qDebug() << "BLOCK: Construction first block";
         this->m_index = BigNumber("0");
@@ -80,7 +85,8 @@ Block::Block(
     , m_hash(std::move(hash))
     , m_signatures(std::move(signatures))
     , m_transactions(std::move(transactions)) {
-    setType(type);
+    if (type != "genesis")
+        setType(type);
 }
 
 Block::~Block() {
@@ -119,8 +125,6 @@ void Block::setType(BlockType value) {
 void Block::setType(const std::string &value) {
     if (value == "data") {
         m_type = BlockType::Data;
-    } else if (value == "genesis") {
-        m_type = BlockType::Genesis;
     } else if (value == "datamerge") {
         m_type = BlockType::DataMerge;
     } else if (value == "genesismerge") {
@@ -130,6 +134,14 @@ void Block::setType(const std::string &value) {
     } else {
         qFatal("Wrong block type");
     }
+}
+
+void Block::addTransaction(const Transaction &transaction) {
+    m_transactions.push_back(transaction);
+}
+
+void Block::addTransactions(const std::vector<Transaction> &transactions) {
+    m_transactions.insert(m_transactions.end(), transactions.begin(), transactions.end());
 }
 
 const std::string &Block::getDataForSignature() const {
@@ -188,7 +200,7 @@ void Block::initializeData(const std::string &serializedData) {
 
 std::vector<Transaction> Block::extractTransactions() const {
     if (m_type != BlockType::Data) {
-        // TODO: qFatal("Wrong transaction extract?");
+        qFatal("Wrong transaction extract?");
         return {};
     }
 

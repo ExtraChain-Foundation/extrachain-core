@@ -440,6 +440,7 @@ enum typeDataRow {
     STAKING
 };
 } // namespace DataStorage
+MSGPACK_ADD_ENUM(DataStorage::typeDataRow)
 
 namespace KeyStore {
 // To store user private/public keys

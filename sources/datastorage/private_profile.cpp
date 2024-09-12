@@ -59,8 +59,7 @@ const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
     return m_actors;
 }
 
-const std::vector<Actor<KeyPrivate> > &PrivateProfile::farmings() const
-{
+const std::vector<Actor<KeyPrivate>> &PrivateProfile::farmings() const {
     return m_farmingAddress;
 }
 
@@ -79,7 +78,11 @@ void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
 }
 
 const Actor<KeyPrivate> &PrivateProfile::getActor(const ActorId &actorId) const {
-    for (const auto &actor : qAsConst(m_actors)) {
+    if (actorId == ActorId()) {
+        qFatal("Can't get zero actor");
+    }
+
+    for (const auto &actor : std::as_const(m_actors)) {
         if (actorId == actor.id()) {
             return actor;
         }

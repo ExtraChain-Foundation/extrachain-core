@@ -57,6 +57,8 @@ enum class BlockType {
 MSGPACK_ADD_ENUM(BlockType)
 FORMAT_ENUM(BlockType)
 
+class BlockVariant;
+
 class EXTRACHAIN_EXPORT Block {
 protected:
     BlockType m_type;                  // simple block, or genesis block (or other)
@@ -90,7 +92,7 @@ public:
      * @param data
      * @param prev
      */
-    Block(const std::string &data, const Block &prev);
+    Block(const std::string &data, const BlockVariant &prev);
 
     Block(
         std::string &&type,
@@ -128,6 +130,7 @@ public:
      * @brief extract non-empty transactions from data
      * @return transaction list
      */
+    [[deprecated("Use transactions().")]]
     std::vector<Transaction> extractTransactions() const;
     Transaction getTransactionByHash(std::string hash) const;
 
@@ -169,19 +172,38 @@ public:
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
-    void setType(BlockType value);
-    void setType(const std::string &value);
+    virtual void setType(BlockType value);
+    virtual void setType(const std::string &value);
+
+    void addTransaction(const Transaction &transaction);
+    void addTransactions(const std::vector<Transaction> &transactions);
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
         std::string index_str = m_index.toStdString();
-        msgpack::type::make_define_array(m_type, index_str, m_date, m_data, m_hash, m_prevHash, m_signatures)
+        msgpack::type::make_define_array(
+            m_type,
+            index_str,
+            m_date,
+            m_data,
+            m_hash,
+            m_prevHash,
+            m_signatures,
+            m_transactions)
             .msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string index_str;
-        msgpack::type::make_define_array(m_type, index_str, m_date, m_data, m_hash, m_prevHash, m_signatures)
+        msgpack::type::make_define_array(
+            m_type,
+            index_str,
+            m_date,
+            m_data,
+            m_hash,
+            m_prevHash,
+            m_signatures,
+            m_transactions)
             .msgpack_unpack(msgpack_o);
         m_index = index_str;
     }
@@ -193,7 +215,7 @@ inline bool operator<(const Block &l, const Block &r) {
 
 inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-           && l.extractTransactions() == r.extractTransactions();
+           && l.transactions() == r.transactions();
 }
 
 #endif // MEMBLOCK_H

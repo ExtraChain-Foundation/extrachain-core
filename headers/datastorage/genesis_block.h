@@ -75,6 +75,8 @@ public:
         return this->actorId == other.actorId && this->state == other.state && this->token == other.token
                && this->type == other.type;
     }
+
+    MSGPACK_DEFINE(actorId, state, token, type)
 };
 
 /**
@@ -94,7 +96,10 @@ public:
     explicit GenesisBlock(const std::string &serialized);
 
     // Initial block construction, prev = nullptr for first block
-    explicit GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash);
+    explicit GenesisBlock(
+        const std::string &_data,
+        const BlockVariant &prevBlock,
+        const std::string &prevGenHash);
 
     explicit GenesisBlock(
         std::string &&type,
@@ -124,6 +129,8 @@ public:
 public:
     std::string getPrevGenHash() const;
     void setPrevGenHash(const std::string &value);
+    void setType(BlockType value) override;
+    void setType(const std::string &value) override;
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
@@ -136,7 +143,8 @@ public:
             m_hash,
             m_prevHash,
             m_signatures,
-            m_prevGenHash)
+            m_prevGenHash,
+            m_dataRows)
             .msgpack_pack(msgpack_pk);
     }
     void msgpack_unpack(msgpack::object const &msgpack_o) {
@@ -149,10 +157,16 @@ public:
             m_hash,
             m_prevHash,
             m_signatures,
-            m_prevGenHash)
+            m_prevGenHash,
+            m_dataRows)
             .msgpack_unpack(msgpack_o);
         m_index = index_str;
     }
 };
+
+inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.getData() == r.getData()
+           && l.dataRows() == r.dataRows();
+}
 
 #endif // GENESIS_BLOCK_H
