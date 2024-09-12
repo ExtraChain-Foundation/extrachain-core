@@ -1194,13 +1194,14 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
                         qInfo() << "vpnHandhakeCacheInProccess" << it.chainIndex << it.uuid << it.requesterIdentifier;
                         if (it.chainIndex == inputMsg.resultChainIndex && it.uuid == inputMsg.uuid && it.requesterIdentifier == identifier)
                         {
+                            qInfo() << "vpnHandhakeCacheInProccess inside";
                             canProccess = true;
                             it.timestamp = QDateTime::currentDateTime();
                         }
                     }
                 }
 
-                qInfo() << "Request server 2";
+                qInfo() << "Request server 2" << ((node.vpnManager.vpnFunctions == nullptr) ? "nullptr" : "good");
 
                 if (canProccess && node.vpnManager.vpnFunctions)
                 {
