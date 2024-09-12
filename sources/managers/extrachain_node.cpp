@@ -24,6 +24,7 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
+#include "datastorage/block_variant.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/dfs/permission_manager.h"
@@ -126,7 +127,8 @@ bool ExtraChainNode::createNewNetwork(
         QMap<ActorId, BigNumberFloat> tm;
         tm.insert(ActorId(), 0);
         GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
-        m_blockchain->addBlock(tmp, true);
+        auto tmpVariant = BlockVariant(tmp);
+        m_blockchain->addBlock(tmpVariant, true);
 
         // TEST
         //        Block lastBlock = m_blockchain->getLastBlock();
@@ -338,7 +340,11 @@ Transaction ExtraChainNode::createTransactionFrom(
     ActorId        sender,
     ActorId        receiver,
     BigNumberFloat amount,
-    ActorId        token) {
+    ActorId token) {
+    if (sender == ActorId()) { // TODO: remove hack
+        sender = m_accountController->currentWallet().id();
+    }
+
     Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
@@ -466,9 +472,9 @@ void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
         //      seconds the network has been online.
         // Ef - efficiency coefficient
 
-        std::string ip   = m_networkManager->localIp().toStdString();
+        std::string ip = m_networkManager->localIp().toStdString();
         std::string port = QString::number(m_networkManager->wsPort).toStdString();
-        blockCount       = m_connectionsManager->getActivityScore(Connection{ ip, port, true })
+        blockCount = m_connectionsManager->getActivityScore(Connection { ip, port, true })
                      / (std::stoi(middleCount.toStdString()) * 2);
     }
 }

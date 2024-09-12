@@ -53,7 +53,7 @@ using namespace magic_enum::bitwise_operators;
         template <typename FormatContext>                                                                    \
         auto format(E Enum, FormatContext &ctx) const {                                                      \
             static_assert(std::is_enum_v<E>);                                                                \
-            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
+            string_view enum_name = magic_enum::enum_type_name<E>();                                         \
             string_view value_name = magic_enum::enum_name(Enum);                                            \
             return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
         }                                                                                                    \
@@ -142,15 +142,15 @@ namespace DataStorage {
           "hop          TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
           "approver     TEXT  NOT NULL, "
-          "digSig       TEXT  NOT NULL, "
+          "signature    TEXT  NOT NULL, "
           "producer     TEXT  NOT NULL "
           ");";
     static const std::string SignTable = "Signatures";
     static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
         + " ("
           "actorId      TEXT PRIMARY KEY NOT NULL, "
-          "digSig       TEXT             NOT NULL, "
-          "type         TEXT             NOT NULL  "
+          "signature    TEXT             NOT NULL, "
+          "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
           ");";
 
     static const std::string GenesisBlockTable = "GenesisBlock";
@@ -334,6 +334,11 @@ static uint64_t currentDateMs() {
     return ms;
 }
 
+template <typename T>
+bool vector_contains(const std::vector<T> &vec, const T &element) {
+    return std::find(vec.begin(), vec.end(), element) != vec.end();
+}
+
 EXTRACHAIN_EXPORT QString extrachainVersion();
 EXTRACHAIN_EXPORT std::string sodiumVersion();
 EXTRACHAIN_EXPORT QString boostVersion();
@@ -359,6 +364,9 @@ static QString filePrefix = "file://";
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64 diskFreeMemory();
 EXTRACHAIN_EXPORT qint64 diskTotalMemory();
+
+EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
+EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
 
 QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
@@ -432,6 +440,7 @@ enum typeDataRow {
     STAKING
 };
 } // namespace DataStorage
+MSGPACK_ADD_ENUM(DataStorage::typeDataRow)
 
 namespace KeyStore {
 // To store user private/public keys

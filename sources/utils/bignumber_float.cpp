@@ -98,6 +98,8 @@ BigNumberFloat BigNumberFloat::operator*(long long number) {
 }
 
 BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) {
+    if (bigNumberFloat == 0)
+        qFatal("BigNumberFloat: Division by zero");
     return BigNumberFloat(m_data / bigNumberFloat.data());
 }
 

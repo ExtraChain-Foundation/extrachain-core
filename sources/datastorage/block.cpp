@@ -18,25 +18,28 @@
  */
 
 #include "datastorage/block.h"
+#include "datastorage/block_variant.h"
+
+#include "sha3.h"
 
 Block::Block() {
-    this->m_type = Config::DATA_BLOCK_TYPE;
-
-    this->index = BigNumber(-1);
-    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
-    this->data = "";
-    this->prevHash = "";
-    this->hash = "";
+    this->m_type = BlockType::Data;
+    this->m_index = BigNumber(-1);
+    this->m_date = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    this->m_data = "";
+    this->m_prevHash = "";
+    this->m_hash = "";
 }
 
 Block::Block(const Block &block) {
     this->m_type = block.getType();
-    this->index = block.getIndex();
-    this->date = block.getDate();
-    this->data = block.getData();
-    this->prevHash = block.getPrevHash();
-    this->hash = block.getHash();
-    this->signatures = block.signatures;
+    this->m_index = block.getIndex();
+    this->m_date = block.getDate();
+    this->m_data = block.getData();
+    this->m_prevHash = block.getPrevHash();
+    this->m_hash = block.getHash();
+    this->m_signatures = block.m_signatures;
+    this->m_transactions = block.m_transactions;
 }
 
 Block::Block(const std::string &serialized)
@@ -44,22 +47,46 @@ Block::Block(const std::string &serialized)
     this->deserialize(serialized);
 }
 
-Block::Block(const std::string &data, const Block &prev)
+Block::Block(const std::string &data, const BlockVariant &prev)
     : Block() {
+    if (data.size() > 4) {
+        // qFatal("Test: Please, check data");
+    }
+
     if (prev.isEmpty()) {
         // qDebug() << "BLOCK: Construction first block";
-        this->index = BigNumber("0");
-        this->prevHash = Utils::calcHash("0 index");
+        this->m_index = BigNumber("0");
+        this->m_prevHash = Utils::calcHash("0 index");
     } else {
         // qDebug() << "BLOCK: Construction block. Previous block id - "
         //          << prev->getIndex();
-        this->index = prev.getIndex() + 1;
-        this->prevHash = prev.getHash();
+        this->m_index = prev.getIndex() + 1;
+        this->m_prevHash = prev.getHash();
     }
 
-    this->date = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    this->m_date = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
-    this->data = data;
+    this->m_data = data;
+}
+
+Block::Block(
+    std::string &&type,
+    std::string &&data,
+    BigNumber idx,
+    long long date,
+    std::string &&prevHash,
+    std::string &&hash,
+    std::vector<Approvers> &&signatures,
+    std::vector<Transaction> &&transactions)
+    : m_data(std::move(data))
+    , m_index(std::move(idx))
+    , m_date(date)
+    , m_prevHash(std::move(prevHash))
+    , m_hash(std::move(hash))
+    , m_signatures(std::move(signatures))
+    , m_transactions(std::move(transactions)) {
+    if (type != "genesis")
+        setType(type);
 }
 
 Block::~Block() {
@@ -67,52 +94,69 @@ Block::~Block() {
 
 Block Block::operator=(const Block &block) {
     m_type = block.m_type;
-    data = block.data;
-    index = block.index;
-    date = block.date;
-    prevHash = block.prevHash;
-    hash = block.hash;
-    signatures = block.signatures;
+    m_data = block.m_data;
+    m_index = block.m_index;
+    m_date = block.m_date;
+    m_prevHash = block.m_prevHash;
+    m_hash = block.m_hash;
+    m_signatures = block.m_signatures;
+    m_transactions = block.m_transactions;
     return *this;
 }
 
 void Block::calcHash() {
-    std::string resultHash = Utils::calcHash(getDataForHash());
-    if (!resultHash.empty()) {
-        this->hash = resultHash;
+    SHA3 sha3(SHA3::Bits::Bits512);
+    std::string index = m_index.toStdString(16);
+    sha3.add(index.c_str(), index.size());
+    sha3.add(m_data.c_str(), m_data.size());
+
+    for (const auto &tx : std::as_const(m_transactions)) {
+        auto txSerialize = tx.serialize();
+        sha3.add(txSerialize.c_str(), txSerialize.size());
     }
+
+    this->m_hash = sha3.getHash();
 }
 
-void Block::setType(const std::string &value) {
+void Block::setType(BlockType value) {
     m_type = value;
 }
 
-std::string Block::getDataForHash() const {
-    std::string idHash = Utils::calcHash(getIndex().toStdString());
-    auto list = extractTransactions();
-    if (list.empty())
-        return idHash;
-    std::string txHash = Utils::calcHash(list[0].serialize());
-    for (int i = 1; i < list.size(); i++) {
-        std::string tmpTxHash = Utils::calcHash(list[i].serialize());
-        txHash = Utils::calcHash(txHash + tmpTxHash);
+void Block::setType(const std::string &value) {
+    if (value == "data") {
+        m_type = BlockType::Data;
+    } else if (value == "datamerge") {
+        m_type = BlockType::DataMerge;
+    } else if (value == "genesismerge") {
+        m_type = BlockType::GenesisMerge;
+    } else if (value == "dummy") {
+        m_type = BlockType::Dummy;
+    } else {
+        qFatal("Wrong block type");
     }
-    return idHash + txHash;
 }
 
-const std::string &Block::getDataForDigSig() const {
-    return hash;
+void Block::addTransaction(const Transaction &transaction) {
+    m_transactions.push_back(transaction);
+}
+
+void Block::addTransactions(const std::vector<Transaction> &transactions) {
+    m_transactions.insert(m_transactions.end(), transactions.begin(), transactions.end());
+}
+
+const std::string &Block::getDataForSignature() const {
+    return m_hash;
 }
 
 void Block::sign(const Actor<KeyPrivate> &actor) {
     calcHash();
-    std::string sign = actor.key().sign(getDataForDigSig());
-    this->signatures.push_back({ actor.id().toStdString(), sign, true });
+    std::string sign = actor.key().sign(getDataForSignature());
+    this->m_signatures.push_back({ actor.id().toStdString(), sign, true });
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const {
-    bool res = actor.key().verify(getDataForDigSig(), getDigSig());
-    return signatures.empty() ? false : res;
+    bool res = actor.key().verify(getDataForSignature(), getSignature());
+    return m_signatures.empty() ? false : res;
 }
 
 bool Block::deserialize(const std::string &serialized) {
@@ -125,7 +169,7 @@ bool Block::deserialize(const std::string &serialized) {
 }
 
 bool Block::equals(const Block &block) const {
-    return hash == block.getHash();
+    return m_hash == block.getHash();
 }
 
 BlockCompare Block::compareBlock(const Block &b) const {
@@ -134,42 +178,33 @@ BlockCompare Block::compareBlock(const Block &b) const {
     temp.indexDiff = getIndex() - b.getIndex();
     temp.dataDiff =
         Utils::compare(QByteArray::fromStdString(getData()), QByteArray::fromStdString(b.getData()));
-    temp.digitalSigDiff = getDigSig() == b.getDigSig();
+    temp.digitalSigDiff = getSignature() == b.getSignature();
     temp.hashDiff = getHash() == b.getHash();
     temp.prevHashDiff = getPrevHash() == b.getPrevHash();
     return temp;
 }
 
 void Block::addData(const std::string &data) {
-    std::vector<std::string> v = Serialization::deserialize(this->data);
+    std::vector<std::string> v = Serialization::deserialize(this->m_data);
     v.push_back(data);
-    this->data = Serialization::serialize(v);
+    this->m_data = Serialization::serialize(v);
 }
 
-void Block::setData(const std::string &data)
-{
-    this->data = data;
+void Block::setData(const std::string &data) {
+    this->m_data = data;
 }
 
 void Block::initializeData(const std::string &serializedData) {
-    this->data = serializedData;
+    this->m_data = serializedData;
 }
 
 std::vector<Transaction> Block::extractTransactions() const {
-    if (m_type != Config::DATA_BLOCK_TYPE)
+    if (m_type != BlockType::Data) {
+        qFatal("Wrong transaction extract?");
         return {};
-
-    std::vector<Transaction> transactions;
-    std::vector<std::string> txsData = Serialization::deserialize(data);
-
-    for (const std::string &trData : txsData) {
-        if (!trData.empty()) {
-            Transaction tx(trData);
-            if (!tx.isEmpty() || tx.isBurn())
-                transactions.push_back(tx);
-        }
     }
-    return transactions;
+
+    return transactions();
 }
 
 Transaction Block::getTransactionByHash(std::string hash) const {
@@ -200,21 +235,34 @@ QString Block::toString() const {
 }
 
 bool Block::isEmpty() const {
-    return this->getHash().empty() && this->getDigSig().empty() && this->getPrevHash().empty();
+    return this->getHash().empty() && this->getSignature().empty() && this->getPrevHash().empty();
 }
 
-std::string Block::getType() const {
+BlockType Block::getType() const {
     return m_type;
 }
 
-std::string Block::getDigSig() const {
-    return signatures.empty() ? "" : this->signatures.begin()->sign;
+std::string Block::getTypeStr() const {
+    auto type = std::string(magic_enum::enum_name(m_type));
+    return Utils::str_to_lower(type);
+}
+
+std::string Block::getSignature() const {
+    return m_signatures.empty() ? "" : this->m_signatures.begin()->sign;
+}
+
+const std::vector<Approvers> &Block::signatures() const {
+    return m_signatures;
+}
+
+const std::vector<Transaction> &Block::transactions() const {
+    return m_transactions;
 }
 
 QByteArrayList Block::getListSignatures() const {
     QByteArrayList res;
 
-    for (auto const &signature : signatures) {
+    for (auto const &signature : m_signatures) {
         res << QByteArray::fromStdString(signature.actorId) << QByteArray::fromStdString(signature.sign)
             << (signature.isApprove ? "1" : "0");
     }
@@ -223,24 +271,20 @@ QByteArrayList Block::getListSignatures() const {
 }
 
 void Block::addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover) {
-    this->signatures.push_back({ id.toStdString(), sign.toStdString(), isApprover });
+    this->m_signatures.push_back({ id.toStdString(), sign.toStdString(), isApprover });
 }
-// void Block::setType(QByteArray type)
-//{
-//    this->type = type;
-//}
 
 void Block::setPrevHash(const std::string &value) {
-    prevHash = value;
+    m_prevHash = value;
 }
 
 ActorId Block::getApprover() const {
-    if (signatures.empty()) {
+    if (m_signatures.empty()) {
         return ActorId();
     } else {
-        for (int i = signatures.size() - 1; i >= 0; i--) {
-            if (signatures[i].isApprove)
-                return signatures[i].actorId;
+        for (int i = m_signatures.size() - 1; i >= 0; i--) {
+            if (m_signatures[i].isApprove)
+                return m_signatures[i].actorId;
         }
     }
 
@@ -248,59 +292,38 @@ ActorId Block::getApprover() const {
 }
 
 BigNumber Block::getIndex() const {
-    return index;
+    return m_index;
 }
 
 std::string Block::getData() const {
-    return data;
+    return m_data;
 }
 
 std::string Block::getHash() const {
-    return hash;
+    return m_hash;
 }
 
 std::string Block::getPrevHash() const {
-    return prevHash;
+    return m_prevHash;
 }
 
 bool Block::operator<(const Block &other) {
-    if (this->index < other.getIndex()) {
+    if (this->m_index < other.getIndex()) {
         return true;
-    } else if (this->data < other.getData()) {
+    } else if (this->m_data < other.getData()) {
         return true;
     }
     return false;
-}
-
-bool Block::isBlock(const QByteArray &data) {
-    return (data.contains(Config::DATA_BLOCK_TYPE) || data.contains(Config::DUMMY_BLOCK_TYPE));
 }
 
 bool Block::isApprover(const ActorId &actorId) const {
     return actorId == getApprover();
 }
 
-void Block::initFields(QList<QByteArray> &list) {
-    m_type = list.takeFirst();
-    index = BigNumber(list.takeFirst().toStdString());
-    date = list.takeFirst().toLongLong();
-    data = list.takeFirst();
-    prevHash = list.takeFirst();
-    hash = list.takeFirst();
-    QByteArray signs = list.takeFirst();
-    std::vector<std::string> lists = Serialization::deserialize(signs.toStdString());
-    for (const auto &tmp : lists) {
-        std::vector<std::string> tmps = Serialization::deserialize(tmp);
-        if (tmps.size() == 3) {
-            signatures.push_back({ tmps.at(0), tmps.at(1), bool(std::stoi(tmps.at(2))) });
-        }
-    }
-}
-
 long long Block::getDate() const {
-    return date;
+    return m_date;
 }
 
 void Block::setDate(long long value) {
-    date = value;
+    m_date = value;
 }

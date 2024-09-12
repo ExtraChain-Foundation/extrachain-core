@@ -20,10 +20,12 @@
 #ifndef BLOCKINDEX_H
 #define BLOCKINDEX_H
 
+#include <list>
+
 #include "datastorage/block.h"
 #include "datastorage/genesis_block.h"
+#include "datastorage/block_variant.h"
 #include "utils/db_connector.h"
-#include <list>
 
 class EXTRACHAIN_EXPORT BlockIndex {
 public:
@@ -45,25 +47,29 @@ public:
     BigNumber realBlockRecords = 0;
     int countTransactions = 0;
 
+    bool m_blockCompress = false;
+
 public:
+    void setBlockCompress(bool newBlockCompress);
+
     /**
      * Serializes a block and make a file in fs.
      * @param block
      * @return resultCode, 0 - block is saved
      */
-    int addBlock(const Block &block);
+    int addBlock(const BlockVariant &block);
 
     /**
      * @brief Get last block (only Block, not Genesis block)
      * @return last block
      */
-    Block getLastBlock() const;
+    BlockVariant getLastBlock() const;
 
     /**
      * @brief Get last real (not dummy) block
      * @return last real block
      */
-    Block getLastRealBlock() const;
+    BlockVariant getLastRealBlock() const;
     /**
      * @brief Get last genesis block
      * @return last genesis block
@@ -76,34 +82,37 @@ public:
      * @param id
      * @return block, if is found, otherwise - empty block
      */
-    Block getBlockById(const BigNumber &id) const;
+    BlockVariant getBlockById(const BigNumber &id) const;
 
     std::string getBlockDataById(const BigNumber &id) const;
 
     // todo: if genesis block is found -> return empty block, or skip in search logic
-    Block getBlockByPosition(const BigNumber &position) const;
-    Block getBlockByApprover(const BigNumber &approver) const;
-    Block getBlockByHash(const QByteArray &hash) const;
-    Block getBlockByData(const QByteArray &data) const;
+    BlockVariant getBlockByPosition(const BigNumber &position) const;
+    BlockVariant getBlockByApprover(const BigNumber &approver) const;
+    BlockVariant getBlockByHash(const QByteArray &hash) const;
+    BlockVariant getBlockByData(const QByteArray &data) const;
 
-    Block getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
-    Block getLastRealBlockById();
+    BlockVariant getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
+    BlockVariant getLastRealBlockById();
 
     std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
     std::pair<Transaction, QByteArray> getLastTxByData(const std::string &data) const;
     std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
-    std::pair<Transaction, QByteArray> getLastTxByReceiver(const BigNumber &id,
-                                                           const QByteArray &token) const;
-    std::pair<Transaction, QByteArray> getLastTxBySenderOrReceiver(const BigNumber &id,
-                                                                   const QByteArray &token) const;
-    std::pair<Transaction, QByteArray> getLastTxBySenderOrReceiverAndToken(const BigNumber &id,
-                                                                           const QByteArray &token) const;
-    std::pair<Transaction, QByteArray> getLastTxByApprover(const BigNumber &id,
-                                                           const QByteArray &token) const;
+    std::pair<Transaction, QByteArray>
+    getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray>
+    getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray>
+    getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray>
+    getLastTxByApprover(const BigNumber &id, const QByteArray &token) const;
     QList<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
-    QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
-                                                     BigNumber token = 0) const;
+    QList<Transaction> getTxsBySenderOrReceiverInRow(
+        const BigNumber &id,
+        BigNumber from = -1,
+        int count = 10,
+        BigNumber token = 0) const;
 
     void removeAll();
     BigNumber getLastSavedId() const;
@@ -114,7 +123,7 @@ public:
     BigNumber getIndexBlockByLastFarmingTx() const;
     std::list<FarmingTransactionData> getAllLockedFarmingTransactions() const;
     int removeById(const BigNumber &id);
-    int removeById(const Block &block);
+    int removeById(const BlockVariant &block);
     void removeDummyBlocks(const BigNumber &id);
     QString buildFilePath(const BigNumber &id) const;
     BigNumberFloat calculateCirculativeBalance() const;
@@ -124,21 +133,27 @@ public:
     void calculationCountBlock();
 
 private:
-    std::pair<Transaction, QByteArray> getLastTxByParam(const std::string &id, SearchEnum::TxParam param,
-                                                        const QByteArray &token) const;
-    QList<Transaction> getTxsByParamInRow(const BigNumber &id, SearchEnum::TxParam param, BigNumber from = -1,
-                                          int count = 10, BigNumber token = 0) const;
+    std::pair<Transaction, QByteArray>
+    getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const QByteArray &token) const;
+    QList<Transaction> getTxsByParamInRow(
+        const BigNumber &id,
+        SearchEnum::TxParam param,
+        BigNumber from = -1,
+        int count = 10,
+        BigNumber token = 0) const;
 
-    int add(const BigNumber &id, const std::string &_data);
+    int add(const BigNumber &id, const BlockVariant &newBlock);
     bool hasRecordLimit() const;
     bool recordLimitIsReached() const;
     QString getFolderPath() const;
     QString getFolderName() const;
     BigNumber calcSection(BigNumber id) const;
-    std::string getById(const BigNumber &id) const;
+    std::optional<BlockVariant> getByIdUnsafe(const BigNumber &id) const;
+    std::optional<BlockVariant> getById(const BigNumber &id) const;
     BigNumber loadFirstId();
-    BigNumber loadFileFromSection(std::function<QString(const QStringList &folders)> getFolder,
-                                  std::function<QString(const QStringList &files)> getFile);
+    BigNumber loadFileFromSection(
+        std::function<QString(const QStringList &folders)> getFolder,
+        std::function<QString(const QStringList &files)> getFile);
 
     BigNumber loadLastId();
 };

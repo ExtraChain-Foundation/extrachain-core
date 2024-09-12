@@ -23,7 +23,7 @@
 #include "extrachain_global.h"
 
 #include "datastorage/actor.h"
-#include "datastorage/block.h"
+#include "datastorage/block_variant.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 
@@ -91,7 +91,7 @@ public:
      * @param block
      * @return true if block is valid
      */
-    bool validateBlock(const Block &block);
+    bool validateBlock(const BlockVariant &block);
 
     /**
      * @brief Validates transaction digital signature
