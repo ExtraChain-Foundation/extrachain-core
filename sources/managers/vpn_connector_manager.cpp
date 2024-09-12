@@ -27,11 +27,10 @@ VPNConnectorManager::~VPNConnectorManager()
 bool VPNConnectorManager::CheckVPNHandshakeAccess(const std::string& requesterIdentifier, const int counter)
 {
     qInfo() << "VPNConnectorManager::CheckVPNHandshakeAccess";
-    qInfo() << "MUTEX 4";
-    std::lock_guard<std::mutex> lock(vpnHandhakeCacheMutex);
-    qInfo() << "VPNConnectorManager::CheckVPNHandshakeAccess 1, size:" << vpnHandhakeCacheInProccess.size();
+    qInfo() << "VPNConnectorManager::CheckVPNHandshakeAccess 1, size:" << vpnHandhakeCacheInProccess->size();
     bool requesterFound = true;
-    for (auto it = vpnHandhakeCacheInProccess.begin(); it != vpnHandhakeCacheInProccess.end(); )
+    auto vpnHandhakeCacheInProccessLocked = *vpnHandhakeCacheInProccess;
+    for (auto it = vpnHandhakeCacheInProccessLocked->begin(); it != vpnHandhakeCacheInProccessLocked->end(); )
     {
         if (it->requesterIdentifier == requesterIdentifier)
         {
@@ -46,7 +45,7 @@ bool VPNConnectorManager::CheckVPNHandshakeAccess(const std::string& requesterId
             if (it->timestamp.secsTo(currentTime) >= 3)
             {
                 qInfo() << "DELETED vpnHandhakeCacheInProccess" << it->uuid;
-                it = vpnHandhakeCacheInProccess.erase(it);
+                it = vpnHandhakeCacheInProccessLocked->erase(it);
             }
             else
                 ++it;
@@ -55,8 +54,8 @@ bool VPNConnectorManager::CheckVPNHandshakeAccess(const std::string& requesterId
 
     if (requesterFound)
         return true;
-    qInfo() << "VPNConnectorManager::CheckVPNHandshakeAccess not found" << (vpnHandhakeCacheInProccess.size() < counter);
-    return vpnHandhakeCacheInProccess.size() < counter;
+    qInfo() << "VPNConnectorManager::CheckVPNHandshakeAccess not found" << (vpnHandhakeCacheInProccessLocked->size() < counter);
+    return vpnHandhakeCacheInProccessLocked->size() < counter;
 }
 
 VPNWorkerThread::VPNWorkerThread(VPNConnectorManager* vpnManager, ExtraChainNode* node, QObject* parent)
@@ -81,8 +80,8 @@ void VPNWorkerThread::run()
         if (m_vpnManager->vpnConnectedType.has_value())
         {
             qInfo() << "MUTEX INSIDE VPNWorkerThread!";
-            std::unique_lock<std::mutex> lock(m_vpnManager->vpnUuidToVPNWorkersMutex);
-            for (auto it = m_vpnManager->vpnUuidToVPNWorkers.begin(); it != m_vpnManager->vpnUuidToVPNWorkers.end(); ++it)
+            auto vpnUuidToVPNWorkersLocked = *m_vpnManager->vpnUuidToVPNWorkers;
+            for (auto it = vpnUuidToVPNWorkersLocked->begin(); it != vpnUuidToVPNWorkersLocked->end(); ++it)
             {
                 if (m_vpnManager->vpnConnectedType != VPNType::CLIENT)
                 {
@@ -90,7 +89,6 @@ void VPNWorkerThread::run()
                     if (currentTimestamp - it->second.lastUpdateRequsterTS >= 20000)
                     {
                         auto uuid = it->first;
-                        lock.unlock();
                         deleteFunc(uuid, m_node, m_vpnManager);
                         break;
                     }
@@ -102,7 +100,6 @@ void VPNWorkerThread::run()
                     if (currentTimestamp - it->second.lastUpdateNextTS >= 20000)
                     {
                         auto uuid = it->first;
-                        lock.unlock();
                         deleteFunc(uuid, m_node, m_vpnManager);
 
                         if (isClient)

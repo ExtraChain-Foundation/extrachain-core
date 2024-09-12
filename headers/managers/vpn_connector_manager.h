@@ -1,10 +1,13 @@
 #ifndef VPN_CONNECTOR_MANAGER_H
 #define VPN_CONNECTOR_MANAGER_H
 
+#include <atomic>
+
 #include <QObject>
 #include <QThread>
 
 #include "network/message_body.h"
+#include "utils/safeptr.h"
 
 class ActorId;
 class ExtraChainNode;
@@ -74,21 +77,15 @@ public:
         qint64  lastSendedNextTS;
     };
 
+    SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
 
-    std::mutex vpnHandhakeCacheMutex;
-    QList<VPNHandhakeCache> vpnHandhakeCacheInProccess;
-
-    std::mutex vpnLockedChainIndexesMutex;
-    std::set<int> vpnLockedChainIndexes;
-
-    bool vpnIsClient = false;
+    std::atomic_bool vpnIsClient = false;
     std::vector<std::string>         vpnFileAddedHash;
     QString             vpnFileLocalPath;
     std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions;
     std::pair<QString, QString> vpnInitPublicIPAndCountry;
 
-    std::mutex vpnUuidToVPNWorkersMutex;
-    std::map<std::string, VPNWorkers> vpnUuidToVPNWorkers;
+    SafePtr<std::map<std::string, VPNWorkers>> vpnUuidToVPNWorkers;
     std::optional<VPNType> vpnConnectedType;
     std::optional<std::tuple<QString, quint16, QString>> vpnLastDestroyed;
 
