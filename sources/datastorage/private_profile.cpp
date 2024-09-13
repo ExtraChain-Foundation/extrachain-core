@@ -77,13 +77,13 @@ void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
     save();
 }
 
-const Actor<KeyPrivate> &PrivateProfile::getActor(const ActorId &actorId) const {
+const std::shared_ptr<Actor<KeyPrivate>> &PrivateProfile::getActor(const ActorId &actorId) const {
     if (actorId == ActorId()) {
         qFatal("Can't get zero actor");
     }
 
     for (const auto &actor : std::as_const(m_actors)) {
-        if (actorId == actor.id()) {
+        if (actorId == actor->id()) {
             return actor;
         }
     }

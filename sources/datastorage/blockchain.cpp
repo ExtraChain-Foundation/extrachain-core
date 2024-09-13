@@ -761,7 +761,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     if (indexBlock % 20 == 0) {
         const auto &actor = node->accountController()->mainActor();
         const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-        requestCoins({ .Actor = actor.id().toStdString(),
+        requestCoins({ .Actor = actor->id().toStdString(),
                        .DataStoredSize = node->dfs()->sizeTaken(),
                        .TypeFunctioningObj = DFS::Reward::Base,
                        .RewardAmount = calculateRewardAmount(),
@@ -774,9 +774,9 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     if (!isGenesis && resultCode == 0) {
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation()) {
-            const auto &actor = node->accountController()->mainActor();
+            const auto actor = node->accountController()->mainActor().get();
 
-            GenesisBlock gB = createGenesisBlock(actor);
+            GenesisBlock gB = createGenesisBlock(*actor);
             if (blockIndex.addBlock(BlockVariant(gB)) == 0) {
                 qDebug() << "[Blockchain] Block" << gB.getIndex() << gB.getType()
                          << "is successfully added to blockchain";
@@ -929,7 +929,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
 }
 
 void Blockchain::signBlock(BlockVariant &block) const {
-    block.sign(node->accountController()->currentWallet());
+    block.sign(*node->accountController()->currentWallet().get());
 }
 
 QString Blockchain::getLastBlockData() const {
@@ -1140,7 +1140,7 @@ void Blockchain::addBlockToBlockchain(BlockVariant &block) {
         QList<ActorId> list;
         auto accounts = node->accountController()->accounts();
         for (const auto &tmp : std::as_const(accounts))
-            list.append(tmp.id());
+            list.append(tmp->id());
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });

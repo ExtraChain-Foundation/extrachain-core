@@ -32,7 +32,7 @@ public:
     const std::vector<Actor<KeyPrivate>> &farmings() const;
     bool changeCurrent(const ActorId &actorId);
     void addWalet(const Actor<KeyPrivate> &actor);
-    const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
+    const std::shared_ptr<Actor<KeyPrivate>>& getActor(const ActorId &actorId) const;
     bool loaded();
     const std::string &hash() const;
     QJsonObject toJson() const;

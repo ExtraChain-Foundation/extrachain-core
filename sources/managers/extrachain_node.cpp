@@ -130,7 +130,7 @@ bool ExtraChainNode::createNewNetwork(
 
         QMap<ActorId, BigNumberFloat> tm;
         tm.insert(ActorId(), 0);
-        GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
+        GenesisBlock tmp = m_blockchain->createGenesisBlock(*first.get(), tm);
         auto tmpVariant = BlockVariant(tmp);
         m_blockchain->addBlock(tmpVariant, true);
 
@@ -326,19 +326,19 @@ Transaction ExtraChainNode::createTransactionFrom(
     BigNumberFloat amount,
     ActorId token) {
     if (sender == ActorId()) { // TODO: remove hack
-        sender = m_accountController->currentWallet().id();
+        sender = m_accountController->currentWallet()->id();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
+    Actor<KeyPrivate> actor = *m_accountController->currentProfile().getActor(sender).get();
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
         if (receiver.isEmpty() && !amount.isEmpty()) {
-            if (!actor->empty()) {
-                Transaction tx(actor->id(), receiver, amount);
+            if (!actor.empty()) {
+                Transaction tx(actor.id(), receiver, amount);
                 tx.setToken(token);
 
                 qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                    .arg(tx.toString(), QString(actor->id().toByteArray()));
+                    .arg(tx.toString(), QString(actor.id().toByteArray()));
 
                 // 1) set prev block id
                 BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
@@ -361,7 +361,7 @@ Transaction ExtraChainNode::createTransactionFrom(
                 //                }
                 // 3) sign transaction
 
-                tx.sign(*actor);
+                tx.sign(actor);
                 qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to"
                     << tx.getReceiver();
 
@@ -373,9 +373,9 @@ Transaction ExtraChainNode::createTransactionFrom(
         return Transaction();
     }
 
-    if (!actor->empty()) {
-        qDebug() << actor->id();
-        Transaction tx(actor->id(), receiver, amount);
+    if (!actor.empty()) {
+        qDebug() << actor.id();
+        Transaction tx(actor.id(), receiver, amount);
         // add sent tx balances
 
         tx.setToken(token);
