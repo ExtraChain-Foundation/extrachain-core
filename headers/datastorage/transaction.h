@@ -26,6 +26,7 @@
 #include "utils/exc_utils.h"
 #include <QDateTime>
 #include <QString>
+
 enum class TypeTx {
     Transaction = 0,
     RewardTransaction = 1,
@@ -72,11 +73,12 @@ public:
     Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
+                const ActorId &token = ActorId(), const std::string &data = "");
 
     // Construct transaction with data
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
-                const std::string &data);
+                const std::string &data, const ActorId &token = ActorId());
 
     Transaction(const Transaction &other);
 

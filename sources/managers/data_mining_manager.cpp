@@ -71,7 +71,7 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     rewardTx.setToken(ActorId());
     rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
     rewardTx.setData(Utils::bytesEncodeStdString(mb.data));
-    rewardTx.sign(node->accountController()->mainActor());
+    rewardTx.sign(*node->accountController()->mainActor());
     qDebug() << rewardTx.getTypeTx();
     return rewardTx;
 }
@@ -94,24 +94,24 @@ Transaction DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &re
     rewardTx.setTypeTx(TypeTx::RewardTransaction);
     rewardTx.setToken(ActorId());
     rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
-    rewardTx.sign(node->accountController()->mainActor());
+    rewardTx.sign(*node->accountController()->mainActor());
     return rewardTx;
 }
 
 void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
-    if (blockIndex % CoinProductionRate == 0) {
-        qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
-        DFSP::StateMessage stateMessage;
-        stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
-        stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
-        if (stateMessage.DataAmountStored > 0)
-            node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
-    }
+    // if (blockIndex % CoinProductionRate == 0) {
+    //     qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
+    //     DFSP::StateMessage stateMessage;
+    //     stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
+    //     stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
+    //     // if (stateMessage.DataAmountStored > 0)
+    //         // node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
+    // }
 }
 
 void DataMiningManager::interestAccrual() {
     indexBlock++;
-    updateLastIndex();
+    // updateLastIndex();
     if (indexBlock % indexBlockFarming == 0) {
         return; // farming not farm
         if (!isRecalculate) {
@@ -119,7 +119,7 @@ void DataMiningManager::interestAccrual() {
         }
         BigNumberFloat result = balanceFarming * farmingPercent;
         balanceFarming += result;
-        ActorId actorId = node->accountController()->mainActor().id();
+        ActorId actorId = node->accountController()->mainActor()->id();
         Transaction tx = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
         node->txManager()->addTransaction(tx);
     }
@@ -130,7 +130,7 @@ BigNumberFloat DataMiningManager::farmingBalance() const {
 }
 
 void DataMiningManager::calculateFarmingBalanceMainUser() {
-    auto currentActorId = node->accountController()->currentProfile().current().id();
+    auto currentActorId = node->accountController()->currentProfile().current()->id();
     balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TypeTx::FarmingTransaction);
     isRecalculate = true;
 }

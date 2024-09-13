@@ -249,7 +249,7 @@ public:
      * @brief getApprover
      * @return
      */
-    Actor<KeyPrivate> getApprover() const;
+    std::shared_ptr<Actor<KeyPrivate>> getApprover() const;
     /**
      * @brief setApprover
      * @param value

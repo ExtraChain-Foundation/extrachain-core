@@ -18,32 +18,38 @@
  */
 
 #ifndef UTILS_H
-#define UTILS_H
+    #define UTILS_H
 
-#include <sstream>
-#include <string>
-#include <vector>
+    #include <sstream>
+    #include <string>
+    #include <vector>
 
-#include <QFile>
-#include <QObject>
-#include <QtNetwork/QNetworkAddressEntry>
+    #include <QFile>
+    #include <QObject>
+    #include <QtNetwork/QNetworkAddressEntry>
+    #include <QCryptographicHash>
+    #include <QDir>
+    #include <QFile>
+    #include <QFileInfo>
+    #include <QByteArray>
+    #include <QBuffer>
 
-#include "extrachain_global.h"
-#include <msgpack.hpp>
+    #include "extrachain_global.h"
+    #include <msgpack.hpp>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/join.hpp>
-#include <boost/algorithm/string/split.hpp>
+    #include <boost/algorithm/string/classification.hpp>
+    #include <boost/algorithm/string/join.hpp>
+    #include <boost/algorithm/string/split.hpp>
 
-#include <fmt/chrono.h>
-#include <fmt/color.h>
-#include <fmt/core.h>
-#include <fmt/os.h>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
+    #include <fmt/chrono.h>
+    #include <fmt/color.h>
+    #include <fmt/core.h>
+    #include <fmt/os.h>
+    #include <fmt/ostream.h>
+    #include <fmt/ranges.h>
 
-#include <magic_enum.hpp>
-#include <magic_enum_iostream.hpp>
+    #include <magic_enum.hpp>
+    #include <magic_enum_iostream.hpp>
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
@@ -120,14 +126,14 @@ const int NECESSARY_SAME_TX = 1;
 namespace DataStorage {
     static const std::string BlockTable = "Block";
     static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
-        + " ( "
-          "type         TEXT  NOT NULL, "
-          "id           TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL  "
-          ");";
+                                                + " ( "
+                                                "type         TEXT  NOT NULL, "
+                                                "id           TEXT  NOT NULL, "
+                                                "date         TEXT  NOT NULL, "
+                                                "data         TEXT          , "
+                                                "prevHash     TEXT  NOT NULL, "
+                                                "hash         TEXT  NOT NULL  "
+                                                ");";
     static const std::string TxBlockTable = "Transactions";
     static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
         + " ("
@@ -155,60 +161,60 @@ namespace DataStorage {
 
     static const std::string GenesisBlockTable = "GenesisBlock";
     static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
-        + " ("
-          "type         TEXT  NOT NULL, "
-          "id           TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL, "
-          "prevGenHash  TEXT            "
-          ");";
+                                                       + " ("
+                                                       "type         TEXT  NOT NULL, "
+                                                       "id           TEXT  NOT NULL, "
+                                                       "date         TEXT  NOT NULL, "
+                                                       "data         TEXT          , "
+                                                       "prevHash     TEXT  NOT NULL, "
+                                                       "hash         TEXT  NOT NULL, "
+                                                       "prevGenHash  TEXT            "
+                                                       ");";
     static const std::string RowGenesisBlockTable = "GenesisDataRow";
     static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
-        + " ("
-          "actorId    TEXT  NOT NULL, "
-          "state      TEXT  NOT NULL, "
-          "token      TEXT  NOT NULL, "
-          "type       TEXT  NOT NULL "
-          ");";
+                                                          + " ("
+                                                          "actorId    TEXT  NOT NULL, "
+                                                          "state      TEXT  NOT NULL, "
+                                                          "token      TEXT  NOT NULL, "
+                                                          "type       TEXT  NOT NULL "
+                                                          ");";
 
     static const std::string tokensCacheTable = "Tokens";
     static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
-        + " ("
-          "tokenId      TEXT PRIMARY KEY NOT NULL, "
-          "name         TEXT             NOT NULL, "
-          "color        TEXT             NOT NULL, "
-          "canStaking   INT              NOT NULL  "
-          ");";
+                                                      + " ("
+                                                      "tokenId      TEXT PRIMARY KEY NOT NULL, "
+                                                      "name         TEXT             NOT NULL, "
+                                                      "color        TEXT             NOT NULL, "
+                                                      "canStaking   INT              NOT NULL  "
+                                                      ");";
 
     static const std::string actorsTable = "Actors";
     static const std::string actorsTableCreate = "CREATE TABLE IF NOT EXISTS " + actorsTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "type INT              NOT NULL  "
-          ");";
+                                                 + " ("
+                                                 "id   TEXT PRIMARY KEY NOT NULL, "
+                                                 "type INT              NOT NULL  "
+                                                 ");";
 
     static const std::string farmingCacheTable = "FarmingCache";
     static const std::string farmingTableCreate = "CREATE TABLE IF NOT EXISTS " + farmingCacheTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "blockIndex INT              NOT NULL  "
-          ");";
+                                                  + " ("
+                                                  "id   TEXT PRIMARY KEY NOT NULL, "
+                                                  "blockIndex INT              NOT NULL  "
+                                                  ");";
 
-    // How many files one section folder will store
+           // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
-    // How often to construct block from pending transactions (in miliseconds)
+           // How often to construct block from pending transactions (in miliseconds)
     static const int BLOCK_CREATION_PERIOD = 2000;
 
-    // How often to construct genesis block (in blocks)
+           // How often to construct genesis block (in blocks)
     static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
 
-    // Max number of saved blocks in mem index
+           // Max number of saved blocks in mem index
     static const int MEM_INDEX_SIZE_LIMIT = 1000;
 
-    // How often to prove pransactions
+           // How often to prove pransactions
     static const int PROVE_TXS_INTERVAL = 2000;
 } // namespace DataStorage
 
@@ -216,11 +222,11 @@ namespace Net {
     // Default gas for transaction
     static const int DEFAULT_GAS = 10;
 
-    // Networking will work only if there are enough peers
+           // Networking will work only if there are enough peers
     static const int MINIMUM_PEERS = 1;
 
-    // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
-    // responses
+           // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
+           // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
     enum class TypeSend {
@@ -238,7 +244,9 @@ MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
+static const int UNEXPECT = -1;
 // IO
+static const int NO = 0;
 static const int FILE_ALREADY_EXISTS = 101;
 static const int FILE_IS_NOT_OPENED = 102;
 
@@ -355,11 +363,11 @@ enum class HashEncode {
     Hex,
 };
 
-#ifdef Q_OS_WIN
+    #ifdef Q_OS_WIN
 static QString filePrefix = "file:///";
-#else
+    #else
 static QString filePrefix = "file://";
-#endif
+    #endif
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64 diskFreeMemory();
@@ -395,9 +403,9 @@ QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::B
 QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
 EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
-                                   const QByteArray &key, int blockSize = 60007);
+                                         const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
-                                   const QByteArray &key, int blockSize = 60007);
+                                         const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
                                                       int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
@@ -447,10 +455,230 @@ namespace KeyStore {
 static const std::string folder = "keystore";
 static const std::string format = ".profile";
 static const std::string profiles = "profiles";
+static const std::string encrypt = "encrypt";
+static const std::string encryptExt =".enc";
+static const QString folderEncryptExt = ".fenc";
+
 
 // TODO: remove
 static const QString KEY_TYPE = ".key";
 QString makeKeyFileName(QString name);
+
+
+struct Keystore {
+    std::string key = "", data = "";
+    std::string autologinHash = "";
+
+    Keystore(){};
+    Keystore(std::string _key, std::string _data, std::string _autologinHash)
+        : key(_key)
+        , data(_data)
+        , autologinHash(_autologinHash){}
+
+    std::string serialize() const {
+        return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
+    }
+
+    bool deserialize(const std::string &serialized) {
+        if (serialized.empty()) {
+            return false;
+        } else {
+            *this = MessagePack::deserialize<KeyStore::Keystore>(Utils::bytesDecodeStdString(serialized));
+            return true;
+        }
+    }
+
+    MSGPACK_DEFINE(key, data, autologinHash)
+};
+
+struct EncryptData{
+    std::string namefile, data;
+
+    std::string serialize() const {
+        return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
+    }
+
+    bool deserialize(const std::string &serialized) {
+        if (serialized.empty()) {
+            return false;
+        } else {
+            *this = MessagePack::deserialize<KeyStore::EncryptData>(Utils::bytesDecodeStdString(serialized));
+            return true;
+        }
+    }
+
+    MSGPACK_DEFINE(namefile, data)
+};
+
+class KeystoneUtil {
+public:
+    // Simple XOR encryption example (replace with actual encryption method)
+    QByteArray xorEncryptDecrypt(const QByteArray &data, const QByteArray &key) {
+        QByteArray result = data;
+        for (int i = 0; i < result.size(); ++i) {
+            result[i] ^= key[i % key.size()];
+        }
+        return result;
+    }
+
+           // Encrypt a single file
+    bool encryptFile(const QString &inputPath, const QString &outputPath, const QByteArray &key, std::string& writeData) {
+        QFile inputFile(inputPath);
+        if (!inputFile.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+        QByteArray data = inputFile.readAll();
+        QByteArray encryptedData = xorEncryptDecrypt(data, key);
+        QFile outputFile(outputPath);
+        if (!outputFile.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        outputFile.write(encryptedData);
+        qDebug() << "WD before: [" << writeData.size() << "].";
+        writeData = encryptedData.toStdString();
+        qDebug() << "WD after: [" << writeData.size() << "].";
+
+        return true;
+    }
+
+    bool encryptFolder(const QString &folderPath, const QString &outputFolderPath, const QString &namefileExport, const QByteArray &key, const std::string &autologinHash) {
+        qDebug() << "Export folder - " << folderPath;
+        qDebug() << "Output folder - " << outputFolderPath;
+        qDebug() << "By key - " << key;
+        qDebug() << "Hash - " << QString::fromStdString(autologinHash);
+
+        QDir dir(folderPath);
+        QDir tmpEncryptFolder(QDir(QString::fromStdString(encrypt)));
+        QStringList files = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+        std::vector<std::string> encryptedList;
+
+        for (const QString &file : files) {
+            QString inputFilePath = dir.filePath(file);
+            EncryptData encryptData;
+            encryptData.namefile = file.toStdString() + encryptExt;
+            QString outputFilePath = tmpEncryptFolder.filePath(file + QString::fromStdString(encryptExt));
+
+            if (!encryptFile(inputFilePath, outputFilePath, key, encryptData.data)) {
+                qDebug() << "Not encrypted file" << inputFilePath <<  outputFilePath << key;
+                return false;
+            }
+            encryptedList.push_back(encryptData.serialize());      
+        }
+
+        qDebug() << "start create one file";
+        std::string data = Serialization::serialize(encryptedList);
+        Keystore keystore(key.toStdString(), data, autologinHash);
+        qDebug() << "write to: " << QString("%1%2").arg(namefileExport).arg(folderEncryptExt);
+        QString outputFilePathForFolder = QDir(outputFolderPath).filePath(QString("%1%2").arg(namefileExport).arg(folderEncryptExt));
+        qDebug() << "Export to file - " << outputFilePathForFolder;
+        QFile outputFile(outputFilePathForFolder);
+        if (!outputFile.open(QIODevice::WriteOnly)) {
+            qDebug() << "File to export folder " << outputFilePathForFolder << " not open";
+            return false;
+        }
+        outputFile.write(QByteArray::fromStdString(keystore.serialize()));
+        outputFile.flush();
+        outputFile.close();
+
+        // Remove files
+        foreach (QFileInfo item, tmpEncryptFolder.entryInfoList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+            if (!item.isDir()) {
+                qDebug() << "Remove file - " << item.fileName();
+                QFile::remove(item.absoluteFilePath());
+            }
+        }
+
+        return true;
+    }
+
+    bool decryptFile(const QString &inputPath, const QString &outputPath, const QByteArray &key) {
+        QFile inputFile(inputPath);
+        if (!inputFile.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+        QByteArray encryptedData = inputFile.readAll();
+        QByteArray data = xorEncryptDecrypt(encryptedData, key);
+        QFile outputFile(outputPath);
+        if (!outputFile.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        outputFile.write(data);
+        return true;
+    }
+
+           // Decrypt all files in a folder
+    bool decryptFolder(const QString &filePath, const QString &outputFolderPath, const QByteArray &key, QString& error, std::string& hash) {
+        QDir dir(filePath);
+        if (!filePath.endsWith(folderEncryptExt)) {
+            error = "File has not extention `.fenc`";
+            return false;
+        }
+
+        clearDirectory(outputFolderPath);
+
+        QString inputFilePath = dir.filePath(filePath);
+        qDebug() << filePath << inputFilePath;
+
+        QFile inputFile(inputFilePath);
+        if (!inputFile.open(QIODevice::ReadOnly)) {
+            error = "File can not open.";
+            return false;
+        }
+
+        QByteArray encryptedData = inputFile.readAll();
+        Keystore keystore;
+        keystore.deserialize(encryptedData.toStdString());
+
+                if(keystore.key != key.toStdString()) {
+            error = "Can not import keys. Key is not valid.";
+            return false;
+        }
+        qDebug() << "decrypt folder hash: [" << keystore.autologinHash << "]";
+        hash = keystore.autologinHash;
+
+        auto deserializedList = Serialization::deserialize(keystore.data);
+        qDebug() << "count files:" << deserializedList.size();
+        for(auto data : deserializedList) {
+            EncryptData decryptData;
+            decryptData.deserialize(data);
+            auto xorEncryptDecrypted = xorEncryptDecrypt(QByteArray::fromStdString(decryptData.data), key);
+            QFile fileData(QDir(outputFolderPath).filePath(QString::fromStdString(decryptData.namefile).chopped(4)));
+            if(fileData.open(QIODevice::WriteOnly)) {
+                qDebug() << "file " << fileData.fileName() << " opened";
+                fileData.write(QByteArray(xorEncryptDecrypted));
+                fileData.flush();
+                fileData.close();
+            }
+        }
+        return true;
+    }
+
+protected:
+    bool clearDirectory(const QString &path) {
+        QDir dir(path);
+
+        if (!dir.exists()) {
+            return false; // Directory does not exist
+        }
+
+        QFileInfoList files = dir.entryInfoList(QDir::Files);
+        QFileInfoList dirs = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+               // Remove all files in the directory
+        foreach (QFileInfo file, files) {
+            QFile::remove(file.absoluteFilePath());
+        }
+
+               // Recursively remove all subdirectories
+        foreach (QFileInfo subDir, dirs) {
+            QDir subDirPath(subDir.absoluteFilePath());
+            subDirPath.removeRecursively();
+        }
+
+        return true;
+    }
+};
+
 }
 
 namespace Scripts {
@@ -559,9 +787,9 @@ struct EXTRACHAIN_EXPORT Notification {
 
 QDebug operator<<(QDebug d, const Notification &n);
 
-#define TIMER_START(name) \
-    QElapsedTimer name;   \
+    #define TIMER_START(name) \
+QElapsedTimer name;   \
     name.start();
-#define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
+    #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 
 #endif // UTILS_H

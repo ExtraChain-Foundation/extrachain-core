@@ -65,6 +65,8 @@ BlockVariant BlockIndex::getLastBlock() const {
             // qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is not empty, return this
             // block";
             return block;
+        } else {
+            qDebug() << QString("block with id %1 is empty").arg(QString::fromStdString(id.toStdString()));
         }
 
         // qDebug() << "[BlockIndex] getLastBlock:" << block.getIndex() << "is empty, can't return this

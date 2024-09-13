@@ -49,6 +49,14 @@ enum class MessageType {
     SpreadNodeConnection = 111,
     RequestListNodes = 112,
 
+    VPNHandshake = 113,
+    VPNConnection = 114,
+    VPNDisconnect = 115,
+    VPNUpdateConnection = 116,
+
+    ShareConnections = 117,
+    Accrual = 120
+
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)
@@ -98,5 +106,31 @@ inline MessageBody make_message(const std::string &data, MessageType type, Messa
 
     return message;
 }
+
+enum class VPNType
+{
+    CLIENT,
+    SERVER,
+    PROXY
+};
+MSGPACK_ADD_ENUM(VPNType)
+FORMAT_ENUM(VPNType)
+
+struct VPNMessage
+{
+    VPNType     vpnType;
+    int resultChainIndex;
+    std::set<int> lockedChainIndex;
+    std::string countryEndpoint;
+    int proxyCounter;
+    std::set<std::string> networkIdentifiersToIgnore;
+    std::string localIP;
+    std::string publicIP;
+    std::string publicKeyFile;
+    std::string uuid;
+    std::vector<std::string> allIPsToSet;
+
+    MSGPACK_DEFINE(vpnType, resultChainIndex, lockedChainIndex, countryEndpoint, proxyCounter, networkIdentifiersToIgnore, localIP, publicIP, publicKeyFile, uuid, allIPsToSet)
+};
 
 #endif // MESSAGEBODY_H

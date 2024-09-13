@@ -79,6 +79,11 @@ public:
     MSGPACK_DEFINE(actorId, state, token, type)
 };
 
+namespace Token {
+static const std::string EXTRACHAIN_TOKEN = "";
+static const std::string ROCC_TOKEN = "ROCC";
+}
+
 /**
  * @brief Genesis block it's an extended block, with has specific data field
  * and one additional field - prevGenHash.

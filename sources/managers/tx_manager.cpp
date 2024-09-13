@@ -117,7 +117,10 @@ void TransactionManager::makeBlock() {
             pendingTxs.push_back(farmingTransactionData.transaction);
     }
 
-    extraChainNode->dataMiningManager()->interestAccrual();
+    // for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
+    //     if(farmingTransactionData.canImproveTx())
+    //         pendingTxs.push_back(farmingTransactionData.transaction);
+    // }
 
     BlockVariant lastRealBlock = blockchain->getLastRealBlock();
     BlockVariant lastBlock = blockchain->getLastBlock();

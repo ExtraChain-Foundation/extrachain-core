@@ -26,7 +26,8 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
-#include "managers/vpn_manager.h"
+#include "network/message_body.h"
+#include "managers/vpn_connector_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -67,11 +68,8 @@ private:
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
 
-    std::shared_ptr<VPNManager> m_vpnManager;
-    std::string                 m_vpnFileAddedHash;
-
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, std::function<bool(ExtraChainNode&, VPNMessage&, ActorId&, VPNFunctionType, VPNFunctionsResult&)> vpnFunctions = nullptr);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -96,6 +94,9 @@ public:
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
 
+    VPNConnectorManager vpnManager;
+
+
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);
     void logout();
@@ -104,7 +105,7 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    Transaction createTransaction(Transaction tx);
+    Transaction createTransaction(Transaction tx, QString& expError);
 
     /**
      * @brief Shortcut for another createTransaction method
@@ -146,6 +147,9 @@ signals:
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
+    void vpnConnected();
+    void actorInitiated();
+    void vpnDisconnect();
 
 private slots:
     void getAllActorsTimerCall();

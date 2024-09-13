@@ -89,8 +89,22 @@ struct NetworkReconnect {
     quint16           port;
     Network::Protocol protocol;
     // quint64 lastTry;
-    auto operator==(const NetworkReconnect& reconnect) const {
+    bool operator==(const NetworkReconnect& reconnect) const {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
+    }
+
+    bool operator<(const NetworkReconnect& other) const {
+        if (ip < other.ip)
+            return true;
+        if (ip == other.ip)
+        {
+            if (port < other.port)
+                return true;
+            if (port == other.port)
+                return protocol < other.protocol;
+        }
+
+        return false;
     }
 
     static NetworkReconnect fromWsConnection(const DFSP::WSConnection& wsConnection) {
@@ -141,7 +155,7 @@ private:
     QNetworkAddressEntry*  local    = nullptr;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
-    QSet<NetworkReconnect> m_reconnections;
+    QMap<NetworkReconnect, QString> m_reconnectionsToIdentifier;
     NetworkStatus          m_networkStatus;
 
     std::map<std::string, std::string>           m_messages;
@@ -179,6 +193,8 @@ signals:
     void finished(); // ThreadPool
     void addFragSignal(const DFSP::SegmentMessage& msg);
     void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
+    void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                            const std::string &receiver_identifier);
 
 protected:
     void connectToWebSocket(const QString& ip, quint16 port, bool requestListNodes = false);
@@ -202,12 +218,15 @@ public slots:
     void connectToNode(const QString& ip, Network::Protocol protocol, const bool request = false);
     void process();
     void reconnection();
+    void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
     void setupProxy(
         QNetworkProxy::ProxyType type,
         const QString&           hostName,
         quint16                  port,
         const QString&           user,
         const QString&           password);
+    void sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                                const std::string &receiver_identifier);
 
 private slots:
     void removeWsConnection();
@@ -228,6 +247,8 @@ public:
     bool isActiveConnectionExists();
 
     void messageReceived(const std::string& message, const std::string &ip, const std::string& identifier);
+
+    QString foundCurrentIdentifier(QString ip, quint16 port);
 
     template <class T>
     std::string send_message(
@@ -250,11 +271,11 @@ public:
             return "";
         }
 
-        auto&       mainActor = node.accountController()->mainActor();
+        auto       mainActor = node.accountController()->mainActor();
         MessageBody message   =
-            make_message(MessagePack::serialize(data), type, status, mainActor.id(), to_message_id);
+            make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
         auto        serialized = message.serialize();
-        auto        sign       = mainActor.key().sign(serialized);
+        auto        sign       = mainActor->key().sign(serialized);
         std::string receiver_identifier;
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];
@@ -284,7 +305,7 @@ public:
     }
 
     void                    requestWSNodeList(std::string message_id);
-    QSet<NetworkReconnect>& reconnections();
+    QMap<NetworkReconnect, QString>& reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
     
