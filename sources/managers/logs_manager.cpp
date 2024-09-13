@@ -269,7 +269,7 @@ void LogsManager::print(const std::string& log) {
     #if defined(Q_OS_WIN)
     if (IsDebuggerPresent()) {
         OutputDebugStringA(log.c_str());
-        OutputDebugStringA("\n");
+        // OutputDebugStringA("\n");
     }
     #endif
     fmt::print("{}\n", log);
