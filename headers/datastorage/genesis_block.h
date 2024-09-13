@@ -36,7 +36,7 @@ public:
 public:
     GenesisDataRow() = default;
 
-    explicit GenesisDataRow(
+    GenesisDataRow(
         const ActorId &actorId,
         const BigNumberFloat &state,
         const ActorId &token,
@@ -92,16 +92,7 @@ public:
     GenesisBlock();
     GenesisBlock(const GenesisBlock &block);
 
-    // Deserialize already constructed block
-    explicit GenesisBlock(const std::string &serialized);
-
-    // Initial block construction, prev = nullptr for first block
-    explicit GenesisBlock(
-        const std::string &_data,
-        const BlockVariant &prevBlock,
-        const std::string &prevGenHash);
-
-    explicit GenesisBlock(
+    GenesisBlock(
         std::string &&type,
         std::string &&data,
         BigNumber idx,
@@ -114,7 +105,8 @@ public:
 
     // Block interface
 public:
-    void addRow(const GenesisDataRow &row);
+    bool addRow(const GenesisDataRow &row);
+    int addRows(const std::vector<GenesisDataRow> &rows);
     void calcHash() override;
     const std::string &getDataForSignature() const override; // deprecate?
     bool deserialize(const std::string &serialized) override;

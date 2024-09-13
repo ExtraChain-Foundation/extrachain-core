@@ -34,95 +34,21 @@ public:
     std::string serialize() const;
     QString toString() const;
 
-    void setType(BlockType type) {
-        std::visit(
-            [&type](auto& b) {
-                b.setType(type);
-            },
-            m_block);
-    }
+    void setType(BlockType type);
+    void setPrevHash(const std::string& prevHash);
 
-    void setPrevHash(const std::string& prevHash) {
-        std::visit(
-            [&prevHash](auto& b) {
-                b.setPrevHash(prevHash);
-            },
-            m_block);
-    }
+    void addSignature(const QByteArray& id, const QByteArray& sign, const bool& isApprover);
+    void sign(const Actor<KeyPrivate>& actor);
+    bool verify(const Actor<KeyPublic>& actor) const;
 
-    void setData(const std::string& data) {
-        std::visit(
-            [&data](auto& b) {
-                b.setData(data);
-            },
-            m_block);
-    }
+    bool isBlock() const;
+    bool isGenesisBlock() const;
 
-    void addSignature(const QByteArray& id, const QByteArray& sign, const bool& isApprover) {
-        std::visit(
-            [&id, &sign, &isApprover](auto& b) {
-                b.addSignature(id, sign, isApprover);
-            },
-            m_block);
-    }
-
-    void sign(const Actor<KeyPrivate>& actor) {
-        std::visit(
-            [&actor](auto& b) {
-                b.sign(actor);
-            },
-            m_block);
-    }
-
-    bool verify(const Actor<KeyPublic>& actor) const {
-        return std::visit(
-            [&actor](auto& b) {
-                return b.verify(actor);
-            },
-            m_block);
-    }
-
-    bool isBlock() const {
-        return std::holds_alternative<Block>(m_block);
-    }
-
-    bool isGenesisBlock() const {
-        return std::holds_alternative<GenesisBlock>(m_block);
-    }
-
-    std::optional<std::reference_wrapper<const Block>> getBlockConst() const {
-        if (auto block = std::get_if<Block>(&m_block)) {
-            return std::cref(*block);
-        }
-        return std::nullopt;
-    }
-
-    std::optional<std::reference_wrapper<const GenesisBlock>> getGenesisBlockConst() const {
-        if (auto block = std::get_if<GenesisBlock>(&m_block)) {
-            return std::cref(*block);
-        }
-        return std::nullopt;
-    }
-
-    std::optional<std::reference_wrapper<Block>> getBlock() {
-        if (auto block = std::get_if<Block>(&m_block)) {
-            return std::ref(*block);
-        }
-        return std::nullopt;
-    }
-
-    std::optional<std::reference_wrapper<GenesisBlock>> getGenesisBlock() {
-        if (auto block = std::get_if<GenesisBlock>(&m_block)) {
-            return std::ref(*block);
-        }
-        return std::nullopt;
-    }
-
-    Block getAny() {
-        if (isGenesisBlock())
-            return getGenesisBlock()->get();
-        return getBlock()->get();
-    }
+    std::optional<std::reference_wrapper<const Block>> getBlockConst() const;
+    std::optional<std::reference_wrapper<const GenesisBlock>> getGenesisBlockConst() const;
+    std::optional<std::reference_wrapper<Block>> getBlock();
+    std::optional<std::reference_wrapper<GenesisBlock>> getGenesisBlock();
+    Block getAny();
 
     bool operator==(const BlockVariant& other) const {
         if (isGenesisBlock()) {

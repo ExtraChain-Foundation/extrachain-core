@@ -588,23 +588,24 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
         // TODO: why temp std::string?
-        std::string stddata = MessagePack::deserialize<std::string>(serialized);
-        GenesisBlock genesisBlock(stddata);
+        GenesisBlock genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!genesisBlock.isEmpty()) {
             node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         } else {
             qDebug() << "false genesis block";
+            qFatal("FFUUU 1");
         }
         break;
     }
 
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
-        std::string stddata = MessagePack::deserialize<std::string>(serialized);
-        Block block(stddata);
+        Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
             node.blockchain()->addBlockToBlockchain(blockVariant);
+        } else {
+            qFatal("FFUUU 2");
         }
         break;
     }

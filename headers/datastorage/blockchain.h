@@ -68,7 +68,7 @@ private:
                            //    Actor<KeyPrivate>   approver;       // current user.
     TransactionManager *txManager;
     // service //
-    QList<GenesisDataRow> genBlockData; // actorid -> token
+    std::vector<GenesisDataRow> genBlockData; // actorid -> token
     int blocksFromLastGenesis = 0;
 
     bool launched;
@@ -98,7 +98,7 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const std::string &data) const;
+    void saveTxInfoInEC(const std::vector<Transaction> &transactions) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();

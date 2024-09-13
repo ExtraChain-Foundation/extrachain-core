@@ -80,20 +80,10 @@ public:
      * @param block
      */
     Block(const Block &block);
-    /**
-     * @brief Block
-     * Deserialize already constructed block
-     * @param serialized
-     */
-    Block(const std::string &serialized);
-    /**
-     * @brief Block
-     * Initial block construction, prev = nullptr for first block
-     * @param data
-     * @param prev
-     */
-    Block(const std::string &data, const BlockVariant &prev);
 
+    /**
+     * @brief Block
+     */
     Block(
         std::string &&type,
         std::string &&data,
@@ -103,6 +93,18 @@ public:
         std::string &&hash,
         std::vector<Approvers> &&signatures,
         std::vector<Transaction> &&transactions);
+    /**
+     * @brief Block
+     * Deserialize already constructed block
+     * @param serialized
+     */
+    static Block createBlockFromSerialized(const std::string &serialized);
+    /**
+     * @brief Block
+     * Initial oldBlock, prev = nullptr for first oldBlock
+     * @param data
+     * @param prev
+     */
 
     virtual ~Block();
 
@@ -122,8 +124,7 @@ public:
      * @param data
      */
     void addData(const std::string &data);
-
-    void setData(const std::string &data);
+    void addDatas(const std::vector<std::string> &datas);
 
     void initializeData(const std::string &serializedData);
     /**
@@ -158,7 +159,9 @@ public:
     std::string getTypeStr() const;
     ActorId getApprover() const;
     BigNumber getIndex() const;
+    long long getDate() const;
     std::string getData() const;
+    std::vector<std::string> getDatas() const;
     std::string getHash() const;
     std::string getPrevHash() const;
     std::string getSignature() const;
@@ -168,12 +171,13 @@ public:
     // TODO: replace to signatures()
     QByteArrayList getListSignatures() const;
     void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
-    // void setType(QByteArray type);
-    long long getDate() const;
+    void setIndex(const BigNumber &index);
     void setDate(long long value);
     Block operator=(const Block &block);
     virtual void setType(BlockType value);
     virtual void setType(const std::string &value);
+
+    void setPrev(const BlockVariant &prev);
 
     void addTransaction(const Transaction &transaction);
     void addTransactions(const std::vector<Transaction> &transactions);

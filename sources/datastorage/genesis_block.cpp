@@ -29,19 +29,7 @@ GenesisBlock::GenesisBlock()
 GenesisBlock::GenesisBlock(const GenesisBlock &block)
     : Block(block) {
     this->m_prevGenHash = block.getPrevGenHash();
-}
-
-GenesisBlock::GenesisBlock(const std::string &serialized) {
-    deserialize(serialized);
-}
-
-GenesisBlock::GenesisBlock(
-    const std::string &_data,
-    const BlockVariant &prevBlock,
-    const std::string &prevGenHash)
-    : Block(_data, prevBlock)
-    , m_prevGenHash(prevGenHash) {
-    this->m_type = BlockType::Genesis;
+    this->m_dataRows = block.dataRows();
 }
 
 GenesisBlock::GenesisBlock(
@@ -65,10 +53,25 @@ GenesisBlock::GenesisBlock(
           {})
     , m_prevGenHash(std::move(prevGenHash))
     , m_dataRows(std::move(dataRows)) {
+    setType(type);
 }
 
-void GenesisBlock::addRow(const GenesisDataRow &row) {
-    m_dataRows.push_back(row);
+bool GenesisBlock::addRow(const GenesisDataRow &row) {
+    if (!Utils::vector_contains(m_dataRows, row)) {
+        m_dataRows.push_back(row);
+        return true;
+    }
+    return false;
+}
+
+int GenesisBlock::addRows(const std::vector<GenesisDataRow> &rows) {
+    int count = 0;
+    for (const auto &row : std::as_const(rows)) {
+        auto res = addRow(row);
+        if (res)
+            count++;
+    }
+    return count;
 }
 
 const std::string &GenesisBlock::getDataForSignature() const {

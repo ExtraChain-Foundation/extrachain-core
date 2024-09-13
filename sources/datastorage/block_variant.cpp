@@ -99,3 +99,85 @@ QString BlockVariant::toString() const {
         },
         m_block);
 }
+
+void BlockVariant::setType(BlockType type) {
+    std::visit(
+        [&type](auto& b) {
+            b.setType(type);
+        },
+        m_block);
+}
+
+void BlockVariant::setPrevHash(const std::string &prevHash) {
+    std::visit(
+        [&prevHash](auto& b) {
+            b.setPrevHash(prevHash);
+        },
+        m_block);
+}
+
+void BlockVariant::addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover) {
+    std::visit(
+        [&id, &sign, &isApprover](auto& b) {
+            b.addSignature(id, sign, isApprover);
+        },
+        m_block);
+}
+
+void BlockVariant::sign(const Actor<KeyPrivate> &actor) {
+    std::visit(
+        [&actor](auto& b) {
+            b.sign(actor);
+        },
+        m_block);
+}
+
+bool BlockVariant::verify(const Actor<KeyPublic> &actor) const {
+    return std::visit(
+        [&actor](auto& b) {
+            return b.verify(actor);
+        },
+        m_block);
+}
+
+bool BlockVariant::isBlock() const {
+    return std::holds_alternative<Block>(m_block);
+}
+
+bool BlockVariant::isGenesisBlock() const {
+    return std::holds_alternative<GenesisBlock>(m_block);
+}
+
+std::optional<std::reference_wrapper<const Block> > BlockVariant::getBlockConst() const {
+    if (auto block = std::get_if<Block>(&m_block)) {
+        return std::cref(*block);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<const GenesisBlock> > BlockVariant::getGenesisBlockConst() const {
+    if (auto block = std::get_if<GenesisBlock>(&m_block)) {
+        return std::cref(*block);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<Block> > BlockVariant::getBlock() {
+    if (auto block = std::get_if<Block>(&m_block)) {
+        return std::ref(*block);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<GenesisBlock> > BlockVariant::getGenesisBlock() {
+    if (auto block = std::get_if<GenesisBlock>(&m_block)) {
+        return std::ref(*block);
+    }
+    return std::nullopt;
+}
+
+Block BlockVariant::getAny() {
+    if (isGenesisBlock())
+        return getGenesisBlock()->get();
+    return getBlock()->get();
+}

@@ -42,33 +42,6 @@ Block::Block(const Block &block) {
     this->m_transactions = block.m_transactions;
 }
 
-Block::Block(const std::string &serialized)
-    : Block() {
-    this->deserialize(serialized);
-}
-
-Block::Block(const std::string &data, const BlockVariant &prev)
-    : Block() {
-    if (data.size() > 4) {
-        // qFatal("Test: Please, check data");
-    }
-
-    if (prev.isEmpty()) {
-        // qDebug() << "BLOCK: Construction first block";
-        this->m_index = BigNumber("0");
-        this->m_prevHash = Utils::calcHash("0 index");
-    } else {
-        // qDebug() << "BLOCK: Construction block. Previous block id - "
-        //          << prev->getIndex();
-        this->m_index = prev.getIndex() + 1;
-        this->m_prevHash = prev.getHash();
-    }
-
-    this->m_date = QDateTime::currentDateTime().toMSecsSinceEpoch();
-
-    this->m_data = data;
-}
-
 Block::Block(
     std::string &&type,
     std::string &&data,
@@ -87,6 +60,12 @@ Block::Block(
     , m_transactions(std::move(transactions)) {
     if (type != "genesis")
         setType(type);
+}
+
+Block Block::createBlockFromSerialized(const std::string &serialized) {
+    Block block;
+    block.deserialize(serialized);
+    return block;
 }
 
 Block::~Block() {
@@ -127,8 +106,8 @@ void Block::setType(const std::string &value) {
         m_type = BlockType::Data;
     } else if (value == "datamerge") {
         m_type = BlockType::DataMerge;
-    } else if (value == "genesismerge") {
-        m_type = BlockType::GenesisMerge;
+        // } else if (value == "genesismerge") {
+        //     m_type = BlockType::GenesisMerge;
     } else if (value == "dummy") {
         m_type = BlockType::Dummy;
     } else {
@@ -136,12 +115,28 @@ void Block::setType(const std::string &value) {
     }
 }
 
+void Block::setPrev(const BlockVariant &prev) {
+    if (prev.isEmpty()) {
+        // qDebug() << "[Block] Construction first block";
+        this->m_index = BigNumber("0");
+        this->m_prevHash = Utils::calcHash("0 index");
+    } else {
+        // qDebug() << "[Block] Construction block. Previous block id: " << prev->getIndex();
+        this->m_index = prev.getIndex() + 1;
+        this->m_prevHash = prev.getHash();
+    }
+}
+
 void Block::addTransaction(const Transaction &transaction) {
-    m_transactions.push_back(transaction);
+    if (!Utils::vector_contains(m_transactions, transaction)) {
+        m_transactions.push_back(transaction);
+    }
 }
 
 void Block::addTransactions(const std::vector<Transaction> &transactions) {
-    m_transactions.insert(m_transactions.end(), transactions.begin(), transactions.end());
+    for (const auto &transaction : std::as_const(transactions)) {
+        addTransaction(transaction);
+    }
 }
 
 const std::string &Block::getDataForSignature() const {
@@ -186,12 +181,16 @@ BlockCompare Block::compareBlock(const Block &b) const {
 
 void Block::addData(const std::string &data) {
     std::vector<std::string> v = Serialization::deserialize(this->m_data);
-    v.push_back(data);
+    if (!Utils::vector_contains(v, data)) {
+        v.push_back(data);
+    }
     this->m_data = Serialization::serialize(v);
 }
 
-void Block::setData(const std::string &data) {
-    this->m_data = data;
+void Block::addDatas(const std::vector<std::string> &datas) {
+    for (const auto &data : datas) {
+        addData(data);
+    }
 }
 
 void Block::initializeData(const std::string &serializedData) {
@@ -274,6 +273,10 @@ void Block::addSignature(const QByteArray &id, const QByteArray &sign, const boo
     this->m_signatures.push_back({ id.toStdString(), sign.toStdString(), isApprover });
 }
 
+void Block::setIndex(const BigNumber &index) {
+    m_index = index;
+}
+
 void Block::setPrevHash(const std::string &value) {
     m_prevHash = value;
 }
@@ -297,6 +300,10 @@ BigNumber Block::getIndex() const {
 
 std::string Block::getData() const {
     return m_data;
+}
+
+std::vector<std::string> Block::getDatas() const {
+    return Serialization::deserialize(this->m_data);
 }
 
 std::string Block::getHash() const {
