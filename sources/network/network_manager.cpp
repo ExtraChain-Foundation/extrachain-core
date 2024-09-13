@@ -593,7 +593,6 @@ void NetworkManager::messageReceived(
             node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         } else {
             qDebug() << "false genesis block";
-            qFatal("FFUUU 1");
         }
         break;
     }
@@ -604,8 +603,6 @@ void NetworkManager::messageReceived(
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
             node.blockchain()->addBlockToBlockchain(blockVariant);
-        } else {
-            qFatal("FFUUU 2");
         }
         break;
     }

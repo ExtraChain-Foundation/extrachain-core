@@ -272,8 +272,7 @@ void Blockchain::sendBlockByNumber(const BigNumber &index) const {
     std::string data;
     if (answerBlock.getType() == BlockType::Genesis) {
         GenesisBlock genesisBlock = blockIndex.getGenesisBlockById(index);
-        data = genesisBlock.serialize();
-        node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
+        node->network()->send_message(genesisBlock, MessageType::BlockchainGenesisBlock);
     } else {
         data = answerBlock.serialize();
         // node->network()->send_message(data, MessageType::BlockchainNewBlock);
@@ -282,8 +281,7 @@ void Blockchain::sendBlockByNumber(const BigNumber &index) const {
 
 void Blockchain::sendLastGenesisBlock() const {
     const GenesisBlock genesisBlock = blockIndex.getLastGenesisBlock();
-    const std::string data = genesisBlock.serialize();
-    node->network()->send_message(data, MessageType::BlockchainGenesisBlock);
+    node->network()->send_message(genesisBlock, MessageType::BlockchainGenesisBlock);
 }
 
 // Genesis block //

@@ -106,7 +106,7 @@ GenesisBlock BlockIndex::getLastGenesisBlock() const {
 GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const {
     auto block = this->getById(id);
 
-    if (block.has_value() && block->isEmpty() && block->isGenesisBlock()) {
+    if (block.has_value() && !block->isEmpty() && block->isGenesisBlock()) {
         return block->getGenesisBlock()->get();
     }
 
