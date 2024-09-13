@@ -27,7 +27,7 @@ Transaction::Transaction() {
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->digSig = std::string();
+    this->signature = std::string();
     this->typeTx = TypeTx::Transaction;
     calcHash();
 }
@@ -52,7 +52,7 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
-    this->digSig = std::string();
+    this->signature = std::string();
     this->typeTx = TypeTx::Transaction;
     this->token = token;
     calcHash();
@@ -79,7 +79,7 @@ Transaction::Transaction(const Transaction &other) {
     this->hop = other.hop;
     this->hash = other.hash;
     this->approver = other.approver;
-    this->digSig = other.digSig;
+    this->signature = other.signature;
     this->producer = other.producer;
     this->typeTx = other.typeTx;
     calcHash();
@@ -93,13 +93,11 @@ bool Transaction::isRewardTransaction() const {
     return typeTx == TypeTx::RewardTransaction;
 }
 
-bool Transaction::isFarmingTransaction() const
-{
+bool Transaction::isFarmingTransaction() const {
     return typeTx == TypeTx::FarmingTransaction;
 }
 
-bool Transaction::isLockedFarmingTransaction() const
-{
+bool Transaction::isLockedFarmingTransaction() const {
     return typeTx == TypeTx::FarmingLockedTransaction;
 }
 
@@ -107,8 +105,8 @@ void Transaction::setProducer(const ActorId &value) {
     producer = value;
 }
 
-void Transaction::setDigSig(const std::string &value) {
-    digSig = value;
+void Transaction::setSignature(const std::string &value) {
+    signature = value;
 }
 
 void Transaction::setApprover(const ActorId &value) {
@@ -168,18 +166,18 @@ std::string Transaction::getDataForHash() const {
             + producer.toStdString());
 }
 
-std::string Transaction::getDataForDigSig() const {
+std::string Transaction::getDataForSignature() const {
     return getDataForHash() + hash;
 }
 
 void Transaction::sign(const Actor<KeyPrivate> &actor) {
     this->approver = actor.id();
     calcHash();
-    this->digSig = actor.key().sign(getDataForDigSig());
+    this->signature = actor.key().sign(getDataForSignature());
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    return digSig.empty() ? false : actor.key().verify(getDataForDigSig(), getDigSig());
+    return signature.empty() ? false : actor.key().verify(getDataForSignature(), getSignature());
 }
 
 int Transaction::getHop() const {
@@ -221,7 +219,7 @@ void Transaction::clear() {
     this->hop = 0;
     this->hash = "";
     this->approver = "0";
-    this->digSig = std::string();
+    this->signature = std::string();
     this->producer = "0";
     calcHash();
 }
@@ -262,8 +260,8 @@ std::string Transaction::getData() const {
     return this->data;
 }
 
-std::string Transaction::getDigSig() const {
-    return this->digSig;
+std::string Transaction::getSignature() const {
+    return this->signature;
 }
 
 bool Transaction::isEmpty() const {
@@ -305,7 +303,7 @@ bool Transaction::operator==(const Transaction &transaction) const {
     //        return false;
     if (this->prevBlock != transaction.getPrevBlock())
         return false;
-    //    if (this->digSig != transaction.getDigSig())
+    //    if (this->signature != transaction.getSignature())
     //        return false;
     return true;
 }
@@ -326,7 +324,7 @@ void Transaction::operator=(const Transaction &other) {
     this->hop = other.hop;
     this->hash = other.hash;
     this->approver = other.approver;
-    this->digSig = other.digSig;
+    this->signature = other.signature;
     this->producer = other.producer;
     this->typeTx = other.typeTx;
 }
@@ -337,11 +335,11 @@ std::string Transaction::serialize() const {
 
 QString Transaction::toString() const {
     return "sender:" + sender.toByteArray() + ", receiver:" + receiver.toByteArray()
-        + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
-        + ", data:" + QString::fromStdString(data) + ", token:" + token.toByteArray()
-        + ", prevBlock:" + prevBlock.toByteArray() + ", gas:" + QString::number(gas)
-        + ", hop:" + QString::number(hop) + ", hash:" + QString::fromStdString(hash)
-        + ", approver:" + approver.toByteArray() + ", digitalSignature:" + QString::fromStdString(digSig);
+           + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
+           + ", data:" + QString::fromStdString(data) + ", token:" + token.toByteArray() + ", prevBlock:"
+           + prevBlock.toByteArray() + ", gas:" + QString::number(gas) + ", hop:" + QString::number(hop)
+           + ", hash:" + QString::fromStdString(hash) + ", approver:" + approver.toByteArray()
+           + ", digitalSignature:" + QString::fromStdString(signature);
 }
 
 BigNumberFloat Transaction::visibleToAmount(std::string amount) {

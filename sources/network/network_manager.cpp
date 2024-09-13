@@ -440,7 +440,10 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     return flag_result;
 }
 
-void NetworkManager::messageReceived(const std::string &message, const std::string &identifier) {
+void NetworkManager::messageReceived(
+    const std::string &message,
+    const std::string &ip,
+    const std::string &identifier) {
     if (!checkMsgCount(message)) {
         qDebug()
             << "[Network Manager] checkMsgCount have returned false: such message has been already added";
@@ -473,6 +476,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 #endif
 
+    calculateTraffic->addBytesReceived(ip, message.size());
     // try {
     switch (type) {
     case MessageType::ShareConnections:{
@@ -669,10 +673,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
+        // TODO: why temp std::string?
         std::string stddata = MessagePack::deserialize<std::string>(serialized);
         GenesisBlock genesisBlock(stddata);
         if (!genesisBlock.isEmpty()) {
-            node.blockchain()->addGenBlockToBlockchain(genesisBlock);            
+            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         } else {
             qDebug() << "false genesis block";
         }
@@ -684,7 +689,8 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         std::string stddata = MessagePack::deserialize<std::string>(serialized);
         Block block(stddata);
         if (!block.isEmpty()) {
-            node.blockchain()->addBlockToBlockchain(block);
+            auto blockVariant = BlockVariant(block);
+            node.blockchain()->addBlockToBlockchain(blockVariant);
         }
         break;
     }
@@ -699,11 +705,10 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
         //              << "with hash: " << transactionData.hash.c_str();
         // }
 
-        //TODO deep analisys
-        auto& transactionList = node.txManager()->getReceivedTxListByReference();
+        // TODO deep analisys
+        auto &transactionList = node.txManager()->getReceivedTxListByReference();
         auto found = std::find(transactionList.begin(), transactionList.end(), transaction);
-        if(found != transactionList.end())
-        {
+        if (found != transactionList.end()) {
             transactionList.erase(found);
         }
 
@@ -722,11 +727,11 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
 
     case MessageType::BlockchainRequestBlock: {
         qDebug() << "BlockchainRequestBlock";
-        std::pair<std::string, BigNumber> requestData =
-            MessagePack::deserialize<std::pair<std::string, BigNumber>>(serialized);
-        if (requestData.first == Config::DATA_BLOCK_TYPE)
+        std::pair<BlockType, BigNumber> requestData =
+            MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
+        if (requestData.first == BlockType::Data)
             node.blockchain()->sendBlockByNumber(requestData.second);
-        else if (requestData.first == Config::GENESIS_BLOCK_TYPE)
+        else if (requestData.first == BlockType::Genesis)
             node.blockchain()->sendLastGenesisBlock();
 
         break;
@@ -774,8 +779,7 @@ void NetworkManager::messageReceived(const std::string &message, const std::stri
     }
 
     case MessageType::NewListConnections: {
-        DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
-        // calculateTraffic->addBytesReceived(connection.address, message.size());
+        auto connection = MessagePack::deserialize<DFSP::Connection>(serialized);
         node.connectionsManager()->addNewConnection(connection);
         node.connectionsManager()->addActivity(connection);
         break;

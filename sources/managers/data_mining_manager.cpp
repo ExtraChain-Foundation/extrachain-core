@@ -113,7 +113,8 @@ void DataMiningManager::interestAccrual() {
     indexBlock++;
     // updateLastIndex();
     if (indexBlock % indexBlockFarming == 0) {
-        if(!isRecalculate) {
+        return; // farming not farm
+        if (!isRecalculate) {
             calculateFarmingBalanceMainUser();
         }
         BigNumberFloat result = balanceFarming * farmingPercent;
@@ -135,6 +136,7 @@ void DataMiningManager::calculateFarmingBalanceMainUser() {
 }
 
 void DataMiningManager::updateLastIndex() {
+    return; // farming not farm
     DBConnector db(farmingCachePath);
     bool isDbOpen = db.open();
     if (!isFarmingCashEmpty) {

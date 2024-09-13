@@ -19,40 +19,74 @@
 
 #include "datastorage/genesis_block.h"
 
+#include "sha3.h"
+
 GenesisBlock::GenesisBlock()
     : Block() {
-    this->m_type = Config::GENESIS_BLOCK_TYPE;
+    this->m_type = BlockType::Genesis;
 }
 
 GenesisBlock::GenesisBlock(const GenesisBlock &block)
     : Block(block) {
-    this->prevGenHash = block.getPrevGenHash();
+    this->m_prevGenHash = block.getPrevGenHash();
 }
 
 GenesisBlock::GenesisBlock(const std::string &serialized) {
     deserialize(serialized);
 }
 
-GenesisBlock::GenesisBlock(const std::string &_data, const Block &prevBlock, const std::string &prevGenHash)
+GenesisBlock::GenesisBlock(
+    const std::string &_data,
+    const BlockVariant &prevBlock,
+    const std::string &prevGenHash)
     : Block(_data, prevBlock)
-    , prevGenHash(prevGenHash) {
-    this->m_type = Config::GENESIS_BLOCK_TYPE;
+    , m_prevGenHash(prevGenHash) {
+    this->m_type = BlockType::Genesis;
+}
+
+GenesisBlock::GenesisBlock(
+    std::string &&type,
+    std::string &&data,
+    BigNumber idx,
+    long long date,
+    std::string &&prevHash,
+    std::string &&hash,
+    std::string &&prevGenHash,
+    std::vector<Approvers> &&signatures,
+    std::vector<GenesisDataRow> &&dataRows)
+    : Block(
+          std::move(type),
+          std::move(data),
+          std::move(idx),
+          date,
+          std::move(prevHash),
+          std::move(hash),
+          std::move(signatures),
+          {})
+    , m_prevGenHash(std::move(prevGenHash))
+    , m_dataRows(std::move(dataRows)) {
 }
 
 void GenesisBlock::addRow(const GenesisDataRow &row) {
-    std::vector<std::string> v;
-    if(!this->data.empty())
-        v = Serialization::deserialize(this->data);
-    v.push_back(row.serialize());
-    this->data = Serialization::serialize(v);
+    m_dataRows.push_back(row);
 }
 
-const std::string &GenesisBlock::getDataForDigSig() const {
-    return Block::getDataForDigSig();
+const std::string &GenesisBlock::getDataForSignature() const {
+    return Block::getDataForSignature();
 }
 
-std::string GenesisBlock::getDataForHash() const {
-    return Block::getDataForHash();
+void GenesisBlock::calcHash() {
+    SHA3 sha3(SHA3::Bits::Bits512);
+    std::string index = m_index.toStdString(16);
+    sha3.add(index.c_str(), index.size());
+    sha3.add(m_data.c_str(), m_data.size());
+
+    for (const auto &dataRow : std::as_const(m_dataRows)) {
+        auto dataRowSerialize = dataRow.serialize();
+        sha3.add(dataRowSerialize.c_str(), dataRowSerialize.size());
+    }
+
+    this->m_hash = sha3.getHash();
 }
 
 bool GenesisBlock::deserialize(const std::string &serialized) {
@@ -68,36 +102,30 @@ std::string GenesisBlock::serialize() const {
     return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
 }
 
-void GenesisBlock::initFields(QList<QByteArray> &list) {
-    m_type = list.takeFirst();
-    index = BigNumber(list.takeFirst().toStdString());
-    date = list.takeFirst().toLongLong();
-    data = list.takeFirst();
-    prevHash = list.takeFirst();
-    hash = list.takeFirst();
-    prevGenHash = list.takeFirst();
-    QByteArray signs = list.takeFirst();
-    std::vector<std::string> lists = Serialization::deserialize(signs.toStdString());
-    for (const auto &tmp : lists) {
-        std::vector<std::string> tmps = Serialization::deserialize(tmp);
-        if (tmps.size() == 3)
-            signatures.push_back({ tmps.at(0), tmps.at(1), bool(std::stoi(tmps.at(2))) });
-    }
-}
-
-QList<GenesisDataRow> GenesisBlock::extractDataRows() const {
-    std::vector<std::string> txsData = Serialization::deserialize(data);
-    QList<GenesisDataRow> genesisDataRows;
-    for (const std::string &dataRow : txsData) {
-        genesisDataRows.append(GenesisDataRow(dataRow));
-    }
-    return genesisDataRows;
+const std::vector<GenesisDataRow> &GenesisBlock::dataRows() const {
+    return m_dataRows;
 }
 
 void GenesisBlock::setPrevGenHash(const std::string &value) {
-    prevGenHash = value;
+    m_prevGenHash = value;
+}
+
+void GenesisBlock::setType(BlockType value) {
+    if (value != BlockType::Genesis || value != BlockType::GenesisMerge)
+        qFatal("GenesisBlock: try to set not genesis type");
+    m_type = value;
+}
+
+void GenesisBlock::setType(const std::string &value) {
+    if (value == "genesis") {
+        m_type = BlockType::Genesis;
+    } else if (value == "genesismerge") {
+        m_type = BlockType::GenesisMerge;
+    } else {
+        qFatal("GenesisBlock: try to set not genesis type");
+    }
 }
 
 std::string GenesisBlock::getPrevGenHash() const {
-    return prevGenHash;
+    return m_prevGenHash;
 }

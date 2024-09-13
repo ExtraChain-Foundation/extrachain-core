@@ -59,8 +59,7 @@ const std::vector<std::shared_ptr<Actor<KeyPrivate>>> PrivateProfile::actors() c
     return m_actors;
 }
 
-const std::vector<Actor<KeyPrivate> > &PrivateProfile::farmings() const
-{
+const std::vector<Actor<KeyPrivate>> &PrivateProfile::farmings() const {
     return m_farmingAddress;
 }
 
@@ -79,7 +78,7 @@ void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
 }
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId &actorId) const {
-    for (const auto &actor : qAsConst(m_actors)) {
+    for (const auto &actor : std::as_const(m_actors)) {
         if (actorId == actor->id()) {
             return actor;
         }

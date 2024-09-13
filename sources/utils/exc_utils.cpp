@@ -108,6 +108,22 @@ int Utils::compare(const QByteArray &one, const QByteArray &two) {
         return two.size() - one.size();
 }
 
+std::string Utils::str_to_lower(const std::string &str) {
+    std::string str_ = str;
+    std::transform(str_.begin(), str_.end(), str_.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+    return str_;
+}
+
+std::string Utils::str_to_upper(const std::string &str) {
+    std::string str_ = str;
+    std::transform(str_.begin(), str_.end(), str_.begin(), [](unsigned char c) {
+        return std::toupper(c);
+    });
+    return str_;
+}
+
 QByteArray Utils::intToByteArray(const int &number, const int &size) {
     auto num = QByteArray::number(number);
     Q_ASSERT(num.size() <= size);

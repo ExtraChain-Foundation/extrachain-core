@@ -246,7 +246,7 @@ public:
     void sendFromCache();
     bool isActiveConnectionExists();
 
-    void messageReceived(const std::string& message, const std::string& identifier);
+    void messageReceived(const std::string& message, const std::string &ip, const std::string& identifier);
 
     QString foundCurrentIdentifier(QString ip, quint16 port);
 

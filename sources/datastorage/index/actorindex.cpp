@@ -55,7 +55,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     }
 }
 
-bool ActorIndex::validateBlock(const Block &block) {
+bool ActorIndex::validateBlock(const BlockVariant &block) {
     Actor<KeyPublic> actor = this->getActor(block.getApprover());
     if (actor.empty()) {
         qWarning() << "Can not validate block" << block.getIndex() << ": There no actor"
@@ -191,9 +191,14 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
 
 void ActorIndex::setFirstId(const ActorId &value) {
     if (!m_firstId.isEmpty()) {
-        // if (firstId() != value)
-        //     qFatal("Another FirstId");
-        // return;
+        if (firstId() != value) {
+            auto message = QString("Another FirstId: %1 != %2")
+                               .arg(firstId().toString())
+                               .arg(value.toString())
+                               .toStdString();
+            qFatal(message.c_str());
+        }
+        return;
     }
 
     qDebug() << "[ActorIndex] Save first id:" << value;

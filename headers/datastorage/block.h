@@ -47,25 +47,31 @@ struct BlockCompare {
     int digitalSigDiff;
 };
 
-namespace Config {
-static const std::string DATA_BLOCK_TYPE = "data";
-static const std::string DUMMY_BLOCK_TYPE = "dummy";
-static const std::string MERGE_BLOCK = "dataMerge";
-}
+enum class BlockType {
+    Data,
+    Genesis,
+    DataMerge,
+    GenesisMerge,
+    Dummy,
+};
+MSGPACK_ADD_ENUM(BlockType)
+FORMAT_ENUM(BlockType)
+
+class BlockVariant;
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    const int FIELDS_SIZE = 4;
-    std::string m_type = Config::DATA_BLOCK_TYPE; // simple block, or genesis block (or other)
-    std::string data;                             // payload (serialized tx's, or other)
-    BigNumber index = BigNumber(-1);              // block id
-    //    BigNumber approver = BigNumber(-1);        // block approver id
+    BlockType m_type;                  // simple block, or genesis block (or other)
+    std::string m_data;                // payload (serialized tx's, or other)
+    BigNumber m_index = BigNumber(-1); // block id
+    // BigNumber approver = BigNumber(-1);        // block approver id
 
-    long long date;
-    std::string prevHash; // previous block hash
-    std::string hash;     // this block hash (from all previous fields)
-    //    QByteArray digSig;   // digital signature (from all fields)
-    std::vector<Approvers> signatures;
+    long long m_date;
+    std::string m_prevHash; // previous block hash
+    std::string m_hash;     // this block hash (from all previous fields)
+    // QByteArray signature;   // digital signature (from all fields)
+    std::vector<Approvers> m_signatures;     // digital signature
+    std::vector<Transaction> m_transactions; // all transactions
 
 public:
     Block();
@@ -86,25 +92,27 @@ public:
      * @param data
      * @param prev
      */
-    Block(const std::string &data, const Block &prev);
+    Block(const std::string &data, const BlockVariant &prev);
+
+    Block(
+        std::string &&type,
+        std::string &&data,
+        BigNumber idx,
+        long long date,
+        std::string &&prevHash,
+        std::string &&hash,
+        std::vector<Approvers> &&signatures,
+        std::vector<Transaction> &&transactions);
 
     virtual ~Block();
 
-private:
+protected:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    void calcHash();
-
-protected:
-    /**
-     * @brief Concatenates all fields that are used for digSig calculation
-     * Override in subclasses
-     * @return digSig data
-     */
-    virtual std::string getDataForHash() const;
-    virtual const std::string &getDataForDigSig() const;
+    virtual void calcHash();
+    virtual const std::string &getDataForSignature() const;
 
 public:
     // data operations
@@ -122,6 +130,7 @@ public:
      * @brief extract non-empty transactions from data
      * @return transaction list
      */
+    [[deprecated("Use transactions().")]]
     std::vector<Transaction> extractTransactions() const;
     Transaction getTransactionByHash(std::string hash) const;
 
@@ -141,39 +150,62 @@ public:
     bool isEmpty() const;
     QString toString() const;
     bool operator<(const Block &other);
-    static bool isBlock(const QByteArray &data);
     bool isApprover(const ActorId &) const;
 
 public:
-    virtual void initFields(QList<QByteArray> &list);
     void setPrevHash(const std::string &value);
-    std::string getType() const;
+    BlockType getType() const;
+    std::string getTypeStr() const;
     ActorId getApprover() const;
     BigNumber getIndex() const;
     std::string getData() const;
     std::string getHash() const;
     std::string getPrevHash() const;
-    std::string getDigSig() const;
+    std::string getSignature() const;
+    const std::vector<Approvers> &signatures() const;
+    const std::vector<Transaction> &transactions() const;
+
+    // TODO: replace to signatures()
     QByteArrayList getListSignatures() const;
     void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
     // void setType(QByteArray type);
     long long getDate() const;
     void setDate(long long value);
     Block operator=(const Block &block);
-    void setType(const std::string &value);
+    virtual void setType(BlockType value);
+    virtual void setType(const std::string &value);
+
+    void addTransaction(const Transaction &transaction);
+    void addTransactions(const std::vector<Transaction> &transactions);
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = index.toStdString();
-        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+        std::string index_str = m_index.toStdString();
+        msgpack::type::make_define_array(
+            m_type,
+            index_str,
+            m_date,
+            m_data,
+            m_hash,
+            m_prevHash,
+            m_signatures,
+            m_transactions)
             .msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string index_str;
-        msgpack::type::make_define_array(m_type, index_str, date, data, hash, prevHash, signatures)
+        msgpack::type::make_define_array(
+            m_type,
+            index_str,
+            m_date,
+            m_data,
+            m_hash,
+            m_prevHash,
+            m_signatures,
+            m_transactions)
             .msgpack_unpack(msgpack_o);
-        index = index_str;
+        m_index = index_str;
     }
 };
 
@@ -183,7 +215,7 @@ inline bool operator<(const Block &l, const Block &r) {
 
 inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-        && l.extractTransactions() == r.extractTransactions();
+           && l.transactions() == r.transactions();
 }
 
 #endif // MEMBLOCK_H

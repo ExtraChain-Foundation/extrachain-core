@@ -77,24 +77,24 @@ private:
 
 public:
     explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
-    Block getBlockByHash(const QByteArray &hash);
+    BlockVariant getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
-    Block getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
+    BlockVariant getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
 
 private:
-    Block getBlockByApprover(const BigNumber &approver);
-    Block getBlockByData(const QByteArray &data);
+    BlockVariant getBlockByApprover(const BigNumber &approver);
+    BlockVariant getBlockByData(const QByteArray &data);
 
     std::string getBlockDataByIndex(const BigNumber &index);
 
     std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
-    std::pair<Transaction, QByteArray> getTxBySenderOrReceiver(const BigNumber &id,
-                                                               const QByteArray &token = "0");
-    std::pair<Transaction, QByteArray> getTxBySenderOrReceiverAndToken(const BigNumber &id,
-                                                                       const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray>
+    getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray>
+    getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
@@ -104,8 +104,8 @@ private:
     bool shouldStartGenesisCreation();
 
     void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
-    QByteArray findRecordsInBlock(const Block &block);
-    bool signCheckAdd(Block &block);
+    QByteArray findRecordsInBlock(const BlockVariant &block);
+    bool signCheckAdd(BlockVariant &block);
     QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
     const int COUNT_APPROVER_BLOCK = 1;
@@ -127,9 +127,9 @@ public:
 
 private:
     void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
-    Block checkBlock(const Block &block);
+
     // merging //
-    int mergeBlockWithLocal(Block &received);
+    int mergeBlockWithLocal(BlockVariant &received);
     int mergeGenesisBlockWithLocal(const GenesisBlock &received);
 
     /**
@@ -137,14 +137,15 @@ private:
      * @param block
      * @return true if block is valid
      */
-    bool validateBlock(const Block &block);
+    bool validateBlock(const BlockVariant &block);
     /**
      * @brief validates block using validateBlock method
      * @param block
-     * @return block - if it is valid, empty block - if block is corrupted.
+     * @return BlockVariant - if it is valid, empty block - if block is corrupted.
      */
-    Block validateAndReturnBlock(const Block &block) const;    
+    BlockVariant validateAndReturnBlock(const BlockVariant &block) const;
 
+public:
     /**
      * @brief calculate reward amound of income reward request
      * @param requestReward - request reward data
@@ -152,7 +153,6 @@ private:
      */
     BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
 
-public:
     /**
      * Compares prevHash field of every block
      * with the hash of the prev block
@@ -165,7 +165,7 @@ public:
     /**
      * @return last blockchain block
      */
-    Block getLastBlock() const;
+    BlockVariant getLastBlock() const;
 
     /**
      * @return Amount of blockchain blocks
@@ -175,14 +175,14 @@ public:
     /**
      * @return last real blockchain block
      */
-    Block getLastRealBlock() const;
+    BlockVariant getLastRealBlock() const;
     /**
      * Gets the block from blockchain by *value* of a certain *type*
      * @param value
      * @param type of param
      * @return last blockchain block
      */
-    Block getBlock(SearchEnum::BlockParam type, const QByteArray &value);
+    BlockVariant getBlock(SearchEnum::BlockParam type, const QByteArray &value);
     /**
      * Gets the block from blockchain by *value* of a certain *type*
      * @param value
@@ -196,26 +196,26 @@ public:
      * @param type of param
      * @return transaction
      */
-    std::pair<Transaction, QByteArray> getTransaction(SearchEnum::TxParam type, const QByteArray &value,
-                                                      const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray>
+    getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token = "0");
 
     /**
      * Add block to blockchain
      * Convert block to MemBlock or FileBlock according to a fileMode.
      * @return 0 is success, or error code
      */
-    int addBlock(Block &block, bool isGenesis = false);
+    int addBlock(BlockVariant &block, bool isGenesis = false);
 
     /**
      * Removes block and all blocks after them
      * @return 0 is success, or error code
      */
-    int removeBlock(const Block &block);
+    int removeBlock(const BlockVariant &block);
 
     /**
      *
      */
-    void removeAllDummyBlocks(const Block &block);
+    void removeAllDummyBlocks(const BlockVariant &block);
 
     /**
      * @brief Check if two blocks can be merged
@@ -224,7 +224,7 @@ public:
      * @param blockB
      * @return true, if blocks can be merged
      */
-    bool canMergeBlocks(const Block &receivedBlock, const Block &existedBlock);
+    bool canMergeBlocks(const BlockVariant &receivedBlock, const BlockVariant &existedBlock);
     /**
      * @brief Merge two blocks to one and sign it using approver
      * @param blockA
@@ -236,9 +236,9 @@ public:
 
     /**
      * @brief Sign Block with current approver
-     * @param block with digSig
+     * @param block with signature
      */
-    void signBlock(Block &block) const;
+    void signBlock(BlockVariant &block) const;
 
     // - ACTORS - //
     /**
@@ -296,17 +296,17 @@ public:
 
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat getUserBalance(ActorId userId, ActorId tokenId = ActorId(),
-                                  TypeTx typeTx = TypeTx::Transaction) const;
+    BigNumberFloat
+    getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TypeTx typeTx = TypeTx::Transaction) const;
 
     /**
      * @brief Show blockchain
      */
     void showBlockchain() const;
 
-    bool isSmContractTx(const Block &block) const;
+    bool isSmContractTx(const BlockVariant &block) const;
 
-    void getSmContractMembers(const Block &block) const;
+    void getSmContractMembers(const BlockVariant &block) const;
 
     /**
      *  @brief Get circulative supply
@@ -390,8 +390,11 @@ signals:
     void NewBlock(Block block);
 
     // responses
-    void responseReady(const QByteArray &data, const unsigned int &msgType, const QByteArray &requestHash,
-                       const std::string &messageId);
+    void responseReady(
+        const QByteArray &data,
+        const unsigned int &msgType,
+        const QByteArray &requestHash,
+        const std::string &messageId);
 
     /**
      * @brief There no such block in a local blockchain
@@ -416,7 +419,7 @@ signals:
     void possibleMiningChange(const bool &possibleMinig);
 
 public:
-    void addBlockToBlockchain(Block &block);
+    void addBlockToBlockchain(BlockVariant &block);
     void addGenBlockToBlockchain(GenesisBlock block);
     void setTxManager(TransactionManager *value);
     BigNumber getBlockCount();
@@ -429,18 +432,24 @@ public slots:
      * Emits BlockExistence or SendMergedBlock signals.
      * @param block
      */
-    void checkBlockExistence(Block &block);
+    void checkBlockExistence(BlockVariant &block);
     /**
      * @brief blockCountResponse
      * @param count
      */
     void blockCountResponse(const BigNumber &count);
     // from node manager
-    void getTxFromBlockchain(const SearchEnum::TxParam &param, const QByteArray &value,
-                             const std::string &messageId, const QByteArray &request);
+    void getTxFromBlockchain(
+        const SearchEnum::TxParam &param,
+        const QByteArray &value,
+        const std::string &messageId,
+        const QByteArray &request);
 
-    void getBlockFromBlockchain(const SearchEnum::BlockParam &param, const QByteArray &value,
-                                const QByteArray &requestHash, const std::string &messageId);
+    void getBlockFromBlockchain(
+        const SearchEnum::BlockParam &param,
+        const QByteArray &value,
+        const QByteArray &requestHash,
+        const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block
