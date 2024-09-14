@@ -121,6 +121,18 @@ QJsonObject PrivateProfile::toJson() const {
     return json;
 }
 
+void PrivateProfile::renameWallet(const std::string &oldWalletName, const std::string &newWalletName)
+{
+    for(auto &actor : m_actors) {
+        qDebug() << actor.walletName();
+        if(actor.walletName() == oldWalletName) {
+            qDebug() << "We found wallet that must rename" << actor.walletName();
+            actor.setWalletName(newWalletName);
+            save();
+        }
+    }
+}
+
 void PrivateProfile::save() {
     auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact);
     auto data = QByteArray::fromStdString(SecretKey::encryptWithPassword(jsonBytes.toStdString(), m_hash));

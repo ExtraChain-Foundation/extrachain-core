@@ -72,7 +72,7 @@ public:
     Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount, const ActorId &token = Token::ROCC_TOKEN, const std::string &data = std::string());
 
     // Construct transaction with data
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,

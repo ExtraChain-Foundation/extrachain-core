@@ -285,55 +285,22 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 }
 
 bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
-    if (msg.Actor == node.accountController()->mainActor().id().toStdString()) {
+    if (msg.Actor != node.accountController()->mainActor().id().toStdString()) {
         qDebug() << "[Dfs] Remove file - file has been removed";
         return false;
     }
+    std::string message  = fmt::format("[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}", msg.FileName,
+                                      msg.Actor, node.accountController()->mainActor().id().toStdString());
+    qDebug() << message;
 
     removeRowFromDB(msg);
     std::string path = DFS_PATH::filePath(msg.Actor, msg.FileName).string();
     const bool removedFile = std::filesystem::remove(path);
+    const bool removeStorjFile = std::filesystem::remove(fmt::format("{}{}", path, DFS::Fragments::Extension));
+    message = fmt::format("[Dfs] Remove file {} - {} by path - {}. Storj file has been - {}.", msg.FileName, (removedFile ? "removed" : "not removed")
+                          , path, removeStorjFile ? "removed" : "not removed");
+    qDebug() << message;
     return removedFile;
-
-
-//    qDebug() << "[Dfs] Remove file message:" << msg.FileName.c_str();
-//    std::string pathDelim = Utils::platformDelimeter();
-//    std::string actorPath = DFSB::fsActrRoot + pathDelim + msg.Actor + pathDelim;
-//    std::string actrDirFilePath = fmt::format("{}{}", actorPath, DFSB::fsMapName);
-//    std::filesystem::path realFilePath = fmt::format("{}{}", actorPath, msg.FileName);
-//    qDebug() << realFilePath.string().c_str() << actrDirFilePath.c_str();
-
-//    DBConnector actrDirFile(actrDirFilePath);
-//    if (!actrDirFile.open()) {
-//        exit(EXIT_FAILURE);
-//    }
-//    std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, msg.FileName);
-//    std::string prevHash;
-//    for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
-//        qDebug() << it->at("fileName").c_str() << msg.FileName.c_str();
-//        if (it->at("fileName") == msg.FileName) {
-//            qDebug() << "finded";
-//            prevHash = it->at("fileNamePrev");
-//            if (!prevHash.empty()) {
-//                qDebug() << "update prev name hash" <<
-//                    fmt::format("UPDATE {} SET fileNamePrev = '{}' WHERE fileName = '{}'",
-//                                DFST::ActorDirFile::TableName, prevHash, it->at("fileName")).c_str();
-//                actrDirFile.update(fmt::format("UPDATE {} SET fileNamePrev = '{}' WHERE fileNamePrev = '{}'",
-//                                               DFST::ActorDirFile::TableName, prevHash, it->at("fileName")));
-//            }
-//            actrDirFile.query(fmt::format("DELETE FROM {} WHERE fileName='{}'",
-//                                          DFST::ActorDirFile::TableName, it->at("fileName")));
-//            if (!std::filesystem::remove(realFilePath)) {
-//                qDebug() << "File removal by path " << realFilePath.c_str() << " failed";
-//                return false;
-//            }
-//        }
-
-//    }
-
-//    actrDirFile.close();
-
-    return true;
 }
 
 std::string DfsController::createFileName(std::filesystem::path file) {

@@ -79,6 +79,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/cache_balance_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/vpn_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/import_export_keystore.h
     # ${CMAKE_CURRENT_LIST_DIR}/headers/managers/restApiServerManager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h

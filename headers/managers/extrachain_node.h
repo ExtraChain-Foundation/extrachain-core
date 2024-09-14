@@ -104,14 +104,14 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    Transaction createTransaction(Transaction tx);
+    Transaction createTransaction(Transaction tx, std::string &error);
 
     /**
      * @brief Shortcut for another createTransaction method
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
+    Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token, std::string& error);
 
     Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
