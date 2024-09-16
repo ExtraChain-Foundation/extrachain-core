@@ -89,7 +89,7 @@ public:
     std::string getDataForSignature() const;
 
     // digital signature
-    void sign(const Actor<KeyPrivate> &actor);
+    void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
     //    void setSenderBalance(BigNumber balance);

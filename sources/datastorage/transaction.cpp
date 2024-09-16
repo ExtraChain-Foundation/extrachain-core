@@ -168,10 +168,10 @@ std::string Transaction::getDataForSignature() const {
     return getDataForHash() + hash;
 }
 
-void Transaction::sign(const Actor<KeyPrivate> &actor) {
-    this->approver = actor.id();
+void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
+    this->approver = actor->id();
     calcHash();
-    this->signature = actor.key().sign(getDataForSignature());
+    this->signature = actor->key().sign(getDataForSignature());
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {

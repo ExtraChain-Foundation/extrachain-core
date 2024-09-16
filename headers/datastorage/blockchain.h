@@ -114,7 +114,7 @@ private:
     const BigNumber StakingCoef = 5;
 
 public:
-    GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
+    GenesisBlock createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor,
                                     QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
     QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
@@ -249,7 +249,7 @@ public:
      * @brief getApprover
      * @return
      */
-    Actor<KeyPrivate> getApprover() const;
+    std::shared_ptr<Actor<KeyPrivate>> getApprover() const;
     /**
      * @brief setApprover
      * @param value

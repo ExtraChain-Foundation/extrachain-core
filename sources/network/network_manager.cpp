@@ -859,7 +859,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     KeyPrivate key;
     key.generate();
     m_networkHashForVPN =
-        Utils::calcHash(key.publicKey() + node.accountController()->mainActor().id().toString().toStdString()
+        Utils::calcHash(key.publicKey() + node.accountController()->mainActor()->id().toString().toStdString()
                             + salt,
                         Utils::HashEncode::Sha3_512).substr(0, 64);
 }

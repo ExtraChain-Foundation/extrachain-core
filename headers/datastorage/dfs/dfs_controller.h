@@ -55,7 +55,7 @@ public:
     void initializeActor(const ActorId &actorId);
 
     // Internal use only
-    std::string addLocalFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+    std::string addLocalFile(const std::shared_ptr<Actor<KeyPrivate>> actor, const std::filesystem::path &filePath,
                              std::string targetVirtualFilePath, DFS::Encryption securityLevel);
     bool removeLocalFile(const std::string &actorId, const std::string &fileHash);
     // visualMoveFile
@@ -148,15 +148,15 @@ class ThreadAddFiles : public QThread {
     Q_OBJECT
     DfsController *m_dfsController;
     QStringList m_files;
-    Actor<KeyPrivate> m_actor;
+    std::shared_ptr<Actor<KeyPrivate>> m_actor;
 
 public:
-    ThreadAddFiles(DfsController *dfsController, const Actor<KeyPrivate> &actor, const QStringList &files,
+    ThreadAddFiles(DfsController *dfsController, const std::shared_ptr<Actor<KeyPrivate>> actor, const QStringList &files,
                    QObject *parent = nullptr);
     ~ThreadAddFiles();
 
     virtual void run() override;
-    void addFile(const Actor<KeyPrivate> &actor, const std::filesystem::path &filePath,
+    void addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, const std::filesystem::path &filePath,
                  std::string targetVirtualFilePath);
 
 signals:

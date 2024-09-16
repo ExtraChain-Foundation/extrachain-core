@@ -27,7 +27,7 @@
 PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash,
                                       const Actor<KeyPrivate> &farmingAddress) {
     PrivateProfile user;
-    user.m_actors.push_back(actor);
+    user.m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(actor));
     user.m_main = actor.id();
     user.m_hash = hash;
     user.m_farmingAddress.push_back(farmingAddress);
@@ -43,19 +43,19 @@ PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string &h
     return user;
 }
 
-const Actor<KeyPrivate> &PrivateProfile::main() const {
+const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::main() const {
     if (m_main.isEmpty())
         qFatal("ExtraUser main error");
     return getActor(m_main);
 }
 
-const Actor<KeyPrivate> &PrivateProfile::current() const {
+const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::current() const {
     if (m_current.isEmpty())
         return main();
     return getActor(m_current);
 }
 
-const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
+const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &PrivateProfile::actors() const {
     return m_actors;
 }
 
@@ -64,7 +64,7 @@ const std::vector<Actor<KeyPrivate>> &PrivateProfile::farmings() const {
 }
 
 bool PrivateProfile::changeCurrent(const ActorId &actorId) {
-    if (getActor(actorId).empty()) {
+    if (getActor(actorId)->empty()) {
         qFatal("Can't find actor");
         std::exit(-123);
     }
@@ -73,24 +73,24 @@ bool PrivateProfile::changeCurrent(const ActorId &actorId) {
 }
 
 void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
-    m_actors.push_back(actor);
+    m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(actor));
     save();
 }
 
-const Actor<KeyPrivate> &PrivateProfile::getActor(const ActorId &actorId) const {
+const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId &actorId) const {
     if (actorId == ActorId()) {
         qFatal("Can't get zero actor");
     }
 
     for (const auto &actor : std::as_const(m_actors)) {
-        if (actorId == actor.id()) {
+        if (actorId == actor->id()) {
             return actor;
         }
     }
 
-    qFatal("Can't find actor");
-    std::exit(-123);
-    return m_actors.front();
+    qWarning("Can't find actor");
+    // std::exit(-123);
+    return nullptr;
 }
 
 bool PrivateProfile::loaded() {
@@ -107,7 +107,7 @@ QJsonObject PrivateProfile::toJson() const {
 
     QJsonArray actors;
     for (const auto &actor : m_actors) {
-        actors.append(actor.toJsonArray());
+        actors.append(actor->toJsonArray());
     }
     json["actors"] = actors;
 
@@ -144,7 +144,7 @@ void PrivateProfile::load() {
     for (const auto &actor : actors) {
         auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
         auto a = Actor<KeyPrivate>::fromJson(json);
-        m_actors.push_back(a);
+        m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(a));
     }
 
     const auto farmings = json["farming"].toArray();

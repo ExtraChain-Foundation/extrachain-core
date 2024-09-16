@@ -89,9 +89,6 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    if (m_vpnManager && !m_vpnFileAddedHash.empty())
-        m_dfs->removeLocalFile(m_accountController->mainActor().id().toStdString(), m_vpnFileAddedHash);
-
     emit m_networkManager->finished();
     delete m_dfs;
     delete m_actorIndex;
@@ -156,26 +153,6 @@ bool ExtraChainNode::createNewNetwork(
     return true;
 }
 
-void ExtraChainNode::createVPNKeys() {
-    #ifdef Q_OS_LINUX
-    m_networkManager->setNetworkVPNHash();
-    auto hash    = QString::fromStdString(m_networkManager->getNetworkVPNHash());
-    m_vpnManager = VPNManager::Instance(m_accountController->mainActor().id().toString() + "_" + hash);
-
-    auto filePath      = m_vpnManager->getPublicKeyFilePath();
-    m_vpnFileAddedHash =
-        m_dfs->addLocalFile(
-            m_accountController->mainActor(),
-            filePath.toStdString(),
-            QFileInfo(filePath).fileName().toStdString(),
-            DFS::Encryption::Public);
-
-    qInfo() << "ExtraChainNode::createVPNKeys, add VPN public server key file: " << m_vpnFileAddedHash;
-    #elif defined(Q_OS_WIN)
-    qCritical() << "ExtraChainNode::createVPNKeys, not supported for Windows";
-    #endif
-}
-
 void ExtraChainNode::start() {
     if (!started) {
         QTimer::singleShot(500, this, &ExtraChainNode::ready);
@@ -220,10 +197,10 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-    if (!actor.empty()) {
+    auto actor = m_accountController->currentWallet();
+    if (!actor->empty()) {
         qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-            .arg(tx.toString(), QString(actor.id().toByteArray()));
+                        .arg(tx.toString(), QString(actor->id().toByteArray()));
 
         // 1) set prev block id
         BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
@@ -236,7 +213,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx) {
         }
         tx.setPrevBlock(lastBlockId);
         // 2) check coin availability
-        if (blockchain()->getUserBalance(actor.id(), tx.getToken()) < tx.getAmount()) {
+        if (blockchain()->getUserBalance(actor->id(), tx.getToken()) < tx.getAmount()) {
             qDebug() << QString("Warning: can not create tx:[%1]. There is not enough coins/tokens in wallet")
                 .arg(tx.toString());
             return Transaction();
@@ -265,10 +242,10 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat a
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-    if (!actor.empty()) {
-        qDebug() << actor.id();
-        Transaction tx(actor.id(), receiver, amount);
+    auto actor = m_accountController->currentWallet();
+    if (!actor->empty()) {
+        qDebug() << actor->id();
+        Transaction tx(actor->id(), receiver, amount);
         // add sent tx balances
 
         tx.setToken(token);
@@ -342,19 +319,19 @@ Transaction ExtraChainNode::createTransactionFrom(
     BigNumberFloat amount,
     ActorId token) {
     if (sender == ActorId()) { // TODO: remove hack
-        sender = m_accountController->currentWallet().id();
+        sender = m_accountController->currentWallet()->id();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentProfile().getActor(sender);
+    auto actor = m_accountController->currentProfile().getActor(sender);
     if (receiver.isEmpty() || amount.isEmpty()) {
         qDebug() << QString("Warning: can not create tx without receiver or amount");
         if (receiver.isEmpty() && !amount.isEmpty()) {
-            if (!actor.empty()) {
-                Transaction tx(actor.id(), receiver, amount);
+            if (!actor->empty()) {
+                Transaction tx(actor->id(), receiver, amount);
                 tx.setToken(token);
 
                 qDebug() << QString("Attempting to create tx:[%1] from user [%2]")
-                    .arg(tx.toString(), QString(actor.id().toByteArray()));
+                                .arg(tx.toString(), QString(actor->id().toByteArray()));
 
                 // 1) set prev block id
                 BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
@@ -388,9 +365,9 @@ Transaction ExtraChainNode::createTransactionFrom(
         return Transaction();
     }
 
-    if (!actor.empty()) {
-        qDebug() << actor.id();
-        Transaction tx(actor.id(), receiver, amount);
+    if (!actor->empty()) {
+        qDebug() << actor->id();
+        Transaction tx(actor->id(), receiver, amount);
         // add sent tx balances
 
         tx.setToken(token);
@@ -419,7 +396,7 @@ Transaction ExtraChainNode::createFarmingTransaction(
 
 void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
-        ActorId actorId = m_accountController->mainActor().id();
+        ActorId actorId = m_accountController->mainActor()->id();
 
         if (!actorId.isEmpty())
             m_actorIndex->getAllActors(actorId, true);
@@ -443,7 +420,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto& mainKey   = m_accountController->mainActor().key();
+    auto& mainKey   = m_accountController->mainActor()->key();
     auto& publicKey = first.key().publicKey();
 
     // std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
@@ -526,13 +503,13 @@ void ExtraChainNode::connectSignals() {
         m_networkManager,
         &NetworkManager::newSocket,
         [this]() {
-            m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
+            m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
         });
     connect(
         m_networkManager,
         &NetworkManager::newSocket,
         [this]() {
-            m_dfs->sendCountRequestMsg(m_accountController->mainActor().id());
+            m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
         });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
@@ -554,7 +531,7 @@ void ExtraChainNode::prepareFolders() {
 }
 
 void ExtraChainNode::calculateBlockCount() {
-    ActorId              actorId = m_accountController->mainActor().id();
+    ActorId              actorId = m_accountController->mainActor()->id();
     DFSP::RequestDfsSize msg{ actorId.toStdString() };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);

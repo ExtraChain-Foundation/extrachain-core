@@ -26,7 +26,6 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
-#include "managers/vpn_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -67,9 +66,6 @@ private:
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
 
-    std::shared_ptr<VPNManager> m_vpnManager;
-    std::string                 m_vpnFileAddedHash;
-
 public:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
@@ -85,7 +81,6 @@ public:
     bool isClientApp() {
         return isClientApplication;
     };
-    void createVPNKeys();
 
     Blockchain*         blockchain();
     NetworkManager*     network();

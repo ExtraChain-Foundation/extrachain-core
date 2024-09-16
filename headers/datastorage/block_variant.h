@@ -66,9 +66,9 @@ public:
             m_block);
     }
 
-    void sign(const Actor<KeyPrivate>& actor) {
+    void sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
         std::visit(
-            [&actor](auto& b) {
+            [actor](auto& b) {
                 b.sign(actor);
             },
             m_block);

@@ -371,10 +371,10 @@ bool Blockchain::signCheckAdd(BlockVariant &block) {
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
             if ((list.size() / 3) >= COUNT_CHECKER_BLOCK)
                 return false;
-            QByteArray id = node->accountController()->mainActor().id().toByteArray();
+            QByteArray id = node->accountController()->mainActor()->id().toByteArray();
             if (!list.contains(id)) {
                 QByteArray sign = QByteArray::fromStdString(
-                    node->accountController()->mainActor().key().sign(block.getHash()));
+                    node->accountController()->mainActor()->key().sign(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -405,10 +405,10 @@ bool Blockchain::signCheckAdd(BlockVariant &block) {
         if ((list.size() / 3) >= COUNT_APPROVER_BLOCK) {
             if ((list.size() / 3) > COUNT_CHECKER_BLOCK + COUNT_APPROVER_BLOCK)
                 return false;
-            QByteArray id = node->accountController()->mainActor().id().toByteArray();
+            QByteArray id = node->accountController()->mainActor()->id().toByteArray();
             if (!list.contains(id)) {
                 QByteArray sign = QByteArray::fromStdString(
-                    node->accountController()->mainActor().key().sign(block.getHash()));
+                    node->accountController()->mainActor()->key().sign(block.getHash()));
                 block.addSignature(id, sign, false);
                 return true;
             }
@@ -418,7 +418,7 @@ bool Blockchain::signCheckAdd(BlockVariant &block) {
 }
 
 GenesisBlock
-Blockchain::createGenesisBlock(const Actor<KeyPrivate> actor, QMap<ActorId, BigNumberFloat> states) {
+Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor, QMap<ActorId, BigNumberFloat> states) {
     qDebug() << "Creating genesis block";
     genBlockData.clear();
     // QByteArray previousGenHash;
@@ -762,7 +762,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     if (indexBlock % 20 == 0) {
         const auto &actor = node->accountController()->mainActor();
         const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-        requestCoins({ .Actor = actor.id().toStdString(),
+        requestCoins({ .Actor = actor->id().toStdString(),
                        .DataStoredSize = node->dfs()->sizeTaken(),
                        .TypeFunctioningObj = DFS::Reward::Base,
                        .RewardAmount = calculateRewardAmount(),
@@ -1044,7 +1044,7 @@ void Blockchain::requestCoins(const DFS::Reward::RequestReward &requestReward) {
 void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {
     if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100) {
         Transaction transaction;
-        transaction.setSender(node->accountController()->mainActor().id());
+        transaction.setSender(node->accountController()->mainActor()->id());
         transaction.setReceiver(requestReward.Actor);
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
@@ -1141,7 +1141,7 @@ void Blockchain::addBlockToBlockchain(BlockVariant &block) {
         QList<ActorId> list;
         auto accounts = node->accountController()->accounts();
         for (const auto &tmp : std::as_const(accounts))
-            list.append(tmp.id());
+            list.append(tmp->id());
         if (list.contains(tmp.getSender())) {
             emit newNotify({ QDateTime::currentMSecsSinceEpoch(), Notification::NotifyType::TxToUser,
                              tmp.getReceiver().toByteArray() });
@@ -1167,7 +1167,7 @@ void Blockchain::addGenBlockToBlockchain(GenesisBlock block) {
 }
 
 // Actors //
-Actor<KeyPrivate> Blockchain::getApprover() const {
+std::shared_ptr<Actor<KeyPrivate>> Blockchain::getApprover() const {
     return node->accountController()->currentWallet();
 }
 
@@ -1304,7 +1304,7 @@ void Blockchain::proveTx(Transaction &tx) {
                 return;
             }
 
-            auto mainActorId = node->accountController()->mainActor().id();
+            auto mainActorId = node->accountController()->mainActor()->id();
             ActorId firstId = node->actorIndex()->firstId();
             if (senderCurrentBalance - tx.getAmount() - tx.getAmount() / 100 < 0 && mainActorId == firstId) {
                 qDebug() << senderCurrentBalance << tx.getAmount();
