@@ -42,7 +42,7 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId());
+    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId(), const std::string &nameWallet = std::string(), const std::string &tokenName = Token::ROCC_TOKEN);
     // createService
     // createServiceProvider
 
@@ -70,6 +70,7 @@ public:
 
     static std::vector<ActorId> profilesList();
     void addToProfileList(const ActorId &actorId);
+    void renamewallet(const QString &oldWalletName, const QString &newWalletName);
 
 private:
     ExtraChainNode &node;

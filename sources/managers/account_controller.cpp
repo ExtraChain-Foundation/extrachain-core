@@ -38,6 +38,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
     addToProfileList(actor.id());
+    actor.setWalletName(QString("wallet_%1").arg(QDateTime::currentSecsSinceEpoch()).toStdString());
     autologinHash.save(hash); // TODO: add arg
 
     qDebug() << "[Accounts] Created new profile" << actor.id();
@@ -47,17 +48,23 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
 
     node.blockchain()->getBlockZero();
     node.calculateBlockCount();
-//    if (!(type == ActorType::ServiceProvider)) // TODO: remove
-//        node.blockchain()->getBlockZero();
+    //    if (!(type == ActorType::ServiceProvider)) // TODO: remove
+    //        node.blockchain()->getBlockZero();
     return actor;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor) {
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &nameWallet, const std::string &tokenName) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
     auto &profile = getProfile(profileActor.isEmpty() ? m_currentProfile : profileActor);
     profile.addWalet(actor);
     node.actorIndex()->addActor(actor.convertToPublic());
+    if(nameWallet.empty()) {
+        actor.setWalletName(QString::number(QDateTime::currentSecsSinceEpoch()).toStdString());
+    } else {
+        actor.setWalletName(nameWallet);
+    }
+    actor.setTokenName(tokenName);
 
     return actor;
 }
@@ -201,3 +208,13 @@ void AccountController::addToProfileList(const ActorId &actorId) {
     file.write(json);
     file.close();
 }
+
+void AccountController::renamewallet(const QString &oldWalletName, const QString &newWalletName)
+{
+    for (auto &profile : m_profiles) {
+        if (m_currentProfile == profile.main().id()) {
+            profile.renameWallet(oldWalletName.toStdString(), newWalletName.toStdString());
+        }
+    }
+}
+
