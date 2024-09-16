@@ -124,10 +124,10 @@ QJsonObject PrivateProfile::toJson() const {
 void PrivateProfile::renameWallet(const std::string &oldWalletName, const std::string &newWalletName)
 {
     for(auto &actor : m_actors) {
-        qDebug() << actor.walletName();
-        if(actor.walletName() == oldWalletName) {
-            qDebug() << "We found wallet that must rename" << actor.walletName();
-            actor.setWalletName(newWalletName);
+        qDebug() << actor->walletName();
+        if(actor->walletName() == oldWalletName) {
+            qDebug() << "We found wallet that must rename" << actor->walletName();
+            actor->setWalletName(newWalletName);
             save();
         }
     }

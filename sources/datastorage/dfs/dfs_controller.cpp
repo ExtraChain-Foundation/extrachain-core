@@ -285,12 +285,12 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 }
 
 bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
-    if (msg.Actor != node.accountController()->mainActor().id().toStdString()) {
+    if (msg.Actor != node.accountController()->mainActor()->id().toStdString()) {
         qDebug() << "[Dfs] Remove file - file has been removed";
         return false;
     }
     std::string message  = fmt::format("[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}", msg.FileName,
-                                      msg.Actor, node.accountController()->mainActor().id().toStdString());
+                                      msg.Actor, node.accountController()->mainActor()->id().toStdString());
     qDebug() << message;
 
     removeRowFromDB(msg);

@@ -198,9 +198,9 @@ Transaction ExtraChainNode::createTransaction(Transaction tx, std::string& error
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-    if (!actor.empty()) {
-        error = fmt::format("Attempting to create tx:[{}] from user [{}]", tx.toString().toStdString(), actor.id().toStdString());
+    auto actor = m_accountController->currentWallet();
+    if (!actor->empty()) {
+        error = fmt::format("Attempting to create tx:[{}] from user [{}]", tx.toString().toStdString(), actor->id().toStdString());
         qWarning() << error;
         // 1) set prev block id
         BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
@@ -211,7 +211,7 @@ Transaction ExtraChainNode::createTransaction(Transaction tx, std::string& error
         }
         tx.setPrevBlock(lastBlockId);
         // 2) check coin availability
-        if (blockchain()->getUserBalance(actor.id(), tx.getToken()) < tx.getAmount()) {
+        if (blockchain()->getUserBalance(actor->id(), tx.getToken()) < tx.getAmount()) {
             error = fmt::format("Warning: can not create tx:[{}]. There is not enough coins/tokens in wallet", tx.toString().toStdString());
             qWarning() << error;
             return Transaction();
@@ -242,16 +242,13 @@ Transaction ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat a
         return Transaction();
     }
 
-    Actor<KeyPrivate> actor = m_accountController->currentWallet();
-    if (!actor.empty()) {
-        qDebug() << actor.id();
-        Transaction tx(actor.id(), receiver, amount, token);
+    auto actor = m_accountController->currentWallet();
+    if (!actor->empty()) {
+        qDebug() << actor->id();
+        Transaction tx(actor->id(), receiver, amount, token);
         // add sent tx balances
 
         tx.setToken(token);
-        //        if (actorIndex->m_firstId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
-        //                tx.setSenderBalance(BigNumber(0));
         std::string error;
         return this->createTransaction(tx, error);
     }

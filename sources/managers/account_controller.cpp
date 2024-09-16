@@ -212,7 +212,7 @@ void AccountController::addToProfileList(const ActorId &actorId) {
 void AccountController::renamewallet(const QString &oldWalletName, const QString &newWalletName)
 {
     for (auto &profile : m_profiles) {
-        if (m_currentProfile == profile.main().id()) {
+        if (m_currentProfile == profile.main()->id()) {
             profile.renameWallet(oldWalletName.toStdString(), newWalletName.toStdString());
         }
     }
