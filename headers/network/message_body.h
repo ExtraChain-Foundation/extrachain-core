@@ -49,6 +49,13 @@ enum class MessageType {
     SpreadNodeConnection = 111,
     RequestListNodes = 112,
 
+    ShareConnections = 113,
+
+    VPNHandshake = 1001,
+    VPNConnection = 1002,
+    VPNDisconnect = 1003,
+    VPNUpdateConnection = 1004,
+
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)

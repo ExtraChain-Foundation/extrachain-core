@@ -93,6 +93,20 @@ struct NetworkReconnect {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
     }
 
+    bool operator<(const NetworkReconnect& other) const {
+        if (ip < other.ip)
+            return true;
+        if (ip == other.ip)
+        {
+            if (port < other.port)
+                return true;
+            if (port == other.port)
+                return protocol < other.protocol;
+        }
+
+        return false;
+    }
+
     static NetworkReconnect fromWsConnection(const DFSP::WSConnection& wsConnection) {
         return NetworkReconnect{ .ip = QString::fromStdString(wsConnection.address),
                                  .port = static_cast<quint16>(wsConnection.port),
@@ -141,7 +155,7 @@ private:
     QNetworkAddressEntry*  local    = nullptr;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
-    QSet<NetworkReconnect> m_reconnections;
+    std::map<NetworkReconnect, QString> m_reconnectionsToIdentifier;
     NetworkStatus          m_networkStatus;
 
     std::map<std::string, std::string>           m_messages;
@@ -202,6 +216,7 @@ public slots:
     void connectToNode(const QString& ip, Network::Protocol protocol, const bool request = false);
     void process();
     void reconnection();
+    void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
     void setupProxy(
         QNetworkProxy::ProxyType type,
         const QString&           hostName,
@@ -284,7 +299,7 @@ public:
     }
 
     void                    requestWSNodeList(std::string message_id);
-    QSet<NetworkReconnect>& reconnections();
+    std::map<NetworkReconnect, QString>& reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
     
