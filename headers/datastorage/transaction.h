@@ -72,7 +72,7 @@ public:
     Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount);
+    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount, const ActorId &token = Token::ROCC_TOKEN, const std::string &data = std::string());
 
     // Construct transaction with data
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
@@ -89,7 +89,7 @@ public:
     std::string getDataForSignature() const;
 
     // digital signature
-    void sign(const Actor<KeyPrivate> &actor);
+    void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
     //    void setSenderBalance(BigNumber balance);

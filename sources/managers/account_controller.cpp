@@ -38,6 +38,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
     addToProfileList(actor.id());
+    actor.setWalletName(QString("wallet_%1").arg(QDateTime::currentSecsSinceEpoch()).toStdString());
     autologinHash.save(hash); // TODO: add arg
 
     qDebug() << "[Accounts] Created new profile" << actor.id();
@@ -47,17 +48,23 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
 
     node.blockchain()->getBlockZero();
     node.calculateBlockCount();
-//    if (!(type == ActorType::ServiceProvider)) // TODO: remove
-//        node.blockchain()->getBlockZero();
+    //    if (!(type == ActorType::ServiceProvider)) // TODO: remove
+    //        node.blockchain()->getBlockZero();
     return actor;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor) {
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &nameWallet, const std::string &tokenName) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
     auto &profile = getProfile(profileActor.isEmpty() ? m_currentProfile : profileActor);
     profile.addWalet(actor);
     node.actorIndex()->addActor(actor.convertToPublic());
+    if(nameWallet.empty()) {
+        actor.setWalletName(QString::number(QDateTime::currentSecsSinceEpoch()).toStdString());
+    } else {
+        actor.setWalletName(nameWallet);
+    }
+    actor.setTokenName(tokenName);
 
     return actor;
 }
@@ -70,13 +77,13 @@ bool AccountController::load(const std::string &hash) {
         if (profile.loaded()) {
             const auto &actors = profile.actors();
             for (auto &actor : actors) {
-                if (node.actorIndex()->getById(actor.id()).isEmpty()) {
-                    node.actorIndex()->addActor(actor.convertToPublic());
+                if (node.actorIndex()->getById(actor->id()).isEmpty()) {
+                    node.actorIndex()->addActor(actor->convertToPublic());
                 }
             }
 
             m_profiles.push_back(profile);
-            m_currentProfile = profile.main().id();
+            m_currentProfile = profile.main()->id();
             node.start(); // TODO: remove
             if (this->empty())
                 node.txManager()->runMakeAndProveBlockTimers();
@@ -88,7 +95,7 @@ bool AccountController::load(const std::string &hash) {
     return false;
 }
 
-const Actor<KeyPrivate> &AccountController::mainActor() {
+const std::shared_ptr<Actor<KeyPrivate>> AccountController::mainActor() {
     if (m_profiles.empty()) {
         qFatal("[AccountController] No main actor");
         std::exit(-1);
@@ -98,7 +105,7 @@ const Actor<KeyPrivate> &AccountController::mainActor() {
 
 PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
     for (auto &profile : m_profiles) {
-        if (actorId == profile.main().id()) {
+        if (actorId == profile.main()->id()) {
             return profile;
         }
     }
@@ -113,7 +120,7 @@ const PrivateProfile &AccountController::currentProfile() const {
         qFatal("Incorrect current profile");
 
     for (auto &profile : m_profiles) {
-        if (m_currentProfile == profile.main().id()) {
+        if (m_currentProfile == profile.main()->id()) {
             return profile;
         }
     }
@@ -137,14 +144,14 @@ void AccountController::changeCurrentProfile(const ActorId &actorId) {
     }
 }
 
-const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
+const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &AccountController::accounts() const {
     return currentProfile().actors();
 }
 
 const std::vector<ActorId> AccountController::accountsIds() const {
     std::vector<ActorId> ids;
     for (int i = 0; i < currentProfile().actors().size(); i++) {
-        ids.push_back(currentProfile().actors()[i].id());
+        ids.push_back(currentProfile().actors()[i]->id());
     }
     return ids;
 }
@@ -159,7 +166,7 @@ const std::vector<ActorId> AccountController::farmingIds() const
     return ids;
 }
 
-const Actor<KeyPrivate> &AccountController::currentWallet() const {
+const std::shared_ptr<Actor<KeyPrivate>> AccountController::currentWallet() const {
     return currentProfile().current();
 }
 
@@ -201,3 +208,13 @@ void AccountController::addToProfileList(const ActorId &actorId) {
     file.write(json);
     file.close();
 }
+
+void AccountController::renamewallet(const QString &oldWalletName, const QString &newWalletName)
+{
+    for (auto &profile : m_profiles) {
+        if (m_currentProfile == profile.main()->id()) {
+            profile.renameWallet(oldWalletName.toStdString(), newWalletName.toStdString());
+        }
+    }
+}
+

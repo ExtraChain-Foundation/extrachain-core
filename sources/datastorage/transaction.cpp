@@ -42,18 +42,19 @@ Transaction::Transaction(const std::string &serialized) {
     calcHash();
 }
 
-Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount) {
+Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount, const ActorId &token, const std::string &data) {
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
     this->date = QDateTime::currentMSecsSinceEpoch();
-    this->data = std::string();
+    this->data = data;
     this->prevBlock = BigNumber(0);
     this->gas = 0;
     this->hop = 0;
     this->hash = "";
     this->signature = std::string();
     this->typeTx = TypeTx::Transaction;
+    this->token = token;
     calcHash();
 }
 
@@ -168,10 +169,10 @@ std::string Transaction::getDataForSignature() const {
     return getDataForHash() + hash;
 }
 
-void Transaction::sign(const Actor<KeyPrivate> &actor) {
-    this->approver = actor.id();
+void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
+    this->approver = actor->id();
     calcHash();
-    this->signature = actor.key().sign(getDataForSignature());
+    this->signature = actor->key().sign(getDataForSignature());
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
