@@ -668,17 +668,32 @@ Block Blockchain::validateAndReturnBlock(const Block &block) const {
 BigNumberFloat Blockchain::calculateRewardAmount() const
 {
     //(dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
-    const auto& totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-    return (BigNumberFloat{node->dfs()->sizeTaken()}/node->dfs()->totalDfsSize()
-            + BigNumberFloat{totalBytes.second}/totalBytes.first 
-            + (BigNumberFloat{getBlocksStored()}/getLastBlock().getIndex() * 100));
+    const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+
+    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
+        qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. TotalBytes, total dfs: "
+                 << totalBytes.first << node->dfs()->totalDfsSize();
+        return 0;
+    }
+
+    return (
+        BigNumberFloat { node->dfs()->sizeTaken() } / node->dfs()->totalDfsSize()
+        + BigNumberFloat { totalBytes.second } / totalBytes.first
+        + (BigNumberFloat { getBlocksStored() } / getLastBlock().getIndex() * 100));
 }
 
 BigNumberFloat Blockchain::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const
 {
-    return(BigNumberFloat{requestReward.DataStoredSize}/node->dfs()->totalDfsSize()
-            + BigNumberFloat{requestReward.BytesReceived}/requestReward.BytesSent
-            + (BigNumberFloat{requestReward.BlocksStored}/getLastBlock().getIndex() * 100));
+    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
+        qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs: "
+                 << requestReward.BytesSent << node->dfs()->totalDfsSize();
+        return 0;
+    }
+
+    return (
+        BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+        + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+        + (BigNumberFloat { requestReward.BlocksStored } / getLastBlock().getIndex() * 100));
 }
 
 int Blockchain::addBlock(Block &block, bool isGenesis) {
@@ -746,23 +761,26 @@ int Blockchain::addBlock(Block &block, bool isGenesis) {
         qCritical() << "While adding a new block" << block.toString();
     }
 
+    if (indexBlock % 20 == 0) {
+        const auto &actor = node->accountController()->mainActor();
+        const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+        requestCoins({ .Actor = actor->id().toStdString(),
+                       .DataStoredSize = node->dfs()->sizeTaken(),
+                       .TypeFunctioningObj = DFS::Reward::Base,
+                       .RewardAmount = calculateRewardAmount(),
+                       .BytesSent = totalBytes.first,
+                       .BytesReceived = totalBytes.second,
+                       .BlocksStored = getBlocksStored() });
+    }
+
     // after adding genesis block we don't need to increment counter
     if (!isGenesis && resultCode == 0) {
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation()) {
             const auto& actor = *node->accountController()->mainActor();
-            const auto& totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-            requestCoins({ .Actor = actor.id().toStdString(),
-                            .DataStoredSize = node->dfs()->sizeTaken(),
-                            .TypeFunctioningObj = DFS::Reward::Base,
-                            .RewardAmount = calculateRewardAmount(),
-                            .BytesSent = totalBytes.first,
-                            .BytesReceived = totalBytes.second,
-                            .BlocksStored = getBlocksStored()});
-
             GenesisBlock gB = createGenesisBlock(actor);
             if (blockIndex.addBlock(gB) == 0) {
-                qDebug() << "Block" << gB.getIndex() << QByteArray::fromStdString(gB.getType())
+                qDebug() << "[Blockchain] Block" << gB.getIndex() << gB.getType()
                          << "is successfully added to blockchain";
                 // TODONEW emit sendMessage(gB.serialize(),
                 // Messages::ChainMessage::GenesisBlockMessage);
@@ -1021,13 +1039,14 @@ void Blockchain::requestCoins(const DFS::Reward::RequestReward &requestReward)
 
 void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward)
 {
-    if((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100)
+    if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100)
     {
         Transaction transaction;
         transaction.setSender(node->accountController()->mainActor()->id());
         transaction.setReceiver(requestReward.Actor);
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
+        transaction.setTypeTx(TypeTx::RewardTransaction);
         node->network()->send_message(transaction, MessageType::BlockchainTransaction);
     }
 }
