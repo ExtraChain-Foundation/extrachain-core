@@ -138,8 +138,6 @@ namespace DataStorage {
           "data         TEXT          , "
           "token        TEXT  NOT NULL, "
           "prevBlock    TEXT  NOT NULL, "
-          "gas          TEXT  NOT NULL, "
-          "hop          TEXT  NOT NULL, "
           "hash         TEXT  NOT NULL, "
           "approver     TEXT  NOT NULL, "
           "signature    TEXT  NOT NULL, "
@@ -205,17 +203,13 @@ namespace DataStorage {
     // How often to construct genesis block (in blocks)
     static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
 
-    // Max number of saved blocks in mem index
-    static const int MEM_INDEX_SIZE_LIMIT = 1000;
-
     // How often to prove pransactions
     static const int PROVE_TXS_INTERVAL = 2000;
+
+    static int MAX_SIGN_AMOUNT = 13;
 } // namespace DataStorage
 
 namespace Net {
-    // Default gas for transaction
-    static const int DEFAULT_GAS = 10;
-
     // Networking will work only if there are enough peers
     static const int MINIMUM_PEERS = 1;
 
@@ -435,12 +429,12 @@ static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 // Dfs
 static const int DATA_OFFSET = 512;
 
-enum typeDataRow {
-    UNIVERSAL,
-    STAKING
+enum DataRowType {
+    Universal,
+    Staking
 };
 } // namespace DataStorage
-MSGPACK_ADD_ENUM(DataStorage::typeDataRow)
+MSGPACK_ADD_ENUM(DataStorage::DataRowType)
 
 namespace KeyStore {
 // To store user private/public keys
@@ -461,7 +455,6 @@ static const std::string wasmExtention = ".wasm";
 namespace SearchEnum {
 enum class BlockParam {
     Id = 0,
-    Approver,
     Data,
     Hash,
     Null
@@ -483,8 +476,6 @@ enum class TxParam {
     switch (param) {
     case BlockParam::Id:
         return "Id";
-    case BlockParam::Approver:
-        return "Approver";
     case BlockParam::Data:
         return "Data";
     case BlockParam::Hash:
@@ -497,8 +488,6 @@ enum class TxParam {
 [[maybe_unused]] static BlockParam fromStringBlockParam(QByteArray s) {
     if (s == "Id")
         return BlockParam::Id;
-    if (s == "Approver")
-        return BlockParam::Approver;
     if (s == "Data")
         return BlockParam::Data;
     if (s == "Hash")

@@ -115,6 +115,30 @@ public:
     static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
     static BigNumber random(BigNumber max, bool zeroAllowed = true);
 
+    std::strong_ordering operator<=>(const BigNumber &other) const {
+        if (m_data < other.m_data)
+            return std::strong_ordering::less;
+        if (m_data > other.m_data)
+            return std::strong_ordering::greater;
+        return std::strong_ordering::equal;
+    }
+
+    std::strong_ordering operator<=>(const int &other) const {
+        if (m_data < other)
+            return std::strong_ordering::less;
+        if (m_data > other)
+            return std::strong_ordering::greater;
+        return std::strong_ordering::equal;
+    }
+
+    bool operator==(const BigNumber &other) const {
+        return m_data == other.m_data;
+    }
+
+    bool operator==(const int &other) const {
+        return m_data == other;
+    }
+
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
         std::string num = toStdString();
@@ -127,54 +151,6 @@ public:
         *this = BigNumber(num);
     }
 };
-
-inline bool operator<(const BigNumber &l, const BigNumber &r) {
-    return l.data() < r.data();
-}
-
-inline bool operator>(const BigNumber &l, const BigNumber &r) {
-    return l.data() > r.data();
-}
-
-inline bool operator<=(const BigNumber &l, const BigNumber &r) {
-    return l.data() <= r.data();
-}
-
-inline bool operator>=(const BigNumber &l, const BigNumber &r) {
-    return l.data() >= r.data();
-}
-
-inline bool operator==(const BigNumber &l, const BigNumber &r) {
-    return l.data() == r.data();
-}
-
-inline bool operator!=(const BigNumber &l, const BigNumber &r) {
-    return l.data() != r.data();
-}
-
-inline bool operator<(const BigNumber &l, const int &r) {
-    return l.data() < r;
-}
-
-inline bool operator>(const BigNumber &l, const int &r) {
-    return l.data() > r;
-}
-
-inline bool operator<=(const BigNumber &l, const int &r) {
-    return l.data() <= r;
-}
-
-inline bool operator>=(const BigNumber &l, const int &r) {
-    return l.data() >= r;
-}
-
-inline bool operator==(const BigNumber &l, const int &r) {
-    return l.data() == r;
-}
-
-inline bool operator!=(const BigNumber &l, const int &r) {
-    return l.data() != r;
-}
 
 inline size_t qHash(const BigNumber &key, size_t seed) {
     return qHash(key, seed);

@@ -24,7 +24,6 @@
 #include "datastorage/block.h"
 #include "datastorage/genesis_block.h"
 #include "datastorage/index/blockindex.h"
-#include "datastorage/index/memindex.h"
 #include "datastorage/transaction.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
@@ -62,9 +61,7 @@ private:
     ExtraChainNode *node;
 
     // storage //
-    bool fileMode;         // true = block storage mode
     BlockIndex blockIndex; // blocks (if fileMode is true)
-    MemIndex memIndex;     // blocks (if fileMode is false)
                            //    Actor<KeyPrivate>   approver;       // current user.
     TransactionManager *txManager;
     // service //
@@ -76,7 +73,7 @@ private:
     bool possibleMining = true;
 
 public:
-    explicit Blockchain(ExtraChainNode *node, bool fileMode = true);
+    explicit Blockchain(ExtraChainNode *node);
     BlockVariant getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
@@ -84,7 +81,6 @@ public:
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
 
 private:
-    BlockVariant getBlockByApprover(const BigNumber &approver);
     BlockVariant getBlockByData(const QByteArray &data);
 
     std::string getBlockDataByIndex(const BigNumber &index);
@@ -98,7 +94,7 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
 
-    void saveTxInfoInEC(const std::vector<Transaction> &transactions) const;
+    void saveTxInfoInEC(const std::set<Transaction> &transactions) const;
 
     // genesis blocks //
     bool shouldStartGenesisCreation();
@@ -114,11 +110,15 @@ private:
     const BigNumber StakingCoef = 5;
 
 public:
-    GenesisBlock createGenesisBlock(const Actor<KeyPrivate> actor,
-                                    QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
+    GenesisBlock createGenesisBlock(
+        const Actor<KeyPrivate> actor,
+        QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
-    QList<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from = -1, int count = 10,
-                                                     BigNumber token = 0);
+    std::set<Transaction> getTxsBySenderOrReceiverInRow(
+        const BigNumber &id,
+        BigNumber from = -1,
+        int count = 10,
+        BigNumber token = 0);
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
@@ -154,6 +154,11 @@ public:
     BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
 
     /**
+     *
+     */
+    void updateFirstId(const BlockVariant &block);
+
+    /**
      * Compares prevHash field of every block
      * with the hash of the prev block
      * @return 0 if integrity is ok, or block id where integrity is corrupted
@@ -183,13 +188,6 @@ public:
      * @return last blockchain block
      */
     BlockVariant getBlock(SearchEnum::BlockParam type, const QByteArray &value);
-    /**
-     * Gets the block from blockchain by *value* of a certain *type*
-     * @param value
-     * @param type of param
-     * @return last blockchain block
-     */
-    std::string getBlockData(SearchEnum::BlockParam type, const QByteArray &value);
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
      * @param value
@@ -262,12 +260,6 @@ public:
     void setMode(bool fileMode);
 
     /**
-     * @brief Return's reference to memIndex
-     * @return ref to memIndex field
-     */
-    MemIndex &getMemIndex();
-
-    /**
      * @brief Return's reference to blockIndex
      * @return ref to blockIndex field
      */
@@ -303,8 +295,6 @@ public:
      * @brief Show blockchain
      */
     void showBlockchain() const;
-
-    bool isSmContractTx(const BlockVariant &block) const;
 
     void getSmContractMembers(const BlockVariant &block) const;
 
@@ -444,12 +434,6 @@ public slots:
         const QByteArray &value,
         const std::string &messageId,
         const QByteArray &request);
-
-    void getBlockFromBlockchain(
-        const SearchEnum::BlockParam &param,
-        const QByteArray &value,
-        const QByteArray &requestHash,
-        const std::string &messageId);
 
     /**
      * @brief If there no such tx in a previous block

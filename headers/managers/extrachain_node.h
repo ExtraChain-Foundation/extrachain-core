@@ -61,7 +61,6 @@ private:
     // RestApiServerManager *m_restApiServerManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
-    bool                   fileMode            = true;
     bool                   started             = false;
     bool                   isClientApplication = false;
     uint64_t               blockCount;

@@ -31,7 +31,7 @@ public:
     ActorId actorId;
     BigNumberFloat state;
     ActorId token;
-    DataStorage::typeDataRow type;
+    DataStorage::DataRowType type;
 
 public:
     GenesisDataRow() = default;
@@ -40,41 +40,18 @@ public:
         const ActorId &actorId,
         const BigNumberFloat &state,
         const ActorId &token,
-        const DataStorage::typeDataRow &type)
+        const DataStorage::DataRowType &type)
         : actorId(actorId)
         , state(state)
         , token(token)
         , type(type) {
     }
 
-    explicit GenesisDataRow(const std::string &serialized) {
-        deserialize(serialized);
-    }
-
-    std::string serialize() const {
-        std::vector<std::string> l;
-
-        l.push_back(actorId.toStdString());
-        l.push_back(state.toStdString());
-        l.push_back(token.toStdString());
-        l.push_back(std::to_string(type));
-        return Serialization::serialize(l);
-    }
-
-    void deserialize(const std::string &serialized) {
-        std::vector<std::string> l = Serialization::deserialize(serialized);
-        if (l.size() == 4) {
-            actorId = l.at(0);
-            state = BigNumberFloat(l.at(1));
-            token = l.at(2);
-            type = DataStorage::typeDataRow(std::stoi(l.at(3)));
-        }
-    }
-
-    bool operator==(const GenesisDataRow &other) const {
-        return this->actorId == other.actorId && this->state == other.state && this->token == other.token
-               && this->type == other.type;
-    }
+    // bool operator==(const GenesisDataRow &other) const {
+    //     return this->actorId == other.actorId && this->state == other.state && this->token == other.token
+    //            && this->type == other.type;
+    // }
+    auto operator<=>(const GenesisDataRow &) const = default;
 
     MSGPACK_DEFINE(actorId, state, token, type)
 };
@@ -86,7 +63,7 @@ public:
 class EXTRACHAIN_EXPORT GenesisBlock : public Block {
 private:
     std::string m_prevGenHash; // previous genesis block hashes
-    std::vector<GenesisDataRow> m_dataRows;
+    std::set<GenesisDataRow> m_dataRows;
 
 public:
     GenesisBlock();
@@ -100,23 +77,25 @@ public:
         std::string &&prevHash,
         std::string &&hash,
         std::string &&prevGenHash,
-        std::vector<Approvers> &&signatures,
-        std::vector<GenesisDataRow> &&dataRows);
+        std::set<Approver> &&signatures,
+        std::set<GenesisDataRow> &&dataRows);
 
     // Block interface
 public:
     bool addRow(const GenesisDataRow &row);
+    int addRows(const std::set<GenesisDataRow> &rows);
     int addRows(const std::vector<GenesisDataRow> &rows);
-    void calcHash() override;
-    const std::string &getDataForSignature() const override; // deprecate?
-    bool deserialize(const std::string &serialized) override;
-    std::string serialize() const override;
+    const std::string &getDataForSignature() const override;
 
     /**
      * @brief extract non-empty genesisDataRows from data
      * @return genesis data row list
      */
-    const std::vector<GenesisDataRow> &dataRows() const;
+    const std::set<GenesisDataRow> &dataRows() const;
+    std::string toStdString() const override;
+
+protected:
+    void calcHash() override;
 
 public:
     std::string getPrevGenHash() const;
@@ -131,7 +110,7 @@ public:
             m_type,
             index_str,
             m_date,
-            m_data,
+            m_dataService,
             m_hash,
             m_prevHash,
             m_signatures,
@@ -145,7 +124,7 @@ public:
             m_type,
             index_str,
             m_date,
-            m_data,
+            m_dataService,
             m_hash,
             m_prevHash,
             m_signatures,
@@ -157,8 +136,8 @@ public:
 };
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.getData() == r.getData()
-           && l.dataRows() == r.dataRows();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
+           && l.dataService() == r.dataService() && l.dataRows() == r.dataRows();
 }
 
 #endif // GENESIS_BLOCK_H

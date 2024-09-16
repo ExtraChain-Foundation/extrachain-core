@@ -23,21 +23,20 @@ public:
 
     BlockType getType() const;
     BigNumber getIndex() const;
-    std::string getData() const;
+    std::set<std::string> dataService() const;
     std::string getPrevHash() const;
     std::string getHash() const;
-    ActorId getApprover() const;
     std::string getSignature() const;
-    QByteArrayList getListSignatures() const;
-    std::vector<Transaction> transactions() const;
+    std::set<Approver> signatures() const;
+    std::set<Transaction> transactions() const;
 
-    std::string serialize() const;
     QString toString() const;
+    std::string toStdString() const;
 
     void setType(BlockType type);
     void setPrevHash(const std::string& prevHash);
 
-    void addSignature(const QByteArray& id, const QByteArray& sign, const bool& isApprover);
+    void addSignature(const std::string& id, const std::string& sign, bool isApprove);
     void sign(const Actor<KeyPrivate>& actor);
     bool verify(const Actor<KeyPublic>& actor) const;
 

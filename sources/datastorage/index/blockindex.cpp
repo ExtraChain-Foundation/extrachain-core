@@ -123,17 +123,6 @@ BlockVariant BlockIndex::getBlockById(const BigNumber &id) const {
     return BlockVariant(Block());
 }
 
-std::string BlockIndex::getBlockDataById(const BigNumber &id) const {
-    auto block = this->getById(id);
-    // qDebug() << "[BlockIndex] Block:" << block;
-    if (block.has_value() && !block->isEmpty()) {
-        return block->serialize();
-    } else {
-        qDebug() << "[BlockIndex] is not block";
-        return "";
-    }
-}
-
 BlockVariant BlockIndex::getBlockByPosition(const BigNumber &position) const {
     BigNumber blockId = getFirstSavedId() + position;
     if (blockId <= this->lastSavedId) {
@@ -141,10 +130,6 @@ BlockVariant BlockIndex::getBlockByPosition(const BigNumber &position) const {
         return block;
     }
     return BlockVariant(Block());
-}
-
-BlockVariant BlockIndex::getBlockByApprover(const BigNumber &approver) const {
-    return getBlockByParam(approver, SearchEnum::BlockParam::Approver);
 }
 
 BlockVariant BlockIndex::getBlockByHash(const QByteArray &hash) const {
@@ -166,13 +151,8 @@ BlockVariant BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockP
     while (lastBlockId >= getFirstSavedId()) {
         BlockVariant lastBlock = getBlockById(lastBlockId);
         switch (param) {
-        case SearchEnum::BlockParam::Approver: {
-            if (BigNumber(lastBlock.getApprover().toStdString()) == id)
-                return lastBlock;
-            break;
-        }
         case SearchEnum::BlockParam::Data: {
-            if (lastBlock.getData() == id.toStdString())
+            if (lastBlock.dataService().contains(id.toStdString()))
                 return lastBlock;
             break;
         }
@@ -235,16 +215,11 @@ BlockIndex::getLastTxByApprover(const BigNumber &id, const QByteArray &token) co
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserApprover, token);
 }
 
-QList<Transaction>
+std::set<Transaction>
 BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, BigNumber token)
     const {
     return getTxsByParamInRow(id, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
-
-// QList<Transaction> BlockIndex::getRecentTxList(const BigNumber &last, const BigNumber &first) const {
-//    QList<Transaction> txList;
-
-//}
 
 std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(
     const std::string &id,
@@ -321,13 +296,13 @@ std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(
     return { Transaction(), "-1" };
 }
 
-QList<Transaction> BlockIndex::getTxsByParamInRow(
+std::set<Transaction> BlockIndex::getTxsByParamInRow(
     const BigNumber &id,
     SearchEnum::TxParam param,
     BigNumber from,
     int count,
     BigNumber token) const {
-    QList<Transaction> currentTxs;
+    std::set<Transaction> currentTxs;
     BigNumber records = getRecords();
 
     if (records == 0) {
@@ -356,7 +331,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(
             case SearchEnum::TxParam::UserSender: {
                 if (BigNumber(tx.getSender().toStdString()) == id
                     && BigNumber(tx.getToken().toStdString()) == token) {
-                    currentTxs << tx;
+                    currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
@@ -364,7 +339,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(
             case SearchEnum::TxParam::UserReceiver: {
                 if (BigNumber(tx.getReceiver().toStdString()) == id
                     && BigNumber(tx.getToken().toStdString()) == token) {
-                    currentTxs << tx;
+                    currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
@@ -373,7 +348,7 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(
                 if ((BigNumber(tx.getSender().toStdString()) == id
                      || BigNumber(tx.getReceiver().toStdString()) == id)
                     && BigNumber(tx.getToken().toStdString()) == token) {
-                    currentTxs << tx;
+                    currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
@@ -381,14 +356,14 @@ QList<Transaction> BlockIndex::getTxsByParamInRow(
             case SearchEnum::TxParam::UserApprover: {
                 if (BigNumber(tx.getApprover().toStdString()) == id
                     && BigNumber(tx.getToken().toStdString()) == token) {
-                    currentTxs << tx;
+                    currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::Hash: {
                 if (BigNumber(tx.getHash()) == id && BigNumber(tx.getToken().toStdString()) == token) {
-                    currentTxs << tx;
+                    currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
@@ -440,15 +415,16 @@ BigNumberFloat BlockIndex::calculateCirculativeBalance() const {
 BigNumberFloat BlockIndex::calculateCirculativeBalanceBlock(const Block &block) const {
     BigNumberFloat circulativeBalanceBlock(0);
 
-    const auto allTx = block.transactions();
-    if (allTx.empty())
+    const auto &transactions = block.transactions();
+    if (transactions.empty())
         return BigNumberFloat(0);
 
-    for (int numberTx = 0; numberTx < allTx.size(); numberTx++) {
-        if (allTx[numberTx].isRewardTransaction()) {
-            circulativeBalanceBlock += allTx[numberTx].getAmount();
+    for (const auto &tx : transactions) {
+        if (tx.isRewardTransaction()) {
+            circulativeBalanceBlock += tx.getAmount();
         }
     }
+
     return circulativeBalanceBlock;
 }
 
@@ -456,10 +432,9 @@ BigNumberFloat BlockIndex::calculateCirculativeBalanceLastGenesisBlock() const {
     BigNumberFloat circulativeBalanceGenesisBlock(0);
     const auto genesisBlock = getLastGenesisBlock();
 
-    const auto dataRows = genesisBlock.dataRows();
-    for (int numberRow = 0; numberRow < dataRows.size(); numberRow++) {
-        const GenesisDataRow dataRow = dataRows[numberRow];
-        if (dataRow.type == DataStorage::typeDataRow::UNIVERSAL && dataRow.token == ActorId()) {
+    const auto &dataRows = genesisBlock.dataRows();
+    for (const auto &dataRow : dataRows) {
+        if (dataRow.type == DataStorage::DataRowType::Universal && dataRow.token == ActorId()) {
             circulativeBalanceGenesisBlock += dataRow.state;
         }
     }
@@ -513,15 +488,16 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     if (db.open()) {
         if (bl.getType() == BlockType::Genesis && newBlock.isGenesisBlock()) {
             GenesisBlock block = bl.getGenesisBlock()->get();
+
             db.createTable(Config::DataStorage::GenesisBlockTableCreate);
             db.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
             db.createTable(Config::DataStorage::SignBlockTableCreate);
-            DBRow row;
 
+            DBRow row;
             row.insert({ "type", block.getTypeStr() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
-            row.insert({ "data", block.getData() });
+            row.insert({ "data", block.getDataMessagePack() });
             row.insert({ "prevHash", block.getPrevHash() });
             row.insert({ "hash", block.getHash() });
             row.insert({ "prevGenHash", block.getPrevGenHash() });
@@ -536,12 +512,13 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
                 rowRow.insert({ "type", QByteArray::number(tmp.type).toStdString() });
                 db.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
             }
-            QByteArrayList listSign = block.getListSignatures();
-            for (int i = 0; i < listSign.size(); i += 3) {
+
+            auto listSign = block.signatures();
+            for (const auto &sign : listSign) {
                 DBRow rowRow;
-                rowRow.insert({ "actorId", listSign[i].toStdString() });
-                rowRow.insert({ "signature", listSign[i + 1].toStdString() });
-                rowRow.insert({ "isApprove", listSign[i + 2].toStdString() });
+                rowRow.insert({ "actorId", sign.actorId.toStdString() });
+                rowRow.insert({ "signature", sign.sign });
+                rowRow.insert({ "isApprove", std::to_string(sign.isApprove) });
                 db.insert(Config::DataStorage::SignTable, rowRow);
             }
         } else {
@@ -555,7 +532,7 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
             row.insert({ "type", block.getTypeStr() });
             row.insert({ "id", block.getIndex().toStdString() });
             row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
-            row.insert({ "data", block.getData() });
+            row.insert({ "data", block.getDataMessagePack() });
             row.insert({ "prevHash", block.getPrevHash() });
             row.insert({ "hash", block.getHash() });
             db.insert(Config::DataStorage::BlockTable, row);
@@ -570,8 +547,6 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
                 rowRow.insert({ "token", tmp.getToken().toByteArray().toStdString() });
                 rowRow.insert({ "data", tmp.getData() });
                 rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
-                rowRow.insert({ "gas", QByteArray::number(tmp.getGas()).toStdString() });
-                rowRow.insert({ "hop", QByteArray::number(tmp.getHop()).toStdString() });
                 rowRow.insert({ "hash", tmp.getHash() });
                 rowRow.insert({ "approver", tmp.getApprover().toByteArray().toStdString() });
                 rowRow.insert({ "signature", tmp.getSignature() });
@@ -583,12 +558,13 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
                 if (txInserted)
                     countTransactions++;
             }
-            QByteArrayList listSign = block.getListSignatures();
-            for (int i = 0; i < listSign.size(); i += 3) {
+
+            auto listSign = block.signatures();
+            for (const auto &sign : listSign) {
                 DBRow rowRow;
-                rowRow.insert({ "actorId", listSign[i].toStdString() });
-                rowRow.insert({ "signature", listSign[i + 1].toStdString() });
-                rowRow.insert({ "isApprove", listSign[i + 2].toStdString() });
+                rowRow.insert({ "actorId", sign.actorId.toStdString() });
+                rowRow.insert({ "signature", sign.sign });
+                rowRow.insert({ "isApprove", std::to_string(sign.isApprove) });
                 db.insert(Config::DataStorage::SignTable, rowRow);
             }
 
@@ -808,27 +784,27 @@ std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const
         qFatal("getById: Why?");
 
     std::vector<DBRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");
-    std::vector<Approvers> signatures;
+    std::set<Approver> signatures;
 
     for (const auto &dbSign : dbSigns) {
-        auto block_sign = Approvers { .actorId = dbSign.at("actorId"),
-                                      .sign = dbSign.at("signature"),
-                                      .isApprove = boost::lexical_cast<bool>(dbSign.at("isApprove")) };
-        signatures.push_back(block_sign);
+        auto block_sign = Approver { .actorId = dbSign.at("actorId"),
+                                     .sign = dbSign.at("signature"),
+                                     .isApprove = boost::lexical_cast<bool>(dbSign.at("isApprove")) };
+        signatures.insert(block_sign);
     }
 
     if (isGenesis) {
         std::string prevGenHash = std::move(res[0].at("prevGenHash"));
 
         std::vector<DBRow> rows = db.selectAll(Config::DataStorage::RowGenesisBlockTable);
-        std::vector<GenesisDataRow> dataRows;
+        std::set<GenesisDataRow> dataRows;
         for (const auto &row : rows) {
             GenesisDataRow dRow;
-            dRow.type = DataStorage::typeDataRow(QByteArray(row.at("type").c_str()).toInt());
+            dRow.type = DataStorage::DataRowType(QByteArray(row.at("type").c_str()).toInt());
             dRow.state = BigNumber(row.at("state"));
             dRow.token = row.at("token");
             dRow.actorId = row.at("actorId");
-            dataRows.push_back(dRow);
+            dataRows.insert(dRow);
         }
 
         auto block = GenesisBlock(
@@ -845,7 +821,7 @@ std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const
         return BlockVariant(block);
     } else {
         std::vector<DBRow> rows = db.selectAll(Config::DataStorage::TxBlockTable);
-        std::vector<Transaction> transactions;
+        std::set<Transaction> transactions;
 
         for (const auto &tmp : rows) {
             Transaction tx;
@@ -856,15 +832,13 @@ std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const
             tx.setData(tmp.at("data"));
             tx.setToken(ActorId(tmp.at("token")));
             tx.setPrevBlock(BigNumber(tmp.at("prevBlock")));
-            tx.setGas(std::stoi(tmp.at("gas")));
-            tx.setHop(std::stoi(tmp.at("hop")));
             tx.setHash(tmp.at("hash").c_str());
             tx.setApprover(ActorId(tmp.at("approver")));
             tx.setSignature(tmp.at("signature").c_str());
             tx.setProducer(ActorId(tmp.at("producer")));
 
             if (!tx.isEmpty() || tx.isBurn()) // TODO: ?
-                transactions.push_back(tx);
+                transactions.insert(tx);
         }
 
         auto block = Block(

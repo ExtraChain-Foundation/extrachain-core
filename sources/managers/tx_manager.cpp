@@ -23,11 +23,11 @@
 #include <QFuture>
 #include <QtConcurrent>
 
-QList<Transaction> TransactionManager::getReceivedTxList() const {
+std::vector<Transaction> TransactionManager::getReceivedTxList() const {
     return receivedTxList;
 }
 
-QList<Transaction> &TransactionManager::getReceivedTxListByReference() {
+std::vector<Transaction> &TransactionManager::getReceivedTxListByReference() {
     return receivedTxList;
 }
 
@@ -62,7 +62,7 @@ void TransactionManager::addTransaction(Transaction tx) {
 
     //    if (tx.isEmpty())
     //        return;
-    receivedTxList.append(tx);
+    receivedTxList.push_back(tx);
 }
 
 void TransactionManager::addProvedTransaction(Transaction tx) {
@@ -72,27 +72,34 @@ void TransactionManager::addProvedTransaction(Transaction tx) {
         emit addToCache(tx.getReceiver().toStdString(), tx);
     }
 
-    receivedTxList.removeOne(tx);
+    // receivedTxList.removeOne(tx);
+    auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
+    receivedTxList.erase(it, receivedTxList.end());
 }
 
 void TransactionManager::removeUnApprovedTransaction(Transaction tx) {
-    receivedTxList.removeOne(tx);
+    // receivedTxList.removeOne(tx);
+    auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
+    receivedTxList.erase(it, receivedTxList.end());
 }
 
 bool TransactionManager::isUnapproved(const QByteArray &txHash) {
-    return unApprovedTxHashes.contains(txHash);
+    return Utils::vector_contains(unApprovedTxHashes, txHash);
 }
 
 void TransactionManager::removeUnapprovedHash(const QByteArray &txHash) {
-    QMutableListIterator<QByteArray> i(unApprovedTxHashes);
-    while (i.hasNext()) {
-        if (i.next() == txHash)
-            i.remove();
-    }
+    // QMutableListIterator<QByteArray> i(unApprovedTxHashes);
+    // while (i.hasNext()) {
+    //     if (i.next() == txHash)
+    //         i.remove();
+    // }
+    unApprovedTxHashes.erase(
+        std::remove(unApprovedTxHashes.begin(), unApprovedTxHashes.end(), txHash),
+        unApprovedTxHashes.end());
 }
 
 void TransactionManager::addUnapprovedHash(QByteArray txHash) {
-    unApprovedTxHashes.append(txHash);
+    unApprovedTxHashes.push_back(txHash);
 }
 
 void TransactionManager::addVerifiedTx(Transaction tx) {

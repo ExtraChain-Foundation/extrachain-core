@@ -59,7 +59,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     m_networkManager = new NetworkManager(*this);
     //    ThreadPool::addThread(m_networkManager);
 
-    m_blockchain = new Blockchain(this, fileMode);
+    m_blockchain = new Blockchain(this);
     m_txManager  = new TransactionManager(m_accountController, m_blockchain, this);
     m_dfs        = new DfsController(*this);
 
@@ -394,7 +394,6 @@ Transaction ExtraChainNode::createTransactionFrom(
         // add sent tx balances
 
         tx.setToken(token);
-        // tx.setHop(2);
         //        if (actorIndex->m_firstId != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
         //                tx.setSenderBalance(BigNumber(0));

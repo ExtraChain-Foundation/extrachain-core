@@ -26,7 +26,6 @@ Block::Block() {
     this->m_type = BlockType::Data;
     this->m_index = BigNumber(-1);
     this->m_date = QDateTime::currentDateTime().toMSecsSinceEpoch();
-    this->m_data = "";
     this->m_prevHash = "";
     this->m_hash = "";
 }
@@ -35,7 +34,7 @@ Block::Block(const Block &block) {
     this->m_type = block.getType();
     this->m_index = block.getIndex();
     this->m_date = block.getDate();
-    this->m_data = block.getData();
+    this->m_dataService = block.dataService();
     this->m_prevHash = block.getPrevHash();
     this->m_hash = block.getHash();
     this->m_signatures = block.m_signatures;
@@ -49,10 +48,9 @@ Block::Block(
     long long date,
     std::string &&prevHash,
     std::string &&hash,
-    std::vector<Approvers> &&signatures,
-    std::vector<Transaction> &&transactions)
-    : m_data(std::move(data))
-    , m_index(std::move(idx))
+    std::set<Approver> &&signatures,
+    std::set<Transaction> &&transactions)
+    : m_index(std::move(idx))
     , m_date(date)
     , m_prevHash(std::move(prevHash))
     , m_hash(std::move(hash))
@@ -60,12 +58,7 @@ Block::Block(
     , m_transactions(std::move(transactions)) {
     if (type != "genesis")
         setType(type);
-}
-
-Block Block::createBlockFromSerialized(const std::string &serialized) {
-    Block block;
-    block.deserialize(serialized);
-    return block;
+    setDataServiceFromMessagePack(data);
 }
 
 Block::~Block() {
@@ -73,7 +66,7 @@ Block::~Block() {
 
 Block Block::operator=(const Block &block) {
     m_type = block.m_type;
-    m_data = block.m_data;
+    m_dataService = block.m_dataService;
     m_index = block.m_index;
     m_date = block.m_date;
     m_prevHash = block.m_prevHash;
@@ -87,7 +80,10 @@ void Block::calcHash() {
     SHA3 sha3(SHA3::Bits::Bits512);
     std::string index = m_index.toStdString(16);
     sha3.add(index.c_str(), index.size());
-    sha3.add(m_data.c_str(), m_data.size());
+
+    for (const auto &data : m_dataService) {
+        sha3.add(data.c_str(), data.size());
+    }
 
     for (const auto &tx : std::as_const(m_transactions)) {
         auto txSerialize = tx.serialize();
@@ -128,8 +124,12 @@ void Block::setPrev(const BlockVariant &prev) {
 }
 
 void Block::addTransaction(const Transaction &transaction) {
-    if (!Utils::vector_contains(m_transactions, transaction)) {
-        m_transactions.push_back(transaction);
+    m_transactions.insert(transaction);
+}
+
+void Block::addTransactions(const std::set<Transaction> &transactions) {
+    for (const auto &transaction : std::as_const(transactions)) {
+        addTransaction(transaction);
     }
 }
 
@@ -146,7 +146,7 @@ const std::string &Block::getDataForSignature() const {
 void Block::sign(const Actor<KeyPrivate> &actor) {
     calcHash();
     std::string sign = actor.key().sign(getDataForSignature());
-    this->m_signatures.push_back({ actor.id().toStdString(), sign, true });
+    this->addSignature(actor.id().toStdString(), sign, true);
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const {
@@ -154,37 +154,18 @@ bool Block::verify(const Actor<KeyPublic> &actor) const {
     return m_signatures.empty() ? false : res;
 }
 
-bool Block::deserialize(const std::string &serialized) {
-    if (serialized.empty()) {
-        return false;
-    } else {
-        *this = MessagePack::deserialize<Block>(Utils::bytesDecodeStdString(serialized));
-        return true;
-    }
-}
-
 bool Block::equals(const Block &block) const {
     return m_hash == block.getHash();
 }
 
-BlockCompare Block::compareBlock(const Block &b) const {
-    BlockCompare temp;
-    temp.approverDiff = BigNumber(getApprover().toStdString()) - BigNumber(b.getApprover().toStdString());
-    temp.indexDiff = getIndex() - b.getIndex();
-    temp.dataDiff =
-        Utils::compare(QByteArray::fromStdString(getData()), QByteArray::fromStdString(b.getData()));
-    temp.digitalSigDiff = getSignature() == b.getSignature();
-    temp.hashDiff = getHash() == b.getHash();
-    temp.prevHashDiff = getPrevHash() == b.getPrevHash();
-    return temp;
+void Block::addData(const std::string &data) {
+    m_dataService.insert(data);
 }
 
-void Block::addData(const std::string &data) {
-    std::vector<std::string> v = Serialization::deserialize(this->m_data);
-    if (!Utils::vector_contains(v, data)) {
-        v.push_back(data);
+void Block::addDatas(const std::set<std::string> &datas) {
+    for (const auto &data : datas) {
+        addData(data);
     }
-    this->m_data = Serialization::serialize(v);
 }
 
 void Block::addDatas(const std::vector<std::string> &datas) {
@@ -193,30 +174,16 @@ void Block::addDatas(const std::vector<std::string> &datas) {
     }
 }
 
-void Block::initializeData(const std::string &serializedData) {
-    this->m_data = serializedData;
-}
-
-std::vector<Transaction> Block::extractTransactions() const {
-    if (m_type != BlockType::Data) {
-        qFatal("Wrong transaction extract?");
-        return {};
-    }
-
-    return transactions();
-}
-
 Transaction Block::getTransactionByHash(std::string hash) const {
-    auto txList = extractTransactions();
-    for (const auto &i : txList)
-        if (i.getHash() == hash)
-            return i;
+    for (const auto &tx : m_transactions)
+        if (tx.getHash() == hash)
+            return tx;
     return Transaction();
 }
 
 bool Block::contain(Block &from) const {
-    auto ourTx = this->extractTransactions();
-    auto fromTx = from.extractTransactions();
+    auto ourTx = this->transactions();
+    auto fromTx = from.transactions();
     for (const auto &i : fromTx) {
         if (std::find(ourTx.begin(), ourTx.end(), i) == ourTx.end()) {
             return false;
@@ -225,12 +192,33 @@ bool Block::contain(Block &from) const {
     return true;
 }
 
-std::string Block::serialize() const {
-    return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
+QString Block::toString() const {
+    return QString::fromStdString(this->toStdString());
 }
 
-QString Block::toString() const {
-    return QString::fromStdString(this->serialize());
+std::string Block::toStdString() const {
+    std::ostringstream oss;
+
+    oss << "Block { "
+        << "type: " << magic_enum::enum_name(m_type) << ", "
+        << "data service: [" << m_dataService.size() << "], "
+        << "index: " << m_index.toStdString() << ", "
+        << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
+        << "prev_hash: '"
+        << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
+                                           + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
+                                     : m_prevHash)
+               + "', "
+        << "hash: '"
+        << (m_hash.length() > 10
+                ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)
+                : m_hash)
+        << "', "
+        << "signatures: [" << m_signatures.size() << "], "
+        << "transactions: [" << m_transactions.size() << "]"
+        << " }";
+
+    return oss.str();
 }
 
 bool Block::isEmpty() const {
@@ -250,27 +238,18 @@ std::string Block::getSignature() const {
     return m_signatures.empty() ? "" : this->m_signatures.begin()->sign;
 }
 
-const std::vector<Approvers> &Block::signatures() const {
+const std::set<Approver> &Block::signatures() const {
     return m_signatures;
 }
 
-const std::vector<Transaction> &Block::transactions() const {
+const std::set<Transaction> &Block::transactions() const {
     return m_transactions;
 }
 
-QByteArrayList Block::getListSignatures() const {
-    QByteArrayList res;
-
-    for (auto const &signature : m_signatures) {
-        res << QByteArray::fromStdString(signature.actorId) << QByteArray::fromStdString(signature.sign)
-            << (signature.isApprove ? "1" : "0");
+void Block::addSignature(const std::string &id, const std::string &sign, bool isApprove) {
+    if (this->m_signatures.size() <= Config::DataStorage::MAX_SIGN_AMOUNT) {
+        this->m_signatures.insert({ id, sign, isApprove });
     }
-
-    return res;
-}
-
-void Block::addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover) {
-    this->m_signatures.push_back({ id.toStdString(), sign.toStdString(), isApprover });
 }
 
 void Block::setIndex(const BigNumber &index) {
@@ -281,29 +260,16 @@ void Block::setPrevHash(const std::string &value) {
     m_prevHash = value;
 }
 
-ActorId Block::getApprover() const {
-    if (m_signatures.empty()) {
-        return ActorId();
-    } else {
-        for (int i = m_signatures.size() - 1; i >= 0; i--) {
-            if (m_signatures[i].isApprove)
-                return m_signatures[i].actorId;
-        }
-    }
-
-    return ActorId();
-}
-
 BigNumber Block::getIndex() const {
     return m_index;
 }
 
-std::string Block::getData() const {
-    return m_data;
+const std::set<std::string> &Block::dataService() const {
+    return m_dataService;
 }
 
-std::vector<std::string> Block::getDatas() const {
-    return Serialization::deserialize(this->m_data);
+std::string Block::getDataMessagePack() const {
+    return MessagePack::serialize(m_dataService);
 }
 
 std::string Block::getHash() const {
@@ -317,14 +283,14 @@ std::string Block::getPrevHash() const {
 bool Block::operator<(const Block &other) {
     if (this->m_index < other.getIndex()) {
         return true;
-    } else if (this->m_data < other.getData()) {
+    } else if (this->m_dataService < other.dataService()) {
         return true;
     }
     return false;
 }
 
 bool Block::isApprover(const ActorId &actorId) const {
-    return actorId == getApprover();
+    return false;
 }
 
 long long Block::getDate() const {
@@ -333,4 +299,22 @@ long long Block::getDate() const {
 
 void Block::setDate(long long value) {
     m_date = value;
+}
+
+void Block::setDataServiceFromMessagePack(const std::string &value) {
+    if (m_dataService.empty())
+        return;
+    m_dataService = MessagePack::deserialize<std::set<std::string>>(value);
+}
+
+QDebug operator<<(QDebug debug, const Approver &approver) {
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote() << approver.toStdString();
+    return debug;
+}
+
+QDebug operator<<(QDebug debug, const Block &block) {
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote() << block.toStdString();
+    return debug;
 }

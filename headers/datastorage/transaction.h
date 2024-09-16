@@ -46,24 +46,22 @@ class EXTRACHAIN_EXPORT Transaction {
     ActorId receiver;
 
 protected:
-    /**
-     * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses sha3.
-     */
-    void calcHash();
     BigNumberFloat amount; // coin amount
     long long date;
     std::string data;    // additional payload field
     ActorId token;       // token contract address
     BigNumber prevBlock; // last block id at the moment of tx creation
-    int gas;             // security and reward param
-    int hop;             // number of the nodes, through which the transaction will pass before
-                         // aprovement
     std::string hash;    // hash from all fields
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string signature;
     TypeTx typeTx = TypeTx::Transaction;
+
+    /**
+     * Calculates hash of this block and writes hash to "hash" variable.
+     * Uses sha3.
+     */
+    void calcHash();
 
 public:
     // Construct empty transaction
@@ -75,8 +73,11 @@ public:
     Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount);
 
     // Construct transaction with data
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
-                const std::string &data);
+    Transaction(
+        const ActorId &sender,
+        const ActorId &receiver,
+        const BigNumberFloat &amount,
+        const std::string &data);
 
     Transaction(const Transaction &other);
 
@@ -95,17 +96,12 @@ public:
     //    void setSenderBalance(BigNumber balance);
     //    void setReceiverBalance(BigNumber balance);
     void setPrevBlock(const BigNumber &value);
-    void setGas(int gas);
-    void setHop(int hop);
     void setProducer(const ActorId &value);
     void setSignature(const std::string &value);
     void setApprover(const ActorId &value);
     void setHash(const std::string &value);
-    void decrementHop();
     void clear();
 
-    int getGas() const;
-    int getHop() const;
     ActorId getSender() const;
     ActorId getReceiver() const;
     BigNumberFloat getAmount() const;
@@ -119,8 +115,8 @@ public:
 
     virtual bool isEmpty() const;
     virtual bool isBurn() const;
+    auto operator<=>(const Transaction &) const = default;
     bool operator==(const Transaction &transaction) const;
-    bool operator!=(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);
 
     std::string serialize() const;
@@ -154,8 +150,19 @@ public:
     TypeTx getTypeTx() const;
     virtual void setTypeTx(TypeTx newTypeTx);
 
-    MSGPACK_DEFINE(sender, receiver, amount, date, data, token, prevBlock, gas, hop, hash, approver, producer,
-                   signature, typeTx)
+    MSGPACK_DEFINE(
+        sender,
+        receiver,
+        amount,
+        date,
+        data,
+        token,
+        prevBlock,
+        hash,
+        approver,
+        producer,
+        signature,
+        typeTx)
 };
 
 struct FarmingTransactionData {

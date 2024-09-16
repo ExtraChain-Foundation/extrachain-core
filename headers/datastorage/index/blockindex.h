@@ -84,11 +84,8 @@ public:
      */
     BlockVariant getBlockById(const BigNumber &id) const;
 
-    std::string getBlockDataById(const BigNumber &id) const;
-
     // todo: if genesis block is found -> return empty block, or skip in search logic
     BlockVariant getBlockByPosition(const BigNumber &position) const;
-    BlockVariant getBlockByApprover(const BigNumber &approver) const;
     BlockVariant getBlockByHash(const QByteArray &hash) const;
     BlockVariant getBlockByData(const QByteArray &data) const;
 
@@ -106,9 +103,9 @@ public:
     getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const;
     std::pair<Transaction, QByteArray>
     getLastTxByApprover(const BigNumber &id, const QByteArray &token) const;
-    QList<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
+    // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
-    QList<Transaction> getTxsBySenderOrReceiverInRow(
+    std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
         BigNumber from = -1,
         int count = 10,
@@ -135,7 +132,7 @@ public:
 private:
     std::pair<Transaction, QByteArray>
     getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const QByteArray &token) const;
-    QList<Transaction> getTxsByParamInRow(
+    std::set<Transaction> getTxsByParamInRow(
         const BigNumber &id,
         SearchEnum::TxParam param,
         BigNumber from = -1,
