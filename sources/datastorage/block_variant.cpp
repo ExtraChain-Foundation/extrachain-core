@@ -116,7 +116,7 @@ void BlockVariant::addSignature(const std::string& id, const std::string& sign, 
         m_block);
 }
 
-void BlockVariant::sign(const Actor<KeyPrivate>& actor) {
+void BlockVariant::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     std::visit(
         [&actor](auto& b) {
             b.sign(actor);

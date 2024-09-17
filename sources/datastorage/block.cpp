@@ -23,32 +23,32 @@
 #include "sha3.h"
 
 Block::Block() {
-    this->m_type = BlockType::Data;
-    this->m_index = BigNumber(-1);
-    this->m_date = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    this->m_type     = BlockType::Data;
+    this->m_index    = BigNumber(-1);
+    this->m_date     = QDateTime::currentDateTime().toMSecsSinceEpoch();
     this->m_prevHash = "";
-    this->m_hash = "";
+    this->m_hash     = "";
 }
 
 Block::Block(const Block &block) {
-    this->m_type = block.getType();
-    this->m_index = block.getIndex();
-    this->m_date = block.getDate();
-    this->m_dataService = block.dataService();
-    this->m_prevHash = block.getPrevHash();
-    this->m_hash = block.getHash();
-    this->m_signatures = block.m_signatures;
+    this->m_type         = block.getType();
+    this->m_index        = block.getIndex();
+    this->m_date         = block.getDate();
+    this->m_dataService  = block.dataService();
+    this->m_prevHash     = block.getPrevHash();
+    this->m_hash         = block.getHash();
+    this->m_signatures   = block.m_signatures;
     this->m_transactions = block.m_transactions;
 }
 
 Block::Block(
-    std::string &&type,
-    std::string &&data,
-    BigNumber idx,
-    long long date,
-    std::string &&prevHash,
-    std::string &&hash,
-    std::set<Approver> &&signatures,
+    std::string           &&type,
+    std::string           &&data,
+    BigNumber               idx,
+    long long               date,
+    std::string           &&prevHash,
+    std::string           &&hash,
+    std::set<Approver>    &&signatures,
     std::set<Transaction> &&transactions)
     : m_index(std::move(idx))
     , m_date(date)
@@ -65,19 +65,19 @@ Block::~Block() {
 }
 
 Block Block::operator=(const Block &block) {
-    m_type = block.m_type;
-    m_dataService = block.m_dataService;
-    m_index = block.m_index;
-    m_date = block.m_date;
-    m_prevHash = block.m_prevHash;
-    m_hash = block.m_hash;
-    m_signatures = block.m_signatures;
+    m_type         = block.m_type;
+    m_dataService  = block.m_dataService;
+    m_index        = block.m_index;
+    m_date         = block.m_date;
+    m_prevHash     = block.m_prevHash;
+    m_hash         = block.m_hash;
+    m_signatures   = block.m_signatures;
     m_transactions = block.m_transactions;
     return *this;
 }
 
 void Block::calcHash() {
-    SHA3 sha3(SHA3::Bits::Bits512);
+    SHA3        sha3(SHA3::Bits::Bits512);
     std::string index = m_index.toStdString(16);
     sha3.add(index.c_str(), index.size());
 
@@ -114,11 +114,11 @@ void Block::setType(const std::string &value) {
 void Block::setPrev(const BlockVariant &prev) {
     if (prev.isEmpty()) {
         // qDebug() << "[Block] Construction first block";
-        this->m_index = BigNumber("0");
+        this->m_index    = BigNumber("0");
         this->m_prevHash = Utils::calcHash("0 index");
     } else {
         // qDebug() << "[Block] Construction block. Previous block id: " << prev->getIndex();
-        this->m_index = prev.getIndex() + 1;
+        this->m_index    = prev.getIndex() + 1;
         this->m_prevHash = prev.getHash();
     }
 }
@@ -145,8 +145,8 @@ const std::string &Block::getDataForSignature() const {
 
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     calcHash();
-    std::string sign = actor.key().sign(getDataForSignature());
-    this->addSignature(actor.id().toStdString(), sign, true);
+    std::string sign = actor->key().sign(getDataForSignature());
+    this->addSignature(actor->id().toStdString(), sign, true);
 }
 
 bool Block::verify(const Actor<KeyPublic> &actor) const {
@@ -182,7 +182,7 @@ Transaction Block::getTransactionByHash(std::string hash) const {
 }
 
 bool Block::contain(Block &from) const {
-    auto ourTx = this->transactions();
+    auto ourTx  = this->transactions();
     auto fromTx = from.transactions();
     for (const auto &i : fromTx) {
         if (std::find(ourTx.begin(), ourTx.end(), i) == ourTx.end()) {
