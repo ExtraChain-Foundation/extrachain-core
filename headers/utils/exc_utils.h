@@ -436,11 +436,17 @@ enum DataRowType {
 } // namespace DataStorage
 MSGPACK_ADD_ENUM(DataStorage::DataRowType)
 
+namespace Token {
+static const std::string EXTRACHAIN_TOKEN = "";
+static const std::string ROCC_TOKEN = "ROCC";
+}
+
 namespace KeyStore {
 // To store user private/public keys
 static const std::string folder = "keystore";
 static const std::string format = ".profile";
 static const std::string profiles = "profiles";
+static const std::string encrypt = "encrypt";
 
 // TODO: remove
 static const QString KEY_TYPE = ".key";

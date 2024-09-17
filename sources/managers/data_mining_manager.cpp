@@ -119,7 +119,7 @@ void DataMiningManager::interestAccrual() {
         }
         BigNumberFloat result = balanceFarming * farmingPercent;
         balanceFarming += result;
-        ActorId actorId = node->accountController()->mainActor().id();
+        ActorId actorId = node->accountController()->mainActor()->id();
         Transaction tx = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
         node->txManager()->addTransaction(tx);
     }
@@ -130,7 +130,7 @@ BigNumberFloat DataMiningManager::farmingBalance() const {
 }
 
 void DataMiningManager::calculateFarmingBalanceMainUser() {
-    auto currentActorId = node->accountController()->currentProfile().current().id();
+    auto currentActorId = node->accountController()->currentProfile().current()->id();
     balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TypeTx::FarmingTransaction);
     isRecalculate = true;
 }

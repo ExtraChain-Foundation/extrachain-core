@@ -111,7 +111,7 @@ private:
 
 public:
     GenesisBlock createGenesisBlock(
-        const Actor<KeyPrivate> actor,
+        const std::shared_ptr<Actor<KeyPrivate>> actor,
         QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
@@ -247,7 +247,7 @@ public:
      * @brief getApprover
      * @return
      */
-    Actor<KeyPrivate> getApprover() const;
+    std::shared_ptr<Actor<KeyPrivate>> getApprover() const;
     /**
      * @brief setApprover
      * @param value

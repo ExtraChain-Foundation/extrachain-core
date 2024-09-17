@@ -121,6 +121,8 @@ private:
     ActorId m_id;
     T m_key;
     ActorType m_type = ActorType::User;
+    std::string m_walletName = "";
+    std::string m_tokenName = "";
 
 public:
     Actor() = default;
@@ -130,12 +132,16 @@ public:
         m_id = copyActor.id();
         m_key = copyActor.key();
         m_type = ActorType(copyActor.type());
+        m_walletName = copyActor.walletName();
+        m_tokenName = copyActor.tokenName();
     }
 
     Actor &operator=(const Actor<T> &copyActor) {
         m_id = copyActor.id();
         m_key = copyActor.key();
         m_type = copyActor.type();
+        m_walletName = copyActor.walletName();
+        m_tokenName = copyActor.m_tokenName;
         return *this;
     }
 
@@ -166,7 +172,16 @@ public:
         return m_id.isEmpty();
     }
 
-public:
+    std::string walletName() const
+    {
+        return m_walletName;
+    }
+
+    void setWalletName(const std::string &newWalletName)
+    {
+        m_walletName = newWalletName;
+    }
+
     bool operator==(const Actor<T> &other) {
         return this->m_id == other.m_id && *m_key == *other.m_key && m_type == other.m_type;
     }
@@ -193,8 +208,20 @@ public:
         actor.setId(m_id);
         actor.setPublicKey(m_key.publicKey());
         actor.setType(m_type);
+        actor.setWalletName(m_walletName);
+        actor.setTokenName(m_tokenName);
 
         return actor;
+    }
+
+    std::string tokenName() const
+    {
+        return m_tokenName;
+    }
+
+    void setTokenName(const std::string &newTokenName)
+    {
+        m_tokenName = newTokenName;
     }
 
     void setId(const ActorId &id) {
@@ -230,7 +257,7 @@ public:
 
         QJsonArray array;
         auto pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
-        array << m_id.toString() << int(m_type) << pub;
+        array << m_id.toString() << int(m_type) << pub << QString::fromStdString(m_walletName) << QString::fromStdString(m_tokenName);
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             auto secret = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.secretKey())));
@@ -250,12 +277,14 @@ public:
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
         auto pub = Utils::bytesDecode(array[2].toString().toLatin1());
+        actor.setWalletName(array[3].toString().toStdString());
+        actor.setTokenName(array[4].toString().toStdString());
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
             actor.setPublicKey(pub.toStdString());
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto sec = Utils::bytesDecode(array[3].toString().toLatin1());
+            auto sec = Utils::bytesDecode(array[5].toString().toLatin1());
             actor.setSecretKey(sec.toStdString(), pub.toStdString());
         }
 
@@ -264,17 +293,26 @@ public:
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
-        d << "Actor { id:" << actor.id() << ", type: " << magic_enum::enum_name(actor.type()).data()
-          << ", key: " << actor.key() << "}";
+        d << "Actor { id:" << actor.id()
+          << ", type: " << magic_enum::enum_name(actor.type()).data()
+          << ", key: " << actor.key()
+          << ", wallet" << actor.walletName()
+          << ", token" << actor.tokenName()
+          << "}";
         return d;
     }
 
     friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
-        os << "Actor { id: " << actor.id() << ", type: " << actor.type() << ", key: " << actor.key() << " }";
+        os << "Actor { id: " << actor.id()
+           << ", type: " << actor.type()
+           << ", key: " << actor.key()
+           << ", wallet" << actor.walletName()
+           << ", token" << actor.tokenName()
+           << " }";
         return os;
     }
 
-    MSGPACK_DEFINE(m_id, m_type, m_key)
+    MSGPACK_DEFINE(m_id, m_type, m_key, m_walletName, m_tokenName)
 };
 
 #endif // ACTOR_H

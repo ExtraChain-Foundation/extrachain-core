@@ -126,7 +126,7 @@ public:
     bool contain(Block &from) const;
 
     // digital signature
-    virtual void sign(const Actor<KeyPrivate> &actor) final;
+    virtual void sign(const std::shared_ptr<Actor<KeyPrivate>> actor) final;
     virtual bool verify(const Actor<KeyPublic> &actor) const final;
 
     bool equals(const Block &block) const;

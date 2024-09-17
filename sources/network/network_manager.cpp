@@ -49,8 +49,8 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
-QSet<NetworkReconnect> &NetworkManager::reconnections() {
-    return m_reconnections;
+std::map<NetworkReconnect, QString> &NetworkManager::reconnections() {
+    return m_reconnectionsToIdentifier;
 }
 CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
@@ -71,9 +71,24 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
-    qDebug() << "Count reconnections" << m_reconnections.size();
-    for (const auto &connect : m_reconnections)
-        connectToWebSocket(connect.ip, connect.port);
+    qDebug() << "Count reconnections" << m_reconnectionsToIdentifier.size();
+    for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+        connectToWebSocket(it->first.ip, it->first.port);
+}
+
+void NetworkManager::reconnectSocket(const NetworkReconnect& connectInfo, QString identifier) {
+    qDebug() << "Reconnect socket: " << connectInfo.ip << connectInfo.port;
+    for (auto it = m_connections.begin(); it != m_connections.end(); ++it)
+    {
+        if ((*it)->identifier() == identifier)
+        {
+            emit (*it)->close();
+            emit (*it)->finished();
+        }
+        break;
+    }
+
+    connectToWebSocket(connectInfo.ip, connectInfo.port);
 }
 
 void NetworkManager::setupProxy(QNetworkProxy::ProxyType type, const QString &hostName, quint16 port,
@@ -97,6 +112,30 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (node.isClientApp() && requestListNodes)
             send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
     }
+    connect(service, &WebSocketService::shareConnections, this, [&](const std::string& identifier, const QString ip, const quint16 port)
+    {
+        qInfo() << "shareConnections" << identifier << ip << port;
+        bool isUpdated = false;
+        for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+        {
+            if (it->first.ip == ip && it->first.port == port)
+            {
+                qInfo() << "shareConnections updated";
+                isUpdated = true;
+                it->second = QString::fromStdString(identifier);
+            }
+        }
+
+        if (!isUpdated)
+            m_reconnectionsToIdentifier.emplace(NetworkReconnect{.ip = ip, .port = port, .protocol = Network::Protocol::WebSocket}, QString::fromStdString(identifier));
+
+        auto       mainActor = node.accountController()->mainActor();
+        MessageBody message   =
+            make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
+        auto        serialized = message.serialize();
+        auto        sign       = mainActor->key().sign(serialized);
+        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+    });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -244,8 +283,8 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool re
     auto service = new WebSocketService(nullptr, node);
     service->open(ip, port);
     connectWsService(service, requestListNodes);
-    m_reconnections.insert(
-        NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket });
+    m_reconnectionsToIdentifier.emplace(NetworkReconnect{ .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
+
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
@@ -713,7 +752,7 @@ void NetworkManager::messageReceived(
     case MessageType::NewNodeConnected: {
         qDebug() << "Get new node";
         DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
-        m_reconnections.insert(NetworkReconnect::fromWsConnection(wsConnection));
+        m_reconnectionsToIdentifier.emplace(NetworkReconnect::fromWsConnection(wsConnection), "");
         m_wsConnections.push_back(wsConnection);
         if (!node.isClientApp()) {
             send_message(wsConnection, MessageType::SpreadNodeConnection);
@@ -740,21 +779,32 @@ void NetworkManager::messageReceived(
                 MessagePack::deserializeContainer<DFSP::WSConnection>(newWsConnectionsList);
 
             for (const auto &c : newWSConnections) {
-                m_reconnections.insert(NetworkReconnect { .ip = QString::fromStdString(c.address),
-                                                          .port = static_cast<quint16>(c.port),
-                                                          .protocol = Network::Protocol::WebSocket });
+                m_reconnectionsToIdentifier.emplace(NetworkReconnect { .ip = QString::fromStdString(c.address),
+                                                                      .port = static_cast<quint16>(c.port),
+                                                                      .protocol = Network::Protocol::WebSocket }, "");
                 wsPort = c.port;
                 connectToWebSocket(QString::fromStdString(c.address), wsPort, false);
             }
 
-            qDebug() << "count reconnect urls:" << m_reconnections.size();
-            for (const auto &r : m_reconnections)
-                r.print();
+            qDebug() << "count reconnect urls:" << m_reconnectionsToIdentifier.size();
+            for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+                it->first.print();
 
         } else if (status == MessageStatus::Request) {
             requestWSNodeList(messageId);
         }
 
+        break;
+    }
+
+    case MessageType::Accrual: {
+        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+        qDebug() << "Begin accrual for actor " << actor.id().toString();
+        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumSystem::DEC), ActorId(Token::ROCC_TOKEN));
+        tx.setDate(QDateTime::currentMSecsSinceEpoch());
+        tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
+        node.txManager()->addTransaction(tx);
+        node.network()->send_message(tx, MessageType::BlockchainTransaction);
         break;
     }
 
@@ -796,12 +846,13 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
 
     if (error != Network::SocketServiceError::DuplicateIdentifier) {
-        auto res = std::find_if(m_reconnections.begin(), m_reconnections.end(),
-                                [service](const NetworkReconnect &recon) {
-                                    return recon.ip == service->ip() && recon.protocol == service->protocol();
-                                });
-        if (res != m_reconnections.end()) {
-            //            m_reconnections.remove(*res);
+        for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+        {
+            if (it->first.ip == service->ip() && it->first.protocol == service->protocol())
+            {
+                reconnectSocket(it->first, it->second);
+                break;
+            }
         }
     }
 
@@ -857,7 +908,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     KeyPrivate key;
     key.generate();
     m_networkHashForVPN =
-        Utils::calcHash(key.publicKey() + node.accountController()->mainActor().id().toString().toStdString()
+        Utils::calcHash(key.publicKey() + node.accountController()->mainActor()->id().toString().toStdString()
                             + salt,
                         Utils::HashEncode::Sha3_512).substr(0, 64);
 }
@@ -879,8 +930,8 @@ void NetworkManager::onNewWsConnection() {
     auto service = new WebSocketService(ws, node);
     connectWsService(service);
     emit newSocket();
-    m_reconnections.insert(NetworkReconnect {
-        .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket });
+    m_reconnectionsToIdentifier.emplace(NetworkReconnect {
+                                    .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket }, "");
 }
 
 CalculateTraffic *CalculateTraffic::GetInstance() {

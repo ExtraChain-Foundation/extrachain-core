@@ -8,6 +8,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject
     } else {
         m_ws = ws;
         this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
+        this->m_port = m_ws->peerPort();
         qDebug() << "[WS] New service:" << m_ip;
         connections();
         handshake();
@@ -36,6 +37,7 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         connections();
         m_ws->open(url);
         m_ip = m_ws->peerAddress().toString();
+        m_port = m_ws->peerPort();
     }
 }
 
@@ -104,6 +106,7 @@ void WebSocketService::sendMessage(const QByteArray &data) {
 
 void WebSocketService::onConnected() {
     this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
+    this->m_port = m_ws->peerPort();
     handshake();
     qDebug() << "[WS] New service:" << m_ip << port();
     emit node.network()->newSocket();

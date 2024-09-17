@@ -26,7 +26,6 @@
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
-#include "managers/vpn_manager.h"
 
 class DfsController;
 class ActorIndex;
@@ -66,9 +65,6 @@ private:
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
 
-    std::shared_ptr<VPNManager> m_vpnManager;
-    std::string                 m_vpnFileAddedHash;
-
 public:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
@@ -84,7 +80,6 @@ public:
     bool isClientApp() {
         return isClientApplication;
     };
-    void createVPNKeys();
 
     Blockchain*         blockchain();
     NetworkManager*     network();
@@ -103,14 +98,14 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    Transaction createTransaction(Transaction tx);
+    Transaction createTransaction(Transaction tx, std::string &error);
 
     /**
      * @brief Shortcut for another createTransaction method
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
+    Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token, std::string& error);
 
     Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 

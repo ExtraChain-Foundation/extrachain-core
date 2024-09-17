@@ -143,7 +143,7 @@ const std::string &Block::getDataForSignature() const {
     return m_hash;
 }
 
-void Block::sign(const Actor<KeyPrivate> &actor) {
+void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     calcHash();
     std::string sign = actor.key().sign(getDataForSignature());
     this->addSignature(actor.id().toStdString(), sign, true);

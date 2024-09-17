@@ -42,13 +42,13 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId());
+    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId(), const std::string &nameWallet = std::string(), const std::string &tokenName = Token::ROCC_TOKEN);
     // createService
     // createServiceProvider
 
     bool load(const std::string &hash);
 
-    const Actor<KeyPrivate> &mainActor();
+    const std::shared_ptr<Actor<KeyPrivate>> mainActor();
 
     PrivateProfile &getProfile(const ActorId &actorId);
     /**
@@ -62,14 +62,15 @@ public:
     void changeCurrentProfile(const ActorId &actorId);
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
-    const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
+    const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &accounts() const; // temp
     const std::vector<ActorId> accountsIds() const;
     const std::vector<ActorId> farmingIds() const;
-    const Actor<KeyPrivate> &currentWallet() const;         // temp
+    const std::shared_ptr<Actor<KeyPrivate>> currentWallet() const;         // temp
     void clear();
 
     static std::vector<ActorId> profilesList();
     void addToProfileList(const ActorId &actorId);
+    void renamewallet(const QString &oldWalletName, const QString &newWalletName);
 
 private:
     ExtraChainNode &node;
