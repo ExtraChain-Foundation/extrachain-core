@@ -24,6 +24,8 @@
 #include <QMap>
 #include <QObject>
 
+#include <expected>
+
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
 
@@ -98,18 +100,21 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    Transaction createTransaction(Transaction tx, std::string &error);
+    std::expected<Transaction, TransactionError> createTransaction(Transaction tx);
 
     /**
      * @brief Shortcut for another createTransaction method
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    Transaction createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token, std::string& error);
+    std::expected<Transaction, TransactionError>
+    createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
 
-    Transaction createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
+    std::expected<Transaction, TransactionError>
+    createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
-    Transaction createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TypeTx& typeTx);
+    std::expected<Transaction, TransactionError>
+                createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TypeTx& typeTx);
     std::string exportUser();
     bool        importUser(const std::string& data, const std::string& login, const std::string& password);
     // TODO: prepareImportUser: get visual info about file

@@ -79,6 +79,7 @@
     // #include <cstdalign>
     // #include <cstdbool>
     #include <optional>
+    #include <expected>
 
     #include <msgpack.hpp>
     #include <sodium.h>

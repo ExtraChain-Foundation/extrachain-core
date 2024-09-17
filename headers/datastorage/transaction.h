@@ -41,6 +41,17 @@ struct TransactionData {
     MSGPACK_DEFINE(hash, path)
 };
 
+enum class TransactionError {
+    Unknown,
+    EmptyTransaction,
+    NoLastBlock,
+    InsufficientFunds,
+    NoCurrentUser,
+    ZeroAmount
+};
+// MSGPACK_ADD_ENUM(TransactionError)
+FORMAT_ENUM(TransactionError)
+
 class EXTRACHAIN_EXPORT Transaction {
     ActorId sender;
     ActorId receiver;
