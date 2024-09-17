@@ -200,9 +200,8 @@ const cpp_dec_float_exc &BigNumberFloat::data() const {
     return m_data;
 }
 
-bool BigNumberFloat::isEmpty() const // TODO
-{
-    return m_data == -1;
+bool BigNumberFloat::isEmpty() const {
+    return m_data == 0;
 }
 
 QByteArray BigNumberFloat::toByteArray(int base) const {

@@ -120,8 +120,11 @@ void DataMiningManager::interestAccrual() {
         BigNumberFloat result = balanceFarming * farmingPercent;
         balanceFarming += result;
         ActorId actorId = node->accountController()->mainActor()->id();
-        Transaction tx = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
-        node->txManager()->addTransaction(tx);
+        auto transaction = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
+        if (transaction.has_value())
+            node->txManager()->addTransaction(transaction.value());
+        else
+            qDebug() << "[DataMiningManager] Can't create tx:" << transaction.error();
     }
 }
 
