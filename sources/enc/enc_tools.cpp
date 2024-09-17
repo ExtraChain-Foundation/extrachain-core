@@ -1,5 +1,6 @@
 #include "enc/enc_tools.h"
 
+#include "cpp-base64/base64.h"
 #include <sodium.h>
 
 using std::string, std::vector;
