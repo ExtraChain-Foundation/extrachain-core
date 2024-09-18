@@ -238,10 +238,10 @@ std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(
     // iterating from last to first block
     while (lastBlockId >= getFirstSavedId()) {
         BlockVariant lastBlock = getBlockById(lastBlockId);
-        // if (lastBlock.isGenesisBlock() || !lastBlock.isBlock()) {
-        //     --lastBlockId;
-        //     continue;
-        // }
+        if (lastBlock.isGenesisBlock()) {
+            --lastBlockId;
+            continue;
+        }
 
         auto txs = lastBlock.transactions();
 
@@ -320,8 +320,10 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
             break;
 
         BlockVariant lastBlock = getBlockById(lastBlockId);
-        // if (lastBlock.isGenesisBlock() || !lastBlock.isBlock())
-        //     continue;
+        if (lastBlock.isGenesisBlock()) {
+            --lastBlockId;
+            continue;
+        }
         auto txs = lastBlock.transactions();
 
         for (const Transaction &tx : txs) {

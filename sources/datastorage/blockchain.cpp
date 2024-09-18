@@ -750,14 +750,14 @@ bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVa
 }
 
 Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    qDebug() << "Attempting to merge block:" << blockA << "and block:" << blockB;
+    qDebug() << "[Blockchain] Attempting to merge" << blockA << "and" << blockB;
 
     if (blockA.getIndex() == BigNumber(0))
         return Block();
 
     BlockVariant prev = getBlockByIndex(blockA.getIndex() - 1);
     if (prev.isEmpty()) {
-        qWarning() << "Can't merge block" << blockA << "with" << blockB << " - there no prev block";
+        qWarning() << "[Blockchain] Can't merge" << blockA << "with" << blockB << " - there no prev block";
         return Block();
     }
 
@@ -798,11 +798,11 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
 }
 
 GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB) {
-    qDebug() << "Attempting to merge genesis block:" << blockA << "and block:" << blockB;
+    qDebug() << "[Blockchain] Attempting to merge" << blockA << "and" << blockB;
 
     BlockVariant prev = getBlockByIndex(blockA.getIndex() - 1);
     if (prev.isEmpty()) {
-        qWarning() << "Can't merge genesis block" << blockA << "with" << blockB << " - there no prev block";
+        qWarning() << "[Blockchain] Can't merge" << blockA << "with" << blockB << " - there no prev block";
         return GenesisBlock();
     }
 
@@ -836,7 +836,7 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
         if (!isDataRowsEqual) {
             int count = merged.addRows(dataRowsB);
             if (count < Config::NECESSARY_SAME_TX) {
-                qFatal("Need to test count");
+                qFatal("[Blockchain] Need to test count");
                 return GenesisBlock();
             }
         }
@@ -922,6 +922,8 @@ void Blockchain::showBlockchain() const {
 }
 
 void Blockchain::getSmContractMembers(const BlockVariant &block) const {
+    if (block.isGenesisBlock())
+        return;
     auto txList = block.transactions();
     for (const Transaction &tx : txList) {
         if (tx.getData() == "InitContract") {

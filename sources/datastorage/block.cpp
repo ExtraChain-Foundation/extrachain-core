@@ -324,8 +324,8 @@ void Block::setDate(long long value) {
 }
 
 void Block::setDataServiceFromMessagePack(const std::string &value) {
-    if (m_dataService.empty())
-        return;
+    // if (m_dataService.empty())
+    // return;
     m_dataService = MessagePack::deserialize<std::set<std::string>>(value);
 }
 
