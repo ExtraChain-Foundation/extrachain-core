@@ -52,8 +52,8 @@ private:
 
     // (This a network state more)
     // hashes of sent transactions, that are not approved yet
-    QList<QByteArray> unApprovedTxHashes;
-    QList<Transaction> receivedTxList;
+    std::vector<QByteArray> unApprovedTxHashes;
+    std::vector<Transaction> receivedTxList;
 
     // current user
     //    Actor<KeyPrivate> currentUser;
@@ -74,8 +74,8 @@ private:
 
 public:
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
-    QList<Transaction> getReceivedTxList() const;
-    QList<Transaction> &getReceivedTxListByReference();
+    std::vector<Transaction> getReceivedTxList() const;
+    std::vector<Transaction> &getReceivedTxListByReference();
     std::vector<Transaction> getPendingTxs() const;
     /**
      * Run make_block and prove_block timers

@@ -29,31 +29,19 @@ GenesisBlock::GenesisBlock()
 GenesisBlock::GenesisBlock(const GenesisBlock &block)
     : Block(block) {
     this->m_prevGenHash = block.getPrevGenHash();
-}
-
-GenesisBlock::GenesisBlock(const std::string &serialized) {
-    deserialize(serialized);
+    this->m_dataRows    = block.dataRows();
 }
 
 GenesisBlock::GenesisBlock(
-    const std::string &_data,
-    const BlockVariant &prevBlock,
-    const std::string &prevGenHash)
-    : Block(_data, prevBlock)
-    , m_prevGenHash(prevGenHash) {
-    this->m_type = BlockType::Genesis;
-}
-
-GenesisBlock::GenesisBlock(
-    std::string &&type,
-    std::string &&data,
-    BigNumber idx,
-    long long date,
-    std::string &&prevHash,
-    std::string &&hash,
-    std::string &&prevGenHash,
-    std::vector<Approvers> &&signatures,
-    std::vector<GenesisDataRow> &&dataRows)
+    std::string              &&type,
+    std::string              &&data,
+    BigNumber                  idx,
+    long long                  date,
+    std::string              &&prevHash,
+    std::string              &&hash,
+    std::string              &&prevGenHash,
+    std::set<Approver>       &&signatures,
+    std::set<GenesisDataRow> &&dataRows)
     : Block(
           std::move(type),
           std::move(data),
@@ -65,10 +53,32 @@ GenesisBlock::GenesisBlock(
           {})
     , m_prevGenHash(std::move(prevGenHash))
     , m_dataRows(std::move(dataRows)) {
+    setType(type);
 }
 
-void GenesisBlock::addRow(const GenesisDataRow &row) {
-    m_dataRows.push_back(row);
+bool GenesisBlock::addRow(const GenesisDataRow &row) {
+    auto res = m_dataRows.insert(row);
+    return res.second;
+}
+
+int GenesisBlock::addRows(const std::set<GenesisDataRow> &rows) {
+    int count = 0;
+    for (const auto &row : std::as_const(rows)) {
+        auto res = addRow(row);
+        if (res)
+            count++;
+    }
+    return count;
+}
+
+int GenesisBlock::addRows(const std::vector<GenesisDataRow> &rows) {
+    int count = 0;
+    for (const auto &row : std::as_const(rows)) {
+        auto res = addRow(row);
+        if (res)
+            count++;
+    }
+    return count;
 }
 
 const std::string &GenesisBlock::getDataForSignature() const {
@@ -77,32 +87,23 @@ const std::string &GenesisBlock::getDataForSignature() const {
 
 void GenesisBlock::calcHash() {
     SHA3 sha3(SHA3::Bits::Bits512);
-    std::string index = m_index.toStdString(16);
-    sha3.add(index.c_str(), index.size());
-    sha3.add(m_data.c_str(), m_data.size());
+    sha3.add(m_index.toStdString(16).c_str(), m_index.toStdString(16).size());
 
-    for (const auto &dataRow : std::as_const(m_dataRows)) {
-        auto dataRowSerialize = dataRow.serialize();
-        sha3.add(dataRowSerialize.c_str(), dataRowSerialize.size());
+    for (const auto &data : m_dataService) {
+        sha3.add(data.c_str(), data.size());
+    }
+
+    for (const GenesisDataRow &row : std::as_const(m_dataRows)) {
+        sha3.add(row.actorId.toStdString().c_str(), row.actorId.toStdString().size());
+        sha3.add(row.state.toStdString().c_str(), row.state.toStdString().size());
+        sha3.add(row.token.toStdString().c_str(), row.token.toStdString().size());
+        sha3.add(reinterpret_cast<const char *>(&row.type), sizeof(row.type));
     }
 
     this->m_hash = sha3.getHash();
 }
 
-bool GenesisBlock::deserialize(const std::string &serialized) {
-    if (serialized.empty()) {
-        return false;
-    } else {
-        *this = MessagePack::deserialize<GenesisBlock>(Utils::bytesDecodeStdString(serialized));
-        return true;
-    }
-}
-
-std::string GenesisBlock::serialize() const {
-    return Utils::bytesEncodeStdString(MessagePack::serialize(*this));
-}
-
-const std::vector<GenesisDataRow> &GenesisBlock::dataRows() const {
+const std::set<GenesisDataRow> &GenesisBlock::dataRows() const {
     return m_dataRows;
 }
 
@@ -111,8 +112,10 @@ void GenesisBlock::setPrevGenHash(const std::string &value) {
 }
 
 void GenesisBlock::setType(BlockType value) {
-    if (value != BlockType::Genesis || value != BlockType::GenesisMerge)
+    if (value != BlockType::Genesis || value != BlockType::GenesisMerge) {
         qFatal("GenesisBlock: try to set not genesis type");
+    }
+
     m_type = value;
 }
 
@@ -128,4 +131,29 @@ void GenesisBlock::setType(const std::string &value) {
 
 std::string GenesisBlock::getPrevGenHash() const {
     return m_prevGenHash;
+}
+
+std::string GenesisBlock::toStdString() const {
+    std::ostringstream oss;
+
+    oss << "GenesisBlock { "
+        << "type: " << magic_enum::enum_name(m_type) << ", "
+        << "data service: [" << m_dataService.size() << "], "
+        << "index: " << m_index.toStdString() << ", "
+        << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
+        << "prev_hash: '"
+        << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
+                                           + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
+                                     : m_prevHash)
+               + "', "
+        << "hash: '"
+        << (m_hash.length() > 10
+                ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)
+                : m_hash)
+        << "', "
+        << "signatures: [" << m_signatures.size() << "], "
+        << "data rows: [" << m_dataRows.size() << "]"
+        << " }";
+
+    return oss.str();
 }

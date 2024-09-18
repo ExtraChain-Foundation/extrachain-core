@@ -58,7 +58,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block_variant.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/memindex.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/reward_transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
@@ -110,7 +109,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block_variant.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/actorindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/memindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
 #    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/reward_transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp

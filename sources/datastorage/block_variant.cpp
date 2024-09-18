@@ -24,10 +24,10 @@ BigNumber BlockVariant::getIndex() const {
         m_block);
 }
 
-std::string BlockVariant::getData() const {
+std::set<std::string> BlockVariant::dataService() const {
     return std::visit(
         [](const auto& b) {
-            return b.getData();
+            return b.dataService();
         },
         m_block);
 }
@@ -48,14 +48,6 @@ std::string BlockVariant::getHash() const {
         m_block);
 }
 
-ActorId BlockVariant::getApprover() const {
-    return std::visit(
-        [](const auto& b) {
-            return b.getApprover();
-        },
-        m_block);
-}
-
 std::string BlockVariant::getSignature() const {
     return std::visit(
         [](const auto& b) {
@@ -64,15 +56,15 @@ std::string BlockVariant::getSignature() const {
         m_block);
 }
 
-QByteArrayList BlockVariant::getListSignatures() const {
+std::set<Approver> BlockVariant::signatures() const {
     return std::visit(
         [](const auto& b) {
-            return b.getListSignatures();
+            return b.signatures();
         },
         m_block);
 }
 
-std::vector<Transaction> BlockVariant::transactions() const {
+std::set<Transaction> BlockVariant::transactions() const {
     if (isGenesisBlock()) {
         qDebug() << "[BlockVariant] Try to get transactions for GenesisBlock";
     }
@@ -84,18 +76,100 @@ std::vector<Transaction> BlockVariant::transactions() const {
         m_block);
 }
 
-std::string BlockVariant::serialize() const {
-    return std::visit(
-        [](const auto& b) {
-            return b.serialize();
-        },
-        m_block);
-}
-
 QString BlockVariant::toString() const {
     return std::visit(
         [](const auto& b) {
             return b.toString();
         },
         m_block);
+}
+
+std::string BlockVariant::toStdString() const {
+    return std::visit(
+        [](const auto& b) {
+            return b.toStdString();
+        },
+        m_block);
+}
+
+void BlockVariant::setType(BlockType type) {
+    std::visit(
+        [&type](auto& b) {
+            b.setType(type);
+        },
+        m_block);
+}
+
+void BlockVariant::setPrevHash(const std::string& prevHash) {
+    std::visit(
+        [&prevHash](auto& b) {
+            b.setPrevHash(prevHash);
+        },
+        m_block);
+}
+
+void BlockVariant::addSignature(const std::string& id, const std::string& sign, bool isApprove) {
+    std::visit(
+        [&id, &sign, &isApprove](auto& b) {
+            b.addSignature(id, sign, isApprove);
+        },
+        m_block);
+}
+
+void BlockVariant::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
+    std::visit(
+        [&actor](auto& b) {
+            b.sign(actor);
+        },
+        m_block);
+}
+
+bool BlockVariant::verify(const Actor<KeyPublic>& actor) const {
+    return std::visit(
+        [&actor](auto& b) {
+            return b.verify(actor);
+        },
+        m_block);
+}
+
+bool BlockVariant::isBlock() const {
+    return std::holds_alternative<Block>(m_block);
+}
+
+bool BlockVariant::isGenesisBlock() const {
+    return std::holds_alternative<GenesisBlock>(m_block);
+}
+
+std::optional<std::reference_wrapper<const Block>> BlockVariant::getBlockConst() const {
+    if (auto block = std::get_if<Block>(&m_block)) {
+        return std::cref(*block);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<const GenesisBlock>> BlockVariant::getGenesisBlockConst() const {
+    if (auto block = std::get_if<GenesisBlock>(&m_block)) {
+        return std::cref(*block);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<Block>> BlockVariant::getBlock() {
+    if (auto block = std::get_if<Block>(&m_block)) {
+        return std::ref(*block);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<GenesisBlock>> BlockVariant::getGenesisBlock() {
+    if (auto block = std::get_if<GenesisBlock>(&m_block)) {
+        return std::ref(*block);
+    }
+    return std::nullopt;
+}
+
+Block BlockVariant::getAny() {
+    if (isGenesisBlock())
+        return getGenesisBlock()->get();
+    return getBlock()->get();
 }

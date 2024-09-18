@@ -64,17 +64,7 @@ public:
         return *this;
     }
 
-    bool operator==(const ActorId &actorId) const {
-        return m_id == actorId.m_id;
-    }
-
-    bool operator!=(const ActorId &actorId) const {
-        return m_id != actorId.m_id;
-    }
-
-    bool operator<(const ActorId &actorId) const {
-        return m_id < actorId.m_id;
-    }
+    auto operator<=>(const ActorId &) const = default;
 
     QByteArray toByteArray() const {
         return QByteArray::fromStdString(m_id);
@@ -102,11 +92,6 @@ public:
     friend std::ostream &operator<<(std::ostream &os, const ActorId &actorId) {
         os << actorId.toStdString();
         return os;
-    }
-
-    static bool empty(const std::string &actorId) {
-        ActorId actor(actorId);
-        return actor.isEmpty();
     }
 
     template <typename Packer>

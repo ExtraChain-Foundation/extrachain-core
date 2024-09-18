@@ -32,8 +32,9 @@ ActorIndex::ActorIndex(ExtraChainNode &node)
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal("%s",
-               QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
+        qFatal(
+            "%s",
+            QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
@@ -56,13 +57,22 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
 }
 
 bool ActorIndex::validateBlock(const BlockVariant &block) {
-    Actor<KeyPublic> actor = this->getActor(block.getApprover());
-    if (actor.empty()) {
-        qWarning() << "Can not validate block" << block.getIndex() << ": There no actor"
-                   << block.getApprover() << " in local storage";
-        return false;
+    auto signatures = block.signatures();
+
+    for (const auto &signature : signatures) {
+        Actor<KeyPublic> actor = this->getActor(signature.actorId);
+
+        if (actor.empty()) {
+            qWarning() << "Can not validate block" << block.getIndex() << ": There no actor"
+                       << signature.actorId << "in local storage";
+            continue;
+        }
+
+        if (!block.verify(actor))
+            return false;
     }
-    return block.verify(actor);
+
+    return true;
 }
 
 bool ActorIndex::validateTx(const Transaction &tx) {
@@ -82,8 +92,12 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         qFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
-        node.network()->send_message(actor, MessageType::Actor, MessageStatus::Response, messageId,
-                                     Config::Net::TypeSend::Focused);
+        node.network()->send_message(
+            actor,
+            MessageType::Actor,
+            MessageStatus::Response,
+            messageId,
+            Config::Net::TypeSend::Focused);
     } else {
         sendGetActorMessage(actorId);
     }
@@ -96,8 +110,12 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
     std::vector<std::string> result = allActorsStd();
     result.erase(std::remove(result.begin(), result.end(), ignoredActorId.toStdString()), result.end());
     if (!result.empty()) {
-        node.network()->send_message(result, MessageType::ActorAll, MessageStatus::Response, messageId,
-                                     Config::Net::TypeSend::Focused);
+        node.network()->send_message(
+            result,
+            MessageType::ActorAll,
+            MessageStatus::Response,
+            messageId,
+            Config::Net::TypeSend::Focused);
     } else {
         // send empty response
     }
@@ -138,8 +156,10 @@ void ActorIndex::handleNewAllActors(const std::vector<std::string> &actors) {
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
 
-    node.network()->send_message(std::to_string(this->getRecords()), MessageType::ActorCount,
-                                 MessageStatus::Response);
+    node.network()->send_message(
+        std::to_string(this->getRecords()),
+        MessageType::ActorCount,
+        MessageStatus::Response);
 }
 
 bool ActorIndex::actorExist(const ActorId &actorId) {
@@ -245,8 +265,9 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         this->records++;
         DBConnector db(folderPath + "actors");
         db.open();
-        bool dbInsert = db.insert(Config::DataStorage::actorsTable,
-                                  { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
+        bool dbInsert = db.insert(
+            Config::DataStorage::actorsTable,
+            { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
             qFatal("db actor insert error");
 

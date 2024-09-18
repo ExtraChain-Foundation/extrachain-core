@@ -670,8 +670,7 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
         // TODO: why temp std::string?
-        std::string stddata = MessagePack::deserialize<std::string>(serialized);
-        GenesisBlock genesisBlock(stddata);
+        GenesisBlock genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!genesisBlock.isEmpty()) {
             node.blockchain()->addGenBlockToBlockchain(genesisBlock);
         } else {
@@ -682,8 +681,7 @@ void NetworkManager::messageReceived(
 
     case MessageType::BlockchainNewBlock: {
         qDebug() << "BlockchainNewBlock";
-        std::string stddata = MessagePack::deserialize<std::string>(serialized);
-        Block block(stddata);
+        Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
             node.blockchain()->addBlockToBlockchain(blockVariant);
@@ -854,7 +852,9 @@ void NetworkManager::messageReceived(
     }
 
     default:
-        qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
+        std::string error =
+            fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
+        qFatal(error.data());
         break;
     }
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }

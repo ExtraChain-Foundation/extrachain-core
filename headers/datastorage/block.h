@@ -23,29 +23,37 @@
 #include "actor.h"
 #include "datastorage/transaction.h"
 #include "utils/bignumber.h"
-#include "utils/db_connector.h"
 #include "utils/exc_utils.h"
 #include <QDateTime>
 #include <QDebug>
 #include <QString>
 
 // Block comparison result
-struct Approvers {
-    std::string actorId = "";
+struct Approver {
+    ActorId actorId;
     std::string sign = "";
     bool isApprove = false;
+
+    std::string toStdString() const {
+        auto actorIdStr = actorId.toStdString();
+        std::ostringstream oss;
+        oss << "Approver { "
+            << "actor_id: \""
+            << actorIdStr.substr(0, 5) + "..."
+                   + actorIdStr.substr(actorIdStr.size() - 5, actorIdStr.size() - 1)
+            << "\", "
+            << "sign: \"" << (sign.empty() ? "" : sign.substr(0, 8) + "...") << "\", "
+            << "is_approve: " << std::boolalpha << isApprove << " }";
+        return oss.str();
+    }
+
+    auto operator<=>(const Approver &) const = default;
+    bool operator==(const Approver &) const = default;
 
     MSGPACK_DEFINE(actorId, sign, isApprove)
 };
 
-struct BlockCompare {
-    BigNumber indexDiff;
-    BigNumber approverDiff;
-    int dataDiff;
-    int prevHashDiff;
-    int hashDiff;
-    int digitalSigDiff;
-};
+QDebug operator<<(QDebug debug, const Approver &approvers);
 
 enum class BlockType {
     Data,
@@ -62,16 +70,13 @@ class BlockVariant;
 class EXTRACHAIN_EXPORT Block {
 protected:
     BlockType m_type;                  // simple block, or genesis block (or other)
-    std::string m_data;                // payload (serialized tx's, or other)
+    std::set<std::string> m_dataService;      // payload (serialized tx's, or other)
     BigNumber m_index = BigNumber(-1); // block id
-    // BigNumber approver = BigNumber(-1);        // block approver id
-
     long long m_date;
-    std::string m_prevHash; // previous block hash
-    std::string m_hash;     // this block hash (from all previous fields)
-    // QByteArray signature;   // digital signature (from all fields)
-    std::vector<Approvers> m_signatures;     // digital signature
-    std::vector<Transaction> m_transactions; // all transactions
+    std::string m_prevHash;               // previous block hash
+    std::string m_hash;                   // this block hash (from all previous fields)
+    std::set<Approver> m_signatures;      // digital signature
+    std::set<Transaction> m_transactions; // all transactions
 
 public:
     Block();
@@ -80,20 +85,10 @@ public:
      * @param block
      */
     Block(const Block &block);
-    /**
-     * @brief Block
-     * Deserialize already constructed block
-     * @param serialized
-     */
-    Block(const std::string &serialized);
-    /**
-     * @brief Block
-     * Initial block construction, prev = nullptr for first block
-     * @param data
-     * @param prev
-     */
-    Block(const std::string &data, const BlockVariant &prev);
 
+    /**
+     * @brief Block
+     */
     Block(
         std::string &&type,
         std::string &&data,
@@ -101,8 +96,8 @@ public:
         long long date,
         std::string &&prevHash,
         std::string &&hash,
-        std::vector<Approvers> &&signatures,
-        std::vector<Transaction> &&transactions);
+        std::set<Approver> &&signatures,
+        std::set<Transaction> &&transactions);
 
     virtual ~Block();
 
@@ -122,16 +117,9 @@ public:
      * @param data
      */
     void addData(const std::string &data);
+    void addDatas(const std::set<std::string> &datas);
+    void addDatas(const std::vector<std::string> &datas);
 
-    void setData(const std::string &data);
-
-    void initializeData(const std::string &serializedData);
-    /**
-     * @brief extract non-empty transactions from data
-     * @return transaction list
-     */
-    [[deprecated("Use transactions().")]]
-    std::vector<Transaction> extractTransactions() const;
     Transaction getTransactionByHash(std::string hash) const;
 
     bool contain(Block &from) const;
@@ -140,15 +128,10 @@ public:
     virtual void sign(const std::shared_ptr<Actor<KeyPrivate>> actor) final;
     virtual bool verify(const Actor<KeyPublic> &actor) const final;
 
-    // serialization
-
-    virtual std::string serialize() const;
-    virtual bool deserialize(const std::string &serialized);
-
     bool equals(const Block &block) const;
-    BlockCompare compareBlock(const Block &b) const;
     bool isEmpty() const;
     QString toString() const;
+    virtual std::string toStdString() const;
     bool operator<(const Block &other);
     bool isApprover(const ActorId &) const;
 
@@ -156,26 +139,31 @@ public:
     void setPrevHash(const std::string &value);
     BlockType getType() const;
     std::string getTypeStr() const;
-    ActorId getApprover() const;
     BigNumber getIndex() const;
-    std::string getData() const;
+    long long getDate() const;
+    const std::set<std::string> &dataService() const;
+    std::string getDataMessagePack() const;
     std::string getHash() const;
     std::string getPrevHash() const;
     std::string getSignature() const;
-    const std::vector<Approvers> &signatures() const;
-    const std::vector<Transaction> &transactions() const;
+    const std::set<Approver> &signatures() const;
+    const std::set<Transaction> &transactions() const;
 
-    // TODO: replace to signatures()
-    QByteArrayList getListSignatures() const;
-    void addSignature(const QByteArray &id, const QByteArray &sign, const bool &isApprover);
-    // void setType(QByteArray type);
-    long long getDate() const;
+    void addSignature(const std::string &id, const std::string &sign, bool isApprove);
+    void addSignatures(const std::set<Approver> &approvers);
+    void clearSignatures();
+
+    void setIndex(const BigNumber &index);
     void setDate(long long value);
+    void setDataServiceFromMessagePack(const std::string &value);
     Block operator=(const Block &block);
     virtual void setType(BlockType value);
     virtual void setType(const std::string &value);
 
+    void setPrev(const BlockVariant &prev);
+
     void addTransaction(const Transaction &transaction);
+    void addTransactions(const std::set<Transaction> &transactions);
     void addTransactions(const std::vector<Transaction> &transactions);
 
     template <typename Packer>
@@ -185,7 +173,7 @@ public:
             m_type,
             index_str,
             m_date,
-            m_data,
+            m_dataService,
             m_hash,
             m_prevHash,
             m_signatures,
@@ -199,7 +187,7 @@ public:
             m_type,
             index_str,
             m_date,
-            m_data,
+            m_dataService,
             m_hash,
             m_prevHash,
             m_signatures,
@@ -210,12 +198,15 @@ public:
 };
 
 inline bool operator<(const Block &l, const Block &r) {
-    return l.getIndex() < r.getIndex() || l.getData() < r.getData();
+    qFatal("Block: incorrect operator<");
+    return l.getIndex() < r.getIndex() || l.dataService() < r.dataService();
 }
 
 inline bool operator==(const Block &l, const Block &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
            && l.transactions() == r.transactions();
 }
+
+QDebug operator<<(QDebug debug, const Block &block);
 
 #endif // MEMBLOCK_H
