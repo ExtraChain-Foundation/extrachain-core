@@ -475,6 +475,49 @@ void NetworkManager::messageReceived(
 
     // try {
     switch (type) {
+    case MessageType::ShareConnections:{
+        if (status == MessageStatus::Request)
+        {
+            qInfo() << "Achieved ShareConnections(Request)" << messageId;
+            std::vector<std::string> ips;
+            for (const auto& item : m_connections)
+            {
+                if (identifier != item->identifier().toStdString())
+                {
+                    qDebug() << item->ip().toStdString();
+                    ips.emplace_back(item->ip().toStdString());
+                }
+            }
+
+            if (!ips.empty())
+            {
+                node.network()->send_message(MessagePack::serializeContainer(ips), MessageType::ShareConnections,
+                                             MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+            }
+        }
+        else if (status == MessageStatus::Response)
+        {
+            qInfo() << "Achieved ShareConnections(Response)" << messageId;
+            auto ipsInput = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            auto ips = MessagePack::deserializeContainer<std::string>(ipsInput);
+            for (const auto& item : ips)
+            {
+                bool canConnect = true;
+                for (const auto& connItem : m_connections)
+                {
+                    if (item == connItem->ip().toStdString())
+                    {
+                        canConnect = false;
+                        break;
+                    }
+                }
+
+                if (canConnect)
+                    connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
+            }
+        }
+        break;
+    }
     case MessageType::ResponseDfsSize: {
         const auto msgStruct = MessagePack::deserialize<DFSP::ResponseDfsSize>(serialized);
         if (Utils::globalVariableOfDfsSize < msgStruct.Size) {
