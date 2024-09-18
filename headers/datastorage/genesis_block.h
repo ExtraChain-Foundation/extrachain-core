@@ -52,6 +52,7 @@ public:
     //            && this->type == other.type;
     // }
     auto operator<=>(const GenesisDataRow &) const = default;
+    bool operator==(const GenesisDataRow &) const  = default;
 
     MSGPACK_DEFINE(actorId, state, token, type)
 };

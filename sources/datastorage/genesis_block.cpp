@@ -29,18 +29,18 @@ GenesisBlock::GenesisBlock()
 GenesisBlock::GenesisBlock(const GenesisBlock &block)
     : Block(block) {
     this->m_prevGenHash = block.getPrevGenHash();
-    this->m_dataRows = block.dataRows();
+    this->m_dataRows    = block.dataRows();
 }
 
 GenesisBlock::GenesisBlock(
-    std::string &&type,
-    std::string &&data,
-    BigNumber idx,
-    long long date,
-    std::string &&prevHash,
-    std::string &&hash,
-    std::string &&prevGenHash,
-    std::set<Approver> &&signatures,
+    std::string              &&type,
+    std::string              &&data,
+    BigNumber                  idx,
+    long long                  date,
+    std::string              &&prevHash,
+    std::string              &&hash,
+    std::string              &&prevGenHash,
+    std::set<Approver>       &&signatures,
     std::set<GenesisDataRow> &&dataRows)
     : Block(
           std::move(type),
@@ -112,8 +112,10 @@ void GenesisBlock::setPrevGenHash(const std::string &value) {
 }
 
 void GenesisBlock::setType(BlockType value) {
-    if (value != BlockType::Genesis || value != BlockType::GenesisMerge)
+    if (value != BlockType::Genesis || value != BlockType::GenesisMerge) {
         qFatal("GenesisBlock: try to set not genesis type");
+    }
+
     m_type = value;
 }
 

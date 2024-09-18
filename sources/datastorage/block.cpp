@@ -94,6 +94,10 @@ void Block::calcHash() {
 }
 
 void Block::setType(BlockType value) {
+    if (value == BlockType::Genesis || value == BlockType::GenesisMerge) {
+        qFatal("Block: try to set not data type");
+    }
+
     m_type = value;
 }
 
@@ -107,7 +111,7 @@ void Block::setType(const std::string &value) {
     } else if (value == "dummy") {
         m_type = BlockType::Dummy;
     } else {
-        qFatal("Wrong block type");
+        qFatal("Block: try to set not data type");
     }
 }
 
@@ -243,6 +247,10 @@ const std::set<Approver> &Block::signatures() const {
 }
 
 const std::set<Transaction> &Block::transactions() const {
+    if (m_type == BlockType::Genesis || m_type == BlockType::GenesisMerge) {
+        qFatal("GenesisBlock: try to use transactions");
+    }
+
     return m_transactions;
 }
 
@@ -250,6 +258,20 @@ void Block::addSignature(const std::string &id, const std::string &sign, bool is
     if (this->m_signatures.size() <= Config::DataStorage::MAX_SIGN_AMOUNT) {
         this->m_signatures.insert({ id, sign, isApprove });
     }
+}
+
+void Block::addSignatures(const std::set<Approver> &approvers) {
+    for (const auto &approver : std::as_const(approvers)) {
+        if (this->m_signatures.size() > Config::DataStorage::MAX_SIGN_AMOUNT) {
+            return;
+        }
+
+        this->m_signatures.insert(approver);
+    }
+}
+
+void Block::clearSignatures() {
+    m_signatures.clear();
 }
 
 void Block::setIndex(const BigNumber &index) {

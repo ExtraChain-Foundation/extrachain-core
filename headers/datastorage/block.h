@@ -47,9 +47,8 @@ struct Approver {
         return oss.str();
     }
 
-    bool operator<(const Approver &other) const {
-        return actorId < other.actorId && sign < other.sign && isApprove < other.isApprove;
-    }
+    auto operator<=>(const Approver &) const = default;
+    bool operator==(const Approver &) const = default;
 
     MSGPACK_DEFINE(actorId, sign, isApprove)
 };
@@ -151,6 +150,9 @@ public:
     const std::set<Transaction> &transactions() const;
 
     void addSignature(const std::string &id, const std::string &sign, bool isApprove);
+    void addSignatures(const std::set<Approver> &approvers);
+    void clearSignatures();
+
     void setIndex(const BigNumber &index);
     void setDate(long long value);
     void setDataServiceFromMessagePack(const std::string &value);

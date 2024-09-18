@@ -757,40 +757,43 @@ Block Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
 
     BlockVariant prev = getBlockByIndex(blockA.getIndex() - 1);
     if (prev.isEmpty()) {
-        qWarning() << "Can't merge block" << blockA.toString() << "with" << blockB.toString()
-                   << " - there no prev block";
+        qWarning() << "Can't merge block" << blockA << "with" << blockB << " - there no prev block";
         return Block();
     }
 
-    if (prev.isGenesisBlock() && prev.getType() == BlockType::Genesis) { // TODO: type check not nes
-        qWarning() << "Can't merge block" << blockA.toString() << "with" << blockB.toString()
-                   << " - prev block is genesis";
-        return Block();
-    }
+    const auto &dataServiceA  = blockA.dataService();
+    const auto &dataServiceB  = blockB.dataService();
+    const auto &transactionsA = blockA.transactions();
+    const auto &transactionsB = blockB.transactions();
+    const auto &signaturesA   = blockA.signatures();
+    const auto &signaturesB   = blockB.signatures();
 
-    const std::set<std::string> &dataA         = blockA.dataService();
-    const std::set<std::string> &dataB         = blockB.dataService();
-    const auto                  &transactionsA = blockA.transactions();
-    const auto                  &transactionsB = blockB.transactions();
-    const auto                  &approversA    = blockA.signatures();
-    const auto                  &approversB    = blockB.signatures();
+    bool isDataServiceEqual  = dataServiceA == dataServiceB;
+    bool isTransactionsEqual = transactionsA == transactionsB;
 
     // Case 1 - equal payload
-    if (dataA == dataB && transactionsA == transactionsB) {
+    if (isDataServiceEqual && isTransactionsEqual) {
         Block merged = Block(blockA);
+        merged.setPrev(prev);
+
+        if (signaturesA != signaturesB) {
+            merged.addSignatures(signaturesB);
+        }
+
+        BlockVariant mergedVariant = BlockVariant(merged);
+        signBlock(mergedVariant);
+        return *mergedVariant.getBlockConst();
+    } else { // Case 2 - different payload
+        Block merged = Block(blockA);
+        merged.clearSignatures();
+        if (!isDataServiceEqual)
+            merged.addDatas(dataServiceB);
+        if (!isTransactionsEqual)
+            merged.addTransactions(transactionsB);
         merged.setPrev(prev);
         BlockVariant mergedVariant = BlockVariant(merged);
         signBlock(mergedVariant);
         return *mergedVariant.getBlockConst();
-    } else // Case 2 - different payload
-    {
-        Block merged = Block(blockA);
-        merged.addTransactions(transactionsB);
-        merged.addDatas(blockB.dataService());
-        merged.setPrev(prev);
-        BlockVariant mergedBlockVariant = BlockVariant(merged);
-        signBlock(mergedBlockVariant);
-        return *mergedBlockVariant.getBlockConst();
     }
 }
 
@@ -798,41 +801,53 @@ GenesisBlock Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const Ge
     qDebug() << "Attempting to merge genesis block:" << blockA << "and block:" << blockB;
 
     BlockVariant prev = getBlockByIndex(blockA.getIndex() - 1);
-
     if (prev.isEmpty()) {
-        qWarning() << "Can't merge genesis block" << blockA.toString() << "with" << blockB.toString()
-                   << " - there no prev block";
+        qWarning() << "Can't merge genesis block" << blockA << "with" << blockB << " - there no prev block";
         return GenesisBlock();
     }
 
-    const std::set<std::string> &dataA     = blockA.dataService();
-    const std::set<std::string> &dataB     = blockB.dataService();
-    const auto                  &dataRowsA = blockA.dataRows();
-    const auto                  &dataRowsB = blockB.dataRows();
+    const auto &dataServiceA = blockA.dataService();
+    const auto &dataServiceB = blockB.dataService();
+    const auto &dataRowsA    = blockA.dataRows();
+    const auto &dataRowsB    = blockB.dataRows();
+    const auto &signaturesA  = blockA.signatures();
+    const auto &signaturesB  = blockB.signatures();
+
+    bool isDataServiceEqual = dataServiceA == dataServiceB;
+    bool isDataRowsEqual    = dataRowsA == dataRowsB;
 
     // Case 1 - equal payload
-    if (dataA == dataB && dataRowsA == dataRowsB) {
+    if (isDataServiceEqual && isDataRowsEqual) {
         GenesisBlock merged(blockA);
         merged.setPrevGenHash(blockA.getPrevGenHash());
         merged.setPrev(prev);
+
+        if (signaturesA != signaturesB) {
+            merged.addSignatures(signaturesB);
+        }
+
         auto mergedVariant = BlockVariant(merged);
         signBlock(mergedVariant);
         return *mergedVariant.getGenesisBlockConst();
-    } else // Case 2 - different payload
-    {
+    } else { // Case 2 - different payload
         GenesisBlock merged = GenesisBlock(blockA);
-        int          count  = merged.addRows(dataRowsB);
-        if (count < Config::NECESSARY_SAME_TX) {
-            qFatal("Need to test count");
-            return GenesisBlock();
+        merged.clearSignatures();
+
+        if (!isDataRowsEqual) {
+            int count = merged.addRows(dataRowsB);
+            if (count < Config::NECESSARY_SAME_TX) {
+                qFatal("Need to test count");
+                return GenesisBlock();
+            }
         }
 
-        merged.addDatas(blockB.dataService());
+        if (!isDataServiceEqual)
+            merged.addDatas(dataServiceB);
         merged.setPrev(prev);
 
-        BlockVariant mergedBlockVariant = BlockVariant(merged);
-        signBlock(mergedBlockVariant);
-        return *mergedBlockVariant.getGenesisBlockConst();
+        BlockVariant mergedVariant = BlockVariant(merged);
+        signBlock(mergedVariant);
+        return *mergedVariant.getGenesisBlockConst();
     }
 }
 
