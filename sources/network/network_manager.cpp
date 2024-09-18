@@ -852,7 +852,9 @@ void NetworkManager::messageReceived(
     }
 
     default:
-        qFatal("[NetworkManager/messageReceived] Not supported message type: %d", int(type));
+        std::string error =
+            fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
+        qFatal(error.data());
         break;
     }
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
