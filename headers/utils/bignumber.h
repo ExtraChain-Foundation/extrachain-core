@@ -35,12 +35,17 @@
 #include "extrachain_global.h"
 
 #ifdef QT_DEBUG
-    #define UPDATE_DEBUG()       \
-        qdata = toStdString(16); \
-        qdataDec = toStdString(10);
+    #define UPDATE_DEBUG()                                                                                   \
+        qdata = toStdString(NumeralBase::Hex);                                                               \
+        qdataDec = toStdString(NumeralBase::Dec);
 #else
     #define UPDATE_DEBUG()
 #endif
+
+enum class NumeralBase {
+    Dec = 10,
+    Hex = 16
+};
 
 namespace BigNumberUtils {
 const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
@@ -54,7 +59,7 @@ const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
 class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
-    BigNumber(const std::string &bigNumber, int base = 16);
+    BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
     BigNumber(const BigNumber &other);
     BigNumber(int number);
     BigNumber(long long number);
@@ -105,8 +110,8 @@ public:
 public:
     const boost::multiprecision::cpp_int &data() const;
     bool isEmpty() const;
-    QByteArray toByteArray(int base = 16) const;
-    std::string toStdString(int base = 16) const;
+    QByteArray toByteArray(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string toStdString(NumeralBase numSystem = NumeralBase::Hex) const;
     std::string toZeroStdString(int size) const;
     BigNumber pow(unsigned long number);
     // BigNumber sqrt(unsigned long number = 2) const;

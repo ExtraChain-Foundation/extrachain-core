@@ -64,8 +64,6 @@ public:
         return *this;
     }
 
-    auto operator<=>(const ActorId &) const = default;
-
     QByteArray toByteArray() const {
         return QByteArray::fromStdString(m_id);
     }
@@ -83,6 +81,8 @@ public:
             qFatal("ActorId: WTF");
         return m_id.empty() || m_id == "00000000000000000000";
     }
+
+    auto operator<=>(const ActorId &) const = default;
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId) {
         d.noquote().nospace() << actorId.toByteArray();
@@ -106,7 +106,11 @@ public:
 
 private:
     void normalize() {
-        m_id = QByteArray("0").repeated(20 - m_id.length()).toStdString() + m_id;
+        m_id = std::string(20 - m_id.length(), '0') + m_id;
+
+        if (!Utils::is_hex_string_lower(m_id)) {
+            qFatal("[ActorId] Not correct hex: %s", m_id.c_str());
+        }
     }
 
     std::string m_id;
@@ -172,13 +176,11 @@ public:
         return m_id.isEmpty();
     }
 
-    std::string walletName() const
-    {
+    std::string walletName() const {
         return m_walletName;
     }
 
-    void setWalletName(const std::string &newWalletName)
-    {
+    void setWalletName(const std::string &newWalletName) {
         m_walletName = newWalletName;
     }
 
@@ -214,13 +216,11 @@ public:
         return actor;
     }
 
-    std::string tokenName() const
-    {
+    std::string tokenName() const {
         return m_tokenName;
     }
 
-    void setTokenName(const std::string &newTokenName)
-    {
+    void setTokenName(const std::string &newTokenName) {
         m_tokenName = newTokenName;
     }
 

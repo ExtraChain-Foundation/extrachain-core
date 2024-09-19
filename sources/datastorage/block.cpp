@@ -78,7 +78,7 @@ Block Block::operator=(const Block &block) {
 
 void Block::calcHash() {
     SHA3        sha3(SHA3::Bits::Bits512);
-    std::string index = m_index.toStdString(16);
+    std::string index = m_index.toStdString(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -86,8 +86,8 @@ void Block::calcHash() {
     }
 
     for (const auto &tx : std::as_const(m_transactions)) {
-        auto txSerialize = tx.serialize();
-        sha3.add(txSerialize.c_str(), txSerialize.size());
+        auto txHash = tx.getHash();
+        sha3.add(txHash.c_str(), txHash.size());
     }
 
     this->m_hash = sha3.getHash();

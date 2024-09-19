@@ -124,6 +124,32 @@ std::string Utils::str_to_upper(const std::string &str) {
     return str_;
 }
 
+bool Utils::is_hex_string(const std::string &str) {
+    if (str.empty())
+        return false;
+    size_t start = 0;
+    if (str.length() > 2 && str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
+        start = 2;
+    }
+    return std::all_of(str.begin() + start, str.end(), [](unsigned char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    });
+}
+
+bool Utils::is_hex_string_lower(const std::string &str) {
+    if (str.empty())
+        return false;
+
+    size_t start = 0;
+    if (str.length() > 2 && str[0] == '0' && str[1] == 'x') {
+        start = 2;
+    }
+
+    return std::all_of(str.begin() + start, str.end(), [](unsigned char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    });
+}
+
 QByteArray Utils::intToByteArray(const int &number, const int &size) {
     auto num = QByteArray::number(number);
     Q_ASSERT(num.size() <= size);
@@ -244,7 +270,7 @@ std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEn
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
         SHA3 sha3(SHA3::Bits::Bits512);
-        while(!file.atEnd()) {
+        while (!file.atEnd()) {
             QByteArray data = file.read(1024);
             sha3.add(data.data(), data.length());
         }

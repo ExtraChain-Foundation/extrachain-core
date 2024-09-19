@@ -35,14 +35,6 @@
 #include "extrachain_global.h"
 #include "utils/bignumber.h"
 
-#ifdef QT_DEBUG
-    #define UPDATE_DEBUG()       \
-        qdata = toStdString(16); \
-        qdataDec = toStdString(10);
-#else
-    #define UPDATE_DEBUG()
-#endif
-
 // namespace BigNumberUtils {
 // const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
 //                                    '2', '3', '4', '5', '6', '7', '8', '9' };
@@ -51,11 +43,6 @@
 const int float_size = 100;
 using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::cpp_dec_float<float_size>>;
 
-enum NumSystem {
-    DEC = 10,
-    HEX = 16
-};
-
 /**
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
@@ -63,7 +50,7 @@ enum NumSystem {
 class EXTRACHAIN_EXPORT BigNumberFloat {
 public:
     BigNumberFloat();
-    BigNumberFloat(const std::string &bigNumberFloat, int base = 16);
+    BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
     BigNumberFloat(const BigNumberFloat &other);
     BigNumberFloat(const BigNumber &other);
     BigNumberFloat(int number);
@@ -108,8 +95,8 @@ public:
 public:
     const cpp_dec_float_exc &data() const;
     bool isEmpty() const;
-    QByteArray toByteArray(int base = 16) const;
-    std::string toStdString(int base = 16) const;
+    QByteArray toByteArray(NumeralBase base = NumeralBase::Hex) const;
+    std::string toStdString(NumeralBase base = NumeralBase::Hex) const;
     QByteArray toZeroByteArray(int size) const;
     BigNumberFloat pow(unsigned long number);
     // BigNumberFloat sqrt(unsigned long number = 2) const;

@@ -123,8 +123,8 @@ bool ExtraChainNode::createNewNetwork(
 
         QMap<ActorId, BigNumberFloat> tm;
         tm.insert(ActorId(), 0);
-        GenesisBlock tmp = m_blockchain->createGenesisBlock(first, tm);
-        auto tmpVariant = BlockVariant(tmp);
+        GenesisBlock tmp        = m_blockchain->createGenesisBlock(first, tm);
+        auto         tmpVariant = BlockVariant(tmp);
         m_blockchain->addBlock(tmpVariant, true);
 
         // TEST
@@ -237,8 +237,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
     // 3) sign transaction
     tx.sign(actor);
-    qDebug() << "[Transaction] Send" << Transaction::amountToVisible(tx.getAmount()) << "to"
-             << tx.getReceiver();
+    qDebug() << "[Transaction] Send" << tx.getAmountDec() << "to" << tx.getReceiver();
 
     if (tx.isFarmingTransaction() || tx.isLockedFarmingTransaction()) {
         m_txManager->addTransaction(tx);
@@ -364,7 +363,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             // 3) sign transaction
 
             tx.sign(actor);
-            qDebug() << "send tx" << Transaction::amountToVisible(tx.getAmount()) << "to" << tx.getReceiver();
+            qDebug() << "[Transaction] Send tx" << tx.getAmountDec() << "to" << tx.getReceiver();
             auto createdTx = this->createTransaction(tx);
             if (createdTx.has_value()) {
                 m_txManager->addTransaction(createdTx.value());

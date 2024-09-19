@@ -302,7 +302,7 @@ namespace Historical {
 }
 
 namespace Reward {
-    static const BigNumber coinProductionAlgorithmTick = BigNumber("100", 10);
+    static const BigNumber coinProductionAlgorithmTick = BigNumber("100", NumeralBase::Dec);
 
     struct CoinReward {
         std::string    Actor;
@@ -427,6 +427,5 @@ MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)
 
 MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
-
 
 #endif // DFS_UTILS_H

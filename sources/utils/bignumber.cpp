@@ -26,14 +26,14 @@ BigNumber::BigNumber()
     : m_data(0) {
 }
 
-BigNumber::BigNumber(const std::string &bigNumber, int base) {
+BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
     if (bigNumber == "inf")
         qFatal("BigNumber: infinity");
     try {
         if (bigNumber.empty()) {
             this->m_data = cpp_int(0);
         } else {
-            if (base == 10) {
+            if (base == NumeralBase::Dec) {
                 std::string trimmed = bigNumber;
                 trimmed.erase(0, trimmed.find_first_not_of('0'));
                 this->m_data = cpp_int(trimmed);
@@ -242,13 +242,13 @@ bool BigNumber::isEmpty() const // TODO
     return m_data == -1;
 }
 
-QByteArray BigNumber::toByteArray(int base) const {
-    auto res = toStdString(base);
+QByteArray BigNumber::toByteArray(NumeralBase numSystem) const {
+    auto res = toStdString(numSystem);
     return res.c_str();
 }
 
-std::string BigNumber::toStdString(int base) const {
-    if (base == 10) {
+std::string BigNumber::toStdString(NumeralBase numSystem) const {
+    if (numSystem == NumeralBase::Dec) {
         return m_data.str();
     } else {
         std::stringstream ss;
@@ -298,7 +298,7 @@ BigNumber BigNumber::random(int n, bool zeroAllowed) {
 }
 
 BigNumber BigNumber::random(int n, const BigNumber &max, bool zeroAllowed) {
-    if (max.toByteArray(16).length() < n)
+    if (max.toByteArray(NumeralBase::Hex).length() < n)
         return BigNumber(0);
 
     BigNumber result;

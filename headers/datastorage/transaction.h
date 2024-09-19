@@ -24,8 +24,7 @@
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
-#include <QDateTime>
-#include <QString>
+
 enum class TypeTx {
     Transaction = 0,
     RewardTransaction = 1,
@@ -77,45 +76,33 @@ protected:
 public:
     // Construct empty transaction
     Transaction();
-    // Deserialize already created transaction
-    Transaction(const std::string &serialized);
 
     // Construct transaction
-    Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount, const ActorId &token = Token::ROCC_TOKEN, const std::string &data = std::string());
-
-    // Construct transaction with data
     Transaction(
         const ActorId &sender,
         const ActorId &receiver,
         const BigNumberFloat &amount,
-        const std::string &data);
+        const ActorId &token = Token::ROCC_TOKEN,
+        const std::string &data = std::string());
 
     Transaction(const Transaction &other);
-
-    /**
-     * @brief Concatenates all fields that are used for signature calculation
-     * Override in subclasses
-     * @return signature data
-     */
-    std::string getDataForHash() const;
-    std::string getDataForSignature() const;
 
     // digital signature
     void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
-    //    void setSenderBalance(BigNumber balance);
-    //    void setReceiverBalance(BigNumber balance);
+    // void setSenderBalance(BigNumber balance);
+    // void setReceiverBalance(BigNumber balance);
     void setPrevBlock(const BigNumber &value);
     void setProducer(const ActorId &value);
     void setSignature(const std::string &value);
     void setApprover(const ActorId &value);
     void setHash(const std::string &value);
-    void clear();
 
     ActorId getSender() const;
     ActorId getReceiver() const;
     BigNumberFloat getAmount() const;
+    std::string getAmountDec() const;
     BigNumber getPrevBlock() const;
     std::string getData() const;
     std::string getHash() const;
@@ -130,28 +117,11 @@ public:
     bool operator==(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);
 
-    std::string serialize() const;
-    bool deserialize(const std::string &serialized);
     QString toString() const;
     long long getDate() const;
     void setDate(long long value);
     void setToken(const ActorId &value);
     void setData(const std::string &value);
-    /**
-     * @brief 1.1 -> 1.1 * 10e18 in BigNumber
-     * @param amount
-     */
-    static BigNumberFloat visibleToAmount(std::string amount);
-
-    /**
-     * @brief 1 * 10e18 from BigNumber to number -> 1
-     * @param number
-     */
-    static QString amountToVisible(const BigNumberFloat &number);
-    static BigNumberFloat amountNormalizeMul(const BigNumberFloat &number);
-    static BigNumberFloat amountMul(const BigNumberFloat &number1, const BigNumberFloat &number2);
-    static BigNumberFloat amountDiv(const BigNumberFloat &number1, const BigNumberFloat &number2);
-    static BigNumberFloat amountPercent(BigNumberFloat number, uint percent);
     void setAmount(const BigNumberFloat &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
@@ -188,5 +158,7 @@ struct FarmingTransactionData {
         return index <= 0;
     }
 };
+
+QDebug operator<<(QDebug debug, const Transaction &tx);
 
 #endif // TRANSACTION_H

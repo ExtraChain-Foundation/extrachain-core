@@ -51,8 +51,8 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 
 Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(mb.data);
-    BigNumberFloat circulativeSupply(node->blockchain()->getCirculativeSuply().toStdString(10));
-    BigNumberFloat blockAmount(node->blockchain()->getRecords().toStdString(10));
+    BigNumberFloat circulativeSupply = node->blockchain()->getCirculativeSuply();
+    BigNumberFloat blockAmount = node->blockchain()->getRecords();
     BigNumberFloat dataAmountStoredInNetwork(std::to_string(node->dfs()->totalDfsSize()));
 
     qDebug() << "circulativeSupply" << circulativeSupply << "blockAmount" << blockAmount
@@ -76,10 +76,10 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     return rewardTx;
 }
 
-Transaction DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &requestReward,
-                                            const double coefficient) {
-    BigNumberFloat circulativeSupply(node->blockchain()->getCirculativeSuply().toStdString(10));
-    BigNumberFloat blockAmount(node->blockchain()->getRecords().toStdString(10));
+Transaction
+DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &requestReward, const double coefficient) {
+    BigNumberFloat circulativeSupply = node->blockchain()->getCirculativeSuply();
+    BigNumberFloat blockAmount = node->blockchain()->getRecords();
     BigNumberFloat dataAmountStoredInNetwork(std::to_string(node->dfs()->totalDfsSize()));
 
     BigNumberFloat result = 100; // Test
@@ -100,7 +100,7 @@ Transaction DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &re
 
 void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
     if (blockIndex % CoinProductionRate == 0) {
-        qDebug() << "Make reward request" << std::stoi(blockIndex.toStdString(10));
+        qDebug() << "Make reward request:" << std::stoi(blockIndex.toStdString(NumeralBase::Dec));
         DFSP::StateMessage stateMessage;
         stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
         stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
@@ -143,12 +143,14 @@ void DataMiningManager::updateLastIndex() {
     DBConnector db(farmingCachePath);
     bool isDbOpen = db.open();
     if (!isFarmingCashEmpty) {
-        db.query(fmt::format("UPDATE {} SET blockIndex='{}' WHERE id = '1'",
-                             Config::DataStorage::farmingCacheTable, indexBlock.toStdString(10)));
+        db.query(fmt::format(
+            "UPDATE {} SET blockIndex='{}' WHERE id = '1'",
+            Config::DataStorage::farmingCacheTable,
+            indexBlock.toStdString(NumeralBase::Dec)));
     } else {
         DBRow row;
         row.insert({ "id", "1" });
-        row.insert({ "blockIndex", indexBlock.toStdString(10) });
+        row.insert({ "blockIndex", indexBlock.toStdString(NumeralBase::Dec) });
         const bool inserted = db.insert(Config::DataStorage::farmingCacheTable, row);
         if (inserted)
             isFarmingCashEmpty = false;

@@ -654,7 +654,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
         if (blockType == BlockType::Data) {
             saveTxInfoInEC(block.transactions());
         }
-        qDebug() << (blockType == BlockType::Data) << blockType;
+        // qDebug() << (blockType == BlockType::Data) << blockType;
         node->dataMiningManager()->coinRewardRequest(indexBlock);
 
         break;
@@ -1155,7 +1155,7 @@ void Blockchain::proveTx(Transaction &tx) {
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (!producerActor.key().verify(tx.getDataForSignature(), tx.getSignature())) {
+        if (!producerActor.key().verify(tx.getHash(), tx.getSignature())) {
             qDebug() << QString("Tx %1 not approved: bad signature in fee tx").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
