@@ -119,8 +119,8 @@ bool KeyPrivate::empty() const {
 
 QDebug operator<<(QDebug debug, const KeyPrivate &key) {
     QDebugStateSaver saver(debug);
-    debug << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str())
-          << ", public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
+    debug.nospace().noquote() << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str())
+                              << ", public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
     return debug;
 }
 

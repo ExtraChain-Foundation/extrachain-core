@@ -192,10 +192,6 @@ public:
         return m_id;
     }
 
-    [[deprecated("Use id().toStdString() instead.")]] const std::string &idStd() const {
-        return m_id.toStdString();
-    }
-
     const T &key() const {
         return m_key;
     }
@@ -244,6 +240,15 @@ public:
         m_type = type;
     }
 
+    std::string toStdString() const {
+        std::ostringstream oss;
+
+        oss << "Actor { id:" << m_id << ", type: " << magic_enum::enum_name(m_type) << ", key: " << m_key
+            << ", wallet: " << m_walletName << ", token: " << m_tokenName << " }";
+
+        return oss.str();
+    }
+
     QByteArray toJson() const {
         auto array = toJsonArray();
         QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
@@ -257,7 +262,8 @@ public:
 
         QJsonArray array;
         auto pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
-        array << m_id.toString() << int(m_type) << pub << QString::fromStdString(m_walletName) << QString::fromStdString(m_tokenName);
+        array << m_id.toString() << int(m_type) << pub << QString::fromStdString(m_walletName)
+              << QString::fromStdString(m_tokenName);
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             auto secret = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.secretKey())));
@@ -293,22 +299,12 @@ public:
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
-        d << "Actor { id:" << actor.id()
-          << ", type: " << magic_enum::enum_name(actor.type()).data()
-          << ", key: " << actor.key()
-          << ", wallet" << actor.walletName()
-          << ", token" << actor.tokenName()
-          << "}";
+        d << actor.toStdString();
         return d;
     }
 
     friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
-        os << "Actor { id: " << actor.id()
-           << ", type: " << actor.type()
-           << ", key: " << actor.key()
-           << ", wallet" << actor.walletName()
-           << ", token" << actor.tokenName()
-           << " }";
+        os << actor.toStdString();
         return os;
     }
 

@@ -32,9 +32,10 @@ ActorIndex::ActorIndex(ExtraChainNode &node)
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal(
-            "%s",
-            QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
+        qFatal(QString("db for actors (open: %1, create: %2)")
+                   .arg(isDbOpen, isDbCreate)
+                   .toStdString()
+                   .c_str());
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;

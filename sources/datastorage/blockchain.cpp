@@ -719,33 +719,42 @@ bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVa
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
-    if (!receivedBlock.getSignature().empty() && !existedBlock.getSignature().empty()
-        && receivedBlock.getType() == existedBlock.getType()
-        && receivedBlock.getIndex() == existedBlock.getIndex()) {
-        if ((receivedBlock.getType() == BlockType::Data) || (receivedBlock.getType() == BlockType::Genesis)
-            || (receivedBlock.getType() == BlockType::Dummy))
-            return true;
-        else if (receivedBlock.getType() == BlockType::GenesisMerge) {
-            // 4) at least one common data row
-            // TODO: need get?
-            std::set<GenesisDataRow> rowsA = receivedBlock.getGenesisBlockConst()->get().dataRows();
-            std::set<GenesisDataRow> rowsB = existedBlock.getGenesisBlockConst()->get().dataRows();
-            for (const GenesisDataRow &g : rowsA) {
-                if (rowsB.contains(g)) {
-                    return true;
-                }
-            }
-        } else if (receivedBlock.getType() == BlockType::DataMerge) {
-            // 4) at least one common transaction
-            auto transactionsA = receivedBlock.transactions();
-            auto transactionsB = existedBlock.transactions();
-            for (const Transaction &tr : transactionsA) {
-                if (transactionsB.contains(tr)) {
-                    return true;
-                }
+    if (receivedBlock.getSignature().empty() || existedBlock.getSignature().empty()
+        || receivedBlock.getType() != existedBlock.getType()
+        || receivedBlock.getIndex() != existedBlock.getIndex()) {
+        return false;
+    }
+
+    switch (receivedBlock.getType()) {
+    case BlockType::Data:
+    case BlockType::Genesis:
+    case BlockType::Dummy:
+        return true;
+    case BlockType::GenesisMerge: {
+        // 4) at least one common data row
+        const auto &rowsA = receivedBlock.dataRows();
+        const auto &rowsB = existedBlock.dataRows();
+
+        for (const GenesisDataRow &rowA : rowsA) {
+            if (rowsB.contains(rowA)) {
+                return true;
             }
         }
+        break;
     }
+    case BlockType::DataMerge: {
+        // 4) at least one common transaction
+        const auto &transactionsA = receivedBlock.transactions();
+        const auto &transactionsB = existedBlock.transactions();
+        for (const Transaction &tr : transactionsA) {
+            if (transactionsB.contains(tr)) {
+                return true;
+            }
+        }
+        break;
+    }
+    }
+
     return false;
 }
 
