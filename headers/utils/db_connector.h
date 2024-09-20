@@ -32,6 +32,7 @@
 
 #include "extrachain_global.h"
 #include "utils/exc_utils.h"
+#include "utils/db_iterator.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
@@ -51,6 +52,12 @@ struct DBColumn {
                + ")";
     }
 };
+
+enum class OpenMode {
+    Read,
+    Write
+};
+FORMAT_ENUM(OpenMode)
 
 enum class DBConnectorType {
     Regular,
@@ -75,10 +82,11 @@ public:
 public:
     static QString sqlite_version();
 
-    bool open();
+    bool open(OpenMode mode = OpenMode::Read);
     bool close();
     std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});
     std::vector<DBRow> selectAll(std::string table, int limit = -1);
+    std::unique_ptr<DBIterator> selectWhile(std::string query, std::string tableName, DBRow binds = {});
     bool insert(const std::string &tableName, const DBRow &data);
     bool replace(const std::string &tableName, const DBRow &data);
     bool update(const std::string &query);
@@ -104,5 +112,10 @@ public:
 private:
     bool implementationPrepare(const std::string &tableName, const DBRow &data, sqlite3_stmt *stmt);
     bool implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace);
+
+    friend QDebug operator<<(QDebug debug, const DBConnector &connector);
 };
+
+QDebug operator<<(QDebug debug, const std::unordered_map<std::string, std::string> &row);
+
 #endif // DB_CONNECTOR_H

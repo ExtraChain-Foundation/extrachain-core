@@ -20,6 +20,7 @@
 #include "utils/db_connector.h"
 
 #include "sqlite3.h"
+
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -76,7 +77,7 @@ QString DBConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
-bool DBConnector::open() {
+bool DBConnector::open(OpenMode mode) {
     if (isOpen()) {
         qFatal("[DBConnector] Double open");
         return false;
@@ -209,6 +210,32 @@ std::vector<DBRow> DBConnector::selectAll(std::string table, int limit) {
     std::string query =
         fmt::format("SELECT * FROM {}{}", table, limit > 0 ? " LIMIT " + std::to_string(limit) : "");
     return select(query);
+}
+
+std::unique_ptr<DBIterator>
+DBConnector::DBConnector::selectWhile(std::string query, std::string tableName, DBRow binds) {
+    if (!isOpen()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
+    dbmutex.lock();
+    sqlite3_stmt *stmt;
+    std::vector<DBRow> res;
+    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+
+    if (!binds.empty()) {
+        dbmutex.unlock();
+        if (!implementationPrepare(tableName, binds, stmt)) {
+            qDebug() << "[DBConnector] Select bind error";
+            return {};
+        }
+        dbmutex.lock();
+    }
+
+    // TODO
+    dbmutex.unlock();
+
+    return std::make_unique<DBIterator>(stmt);
 }
 
 bool DBConnector::insert(const std::string &tableName, const DBRow &data) {
@@ -510,4 +537,29 @@ bool DBConnector::implementationInsert(const std::string &tableName, const DBRow
     sqlite3_finalize(stmt);
     dbmutex.unlock();
     return true;
+}
+
+QDebug operator<<(QDebug debug, const std::unordered_map<std::string, std::string> &row) {
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote() << "DBRow {";
+
+    for (auto it = row.begin(); it != row.end(); ++it) {
+        if (it != row.begin()) {
+            debug << ",";
+        }
+        debug << " " << it->first << ": '" << it->second << "'";
+    }
+
+    debug << " }";
+    return debug;
+}
+
+QDebug operator<<(QDebug debug, const DBConnector &connector) {
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote() << "DBConnector { "
+                              << "file: '" << QString::fromStdString(connector.m_file)
+                              << "', open: " << (connector.m_open ? "true" : "false")
+                              << ", db pointer: " << (connector.db ? "active" : "nullptr")
+                              << ", type: " << connector.m_type << " }";
+    return debug;
 }
