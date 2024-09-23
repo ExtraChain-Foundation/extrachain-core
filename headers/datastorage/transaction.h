@@ -117,6 +117,7 @@ public:
     bool operator==(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);
 
+    std::string toStdString() const;
     QString toString() const;
     long long getDate() const;
     void setDate(long long value);

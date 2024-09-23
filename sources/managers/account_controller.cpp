@@ -56,7 +56,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
 Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &nameWallet, const std::string &tokenName) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
-    auto &profile = getProfile(profileActor.isEmpty() ? m_currentProfile : profileActor);
+    auto &profile = getProfile(profileActor.isZero() ? m_currentProfile : profileActor);
     profile.addWalet(actor);
     node.actorIndex()->addActor(actor.convertToPublic());
     if(nameWallet.empty()) {
@@ -116,7 +116,7 @@ PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
 }
 
 const PrivateProfile &AccountController::currentProfile() const {
-    if (m_currentProfile.isEmpty())
+    if (m_currentProfile.isZero())
         qFatal("Incorrect current profile");
 
     for (auto &profile : m_profiles) {

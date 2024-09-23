@@ -126,9 +126,9 @@ void Transaction::setDate(long long value) {
 }
 
 void Transaction::calcHash() {
-    auto hashData = sender.toStdString() + receiver.toStdString() + amount.toStdString(NumeralBase::Hex) + data
-                    + std::to_string(date) + token.toStdString() + prevBlock.toStdString() + approver.toStdString()
-                    + producer.toStdString();
+    auto hashData = sender.toStdString() + receiver.toStdString() + amount.toStdString(NumeralBase::Hex)
+                    + data + std::to_string(date) + token.toStdString() + prevBlock.toStdString()
+                    + approver.toStdString() + producer.toStdString();
 
     std::string resultHash = Utils::calcHash(hashData);
     if (!resultHash.empty()) {
@@ -201,12 +201,12 @@ std::string Transaction::getSignature() const {
 }
 
 bool Transaction::isEmpty() const {
-    return sender.isEmpty() && receiver.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
-           && approver.isEmpty() && hash.empty();
+    return sender.isZero() && receiver.isZero() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
+           && approver.isZero() && hash.empty();
 }
 
 bool Transaction::isBurn() const {
-    return sender.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty() && approver.isEmpty()
+    return sender.isZero() && amount.isEmpty() && data.empty() && prevBlock.isEmpty() && approver.isZero()
            && hash.empty();
 }
 
@@ -247,6 +247,11 @@ void Transaction::operator=(const Transaction &other) {
     this->signature = other.signature;
     this->producer = other.producer;
     this->typeTx = other.typeTx;
+}
+
+std::string Transaction::toStdString() const
+{
+    return toString().toStdString();
 }
 
 QString Transaction::toString() const {

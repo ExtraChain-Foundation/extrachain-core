@@ -78,21 +78,21 @@ public:
     ~Blockchain();
 
     BlockVariant getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
-    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const ActorId &token = ActorId());
 
 private:
     BlockVariant getBlockByData(const QByteArray &data);
 
     std::string getBlockDataByIndex(const BigNumber &index);
 
-    std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const QByteArray &token = "0");
-    std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const QByteArray &token = "0");
+    std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const ActorId &token = ActorId());
+    std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const ActorId &token = ActorId());
     std::pair<Transaction, QByteArray>
-    getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token = "0");
+    getTxBySenderOrReceiver(const BigNumber &id, const ActorId &token = ActorId());
     std::pair<Transaction, QByteArray>
-    getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token = "0");
-    std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const QByteArray &token = "0");
-    std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const QByteArray &token = "0");
+    getTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token = ActorId());
+    std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const ActorId &token = ActorId());
+    std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const ActorId &token = ActorId());
 
     void saveTxInfoInEC(const std::set<Transaction> &transactions) const;
 
@@ -114,11 +114,10 @@ public:
         const std::shared_ptr<Actor<KeyPrivate>> actor,
         QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
-    std::set<Transaction> getTxsBySenderOrReceiverInRow(
-        const BigNumber &id,
-        BigNumber from = -1,
-        int count = 10,
-        BigNumber token = 0);
+    std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
+                                                        BigNumber from = -1,
+                                                        int count = 10,
+                                                        ActorId token = ActorId());
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
@@ -195,7 +194,7 @@ public:
      * @return transaction
      */
     std::pair<Transaction, QByteArray>
-    getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token = "0");
+    getTransaction(SearchEnum::TxParam type, const QByteArray &value, const ActorId &token = ActorId());
 
     /**
      * Add block to blockchain

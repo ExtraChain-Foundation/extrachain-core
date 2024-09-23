@@ -182,41 +182,41 @@ BlockVariant BlockIndex::getLastRealBlockById() {
 }
 
 std::pair<Transaction, QByteArray>
-BlockIndex::getLastTxByHash(const QByteArray &hash, const QByteArray &token) const {
+BlockIndex::getLastTxByHash(const QByteArray &hash, const ActorId &token) const {
     return getLastTxByParam(hash.toStdString(), SearchEnum::TxParam::Hash, token);
 }
 
-std::pair<Transaction, QByteArray> BlockIndex::getLastTxByData(const std::string &data) const {
-    return getLastTxByParam(data, SearchEnum::TxParam::Data, "token");
+std::pair<Transaction, QByteArray> BlockIndex::getLastTxByData(const std::string &data, const ActorId &token) const {
+    return getLastTxByParam(data, SearchEnum::TxParam::Data, token);
 }
 
 std::pair<Transaction, QByteArray>
-BlockIndex::getLastTxBySender(const BigNumber &id, const QByteArray &token) const {
+BlockIndex::getLastTxBySender(const BigNumber &id, const ActorId &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserSender, token);
 }
 
 std::pair<Transaction, QByteArray>
-BlockIndex::getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const {
+BlockIndex::getLastTxByReceiver(const BigNumber &id, const ActorId &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserReceiver, token);
 }
 
 std::pair<Transaction, QByteArray>
-BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const {
+BlockIndex::getLastTxBySenderOrReceiver(const BigNumber &id, const ActorId &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
 std::pair<Transaction, QByteArray>
-BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const {
+BlockIndex::getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
 std::pair<Transaction, QByteArray>
-BlockIndex::getLastTxByApprover(const BigNumber &id, const QByteArray &token) const {
+BlockIndex::getLastTxByApprover(const BigNumber &id, const ActorId &token) const {
     return getLastTxByParam(id.toStdString(), SearchEnum::TxParam::UserApprover, token);
 }
 
 std::set<Transaction>
-BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, BigNumber token)
+BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, const ActorId &token)
     const {
     return getTxsByParamInRow(id, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
@@ -224,7 +224,7 @@ BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, i
 std::pair<Transaction, QByteArray> BlockIndex::getLastTxByParam(
     const std::string &id,
     SearchEnum::TxParam param,
-    const QByteArray &token) const {
+    const ActorId &token) const {
     BigNumber records = getRecords();
     ActorId tokenActor = token.toStdString();
 
@@ -301,7 +301,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
     SearchEnum::TxParam param,
     BigNumber from,
     int count,
-    BigNumber token) const {
+    ActorId token) const {
     std::set<Transaction> currentTxs;
     BigNumber records = getRecords();
 
@@ -327,12 +327,12 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
         auto txs = lastBlock.transactions();
 
         for (const Transaction &tx : txs) {
-            if (BigNumber(tx.getToken().toStdString()) != token)
+            if (tx.getToken() != token)
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSender: {
                 if (BigNumber(tx.getSender().toStdString()) == id
-                    && BigNumber(tx.getToken().toStdString()) == token) {
+                    && tx.getToken() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -340,7 +340,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
             }
             case SearchEnum::TxParam::UserReceiver: {
                 if (BigNumber(tx.getReceiver().toStdString()) == id
-                    && BigNumber(tx.getToken().toStdString()) == token) {
+                    && tx.getToken() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -349,7 +349,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
             case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if ((BigNumber(tx.getSender().toStdString()) == id
                      || BigNumber(tx.getReceiver().toStdString()) == id)
-                    && BigNumber(tx.getToken().toStdString()) == token) {
+                    && tx.getToken() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -357,14 +357,14 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
             }
             case SearchEnum::TxParam::UserApprover: {
                 if (BigNumber(tx.getApprover().toStdString()) == id
-                    && BigNumber(tx.getToken().toStdString()) == token) {
+                    && tx.getToken() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (BigNumber(tx.getHash()) == id && BigNumber(tx.getToken().toStdString()) == token) {
+                if (BigNumber(tx.getHash()) == id && tx.getToken() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -542,20 +542,20 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
             auto rows = block.transactions();
             for (const auto &tmp : std::as_const(rows)) {
                 DBRow rowRow;
-                rowRow.insert({ "sender", tmp.getSender().toByteArray().toStdString() });
-                rowRow.insert({ "receiver", tmp.getReceiver().toByteArray().toStdString() });
+                rowRow.insert({ "sender", tmp.getSender().toStdString() });
+                rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });
                 rowRow.insert({ "date", QByteArray::number(tmp.getDate()).toStdString() });
-                rowRow.insert({ "token", tmp.getToken().toByteArray().toStdString() });
+                rowRow.insert({ "token", tmp.getToken().toStdString() });
                 rowRow.insert({ "data", tmp.getData() });
                 rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
                 rowRow.insert({ "hash", tmp.getHash() });
-                rowRow.insert({ "approver", tmp.getApprover().toByteArray().toStdString() });
+                rowRow.insert({ "approver", tmp.getApprover().toStdString() });
                 rowRow.insert({ "signature", tmp.getSignature() });
-                if (tmp.getProducer().isEmpty())
+                if (tmp.getProducer().isZero())
                     rowRow.insert({ "producer", "0" });
                 else
-                    rowRow.insert({ "producer", tmp.getProducer().toByteArray().toStdString() });
+                    rowRow.insert({ "producer", tmp.getProducer().toStdString() });
                 bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
                 if (txInserted)
                     countTransactions++;

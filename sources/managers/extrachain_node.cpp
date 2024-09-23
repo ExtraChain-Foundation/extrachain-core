@@ -200,7 +200,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     if (tx.isEmpty() && !tx.isBurn()) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. Transaction is empty",
-            tx.toString().toStdString());
+            tx.toStdString());
         return std::unexpected(TransactionError::EmptyTransaction);
     }
 
@@ -208,13 +208,13 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     if (actor->empty()) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. There no current user",
-            tx.toString().toStdString());
+            tx.toStdString());
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
     qWarning() << fmt::format(
         "Attempting to create tx:[{}] from user [{}]",
-        tx.toString().toStdString(),
+        tx.toStdString(),
         actor->id().toStdString());
 
     // 1) set prev block id
@@ -222,7 +222,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     if (lastBlockId.isEmpty()) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. There is no last block in blockchain",
-            tx.toString().toStdString());
+            tx.toStdString());
         return std::unexpected(TransactionError::NoLastBlock);
     }
     tx.setPrevBlock(lastBlockId);
@@ -231,7 +231,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     if (blockchain()->getUserBalance(actor->id(), tx.getToken()) < tx.getAmount()) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. There is not enough coins/tokens in wallet",
-            tx.toString().toStdString());
+            tx.toStdString());
         return std::unexpected(TransactionError::InsufficientFunds);
     }
 
@@ -242,7 +242,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     if (tx.isFarmingTransaction() || tx.isLockedFarmingTransaction()) {
         m_txManager->addTransaction(tx);
     }
-    if (tx.getSender().isEmpty() || tx.getSender() == m_actorIndex->firstId())
+    if (tx.getSender().isZero() || tx.getSender() == m_actorIndex->firstId())
         m_txManager->addTransaction(tx);
 
     return tx;
@@ -257,7 +257,7 @@ ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, Actor
     tx.setToken(token);
 
     if (actor->empty()) {
-        qWarning() << fmt::format("Can not create tx. There no current user", tx.toString().toStdString());
+        qWarning() << fmt::format("Can not create tx. There no current user", tx.toStdString());
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
@@ -332,7 +332,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         return std::unexpected(TransactionError::ZeroAmount);
     }
 
-    if (receiver.isEmpty() && !amount.isEmpty()) {
+    if (receiver.isZero() && !amount.isEmpty()) {
         if (!actor->empty()) {
             Transaction tx(actor->id(), receiver, amount);
             tx.setToken(token);
@@ -406,7 +406,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
         ActorId actorId = m_accountController->mainActor()->id();
 
-        if (!actorId.isEmpty())
+        if (!actorId.isZero())
             m_actorIndex->getAllActors(actorId, true);
     }
 }
@@ -423,7 +423,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
     auto firstId = m_actorIndex->firstId();
-    if (firstId.isEmpty())
+    if (firstId.isZero())
         return;
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())

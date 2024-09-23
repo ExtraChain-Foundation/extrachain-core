@@ -54,7 +54,7 @@ public:
     };
 
     ActorId(const std::string &actorId) {
-        m_id = !actorId.empty() ? actorId : "00000000000000000000";
+        m_id = actorId;
         normalize();
     }
 
@@ -76,10 +76,13 @@ public:
         return m_id;
     }
 
+    [[deprecated("Use isZero() instead.")]]
     bool isEmpty() const {
-        if (m_id == "000000000000000000-1")
-            qFatal("ActorId: WTF");
-        return m_id.empty() || m_id == "00000000000000000000";
+        return isZero();
+    }
+
+    bool isZero() const {
+        return m_id == "00000000000000000000";
     }
 
     auto operator<=>(const ActorId &) const = default;
@@ -106,6 +109,10 @@ public:
 
 private:
     void normalize() {
+        if (m_id.size() > 20) {
+            qFatal("[ActorId] Not correct size: %d", m_id.size());
+        }
+
         m_id = std::string(20 - m_id.length(), '0') + m_id;
 
         if (!Utils::is_hex_string_lower(m_id)) {
@@ -173,7 +180,7 @@ public:
         if (m_key.empty())
             return true;
 
-        return m_id.isEmpty();
+        return m_id.isZero();
     }
 
     std::string walletName() const {
