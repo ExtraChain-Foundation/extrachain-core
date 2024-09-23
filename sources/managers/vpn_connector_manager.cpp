@@ -5,13 +5,13 @@
 #include <network/network_manager.h>
 #include "datastorage/dfs/dfs_controller.h"
 
-VPNConnectorManager::VPNConnectorManager(std::shared_ptr<ExtraChainNode> node, QObject *parent)
+VPNConnectorManager::VPNConnectorManager(ExtraChainNode* node, QObject *parent)
     : m_node(node), QObject { parent }
 {
     vpnManager = raccoon::vpn::VPNManager::create();
     vpnInitPublicIPAndCountry = vpnManager->getPublicIPAndCountry();
     QCoreApplication *app = QCoreApplication::instance();
-    m_workerThread = std::make_unique<VPNWorkerThread>(shared_from_this(), m_node, app);
+    m_workerThread = std::make_unique<VPNWorkerThread>(this, m_node, app);
     m_workerThread->start();
     QObject::connect(app, &QCoreApplication::aboutToQuit, m_workerThread.get(), [this]() {
         m_workerThread->stop();
@@ -61,12 +61,12 @@ bool VPNConnectorManager::CheckVPNHandshakeAccess(const std::string& requesterId
     return vpnHandhakeCacheInProccessLocked->size() < counter;
 }
 
-VPNWorkerThread::VPNWorkerThread(std::shared_ptr<VPNConnectorManager> vpnConnectorManager, std::shared_ptr<ExtraChainNode> node, QObject* parent)
+VPNWorkerThread::VPNWorkerThread(VPNConnectorManager* vpnConnectorManager, ExtraChainNode* node, QObject* parent)
     : QThread(parent), m_vpnConnectorManager(vpnConnectorManager), m_node(node), m_running(true) {}
 
 void VPNWorkerThread::run()
 {
-    auto deleteFunc = [](const std::string& uuid, std::shared_ptr<ExtraChainNode> node, std::shared_ptr<VPNConnectorManager> vpnConnectorManager)
+    auto deleteFunc = [](const std::string& uuid, ExtraChainNode* node, VPNConnectorManager* vpnConnectorManager)
     {
         VPNFunctionsResult output;
         VPNMessage inputMsg;
@@ -146,7 +146,7 @@ void VPNWorkerThread::stop()
 
 bool VPNConnectorManager::networkCallback(VPNMessage& networkInput, ActorId& senderId, VPNFunctionType funcType, VPNFunctionsResult& output)
 {
-    static auto readFile = [](std::shared_ptr<ExtraChainNode> node, ActorId& senderId, const std::string& publicKeyFile) -> QString
+    static auto readFile = [](ExtraChainNode* node, ActorId& senderId, const std::string& publicKeyFile) -> QString
     {
         // node.dfs()->requestFile(senderId, publicKeyFile);
         // return "";

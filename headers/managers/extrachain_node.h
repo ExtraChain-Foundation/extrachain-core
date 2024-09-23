@@ -49,7 +49,7 @@ class ConnectionsManager;
 class VPNConnectorManager;
 // class RestApiServerManager;
 
-class EXTRACHAIN_EXPORT ExtraChainNode : public QObject, std::enable_shared_from_this<ExtraChainNode> {
+class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
 
 private:

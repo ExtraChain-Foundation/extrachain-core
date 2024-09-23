@@ -35,10 +35,10 @@ struct VPNFunctionsResult
 
 class VPNWorkerThread;
 
-class VPNConnectorManager : public QObject, std::enable_shared_from_this<VPNConnectorManager> {
+class VPNConnectorManager : public QObject {
     Q_OBJECT
 public:
-    explicit VPNConnectorManager(std::shared_ptr<ExtraChainNode> node, QObject *parent = nullptr);
+    explicit VPNConnectorManager(ExtraChainNode* node, QObject *parent = nullptr);
 
     ~VPNConnectorManager();
 
@@ -95,7 +95,7 @@ public:
     std::shared_ptr<raccoon::vpn::VPNManager> vpnManager;
 private:
     std::unique_ptr<VPNWorkerThread> m_workerThread;
-    std::shared_ptr<ExtraChainNode> m_node;
+    ExtraChainNode* m_node;
 };
 
 class VPNWorkerThread : public QThread
@@ -103,15 +103,15 @@ class VPNWorkerThread : public QThread
     Q_OBJECT
 
 public:
-    VPNWorkerThread(std::shared_ptr<VPNConnectorManager> vpnConnectorManager, std::shared_ptr<ExtraChainNode> node, QObject* parent = nullptr);
+    VPNWorkerThread(VPNConnectorManager* vpnConnectorManager, ExtraChainNode* node, QObject* parent = nullptr);
 
     void run() override;
 
     void stop();
 
 private:
-    std::shared_ptr<VPNConnectorManager> m_vpnConnectorManager;
-    std::shared_ptr<ExtraChainNode> m_node;
+    VPNConnectorManager* m_vpnConnectorManager;
+    ExtraChainNode* m_node;
     std::atomic_bool m_running;
 };
 

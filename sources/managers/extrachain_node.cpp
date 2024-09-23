@@ -600,5 +600,5 @@ void ExtraChainNode::logout() {
 
 void ExtraChainNode::InitVPN()
 {
-    vpnConnectorManager = std::make_shared<VPNConnectorManager>(shared_from_this());
+    vpnConnectorManager = std::make_shared<VPNConnectorManager>(this);
 }
