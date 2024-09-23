@@ -843,7 +843,7 @@ void NetworkManager::messageReceived(
     case MessageType::Accrual: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         qDebug() << "Begin accrual for actor " << actor.id().toString();
-        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumSystem::DEC), ActorId(Token::ROCC_TOKEN));
+        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec), ActorId(Token::ROCC_TOKEN));
         tx.setDate(QDateTime::currentMSecsSinceEpoch());
         tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
         node.txManager()->addTransaction(tx);

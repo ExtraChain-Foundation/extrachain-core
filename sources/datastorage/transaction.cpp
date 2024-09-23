@@ -30,17 +30,12 @@ Transaction::Transaction() {
     calcHash();
 }
 
-Transaction::Transaction(const std::string &serialized) {
-    if (serialized.empty()) {
-        qDebug() << "Incorrect TX";
-        return;
-    }
-
-    deserialize(serialized);
-    calcHash();
-}
-
-Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount, const ActorId &token, const std::string &data) {
+Transaction::Transaction(
+    const ActorId &sender,
+    const ActorId &receiver,
+    const BigNumberFloat &amount,
+    const ActorId &token,
+    const std::string &data) {
     this->sender = sender;
     this->receiver = receiver;
     this->amount = amount;
@@ -51,14 +46,6 @@ Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const B
     this->signature = std::string();
     this->typeTx = TypeTx::Transaction;
     this->token = token;
-    calcHash();
-}
-
-Transaction::Transaction(const ActorId &sender, const ActorId &receiver, const BigNumberFloat &amount,
-                         const std::string &data)
-    : Transaction(sender, receiver, amount) {
-    this->data = data;
-    this->typeTx = TypeTx::Transaction;
     calcHash();
 }
 
@@ -139,7 +126,11 @@ void Transaction::setDate(long long value) {
 }
 
 void Transaction::calcHash() {
-    std::string resultHash = Utils::calcHash(getDataForHash());
+    auto hashData = sender.toStdString() + receiver.toStdString() + amount.toStdString(NumeralBase::Hex)
+                    + data + std::to_string(date) + token.toStdString() + prevBlock.toStdString()
+                    + approver.toStdString() + producer.toStdString();
+
+    std::string resultHash = Utils::calcHash(hashData);
     if (!resultHash.empty()) {
         this->hash = resultHash;
     }
@@ -153,44 +144,19 @@ void Transaction::setTypeTx(TypeTx newTypeTx) {
     typeTx = newTypeTx;
 }
 
-std::string Transaction::getDataForHash() const {
-    return (
-        sender.toStdString() + receiver.toStdString() + amount.toStdString() + std::to_string(date) + data
-        + token.toStdString() + prevBlock.toStdString() + approver.toStdString() + producer.toStdString());
-}
-
-std::string Transaction::getDataForSignature() const {
-    return getDataForHash() + hash;
-}
-
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     this->approver = actor->id();
     calcHash();
-    this->signature = actor->key().sign(getDataForSignature());
+    this->signature = actor->key().sign(hash);
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    return signature.empty() ? false : actor.key().verify(getDataForSignature(), getSignature());
+    return signature.empty() ? false : actor.key().verify(hash, getSignature());
 }
 
 void Transaction::setPrevBlock(const BigNumber &value) {
     this->prevBlock = value;
 
-    calcHash();
-}
-
-void Transaction::clear() {
-    this->sender = "0";
-    this->receiver = "0";
-    this->amount = BigNumberFloat(0);
-    this->date = QDateTime::currentMSecsSinceEpoch();
-    this->data = std::string();
-    this->token = "0";
-    this->prevBlock = BigNumber(0);
-    this->hash = "";
-    this->approver = "0";
-    this->signature = std::string();
-    this->producer = "0";
     calcHash();
 }
 
@@ -204,6 +170,10 @@ ActorId Transaction::getReceiver() const {
 
 BigNumberFloat Transaction::getAmount() const {
     return this->amount;
+}
+
+std::string Transaction::getAmountDec() const {
+    return this->amount.toStdString(NumeralBase::Dec);
 }
 
 BigNumber Transaction::getPrevBlock() const {
@@ -231,18 +201,13 @@ std::string Transaction::getSignature() const {
 }
 
 bool Transaction::isEmpty() const {
-    return sender.isEmpty() && receiver.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
-           && approver.isEmpty() && hash.empty();
+    return sender.isZero() && receiver.isZero() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
+           && approver.isZero() && hash.empty();
 }
 
 bool Transaction::isBurn() const {
-    return sender.isEmpty() && amount.isEmpty() && data.empty() && prevBlock.isEmpty() && approver.isEmpty()
+    return sender.isZero() && amount.isEmpty() && data.empty() && prevBlock.isEmpty() && approver.isZero()
            && hash.empty();
-}
-
-bool Transaction::deserialize(const std::string &serialized) {
-    *this = MessagePack::deserialize<Transaction>(serialized);
-    return true;
 }
 
 bool Transaction::operator==(const Transaction &transaction) const {
@@ -284,94 +249,23 @@ void Transaction::operator=(const Transaction &other) {
     this->typeTx = other.typeTx;
 }
 
-std::string Transaction::serialize() const {
-    return MessagePack::serialize(*this);
+std::string Transaction::toStdString() const
+{
+    return toString().toStdString();
 }
 
 QString Transaction::toString() const {
-    return "sender:" + sender.toByteArray() + ", receiver:" + receiver.toByteArray()
-           + ", amount:" + amount.toByteArray() + ", date:" + QDateTime::fromMSecsSinceEpoch(date).toString()
-           + ", data:" + QString::fromStdString(data) + ", token:" + token.toByteArray() + ", prevBlock:"
-           + prevBlock.toByteArray() + ", hash:" + QString::fromStdString(hash) + ", approver:"
-           + approver.toByteArray() + ", digitalSignature:" + QString::fromStdString(signature);
+    auto hashQt = QString::fromStdString(hash);
+    return "Transaction { sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
+           + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
+           + QDateTime::fromMSecsSinceEpoch(date).toString() + ", data: '" + QString::fromStdString(data)
+           + "', token: " + token.toByteArray() + ", prevBlock: " + prevBlock.toByteArray() + ", hash: '"
+           + hashQt.left(5) + ".." + hashQt.right(5) + "', approver: " + approver.toByteArray()
+           + ", digitalSignature: '" + QString::fromStdString(signature) + "' }";
 }
 
-BigNumberFloat Transaction::visibleToAmount(std::string amount) {
-    if (amount.empty())
-        return 0;
-
-    amount += amount.find(".") == -1 ? "." : "";
-    std::vector<std::string> amountList;
-    boost::algorithm::split(amountList, amount, boost::algorithm::is_any_of("."));
-    int secondLength = amountList[1].length();
-    amount.append(18 - secondLength, '0');
-    amount = std::regex_replace(amount, std::regex("."), "");
-
-    return BigNumberFloat(amount, 10);
-}
-
-QString Transaction::amountToVisible(const BigNumberFloat &number) {
-    if (number == 0)
-        return "0";
-
-    QByteArray numberArr = number.toByteArray(10);
-    bool minus = false;
-
-    if (numberArr[0] == '-') {
-        numberArr = numberArr.remove(0, 1);
-        minus = true;
-    }
-
-    QString second = numberArr.right(18); // TODO
-    second = QString("0").repeated(18 - second.length()).toLatin1() + second;
-    second = second.remove(QRegularExpression("[0]*$"));
-    QByteArray first = numberArr.left(numberArr.length() - 18);
-
-    QByteArray numberDec = (first.isEmpty() ? QByteArray("0") : first)
-        + (second.toLatin1() == QByteArray("0") || second.isEmpty() ? QByteArray("")
-                                                                    : QByteArray(".") + second.toLatin1());
-
-    return (minus ? "-" : "") + numberDec;
-}
-
-BigNumberFloat Transaction::amountNormalizeMul(const BigNumberFloat &number) {
-    QByteArray n = number.toByteArray(10);
-    if (n.length() < 36)
-        return number;
-    return BigNumberFloat(n.chopped(18).toStdString(), 10);
-}
-
-BigNumberFloat Transaction::amountMul(const BigNumberFloat &number1, const BigNumberFloat &number2) {
-    QByteArray one = Transaction::amountToVisible(number1).toLatin1();
-    QByteArray two = Transaction::amountToVisible(number1).toLatin1();
-    int index1 = one.indexOf(".");
-    int index2 = two.indexOf(".");
-    int div1 = one.size() - index1 - 1;
-    int div2 = two.size() - index2 - 1;
-    BigNumberFloat returned1 = index1 == -1 ? 1 : BigNumberFloat(10).pow(div1);
-    BigNumberFloat returned2 = index2 == -1 ? 1 : BigNumberFloat(10).pow(div2);
-
-    BigNumberFloat number = (number1 * returned1) * (number2 * returned2);
-
-    return amountNormalizeMul(number) / returned1 / returned2;
-}
-
-BigNumberFloat Transaction::amountDiv(const BigNumberFloat &number1, const BigNumberFloat &number2) {
-    QByteArray two = Transaction::amountToVisible(number2).toLatin1();
-    int index = two.indexOf(".");
-    int div = two.size() - index - 1;
-    QByteArray newTwoByte = two.remove(index, 1);
-
-    BigNumberFloat returned = index == -1 ? 1 : BigNumberFloat(10).pow(div);
-    auto second = BigNumberFloat(newTwoByte.toStdString(), 10);
-    if (second == 0)
-        return 0;
-
-    return number1 * returned / second;
-}
-
-BigNumberFloat Transaction::amountPercent(BigNumberFloat number, uint percent) {
-    if (percent > 100)
-        percent = 100;
-    return number * percent / 100;
+QDebug operator<<(QDebug debug, const Transaction &tx) {
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote() << tx.toString();
+    return debug;
 }

@@ -25,12 +25,12 @@ BigNumberFloat::BigNumberFloat()
     : m_data(0) {
 }
 
-BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, int base) {
+BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base) {
     try {
         if (bigNumberFloat.empty()) {
             this->m_data = cpp_dec_float_exc(0);
         } else {
-            if (base == 10) {
+            if (base == NumeralBase::Dec) {
                 this->m_data = cpp_dec_float_exc(bigNumberFloat);
             } else {
                 *this = fromHex(bigNumberFloat);
@@ -204,13 +204,13 @@ bool BigNumberFloat::isEmpty() const {
     return m_data == 0;
 }
 
-QByteArray BigNumberFloat::toByteArray(int base) const {
-    auto res = toStdString(base);
+QByteArray BigNumberFloat::toByteArray(NumeralBase numSystem) const {
+    auto res = toStdString(numSystem);
     return QByteArray::fromStdString(res);
 }
 
-std::string BigNumberFloat::toStdString(int base) const {
-    if (base == 10) {
+std::string BigNumberFloat::toStdString(NumeralBase numSystem) const {
+    if (numSystem == NumeralBase::Dec) {
         std::stringstream ss;
         ss << std::setprecision(float_size) << std::fixed << m_data;
         std::string str = ss.str();
@@ -221,22 +221,23 @@ std::string BigNumberFloat::toStdString(int base) const {
         }
 
         return str;
-    } else if (base == 16) {
-        std::string str     = toStdString(10);
-        size_t      dot_pos = str.find('.');
+    } else if (numSystem == NumeralBase::Hex) {
+        std::string str = toStdString(NumeralBase::Dec);
+        size_t dot_pos = str.find('.');
         if (dot_pos == std::string::npos)
-            return BigNumber(str, 10).toStdString(16);
+            return BigNumber(str, NumeralBase::Dec).toStdString(NumeralBase::Hex);
 
-        std::string integer_part    = str.substr(0, dot_pos);
+        std::string integer_part = str.substr(0, dot_pos);
         std::string fractional_part = str.substr(dot_pos + 1);
 
         size_t sizeBefore = fractional_part.size();
         fractional_part.erase(0, fractional_part.find_first_not_of('0'));
         size_t zeros = sizeBefore - fractional_part.size();
 
-        BigNumber one(integer_part, 10);
-        BigNumber two(fractional_part, 10);
-        return one.toStdString(16) + "." + std::string(zeros, '0') + two.toStdString(16);
+        BigNumber one(integer_part, NumeralBase::Dec);
+        BigNumber two(fractional_part, NumeralBase::Dec);
+        return one.toStdString(NumeralBase::Hex) + "." + std::string(zeros, '0')
+               + two.toStdString(NumeralBase::Hex);
     } else {
         throw std::invalid_argument("Unsupported base");
     }
@@ -279,7 +280,7 @@ BigNumberFloat BigNumberFloat::random(int n, bool zeroAllowed) {
 }
 
 BigNumberFloat BigNumberFloat::random(int n, const BigNumberFloat &max, bool zeroAllowed) {
-    if (max.toByteArray(16).length() < n)
+    if (max.toByteArray(NumeralBase::Hex).length() < n)
         return BigNumberFloat(0);
 
     BigNumberFloat result;
@@ -322,9 +323,11 @@ BigNumberFloat BigNumberFloat::fromHex(const std::string &number) {
     size_t      sizeBefore      = fractional_part.size();
     fractional_part.erase(0, fractional_part.find_first_not_of('0'));
     size_t    zeros = sizeBefore - fractional_part.size();
-    BigNumber one(integer_part, 16);
-    BigNumber two(fractional_part, 16);
-    return BigNumberFloat(one.toStdString(10) + "." + std::string(zeros, '0') + two.toStdString(10), 10);
+    BigNumber one(integer_part, NumeralBase::Hex);
+    BigNumber two(fractional_part, NumeralBase::Hex);
+    return BigNumberFloat(
+        one.toStdString(NumeralBase::Dec) + "." + std::string(zeros, '0') + two.toStdString(NumeralBase::Dec),
+        NumeralBase::Dec);
 }
 
 QDebug operator<<(QDebug debug, const BigNumberFloat &bigNumberFloat) {

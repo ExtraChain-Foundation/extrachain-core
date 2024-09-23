@@ -29,6 +29,12 @@ public:
     std::string getSignature() const;
     std::set<Approver> signatures() const;
     std::set<Transaction> transactions() const;
+    const std::set<GenesisDataRow>& dataRows() const {
+        if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
+            return genesisBlock->dataRows();
+        }
+        throw std::runtime_error("Not a GenesisBlock");
+    }
 
     QString toString() const;
     std::string toStdString() const;

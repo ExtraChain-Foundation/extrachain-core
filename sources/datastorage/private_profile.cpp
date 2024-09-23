@@ -44,13 +44,13 @@ PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string &h
 }
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::main() const {
-    if (m_main.isEmpty())
+    if (m_main.isZero())
         qFatal("ExtraUser main error");
     return getActor(m_main);
 }
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::current() const {
-    if (m_current.isEmpty())
+    if (m_current.isZero())
         return main();
     return getActor(m_current);
 }
@@ -94,7 +94,7 @@ const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId 
 }
 
 bool PrivateProfile::loaded() {
-    return !m_main.isEmpty() && !m_actors.empty();
+    return !m_main.isZero() && !m_actors.empty();
 }
 
 const std::string &PrivateProfile::hash() const {

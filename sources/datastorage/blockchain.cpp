@@ -91,33 +91,33 @@ BlockVariant Blockchain::getBlockByHash(const QByteArray &hash) {
     return validateAndReturnBlock(block);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &hash, const QByteArray &token) {
+std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &hash, const ActorId &token) {
     return blockIndex.getLastTxByHash(hash, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const QByteArray &token) {
+std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxBySender(id, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByReceiver(const BigNumber &id, const QByteArray &token) {
+std::pair<Transaction, QByteArray> Blockchain::getTxByReceiver(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxByReceiver(id, token);
 }
 
 std::pair<Transaction, QByteArray>
-Blockchain::getTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) {
+Blockchain::getTxBySenderOrReceiver(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxBySenderOrReceiver(id, token);
 }
 
 std::pair<Transaction, QByteArray>
-Blockchain::getTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) {
+Blockchain::getTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxBySenderOrReceiverAndToken(id, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByApprover(const BigNumber &id, const QByteArray &token) {
+std::pair<Transaction, QByteArray> Blockchain::getTxByApprover(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxByApprover(id, token);
 }
 
-std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, const QByteArray &token) {
+std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxByApprover(id, token);
 }
 
@@ -194,7 +194,7 @@ void Blockchain::saveTxInfoInEC(const std::set<Transaction> &transactions) const
 }
 
 std::set<Transaction>
-Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, BigNumber token) {
+Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, ActorId token) {
     return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
 }
 
@@ -541,7 +541,7 @@ BlockVariant Blockchain::getBlock(SearchEnum::BlockParam type, const QByteArray 
 }
 
 std::pair<Transaction, QByteArray>
-Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, const QByteArray &token) {
+Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, const ActorId &token) {
     switch (type) {
     case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
         return getTxBySenderOrReceiverAndToken(value.toStdString(), token);
@@ -609,7 +609,7 @@ void Blockchain::updateFirstId(const BlockVariant &block) {
         qFatal("Incorrect first genesis");
 
     auto firstId = ActorId(*block.dataService().begin());
-    if (!firstId.isEmpty())
+    if (!firstId.isZero())
         node->actorIndex()->setFirstId(firstId);
 }
 
@@ -646,7 +646,9 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
 
     switch (resultCode) {
     case 0: {
-        emit updateLastTransactionList(); // TODO: ?
+        if (blockType != BlockType::Dummy) {
+            emit updateLastTransactionList();
+        }
         qDebug() << "[Blockchain] Block" << indexBlock << "is successfully added to blockchain";
         getSmContractMembers(block);
 
@@ -654,7 +656,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
         if (blockType == BlockType::Data) {
             saveTxInfoInEC(block.transactions());
         }
-        qDebug() << (blockType == BlockType::Data) << blockType;
+        // qDebug() << (blockType == BlockType::Data) << blockType;
         node->dataMiningManager()->coinRewardRequest(indexBlock);
 
         break;
@@ -719,33 +721,42 @@ bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVa
     // 1) Blocks are approved
     // 2) Blocks has one type
     // 3) Blocks ids are identical
-    if (!receivedBlock.getSignature().empty() && !existedBlock.getSignature().empty()
-        && receivedBlock.getType() == existedBlock.getType()
-        && receivedBlock.getIndex() == existedBlock.getIndex()) {
-        if ((receivedBlock.getType() == BlockType::Data) || (receivedBlock.getType() == BlockType::Genesis)
-            || (receivedBlock.getType() == BlockType::Dummy))
-            return true;
-        else if (receivedBlock.getType() == BlockType::GenesisMerge) {
-            // 4) at least one common data row
-            // TODO: need get?
-            std::set<GenesisDataRow> rowsA = receivedBlock.getGenesisBlockConst()->get().dataRows();
-            std::set<GenesisDataRow> rowsB = existedBlock.getGenesisBlockConst()->get().dataRows();
-            for (const GenesisDataRow &g : rowsA) {
-                if (rowsB.contains(g)) {
-                    return true;
-                }
-            }
-        } else if (receivedBlock.getType() == BlockType::DataMerge) {
-            // 4) at least one common transaction
-            auto transactionsA = receivedBlock.transactions();
-            auto transactionsB = existedBlock.transactions();
-            for (const Transaction &tr : transactionsA) {
-                if (transactionsB.contains(tr)) {
-                    return true;
-                }
+    if (receivedBlock.getSignature().empty() || existedBlock.getSignature().empty()
+        || receivedBlock.getType() != existedBlock.getType()
+        || receivedBlock.getIndex() != existedBlock.getIndex()) {
+        return false;
+    }
+
+    switch (receivedBlock.getType()) {
+    case BlockType::Data:
+    case BlockType::Genesis:
+    case BlockType::Dummy:
+        return true;
+    case BlockType::GenesisMerge: {
+        // 4) at least one common data row
+        const auto &rowsA = receivedBlock.dataRows();
+        const auto &rowsB = existedBlock.dataRows();
+
+        for (const GenesisDataRow &rowA : rowsA) {
+            if (rowsB.contains(rowA)) {
+                return true;
             }
         }
+        break;
     }
+    case BlockType::DataMerge: {
+        // 4) at least one common transaction
+        const auto &transactionsA = receivedBlock.transactions();
+        const auto &transactionsB = existedBlock.transactions();
+        for (const Transaction &tr : transactionsA) {
+            if (transactionsB.contains(tr)) {
+                return true;
+            }
+        }
+        break;
+    }
+    }
+
     return false;
 }
 
@@ -1106,17 +1117,17 @@ void Blockchain::proveTx(Transaction &tx) {
     if (tx.isRewardTransaction() || tx.isFarmingTransaction()) {
         targetSender = tx.getApprover();
         // TODO: add extended check of validity
-        auto res = this->blockIndex.getLastTxByData(tx.getData());
+        auto res = this->blockIndex.getLastTxByData(tx.getData(), ActorId());
         if (res.second == "-1") {
             txManager->addProvedTransaction(tx);
             return;
         }
     }
     Actor<KeyPublic> senderActor;
-    if (!targetSender.isEmpty())
+    if (!targetSender.isZero())
         senderActor = node->actorIndex()->getActor(targetSender);
     Actor<KeyPublic> receiverActor;
-    if (!targetReceiver.isEmpty())
+    if (!targetReceiver.isZero())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
     if (tx.getAmount() < 0) {
         qDebug() << "Transaction not approved: amount less 0";
@@ -1135,8 +1146,8 @@ void Blockchain::proveTx(Transaction &tx) {
 
     // if receiver is not exist
 
-    if ((receiverActor.empty() && !targetReceiver.isEmpty())
-        || (senderActor.empty() && !targetSender.isEmpty())) {
+    if ((receiverActor.empty() && !targetReceiver.isZero())
+        || (senderActor.empty() && !targetSender.isZero())) {
         txManager->removeUnApprovedTransaction(tx);
         if (receiverActor.empty()) {
             txManager->addProvedTransaction(tx);
@@ -1146,16 +1157,16 @@ void Blockchain::proveTx(Transaction &tx) {
     }
 
     // special conditions: receiver is null - coins burning
-    if (targetSender.isEmpty()) {
+    if (targetSender.isZero()) {
         Actor<KeyPublic> producerActor;
-        if (!tx.getProducer().isEmpty())
+        if (!tx.getProducer().isZero())
             producerActor = node->actorIndex()->getActor(tx.getProducer());
         else {
             qDebug() << QString("Tx %1 producer 0").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
         }
-        if (!producerActor.key().verify(tx.getDataForSignature(), tx.getSignature())) {
+        if (!producerActor.key().verify(tx.getHash(), tx.getSignature())) {
             qDebug() << QString("Tx %1 not approved: bad signature in fee tx").arg(tx.getHash().c_str());
             txManager->removeUnApprovedTransaction(tx);
             return;
@@ -1179,7 +1190,7 @@ void Blockchain::proveTx(Transaction &tx) {
     //    }
 
     // special conditions: receiver is null - coins burning, contract creation
-    if (targetReceiver.isEmpty()) {
+    if (targetReceiver.isZero()) {
         qDebug() << "target received is empty";
         tx.sign(node->accountController()->currentWallet());
 

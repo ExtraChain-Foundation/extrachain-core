@@ -133,7 +133,7 @@ void TransactionManager::makeBlock() {
         if (lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
         BlockVariant lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
-        qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType();
+        // qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType();
         // creating dummy block in as ordinary block
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);

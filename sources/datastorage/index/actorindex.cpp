@@ -32,15 +32,16 @@ ActorIndex::ActorIndex(ExtraChainNode &node)
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal(
-            "%s",
-            QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toLatin1().data());
+        qFatal(QString("db for actors (open: %1, create: %2)")
+                   .arg(isDbOpen, isDbCreate)
+                   .toStdString()
+                   .c_str());
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
 }
 Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
-    if (id.isEmpty()) {
+    if (id.isZero()) {
         qDebug() << "[ActorIndex] Error: try get actor with id =" << id;
         return Actor<KeyPublic>();
     }
@@ -88,7 +89,7 @@ bool ActorIndex::validateTx(const Transaction &tx) {
 void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messageId) {
     // receive id
     // create response message
-    if (actorId.isEmpty())
+    if (actorId.isZero())
         qFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
@@ -192,7 +193,7 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
 }
 
 void ActorIndex::setFirstId(const ActorId &value) {
-    if (!m_firstId.isEmpty()) {
+    if (!m_firstId.isZero()) {
         if (firstId() != value) {
             auto message = QString("Another FirstId: %1 != %2")
                                .arg(firstId().toString())
@@ -237,8 +238,8 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
 }
 
 void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
-    if (actorId.isEmpty()) {
-        qFatal("Can't get actor by empty id");
+    if (actorId.isZero()) {
+        qFatal("Can't get actor by zero id");
     }
 
     node.network()->send_message(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);

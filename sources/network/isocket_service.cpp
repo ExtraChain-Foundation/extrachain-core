@@ -61,11 +61,11 @@ bool SocketService::checkFirstMessage(const QString &message) {
     ActorId jsonFirstId = ActorId(json["firstId"].toString().toStdString());
     ActorId currentFirstId = node.actorIndex()->firstId();
     bool isFirstIdsContains = currentFirstId == jsonFirstId;
-    bool somethingEmpty = jsonFirstId.isEmpty() || currentFirstId.isEmpty();
+    bool somethingEmpty = jsonFirstId.isZero() || currentFirstId.isZero();
 
     qDebug() << QString("[Socket] First message:%1 | Current first:%2").arg(json.toJson()).arg(currentFirstId.toString());
 
-    if (currentFirstId.isEmpty() && !jsonFirstId.isEmpty()) { // TODO: remove hack
+    if (currentFirstId.isZero() && !jsonFirstId.isZero()) { // TODO: remove hack
         node.actorIndex()->setFirstId(jsonFirstId);
     }
 

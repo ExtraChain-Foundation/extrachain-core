@@ -92,24 +92,24 @@ public:
     BlockVariant getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
     BlockVariant getLastRealBlockById();
 
-    std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const QByteArray &token) const;
-    std::pair<Transaction, QByteArray> getLastTxByData(const std::string &data) const;
-    std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const QByteArray &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const ActorId &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByData(const std::string &data, const ActorId &token) const;
+    std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const ActorId &token) const;
     std::pair<Transaction, QByteArray>
-    getLastTxByReceiver(const BigNumber &id, const QByteArray &token) const;
+    getLastTxByReceiver(const BigNumber &id, const ActorId &token) const;
     std::pair<Transaction, QByteArray>
-    getLastTxBySenderOrReceiver(const BigNumber &id, const QByteArray &token) const;
+    getLastTxBySenderOrReceiver(const BigNumber &id, const ActorId &token) const;
     std::pair<Transaction, QByteArray>
-    getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const QByteArray &token) const;
+    getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token) const;
     std::pair<Transaction, QByteArray>
-    getLastTxByApprover(const BigNumber &id, const QByteArray &token) const;
+    getLastTxByApprover(const BigNumber &id, const ActorId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
         BigNumber from = -1,
         int count = 10,
-        BigNumber token = 0) const;
+        const ActorId &token = ActorId()) const;
 
     void removeAll();
     BigNumber getLastSavedId() const;
@@ -131,13 +131,12 @@ public:
 
 private:
     std::pair<Transaction, QByteArray>
-    getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const QByteArray &token) const;
-    std::set<Transaction> getTxsByParamInRow(
-        const BigNumber &id,
-        SearchEnum::TxParam param,
-        BigNumber from = -1,
-        int count = 10,
-        BigNumber token = 0) const;
+    getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const ActorId &token) const;
+    std::set<Transaction> getTxsByParamInRow(const BigNumber &id,
+                                             SearchEnum::TxParam param,
+                                             BigNumber from = -1,
+                                             int count = 10,
+                                             ActorId token = ActorId()) const;
 
     int add(const BigNumber &id, const BlockVariant &newBlock);
     bool hasRecordLimit() const;

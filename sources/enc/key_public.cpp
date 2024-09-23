@@ -47,7 +47,8 @@ bool KeyPublic::empty() const {
 
 QDebug operator<<(QDebug debug, const KeyPublic &key) {
     QDebugStateSaver saver(debug);
-    debug << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
+    debug.nospace().noquote() << "KeyPublic { public: "
+                              << Utils::bytesEncode(QByteArray::fromStdString(key.publicKey())) << " }";
     return debug;
 }
 

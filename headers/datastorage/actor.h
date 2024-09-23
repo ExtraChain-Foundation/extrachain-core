@@ -54,7 +54,7 @@ public:
     };
 
     ActorId(const std::string &actorId) {
-        m_id = !actorId.empty() ? actorId : "00000000000000000000";
+        m_id = actorId;
         normalize();
     }
 
@@ -63,8 +63,6 @@ public:
         normalize();
         return *this;
     }
-
-    auto operator<=>(const ActorId &) const = default;
 
     QByteArray toByteArray() const {
         return QByteArray::fromStdString(m_id);
@@ -78,11 +76,16 @@ public:
         return m_id;
     }
 
+    [[deprecated("Use isZero() instead.")]]
     bool isEmpty() const {
-        if (m_id == "000000000000000000-1")
-            qFatal("ActorId: WTF");
-        return m_id.empty() || m_id == "00000000000000000000";
+        return isZero();
     }
+
+    bool isZero() const {
+        return m_id == "00000000000000000000";
+    }
+
+    auto operator<=>(const ActorId &) const = default;
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId) {
         d.noquote().nospace() << actorId.toByteArray();
@@ -106,7 +109,15 @@ public:
 
 private:
     void normalize() {
-        m_id = QByteArray("0").repeated(20 - m_id.length()).toStdString() + m_id;
+        if (m_id.size() > 20) {
+            qFatal("[ActorId] Not correct size: %d", m_id.size());
+        }
+
+        m_id = std::string(20 - m_id.length(), '0') + m_id;
+
+        if (!Utils::is_hex_string_lower(m_id)) {
+            qFatal("[ActorId] Not correct hex: %s", m_id.c_str());
+        }
     }
 
     std::string m_id;
@@ -169,16 +180,14 @@ public:
         if (m_key.empty())
             return true;
 
-        return m_id.isEmpty();
+        return m_id.isZero();
     }
 
-    std::string walletName() const
-    {
+    std::string walletName() const {
         return m_walletName;
     }
 
-    void setWalletName(const std::string &newWalletName)
-    {
+    void setWalletName(const std::string &newWalletName) {
         m_walletName = newWalletName;
     }
 
@@ -188,10 +197,6 @@ public:
 
     const ActorId &id() const {
         return m_id;
-    }
-
-    [[deprecated("Use id().toStdString() instead.")]] const std::string &idStd() const {
-        return m_id.toStdString();
     }
 
     const T &key() const {
@@ -214,13 +219,11 @@ public:
         return actor;
     }
 
-    std::string tokenName() const
-    {
+    std::string tokenName() const {
         return m_tokenName;
     }
 
-    void setTokenName(const std::string &newTokenName)
-    {
+    void setTokenName(const std::string &newTokenName) {
         m_tokenName = newTokenName;
     }
 
@@ -244,6 +247,15 @@ public:
         m_type = type;
     }
 
+    std::string toStdString() const {
+        std::ostringstream oss;
+
+        oss << "Actor { id:" << m_id << ", type: " << magic_enum::enum_name(m_type) << ", key: " << m_key
+            << ", wallet: " << m_walletName << ", token: " << m_tokenName << " }";
+
+        return oss.str();
+    }
+
     QByteArray toJson() const {
         auto array = toJsonArray();
         QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
@@ -257,7 +269,8 @@ public:
 
         QJsonArray array;
         auto pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
-        array << m_id.toString() << int(m_type) << pub << QString::fromStdString(m_walletName) << QString::fromStdString(m_tokenName);
+        array << m_id.toString() << int(m_type) << pub << QString::fromStdString(m_walletName)
+              << QString::fromStdString(m_tokenName);
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             auto secret = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.secretKey())));
@@ -293,22 +306,12 @@ public:
 
     friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
         QDebugStateSaver saver(d);
-        d << "Actor { id:" << actor.id()
-          << ", type: " << magic_enum::enum_name(actor.type()).data()
-          << ", key: " << actor.key()
-          << ", wallet" << actor.walletName()
-          << ", token" << actor.tokenName()
-          << "}";
+        d << actor.toStdString();
         return d;
     }
 
     friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
-        os << "Actor { id: " << actor.id()
-           << ", type: " << actor.type()
-           << ", key: " << actor.key()
-           << ", wallet" << actor.walletName()
-           << ", token" << actor.tokenName()
-           << " }";
+        os << actor.toStdString();
         return os;
     }
 

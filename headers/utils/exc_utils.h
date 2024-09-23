@@ -68,8 +68,9 @@ using namespace magic_enum::bitwise_operators;
 namespace fmt {
 template <typename... Args>
 void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
-    fmt::print("{}\n",
-               fmt::format(std::forward<fmt::format_string<Args...>>(fmt_str), std::forward<Args>(args)...));
+    fmt::print(
+        "{}\n",
+        fmt::format(std::forward<fmt::format_string<Args...>>(fmt_str), std::forward<Args>(args)...));
 }
 }
 
@@ -361,6 +362,8 @@ EXTRACHAIN_EXPORT qint64 diskTotalMemory();
 
 EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
 EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
+bool is_hex_string(const std::string &str);
+bool is_hex_string_lower(const std::string &str);
 
 QByteArray intToByteArray(const int &number, const int &size);
 std::string intToStdString(const int &number, const int &size);
