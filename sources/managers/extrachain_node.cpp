@@ -38,6 +38,7 @@
 #include "managers/tx_manager.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
+#include "managers/vpn_connector_manager.h"
 
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     : isClientApplication(isClientApp) {
@@ -593,4 +594,9 @@ void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
     std::exit(0);
+}
+
+void ExtraChainNode::InitVPN()
+{
+    vpnConnectorManager = std::make_shared<VPNConnectorManager>(shared_from_this());
 }

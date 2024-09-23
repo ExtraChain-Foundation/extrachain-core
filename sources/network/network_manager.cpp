@@ -61,6 +61,8 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     localInizialization();
     m_reconnectTimer = new QTimer(this);
     calculateTraffic = CalculateTraffic::GetInstance();
+
+    connect(this, &NetworkManager::sendNetworkMessage, this, &NetworkManager::sendNetworkMessageSlot);
 }
 
 void NetworkManager::process() {
@@ -1017,4 +1019,24 @@ std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
         acc.second += connection.second.bytesReceived;
         return acc;
     });
+}
+
+QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
+{
+    QString res;
+    for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+    {
+        if (it->first.ip == ip && it->first.port == port)
+        {
+            res = it->second;
+            break;
+        }
+    }
+    return res;
+}
+
+void NetworkManager::sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                                            const std::string &receiver_identifier)
+{
+    sendMessage(serialized_message, type_send, receiver_identifier);
 }

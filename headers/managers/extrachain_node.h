@@ -20,6 +20,8 @@
 #ifndef EXTRACHAIN_NODE_H
 #define EXTRACHAIN_NODE_H
 
+#include <memory>
+
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
@@ -44,9 +46,10 @@ class Actor;
 class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
+class VPNConnectorManager;
 // class RestApiServerManager;
 
-class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
+class EXTRACHAIN_EXPORT ExtraChainNode : public QObject, std::enable_shared_from_this<ExtraChainNode> {
     Q_OBJECT
 
 private:
@@ -124,6 +127,9 @@ public:
 
     uint64_t getBlockCount() const;
 
+    void InitVPN();
+    std::shared_ptr<VPNConnectorManager> vpnConnectorManager;
+
 private:
     void showMessage(QString from, QString message);
     /**
@@ -146,6 +152,7 @@ signals:
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
+    void vpnDisconnect();
 
 private slots:
     void getAllActorsTimerCall();
