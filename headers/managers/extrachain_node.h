@@ -115,6 +115,7 @@ public:
 
     std::expected<Transaction, TransactionError>
                 createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TypeTx& typeTx);
+    std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();
     bool        importUser(const std::string& data, const std::string& login, const std::string& password);
     // TODO: prepareImportUser: get visual info about file

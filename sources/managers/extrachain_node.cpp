@@ -403,6 +403,18 @@ ExtraChainNode::createFarmingTransaction(ActorId sender, const BigNumberFloat& a
     return this->createTransaction(tx);
 }
 
+std::string ExtraChainNode::transactionErrorDescription(const TransactionError &error)
+{
+    switch(error) {
+    case TransactionError::Unknown: return "Unknown error";
+    case TransactionError::ZeroAmount: return "Can not create transaction without amount.";
+    case TransactionError::EmptyTransaction: return "Can not create transaction. Transaction is empty.";
+    case TransactionError::NoLastBlock: return "There is no last block in blockchain.";
+    case TransactionError::InsufficientFunds: return "Can not create transaction. There is not enough coins/tokens in wallet.";
+    case TransactionError::NoCurrentUser: return "Can not create transaction. There no current user.";
+    }
+}
+
 void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
         ActorId actorId = m_accountController->mainActor()->id();
