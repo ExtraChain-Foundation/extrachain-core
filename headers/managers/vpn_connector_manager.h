@@ -8,7 +8,7 @@
 
 #include "network/message_body.h"
 #include "utils/safeptr.h"
-#include "C:\Work\Extrachain\raccoon-core\include\vpnmanager.h"
+#include "vpnmanager.h"
 
 class VPNMessage;
 class ActorId;

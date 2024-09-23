@@ -412,6 +412,8 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError &
     case TransactionError::NoLastBlock: return "There is no last block in blockchain.";
     case TransactionError::InsufficientFunds: return "Can not create transaction. There is not enough coins/tokens in wallet.";
     case TransactionError::NoCurrentUser: return "Can not create transaction. There no current user.";
+    default:
+        return "";
     }
 }
 
