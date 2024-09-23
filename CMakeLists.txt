@@ -38,9 +38,12 @@ find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 
+if(NOT DEFINED RACCOON_CORE OR RACCOON_CORE STREQUAL "")
+    message(WARNING "Can not find Raccoon-core.")
+endif()
 
-
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
+add_subdirectory(${RACCOON_CORE} ${CMAKE_BINARY_DIR}/raccoon-core)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
@@ -183,7 +186,7 @@ string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}")
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
-target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES} ${RACCOON_CORE}/include)
 # target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets

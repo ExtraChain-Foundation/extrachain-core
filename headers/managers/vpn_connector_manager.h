@@ -7,6 +7,7 @@
 #include <QThread>
 
 #include "network/message_body.h"
+#include "vpnmanager.h"
 #include "utils/safeptr.h"
 #include "vpnmanager.h"
 
