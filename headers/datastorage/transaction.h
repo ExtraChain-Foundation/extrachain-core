@@ -82,7 +82,7 @@ public:
         const ActorId &sender,
         const ActorId &receiver,
         const BigNumberFloat &amount,
-        const ActorId &token = Token::ROCC_TOKEN,
+        const ActorId &token = ActorId(),
         const std::string &data = std::string());
 
     Transaction(const Transaction &other);

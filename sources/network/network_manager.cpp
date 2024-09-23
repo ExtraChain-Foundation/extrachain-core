@@ -841,6 +841,7 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::Accrual: {
+        /*
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         qDebug() << "Begin accrual for actor " << actor.id().toString();
         Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec), ActorId(Token::ROCC_TOKEN));
@@ -848,6 +849,7 @@ void NetworkManager::messageReceived(
         tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
         node.txManager()->addTransaction(tx);
         node.network()->send_message(tx, MessageType::BlockchainTransaction);
+        */
         break;
     }
 
