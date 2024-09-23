@@ -42,9 +42,9 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId(), const std::string &nameWallet = std::string(), const std::string &tokenName = Token::ROCC_TOKEN);
+    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId(), const std::string &nameWallet = std::string(), const std::string &tokenName = std::string());
+    // createDAppMaster
     // createService
-    // createServiceProvider
 
     bool load(const std::string &hash);
 

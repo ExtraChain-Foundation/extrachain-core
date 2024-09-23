@@ -41,7 +41,7 @@
 
 enum class ActorType {
     User = 0,
-    ServiceProvider = 1,
+    DAppMaster = 1,
     Service = 2
 };
 MSGPACK_ADD_ENUM(ActorType)

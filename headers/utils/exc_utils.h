@@ -441,7 +441,6 @@ MSGPACK_ADD_ENUM(DataStorage::DataRowType)
 
 namespace Token {
 static const std::string EXTRACHAIN_TOKEN = "";
-static const std::string ROCC_TOKEN = "ROCC";
 }
 
 namespace KeyStore {
