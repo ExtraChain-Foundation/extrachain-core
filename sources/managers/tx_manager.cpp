@@ -130,15 +130,18 @@ void TransactionManager::makeBlock() {
     BlockVariant lastBlock = blockchain->getLastBlock();
 
     if (pendingTxs.empty()) {
-        if (lastRealBlock.isEmpty())
+        // if (lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
-        BlockVariant lastRealBlockTemp = blockchain->getBlockIndex().getLastRealBlockById();
-        // qDebug() << lastRealBlockTemp.getIndex() << lastRealBlockTemp.getType();
+        // qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType();
+        if (lastRealBlock.isEmpty()) {
+            return;
+        }
+
         // creating dummy block in as ordinary block
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
         dummyBlock.setPrev(lastBlock);
-        dummyBlock.addData(lastRealBlockTemp.getIndex().toStdString());
+        dummyBlock.addData(lastRealBlock.getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         blockchain->signBlock(dummyBlockVariant);
         const int addedBlock = blockchain->addBlock(dummyBlockVariant);

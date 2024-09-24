@@ -1144,8 +1144,13 @@ void Blockchain::proveTx(Transaction &tx) {
         // return;
     }
 
-    // if receiver is not exist
+    auto block = getLastRealBlock();
+    if (block.isEmpty()) {
+        qDebug() << "Transaction not approved: no real block";
+        return;
+    }
 
+    // if receiver is not exist
     if ((receiverActor.empty() && !targetReceiver.isZero())
         || (senderActor.empty() && !targetSender.isZero())) {
         txManager->removeUnApprovedTransaction(tx);
