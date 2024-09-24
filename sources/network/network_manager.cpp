@@ -110,7 +110,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
     connect(service, &WebSocketService::activated, this, [&] {
-        node.vpnConnectorManager->ready();
+        emit node.vpnConnectorManager->ready();
         node.dfs()->requestDirFileAllActors();
     });
     if (!m_connections.contains(service)) {
