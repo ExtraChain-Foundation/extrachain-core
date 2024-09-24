@@ -58,12 +58,6 @@ public:
         normalize();
     }
 
-    ActorId &operator=(const std::string &actorId) {
-        this->m_id = actorId;
-        normalize();
-        return *this;
-    }
-
     QByteArray toByteArray() const {
         return QByteArray::fromStdString(m_id);
     }
@@ -82,10 +76,22 @@ public:
     }
 
     bool isZero() const {
-        return m_id == "00000000000000000000";
+        return m_id == "00000000000000000000" || m_id == "";
     }
 
     auto operator<=>(const ActorId &) const = default;
+
+    ActorId &operator=(const ActorId &actorId) {
+        this->m_id = actorId.m_id;
+        normalize();
+        return *this;
+    }
+
+    ActorId &operator=(const std::string &actorId) {
+        this->m_id = actorId;
+        normalize();
+        return *this;
+    }
 
     friend QDebug operator<<(QDebug d, const ActorId &actorId) {
         d.noquote().nospace() << actorId.toByteArray();
