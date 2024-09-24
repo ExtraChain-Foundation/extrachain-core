@@ -93,6 +93,10 @@ public:
     std::optional<std::tuple<QString, quint16, QString>> vpnLastDestroyed;
 
     std::shared_ptr<raccoon::vpn::VPNManager> vpnManager;
+
+signals:
+    void ready();
+
 private:
     std::unique_ptr<VPNWorkerThread> m_workerThread;
     ExtraChainNode* m_node;
