@@ -185,7 +185,7 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 }
 
 void TransactionManager::proveTransactions() {
-    for (auto tx : receivedTxList) {
+    for (Transaction &tx : receivedTxList) {
         blockchain->proveTx(tx);
     }
 }
