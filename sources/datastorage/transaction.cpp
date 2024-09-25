@@ -20,6 +20,11 @@
 #include "datastorage/transaction.h"
 
 Transaction::Transaction() {
+    this->sender = ActorId();
+    this->receiver = ActorId();
+    this->token = ActorId();
+    this->approver = ActorId();
+    this->producer = ActorId();
     this->amount = BigNumberFloat(0);
     this->date = QDateTime::currentMSecsSinceEpoch();
     this->data = std::string();

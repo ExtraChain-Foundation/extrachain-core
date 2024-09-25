@@ -678,8 +678,8 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     }
 
     if (indexBlock % 20 == 0) {
-        const auto &actor      = node->accountController()->mainActor();
-        const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+        const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
+        auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
         requestCoins({ .Actor              = actor->id().toStdString(),
                        .DataStoredSize     = node->dfs()->sizeTaken(),
                        .TypeFunctioningObj = DFS::Reward::Base,
