@@ -34,12 +34,6 @@ enum class TypeTx {
 MSGPACK_ADD_ENUM(TypeTx)
 FORMAT_ENUM(TypeTx)
 
-struct TransactionData {
-    std::string hash;
-    std::string path;
-    MSGPACK_DEFINE(hash, path)
-};
-
 enum class TransactionError {
     Unknown,
     EmptyTransaction,

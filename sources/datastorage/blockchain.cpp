@@ -617,7 +617,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     if (block.getType() == BlockType::Genesis) {
         qDebug() << "[Blockchain] Adding a genesis block" << block.getIndex() << "to storage";
     } else {
-        qDebug() << "[Blockchain] Adding a block" << block.getIndex() << "to storage";
+        qDebug() << "[Blockchain] Adding a block" << block.getIndex() << "to storage" << block.getType();
     }
 
     const auto indexBlock = block.getIndex();
@@ -649,7 +649,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
         if (blockType != BlockType::Dummy) {
             emit updateLastTransactionList();
         }
-        qDebug() << "[Blockchain] Block" << indexBlock << "is successfully added to blockchain";
+        qDebug() << "[Blockchain] Block" << indexBlock << "is successfully added to blockchain" << blockType;
         getSmContractMembers(block);
 
         // TODONEW emit sendMessage(block.serialize(), Messages::ChainMessage::BlockMessage);
@@ -678,8 +678,8 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     }
 
     if (indexBlock % 20 == 0) {
-        const auto &actor      = node->accountController()->mainActor();
-        const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+        const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
+        auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
         requestCoins({ .Actor              = actor->id().toStdString(),
                        .DataStoredSize     = node->dfs()->sizeTaken(),
                        .TypeFunctioningObj = DFS::Reward::Base,
@@ -697,8 +697,8 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
 
             GenesisBlock gB = createGenesisBlock(actor);
             if (blockIndex.addBlock(BlockVariant(gB)) == 0) {
-                qDebug() << "[Blockchain] Block" << gB.getIndex() << gB.getType()
-                         << "is successfully added to blockchain";
+                qDebug() << "[Blockchain] Genesis block" << gB.getIndex()
+                << "is successfully added to blockchain" << gB.getType();
                 // TODONEW emit sendMessage(gB.serialize(),
                 // Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
@@ -1118,6 +1118,7 @@ void Blockchain::proveTx(Transaction &tx) {
         targetSender = tx.getApprover();
         // TODO: add extended check of validity
         auto res = this->blockIndex.getLastTxByData(tx.getData(), ActorId());
+
         if (res.second == "-1") {
             txManager->addProvedTransaction(tx);
             return;
@@ -1141,7 +1142,7 @@ void Blockchain::proveTx(Transaction &tx) {
     }
     if (tx.getAmount() == 0) {
         qDebug() << "Transaction not approved: amount == 0";
-        // return;
+        return;
     }
 
     auto block = getLastRealBlock();
@@ -1154,9 +1155,6 @@ void Blockchain::proveTx(Transaction &tx) {
     if ((receiverActor.empty() && !targetReceiver.isZero())
         || (senderActor.empty() && !targetSender.isZero())) {
         txManager->removeUnApprovedTransaction(tx);
-        if (receiverActor.empty()) {
-            txManager->addProvedTransaction(tx);
-        }
         qDebug() << "Transaction not approved: receiver or sender is not exist";
         return;
     }

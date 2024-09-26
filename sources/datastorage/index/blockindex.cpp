@@ -468,7 +468,7 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     QString path = buildFilePath(id);
     QFile file(path);
 
-    qDebug() << "[BlockIndex] Saving the file:" << path;
+    qDebug() << "[BlockIndex] Saving the file:" << path << newBlock.getType();
 
     if (file.exists()) {
         qDebug() << "[BlockIndex] Can't save the file" << path << "(file already exits)";

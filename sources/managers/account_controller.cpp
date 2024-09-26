@@ -30,10 +30,9 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     if (hash.empty())
         qFatal("[Accounts] Create actor: hash is empty");
 
-    Actor<KeyPrivate> actor, farming;
+    Actor<KeyPrivate> actor;
     actor.create(type);
-    farming.create(type);
-    auto profile = PrivateProfile::create(actor, hash, farming);
+    auto profile = PrivateProfile::create(actor, hash, actor);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
@@ -217,4 +216,3 @@ void AccountController::renamewallet(const QString &oldWalletName, const QString
         }
     }
 }
-

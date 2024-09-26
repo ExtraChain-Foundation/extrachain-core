@@ -692,12 +692,6 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
-            TransactionData transactionData =
-                MessagePack::deserialize<TransactionData>(transaction.getData());
-            qDebug() << "run code from " << transactionData.path.c_str()
-                     << "with hash: " << transactionData.hash.c_str();
-        }
 
         // TODO deep analisys
         auto &transactionList = node.txManager()->getReceivedTxListByReference();
