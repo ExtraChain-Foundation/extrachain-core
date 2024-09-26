@@ -47,7 +47,7 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 class VPNConnectorManager;
-// class RestApiServerManager;
+class CreateTokenManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -62,8 +62,7 @@ private:
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
-    // RestApiServerManager *m_restApiServerManager = nullptr;
-    // ContractManager *m_contractManager = nullptr;
+    CreateTokenManager *m_createTokenManager = nullptr;
 
     bool                   started             = false;
     bool                   isClientApplication = false;
@@ -94,6 +93,7 @@ public:
     TransactionManager* txManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
+    CreateTokenManager* createTokenMananger() const;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);

@@ -81,7 +81,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/cache_balance_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/vpn_connector_manager.h
-    # ${CMAKE_CURRENT_LIST_DIR}/headers/managers/restApiServerManager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/create_token_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
@@ -100,10 +100,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/cpp-base64/base64.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm_rust_test.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
@@ -114,7 +110,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/actorindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
-#    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/reward_transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/threds/inserter_files.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp
@@ -133,7 +128,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/cache_balance_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/vpn_connector_manager.cpp
-    # ${CMAKE_CURRENT_LIST_DIR}/sources/managers/restApiServerManager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/create_token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
