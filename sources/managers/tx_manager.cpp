@@ -57,15 +57,15 @@ void TransactionManager::removeTransaction(int i) {
     this->pendingTxs.erase(pendingTxs.begin() + i);
 }
 
-void TransactionManager::addTransaction(Transaction tx) {
-    qDebug() << QString("TRANSACTION MANAGER: addTransaction [%1]").arg(tx.toString());
+void TransactionManager::addTransaction(const Transaction &tx) {
+    qDebug() << "[TransactionManager] Add transaction:" << tx;
 
     //    if (tx.isEmpty())
     //        return;
     receivedTxList.push_back(tx);
 }
 
-void TransactionManager::addProvedTransaction(Transaction tx) {
+void TransactionManager::addProvedTransaction(const Transaction &tx) {
     qDebug() << "addProvedTransaction";
     if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end() || pendingTxs.empty()) {
         pendingTxs.push_back(tx);
@@ -73,14 +73,14 @@ void TransactionManager::addProvedTransaction(Transaction tx) {
     }
 
     // receivedTxList.removeOne(tx);
-    auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
-    receivedTxList.erase(it, receivedTxList.end());
+    // auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
+    // receivedTxList.erase(it, receivedTxList.end());
 }
 
-void TransactionManager::removeUnApprovedTransaction(Transaction tx) {
+void TransactionManager::removeUnApprovedTransaction(const Transaction &tx) {
     // receivedTxList.removeOne(tx);
-    auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
-    receivedTxList.erase(it, receivedTxList.end());
+    // auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
+    // receivedTxList.erase(it, receivedTxList.end());
 }
 
 bool TransactionManager::isUnapproved(const QByteArray &txHash) {
@@ -188,6 +188,7 @@ void TransactionManager::proveTransactions() {
     for (Transaction &tx : receivedTxList) {
         blockchain->proveTx(tx);
     }
+    receivedTxList.clear();
 }
 
 BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
