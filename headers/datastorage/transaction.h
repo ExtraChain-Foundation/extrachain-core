@@ -37,13 +37,28 @@ FORMAT_ENUM(TypeTx)
 enum class TransactionError {
     Unknown,
     EmptyTransaction,
-    NoLastBlock,
+    NoLastBlock, // EmptyBlockchain?
     InsufficientFunds,
     NoCurrentUser,
     ZeroAmount
 };
 // MSGPACK_ADD_ENUM(TransactionError)
 FORMAT_ENUM(TransactionError)
+
+enum class TransactionProveError {
+    NoError,
+    Unknown,
+    AmountZero, // amount == 0
+    AmountLessZero, // amount less 0
+    IdenticalSenderReceiver, // sender == receiver
+    EmptyBlockchain, // no real block
+    SenderNotExists, // sender is not exist
+    ReceiverNotExists, // receiver is not exist
+    ZeroProducer, // producer 0
+    ProducerVerify, // bad signature in fee tx
+    SenderBalanceBelowZero, // sender's balance will be < 0
+};
+FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
     ActorId sender;
@@ -139,19 +154,6 @@ public:
         producer,
         signature,
         typeTx)
-};
-
-struct FarmingTransactionData {
-    BigNumber index;
-    Transaction transaction;
-
-    void decrementIndex() {
-        index -= BigNumber(1);
-    }
-
-    bool canImproveTx() {
-        return index <= 0;
-    }
 };
 
 QDebug operator<<(QDebug debug, const Transaction &tx);

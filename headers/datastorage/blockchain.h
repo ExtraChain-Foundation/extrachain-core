@@ -343,12 +343,6 @@ public:
     BigNumber getBlockIndexLastFarmingTx() const;
 
     /**
-     * @brief Get all farming txs
-     */
-
-    std::list<FarmingTransactionData> getFarmingTxs() const;
-
-    /**
      * @brief calculate reward amound
      * @return amount of reward
      */
@@ -444,6 +438,6 @@ public slots:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    void proveTx(Transaction &tx);
+    TransactionProveError proveTx(const Transaction &tx);
 };
 #endif // BLOCKCHAIN_H

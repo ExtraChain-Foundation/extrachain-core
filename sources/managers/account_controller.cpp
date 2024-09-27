@@ -32,7 +32,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
 
     Actor<KeyPrivate> actor;
     actor.create(type);
-    auto profile = PrivateProfile::create(actor, hash, actor);
+    auto profile = PrivateProfile::create(actor, hash);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
@@ -151,16 +151,6 @@ const std::vector<ActorId> AccountController::accountsIds() const {
     std::vector<ActorId> ids;
     for (int i = 0; i < currentProfile().actors().size(); i++) {
         ids.push_back(currentProfile().actors()[i]->id());
-    }
-    return ids;
-}
-
-const std::vector<ActorId> AccountController::farmingIds() const
-{
-    std::vector<ActorId> ids;
-    const auto farmings = currentProfile().farmings();
-    for (int i = 0; i < farmings.size(); i++) {
-        ids.push_back(farmings[i].id());
     }
     return ids;
 }

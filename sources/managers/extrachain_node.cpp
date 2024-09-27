@@ -60,7 +60,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     //    ThreadPool::addThread(m_networkManager);
 
     m_blockchain = new Blockchain(this);
-    m_txManager  = new TransactionManager(m_accountController, m_blockchain, this);
+    m_txManager  = new TransactionManager(*this);
     m_dfs        = new DfsController(*this);
 
     m_blockchain->setTxManager(m_txManager);

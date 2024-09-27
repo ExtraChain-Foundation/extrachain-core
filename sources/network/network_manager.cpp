@@ -692,13 +692,6 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-
-        // TODO deep analisys
-        auto &transactionList = node.txManager()->getReceivedTxListByReference();
-        auto found = std::find(transactionList.begin(), transactionList.end(), transaction);
-        if (found != transactionList.end()) {
-            transactionList.erase(found);
-        }
         node.txManager()->addTransaction(transaction);
         break;
     }

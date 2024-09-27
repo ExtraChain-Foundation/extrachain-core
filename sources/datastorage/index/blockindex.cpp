@@ -727,33 +727,6 @@ BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const {
     return BigNumber(-1);
 }
 
-std::list<FarmingTransactionData> BlockIndex::getAllLockedFarmingTransactions() const {
-    std::list<FarmingTransactionData> farmingsTxs;
-    if (getRecords().isEmpty())
-        return farmingsTxs;
-
-    BigNumber lastBlockId = getLastSavedId();
-    BigNumber farmingBlockIndex = BigNumber(302400);
-    BigNumber toBlockIndex =
-        (lastBlockId - farmingBlockIndex) > 0 ? (lastBlockId - farmingBlockIndex) : getFirstSavedId();
-
-    while (lastBlockId >= getFirstSavedId() || lastBlockId >= toBlockIndex) {
-        BlockVariant lastBlock = getBlockById(lastBlockId);
-        if (lastBlock.isBlock()) {
-            auto txs = lastBlock.transactions();
-
-            for (const Transaction &tx : txs) {
-                if (tx.isFarmingTransaction())
-                    farmingsTxs.push_front(FarmingTransactionData { .index = farmingBlockIndex - lastBlockId,
-                                                                    .transaction = tx });
-            }
-        }
-        --lastBlockId;
-    }
-
-    return farmingsTxs;
-}
-
 std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const {
     std::string path = buildFilePath(id).toStdString();
 

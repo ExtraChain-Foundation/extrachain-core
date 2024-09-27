@@ -48,35 +48,23 @@ private:
     QTimer proveTimer;
 
     // received transactions that will be packed into block
-    std::vector<Transaction> pendingTxs;
+    std::set<Transaction> m_pendingTxList;
+    std::set<Transaction> m_receivedTxList;
 
-    // (This a network state more)
-    // hashes of sent transactions, that are not approved yet
-    std::vector<QByteArray> unApprovedTxHashes;
-    std::vector<Transaction> receivedTxList;
-
-    // current user
-    //    Actor<KeyPrivate> currentUser;
-    AccountController *accountController;
-    ExtraChainNode *extraChainNode;
-    Blockchain *blockchain;
+    ExtraChainNode& node;
     // received transactions that we need to compare between network and blockchain
-
-    std::list<FarmingTransactionData> farmingTxs;
 
 public:
     // todo: add ref to blockchain
-    TransactionManager(AccountController *accountController, Blockchain *blockchain,
-                       ExtraChainNode *extraChainNode);
+    TransactionManager(ExtraChainNode &node);
 
 private:
     void removeTransaction(int i);
 
 public:
     BigNumberFloat checkPendingTxsList(const ActorId &sender);
-    std::vector<Transaction> getReceivedTxList() const;
-    std::vector<Transaction> &getReceivedTxListByReference();
-    std::vector<Transaction> getPendingTxs() const;
+    std::set<Transaction> getReceivedTxList() const;
+    std::set<Transaction> getPendingTxs() const;
     /**
      * Run make_block and prove_block timers
      */
@@ -100,7 +88,6 @@ public slots:
     void proveTransactions();
     void addTransaction(const Transaction &tx);
     void addProvedTransaction(const Transaction &tx);
-    void removeUnApprovedTransaction(const Transaction &tx);
     // Unapproved tx's //
 
     /**
@@ -108,19 +95,19 @@ public slots:
      * @param txHash
      * @return true if there is txHash in unApprovedTxHashes, false otherwise
      */
-    bool isUnapproved(const QByteArray &txHash);
+    // bool isUnapproved(const std::string &txHash);
 
     /**
      * @brief Removes hash from unApprovedTxHashes list
      * @param txHash to remove
      */
-    void removeUnapprovedHash(const QByteArray &txHash);
+    // void removeUnapprovedHash(const std::string &txHash);
 
     /**
      * @brief addUnapprovedHash
      * @param txHash
      */
-    void addUnapprovedHash(QByteArray txHash);
+    // void addUnapprovedHash(const std::string &txHash);
 
     /**
      * @brief Adds transaction to pending list
@@ -134,30 +121,30 @@ signals:
      * (By checking tx existanse in previous blocks)
      * @param tx - transaction to check
      */
-    void VerifyTx(Transaction tx);
+    // void VerifyTx(Transaction tx);
 
     /**
      * @brief Sends new verified block to the network
      * @param block
      */
-    void SendBlock(QByteArray block, unsigned int msgType);
+    // void SendBlock(QByteArray block, unsigned int msgType);
     /**
      * @brief Send transaction request
      * @param senderId
      * @param receiverId
      */
-    void SendProveTransactionRequest(BigNumber senderId, BigNumber receiverId, QByteArray txHash);
+    // void SendProveTransactionRequest(BigNumber senderId, BigNumber receiverId, QByteArray txHash);
 
     /**
      * @brief sends transaction request to compare transaction
      * between network and blockchain
      */
-    void ApproveTX();
+    // void ApproveTX();
     /**
      * @brief Sends a compared transaaction no the network manager
      * @param Transaction compared between local blockchain and transaction
      */
-    void GetTxResponse(Transaction tx);
+    // void GetTxResponse(Transaction tx);
 
     void finished();
 

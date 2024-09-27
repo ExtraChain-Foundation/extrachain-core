@@ -23,30 +23,21 @@
 #include <QFuture>
 #include <QtConcurrent>
 
-std::vector<Transaction> TransactionManager::getReceivedTxList() const {
-    return receivedTxList;
+std::set<Transaction> TransactionManager::getReceivedTxList() const {
+    return m_receivedTxList;
 }
 
-std::vector<Transaction> &TransactionManager::getReceivedTxListByReference() {
-    return receivedTxList;
+std::set<Transaction> TransactionManager::getPendingTxs() const {
+    return m_pendingTxList;
 }
 
-std::vector<Transaction> TransactionManager::getPendingTxs() const {
-    return pendingTxs;
-}
-
-TransactionManager::TransactionManager(AccountController *accountController, Blockchain *blockchain,
-                                       ExtraChainNode *extraChainNode) {
-    this->accountController = accountController;
-    this->blockchain = blockchain;
-    this->extraChainNode = extraChainNode;
-
+TransactionManager::TransactionManager(ExtraChainNode &node)
+    : node(node) {
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
     connect(&blockCreationTimer, &QTimer::timeout, this,
             &TransactionManager::makeBlockAndProveTransactionsInThread);
 
-    farmingTxs = blockchain->getFarmingTxs();
     blockCreationTimer.start();
     // prove timer
     //    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
@@ -54,57 +45,23 @@ TransactionManager::TransactionManager(AccountController *accountController, Blo
 }
 
 void TransactionManager::removeTransaction(int i) {
-    this->pendingTxs.erase(pendingTxs.begin() + i);
+    // this->m_pendingTxList.erase(m_pendingTxList.begin() + i);
 }
 
 void TransactionManager::addTransaction(const Transaction &tx) {
-    qDebug() << "[TransactionManager] Add transaction:" << tx;
-
-    //    if (tx.isEmpty())
-    //        return;
-    receivedTxList.push_back(tx);
+    qDebug() << "[TransactionManager] Transaction is being added to the waiting list:" << tx;
+    m_receivedTxList.insert(tx);
 }
 
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
     qDebug() << "addProvedTransaction";
-    if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end() || pendingTxs.empty()) {
-        pendingTxs.push_back(tx);
-        emit addToCache(tx.getReceiver().toStdString(), tx);
-    }
-
-    // receivedTxList.removeOne(tx);
-    // auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
-    // receivedTxList.erase(it, receivedTxList.end());
-}
-
-void TransactionManager::removeUnApprovedTransaction(const Transaction &tx) {
-    // receivedTxList.removeOne(tx);
-    // auto it = std::remove(receivedTxList.begin(), receivedTxList.end(), tx);
-    // receivedTxList.erase(it, receivedTxList.end());
-}
-
-bool TransactionManager::isUnapproved(const QByteArray &txHash) {
-    return Utils::vector_contains(unApprovedTxHashes, txHash);
-}
-
-void TransactionManager::removeUnapprovedHash(const QByteArray &txHash) {
-    // QMutableListIterator<QByteArray> i(unApprovedTxHashes);
-    // while (i.hasNext()) {
-    //     if (i.next() == txHash)
-    //         i.remove();
-    // }
-    unApprovedTxHashes.erase(
-        std::remove(unApprovedTxHashes.begin(), unApprovedTxHashes.end(), txHash),
-        unApprovedTxHashes.end());
-}
-
-void TransactionManager::addUnapprovedHash(QByteArray txHash) {
-    unApprovedTxHashes.push_back(txHash);
+    m_pendingTxList.insert(tx);
+    emit addToCache(tx.getReceiver().toStdString(), tx);
 }
 
 void TransactionManager::addVerifiedTx(Transaction tx) {
     qDebug() << QString("Adding tx[%1] to pending list").arg(tx.toString());
-    pendingTxs.push_back(tx);
+    m_pendingTxList.insert(tx);
 }
 
 void TransactionManager::runMakeAndProveBlockTimers() {
@@ -116,22 +73,17 @@ void TransactionManager::runMakeAndProveBlockTimers() {
 // Block making
 
 void TransactionManager::makeBlock() {
-    if (extraChainNode->accountController()->empty())
+    if (node.accountController()->empty())
         return;
 
-    for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
-        if (farmingTransactionData.canImproveTx())
-            pendingTxs.push_back(farmingTransactionData.transaction);
-    }
+    node.dataMiningManager()->interestAccrual();
 
-    extraChainNode->dataMiningManager()->interestAccrual();
+    BlockVariant lastRealBlock = node.blockchain()->getLastRealBlock();
+    BlockVariant lastBlock = node.blockchain()->getLastBlock();
 
-    BlockVariant lastRealBlock = blockchain->getLastRealBlock();
-    BlockVariant lastBlock = blockchain->getLastBlock();
-
-    if (pendingTxs.empty()) {
+    if (m_pendingTxList.empty()) {
         // if (lastRealBlock.isEmpty())
-            lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
+            lastRealBlock = node.blockchain()->getBlockIndex().getLastRealBlockById();
         // qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType();
         if (lastRealBlock.isEmpty()) {
             return;
@@ -143,40 +95,33 @@ void TransactionManager::makeBlock() {
         dummyBlock.setPrev(lastBlock);
         dummyBlock.addData(lastRealBlock.getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
-        blockchain->signBlock(dummyBlockVariant);
-        const int addedBlock = blockchain->addBlock(dummyBlockVariant);
+        node.blockchain()->signBlock(dummyBlockVariant);
+        const int addedBlock = node.blockchain()->addBlock(dummyBlockVariant);
         if (addedBlock == 0)
             lastBlock = dummyBlockVariant;
-        lastBlock = blockchain->getLastBlock();
+        lastBlock = node.blockchain()->getLastBlock();
         return;
     }
 
     // remove all dummy blocks
-    blockchain->removeAllDummyBlocks(lastBlock);
+    node.blockchain()->removeAllDummyBlocks(lastBlock);
 
     if (lastRealBlock.isEmpty())
-        lastRealBlock = blockchain->getLastRealBlock();
+        lastRealBlock = node.blockchain()->getLastRealBlock();
     Block block;
     block.setPrev(lastRealBlock);
-    block.addTransactions(pendingTxs);
+    block.addTransactions(m_pendingTxList);
 
     auto blockVariant = BlockVariant(block);
-    blockchain->signBlock(blockVariant);
-    const int addedBlock = blockchain->addBlock(blockVariant);
+    node.blockchain()->signBlock(blockVariant);
+    const int addedBlock = node.blockchain()->addBlock(blockVariant);
+
     if (addedBlock == 0) {
         lastBlock = blockVariant;
         lastRealBlock = blockVariant;
-
-        for (FarmingTransactionData &farmingTransactionData : farmingTxs) {
-            continue; // farming not farm
-            if (farmingTransactionData.canImproveTx()) {
-                farmingTxs.pop_front();
-                continue;
-            }
-            farmingTransactionData.decrementIndex();
-        }
     }
-    this->pendingTxs.clear();
+
+    this->m_pendingTxList.clear();
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
@@ -185,16 +130,25 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 }
 
 void TransactionManager::proveTransactions() {
-    for (Transaction &tx : receivedTxList) {
-        blockchain->proveTx(tx);
+    for (const Transaction &tx : m_receivedTxList) {
+        TransactionProveError res = node.blockchain()->proveTx(tx);
+
+        if (res == TransactionProveError::NoError) {
+            qDebug() << "Transaction approved!";
+            qDebug() << tx;
+        } else {
+            qDebug() << "Transaction not approved:" << res;
+            qDebug() << tx;
+        }
     }
-    receivedTxList.clear();
+
+    m_receivedTxList.clear();
 }
 
 BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
     BigNumberFloat res = 0;
-    if (!pendingTxs.empty()) {
-        for (const Transaction &tmp : std::as_const(pendingTxs)) {
+    if (!m_pendingTxList.empty()) {
+        for (const Transaction &tmp : std::as_const(m_pendingTxList)) {
             if (tmp.getSender() == sender) {
                 res -= tmp.getAmount();
             } else if (tmp.getReceiver() == sender) {

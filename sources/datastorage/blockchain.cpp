@@ -698,7 +698,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
             GenesisBlock gB = createGenesisBlock(actor);
             if (blockIndex.addBlock(BlockVariant(gB)) == 0) {
                 qDebug() << "[Blockchain] Genesis block" << gB.getIndex()
-                << "is successfully added to blockchain" << gB.getType();
+                         << "is successfully added to blockchain" << gB.getType();
                 // TODONEW emit sendMessage(gB.serialize(),
                 // Messages::ChainMessage::GenesisBlockMessage);
                 blocksFromLastGenesis = 0;
@@ -964,7 +964,7 @@ void Blockchain::requestCoins(const DFS::Reward::RequestReward &requestReward) {
 void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {
     if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100) {
         Transaction transaction;
-        transaction.setSender(node->accountController()->mainActor()->id());
+        transaction.setSender(ActorId());
         transaction.setReceiver(requestReward.Actor);
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
@@ -986,10 +986,6 @@ bool Blockchain::getPossibleMining() const {
 
 BigNumber Blockchain::getBlockIndexLastFarmingTx() const {
     return blockIndex.getIndexBlockByLastFarmingTx();
-}
-
-std::list<FarmingTransactionData> Blockchain::getFarmingTxs() const {
-    return blockIndex.getAllLockedFarmingTransactions();
 }
 
 [[maybe_unused]] void Blockchain::process() {
@@ -1108,11 +1104,14 @@ void Blockchain::VerifyTx(Transaction &tx) {
     emit VerifiedTx(tx);
 }
 
-void Blockchain::proveTx(Transaction &tx) {
+TransactionProveError Blockchain::proveTx(const Transaction &tx) {
     qDebug() << "proveTx: started" << tx.getTypeTx();
 
-    ActorId targetSender   = tx.getSender();
-    ActorId targetReceiver = tx.getReceiver();
+    ActorId        targetSender   = tx.getSender();
+    ActorId        targetReceiver = tx.getReceiver();
+    const ActorId &mainActorId    = node->accountController()->mainActor()->id();
+    const ActorId &firstId        = node->actorIndex()->firstId();
+
     // start reward check
     if (tx.isRewardTransaction() || tx.isFarmingTransaction()) {
         targetSender = tx.getApprover();
@@ -1121,7 +1120,7 @@ void Blockchain::proveTx(Transaction &tx) {
 
         if (res.second == "-1") {
             txManager->addProvedTransaction(tx);
-            return;
+            return TransactionProveError::NoError;
         }
     }
     Actor<KeyPublic> senderActor;
@@ -1131,32 +1130,27 @@ void Blockchain::proveTx(Transaction &tx) {
     if (!targetReceiver.isZero())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
     if (tx.getAmount() < 0) {
-        qDebug() << "Transaction not approved: amount less 0";
-        txManager->removeUnApprovedTransaction(tx);
-        return;
+        return TransactionProveError::AmountLessZero;
     }
     if (targetSender == targetReceiver) {
-        txManager->removeUnApprovedTransaction(tx);
-        qDebug() << "Transaction not approved: sender == receiver";
-        return;
+        return TransactionProveError::IdenticalSenderReceiver;
     }
     if (tx.getAmount() == 0) {
-        qDebug() << "Transaction not approved: amount == 0";
-        return;
+        return TransactionProveError::AmountZero;
     }
 
     auto block = getLastRealBlock();
     if (block.isEmpty()) {
-        qDebug() << "Transaction not approved: no real block";
-        return;
+        return TransactionProveError::EmptyBlockchain;
     }
 
     // if receiver is not exist
-    if ((receiverActor.empty() && !targetReceiver.isZero())
-        || (senderActor.empty() && !targetSender.isZero())) {
-        txManager->removeUnApprovedTransaction(tx);
-        qDebug() << "Transaction not approved: receiver or sender is not exist";
-        return;
+    if (senderActor.empty() && !targetSender.isZero()) {
+        return TransactionProveError::SenderNotExists;
+    }
+
+    if (receiverActor.empty() && !targetReceiver.isZero()) {
+        return TransactionProveError::ReceiverNotExists;
     }
 
     // special conditions: receiver is null - coins burning
@@ -1165,22 +1159,13 @@ void Blockchain::proveTx(Transaction &tx) {
         if (!tx.getProducer().isZero())
             producerActor = node->actorIndex()->getActor(tx.getProducer());
         else {
-            qDebug() << QString("Tx %1 producer 0").arg(tx.getHash().c_str());
-            txManager->removeUnApprovedTransaction(tx);
-            return;
+            return TransactionProveError::ZeroProducer;
         }
         if (!producerActor.key().verify(tx.getHash(), tx.getSignature())) {
-            qDebug() << QString("Tx %1 not approved: bad signature in fee tx").arg(tx.getHash().c_str());
-            txManager->removeUnApprovedTransaction(tx);
-            return;
-        }
-        if (tx.getAmount() <= 0) {
-            qDebug() << QString("Tx %1 fee amount <= 0").arg(tx.getHash().c_str());
-            txManager->removeUnApprovedTransaction(tx);
-            return;
+            return TransactionProveError::ProducerVerify;
         }
         txManager->addProvedTransaction(tx);
-        return;
+        return TransactionProveError::NoError;
     }
 
     //    // if !sig
@@ -1195,44 +1180,42 @@ void Blockchain::proveTx(Transaction &tx) {
     // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.isZero()) {
         qDebug() << "target received is empty";
-        tx.sign(node->accountController()->currentWallet());
 
-        txManager->addProvedTransaction(tx);
-        return;
+        Transaction provedTx(tx);
+        provedTx.sign(node->accountController()->currentWallet());
+        txManager->addProvedTransaction(provedTx);
+        return TransactionProveError::NoError;
     } else {
         if (tx.getData() == "InitContract") {
-            return;
+            return TransactionProveError::Unknown;
         }
-        if (targetSender != node->actorIndex()->firstId()) {
+
+        if (targetSender != firstId) {
             BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx.getToken());
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
-            if (tx.getAmount() <= 0) {
-                txManager->removeUnApprovedTransaction(tx);
-                qDebug() << "Transaction not approved: amount <= 0";
-                return;
+            BigNumberFloat transactionAmount = tx.getAmount();
+            BigNumberFloat transactionFee    = transactionAmount / 100;
+            BigNumberFloat senderNewBalance  = senderCurrentBalance - transactionAmount - transactionFee;
+
+            if (senderNewBalance < 0 /* && mainActorId == firstId */) {
+                return TransactionProveError::SenderBalanceBelowZero;
             }
 
-            auto    mainActorId = node->accountController()->mainActor()->id();
-            ActorId firstId     = node->actorIndex()->firstId();
-            if (senderCurrentBalance - tx.getAmount() - tx.getAmount() / 100 < 0 && mainActorId == firstId) {
-                qDebug() << senderCurrentBalance << tx.getAmount();
-                qDebug() << "Transaction "
-                            "not approved: sender's or receiver's balance will be < 0";
-                txManager->removeUnApprovedTransaction(tx);
-                return;
-            }
-
+            // sign?
             txManager->addProvedTransaction(tx);
+            return TransactionProveError::NoError;
         } else {
-            tx.sign(node->accountController()->currentWallet());
-            txManager->addProvedTransaction(tx);
-            return;
+            Transaction provedTx(tx);
+            provedTx.sign(node->accountController()->currentWallet());
+            txManager->addProvedTransaction(provedTx);
+            return TransactionProveError::NoError;
         }
-        return;
+
+        return TransactionProveError::Unknown;
     }
-    qDebug() << "Undefine behaviour blockhain.cpp proveTx";
-    txManager->removeUnApprovedTransaction(tx);
+
+    return TransactionProveError::Unknown;
 }
 
 // Other //
