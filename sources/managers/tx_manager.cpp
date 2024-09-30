@@ -54,18 +54,13 @@ void TransactionManager::addTransaction(const Transaction &tx) {
 }
 
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
-    qDebug() << "addProvedTransaction";
+    qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
     emit addToCache(tx.getReceiver().toStdString(), tx);
 }
 
-void TransactionManager::addVerifiedTx(Transaction tx) {
-    qDebug() << QString("Adding tx[%1] to pending list").arg(tx.toString());
-    m_pendingTxList.insert(tx);
-}
-
 void TransactionManager::runMakeAndProveBlockTimers() {
-    qDebug() << "start timer:";
+    qDebug() << "[TransactionManager] Start timers";
     blockCreationTimer.start();
     proveTimer.start();
 }
@@ -89,6 +84,7 @@ void TransactionManager::makeBlock() {
             return;
         }
 
+        return; // temp disable dummy
         // creating dummy block in as ordinary block
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
@@ -111,17 +107,18 @@ void TransactionManager::makeBlock() {
     Block block;
     block.setPrev(lastRealBlock);
     block.addTransactions(m_pendingTxList);
+    this->m_pendingTxList.clear();
 
     auto blockVariant = BlockVariant(block);
     node.blockchain()->signBlock(blockVariant);
-    const int addedBlock = node.blockchain()->addBlock(blockVariant);
 
-    if (addedBlock == 0) {
-        lastBlock = blockVariant;
-        lastRealBlock = blockVariant;
+    if (blockVariant.isGenesisBlock()) {
+        auto genesisBlock = blockVariant.getGenesisBlockConst();
+        node.network()->send_message(genesisBlock, MessageType::BlockchainGenesisBlock);
+    } else {
+        auto dataBlock = blockVariant.getBlockConst();
+        node.network()->send_message(dataBlock, MessageType::BlockchainNewBlock);
     }
-
-    this->m_pendingTxList.clear();
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
@@ -131,14 +128,20 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 
 void TransactionManager::proveTransactions() {
     for (const Transaction &tx : std::as_const(m_receivedTxList)) {
-        TransactionProveError res = node.blockchain()->proveTx(tx);
+        TransactionProveError res = node.blockchain()->proveTransaction(tx);
 
         if (res == TransactionProveError::NoError) {
-            qDebug() << "Transaction approved!";
-            qDebug() << tx;
+            qDebug() << "[TransactionManager]" << tx;
+            qDebug() << "[TransactionManager] Transaction approved!";
+            this->addProvedTransaction(tx);
         } else {
-            qDebug() << "Transaction not approved:" << res;
-            qDebug() << tx;
+            qDebug() << "[TransactionManager]" << tx;
+            qDebug() << "[TransactionManager] Transaction not approved:" << res;
+
+            // hack
+            if (res == TransactionProveError::SelfPleasure && tx.isRewardTransaction()) {
+                node.network()->send_message(tx, MessageType::BlockchainTransaction);
+            }
         }
     }
 

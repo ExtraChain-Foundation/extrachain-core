@@ -125,7 +125,7 @@ bool ExtraChainNode::createNewNetwork(
         tm.insert(ActorId(), 0);
         GenesisBlock tmp        = m_blockchain->createGenesisBlock(first, tm);
         auto         tmpVariant = BlockVariant(tmp);
-        m_blockchain->addBlock(tmpVariant, true);
+        m_blockchain->addBlock(tmpVariant);
 
         // TEST
         //        Block lastBlock = m_blockchain->getLastBlock();
@@ -411,6 +411,7 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError &
     case TransactionError::NoLastBlock: return "There is no last block in blockchain.";
     case TransactionError::InsufficientFunds: return "Can not create transaction. There is not enough coins/tokens in wallet.";
     case TransactionError::NoCurrentUser: return "Can not create transaction. There no current user.";
+    default: return "";
     }
 }
 

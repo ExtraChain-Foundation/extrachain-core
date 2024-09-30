@@ -356,6 +356,11 @@ static QString filePrefix = "file:///";
 static QString filePrefix = "file://";
 #endif
 
+template<typename E>
+std::string enumFullName(E value) {
+    return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
+}
+
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64 diskFreeMemory();
 EXTRACHAIN_EXPORT qint64 diskTotalMemory();

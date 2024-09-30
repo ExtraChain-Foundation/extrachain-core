@@ -77,7 +77,7 @@ BlockVariant BlockIndex::getLastBlock() const {
 
 BlockVariant BlockIndex::getLastRealBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] getLastBlock: last saved id -" << this->lastSavedId;
+    qDebug() << "[BlockIndex] Last real block:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         BlockVariant block = this->getBlockById(id);
         if ((!block.isEmpty()) && (block.getType() != BlockType::Dummy)) {
@@ -91,7 +91,7 @@ BlockVariant BlockIndex::getLastRealBlock() const {
 
 GenesisBlock BlockIndex::getLastGenesisBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] getLastGenesisBlock: last saved id -" << this->lastSavedId;
+    qDebug() << "[BlockIndex] Last real genesis block:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         GenesisBlock block = this->getGenesisBlockById(id);
         if (!block.isEmpty()) {

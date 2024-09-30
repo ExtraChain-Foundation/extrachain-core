@@ -113,7 +113,7 @@ public slots:
      * @brief Adds transaction to pending list
      * @param tx - already verified transaction
      */
-    void addVerifiedTx(Transaction tx);
+    // void addVerifiedTx(Transaction tx);
 
 signals:
     /**

@@ -260,7 +260,8 @@ std::string Transaction::toStdString() const {
 
 QString Transaction::toString() const {
     auto hashQt = QString::fromStdString(hash);
-    return "Transaction { sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
+    auto typeStr = QString::fromStdString(Utils::enumFullName(typeTx));
+    return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
            + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
            + QDateTime::fromMSecsSinceEpoch(date).toString() + ", data: '" + QString::fromStdString(data)
            + "', token: " + token.toByteArray() + ", prevBlock: " + prevBlock.toByteArray() + ", hash: '"

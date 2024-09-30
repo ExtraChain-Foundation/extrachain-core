@@ -510,7 +510,7 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
         // and save updated blocks with new hash
         removeBlock(BlockVariant(existed));
         auto mergedVariant = BlockVariant(merged);
-        addBlock(mergedVariant, true);
+        addBlock(mergedVariant);
         for (BlockVariant &b : tmpBlocks) {
             addBlock(b);
         }
@@ -584,7 +584,7 @@ void Blockchain::updateFirstId(const BlockVariant &block) {
         node->actorIndex()->setFirstId(firstId);
 }
 
-int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
+int Blockchain::addBlock(BlockVariant &block) {
     if (block.getType() == BlockType::Genesis) {
         qDebug() << "[Blockchain] Adding a genesis block" << block.getIndex() << "to storage";
     } else {
@@ -592,7 +592,7 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
     }
 
     const auto indexBlock = block.getIndex();
-    if (!(block.getType() == BlockType::Genesis)) {
+    if (block.getType() != BlockType::Genesis) {
         if (indexBlock != 0) {
             BigNumber id = block.getIndex() - 1;
             if (getBlock(SearchEnum::BlockParam::Id, id.toByteArray()).isEmpty()) {
@@ -648,11 +648,10 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
 
     if (indexBlock % DFS::Reward::coinProductionAlgorithmTick == 0) {
         node->dataMiningManager()->requestCoinReward();
-
     }
 
     // after adding genesis block we don't need to increment counter
-    if (!isGenesis && resultCode == 0) {
+    if (!block.isGenesisBlock() && resultCode == 0) {
         blocksFromLastGenesis++;
         if (shouldStartGenesisCreation()) {
             const auto &actor = node->accountController()->mainActor();
@@ -666,6 +665,10 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
                 blocksFromLastGenesis = 0;
             }
         }
+    }
+
+    if (resultCode != Errors::BLOCKS_ARE_EQUAL && resultCode != Errors::BLOCKS_CANT_MERGE && resultCode != Errors::NO_BLOCKS) {
+        sendBlockByNumber(block.getIndex());
     }
 
     return resultCode;
@@ -986,6 +989,9 @@ BigNumber Blockchain::getBlockCount() {
 }
 
 void Blockchain::addBlockToBlockchain(BlockVariant &block) {
+    BlockVariant lastBlock = this->getLastBlock();
+    this->removeAllDummyBlocks(lastBlock);
+
     addBlock(block);
     auto list = block.transactions();
     for (const auto &tmp : std::as_const(list)) {
@@ -1050,13 +1056,22 @@ void Blockchain::VerifyTx(Transaction &tx) {
     emit VerifiedTx(tx);
 }
 
-TransactionProveError Blockchain::proveTx(const Transaction &tx) {
-    qDebug() << "proveTx: started" << tx.getTypeTx();
+TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
+    qDebug() << "[Blockchain] Transaction prove started:" << tx;
 
     ActorId        targetSender   = tx.getSender();
     ActorId        targetReceiver = tx.getReceiver();
     const ActorId &mainActorId    = node->accountController()->mainActor()->id();
     const ActorId &firstId        = node->actorIndex()->firstId();
+
+    const auto accounts = node->accountController()->accountsIds();
+    for (const auto &accountId : accounts) {
+        if (accountId == firstId)
+            continue;
+        if (targetSender == accountId || targetReceiver == accountId) {
+            return TransactionProveError::SelfPleasure;
+        }
+    }
 
     // start reward check
     if (tx.isRewardTransaction() || tx.isFarmingTransaction()) {
@@ -1065,7 +1080,6 @@ TransactionProveError Blockchain::proveTx(const Transaction &tx) {
         auto res = this->blockIndex.getLastTxByData(tx.getData(), ActorId());
 
         if (res.second == "-1") {
-            txManager->addProvedTransaction(tx);
             return TransactionProveError::NoError;
         }
     }
@@ -1105,12 +1119,13 @@ TransactionProveError Blockchain::proveTx(const Transaction &tx) {
         if (!tx.getProducer().isZero())
             producerActor = node->actorIndex()->getActor(tx.getProducer());
         else {
-            return TransactionProveError::ZeroProducer;
+            // return TransactionProveError::ZeroProducer;
         }
+
         if (!producerActor.key().verify(tx.getHash(), tx.getSignature())) {
-            return TransactionProveError::ProducerVerify;
+            // return TransactionProveError::ProducerVerify;
         }
-        txManager->addProvedTransaction(tx);
+
         return TransactionProveError::NoError;
     }
 
@@ -1129,7 +1144,6 @@ TransactionProveError Blockchain::proveTx(const Transaction &tx) {
 
         Transaction provedTx(tx);
         provedTx.sign(node->accountController()->currentWallet());
-        txManager->addProvedTransaction(provedTx);
         return TransactionProveError::NoError;
     } else {
         if (tx.getData() == "InitContract") {
@@ -1141,7 +1155,7 @@ TransactionProveError Blockchain::proveTx(const Transaction &tx) {
             senderCurrentBalance += txManager->checkPendingTxsList(targetSender);
 
             BigNumberFloat transactionAmount = tx.getAmount();
-            BigNumberFloat transactionFee    = transactionAmount / 100;
+            BigNumberFloat transactionFee    = 0; // transactionAmount / 100;
             BigNumberFloat senderNewBalance  = senderCurrentBalance - transactionAmount - transactionFee;
 
             if (senderNewBalance < 0 /* && mainActorId == firstId */) {

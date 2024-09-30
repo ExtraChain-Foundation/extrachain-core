@@ -13,6 +13,10 @@ string SecretKey::keygen() {
 }
 
 string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
+    if (pass.empty()) {
+        qFatal("[SecretKey::getKeyFromPass] pass is empty. pass: %s", pass.data());
+    }
+
     vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
     if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES) {
         std::fill(vsalt.begin(), vsalt.end(), '0');
@@ -32,6 +36,11 @@ string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
 }
 
 std::string SecretKey::sign(const std::string &data, const std::string &secret_key) {
+    if (data.empty() || secret_key.empty()) {
+        qFatal("[SecretKey::sign] data or secret is empty. data: %s, secret: %s", data.data(),
+               secret_key.data());
+    }
+
     std::vector<unsigned char> sk(secret_key.begin(), secret_key.end());
     std::vector<unsigned char> vmsg(data.begin(), data.end());
     std::vector<unsigned char> vsig(crypto_sign_BYTES);
@@ -41,6 +50,11 @@ std::string SecretKey::sign(const std::string &data, const std::string &secret_k
 }
 
 bool SecretKey::verify(const std::string &data, const std::string &public_key, const std::string &signature) {
+    if (data.empty() || public_key.empty() || signature.empty()) {
+        qCritical().noquote().nospace() << "[SecretKey::verify] data or secret is empty. data: '" << data << "', public: '" << public_key << "', signature: '" << signature << "'";
+        return false;
+    }
+
     std::string sig = base64_decode(signature);
     std::vector<unsigned char> pk(public_key.begin(), public_key.end());
     std::vector<unsigned char> vmsg(data.begin(), data.end());
@@ -49,16 +63,17 @@ bool SecretKey::verify(const std::string &data, const std::string &public_key, c
     return res == 0;
 }
 
-string SecretKey::encrypt(const string &msg, const string &secret_key) {
-    if (msg.empty() || secret_key.empty())
-        qFatal("[SecretKey::encrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
+string SecretKey::encrypt(const string &data, const string &secret_key) {
+    if (data.empty() || secret_key.empty()) {
+        qFatal("[SecretKey::encrypt] data or secret is empty. data: %s, secret: %s", data.data(),
                secret_key.data());
+    }
 
-    unsigned long long enc_size = crypto_secretbox_MACBYTES + msg.length();
+    unsigned long long enc_size = crypto_secretbox_MACBYTES + data.length();
     vector<unsigned char> sk(secret_key.begin(), secret_key.end());
 
     vector<unsigned char> enc_msg(enc_size);
-    vector<unsigned char> dec_msg(msg.begin(), msg.end());
+    vector<unsigned char> dec_msg(data.begin(), data.end());
     vector<unsigned char> nonce;
     nonce.resize(crypto_secretbox_NONCEBYTES);
     randombytes_buf(nonce.data(), nonce.size());
@@ -70,23 +85,24 @@ string SecretKey::encrypt(const string &msg, const string &secret_key) {
     }
 
     if (res.empty())
-        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << msg.data()
+        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << data.data()
                  << "| secret:" << secret_key.data();
     return res;
 }
 
-string SecretKey::decrypt(const string &msg, const string &secret_key) {
-    if (msg.empty() || secret_key.empty())
-        qFatal("[SecretKey::decrypt] msg or secret is empty. msg: %s, secret: %s", msg.data(),
+string SecretKey::decrypt(const string &data, const string &secret_key) {
+    if (data.empty() || secret_key.empty()) {
+        qFatal("[SecretKey::decrypt] data or secret is empty. data: %s, secret: %s", data.data(),
                secret_key.data());
+    }
 
-    string sdata = msg;
+    string sdata = data;
 
     string s_nonce = sdata.substr(0, crypto_secretbox_NONCEBYTES);
     sdata.erase(0, crypto_secretbox_NONCEBYTES);
 
     if (sdata.size() < crypto_secretbox_MACBYTES)
-        qFatal("[SecretKey::decrypt] Incorrect msg: %s", msg.data());
+        qFatal("[SecretKey::decrypt] Incorrect msg: %s", data.data());
 
     vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
     vector<unsigned char> sk(secret_key.begin(), secret_key.end());
@@ -101,7 +117,7 @@ string SecretKey::decrypt(const string &msg, const string &secret_key) {
     }
 
     if (res.empty())
-        qDebug() << "[SecretKey::decrypt] res is empty. msg:" << msg.data()
+        qDebug() << "[SecretKey::decrypt] res is empty. data:" << data.data()
                  << "| secret:" << secret_key.data();
     return res;
 }

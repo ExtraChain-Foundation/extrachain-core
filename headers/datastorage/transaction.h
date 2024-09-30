@@ -57,6 +57,7 @@ enum class TransactionProveError {
     ZeroProducer, // producer 0
     ProducerVerify, // bad signature in fee tx
     SenderBalanceBelowZero, // sender's balance will be < 0
+    SelfPleasure
 };
 FORMAT_ENUM(TransactionProveError)
 

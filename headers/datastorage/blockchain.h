@@ -201,7 +201,7 @@ public:
      * Convert block to MemBlock or FileBlock according to a fileMode.
      * @return 0 is success, or error code
      */
-    int addBlock(BlockVariant &block, bool isGenesis = false);
+    int addBlock(BlockVariant &block);
 
     /**
      * Removes block and all blocks after them
@@ -417,6 +417,6 @@ public slots:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    TransactionProveError proveTx(const Transaction &tx);
+    TransactionProveError proveTransaction(const Transaction &tx);
 };
 #endif // BLOCKCHAIN_H
