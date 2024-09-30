@@ -20,11 +20,12 @@
 #ifndef DATA_MINING_MANAGER_H
 #define DATA_MINING_MANAGER_H
 
-#include "utils/bignumber_float.h"
-#include <QObject>
-#include <managers/extrachain_node.h>
-#include <network/message_body.h>
 #include <string>
+#include <QObject>
+
+#include "datastorage/dfs/dfs_controller.h"
+#include "utils/bignumber_float.h"
+#include <managers/extrachain_node.h>
 #include <utils/db_connector.h>
 #include <utils/dfs_utils.h>
 
@@ -50,10 +51,24 @@ public:
                                   BigNumberFloat dataAmountTotalStoredInNetwork,
                                   BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
                                   double coefficient);
-    Transaction makeRewardTx(const MessageBody &state);
-    Transaction makeRewardTx(const DFSR::RequestReward &requestReward, const double coefficient = 0.5);
 
-    void coinRewardRequest(const BigNumber &blockIndex);
+    /**
+     * @brief Reward request
+     * */
+    void requestCoinReward();
+    
+     /**
+     * @brief calculate reward amound
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount() const;
+    BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
+
+    /**
+     * @brief Send reward amount
+     */
+    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
+
     void interestAccrual();
     BigNumberFloat farmingBalance() const;
     void calculateFarmingBalanceMainUser();

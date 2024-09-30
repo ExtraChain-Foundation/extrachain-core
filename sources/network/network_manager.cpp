@@ -142,7 +142,7 @@ void NetworkManager::removeConnection(const QString &identifier) {
     if (identifier.isEmpty())
         qFatal("Try remove with empty identifier");
 
-    for (auto connection : qAsConst(m_connections)) {
+    for (const auto &connection : std::as_const(m_connections)) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
@@ -153,7 +153,7 @@ NetworkManager::~NetworkManager() {
     delete upnpDis;
     delete local;
 
-    for (const auto &connection : qAsConst(m_connections)) {
+    for (const auto &connection : std::as_const(m_connections)) {
         emit connection->close();
         emit connection->finished();
     }
@@ -406,7 +406,7 @@ bool NetworkManager::isActiveConnectionExists() {
     if (this->m_connections.isEmpty())
         return false;
 
-    for (const auto &el : qAsConst(this->m_connections)) {
+    for (const auto &el : std::as_const(this->m_connections)) {
         if (el->isActive())
             return true;
     }
@@ -652,21 +652,6 @@ void NetworkManager::messageReceived(
         break;
     }
 
-    case MessageType::DfsState: {
-        switch (status) {
-        case MessageStatus::Request: {
-            Transaction reward = node.dataMiningManager()->makeRewardTx(mb);
-            this->send_message(reward, MessageType::BlockchainTransaction);
-            break;
-        }
-        case MessageStatus::NoStatus:
-        case MessageStatus::Response:
-            break;
-        }
-
-        break;
-    }
-
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
         // TODO: why temp std::string?
@@ -737,7 +722,7 @@ void NetworkManager::messageReceived(
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.blockchain()->sendCoinsReward(requestReward);
+            node.dataMiningManager()->sendCoinsReward(requestReward);
             break;
         }
         case MessageStatus::Response: {

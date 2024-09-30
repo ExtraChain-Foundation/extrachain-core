@@ -130,7 +130,7 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 }
 
 void TransactionManager::proveTransactions() {
-    for (const Transaction &tx : m_receivedTxList) {
+    for (const Transaction &tx : std::as_const(m_receivedTxList)) {
         TransactionProveError res = node.blockchain()->proveTx(tx);
 
         if (res == TransactionProveError::NoError) {

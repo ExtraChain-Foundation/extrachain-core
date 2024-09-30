@@ -26,7 +26,7 @@ enum class MessageType {
     DfsVerifyList = 60,
     RequestDfsSize = 61,
     ResponseDfsSize = 62,
-    DfsState = 63,
+    // DfsState = 63,
     RequestBlockCount = 64,
     ResponseBlockCount = 65,
 

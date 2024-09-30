@@ -313,21 +313,6 @@ public:
     void increaseCirculativeSupply(const BigNumber &value);
 
     /**
-     * @brief Coin request
-     * */
-    void requestCoins(const DFS::Reward::RequestReward &requestReward);
-
-    /**
-     * @brief Receive coins
-     */
-    void receiveCoins(const ActorId &receiver, const BigNumberFloat &amount) {
-    }
-    /**
-     * @brief Send reward amount
-     */
-    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
-
-    /**
      * @brief Set possible mining
      */
     void setPossibleMining(const bool &value);
@@ -341,12 +326,6 @@ public:
      * @brief Get block index contains farming transaction
      */
     BigNumber getBlockIndexLastFarmingTx() const;
-
-    /**
-     * @brief calculate reward amound
-     * @return amount of reward
-     */
-    BigNumberFloat calculateRewardAmount() const;
 
 signals:
     void newNotify(Notification ntf);

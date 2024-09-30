@@ -572,35 +572,6 @@ BlockVariant Blockchain::validateAndReturnBlock(const BlockVariant &block) const
     return block;
 }
 
-BigNumberFloat Blockchain::calculateRewardAmount() const {
-    //(dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
-    const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-
-    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
-        qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. TotalBytes, total dfs:"
-                 << totalBytes.first << node->dfs()->totalDfsSize();
-        return 0;
-    }
-
-    return (
-        BigNumberFloat { node->dfs()->sizeTaken() } / node->dfs()->totalDfsSize()
-        + BigNumberFloat { totalBytes.second } / totalBytes.first
-        + (BigNumberFloat { getBlocksStored() } / getLastBlock().getIndex() * 100));
-}
-
-BigNumberFloat Blockchain::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const {
-    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
-        qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
-                 << requestReward.BytesSent << node->dfs()->totalDfsSize();
-        return 0;
-    }
-
-    return (
-        BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-        + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-        + (BigNumberFloat { requestReward.BlocksStored } / getLastBlock().getIndex() * 100));
-}
-
 void Blockchain::updateFirstId(const BlockVariant &block) {
     if (!block.isGenesisBlock() || block.getIndex() != 0)
         return;
@@ -657,8 +628,6 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
             saveTxInfoInEC(block.transactions());
         }
         // qDebug() << (blockType == BlockType::Data) << blockType;
-        node->dataMiningManager()->coinRewardRequest(indexBlock);
-
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
@@ -677,16 +646,9 @@ int Blockchain::addBlock(BlockVariant &block, bool isGenesis) {
         qCritical() << "[Blockchain] While adding a new block" << block.toString();
     }
 
-    if (indexBlock % 20 == 0) {
-        const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
-        auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
-        requestCoins({ .Actor              = actor->id().toStdString(),
-                       .DataStoredSize     = node->dfs()->sizeTaken(),
-                       .TypeFunctioningObj = DFS::Reward::Base,
-                       .RewardAmount       = calculateRewardAmount(),
-                       .BytesSent          = totalBytes.first,
-                       .BytesReceived      = totalBytes.second,
-                       .BlocksStored       = getBlocksStored() });
+    if (indexBlock % DFS::Reward::coinProductionAlgorithmTick == 0) {
+        node->dataMiningManager()->requestCoinReward();
+
     }
 
     // after adding genesis block we don't need to increment counter
@@ -955,22 +917,6 @@ void Blockchain::setCirculativeSupply(const BigNumber &newValue) {
 void Blockchain::increaseCirculativeSupply(const BigNumber &value) {
     circulativeSupply += value;
     setPossibleMining(circulativeSupply <= Config::ExtraCoin::totalSupply);
-}
-
-void Blockchain::requestCoins(const DFS::Reward::RequestReward &requestReward) {
-    node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
-}
-
-void Blockchain::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {
-    if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100) {
-        Transaction transaction;
-        transaction.setSender(ActorId());
-        transaction.setReceiver(requestReward.Actor);
-        transaction.setAmount(requestReward.RewardAmount);
-        transaction.setDate(QDateTime::currentMSecsSinceEpoch());
-        transaction.setTypeTx(TypeTx::RewardTransaction);
-        node->network()->send_message(transaction, MessageType::BlockchainTransaction);
-    }
 }
 
 void Blockchain::setPossibleMining(const bool &value) {
