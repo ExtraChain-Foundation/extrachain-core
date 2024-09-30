@@ -232,6 +232,18 @@ namespace ExtraCoin {
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 FORMAT_ENUM(Config::Net::TypeSend)
 
+namespace Token {
+static const std::string folder_tokens = "tokens";
+static const std::string db_tokens = "tokens";
+static const std::string tokenTableName = "tokens";
+static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
+static const std::string tokenTableCreate =  "CREATE TABLE IF NOT EXISTS tokens("
+                                             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                             "name TEXT   NOT NULL, "
+                                             "symbol TEXT NOT NULL, "
+                                             "count_coins TEXT  NOT NULL);";
+}
+
 namespace Errors {
 // IO
 static const int FILE_ALREADY_EXISTS = 101;

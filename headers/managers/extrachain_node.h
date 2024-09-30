@@ -47,7 +47,6 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 class VPNConnectorManager;
-class CreateTokenManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -62,15 +61,14 @@ private:
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
-    CreateTokenManager *m_createTokenManager = nullptr;
 
     bool                   started             = false;
-    bool                   isClientApplication = false;
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
+    bool isApp;
 
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
+    explicit ExtraChainNode(const bool isApp = true);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -81,10 +79,6 @@ public:
         const QString& tokenColor);
     void start();
 
-    bool isClientApp() {
-        return isClientApplication;
-    };
-
     Blockchain*         blockchain();
     NetworkManager*     network();
     AccountController*  accountController() const;
@@ -93,7 +87,6 @@ public:
     TransactionManager* txManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
-    CreateTokenManager* createTokenMananger() const;
 
     bool login(const std::string& login, const std::string& password);
     bool login(const std::string& hash);
@@ -129,6 +122,7 @@ public:
 
     void InitVPN();
     std::shared_ptr<VPNConnectorManager> vpnConnectorManager;
+    bool isClientApp() { return isApp; }
 
 private:
     void showMessage(QString from, QString message);

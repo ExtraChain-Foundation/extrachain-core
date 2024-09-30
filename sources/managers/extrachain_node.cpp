@@ -41,8 +41,7 @@
 #include "managers/vpn_connector_manager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
-    : isClientApplication(isClientApp) {
+ExtraChainNode::ExtraChainNode(const bool isApp) : isApp(isApp) {
   static bool singleton = false;
   if (!singleton)
     singleton = true;
@@ -66,7 +65,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
   m_dfs = new DfsController(*this);
 
   m_blockchain->setTxManager(m_txManager);
-  m_createTokenManager = new CreateTokenManager(m_actorIndex, this);
   m_dmm = new DataMiningManager(this);
   // test port and address
   m_connectionsManager = new ConnectionsManager(
@@ -78,12 +76,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
   connect(&getAllActorsTimer, &QTimer::timeout, this,
           &ExtraChainNode::getAllActorsTimerCall);
   getAllActorsTimer.start(30000);
-
-  if (allowRunRestApiServer) {
-    // m_restApiServerManager = new RestApiServerManager(this);
-  }
-
-
 }
 
 uint64_t ExtraChainNode::getBlockCount() const { return blockCount; }
@@ -551,7 +543,7 @@ void ExtraChainNode::connectSignals() {
   // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
   //         &Blockchain::updateBlockchain);
 
-  connect(m_createTokenManager, &CreateTokenManager::sendTransactionCreateToken, this, [&](const Transaction& tx) {
+  connect(m_accountController, &AccountController::sendTransactionCreateToken, this, [&](const Transaction& tx) {
       txManager()->addTransaction(tx);
   });
 }
@@ -569,7 +561,7 @@ void ExtraChainNode::prepareFolders() {
   QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
   QDir().mkpath(QString::fromStdString(Scripts::folder));
   QDir().mkpath(QString::fromStdString(Scripts::folder));
-  QDir().mkpath(QString::fromStdString(folder_tokens));
+  QDir().mkpath(QString::fromStdString(Token::folder_tokens));
   QDir().mkpath(QString::fromStdString(contract_profile));
 
   if (!QFile(".settings").exists())
@@ -598,10 +590,6 @@ DataMiningManager *ExtraChainNode::dataMiningManager() const { return m_dmm; }
 
 ConnectionsManager *ExtraChainNode::connectionsManager() const {
   return m_connectionsManager;
-}
-
-CreateTokenManager *ExtraChainNode::createTokenMananger() const {
-  return m_createTokenManager;
 }
 
 bool ExtraChainNode::login(const std::string &login,
