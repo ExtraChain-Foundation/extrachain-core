@@ -543,9 +543,19 @@ void ExtraChainNode::connectSignals() {
   // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
   //         &Blockchain::updateBlockchain);
 
-  connect(m_accountController, &AccountController::sendTransactionCreateToken, this, [&](const Transaction& tx) {
-      txManager()->addTransaction(tx);
-  });
+  // connect(m_accountController, &AccountController::sendTransactionCreateToken,
+  //         this,
+  //         [&](const Transaction &tx) { txManager()->addTransaction(tx); });
+
+  // connect(m_accountController->createTokenManager().get(),
+  //         &CreateTokenManager::sendContract, this,
+  //         [=, this](const QString &pathCreatedTokenJson) {
+  //           m_dfs->addLocalFile(
+  //               m_accountController->mainActor(),
+  //               pathCreatedTokenJson.toStdString(),
+  //               QFileInfo(pathCreatedTokenJson).fileName().toStdString(),
+  //               DFS::Encryption::Public);
+  //         });
 }
 
 void ExtraChainNode::prepareFolders() {

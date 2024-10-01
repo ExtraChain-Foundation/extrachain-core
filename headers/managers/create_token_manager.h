@@ -43,4 +43,5 @@ signals:
   void errorNameTokenExist(const QString&);
   void errorSymbolTokenExist(const QString&);
   void added();
+  void sendContract(const QString& pathToJson);
 };

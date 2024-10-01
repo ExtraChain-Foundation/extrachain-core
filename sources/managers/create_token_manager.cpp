@@ -187,12 +187,12 @@ void CreateTokenManager::createToken(const std::string &tokenCount, const std::s
         jsonObj["url"] = "";
         QJsonDocument jsonDoc(jsonObj);
 
-        qDebug() << __FUNCTION__ << jsonFilePath;
         QFile fileSaveJson(jsonFilePath);
         if (fileSaveJson.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&fileSaveJson);
             stream << jsonDoc.toJson();
             fileSaveJson.close();
+            emit sendContract(jsonFilePath);
         } else {
             qDebug() << "[CreateTokenManager] Error save json into file. File " << fileSaveJson.fileName() << " not open.";
         }
