@@ -239,9 +239,12 @@ static const std::string tokenTableName = "tokens";
 static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
 static const std::string tokenTableCreate =  "CREATE TABLE IF NOT EXISTS tokens("
                                              "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                                             "name TEXT   NOT NULL, "
-                                             "symbol TEXT NOT NULL, "
-                                             "count_coins TEXT  NOT NULL);";
+                                             "name          TEXT   NOT NULL, "
+                                             "symbol        TEXT NOT NULL, "
+                                             "count_coins   TEXT  NOT NULL, "
+                                             "owner         TEXT  NOT NULL, "
+                                             "color         TEXT  NOT NULL, "
+                                             "url           TEXT  NOT NULL);";
 }
 
 namespace Errors {

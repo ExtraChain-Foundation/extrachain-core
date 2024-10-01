@@ -20,7 +20,7 @@ class CreateTokenManager : public QObject {
 
   bool savePrivateActor(Actor<KeyPrivate> actor);
   void sendInitialTransaction(const std::shared_ptr<Actor<KeyPrivate>> sender,
-                                                            ActorId receiver, std::string quantity);
+                              ActorId receiver, std::string quantity);
   std::shared_ptr<Actor<KeyPrivate>> createContract();
   void initializeTokenArray();
   bool tokenExist(const std::string &nameToken);
@@ -30,9 +30,16 @@ public:
   CreateTokenManager(ActorIndex *actorIndex, QObject *parent = nullptr);
   ~CreateTokenManager() = default;
 
+  bool isContract(const QString &pathFile);
+
 public slots:
-  void createToken(const std::string& tokenCount, const std::string& tokenName, const std::string& symbol,
-                   const std::string& relAddress, const std::string& color);
+  void createToken(const std::string &tokenCount, const std::string &tokenName,
+                   const std::string &symbol, const std::string &relAddress,
+                   const std::string &color);
+  void checkIsContract(const QString &pathToFile);
+
+protected:
+  bool checkJsonObjectHasTokenFields(const QJsonObject &jsonObj);
 
 signals:
   void verifyActor(Actor<KeyPublic> actor);
@@ -40,8 +47,8 @@ signals:
   void saveActorInPrivateProfile(const QByteArray &id,
                                  const QString &type = "wallet",
                                  const bool &rewrite = false);
-  void errorNameTokenExist(const QString&);
-  void errorSymbolTokenExist(const QString&);
+  void errorNameTokenExist(const QString &);
+  void errorSymbolTokenExist(const QString &);
   void added();
-  void sendContract(const QString& pathToJson);
+  void sendContract(const QString &pathToJson);
 };
