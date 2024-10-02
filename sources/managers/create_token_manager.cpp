@@ -76,7 +76,7 @@ void CreateTokenManager::sendInitialTransaction(const std::shared_ptr<Actor<KeyP
     emit added();
 }
 
-std::shared_ptr<Actor<KeyPrivate>> CreateTokenManager::createContract() {
+std::shared_ptr<Actor<KeyPrivate>> CreateTokenManager::createPrivateActor() {
     std::shared_ptr<Actor<KeyPrivate>> actor = std::make_shared<Actor<KeyPrivate>>();
     actor->create(ActorType::Service);
 
@@ -159,7 +159,7 @@ void CreateTokenManager::createToken(const std::string &tokenCount,
     }
 
     tokenBalance[relAddress] = {{tokenName, tokenCount}};
-    auto actor = createContract();
+    auto actor = createPrivateActor();
 
     QString contractProfile = QString::fromStdString(contract_profile);
     QString actorId = QString(actor->id().toString());
@@ -189,7 +189,7 @@ void CreateTokenManager::createToken(const std::string &tokenCount,
         stream << jsonDoc.toJson();
         fileSaveJson.close();
 
-        emit sendContract(jsonFilePath);
+        emit sendToken(jsonFilePath);
     } else {
         qDebug() << "[CreateTokenManager] Error save json into file. File " << fileSaveJson.fileName() << " not open.";
     }

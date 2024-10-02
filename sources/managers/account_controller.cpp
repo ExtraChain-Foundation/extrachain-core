@@ -21,15 +21,9 @@
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/tx_manager.h"
-#include "managers/create_token_manager.h"
 
 AccountController::AccountController(ExtraChainNode &node)
-    : node(node) {
-    m_createTokenManager = std::make_shared<CreateTokenManager>(node.actorIndex(), this);
-
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken, this, &AccountController::sendTransactionCreateToken);
-
-}
+    : node(node) { }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
     if (hash.empty())
@@ -222,14 +216,3 @@ void AccountController::renamewallet(const QString &oldWalletName, const QString
         }
     }
 }
-
-void AccountController::createToken(const std::string &tokenCount, const std::string &tokenName, const std::string &symbol, const std::string &relAddress, const std::string &color)
-{
-    m_createTokenManager->createToken(tokenCount, tokenName, symbol, relAddress, color);
-}
-
-std::shared_ptr<CreateTokenManager> AccountController::createTokenManager() const
-{
-    return m_createTokenManager;
-}
-

@@ -28,7 +28,7 @@ class CreateTokenManager : public QObject {
     bool savePrivateActor(Actor<KeyPrivate> actor);
     void sendInitialTransaction(const std::shared_ptr<Actor<KeyPrivate>> sender,
                               ActorId receiver, std::string quantity);
-    std::shared_ptr<Actor<KeyPrivate>> createContract();
+    std::shared_ptr<Actor<KeyPrivate>> createPrivateActor();
     void initializeTokenArray();
     bool tokenExist(const std::string &nameToken);
     bool tokenSymbolExist(const std::string &symbolToken);
@@ -57,5 +57,5 @@ signals:
     void errorNameTokenExist(const QString &);
     void errorSymbolTokenExist(const QString &);
     void added();
-    void sendContract(const QString &pathToJson);
+    void sendToken(const QString &pathToJson);
 };

@@ -72,6 +72,8 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     m_connectionsManager =
         new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
 
+    m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
+
     connectSignals();
 
     static QTimer getAllActorsTimer;
@@ -248,6 +250,16 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         m_txManager->addTransaction(tx);
 
     return tx;
+}
+
+std::shared_ptr<CreateTokenManager> ExtraChainNode::createTokenManager() const
+{
+    return m_createTokenManager;
+}
+
+void ExtraChainNode::createToken(const std::string &tokenCount, const std::string &tokenName, const std::string &symbol, const std::string &relAddress, const std::string &color)
+{
+    m_createTokenManager->createToken(tokenCount, tokenName, symbol, relAddress, color);
 }
 
 std::expected<Transaction, TransactionError>
@@ -528,15 +540,14 @@ void ExtraChainNode::connectSignals() {
     });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
-    connect(m_accountController, &AccountController::sendTransactionCreateToken,this,
+    connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
             [&](const Transaction &tx) { txManager()->addTransaction(tx);
     });
-    connect(m_accountController->createTokenManager().get(), &CreateTokenManager::sendContract, this,
+    connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
     [=, this](const QString &pathCreatedTokenJson) {
-        m_dfs->addLocalFile( m_accountController->mainActor(), pathCreatedTokenJson.toStdString(),
-        QFileInfo(pathCreatedTokenJson).fileName().toStdString(), DFS::Encryption::Public);
+        m_dfs->addListFiles(QStringList(QList<QString>{pathCreatedTokenJson}));
     });
-    connect(m_dfs, &DfsController::checkIsContract, m_accountController->createTokenManager().get(), &CreateTokenManager::checkIsContract);
+    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(), &CreateTokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
