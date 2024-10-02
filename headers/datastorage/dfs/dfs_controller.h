@@ -142,6 +142,7 @@ signals:
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
     void resultAddFile(const QString &result, const QString &fileName);
+    void checkIsContract(const QString &pathToFile);
 };
 
 class ThreadAddFiles : public QThread {

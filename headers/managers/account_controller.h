@@ -24,6 +24,7 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/private_profile.h"
+#include "datastorage/transaction.h"
 #include "utils/autologinhash.h"
 
 class ExtraChainNode;
