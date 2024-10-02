@@ -96,6 +96,7 @@ private:
     void eraseFirstUnsynchronizedDir();
     void removeRowFromDB(const DFSP::RemoveFileMessage &msg);
     void requestFileSegment(const DFSP::DirRow &row);
+    void updateFileState(const ActorId &actorId, const std::string fileName, DFS::Basic::FileState state);
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
