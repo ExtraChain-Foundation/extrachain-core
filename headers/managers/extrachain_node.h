@@ -128,7 +128,6 @@ public:
     uint64_t getBlockCount() const;
 
     std::shared_ptr<CreateTokenManager> createTokenManager() const;
-    void createToken(const std::string &tokenCount, const std::string &tokenName, const std::string &symbol, const std::string &relAddress, const std::string &color);
 
 private:
     void showMessage(QString from, QString message);

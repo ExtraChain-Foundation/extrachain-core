@@ -257,11 +257,6 @@ std::shared_ptr<CreateTokenManager> ExtraChainNode::createTokenManager() const
     return m_createTokenManager;
 }
 
-void ExtraChainNode::createToken(const std::string &tokenCount, const std::string &tokenName, const std::string &symbol, const std::string &relAddress, const std::string &color)
-{
-    m_createTokenManager->createToken(tokenCount, tokenName, symbol, relAddress, color);
-}
-
 std::expected<Transaction, TransactionError>
 ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token) {
     auto actor = m_accountController->currentWallet();
