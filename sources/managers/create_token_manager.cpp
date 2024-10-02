@@ -219,8 +219,8 @@ void CreateTokenManager::checkIsContract(const QString &pathToFile) {
         QJsonDocument jsonDoc = QJsonDocument::fromJson(fileData);
         if (jsonDoc.isObject()) {
             QJsonObject jsonObj = jsonDoc.object();
-
-            if (!checkJsonObjectHasTokenFields(jsonObj))
+            bool checkTokenExist = tokenExist(jsonObj[Token::Fields::name.c_str()].toString().toStdString());
+            if (!checkJsonObjectHasTokenFields(jsonObj) || checkTokenExist)
                 return;
 
             DBRow rowRow;
