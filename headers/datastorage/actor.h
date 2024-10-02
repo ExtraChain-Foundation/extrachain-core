@@ -116,7 +116,7 @@ public:
 private:
     void normalize() {
         if (m_id.size() > 20) {
-            qFatal("[ActorId] Not correct size: %d", m_id.size());
+            qFatal("[ActorId] Not correct size: %zu", m_id.size());
         }
 
         m_id = std::string(20 - m_id.length(), '0') + m_id;

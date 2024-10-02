@@ -12,6 +12,33 @@
 static const std::string contract_profile = "contract_profile";
 static const uint size_of_data_list = 7;
 
+struct TokenData {
+    std::string owner, count, name, symbol, color, url;
+
+    QJsonDocument toJsonDocument() {
+        QJsonObject jsonObj;
+        jsonObj[Token::Fields::owner.c_str()] = owner.c_str();
+        jsonObj[Token::Fields::count.c_str()] = std::stoi(count);
+        jsonObj[Token::Fields::name.c_str()] = name.c_str();
+        jsonObj[Token::Fields::symbol.c_str()] = symbol.c_str();
+        jsonObj[Token::Fields::color.c_str()] = color.c_str();
+        jsonObj[Token::Fields::url.c_str()] = "";
+        QJsonDocument jsonDoc(jsonObj);
+        return jsonDoc;
+    }
+
+    DBRow toDBRow() {
+        DBRow dbRow;
+        dbRow.insert({"name", name});
+        dbRow.insert({"symbol", symbol});
+        dbRow.insert({"count_coins", count});
+        dbRow.insert({"owner", owner});
+        dbRow.insert({"color", color});
+        dbRow.insert({"url", std::string()});
+        return dbRow;
+    }
+};
+
 class CreateTokenManager : public QObject {
   Q_OBJECT
 

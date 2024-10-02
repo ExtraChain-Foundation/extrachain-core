@@ -18,37 +18,37 @@
  */
 
 #ifndef UTILS_H
-#define UTILS_H
+    #define UTILS_H
 
-#include <sstream>
-#include <string>
-#include <vector>
+    #include <sstream>
+    #include <string>
+    #include <vector>
 
-#include <QFile>
-#include <QObject>
-#include <QtNetwork/QNetworkAddressEntry>
+    #include <QFile>
+    #include <QObject>
+    #include <QtNetwork/QNetworkAddressEntry>
 
-#include "extrachain_global.h"
-#include <msgpack.hpp>
+    #include "extrachain_global.h"
+    #include <msgpack.hpp>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/join.hpp>
-#include <boost/algorithm/string/split.hpp>
+    #include <boost/algorithm/string/classification.hpp>
+    #include <boost/algorithm/string/join.hpp>
+    #include <boost/algorithm/string/split.hpp>
 
-#include <fmt/chrono.h>
-#include <fmt/color.h>
-#include <fmt/core.h>
-#include <fmt/os.h>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
+    #include <fmt/chrono.h>
+    #include <fmt/color.h>
+    #include <fmt/core.h>
+    #include <fmt/os.h>
+    #include <fmt/ostream.h>
+    #include <fmt/ranges.h>
 
-#include <magic_enum.hpp>
-#include <magic_enum_iostream.hpp>
+    #include <magic_enum.hpp>
+    #include <magic_enum_iostream.hpp>
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
-#define FORMAT_ENUM(E)                                                                                       \
-    template <>                                                                                              \
+    #define FORMAT_ENUM(E)                                                                                       \
+template <>                                                                                              \
     struct fmt::formatter<E> : formatter<string_view> {                                                      \
         template <typename FormatContext>                                                                    \
         auto format(E Enum, FormatContext &ctx) const {                                                      \
@@ -56,14 +56,14 @@ using namespace magic_enum::bitwise_operators;
             string_view enum_name = magic_enum::enum_type_name<E>();                                         \
             string_view value_name = magic_enum::enum_name(Enum);                                            \
             return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
-        }                                                                                                    \
-    };                                                                                                       \
+    }                                                                                                    \
+};                                                                                                       \
     inline QDebug operator<<(QDebug debug, const E &value) {                                                 \
         QDebugStateSaver saver(debug);                                                                       \
         debug.nospace().noquote() << magic_enum::enum_type_name<E>()                                         \
-                                  << "::" << magic_enum::enum_name(value);                                   \
+        << "::" << magic_enum::enum_name(value);                                   \
         return debug;                                                                                        \
-    }
+}
 
 namespace fmt {
 template <typename... Args>
@@ -121,90 +121,90 @@ const int NECESSARY_SAME_TX = 1;
 namespace DataStorage {
     static const std::string BlockTable = "Block";
     static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
-        + " ( "
-          "type         TEXT  NOT NULL, "
-          "id           TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL  "
-          ");";
+                                                + " ( "
+                                                "type         TEXT  NOT NULL, "
+                                                "id           TEXT  NOT NULL, "
+                                                "date         TEXT  NOT NULL, "
+                                                "data         TEXT          , "
+                                                "prevHash     TEXT  NOT NULL, "
+                                                "hash         TEXT  NOT NULL  "
+                                                ");";
     static const std::string TxBlockTable = "Transactions";
     static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
-        + " ("
-          "sender       TEXT  NOT NULL, "
-          "receiver     TEXT  NOT NULL, "
-          "amount       TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "token        TEXT  NOT NULL, "
-          "prevBlock    TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL, "
-          "approver     TEXT  NOT NULL, "
-          "signature    TEXT  NOT NULL, "
-          "producer     TEXT  NOT NULL "
-          ");";
+                                                  + " ("
+                                                  "sender       TEXT  NOT NULL, "
+                                                  "receiver     TEXT  NOT NULL, "
+                                                  "amount       TEXT  NOT NULL, "
+                                                  "date         TEXT  NOT NULL, "
+                                                  "data         TEXT          , "
+                                                  "token        TEXT  NOT NULL, "
+                                                  "prevBlock    TEXT  NOT NULL, "
+                                                  "hash         TEXT  NOT NULL, "
+                                                  "approver     TEXT  NOT NULL, "
+                                                  "signature    TEXT  NOT NULL, "
+                                                  "producer     TEXT  NOT NULL "
+                                                  ");";
     static const std::string SignTable = "Signatures";
     static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
-        + " ("
-          "actorId      TEXT PRIMARY KEY NOT NULL, "
-          "signature    TEXT             NOT NULL, "
-          "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
-          ");";
+                                                    + " ("
+                                                    "actorId      TEXT PRIMARY KEY NOT NULL, "
+                                                    "signature    TEXT             NOT NULL, "
+                                                    "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
+                                                    ");";
 
     static const std::string GenesisBlockTable = "GenesisBlock";
     static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
-        + " ("
-          "type         TEXT  NOT NULL, "
-          "id           TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL, "
-          "prevGenHash  TEXT            "
-          ");";
+                                                       + " ("
+                                                       "type         TEXT  NOT NULL, "
+                                                       "id           TEXT  NOT NULL, "
+                                                       "date         TEXT  NOT NULL, "
+                                                       "data         TEXT          , "
+                                                       "prevHash     TEXT  NOT NULL, "
+                                                       "hash         TEXT  NOT NULL, "
+                                                       "prevGenHash  TEXT            "
+                                                       ");";
     static const std::string RowGenesisBlockTable = "GenesisDataRow";
     static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
-        + " ("
-          "actorId    TEXT  NOT NULL, "
-          "state      TEXT  NOT NULL, "
-          "token      TEXT  NOT NULL, "
-          "type       TEXT  NOT NULL "
-          ");";
+                                                          + " ("
+                                                          "actorId    TEXT  NOT NULL, "
+                                                          "state      TEXT  NOT NULL, "
+                                                          "token      TEXT  NOT NULL, "
+                                                          "type       TEXT  NOT NULL "
+                                                          ");";
 
     static const std::string tokensCacheTable = "Tokens";
     static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
-        + " ("
-          "tokenId      TEXT PRIMARY KEY NOT NULL, "
-          "name         TEXT             NOT NULL, "
-          "color        TEXT             NOT NULL, "
-          "canStaking   INT              NOT NULL  "
-          ");";
+                                                      + " ("
+                                                      "tokenId      TEXT PRIMARY KEY NOT NULL, "
+                                                      "name         TEXT             NOT NULL, "
+                                                      "color        TEXT             NOT NULL, "
+                                                      "canStaking   INT              NOT NULL  "
+                                                      ");";
 
     static const std::string actorsTable = "Actors";
     static const std::string actorsTableCreate = "CREATE TABLE IF NOT EXISTS " + actorsTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "type INT              NOT NULL  "
-          ");";
+                                                 + " ("
+                                                 "id   TEXT PRIMARY KEY NOT NULL, "
+                                                 "type INT              NOT NULL  "
+                                                 ");";
 
     static const std::string farmingCacheTable = "FarmingCache";
     static const std::string farmingTableCreate = "CREATE TABLE IF NOT EXISTS " + farmingCacheTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "blockIndex INT              NOT NULL  "
-          ");";
+                                                  + " ("
+                                                  "id   TEXT PRIMARY KEY NOT NULL, "
+                                                  "blockIndex INT              NOT NULL  "
+                                                  ");";
 
-    // How many files one section folder will store
+           // How many files one section folder will store
     static const int SECTION_SIZE = 1000;
 
-    // How often to construct block from pending transactions (in miliseconds)
+           // How often to construct block from pending transactions (in miliseconds)
     static const int BLOCK_CREATION_PERIOD = 2000;
 
-    // How often to construct genesis block (in blocks)
+           // How often to construct genesis block (in blocks)
     static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
 
-    // How often to prove pransactions
+           // How often to prove pransactions
     static const int PROVE_TXS_INTERVAL = 2000;
 
     static int MAX_SIGN_AMOUNT = 13;
@@ -214,8 +214,8 @@ namespace Net {
     // Networking will work only if there are enough peers
     static const int MINIMUM_PEERS = 1;
 
-    // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
-    // responses
+           // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
+           // responses
     static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
     enum class TypeSend {
@@ -238,13 +238,22 @@ static const std::string db_tokens = "tokens";
 static const std::string tokenTableName = "tokens";
 static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
 static const std::string tokenTableCreate =  "CREATE TABLE IF NOT EXISTS tokens("
-                                             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                                             "name          TEXT   NOT NULL, "
-                                             "symbol        TEXT NOT NULL, "
-                                             "count_coins   TEXT  NOT NULL, "
-                                             "owner         TEXT  NOT NULL, "
-                                             "color         TEXT  NOT NULL, "
-                                             "url           TEXT  NOT NULL);";
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "name          TEXT   NOT NULL, "
+    "symbol        TEXT NOT NULL, "
+    "count_coins   TEXT  NOT NULL, "
+    "owner         TEXT  NOT NULL, "
+    "color         TEXT  NOT NULL, "
+    "url           TEXT  NOT NULL);";
+namespace Fields {
+    static const std::string name = "name";
+    static const std::string symbol = "symbol";
+    static const std::string count = "count";
+    static const std::string owner = "owner";
+    static const std::string color = "color";
+    static const std::string url = "url";
+    static const std::vector<std::string> fields = { name, symbol, count, owner, color, url };
+}
 }
 
 namespace Errors {
@@ -365,11 +374,11 @@ enum class HashEncode {
     Hex,
 };
 
-#ifdef Q_OS_WIN
+    #ifdef Q_OS_WIN
 static QString filePrefix = "file:///";
-#else
+    #else
 static QString filePrefix = "file://";
-#endif
+    #endif
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64 diskFreeMemory();
@@ -407,9 +416,9 @@ QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::B
 QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
 EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
-                                   const QByteArray &key, int blockSize = 60007);
+                                         const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
-                                   const QByteArray &key, int blockSize = 60007);
+                                         const QByteArray &key, int blockSize = 60007);
 EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
                                                       int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
@@ -571,9 +580,9 @@ struct EXTRACHAIN_EXPORT Notification {
 
 QDebug operator<<(QDebug d, const Notification &n);
 
-#define TIMER_START(name) \
-    QElapsedTimer name;   \
+    #define TIMER_START(name) \
+QElapsedTimer name;   \
     name.start();
-#define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
+    #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 
 #endif // UTILS_H
