@@ -24,16 +24,19 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/private_profile.h"
+#include "datastorage/transaction.h"
 #include "utils/autologinhash.h"
 
 class ExtraChainNode;
+class CreateTokenManager;
 
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-class EXTRACHAIN_EXPORT AccountController {
+class EXTRACHAIN_EXPORT AccountController: public QObject {
+    Q_OBJECT
 public:
     explicit AccountController(ExtraChainNode &node);
 
@@ -72,12 +75,19 @@ public:
     void addToProfileList(const ActorId &actorId);
     void renamewallet(const QString &oldWalletName, const QString &newWalletName);
 
+    void createToken(const std::string& tokenCount,const std::string&  tokenName, const std::string& symbol, const std::string&  relAddress,const std::string&  color);
+    std::shared_ptr<CreateTokenManager> createTokenManager() const;
+
+signals:
+    void sendTransactionCreateToken(const Transaction&);
+
 private:
     ExtraChainNode &node;
     AutologinHash autologinHash;
 
     std::vector<PrivateProfile> m_profiles;
     ActorId m_currentProfile;
+    std::shared_ptr<CreateTokenManager> m_createTokenManager;
 };
 
 #endif // ACCOUNT_CONTROLLER_H

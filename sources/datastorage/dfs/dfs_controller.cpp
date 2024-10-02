@@ -252,6 +252,11 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     files[msg.Actor + msg.FileName] = msg;
     emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
 
+    const QString pathToCheckJson = QString::fromStdString(fmt::format("dfs/{}/{}",msg.Actor.c_str(), msg.FileName.c_str()));
+    emit checkIsContract(pathToCheckJson);
+
+    qDebug() << QString("File %1 was added. Path to added file %2.").arg(msg.FileName.c_str()).arg(pathToCheckJson);
+
     return msg.FileName;
 }
 

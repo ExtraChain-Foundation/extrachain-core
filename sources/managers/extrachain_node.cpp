@@ -36,6 +36,8 @@
 #include "managers/data_mining_manager.h"
 #include "managers/thread_pool.h"
 #include "managers/tx_manager.h"
+#include "managers/create_token_manager.h"
+
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
@@ -513,26 +515,28 @@ void ExtraChainNode::connectSignals() {
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocket,
-        [this]() {
-            m_dfs->requestSync();
-        });
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocket,
-        [this]() {
-            m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
-        });
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocket,
-        [this]() {
-            m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
-        });
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+        m_dfs->requestSync();
+    });
+
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+        m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
+    });
+    connect(m_networkManager, &NetworkManager::newSocket,[this]()
+    {
+        m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
+    });
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
+    connect(m_accountController, &AccountController::sendTransactionCreateToken,this,
+            [&](const Transaction &tx) { txManager()->addTransaction(tx);
+    });
+    connect(m_accountController->createTokenManager().get(), &CreateTokenManager::sendContract, this,
+    [=, this](const QString &pathCreatedTokenJson) {
+        m_dfs->addLocalFile( m_accountController->mainActor(), pathCreatedTokenJson.toStdString(),
+        QFileInfo(pathCreatedTokenJson).fileName().toStdString(), DFS::Encryption::Public);
+    });
+    connect(m_dfs, &DfsController::checkIsContract, m_accountController->createTokenManager().get(), &CreateTokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -545,6 +549,7 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Scripts::folder));
+    QDir().mkpath(QString::fromStdString(Token::folder_tokens));
 
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
