@@ -40,7 +40,7 @@ find_package(unofficial-hash-library CONFIG REQUIRED)
 
 
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
