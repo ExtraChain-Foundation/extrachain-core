@@ -344,7 +344,7 @@ namespace Tables {
                                                     "filePath     TEXT             NOT NULL,"
                                                     "fileSize     INTEGER          NOT NULL,"
                                                     "lastModified INTEGER          NOT NULL,"
-                                                    "state        INTEGER CHECK(state IN (0, 1)) NOT NULL"
+                                                    "state        INTEGER CHECK(state IN (0, 2)) NOT NULL"
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);
